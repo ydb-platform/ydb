@@ -2583,8 +2583,7 @@ public:
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
                                 add_index->mutable_global_vector_kmeans_tree_index();
-                            } else if (type == "globalHnsw") {
-                                add_index->mutable_global_hnsw_index();
+
                             } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
@@ -2705,12 +2704,6 @@ public:
                                                 name, value.StringValue(), error);
                                             break;
                                         }
-                                        case Ydb::Table::TableIndex::kGlobalHnswIndex: {
-                                            NKikimr::NKMeans::FillSetting(
-                                                *add_index->mutable_global_hnsw_index()->mutable_vector_settings(),
-                                                name, value.StringValue(), error);
-                                            break;
-                                        }
                                         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                             NKikimr::NFulltext::FillSetting(
                                                 *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
@@ -2788,14 +2781,6 @@ public:
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
                             if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
-                                return SyncError();
-                            }
-                            break;
-                        }
-                        case Ydb::Table::TableIndex::kGlobalHnswIndex: {
-                            TString error;
-                            if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_hnsw_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }
@@ -3371,12 +3356,12 @@ public:
                         return SyncError();
                     }
 
-                    Ydb::Table::GlobalVectorKMeansTreeIndex* vectorIndex = nullptr;
                     if (existingIndex->Type == NYql::TIndexDescription::EType::GlobalSyncHnsw) {
-                        vectorIndex = add_index->mutable_global_hnsw_index();
-                    } else {
-                        vectorIndex = add_index->mutable_global_vector_kmeans_tree_index();
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            "HNSW index rebuild is not supported by the public table API"));
+                        return SyncError();
                     }
+                    auto* vectorIndex = add_index->mutable_global_vector_kmeans_tree_index();
 
                     // If user didn't provide ON columns, inherit from existing index
                     if (!hasUserColumns) {

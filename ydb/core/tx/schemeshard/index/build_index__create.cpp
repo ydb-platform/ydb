@@ -414,23 +414,12 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
-        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex: {
-            const bool isHnsw = index.type_case()
-                == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
-            if (isHnsw && !Self->EnableHNSWIndex) {
-                explain = "HNSW index support is disabled (EnableHNSWIndex)";
-                return false;
-            }
-            const auto& requestedSettings = isHnsw
-                ? index.global_hnsw_index().vector_settings()
-                : index.global_vector_kmeans_tree_index().vector_settings();
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            const auto& requestedSettings = index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
-            buildInfo.IndexType = isHnsw
-                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw
-                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
 
             if (buildInfo.IsRebuild) {

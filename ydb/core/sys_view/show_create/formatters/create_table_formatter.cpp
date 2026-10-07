@@ -586,11 +586,6 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
             break;
         }
-        case TableIndex::kGlobalHnswIndex: {
-            Stream << " GLOBAL USING hnsw ON ";
-            kMeansTreeSettings = index.global_hnsw_index().vector_settings();
-            break;
-        }
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
             Stream << " GLOBAL USING fulltext_plain ON ";
             fulltextIndexSettings = index.global_fulltext_plain_index().fulltext_settings();
@@ -720,27 +715,6 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         if (kMeansTreeSettings->overlap_ratio() != 0) {
             Stream << del << "overlap_ratio=\"" << kMeansTreeSettings->overlap_ratio() << "\"";
-            del = ", ";
-        }
-
-        const auto& vectorSettings = kMeansTreeSettings->settings();
-        if (vectorSettings.has_min_rows()) {
-            Stream << del << "min_rows="
-                << (vectorSettings.has_min_rows() ? vectorSettings.min_rows() : 10000);
-            del = ", ";
-        }
-        if (vectorSettings.has_m()) {
-            Stream << del << "M=" << vectorSettings.m();
-            del = ", ";
-        }
-        if (vectorSettings.has_ef_construction()) {
-            Stream << del << "ef_construction=" << vectorSettings.ef_construction();
-            del = ", ";
-        }
-        if (vectorSettings.has_delta_rows()) {
-            Stream << del << "delta_rows="
-                << vectorSettings.delta_rows();
-            del = ", ";
         }
 
         Stream << ")";

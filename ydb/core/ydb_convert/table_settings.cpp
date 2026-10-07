@@ -571,11 +571,8 @@ bool FillIndexTablePartitioning(
         }
         break;
 
-    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
-    case Ydb::Table::TableIndex::kGlobalHnswIndex: {
-        const auto& vectorIndex = index.type_case() == Ydb::Table::TableIndex::kGlobalHnswIndex
-            ? index.global_hnsw_index()
-            : index.global_vector_kmeans_tree_index();
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+        const auto& vectorIndex = index.global_vector_kmeans_tree_index();
         const bool prefixVectorIndex = index.index_columns().size() > 1;
         indexImplTableDescriptions.resize(prefixVectorIndex ? 3 : 2);
         if (!fillIndexPartitioning(vectorIndex.level_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::LevelTablePosition])) {

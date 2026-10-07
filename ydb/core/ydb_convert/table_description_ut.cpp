@@ -9,6 +9,38 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(ConvertTableDescription) {
+    Y_UNIT_TEST(InternalHnswIndexesAreOmittedFromPublicDescriptions) {
+        NKikimrSchemeOp::TTableDescription table;
+        auto* hidden = table.AddTableIndexes();
+        hidden->SetName("internal_hnsw");
+        hidden->SetType(NKikimrSchemeOp::EIndexTypeGlobalHnsw);
+        hidden->AddKeyColumnNames("embedding");
+        auto* supported = table.AddTableIndexes();
+        supported->SetName("vector_tree");
+        supported->SetType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree);
+        supported->AddKeyColumnNames("embedding");
+        supported->AddIndexImplTableDescriptions();
+        supported->AddIndexImplTableDescriptions();
+        supported->MutableVectorIndexKmeansTreeDescription()->MutableSettings()
+            ->mutable_settings()->set_vector_dimension(2);
+
+        Ydb::Table::DescribeTableResult description;
+        FillIndexDescription(description, table);
+        UNIT_ASSERT_VALUES_EQUAL(description.indexes_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(description.indexes(0).name(), "vector_tree");
+        UNIT_ASSERT(description.indexes(0).has_global_vector_kmeans_tree_index());
+        UNIT_ASSERT_VALUES_EQUAL(description.indexes(0).global_vector_kmeans_tree_index()
+            .vector_settings().settings().vector_dimension(), 2);
+
+        Ydb::Table::CreateTableRequest request;
+        FillIndexDescription(request, table);
+        UNIT_ASSERT_VALUES_EQUAL(request.indexes_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(request.indexes(0).name(), "vector_tree");
+        UNIT_ASSERT(request.indexes(0).has_global_vector_kmeans_tree_index());
+        UNIT_ASSERT_VALUES_EQUAL(request.indexes(0).global_vector_kmeans_tree_index()
+            .vector_settings().settings().vector_dimension(), 2);
+    }
+
     template <typename T>
     struct TInvoker {
         T Value;

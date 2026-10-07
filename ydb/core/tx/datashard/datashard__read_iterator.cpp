@@ -3007,9 +3007,7 @@ public:
             // construct it asynchronously; this read continues by brute force.
             const ui32 localTid = TableInfo.LocalTid;
             const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
-            const bool useCachedHnswParameters = topK.GetSettings().vector_dimension() == 0
-                && !topK.GetSettings().has_m()
-                && !topK.GetSettings().has_ef_construction();
+            const bool useCachedHnswParameters = topK.GetSettings().vector_dimension() == 0;
             auto hnswSettings = topK.GetSettings();
             if (NKMeans::NeedsVectorSettingsAutoSelect(hnswSettings)) {
                 NKMeans::AutoSelectVectorSettings(hnswSettings, topK.GetTargetVector());

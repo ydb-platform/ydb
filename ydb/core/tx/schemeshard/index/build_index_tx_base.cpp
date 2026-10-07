@@ -347,7 +347,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw:
-            *index.mutable_global_hnsw_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
+            // This internal index type cannot be represented in public build settings.
+            settings.clear_index();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:

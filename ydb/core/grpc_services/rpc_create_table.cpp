@@ -330,7 +330,6 @@ private:
                 case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                 case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
-                case Ydb::Table::TableIndex::kGlobalHnswIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
                 case Ydb::Table::TableIndex::kGlobalJsonIndex:

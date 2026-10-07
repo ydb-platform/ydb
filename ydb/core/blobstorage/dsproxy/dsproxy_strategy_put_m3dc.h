@@ -24,9 +24,9 @@ public:
     ui8 PreferredReplicasPerRealm(const T3dcSituation& situation) const {
         // calculate the least number of replicas we have to provide per each realm
         if (Tactic == TEvBlobStorage::TEvPut::TacticMinLatency) {
-            // Two NOTREADY replies can leave the other realms needing two successful replicas each.
-            // Hedge those writes immediately by sending to their third disks.
-            return EnableRequestMod3x3ForMinLatecy || situation.MaxNotReadyInRealm >= 2 ? 3 : 2;
+            // Try every disk in the realm before hedging the writes in the other realms.
+            return EnableRequestMod3x3ForMinLatecy
+                || situation.MaxNotReadyInRealm == NumFailDomainsPerFailRealm ? 3 : 2;
         }
         return situation.MaxErrorsInRealm == NumFailDomainsPerFailRealm ? 2 : 1;
     }

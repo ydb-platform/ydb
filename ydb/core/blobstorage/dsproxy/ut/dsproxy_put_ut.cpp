@@ -471,7 +471,8 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
 template <bool MultiPut>
 void TestMirror3dcMinLatencyNotReady(ui32 failedRealm, bool splitFailures = false,
         NKikimrProto::EReplyStatus firstStatus = NKikimrProto::NOTREADY,
-        NKikimrProto::EReplyStatus secondStatus = NKikimrProto::NOTREADY) {
+        NKikimrProto::EReplyStatus secondStatus = NKikimrProto::NOTREADY,
+        NKikimrProto::EReplyStatus retryStatus = NKikimrProto::NOTREADY) {
     TTestBasicRuntime runtime;
     SetupRuntime(runtime);
     TDSProxyEnv env;
@@ -562,37 +563,49 @@ void TestMirror3dcMinLatencyNotReady(ui32 failedRealm, bool splitFailures = fals
             secondFailedRealm);
         return;
     }
-    if (firstStatus != NKikimrProto::NOTREADY || secondStatus != NKikimrProto::NOTREADY) {
-        // Ordinary errors still retry within the failed DC without hedging the other DCs.
+    // The first two failures only cause a retry on the third disk in this DC.
+    UNIT_ASSERT(requests.empty());
+    reply(initialRequests[failedRealm][2], retryStatus);
+    UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
+    if (firstStatus != NKikimrProto::NOTREADY || secondStatus != NKikimrProto::NOTREADY
+            || retryStatus == NKikimrProto::ERROR) {
+        // A DC with ordinary errors does not trigger these extra survivor requests.
         UNIT_ASSERT(requests.empty());
         return;
     }
 
-    // Both NOTREADY responses are known before any surviving DC has replied.
-    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
     TVector<typename TRequest::TPtr> hedges(3);
-    while (!requests.empty()) {
-        auto request = std::move(requests.front());
-        requests.pop_front();
-        const TVDiskID vdiskId = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
-        UNIT_ASSERT(vdiskId.FailRealm != failedRealm);
-        UNIT_ASSERT(!hedges[vdiskId.FailRealm]);
-        UNIT_ASSERT(requestedDisks.insert(vdiskId).second);
-        hedges[vdiskId.FailRealm] = std::move(request);
+    if (retryStatus == NKikimrProto::OK) {
+        // Recovery of the third disk makes one successful replica in each DC sufficient.
+        UNIT_ASSERT(requests.empty());
+    } else {
+        // All three disks are NOTREADY before any surviving DC has replied.
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+        while (!requests.empty()) {
+            auto request = std::move(requests.front());
+            requests.pop_front();
+            const TVDiskID vdiskId = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+            UNIT_ASSERT(vdiskId.FailRealm != failedRealm);
+            UNIT_ASSERT(!hedges[vdiskId.FailRealm]);
+            UNIT_ASSERT(requestedDisks.insert(vdiskId).second);
+            hedges[vdiskId.FailRealm] = std::move(request);
+        }
     }
     for (ui32 realm = 0; realm < 3; ++realm) {
         if (realm != failedRealm) {
-            UNIT_ASSERT(hedges[realm]);
             reply(initialRequests[realm][0], NKikimrProto::OK);
         }
     }
-    UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
-    for (ui32 realm = 0; realm < 3; ++realm) {
-        if (realm != failedRealm) {
-            reply(hedges[realm], NKikimrProto::OK);
+    if (retryStatus == NKikimrProto::NOTREADY) {
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId()).empty());
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            if (realm != failedRealm) {
+                UNIT_ASSERT(hedges[realm]);
+                reply(hedges[realm], NKikimrProto::OK);
+            }
         }
     }
-    // One initial request in each surviving DC and the failed DC retry are still pending.
+    // One initial request in each surviving DC is still pending.
     auto results = runtime.CaptureMailboxEvents(testState.EdgeActor.Hint(), testState.EdgeActor.NodeId());
     UNIT_ASSERT_VALUES_EQUAL(results.size(), blobCount);
     THashSet<TLogoBlobID> completed;
@@ -611,21 +624,29 @@ void TestMirror3dcMinLatencyNotReady(ui32 failedRealm, bool splitFailures = fals
 Y_UNIT_TEST(TestMirror3dcMinLatencyNotReady) {
     for (ui32 failedRealm = 0; failedRealm < 3; ++failedRealm) {
         TestMirror3dcMinLatencyNotReady<false>(failedRealm);
+        TestMirror3dcMinLatencyNotReady<false>(failedRealm, false,
+            NKikimrProto::NOTREADY, NKikimrProto::NOTREADY, NKikimrProto::OK);
     }
     TestMirror3dcMinLatencyNotReady<false>(0, true);
     TestMirror3dcMinLatencyNotReady<false>(0, false, NKikimrProto::ERROR, NKikimrProto::ERROR);
     TestMirror3dcMinLatencyNotReady<false>(0, false, NKikimrProto::ERROR, NKikimrProto::NOTREADY);
     TestMirror3dcMinLatencyNotReady<false>(0, false, NKikimrProto::NOTREADY, NKikimrProto::ERROR);
+    TestMirror3dcMinLatencyNotReady<false>(0, false,
+        NKikimrProto::NOTREADY, NKikimrProto::NOTREADY, NKikimrProto::ERROR);
 }
 
 Y_UNIT_TEST(TestMirror3dcMultiPutMinLatencyNotReady) {
     for (ui32 failedRealm = 0; failedRealm < 3; ++failedRealm) {
         TestMirror3dcMinLatencyNotReady<true>(failedRealm);
+        TestMirror3dcMinLatencyNotReady<true>(failedRealm, false,
+            NKikimrProto::NOTREADY, NKikimrProto::NOTREADY, NKikimrProto::OK);
     }
     TestMirror3dcMinLatencyNotReady<true>(0, true);
     TestMirror3dcMinLatencyNotReady<true>(0, false, NKikimrProto::ERROR, NKikimrProto::ERROR);
     TestMirror3dcMinLatencyNotReady<true>(0, false, NKikimrProto::ERROR, NKikimrProto::NOTREADY);
     TestMirror3dcMinLatencyNotReady<true>(0, false, NKikimrProto::NOTREADY, NKikimrProto::ERROR);
+    TestMirror3dcMinLatencyNotReady<true>(0, false,
+        NKikimrProto::NOTREADY, NKikimrProto::NOTREADY, NKikimrProto::ERROR);
 }
 
 Y_UNIT_TEST(TestMirror3dcNotReadyStateIsDistinctFromError) {

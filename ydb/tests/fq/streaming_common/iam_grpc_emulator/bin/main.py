@@ -11,12 +11,8 @@ from google.protobuf import timestamp_pb2
 from ydb.public.api.client.yc_private.iam import iam_token_service_pb2
 from ydb.public.api.client.yc_private.iam import iam_token_service_pb2_grpc
 
-if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
-    from ydb.public.api.client.yc_private.accessservice import access_service_pb2
-    from ydb.public.api.client.yc_private.accessservice import access_service_pb2_grpc
-else:
-    from ydb.public.api.client.yc_private.servicecontrol import access_service_pb2
-    from ydb.public.api.client.yc_private.servicecontrol import access_service_pb2_grpc
+from ydb.public.api.client.yc_private.accessservice import access_service_pb2
+from ydb.public.api.client.yc_private.accessservice import access_service_pb2_grpc
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)

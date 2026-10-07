@@ -111,11 +111,6 @@ def get_ydb_config(request, enable_fq_connector=None):
     if not enable_kqp_constraints_transformer:
         disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
-    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
-        extra_feature_flags.add("enable_access_service_v2_interface")
-    else:
-        disabled_feature_flags.append("enable_access_service_v2_interface")
-
     iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
 
     if enable_external_data_sources:

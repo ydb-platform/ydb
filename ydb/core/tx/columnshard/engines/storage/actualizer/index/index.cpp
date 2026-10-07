@@ -51,6 +51,7 @@ TGranuleActualizationIndex::TGranuleActualizationIndex(
     , VersionedIndex(versionedIndex)
     , StoragesManager(storagesManager)
 {
+    Y_UNUSED(PathId);
 }
 
 void TGranuleActualizationIndex::Start() {

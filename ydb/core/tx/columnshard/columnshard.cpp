@@ -15,8 +15,6 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>

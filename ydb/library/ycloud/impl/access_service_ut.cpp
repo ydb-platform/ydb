@@ -78,6 +78,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(!result->Status.Ok());
+        UNIT_ASSERT_VALUES_EQUAL(result->Status.Msg, "Permission Denied");
 
         request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->Request.set_iam_token("good1");

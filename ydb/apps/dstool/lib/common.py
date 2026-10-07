@@ -219,7 +219,9 @@ class ConnectionParams:
             if password_file is not None or no_password:
                 if password_file is not None:
                     password_file.close()
-                raise InvalidParameterError(self.parser, '--user', '', 'User name is required for password authentication')
+                raise InvalidParameterError(
+                    self.parser, '--user', '', 'User name is required for password authentication'
+                )
             return
 
         if password_file is not None:
@@ -320,15 +322,36 @@ class ConnectionParams:
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
         token_group = g.add_mutually_exclusive_group()
-        token_group.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
-        token_group.add_argument('--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file')
-        token_group.add_argument('--user', type=str, metavar='NAME', help='User name to authenticate with. Use NAME@ldap for LDAP users.')
+        token_group.add_argument(
+            '--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file'
+        )
+        token_group.add_argument(
+            '--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file'
+        )
+        token_group.add_argument(
+            '--user', type=str, metavar='NAME', help='User name to authenticate with. Use NAME@ldap for LDAP users.'
+        )
         password_group = g.add_mutually_exclusive_group()
-        password_group.add_argument('--password-file', type=FileType(encoding='utf-8'), metavar='PATH', help='Path to password file')
-        password_group.add_argument('--no-password', action='store_true', help='Use an empty password for the specified user')
-        g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. '
-                                                                                  'If this parameter is empty, the default roots will be used.')
-        g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')
+        password_group.add_argument(
+            '--password-file', type=FileType(encoding='utf-8'), metavar='PATH', help='Path to password file'
+        )
+        password_group.add_argument(
+            '--no-password', action='store_true', help='Use an empty password for the specified user'
+        )
+        g.add_argument(
+            '--ca-file',
+            metavar='PATH',
+            dest='cafile',
+            type=str,
+            help='File containing PEM encoded root certificates for SSL/TLS connections. '
+            'If this parameter is empty, the default roots will be used.',
+        )
+        g.add_argument(
+            '--http-timeout',
+            type=int,
+            default=5,
+            help='Timeout for blocking socket I/O operations during HTTP(s) queries',
+        )
         g.add_argument('--insecure', action='store_true', help='Allow insecure HTTPS fetching')
 
 
@@ -660,8 +683,10 @@ def invoke_grpc(
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
     if connection_params.debug:
-        p = '<redacted>' if func == 'Login' else ', '.join(
-            '<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params
+        p = (
+            '<redacted>'
+            if func == 'Login'
+            else ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
         )
         print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, endpoint.host, endpoint.grpc_port,
               endpoint.protocol), file=sys.stderr)

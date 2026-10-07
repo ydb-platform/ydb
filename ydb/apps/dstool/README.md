@@ -659,3 +659,29 @@ field and filter schema.
 
 `change_pdisk_key` and `obliterate_pdisk` use the Berkanavt test-cluster paths shown by the existing workload tooling and are
 intended for that deployment layout. `change_pdisk_key` refuses to run unless the node uses the expected PDisk key file.
+
+## Login and password authentication
+
+DSTool can obtain a login token directly:
+
+```bash
+ydb-dstool -e grpcs://host:2135 -e https://host:8765 \
+  --user alice --password-file /path/to/password cluster list
+```
+
+Use `--no-password` for an empty password. Otherwise, the password comes from
+`--password-file`, `YDB_PASSWORD`, or an interactive prompt, in that order.
+`YDB_USER` supplies the username when `--user` is omitted. LDAP usernames use
+the `NAME@ldap` form.
+
+An explicit `--user`, `--password-file`, or `--no-password` selects login instead
+of environment or default-file tokens. Explicit token files retain priority;
+without login options, existing token sources are checked before `YDB_USER`.
+`YDB_PASSWORD` alone does not select login or interfere with token authentication.
+
+Login uses TLS endpoints whenever any are supplied, without falling back to
+plaintext after a failure. For an HTTPS-only endpoint, login uses TLS on the
+configured `--grpc-port` (2135 by default). Supply an explicit `grpcs` endpoint
+when its port differs. Plaintext login is used only when all supplied endpoints
+are `grpc` or `http`. `--ca-file` configures trusted certificates; `--insecure`
+affects HTTPS queries only and does not disable login certificate verification.

@@ -5,6 +5,7 @@ SIZE(SMALL)
 TEST_SRCS(
     test_capacity_metrics.py
     test_connection_tokens.py
+    test_connection_login.py
     test_nbs_dbg_like_load.py
     test_cluster_balance.py
     test_cluster_workload_config.py

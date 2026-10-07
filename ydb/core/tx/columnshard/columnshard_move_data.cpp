@@ -117,7 +117,14 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
 }
 
-void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
+NOlap::NActualizer::TMoveDataQueueSizes TColumnShard::GetMoveDataQueueSizes() const {
+    if (!HasIndex()) {
+        return {};
+    }
+    return GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
+}
+
+void TColumnShard::CheckMoveDataGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
     if (!MoveDataState.Active) {
         return;
     }
@@ -127,10 +134,6 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         return;
     }
 
-    NOlap::NActualizer::TMoveDataQueueSizes queues;
-    if (HasIndex()) {
-        queues = GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
-    }
     Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight, queues.Uncommitted, queues.Retired);
     if (queues.Rejected > MoveDataState.ReportedRejections) {
         Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
@@ -211,9 +214,15 @@ void TMoveDataDriver::StartAndCheckGate(const TActorContext& ctx) {
     if (Self->MoveDataState.TargetsChanged) {
         Self->RestartMoveDataActualizer();
     }
-    Self->SetupMoveDataMetadata();
-    Self->SetupMoveDataRewrites();
-    Self->CheckMoveDataGate(ctx);
+    // One index walk per turn: the sizes also say which leg has anything to do, so an idle turn walks once instead of three times.
+    const NOlap::NActualizer::TMoveDataQueueSizes queues = Self->GetMoveDataQueueSizes();
+    if (queues.Pending) {
+        Self->SetupMoveDataMetadata();
+    }
+    if (queues.ConfirmedToMove) {
+        Self->SetupMoveDataRewrites();
+    }
+    Self->CheckMoveDataGate(ctx, queues);
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx) {

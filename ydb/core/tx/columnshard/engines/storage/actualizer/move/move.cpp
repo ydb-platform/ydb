@@ -39,6 +39,10 @@ private:
         }
     }
 
+    bool DoIsMoveData() const override {
+        return true;
+    }
+
 public:
     TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer)
         : MoveDataActualizer(actualizer)

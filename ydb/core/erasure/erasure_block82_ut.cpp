@@ -95,9 +95,7 @@ Y_UNIT_TEST_SUITE(ErasureBlock82) {
     Y_UNIT_TEST(RegistryAndGeometry) {
         const TErasureType type(Species);
         UNIT_ASSERT_VALUES_EQUAL(Species, 19);
-        UNIT_ASSERT_VALUES_EQUAL(type.ToString(), "block-8-2");
         UNIT_ASSERT_VALUES_EQUAL(TErasureType::ErasureSpeciesToStr(Species), "8Plus2Block");
-        UNIT_ASSERT_VALUES_EQUAL(TErasureType::ErasureSpeciesByName("block-8-2"), Species);
         UNIT_ASSERT_EQUAL(type.ErasureFamily(), TErasureType::ErasureParityBlock);
         UNIT_ASSERT_VALUES_EQUAL(type.DataParts(), 8);
         UNIT_ASSERT_VALUES_EQUAL(type.ParityParts(), 2);

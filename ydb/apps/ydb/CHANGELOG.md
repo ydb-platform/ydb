@@ -1,3 +1,4 @@
+* Exposed the `ydb workload testshard` command for creating and managing TestShard tablets for storage load testing.
 
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.

@@ -258,6 +258,26 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     return false;
 }
 
+void TTupleLayout::StashFloatOriginals(ui8* rows, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            ui8* row = rows + i * rowSize;
+            std::memcpy(row + orig.PayloadOffset, row + orig.KeyOffset, orig.Size);
+        }
+    }
+}
+
+void TTupleLayout::RestoreFloatOriginalsImpl(ui8** columns, const ui8* rows, ui32 start, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            std::memcpy(columns[orig.OriginalIndex] + (start + i) * orig.Size,
+                        rows + i * rowSize + orig.PayloadOffset, orig.Size);
+        }
+    }
+}
+
 void TTupleLayout::CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const {
     const ui32 rowSize = TotalRowSize;
     for (const ui32 offset : FloatKeyOffsets) {
@@ -433,6 +453,17 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         col.Offset = currOffset;
         Columns.push_back(col);
         currOffset += col.DataSize;
+    }
+
+    // Original float/double key bytes. Not a real column: the null bitmask and
+    // column index space stay sized by the input columns. Unpack writes this
+    // slot back over the canonical key.
+    for (const auto& key : KeyColumns) {
+        if (!key.FloatingPoint) {
+            continue;
+        }
+        FloatOriginals.push_back({key.Offset, currOffset, key.DataSize, key.OriginalIndex});
+        currOffset += key.DataSize;
     }
 
     PayloadEnd = currOffset;
@@ -818,6 +849,9 @@ void TTupleLayoutFallback::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
+    const ui8* const rows = res;
+    const ui32 rowStart = start;
+    const ui32 rowCount = count;
     std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
 
     {
@@ -941,6 +975,8 @@ void TTupleLayoutFallback::Unpack(
                                  dataOffset + size);
         }
     }
+
+    RestoreFloatOriginals(columns, rows, rowStart, rowCount);
 }
 
 void TTupleLayoutFallback::BucketPack(
@@ -1471,6 +1507,8 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                                      dataOffset + size);
             }
         }
+
+        RestoreFloatOriginals(columns, res, start, cur_block_size);
 
         start += cur_block_size;
         res += cur_block_size * TotalRowSize;

@@ -1251,11 +1251,38 @@ void CheckFloatKeysCanonicalized(const TTupleLayout& tl) {
     const ui32 floatOffset = keyOffset(sizeof(float));
     const ui32 doubleOffset = keyOffset(sizeof(double));
     const ui32 payloadOffset = tl.PayloadColumns.front().Offset;
+    auto originalOffset = [&](ui32 keyOffset) {
+        for (const auto& orig : tl.FloatOriginals) {
+            if (orig.KeyOffset == keyOffset) {
+                return orig.PayloadOffset;
+            }
+        }
+        UNIT_FAIL("no original slot for key at " << keyOffset);
+        return 0u;
+    };
+    const ui32 floatOriginalOffset = originalOffset(floatOffset);
+    const ui32 doubleOriginalOffset = originalOffset(doubleOffset);
 
     for (ui32 i = 0; i < rows; ++i) {
         UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui32>(row(i) + floatOffset), expectedFloats[i], "row " << i);
         UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + doubleOffset), expectedDoubles[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui32>(row(i) + floatOriginalOffset), floats[i], "row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + doubleOriginalOffset), doubles[i], "row " << i);
         UNIT_ASSERT_VALUES_EQUAL_C(ReadUnaligned<ui64>(row(i) + payloadOffset), payload[i], "row " << i);
+    }
+
+    std::vector<ui32> unpackedFloats(rows);
+    std::vector<ui64> unpackedDoubles(rows);
+    std::vector<ui64> unpackedPayload(rows);
+    ui8* outCols[] = {reinterpret_cast<ui8*>(unpackedFloats.data()),
+                      reinterpret_cast<ui8*>(unpackedDoubles.data()),
+                      reinterpret_cast<ui8*>(unpackedPayload.data())};
+    ui8* outValid[] = {nullptr, nullptr, nullptr};
+    tl.Unpack(outCols, outValid, packed.data(), overflow, 0, rows);
+    for (ui32 i = 0; i < rows; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedFloats[i], floats[i], "unpacked row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedDoubles[i], doubles[i], "unpacked row " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedPayload[i], payload[i], "unpacked row " << i);
     }
 
     auto assertSameKey = [&](ui32 lhs, ui32 rhs) {

@@ -141,8 +141,8 @@ struct TColumnDesc {
                        // Must be same for matching key columns
     ui32 Offset =
         0; // Offset in bytes for column value from the beginning of tuple
-    bool FloatingPoint = false; // Float/Double value; as a key it is canonicalized
-                                // so that equal floats have equal bytes
+    bool FloatingPoint = false; // Float/Double key: hashed and compared in canonical
+                                // form, while the original bytes are kept aside
 };
 
 // Defines in memory layout of tuple.
@@ -181,8 +181,17 @@ struct TTupleLayout {
 
     // Keys are hashed and compared bytewise, so Float/Double keys get -0.0 and
     // every NaN rewritten to a single representation, matching EquateFloats.
+    // The original bytes live in an extra payload slot and are written back on
+    // unpack, so the join result keeps the input value.
+    struct TFloatOriginal {
+        ui32 KeyOffset = 0;
+        ui32 PayloadOffset = 0;
+        ui32 Size = 0;
+        ui32 OriginalIndex = 0; // input/output buffer of this key
+    };
     std::vector<ui32> FloatKeyOffsets;
     std::vector<ui32> DoubleKeyOffsets;
+    std::vector<TFloatOriginal> FloatOriginals;
     bool HasFloatingPointKeys = false;
 
     // Input-column indexes (OriginalColumnIndex) that use IS NOT DISTINCT FROM.
@@ -197,13 +206,24 @@ struct TTupleLayout {
 
     void NormalizeEqualNullsFixedKeys(ui8* res) const;
 
-    // Must run on freshly packed rows before their key bytes are hashed
+    // Must run on freshly packed rows before their key bytes are hashed.
+    // Stashes the original key bytes into the extra payload slot first.
     Y_FORCE_INLINE void CanonicalizeFloatKeys(ui8* rows, ui32 count) const {
         if (Y_UNLIKELY(HasFloatingPointKeys)) {
+            StashFloatOriginals(rows, count);
             CanonicalizeFloatKeysImpl(rows, count);
         }
     }
+    void StashFloatOriginals(ui8* rows, ui32 count) const;
     void CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const;
+
+    // Overwrites unpacked key buffers with the stashed original bytes.
+    Y_FORCE_INLINE void RestoreFloatOriginals(ui8** columns, const ui8* rows, ui32 start, ui32 count) const {
+        if (Y_UNLIKELY(HasFloatingPointKeys)) {
+            RestoreFloatOriginalsImpl(columns, rows, start, count);
+        }
+    }
+    void RestoreFloatOriginalsImpl(ui8** columns, const ui8* rows, ui32 start, ui32 count) const;
     bool HashVariableKey(const ui8* res, ui32 keyColIdx) const;
 
     // Creates new tuple layout based on provided columns description.

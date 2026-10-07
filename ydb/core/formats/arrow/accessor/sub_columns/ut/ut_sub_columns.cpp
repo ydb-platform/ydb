@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                               const std::vector<std::pair<ui32, TStringBuf>>& expected) {
         using namespace NKikimr::NArrow::NAccessor::NSubColumns;
 
-        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
+        TCompositeChunkedArray::TBuilder builder(arrow::binary());
         builder.AddChunk(first);
         builder.AddChunk(second);
         const ui32 recordsCount = first->GetRecordsCount() + second->GetRecordsCount();
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     }
 
     Y_UNIT_TEST(DictionaryThenPlainCompositeUsesGlobalChunkAddress) {
-        arrow::StringBuilder dictionaryBuilder;
+        arrow::BinaryBuilder dictionaryBuilder;
         AFL_VERIFY(dictionaryBuilder.Append("dict-a").ok());
         AFL_VERIFY(dictionaryBuilder.Append("dict-b").ok());
         std::shared_ptr<arrow::Array> dictionary;
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         std::shared_ptr<arrow::Array> positions;
         AFL_VERIFY(positionsBuilder.Finish(&positions).ok());
 
-        TTrivialArray::TPlainBuilder<arrow::StringType> plainBuilder;
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> plainBuilder;
         plainBuilder.AddRecord(0, "plain-a");
         plainBuilder.AddRecord(1, "plain-b");
         CheckCompositeValues(std::make_shared<TDictionaryArray>(dictionary, positions), plainBuilder.Finish(2),
@@ -205,11 +205,11 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
     }
 
     Y_UNIT_TEST(PlainThenSparseCompositeUsesGlobalChunkAddress) {
-        TTrivialArray::TPlainBuilder<arrow::StringType> plainBuilder;
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> plainBuilder;
         plainBuilder.AddRecord(0, "plain-a");
         plainBuilder.AddRecord(1, "plain-b");
 
-        TSparsedArray::TSparsedBuilder<arrow::StringType> sparseBuilder(nullptr, 1, 0);
+        TSparsedArray::TSparsedBuilder<arrow::BinaryType> sparseBuilder(nullptr, 1, 0);
         sparseBuilder.AddRecord(1, "sparse");
         CheckCompositeValues(plainBuilder.Finish(2), sparseBuilder.Finish(3),
                              {{0, "plain-a"}, {1, "plain-b"}, {3, "sparse"}});
@@ -220,7 +220,8 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         statsBuilder.Add(TString(R"("a")"), 1, 0, IChunkedArray::EType::SparsedArray, NSubColumns::EValueType::String);
         auto stats = statsBuilder.Finish();
 
-        TSparsedArray::TSparsedBuilder<arrow::StringType> values(std::make_shared<arrow::StringScalar>("default"), 1, 0);
+        TSparsedArray::TSparsedBuilder<arrow::BinaryType> values(
+            std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString("default")), 1, 0);
         values.AddNull(0);
         auto records = std::make_shared<TGeneralContainer>(1);
         records->AddField(stats.GetField(0), values.Finish(1)).Validate();

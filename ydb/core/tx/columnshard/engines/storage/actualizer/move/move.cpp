@@ -223,6 +223,7 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
         } else if (const auto itUncommitted = uncommitted.find(portionId); itUncommitted != uncommitted.end()) {
             portion = itUncommitted->second;
         } else {
+            // MoveDataMetadataRequestsBatching pins this down: a portion the engine no longer knows is skipped, not requested.
             continue;
         }
         if (!currentRequest) {
@@ -265,7 +266,8 @@ void TMoveDataActualizer::Seed(
             RetiredPortionIds.emplace(portionId);
             continue;
         }
-        AddPortion(portion, externalContext);
+        // Straight to Pending like the uncommitted loop below: on a fresh actualizer every check DoAddPortion makes is already known here.
+        PendingPortionIds.emplace(portionId);
     }
     // Initial membership lets a write that commits after the session started still move.
     for (const auto& [portionId, portion] : uncommitted) {

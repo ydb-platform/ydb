@@ -175,6 +175,7 @@ public:
     bool MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(TTabletDebugState* debugState = nullptr) const;
     bool IsAllowedToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
+    bool SupportsRecoveryForTablet(TTabletTypes::EType type) const;
     bool IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState = nullptr) const;
     i32 GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriority& dcPriority) const;
     ui64 GetMaxTabletsScheduled() const;

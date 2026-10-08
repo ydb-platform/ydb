@@ -27,6 +27,10 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/mediator/mediator.h>
+#include <ydb/core/tx/tx_allocator/txallocator.h>
+#include <ydb/core/tablet_flat/flat_executor_backup.h>
+#include <ydb/core/tablet_flat/flat_executor_recovery.h>
+#include <util/folder/tempdir.h>
 #include <ydb/core/util/random.h>
 
 #include <ydb/core/mind/hive/hive_events.h>
@@ -240,6 +244,10 @@ namespace {
                     TMailboxType::Simple, 0);
         localConfig->TabletClassInfo[TTabletTypes::Mediator].SetupInfo = new TTabletSetupInfo(
                     &CreateTxMediator,
+                    TMailboxType::Simple, 0,
+                    TMailboxType::Simple, 0);
+        localConfig->TabletClassInfo[TTabletTypes::TxAllocator].SetupInfo = new TTabletSetupInfo(
+                    &CreateTxAllocator,
                     TMailboxType::Simple, 0,
                     TMailboxType::Simple, 0);
         localConfig->TabletClassInfo[TTabletTypes::ColumnShard].SetupInfo = new TTabletSetupInfo(
@@ -887,6 +895,194 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     void BalanceTablets(TTestBasicRuntime& runtime, ui64 hiveTabletId) {
         BalanceTablets(runtime, hiveTabletId, runtime.AllocateEdgeActor());
+    }
+
+    Y_UNIT_TEST(TestTenantSystemTabletRecovery) {
+        using namespace NTabletFlatExecutor;
+        TTempDir backupDir;
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [&](TAppPrepare& app) {
+            SetupResourceBroker(runtime, 0, app.ResourceBrokerConfig);
+            NSharedCache::TSharedCacheConfig cacheConfig;
+            cacheConfig.SetMemoryLimit(32_MB);
+            SetupSharedPageCache(runtime, 0, cacheConfig);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 owner = MakeTabletID(false, 1);
+        const TPathId tenant(1, 3);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        const auto sender = runtime.AllocateEdgeActor();
+
+        ui32 normalBoots = 0;
+        ui32 recoveryBoots = 0;
+        ui32 lastNormalGeneration = 0;
+        TActorId localActor;
+        auto bootObserver = runtime.AddObserver<TEvLocal::TEvBootTablet>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetInfo().GetTabletType() == TTabletTypes::TxAllocator) {
+                auto info = TabletStorageInfoFromProto(record.GetInfo());
+                UNIT_ASSERT_VALUES_EQUAL(info->TenantPathId, tenant);
+                localActor = ev->Recipient;
+                if (record.GetRecoveryMode()) {
+                    ++recoveryBoots;
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetFollowerId(), 0);
+                } else {
+                    ++normalBoots;
+                    lastNormalGeneration = record.GetSuggestedGeneration();
+                }
+            }
+        });
+        // TxAllocator requires a nonzero private marker in the low 16 bits of its ID.
+        const auto dummyId = SendCreateTestTablet(runtime, hiveTablet, owner,
+            MakeHolder<TEvHive::TEvCreateTablet>(owner, 1, TTabletTypes::Dummy, BINDED_CHANNELS), 0, true);
+        auto create = MakeHolder<TEvHive::TEvCreateTablet>(owner, 0, TTabletTypes::TxAllocator, BINDED_CHANNELS);
+        create->Record.MutableObjectDomain()->SetSchemeShard(tenant.OwnerId);
+        create->Record.MutableObjectDomain()->SetPathId(tenant.LocalPathId);
+        auto* allowed = create->Record.AddAllowedDomains();
+        allowed->SetSchemeShard(TTestTxConfig::SchemeShard);
+        allowed->SetPathId(1);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, owner, std::move(create), 0, true);
+
+        auto allocate = [&](ui64 count) {
+            runtime.SendToPipe(tabletId, sender, new TEvTxAllocator::TEvAllocate(count), 0, GetPipeConfigWithRetries());
+            auto result = runtime.GrabEdgeEvent<TEvTxAllocator::TEvAllocateResult>(TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrTx::TEvTxAllocateResult::SUCCESS);
+            return result->Record;
+        };
+        const auto saved = allocate(100);
+        auto& backupConfig = runtime.GetAppData().SystemTabletBackupConfig;
+        backupConfig.MutableFilesystem()->SetPath(backupDir.Name());
+        bool snapshotComplete = false;
+        auto snapshotObserver = runtime.AddObserver<NBackup::TEvSnapshotCompleted>([&](auto& ev) {
+            UNIT_ASSERT_C(ev->Get()->Success, ev->Get()->Error);
+            snapshotComplete = true;
+        });
+        RebootTablet(runtime, tabletId, sender);
+        runtime.WaitFor("tenant snapshot", [&] { return snapshotComplete; }, TDuration::Seconds(10));
+        TVector<TFsPath> backups;
+        TFsPath(backupDir.Name()).Child("tx_allocator").Child(ToString(tabletId)).List(backups);
+        UNIT_ASSERT_VALUES_EQUAL(backups.size(), 1);
+        const TString backupPath = backups.front().GetPath();
+
+        // Seal the selected backup, then change the live state without changing that backup.
+        backupConfig.ClearFilesystem();
+        RebootTablet(runtime, tabletId, sender);
+        const auto changed = allocate(200);
+        UNIT_ASSERT_VALUES_EQUAL(changed.GetRangeBegin(), saved.GetRangeEnd());
+
+        auto setMode = [&](const TString& value, bool invalid = false, bool useGet = false, ui64 target = 0) {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(useGet ? HTTP_METHOD_GET : HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            for (const auto& [key, val] : TVector<std::pair<TString, TString>>{
+                    {"TabletID", ToString(hiveTablet)}, {"page", "SetRecoveryMode"},
+                    {"tablet", ToString(target ? target : tabletId)}, {"recovery", value}}) {
+                auto* param = pb.AddQueryParams();
+                param->SetKey(key);
+                param->SetValue(val);
+            }
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+            if (invalid) {
+                auto result = runtime.GrabEdgeEvent<NMon::TEvRemoteBinaryInfoRes>(TDuration::Seconds(10));
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_C(result->Blob.StartsWith("HTTP/1.1 400"), result->Blob);
+                return;
+            }
+            auto result = runtime.GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            NJson::TJsonValue json;
+            UNIT_ASSERT(ReadJsonTree(result->Json, &json, false));
+            UNIT_ASSERT_VALUES_EQUAL(json["RecoveryMode"].GetBooleanSafe(), value == "1");
+        };
+        auto restore = [&](const TString& path, bool success) {
+            runtime.SendToPipe(tabletId, sender, new NRecovery::TEvRestoreBackup(path), 0, GetPipeConfigWithRetries());
+            auto result = runtime.GrabEdgeEvent<NRecovery::TEvRestoreCompleted>(TDuration::Seconds(10));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Success, success, result->Error);
+        };
+
+        setMode("invalid", true);
+        setMode("1", true, true);
+        setMode("1", true, false, tabletId + 1000000);
+        setMode("1", true, false, dummyId);
+        setMode("1");
+        runtime.WaitFor("recovery boot", [&] { return recoveryBoots == 1; }, TDuration::Seconds(10));
+        const auto normalBootsBeforeRecovery = normalBoots;
+        restore(backupPath + "-missing", false);
+        setMode("1"); // Repeating the request must not restart or clear the recovery state.
+        UNIT_ASSERT_VALUES_EQUAL(recoveryBoots, 1);
+        UNIT_ASSERT_VALUES_EQUAL(normalBoots, normalBootsBeforeRecovery);
+
+        RebootTablet(runtime, hiveTablet, sender);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        // Restarting the failed recovery actor must retain recovery after the Hive restart.
+        const auto previousRecoveryBoots = recoveryBoots;
+        ForwardToTablet(runtime, tabletId, sender, new TEvents::TEvPoisonPill(), 0, true);
+        runtime.WaitFor("persistent recovery mode", [&] { return recoveryBoots > previousRecoveryBoots; }, TDuration::Seconds(10));
+        InvalidateTabletResolverCache(runtime, tabletId);
+        restore(backupPath, true);
+        UNIT_ASSERT_VALUES_EQUAL(normalBoots, normalBootsBeforeRecovery);
+
+        // A delayed normal-mode report must not reset the completed recovery.
+        bool staleStopReceived = false;
+        auto staleStopObserver = runtime.AddObserver<TEvLocal::TEvStopTablet>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletId() == tabletId) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetGeneration(), lastNormalGeneration);
+                staleStopReceived = true;
+            }
+        });
+        auto staleSync = MakeHolder<TEvLocal::TEvSyncTablets>();
+        auto* staleTablet = staleSync->Record.AddOnlineTablets();
+        staleTablet->SetTabletId(tabletId);
+        staleTablet->SetGeneration(lastNormalGeneration);
+        staleTablet->SetBootMode(NKikimrLocal::BOOT_MODE_LEADER);
+        staleTablet->SetRecoveryMode(false);
+        runtime.SendToPipe(hiveTablet, localActor, staleSync.Release(), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("stale tablet rejected", [&] { return staleStopReceived; }, TDuration::Seconds(10));
+        staleStopObserver.Remove();
+
+        NActorsProto::TRemoteHttpInfo statusRequest;
+        statusRequest.SetMethod(HTTP_METHOD_GET);
+        statusRequest.SetPath("/app");
+        runtime.SendToPipe(tabletId, sender, new NMon::TEvRemoteHttpInfo(std::move(statusRequest)), 0, GetPipeConfigWithRetries());
+        auto status = runtime.GrabEdgeEvent<NMon::TEvRemoteHttpInfoRes>(TDuration::Seconds(10));
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_C(status->Html.Contains("completed successfully") || status->Html.Contains("completed, but changelog is not fully restored"), status->Html);
+
+        setMode("0");
+        runtime.WaitFor("normal boot after explicit exit", [&] { return normalBoots > normalBootsBeforeRecovery; }, TDuration::Seconds(10));
+        const auto restored = allocate(1);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetRangeBegin(), saved.GetRangeEnd());
+        UNIT_ASSERT_C(restored.GetRangeBegin() < changed.GetRangeEnd(), "Live state was not replaced by the selected backup");
+    }
+
+    Y_UNIT_TEST(TestTenantSystemTabletRecoveryConstraints) {
+        TIntrusivePtr<TTabletStorageInfo> info = CreateTestTabletInfo(MakeDefaultHiveID(), TTabletTypes::Hive);
+        NHive::TTestHive hive(info.Get(), TActorId());
+        NHive::TLeaderTabletInfo tablet(42, hive);
+        tablet.SetType(TTabletTypes::TxAllocator);
+        tablet.State = NHive::ETabletState::ReadyToWork;
+        NHive::TNodeInfo node(1, hive);
+        NKikimrLocal::TTabletAvailability availability;
+        availability.SetType(TTabletTypes::TxAllocator);
+        node.TabletAvailability.emplace(TTabletTypes::TxAllocator, availability);
+
+        UNIT_ASSERT(node.IsAbleToRunTablet(tablet));
+        tablet.RecoveryMode = true;
+        UNIT_ASSERT(!node.IsAbleToRunTablet(tablet));
+        node.TabletAvailability.at(TTabletTypes::TxAllocator).FromLocal.SetSupportsRecovery(true);
+        UNIT_ASSERT(node.IsAbleToRunTablet(tablet));
+        UNIT_ASSERT(!tablet.IsGoodForBalancer(TInstant::Now()));
+
+        NHive::TFollowerGroup group(hive);
+        NHive::TFollowerTabletInfo follower(tablet, 1, group);
+        UNIT_ASSERT(!follower.IsReadyToWork());
+        tablet.RecoveryMode = false;
+        UNIT_ASSERT(follower.IsReadyToWork());
+        node.TabletAvailability.at(TTabletTypes::TxAllocator).FromLocal.ClearSupportsRecovery();
+        UNIT_ASSERT(node.IsAbleToRunTablet(tablet));
     }
 
     Y_UNIT_TEST(TestCreateTablet) {

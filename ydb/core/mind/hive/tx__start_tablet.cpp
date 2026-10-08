@@ -102,9 +102,19 @@ public:
                         {"tabletId", TabletId},
                         {"nodeId", Local.NodeId()},
                         {"storageInfo", leader.TabletStorageInfo->ToString()});
-                    TFollowerId promotableFollowerId = leader.GetFollowerPromotableOnNode(Local.NodeId());
+                    if (leader.RecoveryMode) {
+                        const auto* node = Self->FindNode(Local.NodeId());
+                        if (!node || !node->SupportsRecoveryForTablet(leader.GetTabletType())) {
+                            tablet->InitiateStop(SideEffects);
+                            leader.TryToBoot();
+                            return true;
+                        }
+                    }
+                    TFollowerId promotableFollowerId = leader.RecoveryMode ? 0 : leader.GetFollowerPromotableOnNode(Local.NodeId());
+                    auto boot = MakeHolder<TEvLocal::TEvBootTablet>(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration);
+                    boot->Record.SetRecoveryMode(leader.RecoveryMode);
                     SideEffects.Send(Local,
-                                new TEvLocal::TEvBootTablet(*leader.TabletStorageInfo, promotableFollowerId, leader.KnownGeneration),
+                                boot.Release(),
                                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
                                 Cookie);
                     Success = true;

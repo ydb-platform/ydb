@@ -85,6 +85,7 @@ public:
     TDuration LockedReconnectTimeout;
     ui64 PendingUnlockSeqNo;
     bool StoppedByTenant = false;
+    bool RecoveryMode = false;
     bool IsMarkedForReassign = false;
 
     bool SeizedByChild = false; // transient state for migration - need to delete it later

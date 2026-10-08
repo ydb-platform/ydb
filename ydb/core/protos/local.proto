@@ -12,6 +12,7 @@ message TTabletAvailability {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
     optional uint64 MaxCount = 2 [default = 1000000];
     optional int32 Priority = 3;
+    optional bool SupportsRecovery = 4 [default = false];
 }
 
 message TEvRegisterNode {
@@ -67,6 +68,7 @@ message TEvBootTablet {
     optional EBootMode BootMode = 3 [default = BOOT_MODE_LEADER];
     optional NKikimrHive.TFollowerGroup FollowerGroup = 4;
     optional uint32 FollowerId = 5;
+    optional bool RecoveryMode = 6 [default = false];
 }
 
 message TEvStopTablet {
@@ -106,6 +108,7 @@ message TEvSyncTablets {
         optional uint32 Generation = 2;
         optional EBootMode BootMode = 3;
         optional uint32 FollowerId = 4;
+        optional bool RecoveryMode = 5 [default = false];
     }
 
     repeated TTabletInfo InbootTablets = 1;

@@ -65,6 +65,13 @@ public:
             return true;
         }
 
+        if (tablet->RecoveryMode) {
+            SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(
+                TabletId, NKikimrProto::ERROR, "Cannot lock a tablet in recovery mode"), 0, Cookie);
+            Success = false;
+            return true;
+        }
+
         if (OwnerActor.NodeId() != Sender.NodeId()) {
             SideEffects.Send(Sender, new TEvHive::TEvLockTabletExecutionResult(
                     TabletId,

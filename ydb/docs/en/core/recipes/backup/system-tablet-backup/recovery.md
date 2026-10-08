@@ -22,9 +22,34 @@ If recovery is performed after a complete loss of the [static group](../../../co
 
 {% endnote %}
 
+### Tenant tablet managed by Hive {#tenant-recovery}
+
+This procedure restores one system tablet of an existing tenant with its original `TabletID`. Its managing Hive, the Hive record describing the tablet, and the storage groups used by its channels must be available. Recovery of an entire lost tenant is outside this procedure.
+
+1. In Tablets, find the target tablet ID and the ID of **the Hive that manages it**. For a tenant Hive, use its parent Hive.
+2. Ensure that the managing Hive and the nodes that will run recovery have been updated to a version supporting this operation. Hive does not place a recovery tablet on a node without this support. Do not downgrade the managing Hive while recovery mode is enabled.
+3. Open Manual Ops in Hive monitoring, select `SetRecoveryMode`, and provide `tablet` and `recovery=1`. Alternatively, send a POST request using your monitoring URL, managing Hive ID, and target tablet ID:
+
+   ```bash
+   monitoring_url='http://<monitoring-host>:8765'
+   hive_id='<managing-Hive-ID>'
+   tablet_id='<target-tablet-ID>'
+   curl --fail -X POST \
+     "${monitoring_url}/tablets/app?TabletID=${hive_id}&page=SetRecoveryMode&tablet=${tablet_id}&recovery=1"
+   ```
+
+   Hive saves the mode, stops the normal tablet instances, and starts the tablet for recovery. Storage channels, type, tenant identity, and `TabletID` come from Hive metadata. A response with `RecoveryMode: true` confirms that the setting was saved; it does not mean that the backup has been restored.
+4. Wait for the recovery form to appear in the target tablet's App. Find the node running the tablet and proceed to [finding backup files](#find-backup-files). No temporary bootstrap configuration is needed.
+
+The mode survives Hive and tablet restarts. After a recovery tablet restart, check its App again. If the status has reset, restore the backup again. A restore error does not return the tablet to normal mode. Restart the tablet before retrying to clear the previous attempt's status.
+
+The operation rejects user tablet types, external or locked tablets, tablets being transferred to another Hive, and tablets stopped in Hive. For a stopped tablet, first use `ResumeTablet`. `ResumeTablet` does not exit recovery mode: use the separate operation in [step 5](#return-to-normal).
+
+### Tablet started through bootstrap {#bootstrap-recovery}
+
 1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
 2. Determine the list of nodes where the system tablet to be recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
-3. Modify the configuration by adding `boot_mode: RECOVERY` to the `bootstrap_config` section of the tablet being recovered.
+3. Modify the configuration by adding `boot_type: RECOVERY` to the `bootstrap_config` section of the tablet being recovered.
 
    - When using configuration V1, you need to modify the [static configuration](../../../devops/configuration-management/configuration-v1/static-config.md) on all nodes where the tablet being recovered can run.
    - When using configuration V2, follow the [instructions](../../../devops/configuration-management/configuration-v2/update-config.md).
@@ -57,7 +82,7 @@ If recovery is performed after a complete loss of the [static group](../../../co
                  - from_generation: 0
                      group_id: 0
                  channel_erasure_name: mirror-3-dc
-             boot_mode: RECOVERY
+             boot_type: RECOVERY
    ```
 
 4. Restart all nodes where the tablet being recovered can run. If any node is unavailable and cannot be restarted, isolate it from the cluster over the network — for example, using a firewall.
@@ -197,10 +222,25 @@ If recovery is performed after a complete loss of the [static group](../../../co
 
 ## Step 5. Return the tablet to normal operation mode {#return-to-normal}
 
+### Tenant tablet managed by Hive
+
+After verifying successful restoration, send this request to **the same managing Hive**:
+
+```bash
+curl --fail -X POST \
+  "${monitoring_url}/tablets/app?TabletID=${hive_id}&page=SetRecoveryMode&tablet=${tablet_id}&recovery=0"
+```
+
+In Manual Ops, select `SetRecoveryMode` with `tablet=<TabletID>` and `recovery=0`. Hive saves normal mode and restarts the tablet with its original ID and channels. Verify that the recovery form has disappeared, the tablet is stable, and its system function works. For example, for a SchemeShard, verify the expected tenant schema objects.
+
+Do not send this command during restoration or after an unresolved error: it interrupts recovery and starts the tablet using the state written so far. Successful restoration does not automatically return the tablet to normal mode.
+
+### Tablet started through bootstrap
+
 After successful recovery:
 
 1. Determine the list of nodes on which the system tablet being recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../../devops/configuration-management/index.md). If the `bootstrap_config` section is absent from the configuration, use the list of all [static nodes](../../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
-2. Modify the configuration by removing `boot_mode: RECOVERY` from the `bootstrap_config` section of the tablet being recovered.
+2. Modify the configuration by removing `boot_type: RECOVERY` from the `bootstrap_config` section of the tablet being recovered.
 
    - When using configuration V1, you need to change the [static configuration](../../../devops/configuration-management/configuration-v1/static-config.md) on all nodes on which the tablet being recovered can run.
    - When using configuration V2, follow the [instructions](../../../devops/configuration-management/configuration-v2/update-config.md).

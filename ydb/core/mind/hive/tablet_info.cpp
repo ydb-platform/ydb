@@ -154,7 +154,7 @@ bool TTabletInfo::IsReadyToWork() const {
     if (IsLeader()) {
         return AsLeader().IsReadyToWork();
     }
-    return true;
+    return !GetLeader().RecoveryMode;
 }
 
 bool TTabletInfo::IsReadyToBoot() const {
@@ -215,7 +215,8 @@ bool TTabletInfo::IsStopped() const {
 }
 
 bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
-    return (BalancerPolicy == EBalancerPolicy::POLICY_BALANCE)
+    return !GetLeader().RecoveryMode
+            && (BalancerPolicy == EBalancerPolicy::POLICY_BALANCE)
             && !Hive.IsInBalancerIgnoreList(GetTabletType())
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }

@@ -254,7 +254,15 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
     return priority;
 }
 
+bool TNodeInfo::SupportsRecoveryForTablet(TTabletTypes::EType type) const {
+    auto it = TabletAvailability.find(type);
+    return it != TabletAvailability.end() && it->second.FromLocal.GetSupportsRecovery();
+}
+
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
+    if (tablet.GetLeader().RecoveryMode && !SupportsRecoveryForTablet(tablet.GetTabletType())) {
+        return false;
+    }
     if (tablet.IsAliveOnLocal(Local)) {
         return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }

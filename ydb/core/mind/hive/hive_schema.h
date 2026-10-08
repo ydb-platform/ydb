@@ -100,6 +100,7 @@ struct Schema : NIceDb::Schema {
         struct StoppedByTenant : Column<124, NScheme::NTypeIds::Bool> {};
         struct NewAllowedDataCenterIds : Column<125, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersGroup; };
         struct IsBackup : Column<126, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+        struct RecoveryMode : Column<127, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -129,6 +130,7 @@ struct Schema : NIceDb::Schema {
             NewAllowedDataCenterIds,
             BalancerPolicy,
             StoppedByTenant,
+            RecoveryMode,
             IsBackup
         >;
     };

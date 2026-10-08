@@ -1,5 +1,7 @@
 #include "local.h"
+#include <ydb/core/base/system_tablet_backup.h>
 
+#include <ydb/core/tablet_flat/flat_executor_recovery.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
@@ -55,6 +57,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ui32 Generation;
         TTabletTypes::EType TabletType;
         NKikimrLocal::EBootMode BootMode;
+        bool RecoveryMode = false;
 
         TTablet()
             : Tablet()
@@ -206,6 +209,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 tabletAvailability->SetMaxCount(*tabletInfo.MaxCount);
             }
             tabletAvailability->SetPriority(tabletInfo.Priority);
+            tabletAvailability->SetSupportsRecovery(SupportsSystemTabletBackup(tabletType));
         }
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
@@ -368,6 +372,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 tablet->SetFollowerId(pr.first.second);
                 tablet->SetGeneration(pr.second.Generation);
                 tablet->SetBootMode(pr.second.BootMode);
+                tablet->SetRecoveryMode(pr.second.RecoveryMode);
 
                 ctx.Send(pr.second.Tablet, new TEvTablet::TEvUpdateConfig(ResourceProfiles));
             }
@@ -377,6 +382,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 tablet->SetFollowerId(pr.first.second);
                 tablet->SetGeneration(pr.second.Generation);
                 tablet->SetBootMode(pr.second.BootMode);
+                tablet->SetRecoveryMode(pr.second.RecoveryMode);
 
                 ctx.Send(pr.second.Tablet, new TEvTablet::TEvUpdateConfig(ResourceProfiles));
             }
@@ -417,6 +423,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         NKikimrLocal::TEvBootTablet &record = ev->Get()->Record;
         TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(record.GetInfo()));
         info->HiveId = HiveId;
+        info->BootType = record.GetRecoveryMode() ? ETabletBootType::Recovery : ETabletBootType::Normal;
         TTabletId tabletId(info->TabletID, record.GetFollowerId());
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet",
             {"tabletId", tabletId},
@@ -450,11 +457,20 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             return;
         }
 
+        if (record.GetRecoveryMode() &&
+                (record.GetBootMode() != NKikimrLocal::BOOT_MODE_LEADER || record.GetFollowerId() != 0 ||
+                 !SupportsSystemTabletBackup(tabletType))) {
+            ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(
+                TEvLocal::TEvTabletStatus::StatusTypeUnknown, tabletId, suggestedGen));
+            return;
+        }
+
         {
             auto it = OnlineTablets.find(tabletId);
             if (it != OnlineTablets.end()) {
                 if (it->second.BootMode == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER
-                        && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER) {
+                        && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER
+                        && !record.GetRecoveryMode()) {
                     StartPromotion(tabletId, it->second, suggestedGen, ctx.Now());
                     ctx.Send(it->second.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
                     MarkDeadTablet(it->first, 0, TEvLocal::TEvTabletStatus::StatusSupersededByLeader, TEvTablet::TEvTabletDead::ReasonError, ctx);
@@ -481,7 +497,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ctx.Send(entry.Tablet, new TEvents::TEvPoisonPill());
         }
 
-        TTabletSetupInfo *setupInfo = it->second.SetupInfo.Get();
+        TIntrusivePtr<TTabletSetupInfo> setupInfo = it->second.SetupInfo;
+        if (record.GetRecoveryMode()) {
+            setupInfo = new TTabletSetupInfo(*setupInfo, &NTabletFlatExecutor::NRecovery::CreateRecoveryShard);
+        }
         switch (record.GetBootMode()) {
         case NKikimrLocal::BOOT_MODE_LEADER:
             entry.Tablet = setupInfo->Tablet(info.Get(), ctx.SelfID, ctx, suggestedGen, ResourceProfiles, TxCacheQuota);
@@ -497,6 +516,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         entry.From = ctx.Now();
         entry.TabletType = tabletType;
         entry.BootMode = record.GetBootMode();
+        entry.RecoveryMode = record.GetRecoveryMode();
 
         YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tablet entry created",
             {"tabletId", tabletId});

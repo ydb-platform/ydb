@@ -5,6 +5,7 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/vector.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
+#include <ydb/core/base/system_tablet_backup.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include "hive_impl.h"
 #include "hive_schema.h"
@@ -3775,6 +3776,99 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
+class TTxMonEvent_SetRecoveryMode : public TTransactionBase<THive>, TLoggedMonTransaction {
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    const TActorId Source;
+    TTabletId TabletId = 0;
+    bool RecoveryMode = false;
+    bool Changed = false;
+    TString Error;
+    TSideEffects SideEffects;
+
+public:
+    TTxMonEvent_SetRecoveryMode(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , TLoggedMonTransaction(ev, hive)
+        , Event(ev->Release())
+        , Source(source)
+    {
+        auto cgi = GetParams(Event.Get());
+        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
+        const auto& recovery = cgi.Get("recovery");
+        if (recovery != "0" && recovery != "1") {
+            Error = "recovery must be 0 or 1";
+        }
+        RecoveryMode = recovery == "1";
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_RECOVERY_MODE; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        SideEffects.Reset(Self->SelfId());
+        Changed = false;
+        if (Event->GetMethod() != HTTP_METHOD_POST) {
+            Error = "Must use POST request";
+            return true;
+        }
+        if (Error) {
+            return true;
+        }
+        auto* tablet = Self->FindTablet(TabletId);
+        if (!tablet) {
+            Error = "Tablet not found";
+            return true;
+        }
+        if (!SupportsSystemTabletBackup(tablet->GetTabletType())) {
+            Error = "Tablet type does not support system tablet recovery";
+            return true;
+        }
+        if (tablet->SeizedByChild || tablet->NeedToReleaseFromParent || tablet->IsBootingSuppressed() ||
+                tablet->State != ETabletState::ReadyToWork) {
+            Error = "Tablet must be managed by this Hive and ready to work";
+            return true;
+        }
+        if (tablet->RecoveryMode == RecoveryMode) {
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+        for (auto& follower : tablet->Followers) {
+            follower.InitiateStop(SideEffects);
+            db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId())
+                .Update<Schema::TabletFollowerTablet::FollowerNode>(0);
+        }
+        tablet->InitiateStop(SideEffects);
+        tablet->RecoveryMode = RecoveryMode;
+        db.Table<Schema::Tablet>().Key(TabletId).Update(
+            NIceDb::TUpdate<Schema::Tablet::RecoveryMode>(RecoveryMode),
+            NIceDb::TUpdate<Schema::Tablet::LeaderNode>(0));
+
+        NJson::TJsonValue operation;
+        operation["Tablet"] = TabletId;
+        operation["RecoveryMode"] = RecoveryMode;
+        WriteOperation(db, operation);
+        Changed = true;
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        SideEffects.Complete(ctx, Self->Requests);
+        if (Error) {
+            NJson::TJsonValue result;
+            result["error"] = Error;
+            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, NJson::WriteJson(result, false)));
+            return;
+        }
+        if (Changed) {
+            Self->Execute(Self->CreateForceRestartTablet({TabletId, 0}), ctx);
+        }
+        NJson::TJsonValue result;
+        result["TabletID"] = TabletId;
+        result["RecoveryMode"] = RecoveryMode;
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(result, false)));
+    }
+};
+
 class TTxMonEvent_StopDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
 public:
     THolder<NMon::TEvRemoteHttpInfo> Event;
@@ -4245,6 +4339,7 @@ public:
         result["ChannelProfileReassignReason"] = NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(tablet.ChannelProfileReassignReason);
         result["KnownGeneration"] = tablet.KnownGeneration;
         result["BootMode"] = NKikimrHive::ETabletBootMode_Name(tablet.BootMode);
+        result["RecoveryMode"] = tablet.RecoveryMode;
         result["Owner"] = TStringBuilder() << tablet.Owner;
         result["AllowedDomains"] = MakeFrom(tablet.NodeFilter.AllowedDomains);
         result["EffectiveAllowedDomains"] = MakeFrom(tablet.NodeFilter.GetEffectiveAllowedDomains());
@@ -4982,6 +5077,7 @@ public:
                     <option>MoveTablet</option>
                     <option>StopTablet</option>
                     <option>ResumeTablet</option>
+                    <option>SetRecoveryMode</option>
                     <option>ResetTablet</option>
                     <option>DeleteTablet</option>
                     <option>UpdateResources</option>
@@ -4995,7 +5091,7 @@ public:
             </div>
         )";
 
-        for (auto& param : {"node", "tablet", "wait"}) {
+        for (auto& param : {"node", "tablet", "wait", "recovery"}) {
             out << "<div class='form-group'>";
             out << "<label style='display:block' for='" << param << "'>" << param << "</label>";
             out << "<input type='text' id='" << param << "' name='" << param << "'>";
@@ -5184,6 +5280,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "MoveTablet") {
         return Execute(new TTxMonEvent_MoveTablet(ev->Sender, ev, this), ctx);
+    }
+    if (page == "SetRecoveryMode") {
+        return Execute(new TTxMonEvent_SetRecoveryMode(ev->Sender, ev, this), ctx);
     }
     if (page == "StopTablet") {
         return Execute(new TTxMonEvent_StopTablet(ev->Sender, ev, this), ctx);

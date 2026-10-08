@@ -29,7 +29,7 @@ public:
         // return !tablet.IsDeleting() && StateStorageGroupFromTabletID(tablet.Id) > 0 || HiveUidFromTabletID(tablet.Id) > 0;
         // ^^ temporary commented-out due to unit tests using 0 state storage group and 0 hive uid
 
-        return tablet.IsReadyToWork()
+        return !tablet.RecoveryMode && tablet.IsReadyToWork()
                 && tablet.ChannelProfileNewGroup.none()
                 && tablet.Type != TTabletTypes::Hive // because we leave hive(s) in root hive
                 && tablet.Type != TTabletTypes::BlockStoreVolume // because we don't have support for NBS yet

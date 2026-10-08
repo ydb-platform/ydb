@@ -22,6 +22,10 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_SYNC_TABLETS; }
 
     bool IsSameTablet(const TTabletInfo* local, const NKikimrLocal::TEvSyncTablets_TTabletInfo& remote) const {
+        if (remote.GetRecoveryMode() != local->GetLeader().RecoveryMode ||
+                (local->IsFollower() && local->GetLeader().RecoveryMode)) {
+            return false;
+        }
         if (local->IsFollower()) {
             if (remote.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                 if (local->AsFollower().Id == remote.GetFollowerId()
@@ -88,6 +92,23 @@ public:
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet) {
+                if (ti.GetRecoveryMode() != tablet->GetLeader().RecoveryMode ||
+                        (tablet->IsFollower() && tablet->GetLeader().RecoveryMode)) {
+                    SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId, ti.GetGeneration()));
+                    // An old sync must not interrupt a newer recovery instance.
+                    const bool staleLeader = tablet->IsLeader() && ti.GetGeneration() < tablet->GetLeader().KnownGeneration;
+                    if (!staleLeader && (tablet->GetLocal() == Local || tablet->GetNode() == nullptr)) {
+                        tablet->InitiateStop(SideEffects);
+                        if (tablet->IsLeader()) {
+                            db.Table<Schema::Tablet>().Key(tabletId.first).Update<Schema::Tablet::LeaderNode>(0);
+                        } else {
+                            db.Table<Schema::TabletFollowerTablet>().Key(tabletId).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
+                        }
+                        tabletsToBoot.insert(tabletId);
+                    }
+                    tabletsToStop.erase(tabletId);
+                    continue;
+                }
                 if (IsSameTablet(tablet, ti)) {
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
@@ -109,6 +130,23 @@ public:
             auto tabletId = std::pair<TTabletId, TFollowerId>(ti.GetTabletId(), ti.GetFollowerId());
             TTabletInfo* tablet = Self->FindTablet(tabletId);
             if (tablet) {
+                if (ti.GetRecoveryMode() != tablet->GetLeader().RecoveryMode ||
+                        (tablet->IsFollower() && tablet->GetLeader().RecoveryMode)) {
+                    SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tabletId, ti.GetGeneration()));
+                    // An old sync must not interrupt a newer recovery instance.
+                    const bool staleLeader = tablet->IsLeader() && ti.GetGeneration() < tablet->GetLeader().KnownGeneration;
+                    if (!staleLeader && (tablet->GetLocal() == Local || tablet->GetNode() == nullptr)) {
+                        tablet->InitiateStop(SideEffects);
+                        if (tablet->IsLeader()) {
+                            db.Table<Schema::Tablet>().Key(tabletId.first).Update<Schema::Tablet::LeaderNode>(0);
+                        } else {
+                            db.Table<Schema::TabletFollowerTablet>().Key(tabletId).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
+                        }
+                        tabletsToBoot.insert(tabletId);
+                    }
+                    tabletsToStop.erase(tabletId);
+                    continue;
+                }
                 if (IsSameTablet(tablet, ti)) {
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();

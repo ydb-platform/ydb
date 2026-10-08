@@ -78,6 +78,7 @@ SRCS(
     storage_pools.h
     subdomain.h
     subdomain.cpp
+    system_tablet_backup.h
     table_index.cpp
     tablet.cpp
     tablet.h

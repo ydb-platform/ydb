@@ -202,6 +202,7 @@ protected:
     friend class TTxMonEvent_MoveTablet;
     friend class TTxMonEvent_StopTablet;
     friend class TTxMonEvent_ResumeTablet;
+    friend class TTxMonEvent_SetRecoveryMode;
     friend class TTxMonEvent_InitMigration;
     friend class TTxMonEvent_QueryMigration;
     friend class TTxMonEvent_RebalanceFromScratch;

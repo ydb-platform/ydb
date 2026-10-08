@@ -31,6 +31,11 @@ public:
         , TabletPoolId(tabletPoolId)
     {}
 
+    TTabletSetupInfo(const TTabletSetupInfo& setup, TTabletCreationFunc op)
+        : TTabletSetupInfo(std::move(op), setup.MailboxType, setup.PoolId,
+                          setup.TabletMailboxType, setup.TabletPoolId)
+    {}
+
     TActorId Apply(TTabletStorageInfo *info, TActorIdentity owner);
     TActorId Apply(TTabletStorageInfo *info, const TActorContext &ctx);
     TActorId Tablet(TTabletStorageInfo *info, const TActorId &launcher, const TActorContext &ctx,

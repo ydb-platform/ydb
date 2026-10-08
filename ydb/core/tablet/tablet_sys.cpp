@@ -2410,6 +2410,8 @@ void TTablet::LockedInitializationPath() {
 
 void TTablet::StartRecovery() {
     Become(&TThis::StateRecovery);
+    // Recovery is ready for operator requests before the executor restores any data.
+    Send(Launcher, new TEvTablet::TEvReady(TabletID(), StateStorageInfo.KnownGeneration, UserTablet));
     PipeConnectAcceptor->Activate(SelfId(), UserTablet, true, StateStorageInfo.KnownGeneration, TabletVersionInfo);
 
     ReportTabletStateChange(TTabletStateInfo::Active);

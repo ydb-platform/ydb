@@ -261,6 +261,11 @@ public:
                         return true;
                     }
 
+                    if (tablet->RecoveryMode && BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
+                        ReplyToSender(NKikimrProto::ERROR);
+                        return true;
+                    }
+
                     if (BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                         // Make sure any running tablets are stopped
                         for (TFollowerTabletInfo& follower : tablet->Followers) {

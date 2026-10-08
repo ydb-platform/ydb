@@ -3,6 +3,8 @@ name: YDB documentation policy review
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, labeled, closed, converted_to_draft]
+        paths:
+          - "ydb/docs/**"
 permissions:
   contents: read
   pull-requests: write

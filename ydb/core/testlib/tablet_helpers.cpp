@@ -290,6 +290,26 @@ namespace NKikimr {
         UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
     }
 
+    ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender) {
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(runtime.GetNodeId(0), 0);
+        runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr));
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+        UNIT_ASSERT(event);
+        //Cout << event->Answer << "\n";
+        ui64 totalFreeSize = 0;
+        for (ui32 i = 0; i < 2; ++i) {
+            TString regex = Sprintf(".*sensor=%s:\\s(\\d+).*", i == 0 ? "FreeChunks" : "UntrimmedFreeChunks");
+            TRegExBase matcher(regex);
+            regmatch_t groups[2] = {};
+            matcher.Exec(event->Answer.data(), groups, 0, 2);
+            const ui64 freeSize = IntFromString<ui64, 10>(event->Answer.data() + groups[1].rm_so, groups[1].rm_eo - groups[1].rm_so);
+            totalFreeSize += freeSize;
+        }
+
+        return totalFreeSize;
+    };
+
     class TFollowerLauncher : public TActorBootstrapped<TFollowerLauncher> {
     private:
         ui64 TabletId;

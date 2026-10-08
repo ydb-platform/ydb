@@ -14,7 +14,7 @@
 
 - Go
 
-  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/ca01d135b6c979d0506c6e0dbad5ea64e1761434/examples/ydb_tech/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
 - Java
 
@@ -26,7 +26,7 @@
 
 - C#
 
-  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/5b2b7076219481adc25b6dd3f4e88697fe5d43fa/examples/ydb_tech/topic)
+  [Исполняемый пример на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/904c860de96da3517c4c2c1c6881c30bef9fb73b/examples/ydb_tech/topic)
 
 - JavaScript
 
@@ -991,7 +991,7 @@
 
   Для записи в топик в транзакции необходимо создать транзакционного писателя через вызов [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter). После этого можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/ca01d135b6c979d0506c6e0dbad5ea64e1761434/examples/ydb_tech/topic)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
   {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
@@ -1699,7 +1699,7 @@
 
   Для чтения сообщений в рамках транзакции следует использовать метод [`Reader.PopMessagesBatchTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx). Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку. Проще всего это сделать если использовать читателя в цикле.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/ca01d135b6c979d0506c6e0dbad5ea64e1761434/examples/ydb_tech/topic)
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
   {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 

@@ -14,7 +14,7 @@ The snippets below are parts of the complete executable examples linked in the n
 
 - Go
 
-  [Executable example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/ca01d135b6c979d0506c6e0dbad5ea64e1761434/examples/ydb_tech/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
 - Java
 
@@ -26,7 +26,7 @@ The snippets below are parts of the complete executable examples linked in the n
 
 - C#
 
-  [Executable example on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/5b2b7076219481adc25b6dd3f4e88697fe5d43fa/examples/ydb_tech/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/904c860de96da3517c4c2c1c6881c30bef9fb73b/examples/ydb_tech/topic)
 
 - JavaScript
 
@@ -974,7 +974,7 @@ The metadata size limit is no more than 1000 keys.
 
   To write to a topic in a transaction, you need to create a transactional writer by calling [TopicClient.StartTransactionalWriter](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic#Client.StartTransactionalWriter). After that, you can send messages as usual. There is no need to close the transactional writer — it happens automatically when the transaction completes.
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/ca01d135b6c979d0506c6e0dbad5ea64e1761434/examples/ydb_tech/topic)
+  [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
   {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_write_tx]-[END topic_write_tx]" %}
 
@@ -1644,7 +1644,7 @@ Typically, the topic read progress is stored on the server in each `Consumer`. H
 
   To read messages within a transaction, use the [`Reader.PopMessagesBatchTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicreader#Reader.PopMessagesBatchTx) method. It reads a batch of messages and adds their commit to the transaction, so you do not need to commit these messages separately. The message reader can be reused in different transactions. However, it is important that the order of transaction commits matches the order of messages received from the reader, because message commits in a topic must be performed strictly in order. The easiest way to do this is to use the reader in a loop.
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/ca01d135b6c979d0506c6e0dbad5ea64e1761434/examples/ydb_tech/topic)
+  [Example on GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/8ad2661ef04180780d314fb0706ec3f8a7ccfc8d/examples/ydb_tech/topic)
 
   {% code "/.generated/sdk-snippets/go/examples/ydb_tech/topic/main.go" lang="go" lines="[BEGIN topic_read_tx]-[END topic_read_tx]" %}
 

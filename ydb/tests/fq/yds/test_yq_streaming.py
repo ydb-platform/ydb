@@ -60,9 +60,7 @@ class TestYqStreaming(TestYdsBase):
 
             INSERT INTO myyds2.`{output_topic}`
                 SELECT STREAM key ?? "" FROM bindings.my_binding;
-            '''.format(
-            output_topic=self.output_topic
-        )
+            '''.format(output_topic=self.output_topic)
 
         connection_response = client.create_yds_connection(
             "myyds2", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
@@ -125,9 +123,7 @@ class TestYqStreaming(TestYdsBase):
 
             INSERT INTO myyds4.`{output_topic}`
                 SELECT STREAM Unwrap(key || CAST(value as String)) as data FROM bindings.my_binding4;
-            '''.format(
-            output_topic=self.output_topic
-        )
+            '''.format(output_topic=self.output_topic)
 
         connection_response = client.create_yds_connection(
             "myyds4", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
@@ -194,9 +190,7 @@ class TestYqStreaming(TestYdsBase):
 
             INSERT INTO myyds3.`{output_topic}`
                 SELECT STREAM Unwrap(key || CAST(value as String)) as data FROM bindings.my_binding3;
-            '''.format(
-            output_topic=self.output_topic
-        )
+            '''.format(output_topic=self.output_topic)
 
         connection_response = client.create_yds_connection(
             "myyds3", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")
@@ -520,9 +514,7 @@ class TestYqStreaming(TestYdsBase):
                 )))) AS MATCHED
             ))
             )
-            '''.format(
-            input_topic=self.input_topic
-        )
+            '''.format(input_topic=self.input_topic)
 
         connection_response = client.create_yds_connection(
             "myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT")

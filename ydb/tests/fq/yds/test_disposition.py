@@ -6,7 +6,11 @@ import pytest
 import time
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
-from ydb.tests.tools.fq_runner.fq_client import CONTROL_PLANE_REQUEST_TIMEOUT, FederatedQueryClient, StreamingDisposition
+from ydb.tests.tools.fq_runner.fq_client import (
+    CONTROL_PLANE_REQUEST_TIMEOUT,
+    FederatedQueryClient,
+    StreamingDisposition,
+)
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule

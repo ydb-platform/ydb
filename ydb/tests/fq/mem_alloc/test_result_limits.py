@@ -10,7 +10,6 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-
 # Quota per cloud
 QUOTA_ANALYTICS_COUNT_LIMIT = "yq.analyticsQuery.count"
 QUOTA_STREAMING_COUNT_LIMIT = "yq.streamingQuery.count"

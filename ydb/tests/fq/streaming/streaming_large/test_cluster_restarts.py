@@ -28,12 +28,7 @@ class TestStreamingLarge(StreamingTestBase):
 
         # local_topics over EDS
         inp, out, endpoint = self.get_io_names(
-            kikimr,
-            "test_rolling_restart",
-            local_topics=False,
-            entity_name=entity_name,
-            shared=True,
-            partitions_count=1
+            kikimr, "test_rolling_restart", local_topics=False, entity_name=entity_name, shared=True, partitions_count=1
         )
 
         query_count = 2
@@ -68,12 +63,7 @@ class TestStreamingLarge(StreamingTestBase):
     def test_restart_nodes(self, kikimr, entity_name):
 
         inp, out, endpoint = self.get_io_names(
-            kikimr,
-            "test_restart_nodes",
-            local_topics=False,
-            entity_name=entity_name,
-            shared=True,
-            partitions_count=9
+            kikimr, "test_restart_nodes", local_topics=False, entity_name=entity_name, shared=True, partitions_count=9
         )
 
         sql = R'''
@@ -97,7 +87,9 @@ class TestStreamingLarge(StreamingTestBase):
 
         message_count = 9
         for i in range(message_count):
-            self.write_stream(['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
+            self.write_stream(
+                ['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint
+            )
         expected_data = ['value0'] * message_count * 2
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name1)
@@ -112,12 +104,18 @@ class TestStreamingLarge(StreamingTestBase):
             kikimr.recreate_driver()
             value = f"value{i}"
             for i in range(message_count):
-                self.write_stream([f'{{"value": "{value}"}}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
+                self.write_stream(
+                    [f'{{"value": "{value}"}}'],
+                    partition_key=(''.join(random.choices(string.digits, k=8))),
+                    endpoint=endpoint,
+                )
 
             expected_data = [value] * message_count * 2
             self.wait_completed_checkpoints(kikimr, query_name1)
             self.wait_completed_checkpoints(kikimr, query_name2)
-            assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+            assert (
+                self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+            )
             self.wait_completed_checkpoints(kikimr, query_name1)
             self.wait_completed_checkpoints(kikimr, query_name2)
 
@@ -133,12 +131,7 @@ class TestStreamingLarge(StreamingTestBase):
     def test_replace_node(self, kikimr, entity_name):
 
         inp, out, endpoint = self.get_io_names(
-            kikimr,
-            "test_replace_node",
-            local_topics=False,
-            entity_name=entity_name,
-            shared=True,
-            partitions_count=9
+            kikimr, "test_replace_node", local_topics=False, entity_name=entity_name, shared=True, partitions_count=9
         )
         node1_id = len(kikimr.cluster.slots)
         node1 = kikimr.cluster.slots[node1_id]
@@ -166,7 +159,9 @@ class TestStreamingLarge(StreamingTestBase):
 
         message_count = 9
         for i in range(message_count):
-            self.write_stream(['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
+            self.write_stream(
+                ['{"value": "value0"}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint
+            )
         expected_data = ['value0'] * message_count * 2
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         time.sleep(2)
@@ -181,9 +176,16 @@ class TestStreamingLarge(StreamingTestBase):
         def write_read(i):
             value = f"value {i}"
             for i in range(message_count):
-                self.write_stream([f'{{"value": "{value}"}}'], partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
+                self.write_stream(
+                    [f'{{"value": "{value}"}}'],
+                    partition_key=(''.join(random.choices(string.digits, k=8))),
+                    endpoint=endpoint,
+                )
             expected_data = [value] * message_count * 2
-            assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint, timeout=180) == expected_data
+            assert (
+                self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint, timeout=180)
+                == expected_data
+            )
             time.sleep(2)
 
         write_read(1)

@@ -14,9 +14,7 @@ if __name__ == "__main__":
     )
 
     text = """\033[92mFederated queries workload\x1b[0m"""
-    parser = argparse.ArgumentParser(
-        description=text, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    parser = argparse.ArgumentParser(description=text, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--endpoint", default="localhost:2135", help="An endpoint to be used")
     parser.add_argument("--database", default=None, required=True, help="A database to connect")
     parser.add_argument("--duration", default=60, type=int, help="A duration of workload in seconds")

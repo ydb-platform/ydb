@@ -5,7 +5,6 @@ import ydb.public.api.protos.ydb_value_pb2 as ydb
 
 from ydb.tests.fq.tools.kqprun import KqpRun
 
-
 ValueByTypeExtractors = {
     ydb.Type.PrimitiveTypeId.INT64: lambda x: x.int64_value,
     ydb.Type.PrimitiveTypeId.STRING: lambda x: x.bytes_value,
@@ -32,12 +31,16 @@ def add_sample_table(kqp_run: KqpRun, table_name: str = 'input', infer_schema: b
         }
         """
 
-    kqp_run.add_table(table_name, [
-        '{"key"="075";"subkey"=1;"value"="abc"};',
-        '{"key"="800";"subkey"=2;"value"="ddd"};',
-        '{"key"="020";"subkey"=3;"value"="q"};',
-        '{"key"="150";"subkey"=4;"value"="qzz"};'
-    ], attrs)
+    kqp_run.add_table(
+        table_name,
+        [
+            '{"key"="075";"subkey"=1;"value"="abc"};',
+            '{"key"="800";"subkey"=2;"value"="ddd"};',
+            '{"key"="020";"subkey"=3;"value"="q"};',
+            '{"key"="150";"subkey"=4;"value"="qzz"};',
+        ],
+        attrs,
+    )
 
 
 def validate_sample_result(result: str):
@@ -47,7 +50,7 @@ def validate_sample_result(result: str):
     columns = [
         ('key', ydb.Type.PrimitiveTypeId.STRING),
         ('subkey', ydb.Type.PrimitiveTypeId.INT64),
-        ('value', ydb.Type.PrimitiveTypeId.STRING)
+        ('value', ydb.Type.PrimitiveTypeId.STRING),
     ]
 
     assert len(result_set.columns) == len(columns)
@@ -57,12 +60,7 @@ def validate_sample_result(result: str):
         result_column_type = result_set.columns[i].type.type_id
         assert result_column_type == column_type_id, f'{result_column_type} != {column_type_id}'
 
-    rows = [
-        (b'075', 1, b'abc'),
-        (b'800', 2, b'ddd'),
-        (b'020', 3, b'q'),
-        (b'150', 4, b'qzz')
-    ]
+    rows = [(b'075', 1, b'abc'), (b'800', 2, b'ddd'), (b'020', 3, b'q'), (b'150', 4, b'qzz')]
 
     assert len(result_set.rows) == len(rows)
     for i, row in enumerate(rows):

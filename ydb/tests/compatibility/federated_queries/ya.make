@@ -1,4 +1,7 @@
 PY3TEST()
+
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_TEST_FILES()

@@ -400,9 +400,7 @@ Pear;15;33'''
         )
         return storage_binding_name
 
-    def create_source_date_binding(
-        self, unique_prefix, client, connection_id, filename, type_format, format
-    ):
+    def create_source_date_binding(self, unique_prefix, client, connection_id, filename, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -420,9 +418,7 @@ Pear;15;33'''
         )
         return storage_binding_name
 
-    def create_sink_date_binding(
-        self, unique_prefix, client, connection_id, prefix, type_format, format
-    ):
+    def create_sink_date_binding(self, unique_prefix, client, connection_id, prefix, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -1013,13 +1009,9 @@ Pear;15;33'''
                     id
                 FROM bindings.{}
             )
-            '''.format(
-            binding_for_names_name, binding_for_ids_name
-        )
+            '''.format(binding_for_names_name, binding_for_ids_name)
 
-        query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)

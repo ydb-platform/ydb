@@ -68,7 +68,9 @@ def create_stream(path, partitions_count=1, default_endpoint=None):
     request.shard_count = partitions_count
     request.retention_period_hours = 1
     request.write_quota_kb_per_sec = 1024
-    logging.debug("Requesting CreateStream.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(default_endpoint), request))
+    logging.debug(
+        "Requesting CreateStream.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(default_endpoint), request)
+    )
     response = stub.CreateStream(request, metadata=_build_request_metadata(default_endpoint))
     _get_and_check_result(response, datastreams_pb2.CreateStreamResult)
 
@@ -79,7 +81,9 @@ def delete_stream(path, default_endpoint=None):
     request = datastreams_pb2.DeleteStreamRequest()
     request.stream_name = _build_stream_path(path, default_endpoint)
     request.enforce_consumer_deletion = True
-    logging.debug("Requesting DeleteStream.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(default_endpoint), request))
+    logging.debug(
+        "Requesting DeleteStream.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(default_endpoint), request)
+    )
     response = stub.DeleteStream(request, metadata=_build_request_metadata(default_endpoint))
     _get_and_check_result(response, datastreams_pb2.DeleteStreamResult)
 

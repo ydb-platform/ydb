@@ -9,11 +9,32 @@
 #include <atomic>
 #include <optional>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpCapturedLog) {
+    Y_UNIT_TEST(RvalueConstructionAndAssignmentKeepSourceUsable) {
+        TCapturedLog original(/* appendNewline */ true);
+        TCapturedLog constructed(std::move(original));
+
+        const TString first = "first";
+        original.CreateBackend()->WriteData(TLogRecord(TLOG_INFO, first.data(), first.size()));
+        UNIT_ASSERT_VALUES_EQUAL(original.Snapshot(), first + "\n");
+        UNIT_ASSERT_VALUES_EQUAL(constructed.Snapshot(), first + "\n");
+
+        TCapturedLog assigned;
+        assigned = std::move(constructed);
+
+        const TString second = "second";
+        constructed.CreateBackend()->WriteData(TLogRecord(TLOG_INFO, second.data(), second.size()));
+        const TString expected = first + "\n" + second + "\n";
+        UNIT_ASSERT_VALUES_EQUAL(original.Snapshot(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(constructed.Snapshot(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(assigned.Snapshot(), expected);
+    }
+
     Y_UNIT_TEST(SnapshotAndBackendLifetime) {
         const TString record("first\0record", 12);
         THolder<TLogBackend> first;

@@ -50,7 +50,11 @@ class TCapturedLog final {
 public:
     explicit TCapturedLog(bool appendNewline = false);
 
-    // The snapshot owns its contents; parsing it does not hold up log writers.
+    // Copy rvalues as well so the source handle keeps its shared state.
+    TCapturedLog(const TCapturedLog&) = default;
+    TCapturedLog& operator=(const TCapturedLog&) = default;
+
+    // Copies the buffer under the lock; parsing the returned copy does not block log writers.
     // It includes records already written, not records queued in logger actors.
     TString Snapshot() const;
 

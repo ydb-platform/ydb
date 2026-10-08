@@ -1164,6 +1164,21 @@ namespace NKikimr::NDDisk {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         std::map<TPersistentBufferId, TPersistentBuffer> PersistentBuffers;
+        struct TPersistentBufferMonTablet {
+            TPersistentBufferMonInfo::TTablet Info;
+            struct TNamespace {
+                ui64 Records = 0;
+                ui64 LiveBytes = 0;
+            };
+            std::map<ui8, TNamespace> Namespaces;
+        };
+        std::map<ui64, TPersistentBufferMonTablet> PersistentBufferMonTablets;
+        ui64 PersistentBufferMonLiveBytes = 0;
+        ui64 PersistentBufferMonRegistrations = 0;
+        void UpdatePersistentBufferMonRegistration(TPersistentBufferTabletKey key);
+        void UpdatePersistentBufferMonData(TPersistentBufferTabletKey key, i64 records, i64 bytes);
+        void RestorePersistentBufferMonIndex();
+
         std::map<TInstant, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;

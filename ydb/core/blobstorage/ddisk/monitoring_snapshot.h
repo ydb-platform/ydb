@@ -22,6 +22,9 @@ struct TTabletStatsSnapshotQuery {
     TString StatsOther;
     std::optional<ui64> SearchTabletId;
     std::optional<ui64> StatsSelectedTabletId;
+    // Every page uses current rankings. With unchanged input, a full traversal
+    // returns each tablet once. Changes between pages may cause omissions or
+    // duplicates when tablets enter or leave the first-page prominent set.
     std::optional<ui64> AfterTabletId;
 };
 

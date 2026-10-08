@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_sysview_processor.pb.h>
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/db_counters.h>
@@ -234,6 +235,8 @@ private:
     void AttachDetailedCounters();
     void DetachDetailedCounters();
     TProcessorDatabaseMetricsAggregator* GetDetailedAggregator();
+    NDetailedMetrics::TSubgroupPath MakeDetailedCountersChain() const;
+    void SetDetailedOutputLimit();
     void SendNavigate();
 
     STFUNC(StateInit) {
@@ -428,6 +431,9 @@ private:
 
     ::NMonitoring::TDynamicCounterPtr DetailedGroup;
     TProcessorDatabaseMetricsAggregatorPtr DetailedAggregator;
+    // Defaults: config.proto TDetailedMetricsControls, keep both equal
+    TControlWrapper DetailedMetricsMaxNodeOutputBytes{100000000, 0, Max<i64>()};
+    TControlWrapper DetailedMetricsRestorePercent{80, 1, 100};
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
         NKikimr::NSysView::TDbServiceCounters>;

@@ -22,8 +22,8 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <ydb/library/yql/providers/ydb_external/common/read_limits.h>
-#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
+#include <ydb/library/yql/providers/ydb/query/common/read_limits.h>
+#include <ydb/library/yql/providers/ydb/query/provider/yql_ydb_provider.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -70,7 +70,7 @@ namespace {
         bool addRoot) {
         // Object-kind resolution shares the native provider's TLS-isolated
         // drivers, including setups that do not initialize the topic SDK driver.
-        auto driver = federatedQuerySetup->YdbExternalResources->GetDriver(useTls);
+        auto driver = federatedQuerySetup->YdbResources->GetDriver(useTls);
 
         NYdb::TCommonClientSettings opts;
         opts
@@ -139,24 +139,24 @@ namespace {
         });
     }
 
-    std::shared_ptr<NYdb::TDriver> MakeYdbExternalDriver() {
+    std::shared_ptr<NYdb::TDriver> MakeYdbDriver() {
         NYdb::TDriverConfig config;
         config.SetDiscoveryMode(NYdb::EDiscoveryMode::Off);
-        config.SetMaxInboundMessageSize(NYql::NYdbExternal::MaxInboundMessageBytes);
+        config.SetMaxInboundMessageSize(NYql::NYdbQuery::MaxInboundMessageBytes);
         return MakeSharedYdbDriverWithStop(std::make_unique<NYdb::TDriver>(config));
     }
 
-    class TYdbExternalResources::TImpl {
+    class TYdbResources::TImpl {
     public:
         std::shared_ptr<NYdb::TDriver> GetDriver(bool useTls) {
             std::lock_guard lock(Mutex);
             return GetDriverLocked(useTls);
         }
 
-        std::shared_ptr<NYql::IYdbExternalMetadataClientCache> GetMetadataClientCache() {
+        std::shared_ptr<NYql::IYdbMetadataClientCache> GetMetadataClientCache() {
             std::lock_guard lock(Mutex);
             if (!MetadataClientCache) {
-                MetadataClientCache = NYql::CreateYdbExternalMetadataClientCache(
+                MetadataClientCache = NYql::CreateYdbMetadataClientCache(
                     *GetDriverLocked(false), *GetDriverLocked(true));
             }
             return MetadataClientCache;
@@ -166,7 +166,7 @@ namespace {
         std::shared_ptr<NYdb::TDriver> GetDriverLocked(bool useTls) {
             auto& driver = useTls ? TlsDriver : Driver;
             if (!driver) {
-                driver = MakeYdbExternalDriver();
+                driver = MakeYdbDriver();
             }
             return driver;
         }
@@ -175,19 +175,19 @@ namespace {
         // Keep drivers alive until clients have been released.
         std::shared_ptr<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::TDriver> TlsDriver;
-        std::shared_ptr<NYql::IYdbExternalMetadataClientCache> MetadataClientCache;
+        std::shared_ptr<NYql::IYdbMetadataClientCache> MetadataClientCache;
     };
 
-    TYdbExternalResources::TYdbExternalResources()
+    TYdbResources::TYdbResources()
         : Impl_(std::make_shared<TImpl>())
     {
     }
 
-    std::shared_ptr<NYdb::TDriver> TYdbExternalResources::GetDriver(bool useTls) {
+    std::shared_ptr<NYdb::TDriver> TYdbResources::GetDriver(bool useTls) {
         return Impl_->GetDriver(useTls);
     }
 
-    std::shared_ptr<NYql::IYdbExternalMetadataClientCache> TYdbExternalResources::GetMetadataClientCache() {
+    std::shared_ptr<NYql::IYdbMetadataClientCache> TYdbResources::GetMetadataClientCache() {
         return Impl_->GetMetadataClientCache();
     }
 
@@ -365,7 +365,7 @@ namespace {
 
         auto result = TKqpFederatedQuerySetup{
             Driver,
-            YdbExternalResources,
+            YdbResources,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
@@ -474,7 +474,7 @@ namespace {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path) {
-        if (!federatedQuerySetup || !federatedQuerySetup->YdbExternalResources || !endpoint || !database) {
+        if (!federatedQuerySetup || !federatedQuerySetup->YdbResources || !endpoint || !database) {
             YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
                 {"path", path},
                 {"database", database},

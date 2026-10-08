@@ -3,4 +3,5 @@ RECURSE(
     comp_nodes
     expr_nodes
     provider
+    query
 )

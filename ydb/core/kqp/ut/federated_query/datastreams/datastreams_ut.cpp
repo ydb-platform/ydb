@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(CreateYdbExternalDataSourceFailedWithoutYdbInConfig, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(CreateYdbDataSourceFailedWithoutYdbInConfig, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("ObjectStorage");
         cfg.SetAllExternalDataSourcesAreAvailable(false);

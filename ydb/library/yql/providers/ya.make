@@ -10,6 +10,5 @@ RECURSE(
     s3
     solomon
     ydb
-    ydb_external
     yt
 )

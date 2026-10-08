@@ -24,7 +24,7 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
-#include <ydb/library/yql/providers/ydb_external/actors/dq_ydb_external_read_actor.h>
+#include <ydb/library/yql/providers/ydb/query/actors/dq_ydb_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
@@ -207,9 +207,9 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         }
 
         // Register the runtime independently of compilation-time availability.
-        Y_VALIDATE(federatedQuerySetup->YdbExternalResources, "Missing YdbExternal resources");
-        NYql::NDq::RegisterYdbExternalReadActorFactory(
-            *factory, [resources = federatedQuerySetup->YdbExternalResources](bool useTls) {
+        Y_VALIDATE(federatedQuerySetup->YdbResources, "Missing Ydb resources");
+        NYql::NDq::RegisterYdbQueryReadActorFactory(
+            *factory, [resources = federatedQuerySetup->YdbResources](bool useTls) {
                 return *resources->GetDriver(useTls);
             },
             federatedQuerySetup->CredentialsFactory);

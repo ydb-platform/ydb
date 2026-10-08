@@ -1,0 +1,115 @@
+{
+    "NodeRootType": "TExprBase",
+    "NodeBuilderBase": "TNodeBuilderBase",
+    "ListBuilderBase": "TListBuilderBase",
+    "FreeArgCallableBase": "TFreeArgCallable",
+    "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
+    "Nodes": [
+        {
+            "Name": "TYdbQueryDataSource",
+            "Base": "TCallable",
+            "Definition": "Custom",
+            "Match": {
+                "Type": "Callable",
+                "Name": "DataSource"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "Category",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 1,
+                    "Name": "Cluster",
+                    "Type": "TCoAtom"
+                }
+            ]
+        },
+        {
+            "Name": "TYdbQueryRead",
+            "Base": "TFreeArgCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "Read!"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "DataSource",
+                    "Type": "TYdbQueryDataSource"
+                }
+            ]
+        },
+        {
+            "Name": "TYdbQueryReadTable",
+            "Base": "TCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "YdbQueryReadTable!"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "DataSource",
+                    "Type": "TYdbQueryDataSource"
+                },
+                {
+                    "Index": 2,
+                    "Name": "Table",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 3,
+                    "Name": "Columns",
+                    "Type": "TExprBase"
+                }
+            ]
+        },
+        {
+            "Name": "TYdbQuerySourceSettings",
+            "Base": "TCallable",
+            "Match": {
+                "Type": "Callable",
+                "Name": "YdbQuerySourceSettings"
+            },
+            "Children": [
+                {
+                    "Index": 0,
+                    "Name": "World",
+                    "Type": "TExprBase"
+                },
+                {
+                    "Index": 1,
+                    "Name": "Cluster",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 2,
+                    "Name": "Table",
+                    "Type": "TCoAtom"
+                },
+                {
+                    "Index": 3,
+                    "Name": "Token",
+                    "Type": "TCoSecureParam"
+                },
+                {
+                    "Index": 4,
+                    "Name": "Columns",
+                    "Type": "TCoAtomList"
+                }
+            ]
+        }
+    ]
+}

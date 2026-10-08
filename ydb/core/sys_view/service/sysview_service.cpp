@@ -168,7 +168,7 @@ public:
             AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
             {
                 auto intervalSize = ProcessCountersInterval.MicroSeconds();
-                auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+                auto deadline = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessCounters());
             }
@@ -180,7 +180,7 @@ public:
         if (AppData()->FeatureFlags.GetEnableDbCounters()) {
             {
                 auto intervalSize = ProcessLabeledCountersInterval.MicroSeconds();
-                auto deadline = (TInstant::Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+                auto deadline = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
                 deadline += RandomNumber<ui64>(intervalSize / 5);
                 Schedule(TInstant::MicroSeconds(deadline), new TEvPrivate::TEvProcessLabeledCounters());
             }
@@ -281,7 +281,7 @@ private:
 
     TInstant GetNextIntervalEnd() {
         auto intervalSize = TotalInterval.MicroSeconds();
-        auto rounded = (Now().MicroSeconds() / intervalSize + 1) * intervalSize;
+        auto rounded = (AppData()->TimeProvider->Now().MicroSeconds() / intervalSize + 1) * intervalSize;
         return TInstant::MicroSeconds(rounded);
     }
 
@@ -320,7 +320,7 @@ private:
 
     void Rotate() {
         auto summaryEnd = IntervalEnd;
-        auto delta = Now() - summaryEnd;
+        auto delta = AppData()->TimeProvider->Now() - summaryEnd;
 
         IntervalEnd = GetNextIntervalEnd();
         Schedule(IntervalEnd, new TEvPrivate::TEvProcessInterval(IntervalEnd));
@@ -362,7 +362,7 @@ private:
 
         // randomize send time
         auto windowUs = (SendInterval - delta).MicroSeconds() / 2;
-        auto now = Now();
+        auto now = AppData()->TimeProvider->Now();
         for (const auto& [database, _] : QueryLogs) {
             TInstant deadline = now + TDuration::MicroSeconds(windowUs + RandomNumber<ui64>(windowUs));
             Schedule(deadline, new TEvPrivate::TEvSendSummary(summaryEnd, database));
@@ -540,7 +540,7 @@ private:
         if (intervalEnd != prevIntervalEnd) {
             return;
         }
-        if (Now() > intervalEnd + CollectInterval) {
+        if (AppData()->TimeProvider->Now() > intervalEnd + CollectInterval) {
             return;
         }
         SendSummary(intervalEnd, ev->Get()->Database);
@@ -826,7 +826,7 @@ private:
         }
 
         auto summaryEnd = attempt.first;
-        auto deadline = Now() + SummaryRetryInterval;
+        auto deadline = AppData()->TimeProvider->Now() + SummaryRetryInterval;
         Schedule(deadline, new TEvPrivate::TEvSendSummary(summaryEnd, database));
     }
 

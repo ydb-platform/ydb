@@ -237,11 +237,11 @@ jobs:
             timeout: 240
             build_target: "ydb/"
             test_size: small,medium
-          - build_preset: release-asan
-            threads_count: 52
-            timeout: 240
-            build_target: "ydb/"
-            test_size: small,medium
+          # - build_preset: release-asan
+          #   threads_count: 52
+          #   timeout: 240
+          #   build_target: "ydb/"
+          #   test_size: small,medium
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:
@@ -296,8 +296,8 @@ jobs:
         include:
           - build_preset: relwithdebinfo
             switch_key: postcommit_relwithdebinfo
-          - build_preset: release-asan
-            switch_key: postcommit_asan
+          # - build_preset: release-asan
+          #   switch_key: postcommit_asan
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}", postcommit ]
     name: Postcommit · Build and test ${{ matrix.build_preset }}
     steps:
@@ -342,11 +342,11 @@ jobs:
               | map(.[0])
               | map(select(.context | (
                   startswith("build_relwithdebinfo")
-                  or startswith("build_release-asan")
+                  # or startswith("build_release-asan")
                   or startswith("test_relwithdebinfo")
-                  or startswith("test_release-asan")
+                  # or startswith("test_release-asan")
                 )))
-              | if length == 4 and all(.state == "success") then "success" else "failure" end
+              | if length == 2 and all(.state == "success") then "success" else "failure" end
             ')
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \

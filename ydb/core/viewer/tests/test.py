@@ -646,15 +646,12 @@ class TestViewer(object):
                                     })
 
         # groups
-        # Fresh reservations make usage depend on asynchronous writes and compaction, including zero values.
-        replace_with_types.update({'Used',
-                                   'MaxVDiskSlotUsage',
-                                   'MaxVDiskRawUsage',
-                                   })
         replace_with_values.update({'Available',
                                     'Limit',
                                     'MaxPDiskUsage',
+                                    'MaxVDiskSlotUsage',
                                     'MaxNormalizedOccupancy',
+                                    'MaxVDiskRawUsage',
                                     })
 
         # pdisks
@@ -672,18 +669,17 @@ class TestViewer(object):
         result = cls.replace_values_by_key_and_value(result, {'Status'}, {'ACTIVE', 'INACTIVE'})
 
         # vdisks
-        replace_with_types.update({'AllocatedSize',
-                                   'VDiskSlotUsage',
-                                   'VDiskRawUsage',
-                                   })
         replace_with_values.update({'AvailableSize',
+                                    'AllocatedSize',
                                     'IncarnationGuid',
                                     'InstanceGuid',
                                     'WriteThroughput',
                                     'ReadThroughput',
                                     'StorageSize',
                                     'StorageCount',
+                                    'VDiskSlotUsage',
                                     'NormalizedOccupancy',
+                                    'VDiskRawUsage',
                                     })
 
         # cluster
@@ -2102,10 +2098,9 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        result['administration_bscontrollerinfo_root'] = cls.replace_types_by_key(
-            cls.get_viewer("/viewer/bscontrollerinfo", headers={
-                'Cookie': 'ydb_session_id=' + cls.root_session_id,
-            }), {'DataSize'})
+        result['administration_bscontrollerinfo_root'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        })
         result['administration_bscontrollerinfo_monitoring'] = cls.get_viewer("/viewer/bscontrollerinfo", headers={
             'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
         })

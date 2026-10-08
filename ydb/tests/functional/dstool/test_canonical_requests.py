@@ -409,9 +409,7 @@ class Test(TestBase):
             self._trace('device', 'list', '-AH'),
             self._trace('vdisk', 'list', '-AH', canonize_columns=['NodeId:PDiskId', 'NodeId']),
             self._trace('group', 'list', '-AH', expected_storage_api='distributed_storage'),
-            self._trace('pdisk', 'list', '-AH', canonize_columns={
-                'Usage': 0.0, 'UsedSize': 0, 'AvailableSize': 0,
-            }),
+            self._trace('pdisk', 'list', '-AH'),
             self._trace('pool', 'list', '-AH'),
             self._trace('box', 'list', '-AH', canonize_columns={
                 'Usage': 0.0, 'UsedSize': 0, 'AvailableSize': 0,

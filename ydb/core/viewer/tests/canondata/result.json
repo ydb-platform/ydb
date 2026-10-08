@@ -831,17 +831,17 @@
                 "Limit": "not-zero-number-text",
                 "MaxNormalizedOccupancy": "not-zero-number",
                 "MaxPDiskUsage": "not-zero-number",
-                "MaxVDiskRawUsage": "number",
-                "MaxVDiskSlotUsage": "number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "static",
                 "State": "ok",
                 "Usage": "number",
-                "Used": "text",
+                "Used": "0",
                 "VDisks": [
                     {
-                        "AllocatedSize": "text",
+                        "AllocatedSize": "0",
                         "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "HasWhiteboardData": true,
@@ -888,7 +888,7 @@
                         "Status": "READY",
                         "VDiskId": "0-1-0-0-0",
                         "Whiteboard": {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -920,9 +920,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -944,18 +944,18 @@
                 "Limit": "not-zero-number-text",
                 "MaxNormalizedOccupancy": "not-zero-number",
                 "MaxPDiskUsage": "not-zero-number",
-                "MaxVDiskRawUsage": "number",
-                "MaxVDiskSlotUsage": "number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "dynamic_storage_pool:1",
                 "State": "ok",
                 "Usage": "number",
-                "Used": "text",
+                "Used": "0",
                 "VDisks": [
                     {
-                        "AllocatedSize": "text",
+                        "AllocatedSize": "0",
                         "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "HasWhiteboardData": true,
@@ -1002,7 +1002,7 @@
                         "Status": "READY",
                         "VDiskId": "2181038080-2-0-0-0",
                         "Whiteboard": {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -1034,9 +1034,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -1058,18 +1058,18 @@
                 "Limit": "not-zero-number-text",
                 "MaxNormalizedOccupancy": "not-zero-number",
                 "MaxPDiskUsage": "not-zero-number",
-                "MaxVDiskRawUsage": "number",
-                "MaxVDiskSlotUsage": "number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "dynamic_storage_pool:1",
                 "State": "ok",
                 "Usage": "number",
-                "Used": "text",
+                "Used": "0",
                 "VDisks": [
                     {
-                        "AllocatedSize": "text",
+                        "AllocatedSize": "0",
                         "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "HasWhiteboardData": true,
@@ -1116,7 +1116,7 @@
                         "Status": "READY",
                         "VDiskId": "2181038081-2-0-0-0",
                         "Whiteboard": {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -1148,9 +1148,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -1173,18 +1173,18 @@
                 "Limit": "not-zero-number-text",
                 "MaxNormalizedOccupancy": "not-zero-number",
                 "MaxPDiskUsage": "not-zero-number",
-                "MaxVDiskRawUsage": "number",
-                "MaxVDiskSlotUsage": "number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "/Root/dedicated_db:hdd",
                 "State": "ok",
                 "Usage": "number",
-                "Used": "text",
+                "Used": "0",
                 "VDisks": [
                     {
-                        "AllocatedSize": "text",
+                        "AllocatedSize": "0",
                         "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "HasWhiteboardData": true,
@@ -1231,7 +1231,7 @@
                         "Status": "READY",
                         "VDiskId": "2181038082-2-0-0-0",
                         "Whiteboard": {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -1263,9 +1263,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -1288,18 +1288,18 @@
                 "Limit": "not-zero-number-text",
                 "MaxNormalizedOccupancy": "not-zero-number",
                 "MaxPDiskUsage": "not-zero-number",
-                "MaxVDiskRawUsage": "number",
-                "MaxVDiskSlotUsage": "number",
+                "MaxVDiskRawUsage": 0,
+                "MaxVDiskSlotUsage": 0,
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "/Root/shared_db:hdd",
                 "State": "ok",
                 "Usage": "number",
-                "Used": "text",
+                "Used": "0",
                 "VDisks": [
                     {
-                        "AllocatedSize": "text",
+                        "AllocatedSize": "0",
                         "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "HasWhiteboardData": true,
@@ -1346,7 +1346,7 @@
                         "Status": "READY",
                         "VDiskId": "2181038083-2-0-0-0",
                         "Whiteboard": {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -1378,9 +1378,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     }
@@ -5924,7 +5924,7 @@
         "administration_bscontrollerinfo_root": {
             "BSGroupInfo": [
                 {
-                    "DataSize": "text",
+                    "DataSize": "0",
                     "ErasureSpecies": 0,
                     "GroupId": 2181038080,
                     "VDiskInfo": [
@@ -5944,7 +5944,7 @@
                     ]
                 },
                 {
-                    "DataSize": "text",
+                    "DataSize": "0",
                     "ErasureSpecies": 0,
                     "GroupId": 2181038081,
                     "VDiskInfo": [
@@ -5964,7 +5964,7 @@
                     ]
                 },
                 {
-                    "DataSize": "text",
+                    "DataSize": "0",
                     "ErasureSpecies": 0,
                     "GroupId": 2181038082,
                     "VDiskInfo": [
@@ -5984,7 +5984,7 @@
                     ]
                 },
                 {
-                    "DataSize": "text",
+                    "DataSize": "0",
                     "ErasureSpecies": 0,
                     "GroupId": 2181038083,
                     "VDiskInfo": [
@@ -9281,7 +9281,7 @@
                     "LatencyPutUserData": "accepted-value",
                     "Limit": "not-zero-number-text",
                     "Usage": "number",
-                    "Used": "text"
+                    "Used": "0"
                 }
             ],
             "TotalGroups": 5
@@ -10093,8 +10093,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -10280,7 +10280,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -10316,13 +10316,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -10358,13 +10358,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -10400,13 +10400,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -10442,13 +10442,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -10484,9 +10484,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -10512,8 +10512,8 @@
                     "Database": "/Root/dedicated_db",
                     "MaxNormalizedOccupancy": 0,
                     "MaxPDiskUsage": 0,
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -10724,8 +10724,8 @@
                     "Database": "/Root/shared_db",
                     "MaxNormalizedOccupancy": 0,
                     "MaxPDiskUsage": 0,
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -10926,8 +10926,8 @@
                     "Database": "/Root/shared_db",
                     "MaxNormalizedOccupancy": 0,
                     "MaxPDiskUsage": 0,
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -11138,8 +11138,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -11377,7 +11377,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -11413,13 +11413,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -11455,13 +11455,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -11497,13 +11497,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -11539,13 +11539,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -11581,9 +11581,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -11599,8 +11599,8 @@
                     "Database": "/Root/shared_db",
                     "MaxNormalizedOccupancy": 0,
                     "MaxPDiskUsage": 0,
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -11801,8 +11801,8 @@
                     "Database": "/Root/dedicated_db",
                     "MaxNormalizedOccupancy": 0,
                     "MaxPDiskUsage": 0,
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -14458,8 +14458,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -14645,7 +14645,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -14681,13 +14681,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -14723,13 +14723,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -14765,13 +14765,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -14807,13 +14807,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -14849,9 +14849,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -14877,8 +14877,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -15064,7 +15064,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15100,13 +15100,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15142,13 +15142,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15184,13 +15184,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15226,13 +15226,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15268,9 +15268,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -15296,8 +15296,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -15483,7 +15483,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15519,13 +15519,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15561,13 +15561,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15603,13 +15603,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15645,13 +15645,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15687,9 +15687,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -15715,8 +15715,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -15902,7 +15902,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15938,13 +15938,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -15980,13 +15980,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16022,13 +16022,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16064,13 +16064,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16106,9 +16106,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -16134,8 +16134,8 @@
                     "DiskSpaceUsage": "not-zero-number",
                     "MaxNormalizedOccupancy": "not-zero-number",
                     "MaxPDiskUsage": "not-zero-number",
-                    "MaxVDiskRawUsage": "number",
-                    "MaxVDiskSlotUsage": "number",
+                    "MaxVDiskRawUsage": 0,
+                    "MaxVDiskSlotUsage": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -16373,7 +16373,7 @@
                     "UptimeSeconds": "number",
                     "VDisks": [
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16409,13 +16409,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 0,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16451,13 +16451,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1000,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16493,13 +16493,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1001,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16535,13 +16535,13 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1002,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         },
                         {
-                            "AllocatedSize": "text",
+                            "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
                             "CapacityAlert": "GREEN",
                             "ChangeTime": "not-zero-number-text",
@@ -16577,9 +16577,9 @@
                                 "Ring": 0,
                                 "VDisk": 0
                             },
-                            "VDiskRawUsage": "number",
+                            "VDiskRawUsage": 0,
                             "VDiskSlotId": 1003,
-                            "VDiskSlotUsage": "number",
+                            "VDiskSlotUsage": 0,
                             "VDiskState": "OK"
                         }
                     ]
@@ -18812,7 +18812,7 @@
         "ResponseTime": "not-zero-number-text",
         "VDiskStateInfo": [
             {
-                "AllocatedSize": "text",
+                "AllocatedSize": "0",
                 "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
@@ -18847,7 +18847,7 @@
                 "VDiskState": 5
             },
             {
-                "AllocatedSize": "text",
+                "AllocatedSize": "0",
                 "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
@@ -18882,7 +18882,7 @@
                 "VDiskState": 5
             },
             {
-                "AllocatedSize": "text",
+                "AllocatedSize": "0",
                 "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
@@ -18917,7 +18917,7 @@
                 "VDiskState": 5
             },
             {
-                "AllocatedSize": "text",
+                "AllocatedSize": "0",
                 "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
@@ -18952,7 +18952,7 @@
                 "VDiskState": 5
             },
             {
-                "AllocatedSize": "text",
+                "AllocatedSize": "0",
                 "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,

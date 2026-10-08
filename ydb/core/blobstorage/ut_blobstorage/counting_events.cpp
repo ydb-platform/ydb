@@ -89,13 +89,9 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
 
     void CountingEventsTest(TString typeOperation, ui32 eventsCount, TBlobStorageGroupType groupType)
     {
-        // Fresh reservations add events depending on which VDisks earlier writes touched.
-        TFeatureFlags featureFlags;
-        featureFlags.SetEnableVDiskFreshSpaceProjection(false);
         TEnvironmentSetup env({
             .VDiskReplPausedAtStart = true,
             .Erasure = groupType,
-            .FeatureFlags = featureFlags,
             .UseActorSystemTimeInBSQueue = false,
         });
         auto& runtime = env.Runtime;

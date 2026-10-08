@@ -624,6 +624,11 @@ private:
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
+        if (compileSettings.Action == ECompileActorAction::COMPILE) {
+            return EnqueueCacheMiss(std::move(compileRequest), ctx);
+        }
+
+        // Parsing or splitting can still lead to a cache hit in a subsequent request.
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
@@ -835,6 +840,11 @@ private:
         }
     }
 
+    void EnqueueCacheMiss(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
+        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
+        EnqueueCompileRequest(std::move(compileRequest), ctx);
+    }
+
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
@@ -886,15 +896,13 @@ private:
             return;
         }
 
-        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
-
         LWTRACK(KqpCompileServiceEnqueued,
             compileRequest.Orbit,
             compileRequest.Query.UserSid);
 
         compileRequest.QueryAst = std::move(queryAst);
 
-        EnqueueCompileRequest(std::move(compileRequest), ctx);
+        EnqueueCacheMiss(std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev, const TActorContext& ctx) {

@@ -92,6 +92,49 @@ void AssertSingleOperatorName(const NJson::TJsonValue& plan, const TString& opNa
 
 Y_UNIT_TEST_SUITE(KqpStats) {
 
+Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
+    TKikimrRunner kikimr(settings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    const auto counters = kikimr.GetTestServer().GetRuntime()->GetAppData().Counters->FindSubgroup("counters", "ydb");
+    UNIT_ASSERT(counters);
+    const auto cacheHits = counters->FindNamedCounter("name", "table.query.compilation.cache_hits");
+    const auto cacheMisses = counters->FindNamedCounter("name", "table.query.compilation.cache_misses");
+    UNIT_ASSERT(cacheHits);
+    UNIT_ASSERT(cacheMisses);
+
+    const ui64 initialHits = cacheHits->Val();
+    const ui64 initialMisses = cacheMisses->Val();
+    const auto execSettings = TExecDataQuerySettings()
+        .KeepInQueryCache(true)
+        .CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+    auto execute = [&](const TString& query, bool fromCache) {
+        auto result = session.ExecuteDataQuery(query,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+    };
+
+    const TString query = Q1_("SELECT 42 AS compilation_cache_counter;");
+    execute(query, false);
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + 1);
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits);
+
+    execute(query, true);
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + 1);
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits + 1);
+
+    // A text miss followed by an AST hit must not increase the miss counter.
+    execute(Q1_("select 42 as compilation_cache_counter;"), AstCache);
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + (AstCache ? 1 : 2));
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits + (AstCache ? 2 : 1));
+}
+
 auto GetYqlStreamIterator(
         TKikimrRunner& kikimr,
         ECollectQueryStatsMode mode,

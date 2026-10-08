@@ -3,7 +3,7 @@ items:
     href: index.md
   - name: Процесс выполнения запросов
     href: execution_process.md
-  - name: Прогрев кэша компиляции
+  - name: Прогрев кеша компиляции
     href: compile-cache-warmup.md
   - name: Оптимизатор запросов
     href: optimizer.md

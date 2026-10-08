@@ -327,6 +327,14 @@ TEST_F(TYPathTest, ParseRichYPath3)
             ConvertToNode(EmptyAttributes())));
 }
 
+TEST_F(TYPathTest, ParseRichYPathAmpersand)
+{
+    EXPECT_EQ(NYPath::TRichYPath::Parse("&#1-2-3-4").GetPath(), "&#1-2-3-4");
+    EXPECT_ANY_THROW(NYPath::TRichYPath::Parse("&//home"));
+    EXPECT_ANY_THROW(NYPath::TRichYPath::Parse("&"));
+    EXPECT_ANY_THROW(NYPath::TRichYPath::Parse("&home"));
+}
+
 TEST_F(TYPathTest, ParseRichYPath4)
 {
     auto path = NYPath::TRichYPath::Parse("//home[:]");

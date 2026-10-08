@@ -13,6 +13,8 @@
 #include <library/cpp/yt/memory/ref_counted.h>
 #include <library/cpp/yt/memory/new.h>
 
+#include <library/cpp/yt/misc/immortal.h>
+
 #include <util/generic/hash.h>
 
 #include <atomic>
@@ -156,43 +158,43 @@ private:
     }
 };
 
-static constinit TUndumpableMemoryManager UndumpableMemoryManager;
+static constinit TImmortal<TUndumpableMemoryManager> UndumpableMemoryManager;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TUndumpableMark* MarkUndumpable(void* ptr, size_t size)
 {
-    return UndumpableMemoryManager.MarkUndumpable(ptr, size);
+    return UndumpableMemoryManager->MarkUndumpable(ptr, size);
 }
 
 void UnmarkUndumpable(TUndumpableMark* mark)
 {
-    UndumpableMemoryManager.UnmarkUndumpable(mark);
+    UndumpableMemoryManager->UnmarkUndumpable(mark);
 }
 
 void MarkUndumpableOob(void* ptr, size_t size)
 {
-    UndumpableMemoryManager.MarkUndumpableOob(ptr, size);
+    UndumpableMemoryManager->MarkUndumpableOob(ptr, size);
 }
 
 void UnmarkUndumpableOob(void* ptr)
 {
-    UndumpableMemoryManager.UnmarkUndumpableOob(ptr);
+    UndumpableMemoryManager->UnmarkUndumpableOob(ptr);
 }
 
 size_t GetUndumpableMemorySize()
 {
-    return UndumpableMemoryManager.GetUndumpableMemorySize();
+    return UndumpableMemoryManager->GetUndumpableMemorySize();
 }
 
 size_t GetUndumpableMemoryFootprint()
 {
-    return UndumpableMemoryManager.GetUndumpableMemoryFootprint();
+    return UndumpableMemoryManager->GetUndumpableMemoryFootprint();
 }
 
 TCutBlocksInfo CutUndumpableRegionsFromCoredump()
 {
-    return UndumpableMemoryManager.CutUndumpableRegionsFromCoredump();
+    return UndumpableMemoryManager->CutUndumpableRegionsFromCoredump();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

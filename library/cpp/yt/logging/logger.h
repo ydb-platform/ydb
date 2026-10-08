@@ -14,6 +14,7 @@
 #include <library/cpp/yt/yson_string/string.h>
 
 #include <library/cpp/yt/misc/guid.h>
+#include <library/cpp/yt/misc/immortal.h>
 
 #include <library/cpp/yt/system/thread_name.h>
 
@@ -375,9 +376,9 @@ void LogStructuredEvent(
         auto loggingContext__ = ::NYT::NLogging::GetLoggingContext();                                                \
         auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__);         \
         /* Copy the message out before the payload is moved into the log event below. */                             \
-        auto messageStr__ = ::std::string(::NYT::NLogging::GetMessageFromTaggedPayload(message__.Payload)); \
+        auto messageStr__ = ::std::string(::NYT::NLogging::GetMessageFromTaggedPayload(message__.Payload));          \
                                                                                                                      \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                                \
+        static ::NYT::TImmortal<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                                    \
         auto* anchor__ = anchorStorage__.Get();                                                                      \
                                                                                                                      \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__);                                                \
@@ -422,7 +423,7 @@ void LogStructuredEvent(
         const auto& logger__ = (logger)();                                                                   \
         auto level__ = (level);                                                                              \
         auto location__ = __LOCATION__;                                                                      \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                        \
+        static ::NYT::TImmortal<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                            \
         auto* anchor__ = anchorStorage__.Get();                                                              \
                                                                                                              \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__);                                        \
@@ -505,12 +506,12 @@ void LogStructuredEvent(
 // If the message is not logged then the |.With| chain is not evaluated, so tag value
 // expressions cost nothing.
 
-//! Yields a #TStaticAnchorRef for the expansion site: a per-call-site leaky anchor, its
+//! Yields a #TStaticAnchorRef for the expansion site: a per-call-site immortal anchor, its
 //! one-shot registration flag and the site's source location.
 #define YT_TLOG_STATIC_ANCHOR_REF()                                                    \
     [] {                                                                               \
         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */ \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;  \
+        static ::NYT::TImmortal<::NYT::NLogging::TLoggingAnchor> anchorStorage__;      \
         static std::atomic<bool> anchorRegistered__;                                   \
         return ::NYT::NLogging::NDetail::TStaticAnchorRef{                             \
             anchorStorage__.Get(),                                                     \

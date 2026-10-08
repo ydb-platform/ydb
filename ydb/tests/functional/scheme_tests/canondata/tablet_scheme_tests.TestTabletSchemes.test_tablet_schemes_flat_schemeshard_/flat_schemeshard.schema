@@ -5454,6 +5454,11 @@
                 "ColumnId": 60,
                 "ColumnName": "RebuildIndexName",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 61,
+                "ColumnName": "HnswWaitStartedAt",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5519,7 +5524,8 @@
                     57,
                     58,
                     59,
-                    60
+                    60,
+                    61
                 ],
                 "RoomID": 0,
                 "Codec": 0,

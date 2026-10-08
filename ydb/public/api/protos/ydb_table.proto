@@ -100,18 +100,10 @@ message VectorIndexSettings {
     // Graph construction parameters. Defaults: M=16, ef_construction=200.
     optional uint32 m = 5;
     optional uint32 ef_construction = 6;
-    // Search breadth is a query setting (PRAGMA ydb.HNSWEfSearch).
-    reserved 7;
-    reserved "hnsw_search_candidates";
-
-    // The former percentage threshold must not be interpreted as a row count.
-    reserved 8;
-    reserved "hnsw_rebuild_threshold_percent";
-
     // Rebuild when the number of distinct rows with committed vector changes
     // since the graph snapshot exceeds this absolute count. The default is 10000.
     // Zero requests rebuilding after any changed row.
-    optional uint64 delta_rows = 9;
+    optional uint64 delta_rows = 7;
 }
 
 message KMeansTreeSettings {

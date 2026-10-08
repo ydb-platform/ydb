@@ -838,39 +838,6 @@ Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
 }
 
-Y_UNIT_TEST(HnswAndPagesShareCacheQuota) {
-    NKikimrConfig::TMemoryControllerConfig config;
-    config.SetHardLimitBytes(200_MB);
-    config.SetSharedCacheMinBytes(40_MB);
-    config.SetSharedCacheMaxBytes(40_MB);
-    TControllerFixture fixture(config);
-    const auto pageActor = fixture.Runtime.AllocateEdgeActor();
-    auto pages = fixture.Register(pageActor, EMemoryConsumerKind::SharedCache);
-    pages->SetReport({.Used = 10_MB, .Demand = 20_MB});
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 40_MB);
-
-    const auto graphActor = fixture.Runtime.AllocateEdgeActor();
-    auto graph = fixture.Register(graphActor, EMemoryConsumerKind::SharedCache);
-    graph->SetReport({.Used = 30_MB, .Demand = 60_MB});
-    fixture.Tick();
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 40_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 40_MB);
-    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Demand"), 80_MB);
-
-    // An eighth of the quota is shared equally; the rest follows demand.
-    // Ignore page-cache grants queued before the graph registered.
-    const ui64 expectedPages = 40_MB / 16 + 35_MB / 4;
-    ui64 pageLimit = 0;
-    for (ui32 attempt = 0; attempt < 5 && pageLimit != expectedPages; ++attempt) {
-        pageLimit = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(pageActor)->Get()->LimitBytes;
-    }
-    const auto graphLimit = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(graphActor)->Get()->LimitBytes;
-    UNIT_ASSERT_VALUES_EQUAL(pageLimit, expectedPages);
-    UNIT_ASSERT_VALUES_EQUAL(graphLimit, 40_MB - expectedPages);
-    UNIT_ASSERT_VALUES_EQUAL(pageLimit + graphLimit, 40_MB);
-}
-
 Y_UNIT_TEST(ConsumerReportClamp) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);

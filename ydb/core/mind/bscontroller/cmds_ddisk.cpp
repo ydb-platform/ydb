@@ -54,6 +54,10 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumDDiskGroups();
         storagePool.DefaultGroupSizeInUnits = 1; // cmd.GetDefaultGroupSizeInUnits();
         storagePool.DDisk = true;
+        storagePool.PersistentBufferAllocationMode = cmd.GetPersistentBufferAllocationMode();
+        if (!NKikimrBlobStorage::EPersistentBufferAllocationMode_IsValid(storagePool.PersistentBufferAllocationMode)) {
+            throw TExError() << "invalid PersistentBufferAllocationMode";
+        }
         storagePool.RandomizeGroupMapping = false;
 
         for (const auto &item : cmd.GetPDiskFilter()) {
@@ -111,6 +115,11 @@ namespace NKikimr::NBsController {
             if (!cur.DDisk) {
                 throw TExError() << "can't invoke DefineDDiskPool against storage pool";
             }
+            if (cmd.HasPersistentBufferAllocationMode() &&
+                    storagePool.PersistentBufferAllocationMode != cur.PersistentBufferAllocationMode) {
+                throw TExError() << "PersistentBufferAllocationMode cannot be changed after pool creation";
+            }
+            storagePool.PersistentBufferAllocationMode = cur.PersistentBufferAllocationMode;
             //if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
             //    for (auto it = r.first; it != r.second; ++it) {
             //        GroupContentChanged.insert(it->second);

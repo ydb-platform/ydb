@@ -46,6 +46,8 @@ namespace NKikimr::NBsController {
                 NLayoutChecker::TDomainMapper mapper;
                 TGroupGeometryInfo geom(pool.ErasureSpecies, pool.GetGroupGeometry());
 
+                // Keep a stable representative per physical disk, independent of PB reference counts.
+                std::map<TPDiskId, TDDiskId> persistentBufferPerPDisk;
                 for (const auto& [vslotId, vslot] : self->VSlots) {
                     if (vslot->Group && vslot->Group->StoragePoolId == poolId) {
                         const TNodeId nodeId = vslotId.NodeId;
@@ -66,11 +68,22 @@ namespace NKikimr::NBsController {
                         const TDDiskId ddiskId = vslotId.GetKey();
                         ClaimPerDDisk.try_emplace(ddiskId, vslot->DDiskNumVChunksClaimed, Max<ui32>());
                         DDiskPerClaim.emplace(vslot->DDiskNumVChunksClaimed, ddiskId);
-                        PersistentBuffersPerNode[nodeId].insert({vslot->PersistentBufferRefs, ddiskId});
+                        if (pool.PersistentBufferAllocationMode == NKikimrBlobStorage::ONE_PER_PDISK) {
+                            auto [it, inserted] = persistentBufferPerPDisk.try_emplace(vslotId.ComprisingPDiskId(), ddiskId);
+                            if (!inserted && ddiskId < it->second) {
+                                it->second = ddiskId;
+                            }
+                        } else {
+                            PersistentBuffersPerNode[nodeId].insert({vslot->PersistentBufferRefs, ddiskId});
+                        }
                         NodeClaims[nodeId].Count = 0;
                         NodeClaims[nodeId].PDisks[vslotId.ComprisingPDiskId()].Count = 0;
                         NodeClaims[nodeId].PDisks[vslotId.ComprisingPDiskId()].DDisks.emplace(ddiskId, 0);
                     }
+                }
+                for (const auto& [_, ddiskId] : persistentBufferPerPDisk) {
+                    const auto* vslot = self->FindVSlot(TVSlotId(ddiskId.GetKey()));
+                    PersistentBuffersPerNode[ddiskId.NodeId].insert({vslot->PersistentBufferRefs, ddiskId});
                 }
             }
 

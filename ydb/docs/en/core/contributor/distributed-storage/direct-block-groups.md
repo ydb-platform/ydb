@@ -20,6 +20,10 @@ The protocol's `DirectBlockGroupIndex` is another distinction: it selects a clie
 
 `DefineDDiskPool` creates or updates a storage pool with the DDisk flag, erasure type `none`, a placement geometry, PDisk filters, and `NumDDiskGroups`. The normal pool-fitting machinery creates the resource groups and slots. Defining a pool does not create a tablet's DBG claims.
 
+The optional `PersistentBufferAllocationMode` field in `DefineDDiskPool` selects PB allocation for the pool: `BALANCED` (the default) considers all pool slots, while `ONE_PER_PDISK` considers only the slot with the smallest `TDDiskId` on each physical disk (`NodeId`, `PDiskId`). Set the mode when creating the pool. It cannot be changed afterwards: an explicit change is rejected, and omitting the field when updating the pool preserves its stored mode.
+
+`ONE_PER_PDISK` filters candidates for new PB assignments; existing assignments are not migrated. The other slots remain available for data allocation, and their PB actors and reserved resources are not disabled or released. If the pool's slots change, the representative is selected again from its current slots.
+
 A client then sends `TEvControllerAllocateDDiskBlockGroup` with its tablet ID, data pool name, PB pool name, and requested operations. The controller persists the resulting allocation and updates two counters on each affected VSlot:
 
 - `DDiskNumVChunksClaimed`: the sum of data-side virtual chunk claims.

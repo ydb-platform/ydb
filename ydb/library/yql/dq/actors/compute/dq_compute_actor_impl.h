@@ -242,7 +242,6 @@ protected:
         Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
                     __LOCATION__,
                     NKikimr::TAlignedPagePoolCounters(),
-                    true,
                     false
         );
 
@@ -1408,7 +1407,7 @@ protected:
 
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
         if (!Checkpoints) {
-            Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this);
+            Checkpoints = new TDqComputeActorCheckpoints(this->SelfId(), TxId, Task, this, CheckpointContext);
             Checkpoints->Init(this->SelfId(), this->RegisterWithSameMailbox(Checkpoints));
             if (Channels) {
                 Channels->SetCheckpointsSupport();
@@ -2882,6 +2881,7 @@ protected:
     const IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
+    const TIntrusivePtr<TCheckpointContext> CheckpointContext = MakeIntrusive<TCheckpointContext>();
     TDqComputeActorChannels* Channels = nullptr;
     TDqComputeActorCheckpoints* Checkpoints = nullptr;
     THashMap<ui64, TInputChannelInfo> InputChannelsMap; // Channel id -> Channel info

@@ -1,3 +1,7 @@
+import re
+from typing import Any
+from urllib.parse import unquote_plus
+
 import pytest
 
 import yarl
@@ -380,20 +384,44 @@ def test_quote_percent_last_character(quoter: type[_Quoter]) -> None:
     assert quoter()("%") == "%25"
 
 
-def test_unquote_unsafe(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="@")("%40") == "%40"
+@pytest.mark.parametrize("value", ["%40", "%40abc"])
+def test_unquote_ignore(unquoter: type[_Unquoter], value: str) -> None:
+    assert unquoter(ignore="@")(value) == value
 
 
-def test_unquote_unsafe2(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="@")("%40abc") == "%40abc"
+# qs already keeps these escaped, so ignoring them too is allowed
+@pytest.mark.parametrize("ignore", ["", "+&=;"])
+def test_unquote_qs_keeps_escaped_delimiters(
+    unquoter: type[_Unquoter], ignore: str
+) -> None:
+    assert unquoter(ignore=ignore, qs=True)("a%2Bb=?%3D%2B%26") == "a%2Bb=?%3D%2B%26"
 
 
-def test_unquote_unsafe3(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(qs=True)("a%2Bb=?%3D%2B%26") == "a%2Bb=?%3D%2B%26"
+# Only ASCII characters that requoting escapes can be ignored
+@pytest.mark.parametrize(
+    ("ignore", "qs", "rejected", "reason"),
+    [
+        ("a", True, "a", "it is decoded anyway"),
+        ("/!", False, "!", "it is decoded anyway"),
+        ("/'", True, "'", "it is decoded anyway"),
+        ("%+", False, "+", "it is decoded anyway"),
+        ("\u00e9", False, "\u00e9", "it is not ASCII"),
+        ("/\U0001f600", True, "\U0001f600", "it is not ASCII"),
+        ("\u65e5a", False, "\u65e5", "it is not ASCII"),
+    ],
+)
+def test_unquote_ignore_rejected(
+    unquoter: type[_Unquoter], ignore: str, qs: bool, rejected: str, reason: str
+) -> None:
+    with pytest.raises(
+        ValueError, match=re.escape(f"ignore cannot contain {rejected!r}, {reason}")
+    ):
+        unquoter(ignore=ignore, qs=qs)
 
 
-def test_unquote_unsafe4(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="@")("a@b") == "a%40b"
+def test_unquote_unsafe_not_supported(unquoter: type[_Unquoter]) -> None:
+    with pytest.raises(TypeError):
+        unquoter(unsafe="+")  # type: ignore[call-arg]
 
 
 @pytest.mark.parametrize(
@@ -411,8 +439,77 @@ def test_unquote_non_utf8(unquoter: type[_Unquoter], input: str, expected: str) 
     assert unquoter()(input) == expected
 
 
-def test_unquote_unsafe_non_utf8(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="\n")("%e2%82%0a") == "%e2%82%0A"
+# Strict UTF-8 as accepted by CPython's decoder, see table 3-7 of the Unicode
+# standard: sequences it rejects keep their escapes, the boundaries it accepts
+# are decoded.
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("a%C0%AFb", "a%C0%AFb", id="overlong_2_byte"),
+        pytest.param("%C1%BF", "%C1%BF", id="overlong_c1_lead"),
+        pytest.param("a%E0%80%AFb", "a%E0%80%AFb", id="overlong_3_byte"),
+        pytest.param("a%F0%80%80%AFb", "a%F0%80%80%AFb", id="overlong_4_byte"),
+        pytest.param("a%ED%A0%80b", "a%ED%A0%80b", id="surrogate"),
+        pytest.param("%ED%9F%BF", "\ud7ff", id="last_before_surrogates"),
+        pytest.param("a%F4%90%80%80b", "a%F4%90%80%80b", id="above_max_code_point"),
+        pytest.param("%F4%8F%BF%BF", "\U0010ffff", id="max_code_point"),
+        pytest.param("%C2%80", "\x80", id="smallest_2_byte"),
+        pytest.param("%DF%BF", "\u07ff", id="largest_2_byte"),
+        pytest.param("%E1%80%80", "\u1000", id="plain_3_byte_lead_smallest"),
+        pytest.param("%EC%BF%BF", "\ucfff", id="plain_3_byte_lead_largest"),
+        pytest.param("%ED%80%80", "\ud000", id="smallest_with_surrogate_lead"),
+        pytest.param("%EE%80%80", "\ue000", id="first_after_surrogates"),
+        pytest.param("%F1%80%80%80", "\U00040000", id="plain_4_byte_lead_smallest"),
+        pytest.param("%F3%BF%BF%BF", "\U000fffff", id="plain_4_byte_lead_largest"),
+        pytest.param("%E0%A0%80", "\u0800", id="smallest_3_byte"),
+        pytest.param("%EF%BF%BF", "\uffff", id="largest_3_byte"),
+        pytest.param("%F0%90%80%80", "\U00010000", id="smallest_4_byte"),
+        pytest.param("%F5%80%80%80", "%F5%80%80%80", id="invalid_lead_f5"),
+        pytest.param("a%80b%BFc", "a%80b%BFc", id="lone_continuation"),
+        pytest.param("%E2%82ab%41", "%E2%82abA", id="interrupted_by_run"),
+        pytest.param(
+            "%E2%82ab%AC", "%E2%82ab%AC", id="interrupted_by_run_before_continuation"
+        ),
+        pytest.param("%E2%82%41", "%E2%82A", id="interrupted_by_ascii_escape"),
+        pytest.param("%E2%82%C3%A9", "%E2%82\u00e9", id="interrupted_by_lead_byte"),
+    ],
+)
+def test_unquote_utf8_edges(
+    unquoter: type[_Unquoter], value: str, expected: str
+) -> None:
+    assert unquoter()(value) == expected
+
+
+# The same sequences as urllib.parse.unquote, which uses CPython's decoder with
+# errors="replace": one U+FFFD for each maximal invalid subsequence.
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("%e2%82", "\ufffd", id="incomplete_at_end"),
+        pytest.param("%e2%82ac", "\ufffdac", id="incomplete_then_run"),
+        pytest.param("%e2%82%f8", "\ufffd\ufffd", id="incomplete_then_invalid"),
+        pytest.param("%e2%82%2b", "\ufffd+", id="incomplete_then_ascii_escape"),
+        pytest.param("%e2%82%e2%82%ac", "\ufffd\u20ac", id="incomplete_then_valid"),
+        pytest.param("%e2%82%zz", "\ufffd%zz", id="incomplete_then_bad_escape"),
+        pytest.param("%E2%82ab%AC", "\ufffdab\ufffd", id="interrupted_by_run"),
+        pytest.param("%C0%AF", "\ufffd\ufffd", id="overlong"),
+        pytest.param("%ED%A0%80", "\ufffd\ufffd\ufffd", id="surrogate"),
+        pytest.param("%F4%90%80%80", "\ufffd" * 4, id="above_max_code_point"),
+        pytest.param(
+            "a%C3\u00e9%A9b", "a\ufffd\u00e9\ufffdb", id="interrupted_by_char"
+        ),
+        pytest.param("%C3%A9%25%zz", "\u00e9%%zz", id="valid_and_bad_escapes"),
+    ],
+)
+def test_unquote_replace_invalid(
+    unquoter: type[_Unquoter], value: str, expected: str
+) -> None:
+    assert unquoter(replace_invalid=True)(value) == expected
+    assert unquote_plus(value) == expected
+
+
+def test_unquote_ignore_non_utf8(unquoter: type[_Unquoter]) -> None:
+    assert unquoter(ignore="\n")("%e2%82%0a") == "%e2%82%0A"
 
 
 def test_unquote_plus_non_utf8(unquoter: type[_Unquoter]) -> None:
@@ -503,18 +600,6 @@ def test_unquote_without_plus_plus(unquoter: type[_Unquoter]) -> None:
     assert unquoter(plus=False)("a+b") == "a+b"
 
 
-def test_unquote_plus_to_space_unsafe(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="+", qs=True)("a+b") == "a+b"
-
-
-def test_unquote_multiple_unsafe(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="!@#$")("a!@#$b") == "a%21%40%23%24b"
-
-
-def test_unquote_explict_empty_unsafe(unquoter: type[_Unquoter]) -> None:
-    assert unquoter(unsafe="")("a!@#$b") == "a!@#$b"
-
-
 def test_quote_qs_with_colon(quoter: type[_Quoter]) -> None:
     s = quoter(safe="=+&?/:@", qs=True)("next=http%3A//example.com/")
     assert s == "next=http://example.com/"
@@ -548,11 +633,148 @@ def test_space(quoter: type[_Quoter]) -> None:
     assert quoter()(s) == "%25%20A"
 
 
+@pytest.mark.parametrize(
+    ("safe", "protected"),
+    [("\u00e9", ""), ("", "\u00e9"), ("/\u65e5", "+")],
+    ids=["safe", "protected", "mixed"],
+)
+def test_quoter_non_ascii_arguments(
+    quoter: type[_Quoter], safe: str, protected: str
+) -> None:
+    with pytest.raises(
+        ValueError, match="Only safe symbols with ORD < 128 are allowed"
+    ):
+        quoter(safe=safe, protected=protected)
+
+
+@pytest.mark.parametrize(
+    ("safe", "protected", "qs", "requote", "match"),
+    [
+        ("%", "", False, True, "'%' when requote"),
+        ("", "%", False, True, "'%' when requote"),
+        ("@%", "/", True, True, "'%' when requote"),
+        (" ", "", True, False, "' ' when qs"),
+        ("", " ", True, False, "' ' when qs"),
+        ("?/ ", "=", True, True, "' ' when qs"),
+    ],
+)
+def test_quoter_conflicting_safe(
+    quoter: type[_Quoter],
+    safe: str,
+    protected: str,
+    qs: bool,
+    requote: bool,
+    match: str,
+) -> None:
+    with pytest.raises(ValueError, match=match):
+        quoter(safe=safe, protected=protected, qs=qs, requote=requote)
+
+
+@pytest.mark.parametrize(
+    ("safe", "requote", "value", "expected"),
+    [
+        ("%", False, "%41 %", "%41%20%"),
+        (" ", True, "a b%41", "a bA"),
+    ],
+)
+def test_quoter_percent_or_space_safe(
+    quoter: type[_Quoter], safe: str, requote: bool, value: str, expected: str
+) -> None:
+    assert quoter(safe=safe, requote=requote)(value) == expected
+
+
 def test_quoter_path_with_plus(quoter: type[_Quoter]) -> None:
     s = "/test/x+y%2Bz/:+%2B/"
     assert "/test/x+y%2Bz/:+%2B/" == quoter(safe="@:", protected="/+")(s)
 
 
-def test_unquoter_path_with_plus(unquoter: type[_Unquoter]) -> None:
+def test_unquote_keeps_literal_plus(unquoter: type[_Unquoter]) -> None:
     s = "/test/x+y%2Bz/:+%2B/"
-    assert "/test/x+y+z/:++/" == unquoter(unsafe="+")(s)
+    assert "/test/x+y+z/:++/" == unquoter()(s)
+
+
+def test_unquote_long_plain_returns_same_object(unquoter: type[_Unquoter]) -> None:
+    s = "abc/def" * 4096
+    assert unquoter(plus=True)(s) is s
+
+
+def test_unquote_long_with_plus_only(unquoter: type[_Unquoter]) -> None:
+    assert unquoter(plus=True)("a+b" * 4096) == "a b" * 4096
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "value"),
+    [
+        pytest.param({"qs": True}, "%26%3D%2B%3B" * 100, id="qs_requoted_escapes"),
+        pytest.param({"ignore": "/%"}, "%2F%25" * 200, id="ignored_escapes"),
+        pytest.param({}, "%e2%82%ff%zz%4" * 100 + "%", id="invalid_escapes"),
+        pytest.param({"plus": True}, "+" * 300, id="plus"),
+    ],
+)
+def test_unquote_output_as_long_as_input(  # type: ignore[misc]
+    unquoter: type[_Unquoter], kwargs: dict[str, Any], value: str
+) -> None:
+    # The longest possible output is exactly as long as the input;
+    # implementations may rely on this to size an output buffer to the input
+    assert len(unquoter(**kwargs)(value)) == len(value)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "input", "expected"),
+    [
+        pytest.param({}, "a" * 8192 + "%20", "a" * 8192 + " ", id="run_then_escape"),
+        pytest.param({}, "%20" + "a" * 8192, " " + "a" * 8192, id="escape_then_run"),
+        pytest.param(
+            {},
+            "a" * 100 + "%e2%82" + "b" * 100,
+            "a" * 100 + "%e2%82" + "b" * 100,
+            id="incomplete_sequence_between_runs",
+        ),
+        pytest.param(
+            {},
+            "a" * 100 + "%e2%82",
+            "a" * 100 + "%e2%82",
+            id="incomplete_sequence_at_end",
+        ),
+        pytest.param(
+            {},
+            "a" * 100 + "%e2%82%zz" + "b",
+            "a" * 100 + "%e2%82%zzb",
+            id="incomplete_sequence_then_invalid_escape",
+        ),
+        pytest.param(
+            {"plus": True},
+            "a+%e2%82+b%C3%A9",
+            "a %e2%82 bé",
+            id="incomplete_sequence_then_plus",
+        ),
+        pytest.param(
+            {"ignore": "/"},
+            "a" * 100 + "%e2%82%2F/" + "b" * 100,
+            "a" * 100 + "%e2%82%2F/" + "b" * 100,
+            id="incomplete_sequence_then_ignored",
+        ),
+        pytest.param(
+            {"ignore": "%"},
+            "a" * 100 + "%zz%41%25",
+            "a" * 100 + "%zzA%25",
+            id="ignored_percent",
+        ),
+        pytest.param(
+            {"qs": True},
+            "a=1%26b" + "c" * 100 + "+d",
+            "a=1%26b" + "c" * 100 + " d",
+            id="qs_requote_between_runs",
+        ),
+        pytest.param(
+            {"ignore": "/%"},
+            "\u65e5" * 100 + "%2F%25+" + "\u65e5" * 100,
+            "\u65e5" * 100 + "%2F%25+" + "\u65e5" * 100,
+            id="path_safe_non_ascii_runs",
+        ),
+    ],
+)
+def test_unquote_runs(  # type: ignore[misc]
+    unquoter: type[_Unquoter], kwargs: dict[str, Any], input: str, expected: str
+) -> None:
+    assert unquoter(**kwargs)(input) == expected

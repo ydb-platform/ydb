@@ -20,6 +20,9 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#include <util/string/builder.h>
+
+#include <atomic>
 
 namespace NKikimr::NKqp {
 
@@ -67,6 +70,12 @@ private:
 };
 
 } // anonymous namespace
+
+TString MakeExternalName(TStringBuf prefix) {
+    // Recipes are shared by multiple tests; the counter distinguishes calls within one clock tick.
+    static std::atomic<ui64> sequence{0};
+    return TStringBuilder() << prefix << "_" << TInstant::Now().MicroSeconds() << "_" << sequence.fetch_add(1, std::memory_order_relaxed);
+}
 
 TStreamingTestFixture::~TStreamingTestFixture () {
     if (PqGatewayDriver) {
@@ -1337,6 +1346,19 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
             Y_ENSURE(executionId);
 
             result.PreviousExecutionIds.emplace_back(executionId->GetString());
+        }
+
+        if (!row.CreatedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("CreatedBy").GetOptionalUtf8(), row.CreatedBy);
+        }
+        if (!row.ModifiedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("ModifiedBy").GetOptionalUtf8(), row.ModifiedBy);
+        }
+        if (!row.StartedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("StartedBy").GetOptionalUtf8(), row.StartedBy);
+        }
+        if (!row.StoppedBy.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("StoppedBy").GetOptionalUtf8(), row.StoppedBy);
         }
     });
 

@@ -71,6 +71,7 @@
 
 #include <ydb/library/login/login.h>
 
+#include <util/generic/list.h>
 #include <util/generic/ptr.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
@@ -418,6 +419,14 @@ public:
 
     THashSet<TShardIdx> ShardsWithBorrowed; // shards have parts from another shards
     THashSet<TShardIdx> ShardsWithLoaned;   // shards have parts loaned to another shards
+
+    // Split/merge candidacy memory + cross-table fair scheduler (EnableSplitMergeDemandTracking /
+    // EnableSplitMergeFairScheduling). All in-memory, lost on restart. Empty/zero when the flag is off.
+    TList<TPathId> SplitMergeRevisitQueue;          // round-robin FIFO of tables with deferred candidates
+    bool SplitMergeRevisitScheduled = false;        // at most one TEvRevisitSplitMerge in flight
+    THashSet<TPathId> TablesWithDeferredSplitMerge; // tables with a non-empty deferred set (counter source)
+
+
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
     bool EnableBorrowedSplitCompaction = false;
@@ -807,7 +816,9 @@ public:
         TTableInfo::TPtr tableInfo,
         TVector<TTableShardInfo>&& dstPartitions,
         const TVector<TShardIdx>& removedShards,
-        ui64 splitStartIdx
+        ui64 splitStartIdx,
+        bool trackSplitMergeDemand,
+        bool loadSplitLineage
     );
     void OnShardRemoved(const TShardIdx& shardIdx);
     auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
@@ -1028,6 +1039,8 @@ public:
     void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId, const TExternalDataSourceInfo::TPtr externalDataSource);
     void PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId pathId);
+    void AddExternalDataSourceReference(TPathId pathId, const TPath& referrer);
+    void RemoveExternalDataSourceReference(TPathId pathId, TPathId referrer);
     void PersistExternalDataSourceReference(NIceDb::TNiceDb &db, TPathId pathId, const TPath& referrer);
     void PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb &db, TPathId pathId, TPathId referrer);
 
@@ -1159,6 +1172,56 @@ public:
 
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats, TInstant now);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
+
+    // --- Split/merge candidacy memory (EnableSplitMergeDemandTracking). All no-ops when the flag is off. ---
+    // The Record* family is per-direction: each entry point names the direction explicitly
+    // instead of taking a boolean, so a call site where the direction is not (yet) known
+    // is visible as such. All take (pathId, table, shardIdx, ...).
+    // Record that a partition became a split/merge candidate this stats cycle.
+    void RecordSplitDemand(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now);
+    void RecordMergeDemand(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now);
+    // Record that a wanted split/merge was deferred (blocked); enqueues the table for fair re-eval.
+    // `demandTracking` must be the caller's tx-level snapshot of EnableSplitMergeDemandTracking
+    // (not re-read here): the flag is reloadable at runtime, and re-reading it inside this
+    // function could disagree with the snapshot the caller used to decide whether to call at
+    // all, desyncing the deferral counters from the fair-revisit enqueue decision.
+    void RecordSplitDeferral(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,
+        TPartitionSplitMergeState::EDeferralReason reason, TInstant now, bool demandTracking);
+    void RecordMergeDeferral(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,
+        TPartitionSplitMergeState::EDeferralReason reason, TInstant now, bool demandTracking);
+    // Record that a split/merge actually fired for a partition (clears its "stuck" counters).
+    void RecordSplitApplied(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx, TInstant now);
+    void RecordMergeApplied(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx, TInstant now);
+    // Shared per-direction bodies (direction passed explicitly; a re-deferral with a
+    // changed direction corrects the aggregate counts).
+    void RecordSplitMergeDeferralImpl(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,
+        bool wantsSplit, TPartitionSplitMergeState::EDeferralReason reason, TInstant now, bool demandTracking);
+    void RecordSplitMergeAppliedImpl(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,
+        bool wasSplit, TInstant now);
+    // Drop a partition from the deferred set, keeping per-table aggregate and global totals consistent.
+    void RemoveDeferredPartition(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx);
+    // Set the COUNTER_PARTITIONS_* / COUNTER_TABLES_WITH_DEFERRED_SPLIT_MERGE sensors from the totals.
+    void UpdateSplitMergeCounters();
+    // Zero the split/merge gauges (used when EnableSplitMergeDemandTracking is off).
+    void ResetSplitMergeCounters();
+
+    // --- Always-on split/merge demand observability (independent of the feature flags). ---
+    // Monotonic counters at the same decision points the Record* family uses, so the
+    // demand pressure is measurable with the feature off (the A/B baseline). Observation only.
+    // Note: a stats cycle detected split/merge demand for a partition.
+    void NoteSplitDemandDetected();
+    void NoteMergeDemandDetected();
+    // Note a slot-limit deferral (direction is not evaluated at the deferral stage).
+    void NoteSplitMergeDeferral();
+
+    // --- Cross-table fair scheduler (EnableSplitMergeFairScheduling). ---
+    bool IsSplitMergeFairSchedulingEnabled(bool demandTracking) const {
+        return demandTracking && ui64(SplitSettings.EnableSplitMergeFairScheduling) != 0;
+    }
+    // Append a table to the round-robin re-eval queue (once, guarded by QueuedForRevisit) and ensure a
+    // single TEvRevisitSplitMerge is in flight.
+    void EnqueueSplitMergeRevisit(const TPathId& pathId, TTableInfo& table, const TActorContext& ctx, bool demandTracking);
+    void ScheduleSplitMergeRevisit(const TActorContext& ctx);
 
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
     void OnBackgroundCompactionTimeout(const TShardCompactionInfo& info);
@@ -1577,6 +1640,7 @@ public:
     void ExecuteTableStatsBatch(const TActorContext& ctx);
     void ScheduleTableStatsBatch(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPersistTableStats::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRevisitSplitMerge::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPeriodicTableStatsParsed::TPtr& ev, const TActorContext& ctx);
     void HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);

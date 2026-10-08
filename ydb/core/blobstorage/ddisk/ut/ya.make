@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     ddisk_actor_ut.cpp
+    metric_rates_ut.cpp
     ddisk_actor_batch_write_ut.cpp
     ddisk_actor_checksum_ut.cpp
     ddisk_actor_pdisk_ut.cpp
@@ -22,6 +23,7 @@ SRCS(
     persistent_buffer_barriers_manager_ut.cpp
     persistent_buffer_space_allocator_ut.cpp
     segment_manager_ut.cpp
+    tablet_stats_ut.cpp
 )
 
 END()

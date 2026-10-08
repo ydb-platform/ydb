@@ -14,7 +14,6 @@ YQL_UDF_CONTRIB(datetime2_udf)
         yql/essentials/public/udf/arrow
         yql/essentials/public/langver
         yql/essentials/core/langver
-        yql/essentials/minikql
         yql/essentials/minikql/datetime
     )
     END()

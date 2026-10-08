@@ -18,6 +18,6 @@ NYql::NNodes::TExprBase KqpEliminateWideMapPackUnpack(const NYql::NNodes::TExprB
 
 NYql::IGraphTransformer::TStatus KqpBuildStreamingFlow(
     ui64 txIdx, const NYql::NNodes::TKqpPhysicalTx& tx, NYql::TExprNode::TPtr& output, THashSet<std::pair<ui64, ui64>>& streamingTxResults,
-    const NYql::TKikimrConfiguration& config, const NYql::TKikimrTablesData& tables, TStringBuf cluster, NYql::TExprContext& ctx);
+    const NYql::TKikimrConfiguration& config, const NYql::TKikimrTablesData& tables, TStringBuf cluster, const TUserRequestContext* userRequestContext, NYql::TExprContext& ctx);
 
 } // namespace NKikimr::NKqp::NOpt

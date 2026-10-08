@@ -15,6 +15,7 @@ struct TItemWithLag {
 class TLagProvider {
 public:
     void AddPendingLag(ui64 childId);
+    void RemoveLag(const TItemWithLag& child, ui64 childId);
     bool UpdateLag(TItemWithLag& child, ui64 childId, TDuration lag);
     const std::optional<TDuration> GetLag() const;
 

@@ -1737,6 +1737,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 EnableSplitMergeFairScheduling = 20 [(ControlOptions) = {
+            Description: "Enables cross-table fair (round-robin) scheduling of deferred split/merge operations on slot-free. Requires the EnableSplitMergeDemandTracking feature flag. Off falls back to stats-arrival order.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTCMallocControls {
@@ -2310,6 +2315,11 @@ message TImmediateControlsConfig {
                          "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
             MinValue: 0,
             MaxValue: 86400,
+            DefaultValue: 0 }];
+        optional uint64 UseFixedVDiskSlotSize = 14 [(ControlOptions) = {
+            Description: "Use infer_pdisk_slot_count_settings.unit_size as PDiskConfig.ExpectedSlotSize setting",
+            MinValue: 0,
+            MaxValue: 1,
             DefaultValue: 0 }];
     }
 
@@ -3074,6 +3084,15 @@ message TColumnShardConfig {
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
     optional bool EnableWeightedDataChannelSelection = 77 [default = false];
+
+    message TCutHistoryConfig {
+        optional uint32 ScanBatchSize = 2 [default = 32];
+        optional uint64 ScanMemoryLimitBytes = 3 [default = 8388608];
+        optional uint32 ContinuationDelayMs = 4 [default = 1];
+        optional uint32 ContinuationJitterMs = 5 [default = 1];
+    }
+
+    optional TCutHistoryConfig CutHistory = 78;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

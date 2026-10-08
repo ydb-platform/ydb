@@ -2,7 +2,7 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <library/cpp/yt/memory/range.h>
 
@@ -50,7 +50,7 @@ public:
 private:
     const NConcurrency::TPeriodicExecutorPtr EvictionExecutor_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, MapLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, MapLock_);
 
     struct TEntry
     {

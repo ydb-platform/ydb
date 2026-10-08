@@ -627,12 +627,26 @@ public:
             return Metrics.HasExpectedSlotSize() ? Metrics.GetExpectedSlotSize() : ExpectedSlotSize;
         }
 
+        ui32 GetEffectiveSlotSizeInUnits() const {
+            // Preserve config-based slot accounting when ExpectedSlotSize is zero.
+            ui32 slotSizeInUnits = SlotSizeInUnits;
+            // When ExpectedSlotSize is nonzero, prefer SlotSizeInUnits reported by PDisk.
+            if (GetEffectiveExpectedSlotSize() != 0 && Metrics.HasSlotSizeInUnits()) {
+                slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            }
+            return Max(1u, slotSizeInUnits);
+        }
+
         ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-            // NOTE: uses the config-side SlotSizeInUnits, not the effective (metrics-preferred)
-            // one: for unit-size-inferred disks this over-counts occupancy of multi-unit groups
-            // (conservative). Switching to the effective value would change legacy accounting
-            // and requires extending the NumActiveDynamicSlots recompute triggers to units changes
-            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
+            // NOTE: when ExpectedSlotSize is zero, uses the config-side
+            // SlotSizeInUnits, not the effective (metrics-preferred)
+            // one: for unit-size-inferred disks this over-counts
+            // occupancy of multi-unit groups (conservative). Switching
+            // to the effective value would change accounting when
+            // ExpectedSlotSize is zero. When ExpectedSlotSize is
+            // nonzero, use the effective value; NumActiveDynamicSlots
+            // is recomputed on units changes.
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, GetEffectiveSlotSizeInUnits());
         }
 
         // sum of owner weights over the live vslots with the current weight inputs; must be

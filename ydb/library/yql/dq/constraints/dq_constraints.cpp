@@ -135,6 +135,16 @@ TStatus ConstraintDqBlockHashJoinCore(const TExprNode::TPtr& input, TExprContext
     return TStatus::Ok;
 }
 
+TStatus ConstraintDqScalarHashJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto& leftInputNode = *input->Child(0);
+    const auto& rightInputNode = *input->Child(1);
+    if (leftInputNode.GetConstraint<TStreamingConstraintNode>() || rightInputNode.GetConstraint<TStreamingConstraintNode>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Streaming inputs are not supported for " << input->Content()));
+        return TStatus::Error;
+    }
+    return TStatus::Ok;
+}
+
 TStatus ConstraintDqPrecompute(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (input->Head().GetConstraint<TStreamingConstraintNode>()) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Streaming input is not supported for DqPrecompute"));
@@ -206,6 +216,10 @@ public:
         AddHandler({TDqPhyGraceJoin::CallableName()}, Hndl(&ConstraintDqPhyGraceJoin));
         AddHandler({TDqPhyBlockHashJoin::CallableName()}, Hndl(&ConstraintDqBlockHashJoin));
         AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&ConstraintDqBlockHashJoinCore));
+        AddHandler({
+            TDqPhyScalarHashJoin::CallableName(),
+            TDqScalarHashJoinCore::CallableName(),
+        }, Hndl(&ConstraintDqScalarHashJoin));
         AddHandler({
             TDqPrecompute::CallableName(),
             TDqPhyPrecompute::CallableName(),

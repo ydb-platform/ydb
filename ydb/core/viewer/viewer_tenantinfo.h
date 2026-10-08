@@ -692,17 +692,17 @@ public:
     }
 
     static ui64 GetSlotSize(const NKikimrSysView::TPDiskInfo& pdiskInfo, ui32 groupSizeInUnits) {
-        if (pdiskInfo.GetExpectedSlotSize()) {
-            return pdiskInfo.GetExpectedSlotSize();
-        }
         ui64 slotSize = pdiskInfo.GetEnforcedDynamicSlotSize();
+        if (!slotSize) {
+            slotSize = pdiskInfo.GetExpectedSlotSize();
+        }
         if (!slotSize) {
             const ui32 slotCount = pdiskInfo.GetExpectedSlotCount() ? pdiskInfo.GetExpectedSlotCount() : 16;
             slotSize = pdiskInfo.GetTotalSize() / slotCount;
         }
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
-            groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize());
-        return slotSize * ownerWeight;
+        return TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdiskInfo.GetSlotSizeInUnits(), pdiskInfo.GetExpectedSlotSize(),
+            pdiskInfo.HasUserChunkPoolSize() ? std::make_optional(pdiskInfo.GetUserChunkPoolSize()) : std::nullopt);
     }
 
     struct TStoragePoolStats {
@@ -793,7 +793,7 @@ public:
                             if (itPoolName != poolIdToName.end()) {
                                 auto& poolStats = poolByName[itPoolName->second];
                                 poolStats.Size += allocated;
-                                poolStats.Limit += slotSize;
+                                poolStats.Limit += Min(slotSize, Max<ui64>() - poolStats.Limit);
                             }
                         }
                     }
@@ -958,11 +958,11 @@ public:
                                 const auto& poolStats = itPoolStats->second;
                                 auto& databaseStats = databaseStorageByType[poolType];
                                 databaseStats.Size += poolStats.Size;
-                                databaseStats.Limit += poolStats.Limit;
+                                databaseStats.Limit += Min(poolStats.Limit, Max<ui64>() - databaseStats.Limit);
                                 databaseStats.Groups += poolStats.Groups;
                                 storageGroups += poolStats.Groups;
                                 storageSize += poolStats.Size;
-                                storageLimit += poolStats.Limit;
+                                storageLimit += Min(poolStats.Limit, Max<ui64>() - storageLimit);
                             }
                         }
 

@@ -229,12 +229,12 @@ message TFeatureFlags {
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
     optional bool EnableMirroredTopicSplitMerge = 200 [default = true];
     optional bool EnableFulltextIndex = 201 [default = true];
-    optional bool EnableSetColumnConstraint = 202 [default = false];
+    optional bool EnableSetColumnConstraint = 202 [default = true];
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = true];
     optional bool EnableStreamingQueries = 206 [default = true];
-    optional bool EnableTinyDisks = 207 [default = false];
+    optional bool EnableTinyDisks = 207 [default = true];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
@@ -374,7 +374,7 @@ message TFeatureFlags {
     // SchemeShard's single-threaded load.
     optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
     optional bool EnableTruncateColumnTable = 318 [default = false];
-    optional bool EnableSuperLemmer = 319 [default = false];
+    optional bool EnableSuperLemmer = 319 [default = true];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
     optional bool EnableInsecureMirrorFactory = 322 [default = false];
@@ -441,4 +441,7 @@ message TFeatureFlags {
     optional bool EnablePqSourceRescaling = 357 [default = false];
     optional bool EnableStreamingQueryTopicAutopartitioning = 358 [default = true];
     optional bool EnableQYT = 359 [default = false]; //YT queues (QYT) in federated and streaming queries
+    // Enables memory of table partitions split/merge demands
+    optional bool EnableSplitMergeDemandTracking = 360 [default = false];
+    optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
 }

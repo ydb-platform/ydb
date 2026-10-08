@@ -906,7 +906,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
+                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[nextGroup]) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;
@@ -1629,7 +1629,7 @@ public:
                 AllowLocalFiles,
                 WorkFactory));
         }
-        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
             FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
@@ -1899,7 +1899,6 @@ private:
         hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
@@ -2037,12 +2036,6 @@ private:
 
     void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
-    }
-
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
-        if (FileQueueEvents.Heartbeat()) {
-            FileQueueEvents.Send(new TEvS3Provider::TEvAck());
-        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {

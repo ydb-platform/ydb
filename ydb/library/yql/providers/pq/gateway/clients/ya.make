@@ -3,4 +3,5 @@ RECURSE(
     external
     file
     local
+    message_stream
 )

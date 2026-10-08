@@ -925,6 +925,24 @@ Y_UNIT_TEST(GroupByInvalidPragma) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Expected unsigned integer literal as a single argument for: GroupByCubeLimit\n");
 }
 
+Y_UNIT_TEST(GroupingLimitsFromTranslationSettings) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.GroupByCubeLimit = 1;
+    const TString query = "SELECT key FROM plato.Input GROUP BY CUBE(key, subkey);";
+    auto result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "only for 1 columns");
+    result = SqlToYqlWithSettings("PRAGMA GroupByCubeLimit = '2'; " + query, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+    settings.GroupByCubeLimit = 2;
+    settings.GroupByLimit = 3;
+    result = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "more than 3 groups");
+    result = SqlToYqlWithSettings("PRAGMA GroupByLimit = '4'; " + query, settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
 Y_UNIT_TEST(GroupByHugeCubeDeniedPragme) {
     NYql::TAstParseResult res = SqlToYql("PRAGMA GroupByCubeLimit = '4'; SELECT key FROM plato.Input GROUP BY CUBE (key, subkey, value, key + subkey as sum, key - subkey as sub);");
     UNIT_ASSERT(!res.IsOk());
@@ -1357,52 +1375,48 @@ Y_UNIT_TEST(YsonFuncWithoutArgs) {
 }
 
 Y_UNIT_TEST(CanNotUseOrderByInNonLastSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input order by key\n"
                "union all\n"
                "select * from Input order by key limit 1;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Error: ORDER BY within UNION ALL is only allowed after last subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: ORDER BY within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseLimitInNonLastSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input limit 1\n"
                "union all\n"
                "select * from Input order by key limit 1;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: LIMIT within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseDiscardInNonFirstSelectInUnionAllChain) {
-    auto req = "pragma AnsiOrderByLimitInUnionAll;\n"
-               "use plato;\n"
+    auto req = "use plato;\n"
                "\n"
                "select * from Input\n"
                "union all\n"
                "discard select * from Input;";
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
 }
 
 Y_UNIT_TEST(CanNotUseIntoResultInNonLastSelectInUnionAllChain) {
     auto req = "use plato;\n"
-               "pragma AnsiOrderByLimitInUnionAll;\n"
                "\n"
-               "select * from Input\n"
+               "select * from Input into result aaa\n"
                "union all\n"
-               "discard select * from Input;";
+               "select * from Input;";
 
     auto res = SqlToYql(req);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:6:1: Error: DISCARD within UNION ALL is only allowed before first subquery\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:21: Error: INTO RESULT within UNION ALL is only allowed after last subquery\n");
 }
 
 Y_UNIT_TEST(YsonStrictInvalidPragma) {

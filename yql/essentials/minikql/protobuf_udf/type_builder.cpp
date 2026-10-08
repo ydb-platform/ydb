@@ -2,7 +2,6 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
-#include <yql/essentials/utils/yql_panic.h>
 
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 #include <yt/yt_proto/yt/formats/extension.pb.h>

@@ -148,6 +148,14 @@ void TTargetBase::SetStreamState(EStreamState value) {
     StreamState = value;
 }
 
+std::optional<bool> TTargetBase::GetStreamSchemaChanges() const {
+    return StreamSchemaChanges;
+}
+
+void TTargetBase::SetStreamSchemaChanges(bool value) {
+    StreamSchemaChanges = value;
+}
+
 const TString& TTargetBase::GetIssue() const {
     return Issue;
 }

@@ -7,11 +7,11 @@ namespace NKikimr::NKqp::NLocalTopicTests {
 Y_UNIT_TEST_SUITE(TLocalTopicClientFactory) {
     Y_UNIT_TEST_F(CreateTopicClient, TLocalTopicClientFixture) {
         auto factory = CreateLocalTopicClientFactory(LocalClientSettings());
-        auto client = factory->CreateTopicClient(ClientSettings());
+        auto client = factory->CreateTopicClient("topic", ClientSettings());
         factory.Reset();
-        const auto result = client->DescribeTopic("topic").GetValue(TEST_TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetTopicDescription().GetTotalPartitionsCount(), 1);
+        const auto result = client->DescribeStream().GetValue(TEST_TIMEOUT);
+        UNIT_ASSERT_C(result.IsSuccess(), result.Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result.Value.Partitions.size(), 1);
     }
 
     Y_UNIT_TEST_F(CreateFederatedTopicClient, TLocalTopicClientFixture) {

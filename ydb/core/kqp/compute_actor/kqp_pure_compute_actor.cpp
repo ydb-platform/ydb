@@ -36,6 +36,7 @@ TKqpComputeActor::TKqpComputeActor(
     , Database(database)
 {
     ComputeCtx.SetQueryContext(Database, UserToken);
+    ComputeCtx.SetCheckpointContext(CheckpointContext);
     InitializeTask();
     if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
         Meta.ConstructInPlace();
@@ -198,6 +199,7 @@ STFUNC(TKqpComputeActor::StateFunc) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);
             hFunc(TEvKqpCompute::TEvScanData, HandleExecute);
             hFunc(TEvKqpCompute::TEvScanError, HandleExecute);
+            hFunc(TEvKqpCompute::TEvScanWarning, HandleExecute);
             default:
                 BaseStateFuncBody(ev);
         }
@@ -370,6 +372,12 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
 
     State = NDqProto::COMPUTE_STATE_FAILURE;
     ReportStateAndMaybeDie(YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized), issues);
+}
+
+void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+    YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "Got system view scan warning",
+        {"logPrefix", this->LogPrefix},
+        {"issues", ev->Get()->Issues.ToOneLineString()});
 }
 
 ui64 TKqpComputeActor::CalculateFreeSpace() const {

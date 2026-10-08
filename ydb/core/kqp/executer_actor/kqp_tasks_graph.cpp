@@ -7,6 +7,7 @@
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -26,6 +27,10 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <algorithm>
@@ -562,15 +567,34 @@ TVector<TString> ResolveFullTextQueryTokenExpanded(
 
     auto* paramPtr = stageInfo.Meta.Tx.Params->GetParameterUnboxedValuePtr(token.GetParamName());
     if (!paramPtr) {
-        YDB_LOG_WARN("Failed to get parameter value for full-text query token",
-            {"paramName", token.GetParamName()});
+        YDB_LOG_WARN("Failed to get parameter value for full-text query token", {"paramName", token.GetParamName()});
         return { baseToken };
     }
 
-    auto [type, value] = *paramPtr;
     TVector<TString> result;
 
-    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
+    auto [type, value] = *paramPtr;
+    if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data) {
+        auto* dataType = static_cast<NKikimr::NMiniKQL::TDataType*>(type);
+        const auto dataSlot = dataType->GetDataSlot();
+
+        if (dataSlot && *dataSlot == NUdf::EDataSlot::Json) {
+            TString error;
+            const auto jsonTokens = NJsonIndex::TokenizeJson(value.AsStringRef(), error);
+            YQL_ENSURE(error.empty(), "Failed to tokenize Json query parameter '" << token.GetParamName() << "': " << error);
+
+            result.reserve(jsonTokens.size());
+            for (const auto& jsonToken : jsonTokens) {
+                result.emplace_back(baseToken + jsonToken);
+            }
+
+            std::sort(result.begin(), result.end());
+            result.erase(std::unique(result.begin(), result.end()), result.end());
+            return result;
+        }
+
+        return { ResolveFullTextQueryToken(token, stageInfo) };
+    } else if (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::List) {
         NUdf::TUnboxedValue item;
         auto* itemType = static_cast<NKikimr::NMiniKQL::TListType*>(type)->GetItemType();
         auto iter = value.GetListIterator();
@@ -1759,6 +1783,7 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
 void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input, bool serializeAsyncIoSettings, bool& enableMetering) const {
     const auto& snapshot = GetMeta().Snapshot;
     const auto& lockTxId = GetMeta().LockTxId;
+    const auto& lockNodeId = GetMeta().LockNodeId;
 
     switch (input.Type()) {
         case NYql::NDq::TTaskInputType::Source:
@@ -1797,6 +1822,17 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
 
                 if (lockTxId) {
                     input.Meta.FullTextSourceSettings->SetLockTxId(*lockTxId);
+                    input.Meta.FullTextSourceSettings->SetLockNodeId(lockNodeId);
+                }
+
+                if (GetMeta().LockMode) {
+                    input.Meta.FullTextSourceSettings->SetLockMode(*GetMeta().LockMode);
+                }
+
+                const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
+                    GetMeta().QuerySpanId, input.Meta.FullTextSourceSettings->GetTable().GetPath());
+                if (effectiveSpanId) {
+                    input.Meta.FullTextSourceSettings->SetQuerySpanId(effectiveSpanId);
                 }
 
                 inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.FullTextSourceSettings);
@@ -3083,7 +3119,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
 
     auto columns = BuildKqpColumns(source, tableInfo);
     const auto& snapshot = GetMeta().Snapshot;
-    
+
     if (stageInfo.Meta.PrunedPartitions.empty()) {
         return Nothing();
     }

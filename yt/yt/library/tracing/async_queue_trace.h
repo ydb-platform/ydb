@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/generic/noncopyable.h>
 
@@ -50,7 +50,7 @@ public:
 private:
     const bool Lazy_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::deque<std::pair<i64, TTraceContextPtr>> Blocked_;
     THashMap<TTraceContextPtr, i64> Background_;
 };

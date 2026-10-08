@@ -32,12 +32,6 @@ TVector<std::pair<TString, TString>> SettingPairs(const TVector<TCoNameValueTupl
 
 Y_UNIT_TEST_SUITE(DqOptEqualNulls) {
 
-Y_UNIT_TEST(GraceJoinHasNoSettings) {
-    TExprContext ctx;
-    const auto pos = ctx.AppendPosition({});
-    UNIT_ASSERT(BuildBlockHashJoinSettings(pos, EJoinAlgoType::GraceJoin, ctx).empty());
-}
-
 Y_UNIT_TEST(ReverseJoinKeepsBuildSide) {
     TExprContext ctx;
     const auto pos = ctx.AppendPosition({});

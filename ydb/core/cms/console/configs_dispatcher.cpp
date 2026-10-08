@@ -8,7 +8,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/util/config_index.h>
-#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/events/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/config/init/init.h>
 #include <ydb/core/config/init/mock.h>

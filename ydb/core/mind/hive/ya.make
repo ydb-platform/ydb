@@ -168,8 +168,6 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     ydb/core/base
     ydb/core/blobstorage/base
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/nodewarden
     ydb/core/engine/minikql
     ydb/core/node_whiteboard
     ydb/core/protos

@@ -18,7 +18,7 @@ PEERDIR(
     ydb/core/cms/console/events
     ydb/core/kqp/common
     ydb/core/kqp/counters
-    ydb/core/mind
+    ydb/core/mind/events
     ydb/core/mon
     ydb/core/protos
     ydb/core/resource_pools

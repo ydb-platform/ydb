@@ -6,7 +6,7 @@
 
 #include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/cms/console/events/console.h>
-#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/events/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/kqp/common/kqp.h>

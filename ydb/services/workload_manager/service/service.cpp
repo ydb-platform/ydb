@@ -13,7 +13,7 @@
 #include <ydb/services/workload_manager/common/helpers.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 
-#include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/mind/tenant_node_enumeration/tenant_node_enumeration.h>
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>

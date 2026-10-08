@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/cms/console/events
-    ydb/core/mind
+    ydb/core/mind/tenant_node_enumeration
     ydb/core/resource_pools
     ydb/library/aclib
     ydb/library/actors/interconnect
@@ -19,4 +19,3 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-

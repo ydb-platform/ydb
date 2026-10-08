@@ -185,6 +185,16 @@ Y_UNIT_TEST(SplitMakeTzDateSingle) {
     UNIT_ASSERT_VALUES_EQUAL(value, dt / 86400u);
 }
 
+Y_UNIT_TEST(MakeTzDateInvalidInputPreservesOutput) {
+    ui16 value = 123;
+    UNIT_ASSERT(!MakeTzDate(1970, 0, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+    UNIT_ASSERT(!MakeTzDate(1969, 12, 31, value, 1));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+    UNIT_ASSERT(MakeTzDate(1970, 1, 2, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 1);
+}
+
 Y_UNIT_TEST(SplitMakeTzDate32Single) {
     i32 y;
     ui32 month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;

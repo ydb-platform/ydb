@@ -7,6 +7,9 @@ namespace NKikimr::NSQS {
 class TTestEventsWriter : public IEventsWriterWrapper {
 public:
     TTestEventsWriter() = default;
+    ~TTestEventsWriter() override {
+        Close();
+    }
     void Write(const TString& data) override;
     TVector<TString> GetMessages();
 

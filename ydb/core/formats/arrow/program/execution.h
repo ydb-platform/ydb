@@ -339,9 +339,7 @@ public:
     }
 
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> StartFetchHeader(
-        const TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
-        return DoStartFetchHeader(context, fetchContext);
-    }
+        const TProcessorContext& context, const TFetchHeaderContext& fetchContext);
 
     TConclusion<NArrow::TColumnFilter> CheckHeader(const TProcessorContext& context, const TCheckHeaderContext& fetchContext) {
         return DoCheckHeader(context, fetchContext);
@@ -357,17 +355,12 @@ public:
         return DoCheckIndex(context, fetchContext, value);
     }
 
+    // Fetches only the part of addr that is not in the resources yet. An empty result means nothing is left to fetch.
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> StartFetchData(
-        const TProcessorContext& context, const TDataAddress& addr) {
-        return DoStartFetchData(context, addr);
-    }
+        const TProcessorContext& context, const TDataAddress& addr);
 
     TConclusionStatus AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
         return DoAssembleAccessor(context, columnId, subColumnName);
-    }
-
-    TConclusionStatus ApplyPendingFetcher(const TProcessorContext& context, const ui32 entityId) {
-        return DoApplyPendingFetcher(context, entityId);
     }
 };
 

@@ -9,25 +9,7 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
-        // Apply a fetcher left behind by a skipped assembler before deciding what is already loaded.
-        auto applied = source.ApplyPendingFetcher(context, i.GetColumnId());
-        if (applied.IsFail()) {
-            return applied;
-        }
-        auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
-        THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName> subColumnsToFetch;
-        for (auto&& sc : i.GetSubColumnNames(true)) {
-            if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
-                if (!sc && acc) {
-                    context.MutableResources().Remove(i.GetColumnId());
-                }
-                subColumnsToFetch.emplace(sc);
-            }
-        }
-        if (subColumnsToFetch.empty()) {
-            continue;
-        }
-        auto conclusion = source.StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
+        auto conclusion = source.StartFetchData(context, i);
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -58,14 +40,6 @@ TConclusion<TExecutionResult> TOriginalColumnDataProcessor::DoExecute(
         }
     }
     for (auto&& [_, i] : HeaderContext) {
-        // A header fetch uses the column id as its entity id, same as a data fetch of that column.
-        auto applied = source.ApplyPendingFetcher(context, i.GetColumnId());
-        if (applied.IsFail()) {
-            return applied;
-        }
-        if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
-            continue;
-        }
         auto conclusion = source.StartFetchHeader(context, i);
         if (conclusion.IsFail()) {
             return conclusion;

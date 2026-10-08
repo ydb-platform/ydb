@@ -405,8 +405,8 @@ TConclusionStatus TSourceData::DoApplyPendingFetcher(const NArrow::NSSA::TProces
     if (!HasStageData()) {
         return TConclusionStatus::Success();
     }
-    // No stored fetcher: do not publish an empty ChunkDetails column.
     auto fetcher = MutableStageData().ExtractFetcherOptional(entityId);
+    // No stored fetcher: do not publish an empty ChunkDetails column.
     if (!fetcher) {
         return TConclusionStatus::Success();
     }

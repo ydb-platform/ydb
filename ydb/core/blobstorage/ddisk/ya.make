@@ -21,6 +21,9 @@ LIBRARY()
         tablet_stats.h
         tablet_stats_actor.h
         tablet_stats_actor.cpp
+        ddisk_mon.cpp
+        ddisk_mon.h
+        space_metrics.h
         direct_io_op.cpp
         integrity_manager.cpp
         integrity_manager.h

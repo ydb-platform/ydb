@@ -19,12 +19,13 @@ SRCS(
     ddisk_actor_checksum_ut.cpp
     ddisk_actor_pdisk_ut.cpp
     ddisk_sync_ut.cpp
+    ddisk_mon_ut.cpp
+    tablet_stats_ut.cpp
     integrity_manager_ut.cpp
     persistent_buffer_mon_ut.cpp
     persistent_buffer_barriers_manager_ut.cpp
     persistent_buffer_space_allocator_ut.cpp
     segment_manager_ut.cpp
-    tablet_stats_ut.cpp
 )
 
 END()

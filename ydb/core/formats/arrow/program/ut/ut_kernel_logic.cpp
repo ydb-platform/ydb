@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/filter/filter.h>
@@ -242,6 +243,15 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         UNIT_ASSERT(!*secondResult);
         UNIT_ASSERT(processor.OnInputReady(3, context, nodeContext).IsSuccess());
         UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(4)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({0, 0})));
+    }
+
+    Y_UNIT_TEST(AllNullSparsePredicateAndTruePreservesNull) {
+        auto predicate = std::make_shared<NAccessor::TSparsedArray>(nullptr, arrow::uint8(), 2);
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = predicate->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && *oneValue);
+        UNIT_ASSERT(value && !value->is_valid);
+        AssertAndResult(predicate, {std::nullopt, std::nullopt});
     }
 };
 

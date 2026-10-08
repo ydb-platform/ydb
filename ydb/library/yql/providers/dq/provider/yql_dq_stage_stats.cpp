@@ -12,7 +12,7 @@ namespace NYql {
 using namespace std::string_view_literals;
 
 std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOperationStatistics& statistics) {
-    std::unordered_map<ui64, IDqGateway::TStageStats> ret;
+    std::unordered_map<ui64, IDqGateway::TStageStats> resultStats;
     for (const auto& entry : statistics.Entries) {
         if (!entry.Sum) {
             continue;
@@ -25,22 +25,22 @@ std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOp
             continue;
         }
 
-        auto maybeStage = labels.find("Stage");
-        if (maybeStage == labels.end()) {
-            continue;
-        }
-
         // Only accept statistics aggregated by stage, with no labels other than Stage.
         if (labels.size() != 1) {
             continue;
         }
 
-        ui64 stageId = 0;
-        if (!TryFromString(maybeStage->second, stageId) || !stageId) {
+        auto stageIt = labels.find("Stage");
+        if (stageIt == labels.end()) {
             continue;
         }
 
-        auto& stage = ret[stageId];
+        ui64 stageId = 0;
+        if (!TryFromString(stageIt->second, stageId) || !stageId) {
+            continue;
+        }
+
+        auto& stage = resultStats[stageId];
         const i64 sum = *entry.Sum;
         if (name == "OutputRows"sv) {
             stage.OutputRows += sum;
@@ -60,7 +60,7 @@ std::unordered_map<ui64, IDqGateway::TStageStats> ExtractDqStagesStats(const TOp
             stage.EgressBytes += sum;
         }
     }
-    return ret;
+    return resultStats;
 }
 
 } // namespace NYql

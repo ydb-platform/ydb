@@ -1,6 +1,8 @@
 #include "kafka_balancer_actor.h"
 #include "kafka_metadata_service.h"
 
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
@@ -1507,6 +1509,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
 
     response->Leader = Master;
 
+    auto labels = BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count");
     if (IsMaster) {
         response->Members.reserve(WorkerStates.size());
         for (const auto& [mId, meta] : WorkerStates) {
@@ -1516,10 +1519,18 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
             member.Metadata = member.MetaStr;
             response->Members.push_back(std::move(member));
         }
+
+        std::optional<i64> memberCount = static_cast<i64>(WorkerStates.size());
+        Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvGetGroupMemberCounter(
+            std::move(labels), Context->ConnectionId, GroupId, GenerationId, memberCount));
+    } else {
+        Send(Context->ConnectionId, new TEvKafka::TEvReleaseGroupMemberCounter(
+            GroupId, GenerationId, std::move(labels)));
     }
 
     Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, EKafkaErrors::NONE_ERROR));
+
     Die(ctx);
 }
 
@@ -1541,6 +1552,9 @@ void TKafkaBalancerActor::SendLeaveGroupResponseOk(const TActorContext& ctx, ui6
         {LogPrefix()});
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
+    auto labels = BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count");
+    Send(Context->ConnectionId, new TEvKafka::TEvReleaseGroupMemberCounter(
+        GroupId, GenerationId, std::move(labels)));
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
     Die(ctx);
 }

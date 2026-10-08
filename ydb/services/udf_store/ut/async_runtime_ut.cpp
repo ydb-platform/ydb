@@ -65,7 +65,7 @@ public:
 
 struct TEnv {
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc =
-        std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+        std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /*initiallyAcquired=*/false);
     std::shared_ptr<TFakeTransport> Transport = std::make_shared<TFakeTransport>();
     std::shared_ptr<std::atomic<ui64>> Wakeups = std::make_shared<std::atomic<ui64>>(0);
     TQueryCompartmentHandle* Query = nullptr;
@@ -108,6 +108,7 @@ struct TEnv {
         UNIT_ASSERT_VALUES_EQUAL(LiveObjects(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Query->BridgeNodes->DebugSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(Query->BridgeNodes->DebugRunScopeDepth(), 0);
+        UNIT_ASSERT(!Alloc->IsAttached());
         UNIT_ASSERT(!GetCurrentAsyncInvocation());
         UNIT_ASSERT(!GetCurrentInvocationContext());
         UNIT_ASSERT(!GetCurrentQueryCompartment());

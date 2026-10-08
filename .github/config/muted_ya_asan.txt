@@ -68,7 +68,9 @@ ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
 ydb/core/kqp/ut/rbo KqpRboYql.DistinctShuffleEliminationTPCHQ4+CompositePartitionKey
 ydb/core/kqp/ut/rbo KqpRboYql.DistinctShuffleEliminationTPCHQ4-CompositePartitionKey
+ydb/core/kqp/ut/rbo KqpRboYql.FallbackToYqlEnabled
 ydb/core/kqp/ut/rbo KqpRboYql.Having
+ydb/core/kqp/ut/rbo KqpRboYql.RollupGrouping
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
@@ -448,6 +450,7 @@ ydb/library/yaml_config/ut YamlConfigValidation.ManyValuesOfOneLabelWithRedundan
 ydb/library/yaml_config/ut YamlConfigValidation.RegionReclamationPreservesCorrelationsAndRules
 ydb/library/yaml_config/ut unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
+ydb/public/sdk/cpp/src/client/persqueue_public/ut RetryPolicy.TWriteSession_SeqNoShift
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeDataAndShuffle

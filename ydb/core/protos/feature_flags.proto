@@ -248,6 +248,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableIndexMaterialization = 221 [default = false];
+    optional bool EnableTenantSystemTabletBackup = 362 [default = true];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
@@ -365,6 +366,9 @@ message TFeatureFlags {
     // Offloads TEvDataShard::TEvPeriodicTableStats parsing to a dedicated aux actor to reduce
     // SchemeShard's single-threaded load.
     optional bool EnablePeriodicTableStatsParseOffload = 317 [default = false];
+<<<<<<< HEAD
     optional bool EnableTenantSystemTabletBackup = 318 [default = true];
 >>>>>>> 5bcd579571c (feat: add tenant backups and global retention)
+=======
+>>>>>>> b7fcd235cee (fix: resolve tenant backup flag conflict)
 }

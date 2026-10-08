@@ -523,6 +523,46 @@ Y_UNIT_TEST_SUITE(DbCounters) {
 
         UNIT_ASSERT_C(false, "out of iterations");
     }
+
+    // The ICB limit of a node's ydb_detailed output folds the partition leaves and restores them
+    Y_UNIT_TEST(DetailedTablesFoldOverNodeOutputLimit) {
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+
+        CreateDetailedDatabase(env, "Database1");
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/Root", "Database1",
+                {{"monitoring_project_id", "proj1"}}));
+        CreateDetailedTable(env, "Database1", "Table1");
+
+        auto* runtime = env.GetServer().GetRuntime();
+        // Sets the limit on every node, then waits for the rollup with or without the leaves
+        const auto waitFor = [&](i64 limit, bool published) {
+            for (size_t iter = 0; iter < 40; ++iter) {
+                Cerr << "iteration " << iter << " (limit " << limit << ")" << Endl;
+                for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+                    TControlBoard::SetValue(limit, runtime->GetAppData(nodeId).Icb->DetailedMetricsControls.MaxNodeOutputBytes);
+                }
+                for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+                    auto root = GetServiceCounters(runtime->GetAppData(nodeId).Counters, "ydb_detailed", false);
+                    auto tableGroup = FindDetailedTableGroup(root, "proj1", "/Root/Database1", "Table1");
+                    if (!tableGroup) {
+                        continue;
+                    }
+                    auto rowCount = tableGroup->FindNamedCounter("name", "table.datashard.row_count");
+                    if (rowCount && rowCount->Val() > 0 && !!FindAnyTabletIdGroup(tableGroup) == published) {
+                        return;
+                    }
+                }
+                Sleep(TDuration::Seconds(5));
+            }
+            UNIT_FAIL("out of iterations, limit " << limit);
+        };
+
+        // Each phase needs the ICB: leaves published, folded by the limit, restored after the stable ticks
+        waitFor(Max<i64>(), true);
+        waitFor(0, false);
+        waitFor(Max<i64>(), true);
+    }
 }
 
 } // NSysView

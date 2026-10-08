@@ -2,9 +2,10 @@
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
 #include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
 #include <library/cpp/monlib/service/pages/resource_mon_page.h>
-#include "auto_config_initializer.h"
-#include "config_helpers.h"
-#include "config.h"
+#include <ydb/core/driver_lib/actor_system_config/auto_config_initializer.h>
+#include <ydb/core/driver_lib/actor_system_config/config_helpers.h>
+#include <ydb/core/driver_lib/run_config/resource_broker_config.h>
+#include <ydb/core/driver_lib/run_config/config.h>
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 

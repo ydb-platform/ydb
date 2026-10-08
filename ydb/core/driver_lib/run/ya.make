@@ -5,10 +5,6 @@ ADDINCL(
 )
 
 SRCS(
-    auto_config_initializer.cpp
-    config.cpp
-    config.h
-    config_helpers.cpp
     config_parser.cpp
     config_parser.h
     factories.h
@@ -56,8 +52,10 @@ PEERDIR(
     ydb/core/cms/console
     ydb/core/control
     ydb/core/counters_info
+    ydb/core/driver_lib/actor_system_config
     ydb/core/driver_lib/cli_config_base
     ydb/core/driver_lib/cli_utils
+    ydb/core/driver_lib/run_config
     ydb/core/driver_lib/version
     ydb/core/formats
     ydb/core/fq/libs/init

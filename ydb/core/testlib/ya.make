@@ -33,7 +33,8 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/testing/gmock_in_unittest
     library/cpp/testing/unittest
-    ydb/core/driver_lib/run
+    ydb/core/driver_lib/actor_system_config
+    ydb/core/driver_lib/run_config
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/pdisk
@@ -49,7 +50,9 @@ PEERDIR(
     ydb/core/fq/libs/mock
     ydb/core/fq/libs/shared_resources
     ydb/core/grpc_services
+    ydb/core/graph/shard
     ydb/core/health_check
+    ydb/core/kafka_proxy
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
@@ -62,10 +65,12 @@ PEERDIR(
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
+    ydb/core/memory_controller
     ydb/core/mind
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
+    ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
     ydb/core/persqueue
@@ -88,6 +93,7 @@ PEERDIR(
     ydb/core/tx/sequenceproxy
     ydb/core/tx/sequenceshard
     ydb/core/tx/time_cast
+    ydb/core/viewer
     ydb/library/aclib
     ydb/library/folder_service/mock
     ydb/library/mkql_proto/protos
@@ -131,6 +137,8 @@ PEERDIR(
     ydb/services/monitoring
     ydb/services/metadata/ds_table
     ydb/services/tablet
+    ydb/services/udf_store/compile_controller
+    ydb/services/view
     ydb/services/ydb
 
     ydb/core/http_proxy

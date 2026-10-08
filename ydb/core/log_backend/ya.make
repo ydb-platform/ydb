@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/unified_agent_client
     library/cpp/messagebus/monitoring
     ydb/core/base
+    ydb/core/driver_lib/run_config
     ydb/public/sdk/cpp/src/library/grpc/client
 )
 

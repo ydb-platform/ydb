@@ -2,7 +2,6 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/driver_lib/run/run.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>

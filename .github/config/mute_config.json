@@ -27,6 +27,10 @@
     "stable-26-3-1": [
       "relwithdebinfo",
       "release-asan"
-    ]
+    ],
+    "stable-26-4-1": [
+      "relwithdebinfo",
+      "release-asan"
+    ],
   }
 }

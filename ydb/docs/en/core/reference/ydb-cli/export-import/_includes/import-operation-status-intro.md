@@ -1,0 +1,1 @@
+Data loading is performed in the background. You can get information about the status and progress of the loading by calling the `operation get` command, which must be passed a **quoted** operation ID, for example:

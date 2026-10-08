@@ -256,6 +256,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNullableColumn_InsertOrReplace+
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNullableColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpConstraints.IndexedTableAndNotNullColumnAddNotNullColumn+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.IndexedTableAndNotNullColumnAddNotNullColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults

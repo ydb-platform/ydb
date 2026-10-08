@@ -196,7 +196,9 @@ void TTransportChaosInjector::WriteToManyPBuffers(
         const auto response = MakeWritePersistentBuffersResult(
             TReplyStatus::ERROR,
             UndeliveryErrorMessage,
-            std::span(persistentBufferIds.data(), 1));
+            std::span(
+                persistentBufferIds.data(),
+                persistentBufferIds.size()));
         callback(response->Record, std::move(span));
         return;
     }

@@ -160,6 +160,28 @@ namespace NKikimr {
 
         } // anonymous namespace
 
+        Y_UNIT_TEST_SUITE(SysViewServiceTime) {
+            Y_UNIT_TEST(IntervalsAdvanceWithTimeProvider) {
+                TTestBasicRuntime runtime(1);
+                runtime.Initialize(TAppPrepare().Unwrap());
+                runtime.UpdateCurrentTime(TInstant::Now() + TDuration::Days(1));
+                runtime.GetAppData().FeatureFlags.SetEnablePersistentQueryStats(true);
+                runtime.GetAppData().FeatureFlags.SetEnableDbCounters(false);
+                runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+                auto serviceId = runtime.Register(CreateSysViewServiceForTests().Release());
+                runtime.EnableScheduleForActor(serviceId);
+                // Several five-second intervals must complete without spinning
+                // on a deadline calculated from the wall clock.
+                runtime.SetScheduledLimit(100);
+                const auto until = runtime.GetCurrentTime() + TDuration::Seconds(20);
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&] { return runtime.GetCurrentTime() >= until; };
+                runtime.DispatchEvents(options);
+                UNIT_ASSERT(runtime.GetCurrentTime() >= until);
+            }
+        }
+
         Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
 
             Y_UNIT_TEST(BothRolesRideOneMessage) {

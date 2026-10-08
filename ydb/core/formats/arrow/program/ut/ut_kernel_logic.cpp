@@ -202,6 +202,47 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
     Y_UNIT_TEST(SlicedDictionaryPredicatePreservesAndInput) {
         AssertAndResult(BuildSlicedDictionaryPredicate(), {1, std::nullopt, 1});
     }
+
+    Y_UNIT_TEST(AllNullDictionaryInputAndTruePreservesNull) {
+        auto allNullDict = std::make_shared<NAccessor::TDictionaryArray>(
+            NKikimr::NKernels::UInt8VecToArray({1}),
+            NKikimr::NKernels::UInt8VecToArray({std::nullopt, std::nullopt}));
+        AssertAndResult(allNullDict, {std::nullopt, std::nullopt});
+    }
+
+    Y_UNIT_TEST(NullConstantAndTruePreservesNull) {
+        TFailDataSource dataSource;
+        auto resources = std::make_unique<NAccessor::TAccessorsCollection>(2);
+        resources->AddConstantVerified(1, arrow::MakeNullScalar(arrow::uint8()));
+        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({1, 1})), false);
+        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
+        TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3), NKikimr::NKernels::EOperation::And);
+        TExecutionNodeContext nodeContext;
+
+        auto firstResult = processor.OnInputReady(1, context, nodeContext);
+        UNIT_ASSERT(firstResult.IsSuccess());
+        UNIT_ASSERT(!*firstResult);
+        UNIT_ASSERT(processor.OnInputReady(2, context, nodeContext).IsSuccess());
+        UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({std::nullopt, std::nullopt})));
+    }
+
+    Y_UNIT_TEST(NullIntermediateAndResultDoesNotFinishStream) {
+        TFailDataSource dataSource;
+        auto resources = std::make_unique<NAccessor::TAccessorsCollection>(2);
+        resources->AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1})), false);
+        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({1, std::nullopt})), false);
+        resources->AddVerified(3, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, 0})), false);
+        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
+        TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2, 3}), TColumnChainInfo(4), NKikimr::NKernels::EOperation::And);
+        TExecutionNodeContext nodeContext;
+
+        UNIT_ASSERT(processor.OnInputReady(1, context, nodeContext).IsSuccess());
+        auto secondResult = processor.OnInputReady(2, context, nodeContext);
+        UNIT_ASSERT(secondResult.IsSuccess());
+        UNIT_ASSERT(!*secondResult);
+        UNIT_ASSERT(processor.OnInputReady(3, context, nodeContext).IsSuccess());
+        UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(4)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({0, 0})));
+    }
 };
 
 } // namespace NKikimr::NArrow::NSSA

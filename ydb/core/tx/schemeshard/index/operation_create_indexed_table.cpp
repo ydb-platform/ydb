@@ -212,7 +212,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     THashMap<TString, TTableColumns> indexes;
 
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
-    for (auto& indexDescription: indexedTable.GetIndexDescription()) {
+    for (auto& indexDescription: *indexedTable.MutableIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
         const auto indexType = GetIndexType(indexDescription);
 
@@ -254,7 +254,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         "HNSW index support is disabled (EnableHnswIndex)")};
                 }
                 TString msg;
-                if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                auto& treeSettings = *indexDescription.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+                const bool valid = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                    ? NKikimr::NKMeans::AutoSelectHnswSettings(treeSettings, 0, msg)
+                    : NKikimr::NKMeans::ValidateSettingsPartial(treeSettings, msg);
+                if (!valid) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
                 }
                 if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings().settings())) {

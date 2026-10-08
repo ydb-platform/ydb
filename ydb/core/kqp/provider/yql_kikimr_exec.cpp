@@ -2711,7 +2711,7 @@ public:
                                             break;
                                         }
                                         case Ydb::Table::TableIndex::kGlobalHnswIndex: {
-                                            NKikimr::NKMeans::FillSetting(
+                                            NKikimr::NKMeans::FillHnswSetting(
                                                 *add_index->mutable_global_hnsw_index()->mutable_vector_settings(),
                                                 name, value.StringValue(), error);
                                             break;
@@ -2800,7 +2800,7 @@ public:
                         }
                         case Ydb::Table::TableIndex::kGlobalHnswIndex: {
                             TString error;
-                            if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_hnsw_index().vector_settings(), error)) {
+                            if (!NKikimr::NKMeans::ValidateHnswSettingsPartial(add_index->global_hnsw_index().vector_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }
@@ -3433,9 +3433,9 @@ public:
                                         error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
                                     }
                                 } else {
-                                    NKikimr::NKMeans::FillSetting(
-                                        *vectorSettings,
-                                        settingName, value.StringValue(), error);
+                                    const auto fillSetting = add_index->type_case() == Ydb::Table::TableIndex::kGlobalHnswIndex
+                                        ? NKikimr::NKMeans::FillHnswSetting : NKikimr::NKMeans::FillSetting;
+                                    fillSetting(*vectorSettings, settingName, value.StringValue(), error);
                                 }
                                 if (error) {
                                     ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));

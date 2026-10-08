@@ -753,8 +753,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("Should be requested at least one cluster");
         }
 
         if (!request.GetLevelName()) {

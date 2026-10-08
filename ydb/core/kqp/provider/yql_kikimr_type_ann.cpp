@@ -1762,8 +1762,13 @@ private:
 
                 TString error;
                 switch (indexType) {
-                    case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                     case TIndexDescription::EType::GlobalSyncHnsw: {
+                        NKikimr::NKMeans::FillHnswSetting(
+                            *vectorIndexKmeansTreeDescription.MutableSettings(),
+                            nameLower, value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
                             nameLower, value.StringValue(), error);
@@ -1817,7 +1822,10 @@ private:
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 case TIndexDescription::EType::GlobalSyncHnsw: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    const bool valid = indexType == TIndexDescription::EType::GlobalSyncHnsw
+                        ? NKikimr::NKMeans::ValidateHnswSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)
+                        : NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error);
+                    if (!valid) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }

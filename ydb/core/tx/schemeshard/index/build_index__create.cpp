@@ -472,23 +472,37 @@ private:
                 *vectorIndexKmeansTreeDescription.MutableSettings() = requestedSettings;
             }
 
-            if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+            auto& treeSettings = *vectorIndexKmeansTreeDescription.MutableSettings();
+            using TValidate = bool (*)(const Ydb::Table::KMeansTreeSettings&, TString&);
+            const TValidate validatePartial = isHnsw
+                ? NKikimr::NKMeans::ValidateHnswSettingsPartial
+                : static_cast<TValidate>(NKikimr::NKMeans::ValidateSettingsPartial);
+            const TValidate validate = isHnsw
+                ? NKikimr::NKMeans::ValidateHnswSettings
+                : static_cast<TValidate>(NKikimr::NKMeans::ValidateSettings);
+            if (!validatePartial(treeSettings, explain)) {
                 return false;
             }
-
-            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
-                ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
-                const bool isPrefixed = index.index_columns().size() > 1;
-                NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
-                if (isPrefixed) {
-                    vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
+            if (!validate(treeSettings, explain)) {
+                if (isHnsw) {
+                    if (!NKikimr::NKMeans::AutoSelectHnswSettings(treeSettings,
+                            tableInfo->GetStats().Aggregated.DataSize, explain)) {
+                        return false;
+                    }
+                } else {
+                    const ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
+                    const bool isPrefixed = index.index_columns().size() > 1;
+                    NKikimr::NKMeans::AutoSelectKMeansSettings(treeSettings, rowCount, isPrefixed);
+                    if (isPrefixed) {
+                        treeSettings.set_adaptive_clusters(true);
+                    }
                 }
             }
 
-            const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
+            const auto& kmSettings = treeSettings;
             const auto& vectorSettings = kmSettings.settings();
             const bool needVectorAutodetect = NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(vectorSettings);
-            if (!NKikimr::NKMeans::ValidateSettings(kmSettings, explain) && !needVectorAutodetect) {
+            if (!validate(kmSettings, explain) && !needVectorAutodetect) {
                 return false;
             }
 

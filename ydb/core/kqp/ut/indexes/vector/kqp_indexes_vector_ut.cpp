@@ -2723,6 +2723,60 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_GT(vectorReads, readsBefore);
     }
 
+    Y_UNIT_TEST_TWIN(HnswAutomaticRoutingSettings, Prefixed) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& sql) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(sql).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(R"(
+            CREATE TABLE `/Root/HnswAutomatic` (
+                pk Int64 NOT NULL, prefix Uint32, emb String, PRIMARY KEY(pk));
+        )");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswAutomatic` (pk, prefix, emb) VALUES
+                (1, 1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, 1u, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (3, 2u, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(TStringBuilder() << "ALTER TABLE `/Root/HnswAutomatic` ADD INDEX idx GLOBAL USING hnsw ON ("
+            << (Prefixed ? "prefix, emb" : "emb") << ") WITH (distance=cosine, vector_type=float, vector_dimension=2, min_rows=1);");
+        auto checkSettings = [&](const TString& table) {
+            const auto result = kikimr.RunCall([&] { return session.DescribeTable(table).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& proto = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+            UNIT_ASSERT_VALUES_EQUAL(proto.indexes_size(), 1);
+            const auto& settings = proto.indexes(0).global_hnsw_index().vector_settings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1);
+            UNIT_ASSERT(!settings.adaptive_clusters());
+        };
+        checkSettings("/Root/HnswAutomatic");
+        const auto query = kikimr.RunCall([&] { return session.ExecuteDataQuery(TStringBuilder()
+            << "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f]); SELECT pk FROM `/Root/HnswAutomatic` VIEW idx "
+            << (Prefixed ? "WHERE prefix=1u " : "")
+            << "ORDER BY Knn::CosineDistance(emb, $q) LIMIT 1;",
+            TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+        UNIT_ASSERT_C(query.IsSuccess(), query.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(query.GetResultSet(0)), "[[1]]");
+        scheme("ALTER TABLE `/Root/HnswAutomatic` REBUILD INDEX idx WITH (clusters=1);");
+        checkSettings("/Root/HnswAutomatic");
+        scheme(R"(
+            CREATE TABLE `/Root/HnswAutomaticEmpty` (
+                pk Int64 NOT NULL, emb String, PRIMARY KEY(pk),
+                INDEX idx GLOBAL USING hnsw ON (emb)
+                WITH (distance=cosine, vector_type=float, vector_dimension=2));
+        )");
+        checkSettings("/Root/HnswAutomaticEmpty");
+    }
+
     Y_UNIT_TEST_TWIN(HnswFeatureFlagCreation, Enabled) {
         NKikimrConfig::TFeatureFlags defaults;
         UNIT_ASSERT(!defaults.GetEnableHnswIndex());

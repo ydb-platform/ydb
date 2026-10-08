@@ -71,6 +71,12 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
 bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
 
+// HNSW's single-level routing may consist of a single cluster.
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error);
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error);
+bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower, const TString& value, TString& error);
+
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 double ComputeEfficiencyScore(ui64 levels, ui64 clusters, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector);
 

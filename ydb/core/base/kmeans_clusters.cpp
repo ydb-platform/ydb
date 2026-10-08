@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKMeans {
 
@@ -801,8 +802,9 @@ namespace {
         return true;
     }
 
-    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error) {
+    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error, bool hnsw = false) {
         error = "";
+        const ui64 minClusters = hnsw ? 1 : MinClusters;
 
         if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
@@ -832,7 +834,7 @@ namespace {
             if (settings.has_clusters()) {
                 if (!ValidateSettingInRange("clusters",
                     std::optional<ui64>(settings.clusters()),
-                    MinClusters, MaxClusters,
+                    minClusters, MaxClusters,
                     error))
                 {
                     return false;
@@ -849,7 +851,7 @@ namespace {
 
             if (!ValidateSettingInRange("clusters",
                 settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
-                MinClusters, MaxClusters,
+                minClusters, MaxClusters,
                 error))
             {
                 return false;
@@ -906,6 +908,40 @@ bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TS
 
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, true, error);
+}
+
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, false, error, true);
+}
+
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, true, error, true);
+}
+
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error) {
+    if (!settings.has_levels() || !settings.levels()) {
+        settings.set_levels(1);
+    }
+    if (!settings.has_clusters() || !settings.clusters()) {
+        const ui64 clusters = dataSizeBytes / 1_GB + 1;
+        // Validate before narrowing to the protobuf's uint32 field. Keep the
+        // routing-table bounds enforced for explicit settings as well.
+        if (!ValidateSettingInRange("clusters", clusters, 1, MaxClusters, error)) {
+            return false;
+        }
+        settings.set_clusters(clusters);
+    }
+    return ValidateHnswSettingsPartial(settings, error);
+}
+
+bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower,
+        const TString& value, TString& error) {
+    if (nameLower == "clusters") {
+        error = "";
+        settings.set_clusters(ParseUInt32(nameLower, value, 1, MaxClusters, error));
+        return error.empty();
+    }
+    return FillSetting(settings, nameLower, value, error);
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {

@@ -6,6 +6,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <cmath>
+#include <util/generic/size_literals.h>
 #include <util/stream/str.h>
 #include <util/generic/xrange.h>
 
@@ -435,6 +436,70 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         double score = ComputeEfficiencyScore(2, c, 10, 485859, 1.0);
         // S = 96 + 960 + 4858590/9216 = 1056 + 527.26... = 1583.26...
         UNIT_ASSERT_DOUBLES_EQUAL(score, 1583.26, 0.1);
+    }
+
+    Y_UNIT_TEST(AutoSelectHnswByTableSize) {
+        const std::pair<ui64, ui32> cases[] = {
+            {0, 1}, {1_GB - 1, 1}, {1_GB, 2}, {1_GB + 1, 2},
+            {8_GB, 9}, {9_GB - 1, 9}, {9_GB, 10},
+        };
+        for (const auto& [bytes, clusters] : cases) {
+            Ydb::Table::KMeansTreeSettings settings;
+            auto* vector = settings.mutable_settings();
+            vector->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            vector->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            vector->set_vector_dimension(200);
+            TString error;
+            UNIT_ASSERT_C(AutoSelectHnswSettings(settings, bytes, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), clusters);
+            UNIT_ASSERT(!settings.has_overlap_clusters());
+            UNIT_ASSERT(!settings.adaptive_clusters());
+            UNIT_ASSERT_C(ValidateHnswSettings(settings, error), error);
+            if (clusters == 1) {
+                UNIT_ASSERT(!ValidateSettings(settings, error)); // k-means keeps its minimum of two.
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AutoSelectHnswPreservesExplicitSettings) {
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.set_levels(3);
+        settings.set_clusters(4);
+        TString error;
+        UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 8_GB, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 4);
+        settings.clear_levels();
+        UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 8_GB, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 4);
+        settings.clear_clusters();
+        settings.set_levels(2);
+        UNIT_ASSERT_C(AutoSelectHnswSettings(settings, 8_GB, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 9);
+    }
+
+    Y_UNIT_TEST(AutoSelectHnswRejectsUnsupportedTableSize) {
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        TString error;
+        UNIT_ASSERT(!AutoSelectHnswSettings(settings, Max<ui64>(), error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "clusters");
+        UNIT_ASSERT(!settings.has_clusters());
+    }
+
+    Y_UNIT_TEST(HnswSingleClusterSetting) {
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        TString error;
+        UNIT_ASSERT(FillHnswSetting(settings, "clusters", "1", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1);
+        UNIT_ASSERT(ValidateHnswSettingsPartial(settings, error));
+        UNIT_ASSERT(!FillSetting(settings, "clusters", "1", error));
+        UNIT_ASSERT(!FillHnswSetting(settings, "clusters", "0", error));
     }
 
     Y_UNIT_TEST(AutoSelectKMeansNoneSpecified) {

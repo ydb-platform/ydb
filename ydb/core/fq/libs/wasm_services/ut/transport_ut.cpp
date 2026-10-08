@@ -1,10 +1,14 @@
 #include <ydb/core/fq/libs/wasm_services/transport.h>
 #include <ydb/core/fq/libs/wasm_services/profile.h>
+#include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/mock.grpc.pb.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/profile.pb.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <ydb/services/udf_store/wasm/bridge_resident.h>
 #include <ydb/services/udf_store/wasm/compile.h>
@@ -22,6 +26,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include <util/stream/str.h>
+#include <util/stream/file.h>
 #include <util/stream/zlib.h>
 #include <util/string/builder.h>
 #include <util/system/datetime.h>
@@ -514,9 +519,207 @@ struct TCompletions {
     }
 };
 
+struct TQueryOutput {
+    std::mutex Mutex;
+    TVector<TProfile> Rows;
+    std::atomic<bool> Blocked = false;
+    std::atomic<bool> Finished = false;
+};
+
+class TProfileConsumer final : public NYql::NDq::IDqOutputConsumer {
+  public:
+    explicit TProfileConsumer(std::shared_ptr<TQueryOutput> output)
+        : Output(std::move(output))
+    {
+    }
+    NYql::NDq::EDqFillLevel GetFillLevel() const override {
+        return Output->Blocked ? NYql::NDq::HardLimit : NYql::NDq::NoLimit;
+    }
+    void Consume(NYql::NUdf::TUnboxedValue&& row) override {
+        TProfile profile;
+        profile.Id = row.GetElement(0).Get<ui64>();
+        const auto nameValue = row.GetElement(1);
+        const auto name = nameValue.AsStringRef();
+        profile.NameBytes = name.Size();
+        std::memcpy(profile.Name, name.Data(), name.Size());
+        profile.Score = row.GetElement(2).Get<ui32>();
+        std::lock_guard lock(Output->Mutex);
+        Output->Rows.push_back(profile);
+    }
+    void WideConsume(NYql::NUdf::TUnboxedValue[], ui32) override {
+        UNIT_FAIL("Unexpected wide Profile output");
+    }
+    void Consume(NYql::NDqProto::TCheckpoint&&) override {
+        UNIT_FAIL("Unexpected checkpoint");
+    }
+    void Consume(NYql::NDqProto::TWatermark&&) override {
+        UNIT_FAIL("Unexpected watermark");
+    }
+    void Finish() override {
+        Output->Finished = true;
+    }
+    void Flush() override {
+    }
+    bool IsFinished() const override {
+        return Output->Finished;
+    }
+    bool IsEarlyFinished() const override {
+        return false;
+    }
+
+  private:
+    std::shared_ptr<TQueryOutput> Output;
+};
+
+struct TQueryTransformEnv {
+    TTempFile Module;
+    NYql::NDq::TDqAsyncIoFactory Factory;
+    std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
+    NYql::NDq::TFakeCASetup Setup;
+
+    TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000)
+        : Module(MakeTempName())
+    {
+        TFileOutput(Module.Name()).Write(NResource::Find("/fq_transport_coroutine.wasm"));
+        NFq::NConfig::TWasmServicesConfig config;
+        config.SetEnabled(true);
+        config.SetModulePath(Module.Name());
+        config.SetCallTimeoutMs(timeoutMs);
+        auto* entry = config.AddBindings();
+        entry->SetAlias("profiles");
+        entry->SetEndpoint(binding.Endpoint);
+        entry->SetMethod(binding.Method);
+        for (const auto& [key, value] : binding.Headers)
+            (*entry->MutableHeaders())[key] = value;
+        if (binding.Protocol == EProtocol::Grpc) {
+            entry->SetProtocol(NFq::NConfig::TWasmServicesConfig::TBinding::GRPC);
+            entry->SetGrpcInsecure(true);
+        }
+        auto gateway = CreateProfileGatewayFactory(config);
+        auto description =
+            gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "profiles")->ResolveFunction({}, "Profile").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(description.InvokeUrl, "profiles");
+        UNIT_ASSERT_EXCEPTION(gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "missing"), yexception);
+        RegisterProfileTransform(Factory, config);
+        Setup.Execute([&](NYql::NDq::TFakeActor& actor) {
+            using namespace NKikimr::NMiniKQL;
+            auto* input =
+                TStructTypeBuilder(actor.TypeEnv).Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv)).Build();
+            auto* output = TStructTypeBuilder(actor.TypeEnv)
+                               .Add("id", TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, actor.TypeEnv))
+                               .Add("name", TDataType::Create(NYql::NUdf::TDataType<NYql::NUdf::TUtf8>::Id, actor.TypeEnv))
+                               .Add("score", TDataType::Create(NYql::NUdf::TDataType<ui32>::Id, actor.TypeEnv))
+                               .Build();
+            NYql::NDqProto::TTaskOutput desc;
+            desc.MutableTransform()->SetType(TString(ProfileTransformType));
+            desc.MutableTransform()->SetInputType(SerializeNode(input, actor.TypeEnv));
+            desc.MutableTransform()->SetOutputType(SerializeNode(output, actor.TypeEnv));
+            NYql::NProto::TFunctionTransform settings;
+            settings.SetInvokeUrl(description.InvokeUrl);
+            desc.MutableTransform()->MutableSettings()->PackFrom(settings);
+            THashMap<TString, TString> params;
+            auto [sink, sinkActor] = Factory.CreateDqOutputTransform(
+                {.OutputDesc = desc, .OutputIndex = 0, .StatsLevel = NYql::NDq::None, .TxId = {}, .TaskId = 1,
+                 .TransformOutput = new TProfileConsumer(Output),
+                 .Callback = &actor.GetAsyncOutputCallbacks(),
+                 .SecureParams = params,
+                 .TaskParams = params,
+                 .TypeEnv = actor.TypeEnv,
+                 .HolderFactory = actor.HolderFactory,
+                 .Alloc = std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](auto*) {}),
+                 .TraceId = {}});
+            actor.InitAsyncOutput(sink, sinkActor);
+        });
+    }
+
+    void Start(TVector<ui64> ids = {42}) {
+        Setup.AsyncOutputWrite([&](NKikimr::NMiniKQL::THolderFactory& holders) {
+            NKikimr::NMiniKQL::TUnboxedValueBatch batch;
+            for (const auto id : ids) {
+                NYql::NUdf::TUnboxedValue* members;
+                auto row = holders.CreateDirectArrayHolder(1, members);
+                members[0] = NYql::NUdf::TUnboxedValuePod(id);
+                batch.emplace_back(std::move(row));
+            }
+            return batch;
+        }, Nothing(), true);
+    }
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
+    Y_UNIT_TEST(DqProfileHttpBackpressureAndTypedRows) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[2]);
+        env.Output->Blocked = true;
+        env.Start({42, 43});
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait()->Payload, "{\"id\":42}");
+        http.State->Reply(0, "{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1}", 200);
+        Sleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), 1);
+        env.Output->Blocked = false;
+        env.Setup.Execute([](NYql::NDq::TFakeActor& actor) { actor.DqAsyncOutput->OnOutputConsumerReady(); });
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(1)->Payload, "{\"id\":43}");
+        http.State->Reply(1, "{\"id\":43,\"name\":\"Grace\",\"score\":99,\"version\":1}", 200);
+        Eventually([&] { return env.Output->Finished.load(); });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows[1].Id, 43);
+    }
+
+    Y_UNIT_TEST(DqProfileGrpcTypedRow) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[3]);
+        env.Start();
+        auto request = grpc.State->Wait();
+        UNIT_ASSERT(HasHeader(*request, "authorization", "Bearer host-secret"));
+        grpc.State->Reply(0, GrpcProfilePayload(), 0);
+        Eventually([&] { return env.Output->Finished.load(); });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows[0].Id, 42);
+    }
+
+    Y_UNIT_TEST(DqProfileDeadlineAndMalformedResponse) {
+        THttpMock http;
+        TGrpcMock grpc;
+        {
+            TQueryTransformEnv env(Bindings(http, grpc)[2], 100);
+            const auto error = env.Setup.AsyncOutputPromises->Issue.GetFuture();
+            env.Start();
+            http.State->Wait();
+            UNIT_ASSERT(error.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!error.GetValue().Empty());
+        }
+        {
+            TQueryTransformEnv env(Bindings(http, grpc)[2]);
+            const auto error = env.Setup.AsyncOutputPromises->Issue.GetFuture();
+            env.Start();
+            http.State->Wait(1);
+            http.State->Reply(1, "not json", 200);
+            UNIT_ASSERT(error.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToString(), "service failed");
+            UNIT_ASSERT(!env.Output->Finished);
+        }
+    }
+
+    Y_UNIT_TEST(DqProfileCancellationCancelsNativeGrpc) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[3]);
+        env.Start();
+        grpc.State->Wait();
+        env.Setup.Terminate();
+        Eventually([&] {
+            std::lock_guard lock(grpc.State->Mutex);
+            return grpc.State->Requests[0]->Cancelled;
+        });
+        UNIT_ASSERT(!env.Output->Finished);
+    }
+
     Y_UNIT_TEST(HttpTlsTrustedUntrustedAndHostnameVerification) {
         auto perform = [](THttpTlsMock& server, bool trust, bool serve) {
             TBinding binding;

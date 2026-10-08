@@ -2,7 +2,8 @@
 
 This is a network harness for the coroutine/async bridge from P1. All P2 code
 lives under `ydb/core/fq`; it does not change the shared WASM ABI or synchronous
-UDF execution. It is not wired into SQL, DQ or the FQ control plane.
+UDF execution. The opt-in `query` integration connects the private Profile
+example to analytical FQ queries through an asynchronous DQ output transform.
 
 ## Native clients
 
@@ -55,8 +56,8 @@ The fixture also exercises a private typed `Profile` example over HTTP JSON and
 gRPC protobuf: bounded UTF-8 names, required fields, numeric ranges, schema
 version, malformed payload handling, and sequential/parallel adapter modes.
 TLS tests cover trusted and untrusted CAs for gRPC, plus trusted, untrusted and
-hostname-mismatch certificates for HTTP. These are test contracts, not a
-production-facing connection or YQL type.
+hostname-mismatch certificates for HTTP. These are private prototype contracts,
+not a production connection schema.
 
 Run from the repository root:
 
@@ -84,9 +85,96 @@ This harness does not establish the full RFC P2 acceptance criteria:
   current tests use generated local server certificates and trusted CA files.
 - Add production worker/tenant resource accounting beyond application-buffer
   reservations and validate diagnostics against production service behavior.
-- Connect execution to DQ/SQL through the later RFC stages. No production
-  configuration or external-network access is exposed by this prototype.
+- Generalize the experimental Profile SQL/DQ integration to object methods,
+  row-driven arguments, parallel calls and a production connection schema.
 
 `wire.h` is an internal, little-endian harness envelope, not a new public
 connection schema, DDL or typed YQL ABI. Test bindings are not a substitute
 for metadata/ACL validation.
+
+## Experimental FQ Query Integration
+
+The `query` library uses the existing SQL `PROCESS ... EXTERNAL FUNCTION`
+provider and DQ output-transform interface. It is available only for analytical
+queries on the FQ DQ compute path (v1), not KQP/YQv2 or streaming/checkpoints.
+Each transform owns a WASM compartment and native transport. Calls are processed
+one at a time, with a bounded input queue (65536 IDs by default) and one pending
+typed result. A full downstream buffer stops further network dispatch. Native
+I/O only wakes the actor; the actor enters WASM on its own mailbox. Query teardown
+cancels the runtime and drains native I/O. `CallTimeoutMs` sets a per-call wall
+deadline (30000 by default); the enclosing FQ query deadline cancels the actor.
+
+Add an operator-owned `WasmServices` section to the federated query configuration
+on every FQ node that compiles or executes the query:
+
+```protobuf
+WasmServices {
+  Enabled: true
+  ModulePath: "/absolute/path/transport_coroutine.wasm"
+  CallTimeoutMs: 30000
+  MaxBufferedRows: 65536
+  Bindings {
+    Alias: "profiles_http"
+    Protocol: HTTP
+    Endpoint: "https://profiles.example.test/profile"
+    Method: "POST"
+    CaFile: "/absolute/path/ca.pem"
+    Headers { key: "Authorization" value: "Bearer operator-owned-token" }
+  }
+  Bindings {
+    Alias: "profiles_grpc"
+    Protocol: GRPC
+    Endpoint: "profiles.example.test:443"
+    Method: "/NFq.NWasmServices.NTest.MockService/Lookup"
+    CaFile: "/absolute/path/ca.pem"
+    Headers { key: "authorization" value: "Bearer operator-owned-token" }
+  }
+}
+```
+
+Use the module generated from `fixture/main.cpp` above. The operator selects the
+module and installs the same aliases/module on all participating nodes. The
+module is compiled at factory registration and instantiated per transform.
+`GrpcInsecure: true` is an explicit plaintext opt-in for local mock services;
+otherwise gRPC uses TLS. HTTP retains transport certificate/hostname checks.
+Endpoints, CA paths and headers never enter the query plan or guest arguments:
+the plan carries the alias only. Enabling this prototype grants analytical query
+users access to the configured aliases; metadata ACLs and credential refresh
+are still pending. Keep it disabled on shared production tenants.
+
+Submit this SQL as an analytical query through the usual FQ API:
+
+```sql
+$input = SELECT 42ul AS id;
+$profiles = PROCESS $input USING EXTERNAL FUNCTION('WASM_PROFILE', 'Profile')
+    WITH CONNECTION='profiles_http',
+         INPUT_TYPE=Struct<id:Uint64>,
+         OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>;
+SELECT id, name, score FROM $profiles;
+```
+
+Change the connection to `profiles_grpc` for protobuf/gRPC. The private request
+and response formats are defined in `fixture/main.cpp` and `ut/protos/profile.proto`.
+Unknown aliases, wrong row schemas, service errors, invalid payloads and deadline
+expiration fail the query. Diagnostics contain fixed messages and numeric error
+classes, not response bodies, endpoints or credentials. No concurrency, batching
+or replay guarantees are offered by this experimental integration.
+
+The native suite includes output-transform backpressure, typed HTTP/gRPC rows,
+deadline, malformed response and in-flight gRPC cancellation. Full FQ API tests:
+
+```bash
+./ya make --build relwithdebinfo -tA ydb/tests/fq/wasm_services
+```
+
+To run these checks through an installed `ydbd` linked to the build output:
+
+```bash
+./ya make --build relwithdebinfo -tA ydb/tests/fq/wasm_services \
+    --test-env=YDB_DRIVER_BINARY=/absolute/path/to/installation/ydbd
+```
+
+The tests start isolated FQ control/compute nodes and HTTP/gRPC mocks with
+temporary configs and storage; they do not modify the installation's data or
+its normal server config. The installation's binary must point to this build,
+not to an older release without the experimental config field.

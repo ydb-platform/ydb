@@ -21,6 +21,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
+#include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -188,6 +189,9 @@ void Init(
     });
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
+    if (protoConfig.GetWasmServices().GetEnabled()) {
+        NWasmServices::RegisterProfileTransform(*asyncIoFactory, protoConfig.GetWasmServices());
+    }
 
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),

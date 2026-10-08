@@ -13,11 +13,13 @@ PEERDIR(
     library/cpp/testing/unittest
     library/cpp/lwtrace/protos
     ydb/core/fq/libs/wasm_services
+    ydb/core/fq/libs/wasm_services/query
     ydb/core/fq/libs/wasm_services/ut/protos
     ydb/core/security/certificate_check/test_utils
     ydb/library/actors/http
     ydb/library/actors/testlib
     ydb/library/services
+    ydb/library/yql/providers/common/ut_helpers
     ydb/library/wasm/api
     ydb/library/wasm/engine
     yql/essentials/public/udf/service/exception_policy

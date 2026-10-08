@@ -1,0 +1,28 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NFq.NConfig;
+
+// Experimental, operator-owned Profile adapter bindings. Disabled by default.
+message TWasmServicesConfig {
+    bool Enabled = 1;
+    string ModulePath = 2;
+    repeated TBinding Bindings = 3;
+    uint32 MaxBufferedRows = 4;
+    uint32 CallTimeoutMs = 5;
+
+    message TBinding {
+        string Alias = 1;
+        enum EProtocol {
+            HTTP = 0;
+            GRPC = 1;
+        }
+        EProtocol Protocol = 2;
+        string Endpoint = 3;
+        string Method = 4;
+        map<string, string> Headers = 5;
+        string CaFile = 6;
+        // Plaintext gRPC requires explicit opt-in for local prototypes.
+        bool GrpcInsecure = 7;
+    }
+}

@@ -21,6 +21,8 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
+#include <ydb/core/fq/libs/wasm_services/query/query.h>
+#include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -2097,6 +2099,10 @@ private:
             clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
+        if (Params.Config.GetWasmServices().GetEnabled() && Params.QueryType == FederatedQuery::QueryContent::ANALYTICS) {
+            dataProvidersInit.push_back(GetDqFunctionDataProviderInitializer(nullptr,
+                NWasmServices::CreateProfileGatewayFactory(Params.Config.GetWasmServices())));
+        }
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
             NActors::TActivationContext::ActorSystem(),
             Params.DatabaseResolver,

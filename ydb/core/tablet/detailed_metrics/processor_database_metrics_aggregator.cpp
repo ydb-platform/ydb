@@ -285,8 +285,9 @@ namespace NKikimr {
                 }
                 auto& bucket = table.Buckets[key];
                 if (!bucket) {
+                    // A leaf's group is detached until published, inheriting the lookup counter as GetSubgroup does
                     auto mappedGroup = key
-                        ? GetOrCreateTabletGroup(table.PublicGroup, *key)
+                        ? MakeIntrusive<NMonitoring::TDynamicCounters>(table.PublicGroup.Get())
                         : MakeIntrusive<NMonitoring::TDynamicCounters>();
                     // The partial's mapped group is detached: only the combined table
                     // rollup is public, so partials and leaves never overwrite each other.
@@ -296,6 +297,9 @@ namespace NKikimr {
                     const bool isFollowerSource = key && key->second != 0;
                     bucket = MakeHolder<TPublishedBucket>(*descriptor, mappedGroup, nameScope, isFollowerSource);
                     table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, isFollowerSource, nameScope);
+                    if (key) {
+                        RegisterTabletGroup(table.PublicGroup, *key, mappedGroup);
+                    }
                 }
                 bucket->Apply(nodeId, values);
                 contributions.insert(contribution);

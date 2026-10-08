@@ -591,7 +591,64 @@ TColumnConverter ArrowStringAsYqlDate(const std::shared_ptr<arrow::DataType>& ta
     };
 }
 
-TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType, const NDB::FormatSettings& formatSettings) {
+TColumnConverter ArrowDecimalAsYqlDecimal(const std::string& columnName, i32 srcPrecision, i32 srcScale, ui8 dstPrecision, ui8 dstScale) {
+    if (srcScale == dstScale && srcPrecision <= dstPrecision) {
+        // Every valid source value fits, and the unscaled representation is unchanged.
+        return [](const std::shared_ptr<arrow::Array>& value) -> std::shared_ptr<arrow::Array> {
+            const auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
+            return std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(),
+                decimals->values(), decimals->null_bitmap(), decimals->null_count(), decimals->offset());
+        };
+    }
+
+    const TString context = TStringBuilder() << "Cannot convert Decimal(" << srcPrecision << ", " << srcScale
+        << ") to Decimal(" << static_cast<ui32>(dstPrecision) << ", " << static_cast<ui32>(dstScale)
+        << ") for field: " << columnName << ": ";
+    const i64 scaleIncrease = static_cast<i64>(dstScale) - srcScale;
+    const i64 unscaledPrecision = dstPrecision - scaleIncrease;
+    return [context, srcScale, dstPrecision, dstScale, scaleIncrease, unscaledPrecision](const std::shared_ptr<arrow::Array>& value) {
+        const auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16), arrow::system_memory_pool());
+        THROW_ARROW_NOT_OK(builder.Reserve(decimals->length()));
+        for (i64 i = 0; i < decimals->length(); ++i) {
+            if (decimals->IsNull(i)) {
+                THROW_ARROW_NOT_OK(builder.AppendNull());
+                continue;
+            }
+            const arrow::Decimal128 original(decimals->GetValue(i));
+            arrow::Decimal128 converted;
+            // Zero is exact at any scale; skip Rescale and its multiplier table.
+            if (original != 0) {
+                // Check before multiplying: Arrow's 128-bit Rescale overflow check can
+                // miss wraparound. Any accepted product fits the target precision.
+                if (scaleIncrease > 0 && (unscaledPrecision <= 0 || !original.FitsInPrecision(unscaledPrecision))) {
+                    throw parquet::ParquetException(context + "value exceeds target precision");
+                }
+                // Parquet scales are in [0, 38], but other Arrow producers can exceed
+                // that range. A larger reduction loses every nonzero Decimal128 value
+                // and would index Arrow's scale multiplier table out of bounds.
+                if (scaleIncrease < -38) {
+                    throw parquet::ParquetException(context + "rescaling would lose data");
+                }
+                const auto rescaled = original.Rescale(srcScale, dstScale);
+                if (!rescaled.ok()) {
+                    throw parquet::ParquetException(context + "rescaling would lose data");
+                }
+                converted = *rescaled;
+                if (!converted.FitsInPrecision(dstPrecision)) {
+                    throw parquet::ParquetException(context + "value exceeds target precision");
+                }
+            }
+            const auto bytes = converted.ToBytes();
+            THROW_ARROW_NOT_OK(builder.Append(bytes.data()));
+        }
+        std::shared_ptr<arrow::Array> result;
+        THROW_ARROW_NOT_OK(builder.Finish(&result));
+        return result;
+    };
+}
+
+TColumnConverter BuildCustomConverter(const std::string& columnName, const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType, const NDB::FormatSettings& formatSettings) {
     // TODO: support more than 1 optional level
     bool isOptional = false;
     auto unpackedYqlType = UnpackOptional(yqlType, isOptional);
@@ -728,20 +785,28 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
         case arrow::Type::DECIMAL128: {
             switch (slotItem) {
                 case NUdf::EDataSlot::Decimal: {
-                    if (targetType->id() == arrow::Type::FIXED_SIZE_BINARY && 
+                    if (targetType->id() == arrow::Type::FIXED_SIZE_BINARY &&
                         (static_cast<arrow::FixedSizeBinaryType&>(*targetType)).byte_width() == 16
                     ) {
-                        return [](const std::shared_ptr<arrow::Array>& value) {
-                            auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
-                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values(), decimals->null_bitmap(), decimals->null_count());
-                            return output;
-                        };
+                        const auto& decimalType = static_cast<const arrow::Decimal128Type&>(*originalType);
+                        const auto [precision, scale] = static_cast<TDataDecimalType*>(unpackedYqlType)->GetParams();
+                        return ArrowDecimalAsYqlDecimal(columnName, decimalType.precision(), decimalType.scale(), precision, scale);
                     }
                     return {};
                 }
                 default:
                     return {};
             }
+        }
+        case arrow::Type::DECIMAL256: {
+            if (slotItem == NUdf::EDataSlot::Decimal) {
+                const auto& decimalType = static_cast<const arrow::Decimal256Type&>(*originalType);
+                const auto [precision, scale] = static_cast<TDataDecimalType*>(unpackedYqlType)->GetParams();
+                throw parquet::ParquetException(TStringBuilder() << "Unsupported Decimal256(" << decimalType.precision()
+                    << ", " << decimalType.scale() << ") for field: " << columnName << ", declared Decimal("
+                    << static_cast<ui32>(precision) << ", " << static_cast<ui32>(scale) << ")");
+            }
+            return {};
         }
         default:
             return {};
@@ -819,7 +884,7 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         return conv;
     }
 
-    if (auto customConverter = BuildCustomConverter(originalType, targetType, yqlType, formatSettings); customConverter) {
+    if (auto customConverter = BuildCustomConverter(columnName, originalType, targetType, yqlType, formatSettings); customConverter) {
         return customConverter;
     }
 

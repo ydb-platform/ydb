@@ -9,8 +9,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/counters_wasm_compile_controller.pb.h>

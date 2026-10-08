@@ -2,7 +2,7 @@
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/backtrace.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>

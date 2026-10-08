@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/tx/datashard/datashard.h>
 

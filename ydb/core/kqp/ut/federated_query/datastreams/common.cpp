@@ -3,7 +3,7 @@
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/events/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>

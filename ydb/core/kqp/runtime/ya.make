@@ -55,6 +55,7 @@ PEERDIR(
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/cms/console/events
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats

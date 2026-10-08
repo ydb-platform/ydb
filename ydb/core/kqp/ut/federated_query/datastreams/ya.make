@@ -31,7 +31,7 @@ PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/threading/local_executor
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/fq/libs/checkpoint_storage/events
     ydb/core/kqp
     ydb/core/kqp/ut/common

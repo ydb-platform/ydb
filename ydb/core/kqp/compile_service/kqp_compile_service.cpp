@@ -4,11 +4,12 @@
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/console.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>

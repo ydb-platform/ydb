@@ -2,7 +2,7 @@
 #include "fetcher.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/services/workload_manager/actors/actors.h>
 #include <ydb/services/workload_manager/common/events.h>
 #include <ydb/core/protos/console_config.pb.h>

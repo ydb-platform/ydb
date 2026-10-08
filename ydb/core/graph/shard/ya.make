@@ -20,7 +20,7 @@ PEERDIR(
     library/cpp/json
     ydb/library/actors/core
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/graph/api

@@ -26,6 +26,8 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>

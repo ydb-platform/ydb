@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/cms/console
+    ydb/core/cms/console/events
     ydb/core/mind
     ydb/core/resource_pools
     ydb/library/aclib

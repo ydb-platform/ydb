@@ -9,7 +9,7 @@
 #include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/events/configs_dispatcher.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>

@@ -384,6 +384,7 @@ class YdbClient:
 
 
 _SECTIONS_FOR_CMS = [
+    "feature_flags",
     "table_service_config",
     "federated_query_config",
     "log_config",

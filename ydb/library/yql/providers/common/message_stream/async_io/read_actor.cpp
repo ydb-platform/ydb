@@ -1014,7 +1014,7 @@ private:
             if (!partitionInfo.Offset && Self.BeginOffset) {
                 partitionInfo.Offset = *Self.BeginOffset;
             }
-            if (!partitionInfo.Offset && event.CommittedOffset) {
+            if (Self.Settings.StopAtCurrentEndOffsets && !partitionInfo.Offset && event.CommittedOffset) {
                 partitionInfo.Offset = event.CommittedOffset;
             }
             partitionInfo.EndWriteTime = Self.EndWriteTime;

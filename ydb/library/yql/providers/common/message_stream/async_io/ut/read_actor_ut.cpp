@@ -442,6 +442,59 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         promise.SetException("session initialization failed");
         UNIT_ASSERT_EXCEPTION(f.Read(), yexception);
     }
+
+    Y_UNIT_TEST_TWIN(CheckpointWithoutDataDoesNotStoreConsumerOffset, CommittedOffset) {
+        TFixture f;
+        f.Init(true);
+        f.Start(1, CommittedOffset ? 1 : 0);
+        UNIT_ASSERT(f.Read().empty());
+
+        TSourceState saved;
+        f.Setup.SaveSourceState(CreateCheckpoint(1), saved);
+        UNIT_ASSERT(saved.Data.empty());
+
+        TFixture resumed;
+        resumed.Init(true);
+        resumed.Setup.LoadSource(saved);
+        resumed.Start(2, 2);
+        UNIT_ASSERT(resumed.Read().empty());
+        UNIT_ASSERT(!resumed.Control->Start);
+
+        resumed.Data(2);
+        UNIT_ASSERT_VALUES_EQUAL(resumed.Read().size(), 1);
+        TSourceState withData;
+        resumed.Setup.SaveSourceState(CreateCheckpoint(2), withData);
+        UNIT_ASSERT_VALUES_EQUAL(withData.Data.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(withData.Data.front().Blob, "3");
+    }
+
+    Y_UNIT_TEST(StreamingCheckpointOffsetOverridesConsumerOffset) {
+        TFixture f;
+        f.Init(true);
+        TSourceState saved;
+        saved.Data.emplace_back("1", 1);
+        f.Setup.LoadSource(saved);
+        f.Start(2, 2);
+        UNIT_ASSERT(f.Read().empty());
+        UNIT_ASSERT(f.Control->Start);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Control->Start, 1);
+    }
+
+    Y_UNIT_TEST(SnapshotAtConsumerEndFinishesWithoutData) {
+        TFixture f;
+        f.Init();
+        f.Start(2, 2);
+        UNIT_ASSERT(f.Read().empty());
+        UNIT_ASSERT(f.Finished);
+        UNIT_ASSERT(f.Control->Start);
+        UNIT_ASSERT_VALUES_EQUAL(*f.Control->Start, 2);
+
+        TSourceState saved;
+        f.Setup.SaveSourceState(CreateCheckpoint(1), saved);
+        UNIT_ASSERT_VALUES_EQUAL(saved.Data.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(saved.Data.front().Blob, "2");
+    }
+
     Y_UNIT_TEST(CheckpointContainsOnlyDeliveredOffsets) {
         TFixture f;
         f.Init();

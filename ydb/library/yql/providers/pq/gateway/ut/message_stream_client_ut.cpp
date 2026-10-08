@@ -241,6 +241,23 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
         UNIT_ASSERT(fixture.Session->GetEvents({}).empty());
     }
 
+    Y_UNIT_TEST(TransportFailuresRetainRetryableStatus) {
+        for (const auto status : {NYdb::EStatus::TRANSPORT_UNAVAILABLE, NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED}) {
+            TStreamFixture fixture;
+            fixture.Mock->SetEventProvider([status]() -> NYdb::NTopic::TReadSessionEvent::TEvent {
+                return NYdb::NTopic::TSessionClosedEvent(status, {NYdb::NIssue::TIssue("Connection failed")});
+            });
+            const auto events = fixture.Session->GetEvents({});
+            UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+            const auto& closed = std::get<NFq::TMessageStreamSessionClosedEvent>(events.front());
+            const auto expected = status == NYdb::EStatus::TRANSPORT_UNAVAILABLE
+                ? NFq::EMessageStreamStatus::Unavailable
+                : NFq::EMessageStreamStatus::Timeout;
+            UNIT_ASSERT(closed.Status == expected);
+            UNIT_ASSERT_STRING_CONTAINS(closed.Issues.ToOneLineString(), "Connection failed");
+        }
+    }
+
     Y_UNIT_TEST(TerminalEventIsDeliveredOnce) {
         TStreamFixture fixture;
         fixture.Mock->SetEventProvider([]() -> NYdb::NTopic::TReadSessionEvent::TEvent {

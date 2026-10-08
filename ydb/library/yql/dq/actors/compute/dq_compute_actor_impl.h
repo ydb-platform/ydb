@@ -2834,10 +2834,10 @@ public:
 
 protected:
     void ReportStats() {
-        auto now = TInstant::Now();
+        const auto now = NActors::TActivationContext::Monotonic();
         if ((State != NDqProto::COMPUTE_STATE_EXECUTING && !Task.GetCreateSuspended())      // non streaming queries
             || !RuntimeSettings.ReportStatsSettings
-            || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
+            || (LastSendStatsTime && now - *LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval)) {
             return;
         }
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
@@ -2934,7 +2934,7 @@ private:
     TInstant StartTime;
     TMonotonic TimeoutDeadline;
     bool Running = true;
-    TInstant LastSendStatsTime;
+    std::optional<TMonotonic> LastSendStatsTime;
     bool PassExceptions = false;
     bool Terminated = false;
 protected:

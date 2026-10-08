@@ -10,8 +10,12 @@
 namespace NFq::NWasmServices {
 
 // Internal P2 harness protocol, not a public connection or typed YQL ABI.
-inline constexpr uint32_t WireVersion = 1;
+inline constexpr uint32_t WireVersion = 2;
 static_assert(std::endian::native == std::endian::little);
+
+enum class EClientError : uint32_t {
+    None, Connection, Tls, Deadline, Cancelled, ResourceLimit, InvalidRequest, Authentication, HttpStatus, GrpcStatus
+};
 
 struct TRequestHeader {
     uint32_t Version = WireVersion;
@@ -22,6 +26,8 @@ struct TRequestHeader {
 struct TResponseHeader {
     uint32_t Version = WireVersion;
     int32_t Code = 0;
+    EClientError Error = EClientError::None;
+    int32_t NativeCode = 0;
     uint64_t PayloadBytes = 0;
 };
 
@@ -39,7 +45,7 @@ struct TResultHeader {
     uint64_t SecondBytes = 0;
 };
 
-static_assert(sizeof(TRequestHeader) == 16 && sizeof(TResponseHeader) == 16);
+static_assert(sizeof(TRequestHeader) == 16 && sizeof(TResponseHeader) == 24);
 static_assert(sizeof(TArgumentsHeader) == 24 && sizeof(TResultHeader) == 24);
 
 template <class T> std::string Encode(const T& header, std::string_view payload = {}) {

@@ -7,8 +7,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 
-#include <atomic>
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <limits>
 #include <mutex>
@@ -25,8 +25,8 @@ std::string_view View(TStringBuf bytes) {
     return {bytes.data(), bytes.size()};
 }
 
-TString Response(int code, TStringBuf payload = {}) {
-    const TResponseHeader header{WireVersion, code, payload.size()};
+TString Response(int code, EClientError error = EClientError::None, int nativeCode = 0, TStringBuf payload = {}) {
+    const TResponseHeader header{WireVersion, code, error, nativeCode, payload.size()};
     TString bytes;
     bytes.resize(sizeof(header) + payload.size());
     std::memcpy(bytes.Detach(), &header, sizeof(header));
@@ -92,6 +92,7 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
         std::atomic<bool> Cancelled{false};
         std::atomic<bool> Finished{false};
         ui64 MaxResponse = 0;
+        bool ResponseLimitExceeded = false;
         CURL* Easy = nullptr;
         curl_slist* HttpHeaders = nullptr;
         grpc::ClientContext Context;
@@ -213,7 +214,11 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             return 0;
         }
         const auto bytes = size * count;
-        if (request.Cancelled || bytes > request.MaxResponse - request.Body.size()) {
+        if (request.Cancelled) {
+            return 0;
+        }
+        if (bytes > request.MaxResponse - request.Body.size()) {
+            request.ResponseLimitExceeded = true;
             return 0;
         }
         try {
@@ -224,7 +229,8 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
         }
     }
 
-    void Finish(const std::shared_ptr<TRequest>& request, EOperationStatus status, int code, TString body = {}) {
+    void Finish(const std::shared_ptr<TRequest>& request, EOperationStatus status, int code, EClientError error, int nativeCode = 0,
+                TString body = {}) {
         if (request->Finished.exchange(true)) {
             return;
         }
@@ -232,7 +238,7 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             std::lock_guard lock(Mutex);
             Requests.erase(request->Handle);
         }
-        Notify(request->Completion, status, Response(code, body));
+        Notify(request->Completion, status, Response(code, error, nativeCode, body));
     }
 
     void AddHttp(TRequest& request) {
@@ -295,10 +301,11 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                         curl_multi_remove_handle(Multi, request->Easy);
                         active.erase(request->Easy);
                     }
-                    Finish(request, request->Cancelled ? EOperationStatus::Cancelled : EOperationStatus::Failed, 0);
+                    Finish(request, request->Cancelled ? EOperationStatus::Cancelled : EOperationStatus::Failed, 0,
+                           request->Cancelled ? EClientError::Cancelled : EClientError::Deadline);
                 } else if (request->Kind == EOperationKind::Timer) {
                     if (now >= request->TimerDue) {
-                        Finish(request, EOperationStatus::Ready, 0);
+                        Finish(request, EOperationStatus::Ready, 0, EClientError::None);
                     }
                 } else if (!request->Easy) {
                     try {
@@ -308,7 +315,7 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                         if (request->Easy) {
                             curl_multi_remove_handle(Multi, request->Easy);
                         }
-                        Finish(request, EOperationStatus::Failed, 0);
+                        Finish(request, EOperationStatus::Failed, 0, EClientError::Connection);
                     }
                 }
             }
@@ -332,12 +339,31 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                 const auto status = request->Cancelled                                    ? EOperationStatus::Cancelled
                                     : curlStatus == CURLE_OK && code >= 200 && code < 300 ? EOperationStatus::Ready
                                                                                           : EOperationStatus::Failed;
-                Finish(request, status, code, std::move(request->Body));
+                EClientError error = EClientError::None;
+                if (request->Cancelled) {
+                    error = EClientError::Cancelled;
+                } else if (curlStatus == CURLE_OPERATION_TIMEDOUT) {
+                    error = EClientError::Deadline;
+                } else if (curlStatus == CURLE_PEER_FAILED_VERIFICATION || curlStatus == CURLE_SSL_CONNECT_ERROR ||
+                           curlStatus == CURLE_SSL_CERTPROBLEM || curlStatus == CURLE_SSL_CACERT_BADFILE ||
+                           curlStatus == CURLE_SSL_ISSUER_ERROR) {
+                    error = EClientError::Tls;
+                } else if (request->ResponseLimitExceeded) {
+                    error = EClientError::ResourceLimit;
+                } else if (curlStatus != CURLE_OK) {
+                    error = EClientError::Connection;
+                } else if (code == 401 || code == 403) {
+                    error = EClientError::Authentication;
+                } else if (code < 200 || code >= 300) {
+                    error = EClientError::HttpStatus;
+                }
+                Finish(request, status, code, error, curlStatus, std::move(request->Body));
             }
             if (closing && active.empty()) {
                 return;
             }
-            // curl owns socket readiness; this bound also services cancellation and timers.
+            // curl owns socket readiness; this bound also services cancellation and
+            // timers.
             int descriptors = 0;
             curl_multi_poll(Multi, nullptr, 0, 20, &descriptors);
         }
@@ -362,18 +388,46 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             auto status = request->Cancelled               ? EOperationStatus::Cancelled
                           : ok && request->GrpcStatus.ok() ? EOperationStatus::Ready
                                                            : EOperationStatus::Failed;
+            EClientError error = EClientError::None;
+            const int nativeCode = request->GrpcStatus.error_code();
+            if (request->Cancelled) {
+                error = EClientError::Cancelled;
+            } else if (!ok || !request->GrpcStatus.ok()) {
+                switch (request->GrpcStatus.error_code()) {
+                case grpc::StatusCode::CANCELLED:
+                    error = EClientError::Cancelled;
+                    break;
+                case grpc::StatusCode::DEADLINE_EXCEEDED:
+                    error = EClientError::Deadline;
+                    break;
+                case grpc::StatusCode::UNAUTHENTICATED:
+                case grpc::StatusCode::PERMISSION_DENIED:
+                    error = EClientError::Authentication;
+                    break;
+                case grpc::StatusCode::RESOURCE_EXHAUSTED:
+                    error = EClientError::ResourceLimit;
+                    break;
+                case grpc::StatusCode::UNAVAILABLE:
+                    error = EClientError::Connection;
+                    break;
+                default:
+                    error = EClientError::GrpcStatus;
+                    break;
+                }
+            }
             TString body;
             if (status == EOperationStatus::Ready) {
                 std::vector<grpc::Slice> slices;
                 if (request->GrpcResponse.Length() > request->MaxResponse || !request->GrpcResponse.Dump(&slices).ok()) {
                     status = EOperationStatus::Failed;
+                    error = EClientError::ResourceLimit;
                 } else {
                     for (const auto& slice : slices) {
                         body.append(reinterpret_cast<const char*>(slice.begin()), slice.size());
                     }
                 }
             }
-            Finish(request, status, request->GrpcStatus.error_code(), std::move(body));
+            Finish(request, status, nativeCode, error, nativeCode, std::move(body));
         }
     }
 
@@ -388,13 +442,13 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
         if (kind == EOperationKind::Timer) {
             ui64 delay;
             if (bytes.size() != sizeof(delay)) {
-                Notify(request->Completion, EOperationStatus::Failed, Response(0));
+                Notify(request->Completion, EOperationStatus::Failed, Response(0, EClientError::InvalidRequest));
                 return {};
             }
             std::memcpy(&delay, bytes.data(), sizeof(delay));
             const auto now = TInstant::Now();
             if (delay > (TInstant::Max() - now).MicroSeconds()) {
-                Notify(request->Completion, EOperationStatus::Failed, Response(0));
+                Notify(request->Completion, EOperationStatus::Failed, Response(0, EClientError::InvalidRequest));
                 return {};
             }
             request->TimerDue = now + TDuration::MicroSeconds(delay);
@@ -403,14 +457,15 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             std::string_view payload;
             if (bytes.size() > Limits.MaxPayloadBytes + sizeof(header) || !Decode(View(bytes), header, payload) ||
                 header.Version != WireVersion || header.Binding >= Bindings.size() || header.PayloadBytes != payload.size()) {
-                Notify(request->Completion, EOperationStatus::Failed, Response(0));
+                Notify(request->Completion, EOperationStatus::Failed, Response(0, EClientError::InvalidRequest));
                 return {};
             }
             request->Binding = header.Binding;
             request->Payload = TString(payload.data(), payload.size());
             bindingBytes = Bindings[header.Binding].Bytes;
         }
-        // Reserve response capacity before dispatch, including framing and gRPC copies.
+        // Reserve response capacity before dispatch, including framing and gRPC
+        // copies.
         const auto reserve = 2 * (request->Payload.size() + bindingBytes) + 3 * Limits.MaxPayloadBytes + sizeof(TResponseHeader);
         {
             std::lock_guard lock(Mutex);
@@ -444,7 +499,8 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                 Y_ENSURE(request->Reader, "gRPC request preparation failed");
             }
             if (!request->Cancelled) {
-                // Preparation may throw: publish only after it succeeds, before CQ dispatch.
+                // Preparation may throw: publish only after it succeeds, before CQ
+                // dispatch.
                 Requests.emplace(handle, request);
             }
             if (request->Reader) {
@@ -453,7 +509,8 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             }
         }
         if (request->Cancelled) {
-            Notify(request->Completion, EOperationStatus::Failed, Response(0));
+            Notify(request->Completion, EOperationStatus::Failed,
+                   Response(0, deadline <= TInstant::Now() ? EClientError::Deadline : EClientError::ResourceLimit));
             return {};
         }
         curl_multi_wakeup(Multi);

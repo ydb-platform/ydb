@@ -22,6 +22,9 @@ the binding's method path, injected channel credentials and native metadata.
 There are no application retries; gRPC retries are disabled on the channel.
 HTTP status and gRPC status codes accompany opaque response bytes. Network
 errors are ordinary operation failures, not traps or compartment poisoning.
+The private wire-v2 response envelope classifies transport, TLS, authentication,
+deadline, cancellation, HTTP/gRPC status and resource-limit failures using enum
+and numeric codes only; it does not return backend error strings.
 
 The existing `IHTTPGateway` supports these verbs, but its upload/delete and
 buffered download API lacks a uniform per-request cancellation handle and
@@ -48,6 +51,13 @@ and parallel calls. Its reusable, bounded allocator exposes live object counts
 to verify coroutine/frame/buffer cleanup. Network tests complement, rather
 than replace, P1's deterministic fake-transport race tests.
 
+The fixture also exercises a private typed `Profile` example over HTTP JSON and
+gRPC protobuf: bounded UTF-8 names, required fields, numeric ranges, schema
+version, malformed payload handling, and sequential/parallel adapter modes.
+TLS tests cover trusted and untrusted CAs for gRPC, plus trusted, untrusted and
+hostname-mismatch certificates for HTTP. These are test contracts, not a
+production-facing connection or YQL type.
+
 Run from the repository root:
 
 ```bash
@@ -70,11 +80,10 @@ This harness does not establish the full RFC P2 acceptance criteria:
 - Resolve aliases through existing YDB/FQ metadata, permissions and secrets;
   test unknown alias, access denial and incompatible connection types.
 - Integrate credential refresh and connection identity/version-aware pooling.
-- Validate TLS scenarios, production client diagnostics and worker/tenant
-  resource accounting beyond application buffers.
-- Define typed service errors/results and schema-specific guest decoding.
-  Here protobuf wrapper messages are exchanged as opaque bytes; malformed
-  application payloads remain bytes, and decoding checks run in the harness.
+- Validate TLS with production identity sources and client authentication;
+  current tests use generated local server certificates and trusted CA files.
+- Add production worker/tenant resource accounting beyond application-buffer
+  reservations and validate diagnostics against production service behavior.
 - Connect execution to DQ/SQL through the later RFC stages. No production
   configuration or external-network access is exposed by this prototype.
 

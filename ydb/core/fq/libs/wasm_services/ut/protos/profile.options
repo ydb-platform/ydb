@@ -1,0 +1,2 @@
+NFq.NWasmServices.NTest.Profile.name max_size:256
+NFq.NWasmServices.NTest.ProfileReply.payload max_size:1024

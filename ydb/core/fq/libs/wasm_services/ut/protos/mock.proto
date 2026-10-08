@@ -3,7 +3,9 @@ syntax = "proto3";
 package NFq.NWasmServices.NTest;
 
 import "google/protobuf/wrappers.proto";
+import "ydb/core/fq/libs/wasm_services/ut/protos/profile.proto";
 
 service MockService {
     rpc Call(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+    rpc Lookup(ProfileRequest) returns (ProfileReply);
 }

@@ -1,0 +1,19 @@
+syntax = "proto2";
+
+package NFq.NWasmServices.NTest;
+
+message ProfileRequest {
+    required uint64 id = 1;
+}
+
+message Profile {
+    optional uint64 id = 1;
+    optional bytes name = 2;
+    optional uint32 score = 3;
+    optional uint32 version = 4;
+}
+
+// Opaque application bytes allow tests to corrupt payloads without corrupting gRPC.
+message ProfileReply {
+    required bytes payload = 1;
+}

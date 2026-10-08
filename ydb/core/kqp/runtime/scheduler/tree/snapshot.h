@@ -7,7 +7,7 @@
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT> {
-        ui64 FairShare = 0;
+        ui64 CpuFairShare = 0;
 
         std::atomic<ui64> CpuMaxDemand = 0;
 
@@ -17,15 +17,21 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 CpuBurstUsage = 0;
         ui64 CpuBurstThrottle = 0;
 
+        ui64 MemoryFairShare = 0;
+        ui64 MemoryDemand = 0;
+        ui64 MemoryUsage = 0;
+
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
         TPool* GetParent() const;
 
         virtual void AccountSnapshotDuration(TDuration period);
-        virtual void UpdateBottomUp(ui64 totalLimit, TDuration period);
+        virtual void UpdateBottomUp(ui64 totalCpuLimit, TDuration period);
         void UpdateTopDown();
 
     private:
+        void UpdateMemoryTopDown();
+        void UpdateCpuTopDown();
         void DistributeFairShare();
     };
 
@@ -33,7 +39,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     public:
         TQuery(const TQueryId& queryId, const NDynamic::TQueryPtr& query);
 
-        void UpdateBottomUp(ui64 totalLimit, TDuration period) override;
+        void UpdateBottomUp(ui64 totalCpuLimit, TDuration period) override;
 
         std::weak_ptr<NDynamic::TQuery> Origin; // TODO: why public?
 
@@ -53,6 +59,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs = {});
 
         void AccountSnapshotDuration(TDuration period) override;
+    };
+
+    // The memory of the default pool is not limited by the pool itself. Always a child of its database.
+    class TDefaultPool : public TPool {
+    public:
+        TDefaultPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, const TStaticAttributes& attrs = {});
     };
 
     class TDatabase : public TPool {
@@ -77,7 +89,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     public:
         const TMonotonic Timestamp = TMonotonic::Now();
-        ui64 TotalLimit = Infinity();
+        ui64 TotalCpuLimit = Infinity();
+        ui64 TotalMemoryLimit = Infinity();
     };
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot

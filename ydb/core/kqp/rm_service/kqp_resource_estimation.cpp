@@ -35,4 +35,14 @@ void EstimateTaskResources(TTaskResourceEstimation& ret, const TTaskResourceEsti
         + ret.MkqlProgramMemoryLimit;
 }
 
+bool IsHeavyProgram(const TDqTask& task) {
+    const auto& opts = task.GetProgram().GetSettings();
+    return opts.GetHasMapJoin() || opts.GetHasStateAggregation();
+}
+
+ui64 EstimateTaskElasticMemory(const TDqTask& task, ui64 initialLimit, ui64 lightLimit, ui64 heavyLimit) {
+    const ui64 expectedLimit = IsHeavyProgram(task) ? heavyLimit : lightLimit;
+    return expectedLimit > initialLimit ? expectedLimit - initialLimit : 0;
+}
+
 } // namespace NKikimr::NKqp

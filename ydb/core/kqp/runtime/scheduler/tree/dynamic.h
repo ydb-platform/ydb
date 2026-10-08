@@ -40,6 +40,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CpuBurstThrottle = 0;
         std::atomic<ui64> ReadBurstUsage = 0;
 
+        std::atomic<ui64> MemoryUsage = 0;
+        std::atomic<ui64> MemoryDemand = 0;
+
         // TODO: implement Read resource - for now it's only per datashard.
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
@@ -55,6 +58,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs = {});
 
         NSnapshot::TQuery* TakeSnapshot() override;
+
+        // Gives the new query the fair-share of its pool right away - not to wait for its first snapshot.
+        // The initial snapshot is not attached to the snapshot tree, so it has no parent.
+        void InitSnapshot(const NSnapshot::TPool& pool);
 
         TFullPoolId GetFullPoolId() const;
 
@@ -89,6 +96,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
                 Counters->Delay->Collect(microseconds);
             }
         }
+
+    protected:
+        virtual NSnapshot::TPool* CreateSnapshot() const;
+    };
+
+    // The memory of the default pool is accounted, but not limited by the pool itself
+    class TDefaultPool : public TPool {
+    public:
+        TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs = {});
+
+    protected:
+        NSnapshot::TPool* CreateSnapshot() const override;
     };
 
     class TDatabase : public TPool {
@@ -109,11 +128,13 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TRoot* TakeSnapshot() override;
 
     public:
-        std::atomic<ui64> TotalLimit = Infinity();
+        std::atomic<ui64> TotalCpuLimit = Infinity();
+        std::atomic<ui64> TotalMemoryLimit = Infinity();
 
     private:
         struct {
-            NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr TotalCpuLimit;
+            NMonitoring::TDynamicCounters::TCounterPtr TotalMemoryLimit;
         } Counters;
     };
 

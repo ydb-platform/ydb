@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 
 #include <atomic>
@@ -66,6 +67,8 @@ public:
 
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
+        TaskMemory.store(config.GetExecutionUnitMemory());
+        ElasticMemoryPercent.store(config.GetSpillingPercent());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
@@ -98,9 +101,13 @@ public:
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
 
+        // The query node exists for the memory accounting anyway - the CPU is accounted only when the scheduler is enabled
+        const auto& scheduler = AppData()->KqpComputeScheduler;
+        const NScheduler::NHdrf::NDynamic::TQueryPtr cpuQuery = scheduler && scheduler->IsEnabled() ? args.Query : nullptr;
+
         NScheduler::TSchedulableOptions schedulableOptions {
-            .Query = args.Query,
-            .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
+            .Query = cpuQuery,
+            .IsSchedulable = cpuQuery && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
         };
 
         {
@@ -144,6 +151,7 @@ public:
         }
 
         runtimeSettings.TerminateHandler = [state=args.State, query=args.QueryQuotaManager, initialMemoryLimit=args.InitialMemoryLimit,
+                elasticMemory=args.ElasticMemory,
                 txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 YDB_LOG_DEBUG("Compute actor terminated",
@@ -154,7 +162,7 @@ public:
                     {"message", issues.ToOneLineString()});
                 if (query) {
                     // the task memory is freed by now, the task quota manager returns what it grew by when it dies
-                    query->FreeTasks(1, initialMemoryLimit);
+                    query->FreeTasks(1, initialMemoryLimit, elasticMemory);
                 }
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);

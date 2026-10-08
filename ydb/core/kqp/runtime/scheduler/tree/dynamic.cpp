@@ -46,7 +46,18 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     newQuery->CpuUsage = CpuUsage.load();
     newQuery->CpuThrottle = CpuThrottle.load();
 
+    newQuery->MemoryDemand = MemoryDemand.load();
+
     return newQuery;
+}
+
+void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
+    auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
+
+    snapshot->CpuFairShare = pool.CpuFairShare > 0 ? pool.CpuFairShare : AllowMinFairShare;
+    snapshot->MemoryFairShare = pool.MemoryFairShare;
+
+    SetSnapshot(snapshot);
 }
 
 TFullPoolId TQuery::GetFullPoolId() const {
@@ -142,10 +153,17 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
 
     Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
+
+    Counters->MemoryLimit     = group->GetCounter("MemoryLimit",     false);
+    Counters->MemoryUsage     = group->GetCounter("MemoryUsage",     false);
+    Counters->MemoryDemand    = group->GetCounter("MemoryDemand",    false); // snapshot
+    Counters->MemoryFairShare = group->GetCounter("MemoryFairShare", false); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {
-    auto* newPool = new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+    auto* newPool = CreateSnapshot();
+
+    newPool->MemoryUsage = MemoryUsage.load();
 
     if (Counters) {
         Counters->Limit->Set(GetCpuLimit() * 1'000'000);
@@ -156,6 +174,8 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
         Counters->UsageResume->Set(CpuBurstUsageResume);
         Counters->Read->Set(ReadBurstUsage);
         Counters->Throttle->Set(CpuBurstThrottle);
+        Counters->MemoryLimit->Set(GetMemoryLimit());
+        Counters->MemoryUsage->Set(MemoryUsage.load());
     }
 
     if (IsLeaf()) {
@@ -172,6 +192,24 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     }
 
     return newPool;
+}
+
+NSnapshot::TPool* TPool::CreateSnapshot() const {
+    return new NSnapshot::TPool(std::get<TPoolId>(GetId()), Counters, *this);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// TDefaultPool
+///////////////////////////////////////////////////////////////////////////////
+
+TDefaultPool::TDefaultPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, const TStaticAttributes& attrs)
+    : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
+    , TPool(id, counters, attrs)
+{
+}
+
+NSnapshot::TPool* TDefaultPool::CreateSnapshot() const {
+    return new NSnapshot::TDefaultPool(std::get<TPoolId>(GetId()), Counters, *this);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -202,7 +240,8 @@ TRoot::TRoot(const TIntrusivePtr<TKqpCounters>& counters)
 {
     Y_ASSERT(counters);
     auto group = counters->GetKqpCounters();
-    Counters.TotalLimit = group->GetCounter("scheduler/TotalLimit", false);
+    Counters.TotalCpuLimit = group->GetCounter("scheduler/TotalLimit", false);
+    Counters.TotalMemoryLimit = group->GetCounter("scheduler/TotalMemoryLimit", false);
 }
 
 void TRoot::AddDatabase(const TDatabasePtr& database) {
@@ -220,11 +259,14 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
-    const ui64 totalLimit = TotalLimit.load();
+    const ui64 totalCpuLimit = TotalCpuLimit.load();
+    const ui64 totalMemoryLimit = TotalMemoryLimit.load();
 
-    Counters.TotalLimit->Set(totalLimit * 1'000'000);
+    Counters.TotalCpuLimit->Set(totalCpuLimit * 1'000'000);
+    Counters.TotalMemoryLimit->Set(totalMemoryLimit);
 
-    newRoot->TotalLimit = totalLimit;
+    newRoot->TotalCpuLimit = totalCpuLimit;
+    newRoot->TotalMemoryLimit = totalMemoryLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

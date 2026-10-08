@@ -583,7 +583,7 @@ void SetupKqpResourceManager(TTestActorRuntime& runtime,
     auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
     IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-        tableServiceConfig.GetResourceManager(), nullptr, {}, kqpProxySharedResources, nodeId
+        tableServiceConfig.GetResourceManager(), nullptr, kqpProxySharedResources, nodeId
     );
 
     const ui32 userPoolId = runtime.GetAppData(nodeIdx).UserPoolId;

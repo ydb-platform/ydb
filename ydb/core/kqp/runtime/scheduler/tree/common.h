@@ -35,6 +35,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         std::optional<ui64> CpuLimit;
         std::optional<ui64> CpuGuarantee;
+        std::optional<ui64> MemoryLimit;
         std::optional<TDuration> ReadLimit; // per second
 
         auto GetCpuLimit() const {
@@ -43,6 +44,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         auto GetCpuGuarantee() const {
             return CpuGuarantee.value_or(0);
+        }
+
+        auto GetMemoryLimit() const {
+            return MemoryLimit.value_or(Infinity());
         }
 
         auto GetWeight() const {
@@ -63,6 +68,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             if (other.CpuGuarantee) {
                 CpuGuarantee = other.CpuGuarantee;
             }
+            if (other.MemoryLimit) {
+                MemoryLimit = other.MemoryLimit;
+            }
             if (other.ReadLimit) {
                 ReadLimit = other.ReadLimit;
             }
@@ -82,6 +90,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
                 << "Weight: " << GetWeight()
                 << ", CpuLimit: " << GetCpuLimit()
                 << ", CpuGuarantee: " << GetCpuGuarantee()
+                << ", MemoryLimit: " << GetMemoryLimit()
                 << ", ReadLimit: " << GetReadLimit();
         }
     };
@@ -221,6 +230,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr Queries;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::THistogramPtr                 Delay;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryLimit;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryUsage;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryDemand;
+        NMonitoring::TDynamicCounters::TCounterPtr MemoryFairShare;
     };
 
     template <ETreeType T>

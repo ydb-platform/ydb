@@ -42,12 +42,6 @@ void SetEnableTopicCompactificationByKey(TTestContext& tc) {
     }
 }
 
-void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc) {
-    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
-        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
-    }
-}
-
 void TestPartitionMetaOffsetsSurviveRestart(TTestContext& tc, bool enableRetentionDeleteLastBlob) {
     if (enableRetentionDeleteLastBlob) {
         SetEnableTopicRetentionDeleteLastBlob(tc);
@@ -304,58 +298,6 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     return Nothing();
 }
 
-// TSchedulingLimitReachedException means the scheduled-event budget was exhausted,
-// not that dispatch failed. PQ UT relies on partial progress here (see pq_ut_common.cpp).
-void DispatchUntilWakeup(TTestContext& tc, i32 retriesLeft = 2) {
-    TDispatchOptions options;
-    options.FinalEvents.emplace_back([](IEventHandle& ev) {
-        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
-    });
-
-    while (retriesLeft-- > 0) {
-        tc.Runtime->ResetScheduledCount();
-        try {
-            if (tc.Runtime->DispatchEvents(options)) {
-                return;
-            }
-        } catch (const NActors::TSchedulingLimitReachedException&) {
-        }
-    }
-
-    UNIT_FAIL("DispatchEvents did not observe TEvWakeup within retry budget");
-}
-
-bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc) {
-    TAutoPtr<IEventHandle> handle;
-    TEvPersQueue::TEvOffsetsResponse* result = nullptr;
-    THolder<TEvPersQueue::TEvOffsets> request;
-
-    for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
-        try {
-            tc.Runtime->ResetScheduledCount();
-            request.Reset(new TEvPersQueue::TEvOffsets);
-
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(handle);
-            if (!result) {
-                return false;
-            }
-
-            if (result->Record.PartResultSize() == 0 ||
-                result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-                return false;
-            }
-
-            const ui64 startOffset = result->Record.GetPartResult(0).GetStartOffset();
-            const ui64 endOffset = result->Record.GetPartResult(0).GetEndOffset();
-            return startOffset == expectedStartOffset && endOffset == expectedEndOffset;
-        } catch (const NActors::TSchedulingLimitReachedException&) {
-        }
-    }
-
-    return false;
-}
-
 ui64 GetLastWriteTimestamp(i32 partitionId, TTestContext& tc) {
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
 
@@ -371,30 +313,6 @@ ui64 GetLastWriteTimestamp(i32 partitionId, TTestContext& tc) {
 
     UNIT_FAIL("Partition " << partitionId << " is missing in status response");
     return 0;
-}
-
-void WaitRetentionCleanup(TTestContext& tc,
-                          ui64 expectedStartOffset,
-                          ui64 expectedEndOffset,
-                          ui32 retentionSeconds = 5,
-                          ui32 wakeTimeoutSeconds = 5,
-                          ui32 maxAttempts = 10) {
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
-
-    for (ui32 attempt = 0; attempt < maxAttempts; ++attempt) {
-        DispatchUntilWakeup(tc);
-        if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
-            return;
-        }
-
-        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
-        DispatchUntilWakeup(tc);
-        if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
-            return;
-        }
-    }
-
-    PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 }
 
 Y_UNIT_TEST(TestCompaction) {

@@ -427,6 +427,21 @@ void PQGetPartInfo(
     TTestContext& tc
 );
 
+void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc);
+
+bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc);
+
+// TSchedulingLimitReachedException means the scheduled-event budget was exhausted,
+// not that dispatch failed. PQ UT relies on partial progress here (see pq_ut_common.cpp).
+void DispatchUntilWakeup(TTestContext& tc, i32 retriesLeft = 2);
+
+void WaitRetentionCleanup(TTestContext& tc,
+                          ui64 expectedStartOffset,
+                          ui64 expectedEndOffset,
+                          ui32 retentionSeconds = 5,
+                          ui32 wakeTimeoutSeconds = 5,
+                          ui32 maxAttempts = 10);
+
 void ReserveBytes(
     TTestContext& tc,
     const ui32 partition,

@@ -10896,6 +10896,109 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
     }
 
+    Y_UNIT_TEST(PersistentBufferMonitorInfoUsesDirectBlockGroupAggregates) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const ui64 tabletId = 42;
+        const ui64 emptyTabletId = 43;
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+        const auto credsDbg0 = Connect(ctx, disk.PBServiceId, tabletId, 1, /*directBlockGroupIndex=*/0);
+        const auto credsDbg2 = Connect(ctx, disk.PBServiceId, tabletId, 1, /*directBlockGroupIndex=*/2);
+        Connect(ctx, disk.PBServiceId, emptyTabletId, 1);
+
+        auto write = [&](NDDisk::TQueryCredentials creds, ui64 lsn, char fill) {
+            auto request = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            request->AddPayloadThenChecksum(TRope(MakeData(fill, BlockSize)));
+            SendToDDisk(ctx, disk.PBServiceId, request.release());
+            auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            AssertStatus(WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx), TReplyStatus::OK);
+        };
+
+        write(credsDbg0, 10, 'A');
+        // Connection tokens resolve generation server-side, so establish a real newer session
+        // instead of mutating credentials that CheckQuery would overwrite.
+        const auto generation2 = Connect(ctx, disk.PBServiceId, tabletId, 2, /*directBlockGroupIndex=*/0,
+            /*registerBuffer=*/false);
+        write(generation2, 1, 'B');
+        write(credsDbg2, 10, 'C');
+
+        auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
+        request->MonQuery.emplace();
+        request->MonQuery->TabletId = tabletId;
+        request->MonQuery->DirectBlockGroupIndex = 0;
+        request->MonQuery->AfterTabletId = emptyTabletId;
+        auto info = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, request.release());
+
+        UNIT_ASSERT(info->Get()->MonInfo);
+        const auto& mon = *info->Get()->MonInfo;
+        UNIT_ASSERT_VALUES_EQUAL(mon.State, "Ready");
+        UNIT_ASSERT_VALUES_EQUAL(mon.RegistrationCount, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.LiveBytes, 3 * BlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets[0].TabletId, tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets[0].Records, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets[0].LiveBytes, 3 * BlockSize);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets[0].Registrations, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations[0].DirectBlockGroupIndex, 0u);
+        UNIT_ASSERT(mon.Registrations[0].Registered);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations[0].Records, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations[1].DirectBlockGroupIndex, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations[1].Records, 1u);
+        auto listRequest = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
+        listRequest->MonQuery.emplace();
+        auto list = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, listRequest.release());
+        UNIT_ASSERT(list->Get()->MonInfo);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->MonInfo->Tablets.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->MonInfo->Tablets[1].TabletId, emptyTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->MonInfo->Tablets[1].Records, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(list->Get()->MonInfo->Tablets[1].Registrations, 1u);
+        auto spaceRequest = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
+        spaceRequest->MonQuery.emplace().SummaryOnly = true;
+        const auto space = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, spaceRequest.release());
+        UNIT_ASSERT(space->Get()->MonInfo);
+        UNIT_ASSERT_VALUES_EQUAL(space->Get()->MonInfo->AllocatedChunks, mon.AllocatedChunks);
+        UNIT_ASSERT_VALUES_EQUAL(space->Get()->MonInfo->ChunkSize, mon.ChunkSize);
+        UNIT_ASSERT(space->Get()->MonInfo->Tablets.empty());
+        UNIT_ASSERT(space->Get()->MonInfo->Registrations.empty());
+
+    }
+
+    Y_UNIT_TEST(PersistentBufferMonitorInfoCountsAllRecordsWithoutRecordPages) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const ui64 tabletId = 55;
+        const auto creds = Connect(ctx, disk.PBServiceId, tabletId, 1);
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+        for (ui64 lsn = 1; lsn <= NDDisk::TPersistentBufferSnapshotQuery::MaxRows + 1; ++lsn) {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+                creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(TRope(MakeData('P', BlockSize)));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+            auto raw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            ctx.SendPDiskResponse(disk, *raw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+            AssertStatus(WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx), TReplyStatus::OK);
+        }
+
+        auto firstRequest = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
+        firstRequest->MonQuery.emplace();
+        firstRequest->MonQuery->TabletId = tabletId;
+        firstRequest->MonQuery->AfterTabletId = tabletId;
+        auto first = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, firstRequest.release());
+        UNIT_ASSERT(first->Get()->MonInfo);
+        const auto& mon = *first->Get()->MonInfo;
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets[0].Records, NDDisk::TPersistentBufferSnapshotQuery::MaxRows + 1);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Tablets[0].LiveBytes, (NDDisk::TPersistentBufferSnapshotQuery::MaxRows + 1) * BlockSize);
+        UNIT_ASSERT(!mon.MoreTablets);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(mon.Registrations[0].Records, NDDisk::TPersistentBufferSnapshotQuery::MaxRows + 1);
+    }
+
+
 } // Y_UNIT_TEST_SUITE
+
 
 } // NKikimr

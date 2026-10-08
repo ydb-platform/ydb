@@ -9,6 +9,9 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/pb.h>
 
+#include <array>
+#include <bitset>
+
 #define XXH_INLINE_ALL
 #include <contrib/libs/xxhash/xxhash.h>
 
@@ -169,6 +172,8 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvCheckSpaceResult::TPtr ev) {
         if (ev->Get()->Status == NKikimrProto::EReplyStatus::OK) {
             NormalizedOccupancy = ev->Get()->NormalizedOccupancy;
+            LastPDiskSpace = TDDiskSpaceMonInfo{TActivationContext::Now(),
+                ev->Get()->TotalChunks, ev->Get()->UsedChunks, ev->Get()->FreeChunks};
         }
         // A failed check must not replace a still-fresh successful sample.
         if (ev->Get()->Status == NKikimrProto::OK
@@ -2596,6 +2601,175 @@ namespace NKikimr::NDDisk {
         reply->DiskOperationsInflight = PersistentBufferDiskOperationInflight.size();
         reply->PendingEvents = PendingPersistentBufferEvents.size();
         reply->PerTabletStorageLimit = PersistentBufferFormat.PerTabletStorageLimit;
+
+        if (const auto& query = ev->Get()->MonQuery) {
+            auto& mon = reply->MonInfo.emplace();
+            mon.CollectedAt = TActivationContext::Now();
+            mon.StartedAt = StartedAt;
+            mon.State = IsBroken() ? "Broken" : Stopping ? "Stopping" : !PersistentBufferReady ? "Recovering" : "Ready";
+            if (IsBroken()) {
+                mon.BrokenReason = GetBrokenReason();
+            }
+            mon.AllocatedChunks = PersistentBufferAllocatedChunks.size();
+            mon.ChunkSize = DiskFormat->ChunkSize;
+            mon.MaxChunks = PersistentBufferFormat.MaxChunks;
+            mon.FreeSectors = PersistentBufferSpaceAllocator.GetFreeSpace();
+            mon.SectorSize = SectorSize;
+            if (!MemoryMetric) {
+                mon.Memory.Error = "Memory history is unavailable";
+            }
+            mon.Memory.LineId = MemoryMetric.GetLineId();
+            mon.Memory.Limit = PersistentBufferFormat.MaxInMemoryCache;
+            mon.CacheBytes = PersistentBufferInMemoryCacheSize;
+            mon.CacheLimit = PersistentBufferFormat.MaxInMemoryCache;
+            mon.PendingEvents = PendingPersistentBufferEvents.size();
+            mon.DiskOperations = PersistentBufferDiskOperationInflight.size();
+            mon.RouterInFlight = GetDirectIoInflight();
+            mon.RestoringChunks = PersistentBufferRestoringChunks.size();
+            mon.RestoreReadsInFlight = PersistentBufferRestoreChunksInflight;
+            mon.IoStalled = IoStalled;
+            mon.OwnDrainComplete = OwnDrainComplete;
+            if (NormalizedOccupancy >= 0) {
+                mon.NormalizedOccupancy = NormalizedOccupancy;
+            }
+            if (LastPDiskSpace && mon.CollectedAt >= LastPDiskSpace->CollectedAt
+                    && mon.CollectedAt - LastPDiskSpace->CollectedAt
+                        <= TDuration::MilliSeconds(ui64(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds) * 3)) {
+                mon.PDiskSpace = LastPDiskSpace;
+            }
+
+            if (query->SummaryOnly && !query->TabletId) {
+                Send(ev->Sender, reply.release(), 0, ev->Cookie);
+                return;
+            }
+
+            struct TPageTablet {
+                TPersistentBufferMonInfo::TTablet Info;
+                std::bitset<256> Namespaces;
+            };
+            std::map<ui64, TPageTablet> tabletPage;
+            auto addTablet = [&](ui64 tabletId, ui8 directBlockGroupIndex) -> TPageTablet* {
+                // A detail page always gets its tablet, independently of the list cursor.
+                if (query->TabletId ? query->TabletId != tabletId
+                        : query->AfterTabletId && tabletId <= *query->AfterTabletId) {
+                    return nullptr;
+                }
+                auto [it, inserted] = tabletPage.try_emplace(tabletId);
+                if (inserted) {
+                    it->second.Info.TabletId = tabletId;
+                }
+                it->second.Namespaces.set(directBlockGroupIndex);
+                if (tabletPage.size() > TPersistentBufferSnapshotQuery::MaxRows) {
+                    auto last = std::prev(tabletPage.end());
+                    mon.MoreTablets = true;
+                    if (last == it) {
+                        tabletPage.erase(last);
+                        return nullptr;
+                    }
+                    tabletPage.erase(last);
+                }
+                return &it->second;
+            };
+            auto addUniqueBufferNamespaces = [&] {
+                ui64 previousTabletId = Max<ui64>();
+                std::bitset<256> seen;
+                for (const auto& [key, buffer] : PersistentBuffers) {
+                    if (key.TabletId != previousTabletId) {
+                        previousTabletId = key.TabletId;
+                        seen.reset();
+                    }
+                    if (!seen.test(key.DirectBlockGroupIndex)) {
+                        seen.set(key.DirectBlockGroupIndex);
+                        const TPersistentBufferTabletKey tabletKey{key.TabletId, key.DirectBlockGroupIndex};
+                        if (!PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
+                                && !PersistentBufferRegistrations.contains(tabletKey)
+                                && !PersistentBufferRemovals.contains(tabletKey)) {
+                            ++mon.RegistrationCount;
+                        }
+                    }
+                    mon.LiveBytes += buffer.Size;
+                    if (auto* tablet = addTablet(key.TabletId, key.DirectBlockGroupIndex)) {
+                        tablet->Info.LiveBytes += buffer.Size;
+                        tablet->Info.Records += buffer.Records.size();
+                    }
+                }
+            };
+            addUniqueBufferNamespaces();
+            for (const auto& key : PersistentBufferRegistrations) {
+                if (!PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)) {
+                    ++mon.RegistrationCount;
+                }
+                addTablet(key.TabletId, key.DirectBlockGroupIndex);
+            }
+            for (const auto& [key, _] : PersistentBufferRemovals) {
+                if (!PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
+                        && !PersistentBufferRegistrations.contains(key)) {
+                    ++mon.RegistrationCount;
+                }
+                addTablet(key.TabletId, key.DirectBlockGroupIndex);
+            }
+            for (const auto& [key, _] : PersistentBufferBarriersManager.PersistentBufferBarriersLocation) {
+                ++mon.RegistrationCount;
+                addTablet(key.TabletId, key.DirectBlockGroupIndex);
+            }
+            for (auto& [_, tablet] : tabletPage) {
+                tablet.Info.Registrations = tablet.Namespaces.count();
+                mon.Tablets.push_back(std::move(tablet.Info));
+            }
+
+            if (query->TabletId) {
+                const ui64 tabletId = *query->TabletId;
+                std::array<std::optional<TPersistentBufferMonInfo::TRegistration>, 256> registrations;
+                auto registration = [&registrations](ui8 index) -> TPersistentBufferMonInfo::TRegistration& {
+                    auto& item = registrations[index];
+                    if (!item) {
+                        item.emplace();
+                        item->DirectBlockGroupIndex = index;
+                    }
+                    return *item;
+                };
+                for (auto bufferIt = PersistentBuffers.lower_bound({tabletId, 0});
+                        bufferIt != PersistentBuffers.end() && bufferIt->first.TabletId == tabletId; ++bufferIt) {
+                    auto& item = registration(bufferIt->first.DirectBlockGroupIndex);
+                    item.Records += bufferIt->second.Records.size();
+                    item.LiveBytes += bufferIt->second.Size;
+                }
+                for (auto it = PersistentBufferRegistrations.lower_bound({tabletId, 0});
+                        it != PersistentBufferRegistrations.end() && it->TabletId == tabletId; ++it) {
+                    registration(it->DirectBlockGroupIndex).RemovalStage = "Registering";
+                }
+                for (auto it = PersistentBufferRemovals.lower_bound({tabletId, 0});
+                        it != PersistentBufferRemovals.end() && it->first.TabletId == tabletId; ++it) {
+                    auto& item = registration(it->first.DirectBlockGroupIndex);
+                    using EStage = TPersistentBufferRemoval::EStage;
+                    switch (it->second.Stage) {
+                        case EStage::Drain: item.RemovalStage = "Drain"; break;
+                        case EStage::Close: item.RemovalStage = "Close"; break;
+                        case EStage::Wait: item.RemovalStage = "Wait"; break;
+                        case EStage::Remove: item.RemovalStage = "Remove"; break;
+                    }
+                    item.RemovalDeadline = it->second.Deadline;
+                }
+                for (const auto& [key, _] : PersistentBufferBarriersManager.PersistentBufferBarriersLocation) {
+                    if (key.TabletId == tabletId) {
+                        registration(key.DirectBlockGroupIndex);
+                    }
+                }
+                for (ui32 index = 0; index < registrations.size(); ++index) {
+                    if (!registrations[index]) {
+                        continue;
+                    }
+                    auto& item = *registrations[index];
+                    item.Registered = PersistentBufferBarriersManager.HasBarrier(tabletId, index);
+                    if (item.Registered) {
+                        const auto barrier = PersistentBufferBarriersManager.GetBarrier(tabletId, index);
+                        item.BarrierGeneration = barrier.Generation;
+                        item.BarrierLsn = barrier.Lsn;
+                    }
+                    mon.Registrations.push_back(std::move(item));
+                }
+            }
+        }
 
         auto fillOpStats = [&](const TString& name, const auto& opCounters) {
             TEvPersistentBufferInfo::TOpStats stats;

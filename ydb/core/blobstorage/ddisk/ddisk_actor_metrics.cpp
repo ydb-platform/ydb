@@ -2,7 +2,31 @@
 
 namespace NKikimr::NDDisk {
 
+void TDDiskActor::CollectMonRates() {
+    const auto now = TActivationContext::Monotonic();
+    const std::array<const TOpCountersBase*, 5> counters = {
+        &Counters.Interface.Read, &Counters.Interface.Write, &Counters.Interface.Sync,
+        &Counters.DirectIO.Read, &Counters.DirectIO.Write};
+    for (size_t i = 0; i < counters.size(); ++i) {
+        const ui64 requests = (counters[i]->Requests ? counters[i]->Requests->Val() : 0);
+        const ui64 bytes = (counters[i]->Bytes ? counters[i]->Bytes->Val() : 0);
+        if (MonRateSampledAt && now > MonRateSampledAt) {
+            MonRates[i] = CalculateDDiskMonRate(MonRateCounters[i][0], MonRateCounters[i][1],
+                requests, bytes, now - MonRateSampledAt);
+        } else {
+            MonRates[i].reset();
+        }
+        MonRateCounters[i] = {requests, bytes};
+    }
+    MonRateWindow = MonRateSampledAt && now > MonRateSampledAt ? now - MonRateSampledAt : TDuration::Zero();
+    MonRateSampledAt = now;
+    Schedule(MonRatePeriod, new TEvents::TEvWakeup(EWakeupTag::WakeupCollectMonRates));
+}
+
 void TDDiskActor::InitMemoryMetrics() {
+    if (!IsPersistentBufferActor) {
+        CollectMonRates();
+    }
     if (auto* registry = GetMetricSystem()) {
         const std::array<TLabel, 3> labels = {{
             {.Name = "pdisk", .Value = ToString(BaseInfo.PDiskId)},

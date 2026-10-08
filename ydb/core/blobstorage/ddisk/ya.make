@@ -17,6 +17,7 @@ LIBRARY()
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
         ddisk_actor_tablet_stats.cpp
+        monitoring_snapshot.h
         tablet_stats.h
         tablet_stats_actor.h
         tablet_stats_actor.cpp

@@ -194,7 +194,7 @@ public:
 
         // Register a watch the first time this database is seen, so the detailed
         // metrics of its tables are reclaimed on database removal even when the
-        // (leader-only) db counters feature is off. TDbWatcherActor dedupes by path
+        // db counters feature is off. TDbWatcherActor dedupes by path
         // id (sys_view/service/db_counters.cpp), so the "inserted" check here is not
         // load-bearing for correctness, only for cutting one event every 5s per tablet.
         auto [itDb, inserted] = DetailedMetricsByPathId.try_emplace(msg.TenantPathId);
@@ -411,7 +411,7 @@ public:
             typeCounters->Apply(tabletId, followerId, executorCounters, appCounters, tabletType);
         }
         //
-        if (!IsFollower && DbCountersEnabled && tenantPathId) {
+        if (DbCountersEnabled && tenantPathId) {
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
@@ -875,7 +875,7 @@ private:
         TYdbTabletCounters(
             ::NMonitoring::TDynamicCounterPtr ydbGroup,
             ::NMonitoring::TDynamicCounterPtr tabletGroup,
-            ::NMonitoring::TDynamicCounterPtr followerGroup = {}
+            ::NMonitoring::TDynamicCounterPtr followerGroup
         )
             : DatashardYdbMetricsAggregator(
                 CreateYdbMetricsAggregatorByTabletType(
@@ -1050,11 +1050,14 @@ public:
 
         TTabletCountersForDb(::NMonitoring::TDynamicCounterPtr externalGroup,
             ::NMonitoring::TDynamicCounterPtr internalGroup,
-            THolder<TTabletCountersBase> executorCounters)
+            THolder<TTabletCountersBase> executorCounters,
+            ::NMonitoring::TDynamicCounterPtr followerGroup)
             : SolomonCounters(internalGroup)
             , ExecutorCounters(std::move(executorCounters))
         {
-            YdbCounters = MakeIntrusive<TYdbTabletCounters>(externalGroup, internalGroup);
+            if (externalGroup) { // null for TABLETS_FOLLOWERS: TABLETS maps both roles
+                YdbCounters = MakeIntrusive<TYdbTabletCounters>(externalGroup, internalGroup, followerGroup);
+            }
         }
 
         void ToProto(NKikimr::NSysView::TDbServiceCounters& counters) override {
@@ -1184,7 +1187,7 @@ private:
         CountersByPathId[pathId] = dbCounters;
 
         auto evRegister = MakeHolder<NSysView::TEvSysView::TEvRegisterDbCounters>(
-            NKikimrSysView::TABLETS, pathId, dbCounters);
+            IsFollower ? NKikimrSysView::TABLETS_FOLLOWERS : NKikimrSysView::TABLETS, pathId, dbCounters);
         ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()), evRegister.Release());
 
         if (DbWatcherActorId) {
@@ -1434,10 +1437,11 @@ private:
 TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
     ::NMonitoring::TDynamicCounterPtr externalGroup,
     ::NMonitoring::TDynamicCounterPtr internalGroup,
-    THolder<TTabletCountersBase> executorCounters)
+    THolder<TTabletCountersBase> executorCounters,
+    ::NMonitoring::TDynamicCounterPtr followerGroup)
 {
     return MakeIntrusive<TTabletMon::TTabletCountersForDb>(
-        externalGroup, internalGroup, std::move(executorCounters));
+        externalGroup, internalGroup, std::move(executorCounters), followerGroup);
 }
 
 ////////////////////////////////////////////
@@ -1503,11 +1507,11 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     TAppData* appData = AppData(ctx);
     Y_ABORT_UNLESS(!TabletMon);
 
-    // GetEnableDbCounters gates the leader-only per-database "tablets" counters (a
+    // GetEnableDbCounters gates the per-database counters of either role (a
     // SysView feature); the watcher actor itself is also needed by the detailed
     // metrics of EITHER role, so the two features no longer share DbWatcherActorId as
     // a single implicit feature gate (see the DbCountersEnabled member of TTabletMon).
-    const bool dbCountersEnabled = appData->FeatureFlags.GetEnableDbCounters() && !Follower;
+    const bool dbCountersEnabled = appData->FeatureFlags.GetEnableDbCounters();
     const bool detailedMetricsEnabled = appData->FeatureFlags.GetEnableDataShardDetailedMetrics();
 
     if (dbCountersEnabled || detailedMetricsEnabled) {

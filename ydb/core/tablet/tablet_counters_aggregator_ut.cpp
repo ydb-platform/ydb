@@ -1831,7 +1831,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
     /**
      * Verify that the follower actor gets its OWN db watcher and registers its own
-     * watch, even though EnableDbCounters (the leader-only db counters feature) is off
+     * watch, even though EnableDbCounters (the per-database db counters feature) is off
      * in TEnv -- detailed metrics alone must be enough to create the watcher.
      */
     Y_UNIT_TEST(FollowerActorWatchesItsDetailedMetricsDatabase) {

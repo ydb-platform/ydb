@@ -1,12 +1,12 @@
-#include "service.h"
-
 #include "accessor_subscribe.h"
 #include "behaviour_registrator_actor.h"
+#include "service.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/initializer/behaviour.h>
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/metadata/service.h>
@@ -31,7 +31,15 @@ public:
 
     private:
         void OnAlteringProblem(const TString& errorMessage) final {
-            Y_UNUSED(errorMessage);
+            const auto& externalContext = Context.GetExternalData();
+            YDB_LOG_ERROR_CTX(*externalContext.GetActorSystem(), "Object operation tracking failed",
+                {"databaseId", externalContext.GetDatabaseId()},
+                {"typeId", TypeId},
+                {"objectId", ObjectId},
+                {"pathId", Context.GetPathId()},
+                {"requestGeneration", Context.GetRequestGeneration()},
+                {"objectGeneration", Context.GetObjectGeneration()},
+                {"error", errorMessage});
             OnAlteringFinished();
         }
 
@@ -63,8 +71,13 @@ public:
 
 private:
     void DoExecute() const final {
-        GetBehaviour()->GetOperationsManager()->TrackObjectOperation(ObjectId, Context).Subscribe([controller = GetController()](const auto&) {
-            controller->OnAlteringFinished();
+        GetBehaviour()->GetOperationsManager()->TrackObjectOperation(ObjectId, Context).Subscribe([controller = GetController()](const auto& future) {
+            const auto& status = future.GetValue();
+            if (status.IsFail()) {
+                controller->OnAlteringProblem(status.GetErrorMessage());
+            } else {
+                controller->OnAlteringFinished();
+            }
         });
     }
 
@@ -222,6 +235,7 @@ void TService::StartTracking(const TEvTrackOperationCompletion& request) {
     externalData.SetDatabase(request.GetDatabase());
     externalData.SetDatabaseId(request.GetDatabaseId());
     externalData.SetActorSystem(TActivationContext::ActorSystem());
+    externalData.SetUserToken(request.GetUserToken());
 
     NModifications::IOperationsManager::TOperationTrackContext context(std::move(externalData));
     context.SetPathId(request.GetPathId());

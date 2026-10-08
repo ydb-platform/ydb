@@ -1,12 +1,16 @@
 #pragma once
 
-#include <ydb/core/base/events.h>
+#include "events.h"
+
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 
 #include <util/generic/hash.h>
+
+#include <optional>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -60,6 +64,7 @@ public:
     YDB_ACCESSOR_DEF(ui64, RequestGeneration);
     YDB_ACCESSOR_DEF(ui64, ObjectGeneration);
     YDB_ACCESSOR_DEF(NActors::TActorId, OperationOwner);
+    YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
     YDB_ACCESSOR_DEF(TOperationProperties, Properties);
     YDB_ACCESSOR_DEF(ui64, SchemeTxId);
 };

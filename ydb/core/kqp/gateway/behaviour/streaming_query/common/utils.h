@@ -57,7 +57,6 @@ public:
         static inline constexpr char StoppedBy[] = "__stopped_by";
         static inline constexpr char CreatedAt[] = "__created_at";
         static inline constexpr char ModifiedAt[] = "__modified_at";
-        static inline constexpr char OperationOwnerUserToken[] = "__operation_owner_user_token";
         static inline constexpr char InflightOperation[] = "__inflight_operation";
     };
 

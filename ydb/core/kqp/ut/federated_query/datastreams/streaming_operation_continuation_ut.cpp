@@ -49,6 +49,7 @@ THolder<TEvTrackOperationCompletion> CopyTracking(const TEvTrackOperationComplet
     result->SetRequestGeneration(request.GetRequestGeneration());
     result->SetObjectGeneration(request.GetObjectGeneration());
     result->SetOperationOwner(request.GetOperationOwner());
+    result->SetUserToken(request.GetUserToken());
     result->SetProperties(request.GetProperties());
     result->SetSchemeTxId(request.GetSchemeTxId());
     return result;
@@ -232,7 +233,6 @@ struct TContinuationTest {
         const auto& info = entry.StreamingQueryInfo->Description;
         UNIT_ASSERT(!ActorIdFromProto(info.GetOperationOwnerActorId()));
         UNIT_ASSERT(!info.GetProperties().GetProperties().contains(TStreamingQueryMeta::TProperties::InflightOperation));
-        UNIT_ASSERT(!info.GetProperties().GetProperties().contains(TStreamingQueryMeta::TProperties::OperationOwnerUserToken));
     }
 
     void CheckSettled() {
@@ -970,9 +970,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
             if (query.HasOperationOwnerActorId()) {
                 ++begins;
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetUserToken(), token.GetSerializedToken());
-                const NACLib::TUserToken persisted(query.GetProperties().GetProperties().at(TStreamingQueryMeta::TProperties::OperationOwnerUserToken));
-                UNIT_ASSERT_VALUES_EQUAL(persisted.GetUserSID(), token.GetUserSID());
-                UNIT_ASSERT(persisted.IsExist(group));
             } else {
                 ++finalizations;
                 UNIT_ASSERT_VALUES_EQUAL(NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(), BUILTIN_ACL_METADATA);
@@ -990,6 +987,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetErrorMessage());
         UNIT_ASSERT_VALUES_EQUAL(begins, 1);
         UNIT_ASSERT_VALUES_EQUAL(finalizations, 1);
+        const auto& trackerToken = f.Tracking.back()->GetUserToken();
+        UNIT_ASSERT_VALUES_EQUAL(trackerToken.has_value(), Serialized);
+
+        if constexpr (Serialized) {
+            UNIT_ASSERT_VALUES_EQUAL(trackerToken->GetUserSID(), token.GetUserSID());
+            UNIT_ASSERT(trackerToken->IsExist(group));
+            UNIT_ASSERT(trackerToken->GetOriginalUserToken().empty());
+        }
+
         f.CheckSettled();
     }
 
@@ -1049,7 +1055,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingOperationContinuation) {
 
         auto expectedProperties = f.Describe()->ResultSet.at(0).StreamingQueryInfo->Description.GetProperties().GetProperties();
         expectedProperties.erase(TStreamingQueryMeta::TProperties::InflightOperation);
-        expectedProperties.erase(TStreamingQueryMeta::TProperties::OperationOwnerUserToken);
         // Finalization by the metadata service must preserve the original user attribution.
         UNIT_ASSERT_VALUES_EQUAL(expectedProperties.at(TStreamingQueryMeta::TProperties::ModifiedBy), BUILTIN_ACL_ROOT);
         bool failDescribe = !RepeatDescribe;

@@ -231,6 +231,9 @@ class TCreateStreamingQuery : public TSubOperation {
             .AlterVersion = 1,
             .Properties = std::move(properties),
             .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
+            .OperationOwnerUserToken = info.HasOperationOwnerActorId() && context.UserToken
+                ? std::make_optional<NACLib::TUserToken>(context.UserToken->GetUserSID(), context.UserToken->GetGroupSIDs())
+                : std::nullopt,
         });
     }
 

@@ -87,6 +87,7 @@
 /ydb/apps/ydb/experimental/ydb/commands/ydb_service_experimental_fq.cpp @ydb-platform/fq
 /ydb/apps/ydb/experimental/ydb/commands/ydb_service_udf.* @ydb-platform/fq
 /ydb/apps/ydb/ut/sql_resource_pool.cpp @ydb-platform/fq
+/ydb/core/base/metadata.h @ydb-platform/fq
 /ydb/core/external_sources/ @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/grpc_services/local_grpc/ @ydb-platform/fq

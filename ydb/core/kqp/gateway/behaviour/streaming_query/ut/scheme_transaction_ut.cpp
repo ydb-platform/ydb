@@ -590,6 +590,13 @@ Y_UNIT_TEST_SUITE(StreamingQuerySchemeTransaction) {
         UNIT_ASSERT_VALUES_EQUAL(tracker->Get()->GetRequestGeneration(), TFixture::Generation);
         UNIT_ASSERT_VALUES_EQUAL(tracker->Get()->GetOperationOwner(), f.Client);
         UNIT_ASSERT_VALUES_EQUAL(tracker->Get()->GetProperties().at("opaque"), "value");
+        UNIT_ASSERT(tracker->Get()->GetUserToken());
+        const auto& token = *tracker->Get()->GetUserToken();
+        UNIT_ASSERT_VALUES_EQUAL(token.GetUserSID(), "user");
+        UNIT_ASSERT_VALUES_EQUAL(token.GetGroupSIDs().size(), 1);
+        UNIT_ASSERT(token.IsExist("group"));
+        UNIT_ASSERT(token.GetOriginalUserToken().empty());
+        UNIT_ASSERT_VALUES_EQUAL(token.GetSerializedToken(), token.SerializeAsString());
         UNIT_ASSERT_VALUES_EQUAL(tracker->Get()->GetSchemeTxId(), 0);
         f.Response(TStatus::ExecComplete, NKikimrScheme::StatusSuccess);
         UNIT_ASSERT_VALUES_EQUAL(f.Trackers, 1);

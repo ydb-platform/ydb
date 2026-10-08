@@ -31,6 +31,17 @@ from ydb.tests.library.harness.util import LogLevels
 logger = logging.getLogger(__name__)
 
 
+_FEATURE_FLAGS_FOR_CMS = (
+    "enable_streaming_aggregation",
+    "enable_streaming_aggregation_advanced",
+    "enable_streaming_query_scheme_operations",
+    "enable_streaming_query_state_recompute",
+    "enable_shared_reading_structured_json_parsing",
+    "enable_updating_partitions_on_streaming_query_restart",
+    "enable_pq_source_rescaling"
+)
+
+
 def max_json_depth(value):
     if isinstance(value, dict):
         return 1 + max((max_json_depth(v) for v in value.values()), default=0)
@@ -66,6 +77,9 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
+    enable_dq_source_stream_lookup_join_local_lookups = param.get(
+        "enable_dq_source_stream_lookup_join_local_lookups", True
+    )
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
@@ -85,14 +99,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     if param.get("enable_exactly_once_topics_writing", False):
         extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
 
-    for flag in (
-        "enable_streaming_aggregation",
-        "enable_streaming_aggregation_advanced",
-        "enable_streaming_query_scheme_operations",
-        "enable_streaming_query_state_recompute",
-        "enable_dq_source_stream_lookup_join_local_lookups",
-        "enable_shared_reading_structured_json_parsing"
-    ):
+    for flag in _FEATURE_FLAGS_FOR_CMS:
         if flag in param:
             if param[flag]:
                 extra_feature_flags.add(flag)
@@ -107,6 +114,9 @@ def get_ydb_config(request, enable_fq_connector=None):
         extra_feature_flags.add("enable_streaming_queries")
     else:
         disabled_feature_flags.append("enable_streaming_queries")
+
+    if enable_dq_source_stream_lookup_join_local_lookups:
+        extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
 
     if enable_dq_source_stream_lookup_join_fullscan:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
@@ -393,7 +403,6 @@ class YdbClient:
 
 
 _SECTIONS_FOR_CMS = [
-    "feature_flags",
     "table_service_config",
     "federated_query_config",
     "log_config",
@@ -424,6 +433,11 @@ def _replace_config_via_cms(cluster, full_yaml_config):
 
 def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30) -> None:
     expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
+    expected_feature_flags = {
+        flag: full_yaml_config["feature_flags"][flag]
+        for flag in _FEATURE_FLAGS_FOR_CMS
+        if flag in full_yaml_config["feature_flags"]
+    }
     deadline = time.monotonic() + timeout
     attempt = 0
 
@@ -445,6 +459,11 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
                 mismatched_sections = [
                     section for section, value in expected_sections.items() if applied_config.get(section) != value
                 ]
+                mismatched_sections.extend(
+                    f"feature_flags.{flag}"
+                    for flag, value in expected_feature_flags.items()
+                    if applied_config.get("feature_flags", {}).get(flag) != value
+                )
                 if mismatched_sections:
                     logger.info(
                         "CMS config has not been applied to node %s yet (attempt %d): mismatched sections: %s",
@@ -636,6 +655,13 @@ class Kikimr:
 
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
+
+        # These flags may be unknown to the stable binary used by compatibility
+        # tests. Deliver them through CMS after all nodes have started, while
+        # keeping the remaining feature flags available during bootstrap.
+        bootstrap_feature_flags = config.yaml_config.get("feature_flags", {})
+        for flag in _FEATURE_FLAGS_FOR_CMS:
+            bootstrap_feature_flags.pop(flag, None)
 
         # Tenant slots start before the full config reaches CMS. Keep this setting
         # in the bootstrap config so KQP honors it for the first test queries.

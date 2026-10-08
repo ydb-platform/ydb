@@ -1,9 +1,17 @@
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
+#include <ydb/core/formats/arrow/program/execution.h>
+#include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/kernel_logic.h>
+#include <ydb/core/formats/arrow/program/stream_logic.h>
 
+#include <ydb/library/arrow_kernels/ut_common.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/write.h>
 
@@ -59,6 +67,58 @@ TString ExtractJsonValue(const std::shared_ptr<NAccessor::TSubColumnsArray>& inp
         }
     });
     return values;
+}
+
+std::shared_ptr<NAccessor::IChunkedArray> BuildCompositePredicate() {
+    NAccessor::TCompositeChunkedArray::TBuilder builder(arrow::uint8());
+    builder.AddChunk(std::make_shared<NAccessor::TDictionaryArray>(
+        NKikimr::NKernels::UInt8VecToArray({1}), NKikimr::NKernels::UInt8VecToArray({0, 0})));
+    builder.AddChunk(std::make_shared<NAccessor::TDictionaryArray>(
+        NKikimr::NKernels::UInt8VecToArray({0}), NKikimr::NKernels::UInt8VecToArray({0, 0})));
+    return builder.Finish();
+}
+
+std::shared_ptr<NAccessor::IChunkedArray> BuildSlicedDictionaryPredicate() {
+    auto predicate = std::make_shared<NAccessor::TDictionaryArray>(
+        NKikimr::NKernels::UInt8VecToArray({1, std::nullopt}),
+        NKikimr::NKernels::UInt8VecToArray({0, std::nullopt, 0}));
+    auto sliced = predicate->ISlice(0, 3);
+    UNIT_ASSERT(sliced->GetType() == NAccessor::IChunkedArray::EType::Dictionary);
+    sliced->VisitDistinctValues([](const std::shared_ptr<arrow::Array>& values) {
+        UNIT_ASSERT_VALUES_EQUAL(values->length(), 1);
+    });
+    return sliced;
+}
+
+void AssertFilteredRows(const std::shared_ptr<NAccessor::IChunkedArray>& predicate, const std::vector<std::optional<ui8>>& expected) {
+    TFailDataSource dataSource;
+    auto resources = std::make_unique<NAccessor::TAccessorsCollection>(predicate->GetRecordsCount());
+    resources->AddVerified(1, predicate, false);
+    TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
+    UNIT_ASSERT(TFilterProcessor(TColumnChainInfo(1)).Execute(context, TExecutionNodeContext()).IsSuccess());
+
+    std::vector<std::optional<ui8>> rows;
+    for (ui8 i = 0; i < predicate->GetRecordsCount(); ++i) {
+        rows.emplace_back(i);
+    }
+    auto filtered = context.GetResources().GetFilter().Apply(
+        std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray(rows)));
+    UNIT_ASSERT(arrow::Concatenate(filtered->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray(expected)));
+}
+
+void AssertAndResult(const std::shared_ptr<NAccessor::IChunkedArray>& predicate,
+                     const std::vector<std::optional<ui8>>& expected) {
+    TFailDataSource dataSource;
+    auto resources = std::make_unique<NAccessor::TAccessorsCollection>(predicate->GetRecordsCount());
+    resources->AddVerified(1, predicate, false);
+    std::vector<std::optional<ui8>> allTrue(predicate->GetRecordsCount(), 1);
+    resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray(allTrue)), false);
+    TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
+    TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3), NKikimr::NKernels::EOperation::And);
+    TExecutionNodeContext nodeContext;
+    UNIT_ASSERT(processor.OnInputReady(1, context, nodeContext).IsSuccess());
+    UNIT_ASSERT(processor.OnInputReady(2, context, nodeContext).IsSuccess());
+    UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray(expected)));
 }
 
 }
@@ -125,6 +185,22 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         UNIT_ASSERT(TToStringKernel(makeKernel(arrow::utf8(), arrow::binary())).GetOriginalAddressFromInput());
         UNIT_ASSERT(TToStringKernel(makeKernel(arrow::binary(), arrow::binary())).GetOriginalAddressFromInput());
         UNIT_ASSERT(!TToStringKernel(makeKernel(arrow::utf8(), arrow::utf8())).GetOriginalAddressFromInput());
+    }
+
+    Y_UNIT_TEST(CompositePredicateFiltersRows) {
+        AssertFilteredRows(BuildCompositePredicate(), {0, 1});
+    }
+
+    Y_UNIT_TEST(CompositePredicatePreservesAndInput) {
+        AssertAndResult(BuildCompositePredicate(), {1, 1, 0, 0});
+    }
+
+    Y_UNIT_TEST(SlicedDictionaryPredicateFiltersNullRow) {
+        AssertFilteredRows(BuildSlicedDictionaryPredicate(), {0, 2});
+    }
+
+    Y_UNIT_TEST(SlicedDictionaryPredicatePreservesAndInput) {
+        AssertAndResult(BuildSlicedDictionaryPredicate(), {1, std::nullopt, 1});
     }
 };
 

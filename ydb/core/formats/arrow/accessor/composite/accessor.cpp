@@ -101,7 +101,7 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
         }
         if (!result) {
             result = valLocal;
-        } else if (!NArrow::ScalarCompareNullable(*result, valLocal)) {
+        } else if (NArrow::ScalarCompareNullable(*result, valLocal) != 0) {
             return false;
         }
     }

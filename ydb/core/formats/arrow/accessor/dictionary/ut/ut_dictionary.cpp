@@ -360,4 +360,41 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
         checkNulls(restored);
     }
+
+    Y_UNIT_TEST(SlicedSingleValueWithNullPositionsIsNotOneValue) {
+        TTrivialArray::TPlainBuilder<> dictionaryBuilder;
+        dictionaryBuilder.AddRecord(0, "Alpha");
+        dictionaryBuilder.AddNull(1);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddNull(1);
+        positionsBuilder.AddValue(2, 0);
+
+        auto dictionary = std::make_shared<TDictionaryArray>(dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0),
+                                                             positionsBuilder.Finish(3)->GetChunkedArray()->chunk(0));
+        auto sliced = dictionary->ISlice(0, 3);
+        UNIT_ASSERT(sliced->GetType() == IChunkedArray::EType::Dictionary);
+        sliced->VisitDistinctValues([](const std::shared_ptr<arrow::Array>& values) {
+            UNIT_ASSERT_VALUES_EQUAL(values->length(), 1);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sliced->GetNullsCount(), 1);
+
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = sliced->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && !*oneValue);
+    }
+
+    Y_UNIT_TEST(AllNullPositionsAreOneNullValue) {
+        TTrivialArray::TPlainBuilder<> dictionaryBuilder;
+        dictionaryBuilder.AddRecord(0, "Alpha");
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        auto dictionary = std::make_shared<TDictionaryArray>(dictionaryBuilder.Finish(1)->GetChunkedArray()->chunk(0),
+                                                             positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0));
+
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = dictionary->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && *oneValue);
+        UNIT_ASSERT(value && !value->is_valid);
+        UNIT_ASSERT(value->type->Equals(arrow::utf8()));
+    }
 };

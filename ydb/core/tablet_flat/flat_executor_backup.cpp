@@ -402,14 +402,11 @@ public:
             });
             const size_t excess = backups.size() - maxTotalBackups;
             for (size_t i = 0; i < excess; ++i) {
-                YDB_LOG_NOTICE("Deleting old backup above the global limit",
-                    {"path", backups[i].Path});
+                LOG_N("Deleting old backup above the global limit" << " Path# " << backups[i].Path);
                 backups[i].Path.ForceDelete();
             }
         } catch (const std::exception& e) {
-            YDB_LOG_ERROR("Failed to delete backups above the global limit",
-                {"path", root},
-                {"error", e.what()});
+            LOG_E("Failed to delete backups above the global limit" << " Path# " << root << " Error# " << e.what());
         }
     }
 
@@ -557,14 +554,9 @@ public:
 
         DeleteOldBackups();
 
-<<<<<<< HEAD
-        LOG_N("Snapshot finalized" << " Bytes# " << WrittenBytes);
-=======
         DeleteOldBackupsGlobally();
 
-        YDB_LOG_NOTICE("Snapshot finalized",
-            {"bytes", WrittenBytes});
->>>>>>> 5bcd579571c (feat: add tenant backups and global retention)
+        LOG_N("Snapshot finalized" << " Bytes# " << WrittenBytes);
         return ReplyAndDie();
     }
 

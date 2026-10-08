@@ -242,7 +242,6 @@ protected:
         Alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
                     __LOCATION__,
                     NKikimr::TAlignedPagePoolCounters(),
-                    true,
                     false
         );
 

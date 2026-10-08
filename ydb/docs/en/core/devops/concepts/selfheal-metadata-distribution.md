@@ -6,7 +6,7 @@ The configuration uses the historical name `state_storage_self_heal_config` for 
 
 {% note warning %}
 
-These instructions apply only to {{ ydb-short-name }} clusters with **V2 configuration** and **distributed configuration**. On clusters with **V1 configuration**, these steps and commands (including obtaining configuration via `ydb admin cluster config fetch`) are unavailable or will not produce the expected result. Alternatives for V1 are not provided here — see [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
+These instructions apply only to {{ ydb-short-name }} clusters with **V2 configuration**. On clusters with **V1 configuration**, these steps and commands (including obtaining configuration via `ydb admin cluster config fetch`) are unavailable or will not produce the expected result. Alternatives for V1 are not provided here — see [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
 
 {% endnote %}
 
@@ -24,7 +24,11 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-2. Modify the configuration file `config.yaml` by changing the value of parameter `state_storage_self_heal_config.enable` to `true` or `false`:
+2. Modify the configuration file `config.yaml` by changing the value of parameter `state_storage_self_heal_config.enable` to `true` or `false`.
+
+    SelfHeal requires Sentinel to be enabled: set `cms_config.sentinel_config.enable` to `true` in the `config` section of `config.yaml`. Apply the changes in step 3.
+
+    Example configuration with Sentinel and SelfHeal enabled:
 
     ```yaml
     config:
@@ -39,9 +43,9 @@ You can enable and disable Metadata Distribution SelfHeal by changing the config
 
     {% note info %}
 
-    For the mechanism to work, both [CMS Sentinel](../../concepts/glossary.md#cms) and [distributed configuration](../../concepts/glossary.md#distributed-configuration) must be activated. Make sure they are enabled.
+    The mechanism requires [V2 configuration](../configuration-management/configuration-v2/index.md) and enabled [CMS Sentinel](../../concepts/glossary.md#cms).
 
-    See also: [Migration to V2 configuration and enabling distributed configuration](../configuration-management/migration/migration-to-v2.md).
+    The presence of `self_management_config.enabled: true` indirectly indicates that V2 configuration is in use. Setting this flag alone does not migrate the cluster to V2 configuration. To migrate, follow the steps in [Migration to V2 configuration](../configuration-management/migration/migration-to-v2.md).
 
     {% endnote %}
 

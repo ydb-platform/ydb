@@ -626,4 +626,11 @@ message TTableServiceConfig {
 
     // Fallback to legacy optimizer on multiple statements in a query
     optional bool EnableFallbackOnMultipleStatements = 151 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint32 DqHashAggregationDescriptorVersion = 152 [default = 0, (InvalidateCompileCache) = true];
+
+    // When true, map joins use the scalar hash join (DqScalarHashJoin) instead of MapJoinCore.
+    // Overridable per query via PRAGMA ydb.UseScalarHashJoinForMap.
+    // Only the legacy optimizer honors it, NewRBO ignores it for now.
+    optional bool UseScalarHashJoinForMap = 153 [default = false, (InvalidateCompileCache) = true];
 };

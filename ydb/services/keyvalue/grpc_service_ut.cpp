@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             Cerr << "Wait iteration# " << i << Endl;
             auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
             auto& entry = req->ResultSet.emplace_back();
-            entry.Path = SplitPath(path);
+            entry.Path = ::NKikimr::SplitPath(path);
             entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
             entry.ShowPrivatePath = true;
             entry.SyncVersion = false;
@@ -543,7 +543,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         channel = grpc::CreateChannel("localhost:" + ToString(grpc), grpc::InsecureChannelCredentials());
         MakeDirectory(channel, "/Root/mydb");
         MakeTable(channel, tablePath);
-        auto pr = SplitPath(tablePath);
+        auto pr = ::NKikimr::SplitPath(tablePath);
         Ydb::Scheme::ListDirectoryResult listDirectoryResult = ListDirectory(channel, "/Root/mydb");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.self().name(), "mydb");
         UNIT_ASSERT_VALUES_EQUAL(listDirectoryResult.children(0).name(), pr.back());

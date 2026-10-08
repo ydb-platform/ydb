@@ -26,7 +26,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
-        if (node.Local != Local) {
+        const bool localChanged = node.Local != Local;
+        const TActorId previousLocal = node.Local;
+        const auto previousState = node.GetVolatileState();
+        if (localChanged) {
             Self->RemoveNodeFromSegments(&node);
 
             TInstant now = TActivationContext::Now();
@@ -58,15 +61,19 @@ public:
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
-                node.SetDown(false);
-                node.SetFreeze(false);
+                if (!node.LastSeenServicedDomains.empty()) {
+                    Self->RecordNodeEvent(node, EHiveEventType::TenantChanged, EHiveEventReason::ServicedDomainsChanged,
+                        TStringBuilder() << "from=" << node.LastSeenServicedDomains << " to=" << servicedDomains);
+                }
+                node.SetDown(false, EHiveEventReason::TenantChanged);
+                node.SetFreeze(false, EHiveEventReason::TenantChanged);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
                 YDB_LOG_TRACE("THive::TTxRegisterNode::Execute node became up on restart",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", Local.NodeId()});
-                node.SetDown(false);
+                node.SetDown(false, EHiveEventReason::BecomeUpOnRestart);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
             }
@@ -95,8 +102,7 @@ public:
             }
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
-            node.Location = TNodeLocation(Record.GetSystemLocation());
-            node.LocationAcquired = true;
+            node.SetLocation(TNodeLocation(Record.GetSystemLocation()), EHiveEventReason::RegisterNode);
         }
         node.TabletAvailability.clear();
         for (const NKikimrLocal::TTabletAvailability& tabletAvailability : Record.GetTabletAvailability()) {
@@ -107,7 +113,18 @@ public:
                 itAvail->second.UpdateRestriction(itRestr->second);
             }
         }
-        node.BecomeConnecting();
+        if (node.BecomeConnecting() || localChanged) {
+            TStringBuilder details;
+            details << "previousState=" << TNodeInfo::EVolatileStateName(previousState);
+            if (localChanged && previousLocal) {
+                details << " previousLocal=" << previousLocal;
+            }
+            details << " domains=" << node.ServicedDomains
+                << " location=" << GetLocationString(node.Location)
+                << " tabletTypesAvailable=" << node.TabletAvailability.size();
+            Self->RecordNodeEvent(node, EHiveEventType::Registered,
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, details);
+        }
         return true;
     }
 

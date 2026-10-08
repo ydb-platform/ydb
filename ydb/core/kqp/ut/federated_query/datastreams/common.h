@@ -31,6 +31,8 @@
 
 namespace NKikimr::NKqp {
 
+TString MakeExternalName(TStringBuf prefix);
+
 struct TScriptQuerySettings {
     bool SaveState = false;
     NKikimrKqp::TScriptExecutionRetryState::TMapping RetryMapping;

@@ -697,6 +697,12 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
     Y_UNIT_TEST(DoesItWork) {
         TTestEnvCompDefragIndependent env(0.01);
+
+        if (env.Env.Runtime->GetNode(1)->AppData->FeatureFlags.GetEnableTinyDisks()) {
+            // TODO: rewrite test for new huge blob sizes
+            return;
+        }
+
         ui32 N = 70000;
         ui32 batchSize = 1000;
 

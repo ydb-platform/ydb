@@ -451,8 +451,12 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
         entry->Future = entry->Promise.ToFuture();
         Add(map, key, entry);
 
-        if ((isValueOK || canRefreshError) && !config->BatchUpdate) {
-            ScheduleEntryUpdate(entry, key, config);
+        if (!config->BatchUpdate) {
+            if (isValueOK || canRefreshError) {
+                ScheduleEntryUpdate(entry, key, config);
+            } else {
+                ScheduleEntryExpiration(entry, key, config);
+            }
         }
     }
 
@@ -618,8 +622,12 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
         return;
     }
 
-    if ((valueOrError.IsOK() || canRefreshError) && !config->BatchUpdate) {
-        ScheduleEntryUpdate(entry, key, config);
+    if (!config->BatchUpdate) {
+        if (valueOrError.IsOK() || canRefreshError) {
+            ScheduleEntryUpdate(entry, key, config);
+        } else {
+            ScheduleEntryExpiration(entry, key, config);
+        }
     }
 }
 
@@ -916,39 +924,39 @@ int TAsyncExpiringCache<TKey, TValue>::GetShardIndex(const THeterogenousKey& key
 }
 
 template <class TKey, class TValue>
-NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock> TAsyncExpiringCache<TKey, TValue>::MakeReaderGuardForKey(const TKey& key)
+TReaderGuard<TReaderWriterSpinLock> TAsyncExpiringCache<TKey, TValue>::MakeReaderGuardForKey(const TKey& key)
 {
     auto shardIndex = GetShardIndex(key);
     const auto& shard = MapShards_[shardIndex];
-    return NThreading::ReaderGuard(shard.EntryMapSpinLock);
+    return ReaderGuard(shard.EntryMapSpinLock);
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TReaderGuard<TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShard(int shardIndex)
 {
     const auto& shard = MapShards_[shardIndex];
-    return {NThreading::ReaderGuard(shard.EntryMapSpinLock), shard.EntryMap};
+    return {ReaderGuard(shard.EntryMapSpinLock), shard.EntryMap};
 }
 
 template <class TKey, class TValue>
 template <class THeterogenousKey>
-std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TReaderGuard<TReaderWriterSpinLock>, const typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetReadableShardForKey(const THeterogenousKey& key)
 {
     return LockAndGetReadableShard(GetShardIndex(key));
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TWriterGuard<TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetWritableShard(int shardIndex)
 {
     auto& shard = MapShards_[shardIndex];
-    return {NThreading::WriterGuard(shard.EntryMapSpinLock), shard.EntryMap};
+    return {WriterGuard(shard.EntryMapSpinLock), shard.EntryMap};
 }
 
 template <class TKey, class TValue>
-std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
+std::pair<TWriterGuard<TReaderWriterSpinLock>, typename TAsyncExpiringCache<TKey, TValue>::TEntryMap&>
 TAsyncExpiringCache<TKey, TValue>::LockAndGetWritableShardForKey(const TKey& key)
 {
     return LockAndGetWritableShard(GetShardIndex(key));

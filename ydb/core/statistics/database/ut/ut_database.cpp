@@ -19,6 +19,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
             auto* tableService = settings.AppConfig->MutableTableServiceConfig();
             tableService->SetEnableNewRBO(EnableNewRbo);
             tableService->SetEnableFallbackToYqlOptimizer(false);
+            tableService->SetEnableFallbackOnDML(false);
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");

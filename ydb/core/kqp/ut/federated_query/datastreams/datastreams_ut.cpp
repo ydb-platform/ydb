@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "source_type"_a = "YdbTopics",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+        ), EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceBasic, TStreamingTestFixture) {
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
-        const std::string topicName = "topicName";
+        const auto topicName = MakeExternalName("topicName");
         CreateScopedTopic(topicName);
 
         // 1. Schema validation: Should succeed - "YdbTopics" in config enables "Ydb" type
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             )sql",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
-        ), EStatus::SCHEME_ERROR);
+        ), EStatus::BAD_REQUEST);
 
         // 3. E2E smoke test: Full streaming workflow should work
         const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
-        const std::string topicName = "topicName";
+        const auto topicName = MakeExternalName("topicName");
         ui32 partitionCount = 10;
 
         CreateScopedTopicExt(topicName, NTopic::TCreateTopicSettings()
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(ReadTopicExplainBasic, TStreamingTestFixture) {
         const std::string sourceName = "sourceName";
-        const std::string topicName = "topicName";
+        const auto topicName = MakeExternalName("topicName");
         CreateScopedTopic(topicName);
 
         CreatePqSourceBasicAuth(sourceName);
@@ -383,8 +383,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1000);
 
         const std::string sourceName = "sourceName";
-        const std::string inputTopicName = "inputTopicName";
-        const TString outputTopicName = "outputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
+        const auto outputTopicName = MakeExternalName("outputTopicName");
         const std::string tableName = "tableName";
 
         CreateScopedTopic(outputTopicName);
@@ -661,9 +661,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(RestoreScriptPhysicalGraphOnRetryWithCheckpoints, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "inputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
         CreateScopedTopic(inputTopicName);
-        constexpr char outputTopicName[] = "outputTopicName";
+        const auto outputTopicName = MakeExternalName("outputTopicName");
         CreateScopedTopic(outputTopicName);
 
         constexpr char sourceName[] = "sourceName";
@@ -717,8 +717,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         LogSettings.Freeze = true;
         CheckpointPeriod = TDuration::Seconds(5);
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
+        const auto outputTopicName = MakeExternalName("outputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -785,8 +785,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CheckpointPeriod = TDuration::Seconds(3);
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char outputTopicName[] = "outputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
+        const auto outputTopicName = MakeExternalName("outputTopicName");
         CreateScopedTopic(inputTopicName);
         CreateScopedTopic(outputTopicName);
 
@@ -898,7 +898,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateBucket(sourceBucket);
         CreateS3Source(sourceBucket, s3SourceName);
 
-        constexpr char inputTopicName[] = "inputTopicName";
+        const auto inputTopicName = MakeExternalName("inputTopicName");
         constexpr char pqSourceName[] = "pqSourceName";
         CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
@@ -987,8 +987,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_TWIN_F(ReplicatedFederativeWriting, UseColumnTable, TStreamingTestFixture) {
-        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
-        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
+        const auto firstOutputTopic = MakeExternalName("replicatedWritingOutputTopicName1");
+        const auto secondOutputTopic = MakeExternalName("replicatedWritingOutputTopicName2");
         constexpr char pqSource[] = "pqSourceName";
         CreateScopedTopic(firstOutputTopic);
         CreateScopedTopic(secondOutputTopic);
@@ -1051,13 +1051,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // Double solomon insert
         {
             const TSolomonLocation firstSoLocation = {
-                .ProjectId = "cloudId1",
+                .ProjectId = MakeExternalName("cloudId1"),
                 .FolderId = "folderId1",
                 .Service = "custom1",
                 .IsCloud = false,
             };
             const TSolomonLocation secondSoLocation = {
-                .ProjectId = "cloudId2",
+                .ProjectId = MakeExternalName("cloudId2"),
                 .FolderId = "folderId2",
                 .Service = "custom2",
                 .IsCloud = false,
@@ -1230,8 +1230,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
-        constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
-        constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
+        const auto firstOutputTopic = MakeExternalName("replicatedWritingOutputTopicName1");
+        const auto secondOutputTopic = MakeExternalName("replicatedWritingOutputTopicName2");
         constexpr char pqSource1[] = "pqSourceName1";
         constexpr char pqSource2[] = "pqSourceName2";
         CreateScopedTopic(firstOutputTopic);
@@ -1245,7 +1245,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateSolomonSource(solomonSink2);
 
         const TSolomonLocation soLocation = {
-            .ProjectId = "cloudId1",
+            .ProjectId = MakeExternalName("cloudId1"),
             .FolderId = "folderId1",
             .Service = "custom1",
             .IsCloud = false,

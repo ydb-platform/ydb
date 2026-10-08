@@ -4,10 +4,14 @@
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_mem_info.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_combine_layout.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_rh_hash.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
@@ -17,6 +21,7 @@
 
 #include <util/generic/size_literals.h>
 
+#include <algorithm>
 #include <bit>
 #include <cmath>
 #include <limits>
@@ -985,6 +990,29 @@ private:
     size_t Row = 0;
 };
 
+class TSingleFieldComposite final: public NUdf::TBoxedValue {
+public:
+    explicit TSingleFieldComposite(NUdf::TUnboxedValue value)
+        : Value(std::move(value))
+    {}
+
+    NUdf::TUnboxedValue GetElement(ui32 index) const final {
+        UNIT_ASSERT_VALUES_EQUAL(index, 0);
+        ++AccessCount;
+        return Value;
+    }
+
+    const NUdf::TUnboxedValue* GetElements() const final {
+        ++AccessCount;
+        return &Value;
+    }
+
+    mutable size_t AccessCount = 0;
+
+private:
+    const NUdf::TUnboxedValue Value;
+};
+
 NUdf::TUnboxedValue TemporalAfterUpdates(const NUdf::TUnboxedValue& value, NUdf::EDataSlot slot, size_t updates) {
     using namespace NUdf;
     if (!value) {
@@ -1750,6 +1778,290 @@ void RunDqAggregateZeroWidthTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
+    Y_UNIT_TEST_QUAD(TestSampledRowLimit, UseLLVM, UseFlow) {
+        for (const bool structure : {false, true}) {
+            TDqSetup<UseLLVM> setup(GetDqNodeFactory());
+            auto& pb = setup.GetDqProgramBuilder();
+            const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", pb.NewStreamType(pb.NewMultiType({
+                pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)}))).Build();
+            TRuntimeNode input(source, false);
+            if (UseFlow) input = pb.ToFlow(input, {});
+            auto root = pb.DqHashCombine(input, 1_MB,
+                [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+                [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+                    const auto number = pb.template NewDataLiteral<ui64>(7);
+                    const auto composite = structure ? pb.NewStruct({{"a", items[1]}, {"b", number}}) : pb.NewTuple({items[1], number});
+                    return {composite, pb.NewOptional(number), pb.template NewDataLiteral<ui16>(11)};
+                },
+                [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+                [](TRuntimeNode::TList keys, TRuntimeNode::TList state) {
+                    keys.insert(keys.end(), state.begin(), state.end());
+                    return keys;
+                });
+            if (UseFlow) root = pb.FromFlow(root);
+            const TString text("heap-backed string in the sampled aggregation state");
+            NUdf::TUnboxedValue string = NUdf::TUnboxedValuePod(NUdf::TStringValue(text));
+            NUdf::TUnboxedValue longerString = NUdf::TUnboxedValuePod(NUdf::TStringValue(text + "!"));
+            auto graph = setup.BuildGraph(root, {source});
+            size_t inputRows = 0;
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                new TGeneratedWideStream(100000, [&](size_t row) {
+                    inputRows = row + 1;
+                    return std::vector<NUdf::TUnboxedValue>{NUdf::TUnboxedValuePod(ui32(row / 2)), row < 2 ? longerString : string};
+                })));
+            auto stream = graph->GetValue();
+            NUdf::TUnboxedValue output[4];
+            const size_t sampleGroups = 16384;
+            for (size_t i = 0; i < sampleGroups; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 4), NUdf::EFetchStatus::Ok);
+                UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1);
+            }
+            const auto* outputType = AS_TYPE(TMultiType, AS_TYPE(TStreamType, root.GetStaticType())->GetItemType());
+            const std::vector<TType*> keyTypes = {outputType->GetElementType(0)};
+            const std::vector<TType*> stateTypes = {
+                outputType->GetElementType(1), outputType->GetElementType(2), outputType->GetElementType(3),
+            };
+            const size_t recordBytes = TDqHashCombineLayout(keyTypes, stateTypes).GetRecordSize();
+            // One sampled group has an extra string byte, so the average rounds up by one byte
+            const size_t externalBytes = sizeof(TDirectArrayHolderInplace) + 2 * sizeof(NUdf::TUnboxedValuePod) +
+                sizeof(*string.AsRawStringValue()) + text.size() + 1;
+            using TMap = TDqRobinHoodHashSet<char*, TDqHashCombinePackedEqual, std::allocator<char>>;
+            const size_t nextGroups = 1_MB / (recordBytes + externalBytes + 2 * TMap::GetCellSize());
+            UNIT_ASSERT(nextGroups > 1024 && nextGroups < sampleGroups);
+            UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 4), NUdf::EFetchStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1 + 2 * nextGroups - 2);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestNonDirectCompositeKeepsSampleRowLimit, UseLLVM, UseFlow) {
+        for (const bool structure : {false, true}) {
+            TDqSetup<UseLLVM> setup(GetDqNodeFactory());
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* fieldType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+            TType* compositeType = structure ? pb.NewStructType({{"value", fieldType}}) :
+                pb.NewTupleType({fieldType});
+            const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", pb.NewStreamType(pb.NewMultiType({
+                pb.NewDataType(NUdf::TDataType<ui32>::Id), compositeType}))).Build();
+            TRuntimeNode input(source, false);
+            if (UseFlow) input = pb.ToFlow(input, {});
+            auto root = pb.DqHashCombine(input, 16_MB,
+                [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+                [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys[0], state[0]}; });
+            if (UseFlow) root = pb.FromFlow(root);
+
+            auto* holder = new TSingleFieldComposite(NUdf::TUnboxedValuePod(
+                NUdf::TStringValue("heap-backed indirect aggregation state")));
+            NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(holder);
+            auto graph = setup.BuildGraph(root, {source});
+            size_t inputRows = 0;
+            const size_t rows = 100000;
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                new TGeneratedWideStream(rows, [&](size_t row) {
+                    inputRows = row + 1;
+                    return std::vector<NUdf::TUnboxedValue>{NUdf::TUnboxedValuePod(ui32(row / 2)), value};
+                })));
+            auto stream = graph->GetValue();
+            NUdf::TUnboxedValue output[2];
+            std::vector<bool> seen(rows / 2);
+            const auto checkOutput = [&] {
+                const auto key = output[0].Get<ui32>();
+                UNIT_ASSERT(key < seen.size());
+                seen[key] = true;
+                UNIT_ASSERT(output[1].AsRawBoxed() == holder);
+            };
+            const size_t sampleGroups = 16384;
+            for (size_t batch = 0; batch < 2; ++batch) {
+                for (size_t i = 0; i < sampleGroups; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(output, 2), NUdf::EFetchStatus::Ok);
+                    UNIT_ASSERT_VALUES_EQUAL(inputRows, 2 * sampleGroups - 1 + batch * (2 * sampleGroups - 2));
+                    checkOutput();
+                }
+            }
+            for (;;) {
+                const auto status = stream.WideFetch(output, 2);
+                if (status == NUdf::EFetchStatus::Finish) break;
+                UNIT_ASSERT_VALUES_EQUAL(status, NUdf::EFetchStatus::Ok);
+                checkOutput();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(inputRows, rows);
+            UNIT_ASSERT_VALUES_EQUAL(std::count(seen.begin(), seen.end(), true), seen.size());
+            UNIT_ASSERT_VALUES_EQUAL(holder->AccessCount, 0);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestSpillingInputMemoryEstimation, UseLLVM, UseFlow) {
+        for (const bool indirect : {false, true}) {
+            TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+            auto* compositeType = pb.NewTupleType({stringType});
+            const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+                pb.NewStreamType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<ui32>::Id), compositeType}))).Build();
+            TRuntimeNode input(source, false);
+            if (UseFlow) input = pb.ToFlow(input, {});
+            auto root = pb.DqHashAggregate(input, true,
+                [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+                [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys[0], state[0]}; });
+            if (UseFlow) root = pb.FromFlow(root);
+
+            auto graph = setup.BuildGraph(root, {source});
+            graph->GetContext().SpillerFactory = std::make_shared<TPreallocatedSpillerFactory>(4_MB);
+            TDqHashCombineTestState lastState;
+            SetTestStateCallback(graph, [&](const TDqHashCombineTestState& state) { lastState = state; });
+            const TString text("heap-backed field in sampled spilling input");
+            NUdf::TUnboxedValue string = NUdf::TUnboxedValuePod(NUdf::TStringValue(text));
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue direct = graph->GetContext().Builder->NewArray(1, items);
+            items[0] = string;
+            NUdf::TUnboxedValue custom = NUdf::TUnboxedValuePod(new TSingleFieldComposite(string));
+            const size_t rows = 4096;
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                new TGeneratedWideStream(rows, [&](size_t row) {
+                    if (!row) setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                    return std::vector<NUdf::TUnboxedValue>{NUdf::TUnboxedValuePod(ui32(row)),
+                        indirect && row == 500 ? custom : direct};
+                })));
+            auto stream = graph->GetValue();
+            NUdf::TUnboxedValue output[2];
+            size_t outputRows = 0;
+            for (;;) {
+                const auto status = stream.WideFetch(output, 2);
+                if (status == NUdf::EFetchStatus::Finish) break;
+                if (status == NUdf::EFetchStatus::Yield) continue;
+                const auto field = output[1].GetElement(0);
+                UNIT_ASSERT_VALUES_EQUAL(TString(field.AsStringRef()), text);
+                ++outputRows;
+            }
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+            UNIT_ASSERT_VALUES_EQUAL(outputRows, rows);
+            UNIT_ASSERT(lastState.SpillingBucketsRead > 0);
+            UNIT_ASSERT_VALUES_EQUAL(lastState.InputRowMemoryUsageMultiplier.has_value(), !indirect);
+            if (!indirect) {
+                const size_t rowBytes = 3 * sizeof(NUdf::TUnboxedValuePod) + sizeof(TDirectArrayHolderInplace) +
+                    sizeof(*string.AsRawStringValue()) + text.size();
+                UNIT_ASSERT_DOUBLES_EQUAL(*lastState.InputRowMemoryUsageMultiplier,
+                    double(rowBytes) / (2 * sizeof(NUdf::TUnboxedValuePod)), 1e-12);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestMemoryEstimationExceptionCleanup, UseLLVM, UseFlow) {
+        for (const bool spilling : {false, true}) {
+            TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+            auto& pb = setup.GetDqProgramBuilder();
+            auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+            auto* compositeType = pb.NewTupleType({stringType, stringType});
+            const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+                pb.NewStreamType(pb.NewMultiType({pb.NewDataType(NUdf::TDataType<ui32>::Id), compositeType}))).Build();
+            TRuntimeNode input(source, false);
+            if (UseFlow) input = pb.ToFlow(input, {});
+            auto root = GetOperatorNode(pb, spilling, spilling, 16_MB, input,
+                [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1]}; },
+                [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+                [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys[0], state[0]}; });
+            if (UseFlow) root = pb.FromFlow(root);
+
+            TMemoryUsageInfo memInfo("MemoryEstimationExceptionCleanup");
+            THolderFactory factory(setup.Alloc.Ref(), memInfo);
+            TDefaultValueBuilder builder(factory);
+            NUdf::TUnboxedValue string = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap-backed field in a short composite"));
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue valid = builder.NewArray(2, items);
+            items[0] = items[1] = string;
+            NUdf::TUnboxedValue shortHolder = builder.NewArray(1, items);
+            items[0] = string;
+            auto graph = setup.BuildGraph(root, {source});
+            auto storage = std::make_shared<TPreallocatedSpillerFactory>(1_MB);
+            graph->GetContext().SpillerFactory = storage;
+            graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                new TGeneratedWideStream(4096, [&](size_t row) {
+                    if (!row) setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                    return std::vector<NUdf::TUnboxedValue>{NUdf::TUnboxedValuePod(ui32(row / 2)),
+                        spilling && row < 500 ? valid : shortHolder};
+                })));
+            auto stream = graph->GetValue();
+            NUdf::TUnboxedValue output[2];
+            const auto fetch = [&] {
+                while (stream.WideFetch(output, 2) == NUdf::EFetchStatus::Yield) {
+                }
+            };
+            UNIT_ASSERT_EXCEPTION_CONTAINS(fetch(), yexception, "Composite holder has fewer elements than its type");
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+            UNIT_ASSERT_VALUES_EQUAL(!storage->GetCreatedSpillers().empty(), spilling);
+            stream = {};
+            graph.Destroy();
+            UNIT_ASSERT_VALUES_EQUAL(valid.RefCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(shortHolder.RefCount(), 1);
+            valid = {};
+            shortHolder = {};
+            UNIT_ASSERT_VALUES_EQUAL(string.RefCount(), 1);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestFixedSizeBypass, UseLLVM, UseFlow) {
+        for (const bool blocks : {false, true}) {
+            for (const bool optionalKey : {false, true}) {
+                for (const bool optionalState : {false, true}) {
+                    for (const ui32 scenario : {0, 1, 2}) {
+                        TDqSetup<UseLLVM> setup(GetDqNodeFactory());
+                        auto& pb = setup.GetDqProgramBuilder();
+                        auto* number = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+                        auto* keyType = optionalKey ? pb.NewOptionalType(number) : number;
+                        auto* stateType = optionalState ? pb.NewOptionalType(number) : number;
+                        const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+                            pb.NewStreamType(pb.NewMultiType({keyType, stateType}))).Build();
+                        TRuntimeNode input(source, false);
+                        if (blocks) input = pb.WideToBlocks(input);
+                        if (UseFlow) input = pb.ToFlow(input, {});
+                        auto root = pb.DqHashCombine(input, 64_KB,
+                            [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+                            [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[1]}; },
+                            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                                return {pb.AggrAdd(state[0], items[1])};
+                            },
+                            [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys[0], state[0]}; });
+                        if (UseFlow) root = pb.FromFlow(root);
+                        if (blocks) root = pb.WideFromBlocks(root);
+                        auto graph = setup.BuildGraph(root, {source});
+                        TOperatorEndState endState;
+                        SetTestEndStateUpdater(graph, endState);
+                        std::map<ui64, ui64> expected;
+                        const size_t rows = scenario == 2 ? 128 : 32768;
+                        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+                            new TGeneratedWideStream(rows, [&](size_t row) {
+                                const ui64 key = scenario == 1 && row < 8192 ? row / 4 : row;
+                                const bool nullKey = optionalKey && key % 257 == 0;
+                                const bool nullState = optionalState && row % 5 == 0;
+                                expected[nullKey ? Max<ui64>() : key] += !nullState;
+                                return std::vector<NUdf::TUnboxedValue>{
+                                    nullKey ? NUdf::TUnboxedValuePod{} : NUdf::TUnboxedValuePod(key),
+                                    nullState ? NUdf::TUnboxedValuePod{} : NUdf::TUnboxedValuePod(ui64{1})};
+                            })));
+                        auto stream = graph->GetValue();
+                        NUdf::TUnboxedValue output[2];
+                        std::map<ui64, ui64> actual;
+                        for (;;) {
+                            const auto status = stream.WideFetch(output, 2);
+                            if (status == NUdf::EFetchStatus::Finish) break;
+                            UNIT_ASSERT_VALUES_EQUAL(status, NUdf::EFetchStatus::Ok);
+                            UNIT_ASSERT(optionalKey || output[0]);
+                            UNIT_ASSERT(optionalState || output[1]);
+                            if (output[1]) UNIT_ASSERT(output[1].Get<ui64>() > 0);
+                            actual[output[0] ? output[0].Get<ui64>() : Max<ui64>()] += output[1] ? output[1].Get<ui64>() : 0;
+                        }
+                        UNIT_ASSERT(actual == expected);
+                        UNIT_ASSERT_VALUES_EQUAL(endState.WasBypassActive, scenario == 0);
+                    }
+                }
+            }
+        }
+    }
+
 
     Y_UNIT_TEST_QUAD(TestRequiredNativeStateRejectsEmptyValue, UseLLVM, UseFlow) {
         // These exceptions are only thrown in assertions-enabled builds

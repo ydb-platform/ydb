@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
-from configparser import ConfigParser
 from functools import cached_property
 from pathlib import Path
 from tempfile import gettempdir
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Final, NoReturn
 
 from ._xdg import XDGMixin, _xdg_dir
 from .api import PlatformDirsABC
@@ -44,7 +44,7 @@ class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
 
     @property
     def _site_data_dirs(self) -> list[str]:
-        return [self._append_app_name_and_version("/usr/local/share"), self._append_app_name_and_version("/usr/share")]
+        return [self._join_app_name_and_version("/usr/local/share"), self._join_app_name_and_version("/usr/share")]
 
     @property
     def user_config_dir(self) -> str:
@@ -53,7 +53,7 @@ class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
 
     @property
     def _site_config_dirs(self) -> list[str]:
-        return [self._append_app_name_and_version("/etc/xdg")]
+        return [self._join_app_name_and_version("/etc/xdg")]
 
     @property
     def user_cache_dir(self) -> str:
@@ -214,12 +214,12 @@ class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
     @property
     def site_data_path(self) -> Path:
         """Data path shared by users. Only return the first item, even if ``multipath`` is set to ``True``."""
-        return self._first_item_as_path_if_multipath(self.site_data_dir)
+        return self._first_site_dir_as_path(self._site_data_dirs)
 
     @property
     def site_config_path(self) -> Path:
         """Config path shared by users, returns the first item, even if ``multipath`` is set to ``True``."""
-        return self._first_item_as_path_if_multipath(self.site_config_dir)
+        return self._first_site_dir_as_path(self._site_config_dirs)
 
     @property
     def site_cache_path(self) -> Path:
@@ -231,12 +231,12 @@ class _UnixDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
         # dedupe in iter_config_dirs cannot drop it. Skip it here instead.
         if not self._use_site:
             yield self.user_config_dir
-        yield from self._site_config_dirs
+        yield from self._create_as_yielded(self._site_config_dirs)
 
     def _iter_data_dirs(self) -> Iterator[str]:
         if not self._use_site:
             yield self.user_data_dir
-        yield from self._site_data_dirs
+        yield from self._create_as_yielded(self._site_data_dirs)
 
     def _iter_cache_dirs(self) -> Iterator[str]:
         if not self._use_site:
@@ -337,27 +337,44 @@ def _get_user_media_dir(env_var: str, fallback_tilde_path: str) -> str:
     return os.path.expanduser(fallback_tilde_path)  # ruff:ignore[os-path-expanduser]
 
 
+_USER_DIRS_LINE: Final = re.compile(
+    r'[ \t]*(?P<key>\w+)[ \t]*=[ \t]*(?:"(?P<quoted>(?:[^"\\]|\\.)*)"|(?P<bare>[^"\s].*?)[ \t]*$)'
+)
+
+
 def _get_user_dirs_folder(key: str) -> str | None:
     """Return directory from user-dirs.dirs config file.
+
+    ``xdg-user-dirs-update`` writes shell assignments, so match each line like ``xdg-user-dir`` does and keep the last
+    valid assignment to ``key``.
 
     See https://freedesktop.org/wiki/Software/xdg-user-dirs/.
 
     """
     config_home = _xdg_dir("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")  # ruff:ignore[os-path-expanduser]
     user_dirs_config_path = Path(config_home) / "user-dirs.dirs"
-    if user_dirs_config_path.exists():
-        parser = ConfigParser(interpolation=None)
+    if not user_dirs_config_path.exists():
+        return None
+    folder = None
+    with user_dirs_config_path.open() as stream:
+        for line in stream:
+            if (entry := _USER_DIRS_LINE.match(line)) and entry["key"] == key:
+                folder = _resolve_user_dirs_value(entry) or folder
+    return folder
 
-        with user_dirs_config_path.open() as stream:
-            parser.read_string(f"[top]\n{stream.read()}")
 
-        if key not in parser["top"]:
-            return None
-
-        path = parser["top"][key].strip('"')
-        return path.replace("$HOME", os.path.expanduser("~"))  # ruff:ignore[os-path-expanduser]
-
-    return None
+def _resolve_user_dirs_value(entry: re.Match[str]) -> str | None:
+    value = entry["bare"] if entry["quoted"] is None else entry["quoted"]
+    if value == "$HOME" or value.startswith("$HOME/"):
+        prefix, value = os.path.expanduser("~"), value.removeprefix("$HOME")  # ruff:ignore[os-path-expanduser]
+    elif value.startswith("/"):
+        prefix = ""
+    else:
+        return None
+    if entry["quoted"] is not None:
+        # xdg-user-dirs-update backslash-escapes $, `, " and \ inside the quotes.
+        value = re.sub(r"\\(.)", r"\1", value)
+    return prefix + value
 
 
 __all__ = [

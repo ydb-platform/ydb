@@ -15,7 +15,7 @@ TRawTableReaderPtr CreateTablePartitionReader(
 
 IFileReaderPtr CreateFilePartitionReader(
     const IRawClientPtr& rawClient,
-    const IRequestRetryPolicyPtr& retryPolicy,
+    const IClientRetryPolicyPtr& clientRetryPolicy,
     const TString& cookie,
     const TFilePartitionReaderOptions& options);
 

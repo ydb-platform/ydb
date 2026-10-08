@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../line.h"
+#include "compressed_line_storage.h"
 #include "../line_storage.h"
 
 #include <util/datetime/base.h>
@@ -23,7 +24,7 @@ namespace NActors {
     // TValueType, static constexpr TStringBuf Name and a static constexpr array
     // Labels of TLineLabelView (key=value). Snapshot labels identify the instance.
     // All fields share one timestamp and are published as one record.
-    template<class TDescriptor>
+    template<class TDescriptor, class TStoragePolicy = TUncompressedLineStorage>
     struct TGroupLineFrontend {
         using TFields = typename TDescriptor::TFields;
         static constexpr size_t FieldCount = std::tuple_size_v<TFields>;
@@ -141,9 +142,18 @@ namespace NActors {
 
         struct TConfig {};
 
+        template<size_t I>
+        static auto DecodeField(ui64 value) noexcept {
+            if constexpr (TStoragePolicy::Enabled) {
+                return TStoragePolicy::template Decode<I, typename TField<I>::TValueType>(value);
+            } else {
+                return NInMemoryMetricsPrivate::DecodeLineValue<typename TField<I>::TValueType>(value);
+            }
+        }
+
         template<size_t... I>
         static TValueType DecodeValue(const std::array<ui64, FieldCount>& values, std::index_sequence<I...>) noexcept {
-            return TValueType{Value<TField<I>>(NInMemoryMetricsPrivate::DecodeLineValue<typename TField<I>::TValueType>(values[I]))...};
+            return TValueType{Value<TField<I>>(DecodeField<I>(values[I]))...};
         }
 
         static void ReadRange(const TLineSnapshot& snapshot,
@@ -158,6 +168,12 @@ namespace NActors {
 
         template<class TCallback>
         static void ForEachStoredRecord(const TLineSnapshot& snapshot, TCallback&& cb) {
+            if constexpr (TStoragePolicy::Enabled) {
+                TStoragePolicy::template ForEachRecord<FieldCount>(snapshot, [&](TInstant timestamp, const auto& values) {
+                    cb(timestamp, DecodeValue(values, Indices));
+                });
+                return;
+            }
             NInMemoryMetricsPrivate::TLineSnapshotAccess::ForEachChunk(snapshot, [&](const NInMemoryMetricsPrivate::TChunkSnapshotView& chunk) {
                 if (chunk.Payload.size() < sizeof(TChunkHeader)) {
                     return;
@@ -190,7 +206,7 @@ namespace NActors {
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "group",
-                .ReadRange = &TGroupLineFrontend<TDescriptor>::ReadRange,
+                .ReadRange = &TGroupLineFrontend<TDescriptor, TStoragePolicy>::ReadRange,
                 .Fields = Fields,
                 .ReadNumericRange = &ReadNumericRange,
             };
@@ -215,31 +231,47 @@ namespace NActors {
             });
         }
 
-        friend class TLine<TGroupLineFrontend<TDescriptor>>;
+        friend class TLine<TGroupLineFrontend<TDescriptor, TStoragePolicy>>;
 
         template<size_t... I>
         static auto EncodeValue(const TValueType& value, std::index_sequence<I...>) noexcept {
             return std::array<ui64, FieldCount>{NInMemoryMetricsPrivate::EncodeLineValue(value.template Get<TField<I>>())...};
         }
 
+        template<size_t... I>
+        static bool EncodeCompressed(const TValueType& value, std::array<ui64, FieldCount>* values,
+                                     std::index_sequence<I...>) noexcept {
+            return (TStoragePolicy::template Encode<I>(value.template Get<TField<I>>(), &(*values)[I]) && ...);
+        }
+
         static bool Append(IMetricLine& line, const TValueType& value) noexcept;
         static bool WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept;
     };
 
-    template<class TDescriptor>
-    bool TGroupLineFrontend<TDescriptor>::Append(IMetricLine& line, const typename TGroupLineFrontend<TDescriptor>::TValueType& value) noexcept {
+    template<class TDescriptor, class TStoragePolicy>
+    bool TGroupLineFrontend<TDescriptor, TStoragePolicy>::Append(IMetricLine& line, const typename TGroupLineFrontend<TDescriptor, TStoragePolicy>::TValueType& value) noexcept {
         const NHPTimer::STime nowTs = line.CurrentTimestampTs();
 
         TStorageRecord record{
             .TimestampTs = nowTs,
-            .Values = EncodeValue(value, Indices),
         };
-        return line.AccessChunkMemory(&record, &TGroupLineFrontend<TDescriptor>::WriteRecordToChunkMemory);
+        if constexpr (TStoragePolicy::Enabled) {
+            if (!EncodeCompressed(value, &record.Values, Indices)) {
+                return false;
+            }
+        } else {
+            record.Values = EncodeValue(value, Indices);
+        }
+        return line.AccessChunkMemory(&record, &TGroupLineFrontend<TDescriptor, TStoragePolicy>::WriteRecordToChunkMemory);
     }
 
-    template<class TDescriptor>
-    bool TGroupLineFrontend<TDescriptor>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
+    template<class TDescriptor, class TStoragePolicy>
+    bool TGroupLineFrontend<TDescriptor, TStoragePolicy>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
         const auto& record = *static_cast<const TStorageRecord*>(opaque);
+        if constexpr (TStoragePolicy::Enabled) {
+            typename TStoragePolicy::template TRecord<FieldCount> packed{record.TimestampTs, record.Values};
+            return TStoragePolicy::template WriteRecord<FieldCount>(&packed, chunkMemory);
+        }
         const ui32 oldCommittedBytes = chunkMemory.UsedPayloadBytes;
         const size_t requiredBytes = oldCommittedBytes == 0
             ? sizeof(TChunkHeader) + sizeof(TStorageRecord)

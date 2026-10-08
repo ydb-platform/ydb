@@ -115,9 +115,6 @@ struct TPhysicalOpProps {
     }
 
     std::optional<int> StageId;
-    // Dense physical output index of a Replicate port; independent of its stable
-    // logical ordinal, since pruning may remove arbitrary ports.
-    std::optional<ui32> StageOutputIndex;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -144,7 +141,6 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
-        StageOutputIndex = other.StageOutputIndex;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -206,6 +202,7 @@ private:
  */
 
 class TOpRoot;
+class TLogicalCopyContext;
 
 
 class IOperator: public TSimpleRefCount<IOperator> {
@@ -295,6 +292,21 @@ public:
 
     virtual void ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TIntrusivePtr<IOperator> newChild);
 
+    // Copy a logical child graph, preserving sharing inside the copy (including
+    // Replicate hubs), with fresh definitions unless supplied in `renames`.
+    // External references follow `renames`; this overload does not copy subplans.
+    // Physical operators and query roots are outside this API. Returns nullptr
+    // if any operator is unsupported; allocated registry IDs are not rolled back.
+    TIntrusivePtr<IOperator> Copy(TInfoUnitRegistry& registry, TSubstitutions& renames) const;
+
+    // Also copy referenced subplans into the same plan under fresh call IDs.
+    TIntrusivePtr<IOperator> Copy(TPlanProps& props, TSubstitutions& renames) const;
+
+    // Rebuild only this operator, using the supplied children and their already
+    // recorded substitutions. Replicate ports require graph-level handling.
+    TIntrusivePtr<IOperator> CopyWithInputs(TVector<TIntrusivePtr<IOperator>> inputs,
+        TInfoUnitRegistry& registry, TSubstitutions& renames) const;
+
     /**
      * Simultaneously substitute input IDs without changing owned definitions.
      * Forwarded keys change too; external labels and positional contracts do not.
@@ -329,6 +341,11 @@ public:
     TVector<std::pair<IOperator*, ui32>> Parents;
 
 protected:
+    // Reconstruct logical state and owned definitions over the original inputs.
+    // The caller rebinds uses and attaches replacement inputs afterward, once
+    // all definitions are known. Base: not copyable.
+    virtual TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const;
+
     TVector<TIntrusivePtr<IOperator>> Children_;
 
     // Operators exposing owned/forwarded ID sets need no cached output copy.
@@ -336,6 +353,7 @@ protected:
     virtual void ComputeOutputIUsSubtree();
 
     friend class TOpCBOTree;
+    friend class TLogicalCopyContext;
     friend class TOpRoot;
 };
 
@@ -476,6 +494,7 @@ public:
 private:
     friend class TOpReplicate;
     friend class TOpRoot;
+    friend class TLogicalCopyContext;
 
     TReplicate(TIntrusivePtr<IOperator> input, TPositionHandle pos, TInfoUnitRegistry& registry);
     TIntrusivePtr<IOperator> Input_;
@@ -531,6 +550,7 @@ public:
 
 private:
     friend class TReplicate;
+    friend class TLogicalCopyContext;
 
     TOpReplicate(TIntrusivePtr<TReplicate> input, ui32 index);
     void RefreshBindings();
@@ -540,6 +560,10 @@ private:
     TMappedIUs<TInfoUnitId> Rebindings_;
     TUnorderedIUs InputIUs_;
 };
+
+// Follow same-stage unary inputs to a Replicate port, or return nullopt.
+// Its physical index is its rank among the hub's reachable logical port ordinals.
+std::optional<ui32> GetReplicateOutputIndex(const IOperator& op);
 
 class TOpEmptySource: public IOperator {
 public:
@@ -559,6 +583,10 @@ public:
 
     // Represents a custom input, basically it is an external param.
     TExprNode::TPtr Input;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
+
 private:
     TUnorderedIUs Columns;
 };
@@ -579,6 +607,10 @@ public:
         const TStructExprType* PointsItemType = nullptr;
         TVector<TString> PointColumns;
         TMaybe<size_t> ExpectedMaxPoints;
+        // The ranges as a single KqlKeyRange with literal or parameter bounds, when they are known at compile
+        // time. A row storage read passes it to the source as is, so the ranges are not computed in a separate
+        // transaction. ComputeNode describes the same ranges.
+        TExprNode::TPtr LiteralRange;
     };
 
     // Fresh definitions, allocated together in source-schema order. Conversion
@@ -611,6 +643,7 @@ public:
     NYql::EStorageType GetTableStorageType() const;
 
     TExprNode::TPtr GetRanges() const { return RangeInfo ? RangeInfo->ComputeNode : nullptr; }
+    TExprNode::TPtr GetLiteralRange() const { return RangeInfo ? RangeInfo->LiteralRange : nullptr; }
     TExprNode::TPtr GetTable() const { return TableCallable; }
 
     // TODO: make it private members, we should not access it directly
@@ -627,6 +660,9 @@ public:
     std::optional<TExpression> OriginalPredicate;
     ESortDir SortDir{ESortDir::None};
     std::optional<TRangeInfo> RangeInfo;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     // Each ID's registry ColumnName is the physical column to fetch. Multiple
@@ -696,6 +732,7 @@ public:
     bool NeedToPush = false;
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -736,6 +773,7 @@ public:
     TString GetExplainName() const override { return "AddDependencies"; }
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -791,6 +829,7 @@ public:
     bool IsDeduplication() const { return IsDistinctAll() || Aggregations.Keys().Empty(); }
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -819,6 +858,9 @@ public:
     virtual TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     // This op is not present is explain, but we have to define a function, because it's a pure virtual.
     virtual TString GetExplainName() const override { return "GroupingSets"; }
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     TVector<TUnorderedIUs> GroupingSets;
@@ -881,7 +923,30 @@ struct TOpWindowFrame {
                (EndKind == EWindowFrameBound::Preceding) ||
                (EndKind == EWindowFrameBound::Following && EndValue == 0);
     }
+
+    bool IsWholePartition() const {
+        return (Type == EWindowFrameType::Rows || Type == EWindowFrameType::Range) &&
+               BeginKind == EWindowFrameBound::UnboundedPreceding && EndKind == EWindowFrameBound::UnboundedFollowing;
+    }
+
+    // The frame always holds the current row, so an aggregate over it is NULL only for a NULL input.
+    bool IsNeverEmpty() const {
+        const bool beginsAfter = BeginKind == EWindowFrameBound::UnboundedFollowing || (BeginKind == EWindowFrameBound::Following && BeginValue > 0);
+        const bool endsBefore = EndKind == EWindowFrameBound::UnboundedPreceding || (EndKind == EWindowFrameBound::Preceding && EndValue > 0);
+        return !beginsAfter && !endsBefore;
+    }
 };
+
+template <typename TFrameNode>
+TOpWindowFrame WindowFrameFromNode(const TFrameNode& node) {
+    TOpWindowFrame frame;
+    frame.Type = WindowFrameTypeFromString(TString(node.FrameType()));
+    frame.BeginKind = WindowFrameBoundFromString(TString(node.BeginKind()));
+    frame.BeginValue = FromString<ui64>(TString(node.BeginValue()));
+    frame.EndKind = WindowFrameBoundFromString(TString(node.EndKind()));
+    frame.EndValue = FromString<ui64>(TString(node.EndValue()));
+    return frame;
+}
 
 // Represents a window function.
 class TOpWindow: public IUnaryOperator {
@@ -908,6 +973,7 @@ public:
     void SetSortElements(TSortIUs keys) { SortElements = std::move(keys); }
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 
 private:
@@ -943,6 +1009,9 @@ public:
     void SetFilterExpression(TExpression filterExpr);
 
     bool PartiallyPushedDown = false;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     TExpression FilterExpr;
@@ -998,6 +1067,7 @@ public:
     TVector<TExpression> JoinFilters;
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 private:
     mutable TUnorderedIUs RawInputIUs;
@@ -1040,6 +1110,7 @@ public:
     TSubstitutions DomainColumns;
 
 protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
     void ComputeOutputIUs() override;
 };
 
@@ -1065,6 +1136,9 @@ public:
     void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     bool Ordered;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     TUnionAllIUs Columns;
@@ -1100,6 +1174,9 @@ public:
     // Make private.
     TExpression LimitCond;
 
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
+
 private:
     std::optional<TExpression> OffsetCond;
     EOpPhase LimitPhase{EOpPhase::Undefined};
@@ -1131,6 +1208,9 @@ public:
     TString GetExplainName() const override { return IsTopSort() ? "TopSort" : "Sort"; }
 
     std::optional<TExpression> LimitCond;
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     TSortIUs SortElements;
@@ -1297,6 +1377,9 @@ public:
     TExprNode::TPtr Table;
     EEffectType EffectType;
     const TEffectOptions Options; // Storage settings; these names are not IU identity.
+
+protected:
+    TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
     // Target names and positions are fixed; only the input bindings can change.

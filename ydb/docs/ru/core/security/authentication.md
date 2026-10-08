@@ -357,7 +357,7 @@ C=RU,ST=MSK,O=MyOrg,CN=account1.apps.example.net@cert
 
 {% note info %}
 
-В режиме **Service Account Key** приложение формирует JWT по системным часам хоста. Если часы спешат или отстают, сервис IAM может отклонить запрос на выдачу токена. Диагностика и рекомендации — в статье [{#T}](../troubleshooting/client-clock-skew.md).
+При аутентификации по ключу сервисного аккаунта **Service Account Key** клиент (SDK или CLI) формирует [JWT](https://www.rfc-editor.org/rfc/rfc7519) по системным часам хоста. Если часы спешат или отстают, сервис IAM может отклонить запрос на выдачу токена. Диагностика и рекомендации — в статье [{#T}](../troubleshooting/client-clock-skew.md).
 
 {% endnote %}
 

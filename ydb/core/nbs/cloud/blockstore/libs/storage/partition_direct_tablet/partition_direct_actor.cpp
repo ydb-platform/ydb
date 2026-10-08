@@ -454,7 +454,10 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()));
+    SendToBsc(
+        ctx,
+        EBscRequest::InitialAllocation,
+        THolder<IEventBase>(request.release()));
 }
 
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
@@ -713,14 +716,31 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.DebugString().data());
 
-    // The first allocation response sets up the group; any later one is the
-    // result of the single in-flight membership op (add xor remove).
-    if (RemoveHostInFlight.has_value()) {
-        HandleRemoveHostAllocationResult(ev, ctx);
-    } else if (DDiskBlockGroupAllocated) {
-        HandleAddHostAllocationResult(ev, ctx);
-    } else {
-        HandleInitialAllocationResult(ev, ctx);
+    // The cookie identifies the operation that sent this request.
+    const auto request = BscRequestsInFlight.find(ev->Cookie);
+    if (request == BscRequestsInFlight.end()) {
+        LOG_WARN(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s BSC reply for unknown cookie %lu, dropped",
+            LogTitle.GetWithTime().c_str(),
+            ev->Cookie);
+        return;
+    }
+
+    const EBscRequest kind = request->second;
+    BscRequestsInFlight.erase(request);
+
+    switch (kind) {
+        case EBscRequest::InitialAllocation:
+            HandleInitialAllocationResult(ev, ctx);
+            break;
+        case EBscRequest::AddHost:
+            HandleAddHostAllocationResult(ev, ctx);
+            break;
+        case EBscRequest::RemoveHost:
+            HandleRemoveHostAllocationResult(ev, ctx);
+            break;
     }
 }
 
@@ -728,6 +748,16 @@ void TPartitionActor::HandleInitialAllocationResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    if (DDiskBlockGroupAllocated) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Ignore initial allocation result, the group is already "
+            "allocated",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
@@ -992,8 +1022,8 @@ void TPartitionActor::HandleSetVChunkTouched(
 
 void TPartitionActor::SendToBsc(
     const TActorContext& ctx,
-    THolder<IEventBase> request,
-    ui64 cookie)
+    EBscRequest kind,
+    THolder<IEventBase> request)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
         LOG_INFO(
@@ -1004,6 +1034,9 @@ void TPartitionActor::SendToBsc(
         return;
     }
 
+    const ui64 cookie = NextBscCookie++;
+    BscRequestsInFlight[cookie] = kind;
+
     if (!BscProxy) {
         BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
     }
@@ -1012,6 +1045,7 @@ void TPartitionActor::SendToBsc(
 
 void TPartitionActor::StopBscProxy(const TActorContext& ctx)
 {
+    BscRequestsInFlight.clear();
     if (!BscProxy) {
         return;
     }

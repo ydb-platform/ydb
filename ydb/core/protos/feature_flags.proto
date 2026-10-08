@@ -325,8 +325,7 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = true];
-    reserved 283; // EnableAccessServiceV2Interface
-    reserved "EnableAccessServiceV2Interface";
+    reserved 283; reserved "EnableAccessServiceV2Interface";
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableTopicDeferredPublish = 286 [default = false];

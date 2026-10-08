@@ -458,6 +458,13 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         CheckDifferentCasesInDiffSpliting(TErasureType::EErasureSpecies::ErasureMirror3of4);
     }
 
+    Y_UNIT_TEST(TestDifferentCasesInDiffSplitingBlock8Plus2) {
+        CheckDifferentCasesInDiffSpliting(TErasureType::Erasure8Plus2Block);
+        for (ui32 size : {79, 80, 81, 639, 640, 641, 1281}) {
+            BaseCheckDiffSpliting(TErasureType::Erasure8Plus2Block, size, 1, size, 0);
+        }
+    }
+
     Y_UNIT_TEST(TestDifferentCasesInDiffSplitingBlock4Plus2) {
         CheckDifferentCasesInDiffSpliting(TErasureType::EErasureSpecies::Erasure4Plus2Block);
     }
@@ -605,6 +612,10 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     void TestErasure(TErasureType::ECrcMode crcMode, ui32 species) {
+        // Block-8-2 loss patterns and restore modes are covered in erasure_block82_ut.cpp.
+        if (species == TErasureType::Erasure8Plus2Block) {
+            return;
+        }
         TErasureType groupType((TErasureType::EErasureSpecies)species);
         TString erasureName = TErasureType::ErasureName[species];
 

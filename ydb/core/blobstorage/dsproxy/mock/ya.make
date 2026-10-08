@@ -2,7 +2,8 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/base
-    ydb/core/blobstorage/vdisk/common
+    ydb/core/blobstorage/base
+    ydb/core/blobstorage/contracts
 )
 
 SRCS(

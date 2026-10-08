@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 
@@ -24,6 +25,7 @@
 #include <cstring>
 #include <numeric>
 #include <random>
+#include <set>
 
 namespace NKikimr {
 namespace {
@@ -73,14 +75,115 @@ struct TEvReservationsSettled : TEventLocal<TEvReservationsSettled, EventSpaceBe
     explicit TEvReservationsSettled(bool settled) : Settled(settled) {}
 };
 
+struct TEvControlGate : TEventLocal<TEvControlGate, EventSpaceBegin(TEvents::ES_PRIVATE) + 102> {
+    ui32 Type = 0;
+    bool Release = false;
+    bool Broken = false;
+    TEvControlGate(ui32 type = 0, bool release = false, bool broken = false)
+        : Type(type), Release(release), Broken(broken) {
+        }
+};
+struct TEvGateState : TEventLocal<TEvGateState, EventSpaceBegin(TEvents::ES_PRIVATE) + 103> {
+    size_t Held;
+    ui64 IoCompletions;
+    bool Router;
+    size_t Reserved;
+    TEvGateState(size_t held, ui64 io, bool router, size_t reserved)
+        : Held(held), IoCompletions(io), Router(router), Reserved(reserved) {
+        }
+};
+
+// System resumes bypass a decorator's state function. This ordinary envelope lets
+// the real-thread fixture inspect them before forwarding the untouched system event.
+struct TEvProbeBatchResume : TEventLocal<TEvProbeBatchResume, EventSpaceBegin(TEvents::ES_PRIVATE) + 104> {
+    TAutoPtr<IEventHandle> Original;
+
+    explicit TEvProbeBatchResume(IEventHandle* original)
+        : Original(original) {
+    }
+};
+
+class TProbeBatchResumeExecutorPool : public TBasicExecutorPool {
+    static void WrapBatchResume(std::unique_ptr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvents::TEvResumeRunnable::EventType) {
+            const TActorId recipient = event->GetRecipientRewrite();
+            const TActorId sender = event->Sender;
+            const ui64 cookie = event->Cookie;
+            auto envelope = std::make_unique<TEvProbeBatchResume>(event.release());
+            event = std::make_unique<IEventHandle>(recipient, sender, envelope.release(), 0, cookie);
+        }
+    }
+
+public:
+    TProbeBatchResumeExecutorPool()
+        : TBasicExecutorPool(0, 2, 20, "System") {
+    }
+
+    bool Send(std::unique_ptr<IEventHandle>& event) override {
+        WrapBatchResume(event);
+        return TBasicExecutorPool::Send(event);
+    }
+
+    bool SpecificSend(std::unique_ptr<IEventHandle>& event) override {
+        WrapBatchResume(event);
+        return TBasicExecutorPool::SpecificSend(event);
+    }
+};
+
 // A mailbox probe avoids racing test-thread reads of the actor's reservation state.
 class TReservationProbeDecorator : public TDecorator {
+    ui32 GateType = 0;
+    ui64 IoCompletions = 0;
+    std::vector<TAutoPtr<IEventHandle>> Held;
+    std::set<IEventHandle*> Released;
 public:
     explicit TReservationProbeDecorator(IActor* actor)
         : TDecorator(THolder<IActor>(actor))
     {}
 
     bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
+        if (ev->GetTypeRewrite() == TEvProbeBatchResume::EventType) {
+            IEventHandle* original = ev->Get<TEvProbeBatchResume>()->Original.Release();
+            ev.Reset(original);
+        }
+        const auto type = ev->GetTypeRewrite();
+        if (type == TEvControlGate::EventType) {
+            const auto& command = *ev->Get<TEvControlGate>();
+            if (command.Type) {
+                GateType = command.Type;
+            }
+            if (command.Broken) {
+                NDDisk::TDDiskActorTestPeer::EnterBroken(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()),
+                    "native gated interruption");
+            }
+            if (command.Release) {
+                GateType = command.Type;
+                for (auto& event : Held) {
+                    Released.insert(event.Get()); ctx.Send(event.Release());
+                }
+                Held.clear();
+            }
+            bool router = false;
+#if defined(__linux__)
+            router = NDDisk::TDDiskActorTestPeer::UsesRouter(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()));
+#endif
+            ctx.Send(ev->Sender, new TEvGateState(Held.size(), IoCompletions, router,
+                NDDisk::TDDiskActorTestPeer::ReservedChunks(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()))));
+            return false;
+        }
+        if (Released.erase(ev.Get())) {
+            return true;
+        }
+        const bool batchResume = type == TEvents::TEvResumeRunnable::EventType;
+        if (batchResume) {
+            ++IoCompletions;
+        }
+        if (type == GateType && (type != TEvents::TEvResumeRunnable::EventType || batchResume)
+                && (type != NPDisk::TEvLogResult::EventType
+                || ev->Get<NPDisk::TEvLogResult>()->Status == NKikimrProto::OK)) {
+            Held.emplace_back(ev.Release());
+            return false;
+        }
         if (ev->GetTypeRewrite() != TEvProbeReservations::EventType) {
             return true;
         }
@@ -137,6 +240,11 @@ public:
         NActors::TTestActorRuntime::ResetFirstNodeId();
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Runtime.Reset(new NActors::TTestActorRuntime(1, 1, true));
+        if (probeReservations) {
+            Runtime->SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+                setup->Executors[0].Reset(new TProbeBatchResumeExecutorPool);
+            };
+        }
 
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
@@ -195,8 +303,7 @@ public:
         pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
-        if (ProbeReservations) {
-            UNIT_ASSERT_VALUES_EQUAL(p, 0);
+        if (ProbeReservations && p == 0) {
             UncommittedChunkCount = GetServiceCounters(Counters, "pdisks")
                 ->GetSubgroup("pdisk", Sprintf("%09u", pdiskId))
                 ->GetSubgroup("media", to_lower(pdiskConfig->PDiskCategory.TypeStrShort()))
@@ -500,12 +607,16 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
     const TString payload = MakeData('Q', 2 * blockSize);
-    auto write = std::make_unique<NDDisk::TEvWrite>(creds,
-        NDDisk::TBlockSelector(7, blockSize, static_cast<ui32>(payload.size())), NDDisk::TWriteInstruction(0));
-    write->AddPayloadThenChecksum(MakeAlignedRope(payload));
-
-    auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
-    AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
+    auto writeRange = [&](ui32 offset, const TString& data) {
+        for (ui32 pos = 0; pos < data.size(); pos += 1u << 20) {
+            const ui32 size = Min<ui32>(1u << 20, data.size() - pos);
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+                NDDisk::TBlockSelector(7, offset + pos, size), NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(MakeAlignedRope(data.substr(pos, size)));
+            AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        }
+    };
+    writeRange(blockSize, payload);
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {7, blockSize, static_cast<ui32>(payload.size())}, {true}));
@@ -513,12 +624,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     const TString payload2 = MakeData('R', 2 * blockSize);
     const ui32 secondOffset = blockSize + static_cast<ui32>(payload.size());
-    auto write2 = std::make_unique<NDDisk::TEvWrite>(creds,
-        NDDisk::TBlockSelector(7, secondOffset, static_cast<ui32>(payload2.size())), NDDisk::TWriteInstruction(0));
-    write2->AddPayloadThenChecksum(MakeAlignedRope(payload2));
-
-    auto writeResult2 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write2.release());
-    AssertStatus<NDDisk::TEvWriteResult>(writeResult2, TReplyStatus::OK);
+    writeRange(secondOffset, payload2);
 
     auto readResult2 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {7, secondOffset, static_cast<ui32>(payload2.size())}, {true}));
@@ -1231,7 +1337,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     }
 
     // Phase 2: sync DDisk0 -> DDisk1
-    ui32 totalSyncs = 0;
     const auto srcDDiskId = std::make_tuple(ctx.NodeId, ctx.Disks[0].PDiskId, ctx.Disks[0].SlotId);
     for (ui32 t = 0; t < numTablets; ++t) {
         const ui64 srcGuid = *tablets[t].Src.DDiskInstanceGuid;
@@ -1250,13 +1355,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 syncEv->AddSegmentFromDDisk(srcDDiskId, srcGuid, NDDisk::TBlockSelector(v,
                     startBlock * MinBlockSize, (endBlock - startBlock) * MinBlockSize));
             }
-            ctx.SendTo(1, syncEv.release());
-            totalSyncs++;
+            auto syncResult = ctx.SendToAndGrab<NDDisk::TEvSyncResult>(1, syncEv.release());
+            AssertStatus<NDDisk::TEvSyncResult>(syncResult, TReplyStatus::OK);
         }
-    }
-    for (ui32 i = 0; i < totalSyncs; ++i) {
-        auto syncResult = ctx.Grab<NDDisk::TEvSyncResult>();
-        AssertStatus<NDDisk::TEvSyncResult>(syncResult, TReplyStatus::OK);
     }
 
     // Phase 3: read from DDisk1 and verify

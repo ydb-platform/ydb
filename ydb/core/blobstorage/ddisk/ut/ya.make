@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    chunk_manager_ut.cpp
     ddisk_actor_ut.cpp
     metric_rates_ut.cpp
     ddisk_actor_batch_write_ut.cpp
@@ -22,7 +23,6 @@ SRCS(
     integrity_manager_ut.cpp
     persistent_buffer_barriers_manager_ut.cpp
     persistent_buffer_space_allocator_ut.cpp
-    segment_manager_ut.cpp
     tablet_stats_ut.cpp
 )
 

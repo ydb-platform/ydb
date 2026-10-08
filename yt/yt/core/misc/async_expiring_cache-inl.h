@@ -451,8 +451,12 @@ void TAsyncExpiringCache<TKey, TValue>::Set(const TKey& key, TErrorOr<TValue> va
         entry->Future = entry->Promise.ToFuture();
         Add(map, key, entry);
 
-        if ((isValueOK || canRefreshError) && !config->BatchUpdate) {
-            ScheduleEntryUpdate(entry, key, config);
+        if (!config->BatchUpdate) {
+            if (isValueOK || canRefreshError) {
+                ScheduleEntryUpdate(entry, key, config);
+            } else {
+                ScheduleEntryExpiration(entry, key, config);
+            }
         }
     }
 
@@ -618,8 +622,12 @@ void TAsyncExpiringCache<TKey, TValue>::SetResult(
         return;
     }
 
-    if ((valueOrError.IsOK() || canRefreshError) && !config->BatchUpdate) {
-        ScheduleEntryUpdate(entry, key, config);
+    if (!config->BatchUpdate) {
+        if (valueOrError.IsOK() || canRefreshError) {
+            ScheduleEntryUpdate(entry, key, config);
+        } else {
+            ScheduleEntryExpiration(entry, key, config);
+        }
     }
 }
 

@@ -604,11 +604,12 @@ TColumnConverter ArrowDecimalAsYqlDecimal(const std::string& columnName, i32 src
     const TString context = TStringBuilder() << "Cannot convert Decimal(" << srcPrecision << ", " << srcScale
         << ") to Decimal(" << static_cast<ui32>(dstPrecision) << ", " << static_cast<ui32>(dstScale)
         << ") for field: " << columnName << ": ";
-    return [context, srcScale, dstPrecision, dstScale](const std::shared_ptr<arrow::Array>& value) {
+    const i64 scaleIncrease = static_cast<i64>(dstScale) - srcScale;
+    const i64 unscaledPrecision = dstPrecision - scaleIncrease;
+    return [context, srcScale, dstPrecision, dstScale, scaleIncrease, unscaledPrecision](const std::shared_ptr<arrow::Array>& value) {
         const auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
         arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16), arrow::system_memory_pool());
         THROW_ARROW_NOT_OK(builder.Reserve(decimals->length()));
-        const i64 scaleIncrease = static_cast<i64>(dstScale) - srcScale;
         for (i64 i = 0; i < decimals->length(); ++i) {
             if (decimals->IsNull(i)) {
                 THROW_ARROW_NOT_OK(builder.AppendNull());
@@ -616,15 +617,16 @@ TColumnConverter ArrowDecimalAsYqlDecimal(const std::string& columnName, i32 src
             }
             const arrow::Decimal128 original(decimals->GetValue(i));
             arrow::Decimal128 converted;
+            // Zero is exact at any scale; skip Rescale and its multiplier table.
             if (original != 0) {
                 // Check before multiplying: Arrow's 128-bit Rescale overflow check can
                 // miss wraparound. Any accepted product fits the target precision.
-                const i64 unscaledPrecision = dstPrecision - scaleIncrease;
                 if (scaleIncrease > 0 && (unscaledPrecision <= 0 || !original.FitsInPrecision(unscaledPrecision))) {
                     throw parquet::ParquetException(context + "value exceeds target precision");
                 }
-                // Decimal128 has at most 38 digits; a larger reduction loses every
-                // nonzero value. Avoid indexing Arrow's scale multiplier table beyond it.
+                // Parquet scales are in [0, 38], but other Arrow producers can exceed
+                // that range. A larger reduction loses every nonzero Decimal128 value
+                // and would index Arrow's scale multiplier table out of bounds.
                 if (scaleIncrease < -38) {
                     throw parquet::ParquetException(context + "rescaling would lose data");
                 }

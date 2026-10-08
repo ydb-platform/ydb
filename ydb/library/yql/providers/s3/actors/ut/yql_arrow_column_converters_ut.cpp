@@ -267,8 +267,32 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         const auto input = MakeDecimalArray(38, 0, {"0", std::nullopt});
         UNIT_ASSERT_VALUES_EQUAL(GetDecimalValues(f.ConvertDecimal(input, 35, 35), 35, 35),
             (std::vector<TString>{"0", "NULL"}));
-        AssertDecimalConversionError([&] { f.ConvertDecimal(MakeDecimalArray(38, 0, {"1"}), 35, 35); },
-            "Decimal(38, 0)", "Decimal(35, 35)", "precision");
+        for (const auto& value : {"1", "-1"}) {
+            AssertDecimalConversionError([&] { f.ConvertDecimal(MakeDecimalArray(38, 0, {value}), 35, 35); },
+                "Decimal(38, 0)", "Decimal(35, 35)", "precision");
+        }
+    }
+
+    Y_UNIT_TEST(DecimalScaleDeltaBeyondMultiplierTable) {
+        TTestFixture f;
+        // Arrow permits scales outside Parquet's [0, 38] range. Neither direction
+        // may index Rescale's multiplier table beyond 38, even for zero.
+        for (const auto scale : {39, -39}) {
+            const auto zeros = MakeDecimalArray(38, scale, {"1", "0", std::nullopt})->Slice(1);
+            UNIT_ASSERT_VALUES_EQUAL(GetDecimalValues(f.ConvertDecimal(zeros, 35, 0), 35, 0),
+                (std::vector<TString>{"0", "NULL"}));
+            for (const auto& input : {MakeDecimalArray(38, scale, {std::nullopt}), MakeDecimalArray(38, scale, {})}) {
+                const auto output = f.ConvertDecimal(input, 35, 0);
+                UNIT_ASSERT(output->ValidateFull().ok());
+                UNIT_ASSERT_VALUES_EQUAL(output->length(), input->length());
+                UNIT_ASSERT_VALUES_EQUAL(output->null_count(), input->null_count());
+            }
+            const TString source = TStringBuilder() << "Decimal(38, " << scale << ")";
+            for (const auto& value : {"1", "-1"}) {
+                AssertDecimalConversionError([&] { f.ConvertDecimal(MakeDecimalArray(38, scale, {value}), 35, 0); },
+                    source, "Decimal(35, 0)", scale > 0 ? "lose data" : "precision");
+            }
+        }
     }
 
     Y_UNIT_TEST(DecimalMaximumPrecisionBoundary) {

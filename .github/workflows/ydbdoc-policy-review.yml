@@ -1,0 +1,54 @@
+# Deployed in ydb/.github/workflows; enable only after image, schema and stable tag are ready.
+name: YDB documentation policy review
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, closed, converted_to_draft]
+permissions:
+  contents: read
+  checks: write
+jobs:
+  gate:
+    if: >-
+      vars.YDBDOC_REVIEW_ENABLED == 'true' &&
+      (github.event.action != 'labeled' ||
+      github.event.label.name == 'doc_review' || github.event.label.name == 'ok-to-test')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      admitted: ${{ steps.gate.outputs.admitted }}
+      stop: ${{ steps.gate.outputs.stop }}
+    steps:
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@doc-review-stable
+        id: gate
+        with:
+          mode: gate
+          admission-token: ${{ secrets.YDB_GH_TOKEN }}
+          budget-rub: ${{ vars.YDBDOC_REVIEW_MAX_RUN_COST_RUB }}
+          rules-sha: ${{ vars.YDBDOC_REVIEW_RULES_SHA }}
+          publish-token: ${{ secrets.YDB_GH_TOKEN }}
+          ydb-endpoint: ${{ vars.YDB_ENDPOINT }}
+          ydb-database: ${{ vars.YDB_DATABASE }}
+          ydb-token: ${{ secrets.YDB_TOKEN }}
+          ydb-sa-key: ${{ secrets.YDB_SA_KEY }}
+  review:
+    needs: gate
+    if: needs.gate.outputs.admitted == 'true' || needs.gate.outputs.stop == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    concurrency:
+      group: doc-policy-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@doc-review-stable
+        with:
+          mode: run
+          admission-token: ${{ secrets.YDB_GH_TOKEN }}
+          budget-rub: ${{ vars.YDBDOC_REVIEW_MAX_RUN_COST_RUB }}
+          rules-sha: ${{ vars.YDBDOC_REVIEW_RULES_SHA }}
+          publish-token: ${{ secrets.YDB_GH_TOKEN }}
+          ydb-endpoint: ${{ vars.YDB_ENDPOINT }}
+          ydb-database: ${{ vars.YDB_DATABASE }}
+          ydb-token: ${{ secrets.YDB_TOKEN }}
+          ydb-sa-key: ${{ secrets.YDB_SA_KEY }}
+          api-key: ${{ secrets.YANDEX_API_KEY }}
+          folder-id: ${{ vars.YANDEX_FOLDER_ID }}

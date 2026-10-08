@@ -282,7 +282,8 @@ protected:
     // returns owner cookie for this supportive partition
     TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, const ui32 partitionId = 0);
     void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0,
-                                  ui64 seqNo = 0, const TString& data = "123test123", ui64 cookie = 123, bool waitResponse = true);
+                                  ui64 seqNo = 0, const TString& data = "123test123", ui64 cookie = 123, bool waitResponse = true,
+                                  ui32 kafkaBatchSize = 0);
     void ProposeKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
     void WaitTransactionCompleted(ui64 txId, ui64 planStep);
     void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0},

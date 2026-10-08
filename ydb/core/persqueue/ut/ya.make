@@ -39,6 +39,7 @@ SRCS(
     pqtablet_mock.cpp
     internals_ut.cpp
     inflight_limiter_ut.cpp
+    kafka_batch.cpp
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp

@@ -597,7 +597,8 @@ TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProdu
 }
 
 void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId,
-                                                const ui64 seqNo, const TString& data, const ui64 cookie, const bool waitResponse) {
+                                                const ui64 seqNo, const TString& data, const ui64 cookie, const bool waitResponse,
+                                                const ui32 kafkaBatchSize) {
     auto event = MakeHolder<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
@@ -624,6 +625,11 @@ void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceI
     cmdWrite->SetUncompressedSize(data.size());
     cmdWrite->SetIgnoreQuotaDeadline(true);
     cmdWrite->SetExternalOperation(true);
+    if (kafkaBatchSize > 0) {
+        cmdWrite->SetLogicalMessageCount(kafkaBatchSize);
+        cmdWrite->SetIsBatch(true);
+        cmdWrite->SetMaxSeqNo(seqNo + kafkaBatchSize - 1);
+    }
 
     SendToPipe(Ctx->Edge, event.Release());
 

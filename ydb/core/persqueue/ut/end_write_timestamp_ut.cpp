@@ -1,3 +1,4 @@
+#include "kafka_batch.h"
 #include "pqtablet_fixture.h"
 
 #include <ydb/core/persqueue/common/key.h>
@@ -112,12 +113,13 @@ protected:
         auto [offset, endOffset] = PartitionOffsets();
         TInstant result;
         while (offset < endOffset) {
+            const ui64 readOffset = offset;
             const auto read = CmdReadAndGetResult(TPQCmdReadSettings("", 0, offset, endOffset - offset, 32_MB, 0), *Ctx);
-            UNIT_ASSERT_GT(read.ResultSize(), 0);
             for (const auto& message : read.GetResult()) {
                 result = Max(result, TInstant::MilliSeconds(message.GetWriteTimestampMS()));
-                offset = message.GetOffset() + 1;
+                offset = message.GetOffset() + Max<ui64>(message.GetLogicalMessageCount(), 1);
             }
+            UNIT_ASSERT_GT(offset, readOffset);
         }
         return result;
     }
@@ -128,6 +130,13 @@ protected:
 
     void CheckEndWriteTimestamp(TStringBuf step) {
         UNIT_ASSERT_VALUES_EQUAL_C(PartitionEndWriteTimestamp(), Expected, step);
+    }
+
+    void CheckSurvivesRestart(TStringBuf step) {
+        CheckEndWriteTimestamp(step);
+        Tick();
+        Restart();
+        CheckEndWriteTimestamp(TStringBuilder() << step << " and a restart");
     }
 
     void Tick() {
@@ -145,8 +154,8 @@ protected:
         return tx;
     }
 
-    void KafkaWrite(const TKafkaTx& tx) {
-        SendKafkaTxnWriteRequest(tx.Producer, tx.OwnerCookie, 0, 0, "kafka-payload");
+    void KafkaWrite(const TKafkaTx& tx, const TString& data = "kafka-payload") {
+        SendKafkaTxnWriteRequest(tx.Producer, tx.OwnerCookie, 0, 0, data);
     }
 
     void CommitKafka(const TKafkaTx& tx) {
@@ -154,9 +163,9 @@ protected:
         UpdateExpected();
     }
 
-    void KafkaTx() {
+    void KafkaTx(const TString& data = "kafka-payload") {
         const auto tx = BeginKafkaTx();
-        KafkaWrite(tx);
+        KafkaWrite(tx, data);
         Tick();
         CommitKafka(tx);
     }
@@ -357,16 +366,50 @@ Y_UNIT_TEST_F(Direct_SeveralWithTimeGaps, TEndWriteTimestampFixture) {
     }
 }
 
-Y_UNIT_TEST_F(Direct_BigMessageRenamedBlobs, TEndWriteTimestampFixture) {
+Y_UNIT_TEST_F(Direct_LargeMessageInOneBlob, TEndWriteTimestampFixture) {
+    Prepare();
+    DirectWrite();
+    Tick();
+    DirectWrite(1_MB);
+    CheckSurvivesRestart("after a large write");
+}
+
+Y_UNIT_TEST_F(Direct_LargeMessageAcrossBlobs, TEndWriteTimestampFixture) {
     Prepare();
     DirectWrite();
     Tick();
     DirectWrite(10_MB);
     UNIT_ASSERT_GT(MainPartitionRenames, 0);
-    CheckEndWriteTimestamp("after a big write");
+    CheckSurvivesRestart("after a large write");
+}
+
+Y_UNIT_TEST_F(Direct_NativeBatch, TEndWriteTimestampFixture) {
+    SetEnableTopicMessagesBatching(*Ctx);
+    Prepare();
+    CmdWriteBatched(0, "batch-src", 1, TString(16, 'b'), 3, *Ctx);
+    UpdateExpected();
+    CheckSurvivesRestart("after a batch write");
+}
+
+Y_UNIT_TEST_F(Direct_KafkaBatch, TEndWriteTimestampFixture) {
+    SetEnableTopicMessagesBatching(*Ctx);
+    Prepare();
+    CmdWriteKafkaBatch(0, "kafka-batch-src", 1, {"value0", "value1", "value2"}, *Ctx);
+    UpdateExpected();
+    CheckSurvivesRestart("after a Kafka batch write");
+}
+
+Y_UNIT_TEST_F(Direct_WithOffsetGap, TEndWriteTimestampFixture) {
+    Prepare();
+    DirectWrite();
     Tick();
-    Restart();
-    CheckEndWriteTimestamp("after a big write and a restart");
+    CmdWrite(0, "direct-src", {{++DirectSeqNo, "after-gap"}}, *Ctx, false, {}, false, "", -1, 10);
+    UNIT_ASSERT_VALUES_EQUAL(PartitionOffsets().second, 11u);
+    UpdateExpected();
+    CheckEndWriteTimestamp("after a write after an offset gap");
+    Tick();
+    KafkaTx();
+    CheckSurvivesRestart("after a commit after an offset gap");
 }
 
 Y_UNIT_TEST_F(Direct_NotPersistedUntilKvResponse, TEndWriteTimestampFixture) {
@@ -407,6 +450,29 @@ Y_UNIT_TEST_F(DeferredPublish_EmptyPartition, TEndWriteTimestampFixture) {
     Tick();
     FinalizeDeferred(writeId, TDeferredPublicationApi::Publish);
     CheckEndWriteTimestamp("after the publication");
+}
+
+Y_UNIT_TEST_F(KafkaTx_LargeMessageInOneBlob, TEndWriteTimestampFixture) {
+    Prepare();
+    KafkaTx(TString(1_MB, 'k'));
+    CheckSurvivesRestart("after the commit");
+}
+
+Y_UNIT_TEST_F(KafkaTx_LargeMessageAcrossBlobs, TEndWriteTimestampFixture) {
+    Prepare();
+    KafkaTx(TString(10_MB, 'k'));
+    CheckSurvivesRestart("after the commit");
+}
+
+Y_UNIT_TEST_F(KafkaTx_KafkaBatch, TEndWriteTimestampFixture) {
+    SetEnableTopicMessagesBatching(*Ctx);
+    Prepare();
+    const auto tx = BeginKafkaTx();
+    const TVector<TString> values = {"value0", "value1", "value2"};
+    SendKafkaTxnWriteRequest(tx.Producer, tx.OwnerCookie, 0, 1, MakeKafkaBatchData(values, 1), 123, true, values.size());
+    Tick();
+    CommitKafka(tx);
+    CheckSurvivesRestart("after the commit");
 }
 
 Y_UNIT_TEST_F(TopicTx_SeveralWritesInOneTx, TEndWriteTimestampFixture) {

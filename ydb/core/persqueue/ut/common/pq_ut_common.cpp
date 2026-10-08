@@ -472,6 +472,13 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
     return PQGetPartInfo([=](ui64 offset) { return offset == startOffset; }, endOffset, tc);
 }
 
+void SetEnableTopicMessagesBatching(TTestContext& tc) {
+    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicMessagesBatching(true);
+        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+    }
+}
+
 void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc) {
     for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
         tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);

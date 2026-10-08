@@ -427,6 +427,7 @@ void PQGetPartInfo(
     TTestContext& tc
 );
 
+void SetEnableTopicMessagesBatching(TTestContext& tc);
 void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc);
 
 bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc);

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -90,6 +91,10 @@ struct TTestSetup {
         BlobRange = MakeTestBlobRange();
         Runtime = std::make_unique<TTestActorRuntimeBase>();
         Runtime->Initialize();
+        Runtime->GetLogSettings(0)->Append(
+            NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, [](NLog::EComponent component) -> const TString& {
+                return NKikimrServices::EServiceKikimr_Name(component);
+            });
 
         Runtime->SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration, TInstant&) {
             if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite())) {

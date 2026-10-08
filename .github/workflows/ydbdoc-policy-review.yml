@@ -20,7 +20,7 @@ jobs:
       admitted: ${{ steps.gate.outputs.admitted }}
       stop: ${{ steps.gate.outputs.stop }}
     steps:
-      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.2.0
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.0.1
         id: gate
         with:
           mode: gate
@@ -41,7 +41,7 @@ jobs:
       group: doc-policy-review-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.2.0
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.0.1
         with:
           mode: run
           admission-token: ${{ github.token }}

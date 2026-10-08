@@ -1,39 +1,46 @@
-# YdbExternal provider: direct remote reads
+# Ydb provider: direct remote table reads
 
-`SOURCE_TYPE='YdbExternal'` reads remote YDB row tables directly through Query
-Service. The internal provider name is `ydb_external`. This experimental source
-uses the standard external-source availability settings:
-`AllExternalDataSourcesAreAvailable`, or `YdbExternal` in
-`AvailableExternalDataSources`. It has no separate feature flag.
+`SOURCE_TYPE='Ydb'` reads remote YDB row tables directly through Query Service
+using Query SDK. Its internal table provider name remains `ydb_external`.
+The remote object kind selects the provider: tables use Query SDK, topics use
+PQ/Topic SDK. `Generic.Connector.DatabaseNames` and the presence of a Connector
+client no longer select the implementation for YDB tables. There is no fallback
+to Connector.
 
-`SOURCE_TYPE='Ydb'` continues to use Generic/Connector and its existing topic
-routing, authentication and properties. The two source types can be enabled
-independently. There is no alias or automatic fallback between them. A future
-migration may change the `Ydb` alias only after existing sources are migrated;
-this implementation does not perform that migration.
+Enable `Ydb` through `AllExternalDataSourcesAreAvailable` or
+`AvailableExternalDataSources`. The previously released `YdbExternal` source type
+remains supported under its own availability setting and uses the same table
+reader. EXPLAIN exposes `SourceType: Ydb`. The serialized runtime source name
+`YdbExternal` and its protobuf format stay unchanged so older nodes can execute
+new table plans during a rolling upgrade, and previously serialized plans remain
+readable.
 
 ## Connection and authentication
 
 Provide `LOCATION` as `host:port`, an absolute `DATABASE_NAME`, and `USE_TLS`
 (`true` or `false`, default `false`). TLS uses certificate and hostname validation
 against the driver's trusted roots. The initial endpoint is used directly;
-endpoint discovery and database-ID resolution are not supported.
+endpoint discovery and database-ID resolution are not supported. Existing `Ydb`
+definitions with relative database names are normalized to absolute SDK paths
+(e.g. `local` becomes `/local`); `YdbExternal` still requires an absolute name.
 
 The direct path supports `AUTH_METHOD='TOKEN'` with `TOKEN_SECRET_PATH`, and
 `AUTH_METHOD='NONE'`. The token principal must have permission to describe and
 read the remote table. Tokens travel through secure parameters, not serialized
-source settings. The only source-specific properties are `DATABASE_NAME` and
-`USE_TLS`. DDL rejects missing or invalid connection settings, BASIC,
-SERVICE_ACCOUNT and IAM authentication, `DATABASE_ID`, and topic properties
-such as `SHARED_READING` and `SHARED_READING_GROUP`. The legacy `Ydb` contract is
-unchanged. Database paths must be absolute and cannot contain empty, `.` or `..`
-components. Hostname allowlists apply at DDL validation.
+source settings. `Ydb` retains its existing DDL authentication and property
+contract because the same EDS can also serve topics. For table reads, the Query
+SDK provider rejects BASIC, SERVICE_ACCOUNT and IAM authentication, and `DATABASE_ID` resolution at
+compilation. `SHARED_READING` and `SHARED_READING_GROUP` affect topics and are
+ignored for table reads. `YdbExternal` retains its narrower DDL contract: only
+TOKEN/NONE, `DATABASE_NAME` and `USE_TLS` are accepted. Database paths for table
+reads must be absolute and cannot contain empty, `.` or `..` components. Hostname
+allowlists apply at DDL validation.
 
 For an existing secret `remote_token`:
 
 ```sql
 CREATE EXTERNAL DATA SOURCE remote_db WITH (
-    SOURCE_TYPE = 'YdbExternal',
+    SOURCE_TYPE = 'Ydb',
     LOCATION = 'remote.example:2135',
     DATABASE_NAME = '/Remote',
     AUTH_METHOD = 'TOKEN',
@@ -49,9 +56,9 @@ source read, including retries and time waiting for a slow downstream consumer
 (backpressure). This is an experimental limitation, not an inactivity timeout.
 Increasing the query or script timeout does not extend it. There is no external
 data source option to configure this limit; `READ_TIMEOUT_MS` is rejected
-for both `YdbExternal` and legacy `Ydb` sources. Propagating the query deadline through the entire
-remote read path is future work. Metadata loading has a separate finite local
-budget.
+for both `Ydb` and `YdbExternal` sources. Propagating the query deadline through
+the entire remote read path is future work. Metadata loading has a separate
+finite local budget.
 
 ## Query and schema support
 
@@ -77,8 +84,10 @@ local deadline. The current retry set includes `ABORTED`, so deterministic remot
 errors reported with that status are not yet distinguished. Writing
 to the remote external source, streamlookup joins and reads from
 `CREATE/ALTER STREAMING QUERY` are unsupported.
-The legacy `Ydb` Connector-based streamlookup path remains available under its
-existing configuration; `YdbExternal` never falls back to it.
+Existing `Ydb` table queries that rely on Connector type coverage, filter
+pushdown, database-ID resolution, other authentication methods, streamlookup or
+streaming reads need migration before adopting this implementation. These
+capabilities are not supplied by the current Query SDK table reader.
 
 Provider registration does not create SDK drivers. Metadata loading acquires a
 shared metadata-client cache on first use; plaintext and TLS use independent

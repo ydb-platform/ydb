@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
             .DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
         TMap<TString, NJson::TJsonValue> properties;
         UNIT_ASSERT(integration->FillSourcePlanProperties(source, properties));
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("SourceType").GetStringSafe(), "YdbExternal");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("SourceType").GetStringSafe(), "Ydb");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("ReadTimeoutMs").GetUIntegerSafe(), payload.GetReadTimeoutMs());
     }
 
@@ -508,7 +508,6 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
             {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "NONE"}};
         const TVector<std::tuple<TString, TString, TString>> cases{
             {"database_id", "private-managed-id", "YdbExternal currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported"},
-            {"shared_reading_group", "private-topic-group", "YdbExternal does not support topic settings"},
             {"database_name", "relative-db", "YdbExternal requires an absolute DATABASE_NAME without empty, '.' or '..' path components"},
             {"location", "grpc://secret@host:2135", "YdbExternal requires LOCATION in host:port format"},
             {"use_tls", "private-invalid-value", "YdbExternal USE_TLS must be true or false"},
@@ -546,6 +545,24 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         UNIT_ASSERT_EXCEPTION(AddCluster(*f.State, "bad", {{"database_id", "managed-id"}}), yexception);
         UNIT_ASSERT_EXCEPTION(AddCluster(*f.State, "bad", {
             {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "BASIC"}}), yexception);
+    }
+
+    Y_UNIT_TEST(TableReadIgnoresTopicOnlyProperties) {
+        TFixture f;
+        AddCluster(*f.State, "shared", {{"location", "localhost:2135"}, {"database_name", "/Remote"},
+            {"authMethod", "NONE"}, {"shared_reading", "true"}, {"shared_reading_group", "topic-group"}});
+        UNIT_ASSERT(f.State->ValidClusters.contains("shared"));
+        UNIT_ASSERT_VALUES_EQUAL(f.State->Clusters.at("shared").Database, "/Remote");
+    }
+
+    Y_UNIT_TEST(RelativeYdbDatabaseIsNormalizedWithoutRelaxingYdbExternal) {
+        TFixture f;
+        AddCluster(*f.State, "legacy", {{"source_type", "Ydb"}, {"location", "localhost:2135"},
+            {"database_name", "Remote"}, {"authMethod", "NONE"}});
+        UNIT_ASSERT_VALUES_EQUAL(f.State->Clusters.at("legacy").Database, "/Remote");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(AddCluster(*f.State, "external", {
+            {"source_type", "YdbExternal"}, {"location", "localhost:2135"},
+            {"database_name", "Remote"}, {"authMethod", "NONE"}}), yexception, "requires an absolute DATABASE_NAME");
     }
 }
 

@@ -20,9 +20,9 @@ NKikimrSchemeOp::TExternalDataSourceDescription MakeDescription(const TString& t
 } // namespace
 
 Y_UNIT_TEST_SUITE(YdbExternalSourceFactory) {
-    Y_UNIT_TEST(DefaultRoutesSourcesIndependently) {
+    Y_UNIT_TEST(DefaultRoutesYdbTablesToQuerySdk) {
         const auto factory = CreateExternalSourceFactory({});
-        UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::Ydb)->GetName(), NYql::GenericProviderName);
+        UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::Ydb)->GetName(), NYql::YdbExternalProviderName);
         UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::YdbExternal)->GetName(), NYql::YdbExternalProviderName);
         UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::PostgreSQL)->GetName(), NYql::GenericProviderName);
         UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::YT)->GetName(), NYql::YtProviderName);
@@ -47,8 +47,8 @@ Y_UNIT_TEST_SUITE(YdbExternalSourceFactory) {
                 }
                 const auto factory = CreateExternalSourceFactory({}, nullptr, 50000, nullptr,
                     false, false, false, available);
-                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::GenericProviderName)), legacy);
-                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YdbExternalProviderName)), external);
+                UNIT_ASSERT(!factory->IsAvailableProvider(TString(NYql::GenericProviderName)));
+                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YdbExternalProviderName)), legacy || external);
                 for (const auto type : {NYql::EDatabaseType::Ydb, NYql::EDatabaseType::YdbExternal}) {
                     if (available.contains(type)) {
                         UNIT_ASSERT_NO_EXCEPTION(factory->GetOrCreate(type));

@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/ut/federated_query/common
     ydb/core/security/certificate_check/test_utils
+    ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     ydb/library/yql/providers/s3/actors
     ydb/public/api/grpc
     yql/essentials/sql/pg_dummy

@@ -68,18 +68,21 @@ namespace {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const TString& path,
         bool addRoot) {
-        auto driver = federatedQuerySetup->Driver;
+        // Object-kind resolution shares the native provider's TLS-isolated
+        // drivers, including setups that do not initialize the topic SDK driver.
+        auto driver = federatedQuerySetup->YdbExternalResources->GetDriver(useTls);
 
         NYdb::TCommonClientSettings opts;
         opts
             .DiscoveryEndpoint(endpoint)
             .Database(addRoot ? "/Root" + database : database)
             .SslCredentials(NYdb::TSslCredentials(useTls))
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .DiscoveryMode(NYdb::EDiscoveryMode::Off)
             .CredentialsProviderFactory(credentialsProviderFactory);
         auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
 
-        return schemeClient->DescribePath(addRoot ? "/Root" + path : path)
+        return schemeClient->DescribePath(addRoot ? "/Root" + path : path,
+                NYdb::NScheme::TDescribePathSettings().ClientTimeout(TDuration::Seconds(60)).OperationTimeout(TDuration::Seconds(60)))
             .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, credentialsProviderFactory, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 TGetSchemeEntryResult res;
@@ -87,14 +90,11 @@ namespace {
                     if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
-                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
-                    YDB_LOG_WARN_CTX(*actorSystem, message,
-                        {"issues", describePathResult.GetIssues()});
-                    auto rootIssue = NYql::TIssue(message);
-                    for (const auto& issue : describePathResult.GetIssues()) {
-                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));
-                    }
-                    res.Issues.AddIssue(rootIssue);
+                    // Remote issues may echo credentials. Keep object-kind
+                    // resolution as safe as the native table metadata/read path.
+                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed with status " << ToString(describePathResult.GetStatus()) << ".";
+                    YDB_LOG_WARN_CTX(*actorSystem, message);
+                    res.Issues.AddIssue(NYql::TIssue(message));
                 } else {
                     NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
                     res.EntryType = entry.Type;
@@ -474,7 +474,7 @@ namespace {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path) {
-        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
+        if (!federatedQuerySetup || !federatedQuerySetup->YdbExternalResources || !endpoint || !database) {
             YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
                 {"path", path},
                 {"database", database},
@@ -491,9 +491,9 @@ namespace {
                     federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
                     path,
                     false);
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             TGetSchemeEntryResult result;
-            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Failed to get scheme entry type: " << e.what()));
+            result.Issues.AddIssue(NYql::TIssue("Failed to get external YDB entity type"));
             return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
         }
     };

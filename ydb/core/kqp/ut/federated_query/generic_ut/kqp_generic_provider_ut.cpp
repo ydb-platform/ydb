@@ -39,7 +39,6 @@ namespace NKikimr::NKqp {
     enum class EProviderType {
         PostgreSQL,
         ClickHouse,
-        Ydb,
         IcebergHiveMetastoreBasic,
         IcebergHiveMetastoreSa,
         IcebergHiveMetastoreToken,
@@ -54,8 +53,6 @@ namespace NKikimr::NKqp {
                 return TConnectorClientMock::TPostgreSQLDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::ClickHouse:
                 return TConnectorClientMock::TClickHouseDataSourceInstanceBuilder<>().GetResult();
-            case EProviderType::Ydb:
-                return TConnectorClientMock::TYdbDataSourceInstanceBuilder<>().GetResult();
             case EProviderType::IcebergHiveMetastoreBasic:
                 return NTestUtils::CreateIcebergBasic().CreateDataSourceForHiveMetastore();
             case EProviderType::IcebergHiveMetastoreSa:
@@ -77,8 +74,6 @@ namespace NKikimr::NKqp {
                 return CreatePostgreSQLExternalDataSource(kikimr);
             case EProviderType::ClickHouse:
                 return CreateClickHouseExternalDataSource(kikimr);
-            case EProviderType::Ydb:
-                return CreateYdbExternalDataSource(kikimr);
             case EProviderType::IcebergHiveMetastoreBasic:
                 return NTestUtils::CreateIcebergBasic()
                     .ExecuteCreateHiveMetastoreExternalDataSource(kikimr);
@@ -112,7 +107,6 @@ namespace NKikimr::NKqp {
         connector.SetUseSsl(false);
         connector.MutableEndpoint()->set_host("localhost");
         connector.MutableEndpoint()->set_port(1234);
-        connector.AddDatabaseNames(DEFAULT_DATABASE);
 
         config.MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
         config.SetAllExternalDataSourcesAreAvailable(false);
@@ -299,10 +293,6 @@ namespace NKikimr::NKqp {
             TestSelectAllFields(EProviderType::ClickHouse);
         }
 
-        Y_UNIT_TEST(YdbManagedSelectAll) {
-            TestSelectAllFields(EProviderType::Ydb);
-        }
-
         Y_UNIT_TEST(IcebergHiveBasicSelectAll) {
             TestSelectAllFields(EProviderType::IcebergHiveMetastoreBasic);
         }
@@ -416,10 +406,6 @@ namespace NKikimr::NKqp {
             TestSelectConstant(EProviderType::ClickHouse);
         }
 
-        Y_UNIT_TEST(YdbManagedSelectConstant) {
-            TestSelectConstant(EProviderType::Ydb);
-        }
-
         Y_UNIT_TEST(IcebergHiveBasicSelectConstant) {
             TestSelectConstant(EProviderType::IcebergHiveMetastoreBasic);
         }
@@ -527,10 +513,6 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(ClickHouseSelectCount) {
             TestSelectCount(EProviderType::ClickHouse);
-        }
-
-        Y_UNIT_TEST(YdbSelectCount) {
-            TestSelectCount(EProviderType::Ydb);
         }
 
         Y_UNIT_TEST(IcebergHiveBasicSelectCount) {
@@ -683,10 +665,6 @@ namespace NKikimr::NKqp {
             TestFilterPushdown(EProviderType::ClickHouse);
         }
 
-        Y_UNIT_TEST(YdbFilterPushdown) {
-            TestFilterPushdown(EProviderType::Ydb);
-        }
-
         Y_UNIT_TEST(IcebergHiveBasicFilterPushdown) {
             TestFilterPushdown(EProviderType::IcebergHiveMetastoreBasic);
         }
@@ -713,7 +691,7 @@ namespace NKikimr::NKqp {
 
         void TestFailsOnIncorrectScriptExecutionOperation(const TString& operationId, const TString& fetchToken) {
             auto clientMock = std::make_shared<TConnectorClientMock>();
-            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Ydb);
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::PostgreSQL);
             auto appConfig = CreateDefaultAppConfig();
             auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
             auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory,
@@ -779,7 +757,7 @@ namespace NKikimr::NKqp {
             TestFailsOnIncorrectScriptExecutionOperation("", "trash");
         }
 
-        Y_UNIT_TEST(TestConnectorNotConfigured) {
+        Y_UNIT_TEST(YdbReadWithoutConnector) {
             NKikimrConfig::TAppConfig appConfig;
             appConfig.MutableFeatureFlags()->SetEnableScriptExecutionOperations(true);
             appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
@@ -818,8 +796,8 @@ namespace NKikimr::NKqp {
 
             auto db = kikimr->GetQueryClient();
             const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/external_data_source.[example_1] data source generic doesn't exist, please contact internal support");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
         }
     }
 }

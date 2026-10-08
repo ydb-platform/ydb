@@ -196,7 +196,6 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
         if (ConnectorClient) {
             auto& connector = *queryServiceConfig.MutableGeneric()->MutableConnector();
-            connector.AddDatabaseNames("test_db");
             connector.MutableEndpoint()->set_host("localhost");
             connector.MutableEndpoint()->set_port(1234);
         }
@@ -703,26 +702,27 @@ void TStreamingTestFixture::CreateS3Source(const std::string& bucket, const std:
     ));
 }
 
-void TStreamingTestFixture::CreateYdbSource(const std::string& ydbSourceName) {
-    // Use a fixed non-empty database name that matches DatabaseNames in the
-    // connector config, so YDB EDS is routed to the connector (table access).
-    constexpr char YDB_TEST_DATABASE[] = "test_db";
+void TStreamingTestFixture::CreateConnectorSource(const std::string& sourceName) {
+    // Lookup and streaming tests exercise the Generic provider with a mock
+    // PostgreSQL source. Ydb table reads now use Query SDK and do not support lookup.
     ExecQuery(fmt::format(
         R"sql(
-            CREATE SECRET ydb_source_secret WITH (value = "{token}");
-            CREATE EXTERNAL DATA SOURCE `{ydb_source}` WITH (
-                SOURCE_TYPE = "Ydb",
-                LOCATION = "{ydb_location}",
-                DATABASE_NAME = "{ydb_database_name}",
-                AUTH_METHOD = "TOKEN",
-                TOKEN_SECRET_PATH = "ydb_source_secret",
+            CREATE SECRET connector_source_secret WITH (value = "{password}");
+            CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                SOURCE_TYPE = "PostgreSQL",
+                PROTOCOL = "NATIVE",
+                LOCATION = "{endpoint}",
+                DATABASE_NAME = "test_db",
+                SCHEMA = "public",
+                AUTH_METHOD = "BASIC",
+                LOGIN = "connector-user",
+                PASSWORD_SECRET_PATH = "connector_source_secret",
                 USE_TLS = "FALSE"
             );
         )sql",
-        "ydb_source"_a = ydbSourceName,
-        "ydb_location"_a = YDB_ENDPOINT,
-        "ydb_database_name"_a = YDB_TEST_DATABASE,
-        "token"_a = BUILTIN_ACL_ROOT
+        "source"_a = sourceName,
+        "endpoint"_a = YDB_ENDPOINT,
+        "password"_a = BUILTIN_ACL_ROOT
     ));
 }
 
@@ -1155,7 +1155,8 @@ TString TStreamingTestFixture::GetStreamingQueryIssues(const TString& queryName)
 
 NYql::TGenericDataSourceInstance TStreamingTestFixture::GetMockConnectorSourceInstance() {
     NYql::TGenericDataSourceInstance dataSourceInstance;
-    dataSourceInstance.set_kind(NYql::YDB);
+    dataSourceInstance.set_kind(NYql::POSTGRESQL);
+    dataSourceInstance.mutable_pg_options()->set_schema("public");
     dataSourceInstance.set_database("test_db");
     dataSourceInstance.set_use_tls(false);
     dataSourceInstance.set_protocol(NYql::NATIVE);
@@ -1165,9 +1166,9 @@ NYql::TGenericDataSourceInstance TStreamingTestFixture::GetMockConnectorSourceIn
     NHttp::CrackAddress(TString{YDB_ENDPOINT}, *endpoint.mutable_host(), port);
     endpoint.set_port(port);
 
-    auto& iamToken = *dataSourceInstance.mutable_credentials()->mutable_token();
-    iamToken.set_type("IAM");
-    iamToken.set_value(BUILTIN_ACL_ROOT);
+    auto& basic = *dataSourceInstance.mutable_credentials()->mutable_basic();
+    basic.set_username("connector-user");
+    basic.set_password(BUILTIN_ACL_ROOT);
 
     return dataSourceInstance;
 }

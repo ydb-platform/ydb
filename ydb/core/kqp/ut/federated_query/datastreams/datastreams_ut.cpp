@@ -264,17 +264,19 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         };
         CreatePqSource("sourceName");
 
-        const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;", EExecStatus::Failed);
-        const auto& status = operation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-            "database is not configured for connector table access");
+        ExecExternalQuery("UPSERT INTO regularTable (id) VALUES ('query-sdk');");
+        const auto operation = ExecAndWaitScript("SELECT * FROM `sourceName`.`regularTable`;");
+        CheckScriptResult(operation.Id(), 1, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetOptionalString().value(), "query-sdk");
+        });
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
+        // A matching Connector database must not divert a topic to the table provider.
+        cfg.MutableGeneric()->MutableConnector()->AddDatabaseNames(YDB_DATABASE.c_str());
 
         const std::string sourceName = "sourceName";
         const auto topicName = MakeExternalName("topicName");
@@ -939,7 +941,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto connectorClient = SetupMockConnectorClient();
 
         constexpr char ydbSourceName[] = "ydbSourceName";
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         constexpr char ydbTable[] = "unknownSourceLookup";
         ExecExternalQuery(fmt::format(R"(

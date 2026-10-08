@@ -182,7 +182,7 @@ public:
 
     void CreateS3Source(const std::string& bucket, const std::string& s3SourceName);
 
-    void CreateYdbSource(const std::string& ydbSourceName);
+    void CreateConnectorSource(const std::string& sourceName);
 
     void CreateSolomonSource(const std::string& solomonSourceName);
 

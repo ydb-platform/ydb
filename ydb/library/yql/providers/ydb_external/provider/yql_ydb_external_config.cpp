@@ -9,12 +9,17 @@ void AddCluster(TState& state, const TString& name, const THashMap<TString, TStr
     if (properties.contains("database_id") || properties.contains("mdb_cluster_id")) {
         throw yexception() << "YdbExternal currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported";
     }
-    if (properties.contains("shared_reading") || properties.contains("shared_reading_group")) {
-        throw yexception() << "YdbExternal does not support topic settings";
-    }
+    // A Ydb EDS may be shared by table reads and topic operations. Topic-only
+    // properties do not affect the table reader; PQ consumes them on its route.
     TCluster cluster;
     cluster.Endpoint = properties.Value("location", "");
     cluster.Database = properties.Value("database_name", "");
+    // The existing Ydb DDL also accepts relative database names for topics.
+    // Use the same absolute SDK database for its table route; YdbExternal keeps
+    // the strict connection contract it was released with.
+    if (properties.Value("source_type", "") == "Ydb" && !cluster.Database.empty() && !cluster.Database.StartsWith('/')) {
+        cluster.Database = "/" + cluster.Database;
+    }
     TString tls = properties.Value("use_tls", "false");
     if (const auto error = ValidateConnectionSettings(cluster.Endpoint, cluster.Database, tls)) {
         throw yexception() << error;

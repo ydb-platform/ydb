@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <yql/essentials/core/services/mounts/yql_mounts.h>
@@ -51,10 +52,12 @@ struct TYdbExternalFixture {
     const TString SourceType;
     std::shared_ptr<TKikimrRunner> Consumer;
 
-    explicit TYdbExternalFixture(const TString& sourceType = "YdbExternal", const TString& token = "root@builtin",
+    explicit TYdbExternalFixture(const TString& sourceType = "Ydb", const TString& token = "root@builtin",
                                const TString& hostnamePattern = {}, bool createSource = true,
                                bool enableLookup = false,
-                               const std::set<TString>& available = {"Ydb", "YdbExternal"})
+                               const std::set<TString>& available = {"Ydb"},
+                               NYql::NConnector::IClient::TPtr connectorClient = nullptr,
+                               const TVector<TString>& connectorDatabases = {})
         : SourceType(sourceType)
     {
         NKikimrConfig::TAppConfig config;
@@ -63,11 +66,18 @@ struct TYdbExternalFixture {
         for (const auto& type : available) {
             config.MutableQueryServiceConfig()->AddAvailableExternalDataSources(type);
         }
+        for (const auto& database : connectorDatabases) {
+            config.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->AddDatabaseNames(database);
+        }
+        if (connectorClient) {
+            auto* endpoint = config.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint();
+            endpoint->set_host("localhost");
+            endpoint->set_port(1234);
+        }
         if (hostnamePattern) {
             config.MutableQueryServiceConfig()->AddHostnamePatterns(hostnamePattern);
         }
-        // No ConnectorClient is provided, including when checking legacy routing.
-        Consumer = MakeKikimrRunner(false, nullptr, nullptr, config,
+        Consumer = MakeKikimrRunner(false, connectorClient, nullptr, config,
             NYql::NDq::CreateS3ActorsFactory(),
             {.DomainRoot = "Consumer", .CredentialsFactory = CreateCredentialsFactory("root@builtin"), .AuthToken = "root@builtin"});
 
@@ -125,7 +135,7 @@ struct TYdbExternalFixture {
         UNIT_ASSERT(result.GetStats()->GetPlan());
         NJson::TJsonValue plan;
         UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
-        auto source = FindPlanNodeByKv(plan, "SourceType", "YdbExternal");
+        auto source = FindPlanNodeByKv(plan, "SourceType", "Ydb");
         UNIT_ASSERT_C(source.IsDefined(), *result.GetStats()->GetPlan());
         return source;
     }
@@ -134,12 +144,12 @@ struct TYdbExternalFixture {
 void AssertMetadataConnectionFailure(const TExecuteQueryResult& result) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
     const TString issues = result.GetIssues().ToString();
-    UNIT_ASSERT_STRING_CONTAINS(issues, "YdbExternal metadata session failed: TRANSPORT_UNAVAILABLE");
+    UNIT_ASSERT_STRING_CONTAINS(issues, "Couldn't determine external YDB entity type");
     UNIT_ASSERT(!issues.Contains("root@builtin"));
 }
 
 void CheckTlsCertificateRejected(bool wrongHostname) {
-    TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, false);
+    TYdbExternalFixture fixture("Ydb", "root@builtin", {}, false);
     // A hostname mismatch must use the trusted issuer so it cannot accidentally
     // pass by rejecting an unrelated issuer left in gRPC's process-wide cache.
     const auto ca = wrongHostname ? fixture.TrustedCa
@@ -235,6 +245,73 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
+    Y_UNIT_TEST_TWIN(ConnectorDatabaseNamesDoNotSelectTableProvider, MatchingDatabase) {
+        auto connector = std::make_shared<testing::StrictMock<NYql::NConnector::NTest::TConnectorClientMock>>();
+        EXPECT_CALL(*connector, DescribeTableImpl(testing::_)).Times(0);
+        EXPECT_CALL(*connector, ListSplitsImpl(testing::_)).Times(0);
+        EXPECT_CALL(*connector, ReadSplitsImpl(testing::_)).Times(0);
+        TYdbExternalFixture fixture("Ydb", "root@builtin", {}, true, false, {"Ydb", "PostgreSQL"}, connector,
+            {MatchingDatabase ? "/Remote" : "/Other"});
+        fixture.Populate();
+        const auto result = fixture.Read("SELECT Key FROM remote_db.`items` ORDER BY Key;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        fixture.ExplainSource("SELECT Key FROM remote_db.`items`;");
+    }
+
+    Y_UNIT_TEST(RelativeAndAbsoluteTablePathsUseQuerySdk) {
+        TYdbExternalFixture fixture;
+        fixture.Populate();
+        for (const TString path : {"items", "/Remote/items"}) {
+            const TString query = "SELECT Key, Value FROM remote_db.`" + path + "` ORDER BY Key;";
+            const auto result = fixture.Read(query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+            fixture.ExplainSource(query);
+        }
+    }
+
+    Y_UNIT_TEST(TableSourceWithTopicPropertiesUsesQuerySdk) {
+        TYdbExternalFixture fixture;
+        fixture.Populate();
+        fixture.Scheme(TStringBuilder()
+            << "CREATE EXTERNAL DATA SOURCE shared_db WITH (SOURCE_TYPE='Ydb', LOCATION='"
+            << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', AUTH_METHOD='TOKEN', "
+            << "TOKEN_SECRET_PATH='remote_token', SHARED_READING_GROUP='topic-group');");
+        const auto result = fixture.Read("SELECT COUNT(*) AS Total FROM shared_db.`items`;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 3);
+        fixture.ExplainSource("SELECT Key FROM shared_db.`items`;");
+    }
+
+    Y_UNIT_TEST(LegacyRelativeDatabaseNameUsesQuerySdk) {
+        TYdbExternalFixture fixture;
+        fixture.Populate();
+        fixture.Scheme(TStringBuilder()
+            << "CREATE EXTERNAL DATA SOURCE relative_db WITH (SOURCE_TYPE='Ydb', LOCATION='"
+            << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='Remote', AUTH_METHOD='TOKEN', "
+            << "TOKEN_SECRET_PATH='remote_token');");
+        const auto result = fixture.Read("SELECT Key FROM relative_db.`items`;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        const auto source = fixture.ExplainSource("SELECT Key FROM relative_db.`items`;");
+        UNIT_ASSERT_VALUES_EQUAL(source["Database"].GetStringSafe(), "/Remote");
+    }
+
+    Y_UNIT_TEST(TableSourceRejectsDatabaseIdResolutionAtCompilation) {
+        TYdbExternalFixture fixture;
+        fixture.Scheme(TStringBuilder()
+            << "CREATE EXTERNAL DATA SOURCE managed_db WITH (SOURCE_TYPE='Ydb', LOCATION='"
+            << fixture.Remote.GetEndpoint() << "', DATABASE_ID='managed-id', AUTH_METHOD='TOKEN', "
+            << "TOKEN_SECRET_PATH='remote_token');");
+        const auto result = fixture.Read("SELECT * FROM managed_db.`items`;");
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "database ID resolution is not supported");
+        UNIT_ASSERT(result.GetIssues().ToString().find("root@builtin") == std::string::npos);
+    }
+
     Y_UNIT_TEST(MultipleArrowPartsPreserveAggregateRowsAndBytes) {
         TYdbExternalFixture fixture;
         fixture.Scheme("CREATE TABLE `/Remote/many_rows` (Key Uint64 NOT NULL, Value String, PRIMARY KEY(Key));", true);
@@ -328,7 +405,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     Y_UNIT_TEST(ExternalSourceReadTimeoutIsRejectedForBothTypes) {
         for (const auto* type : {"Ydb", "YdbExternal"}) {
             // The fixture first creates a source without a timeout option.
-            TYdbExternalFixture fixture(type);
+            TYdbExternalFixture fixture(type, "root@builtin", {}, true, false, {type});
             for (const auto* value : {"60000", "120000", "0", "60s"}) {
                 const TString sql = TStringBuilder()
                     << "CREATE EXTERNAL DATA SOURCE remote_timeout WITH (SOURCE_TYPE='" << type << "', LOCATION='"
@@ -342,7 +419,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(StreamLookupFailsWithControlledQueryIssue) {
-        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, true, true);
+        TYdbExternalFixture fixture("Ydb", "root@builtin", {}, true, true);
         fixture.Populate();
         fixture.Scheme("CREATE TABLE local_items (Key Uint64 NOT NULL, PRIMARY KEY (Key));");
         const auto inserted = fixture.Read("UPSERT INTO local_items (Key) VALUES (1u);");
@@ -401,14 +478,15 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         TYdbExternalFixture fixture;
         const auto result = fixture.Read("SELECT * FROM remote_db.`does_not_exist`;");
         UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "DescribeTable failed");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Couldn't determine external YDB entity type");
     }
 
-    Y_UNIT_TEST(LegacyYdbStillRequiresConnector) {
-        TYdbExternalFixture fixture("Ydb");
+    Y_UNIT_TEST(PreviouslyReleasedYdbExternalReadsWithoutConnector) {
+        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, true, false, {"YdbExternal"});
+        fixture.Populate();
         const auto result = fixture.Read("SELECT * FROM remote_db.`items`;");
-        UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "generic");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
     }
 
     Y_UNIT_TEST(ExternalAvailabilityDoesNotFollowLegacyYdb) {
@@ -435,7 +513,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(ExternalDdlRejectsUnsupportedPropertiesAndAuthentication) {
-        TYdbExternalFixture fixture;
+        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, true, false, {"YdbExternal"});
         const auto reject = [&](const TString& settings, const TString& expected) {
             const auto result = fixture.Consumer->GetQueryClient().ExecuteQuery(
                 TStringBuilder() << "CREATE EXTERNAL DATA SOURCE invalid_db WITH (SOURCE_TYPE='YdbExternal', LOCATION='"
@@ -467,7 +545,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(TokenAndTlsReadWithoutConnector) {
-        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, false);
+        TYdbExternalFixture fixture("Ydb", "root@builtin", {}, false);
         const auto& ca = fixture.TrustedCa;
         const auto certificate = NCertTestUtils::GenerateSignedCert(ca,
             NCertTestUtils::TProps::AsServer().WithValid(TDuration::Days(1)));
@@ -540,7 +618,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(RemoteTableAccessIsChecked) {
-        TYdbExternalFixture fixture("YdbExternal", "restricted@builtin");
+        TYdbExternalFixture fixture("Ydb", "restricted@builtin");
         fixture.Populate();
         fixture.Scheme("GRANT 'ydb.database.connect', 'ydb.granular.describe_schema' ON `/Remote` TO `restricted@builtin`;", true);
         const auto result = fixture.Read("SELECT * FROM remote_db.`items`;");
@@ -560,7 +638,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(HostnameAllowlistIsChecked) {
-        TYdbExternalFixture fixture("YdbExternal", "root@builtin", "allowed-host.invalid", false);
+        TYdbExternalFixture fixture("Ydb", "root@builtin", "allowed-host.invalid", false);
         const auto result = fixture.CreateSource(fixture.Remote.GetEndpoint(), false);
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "host");

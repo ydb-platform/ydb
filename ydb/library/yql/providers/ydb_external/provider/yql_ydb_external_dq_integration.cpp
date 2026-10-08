@@ -98,6 +98,8 @@ public:
             *target->MutableType() = table.ColumnTypes.at(column.StringValue());
         }
         proto.PackFrom(payload);
+        // Preserve the runtime wire name so older nodes can execute new Ydb
+        // table plans during a rolling upgrade. The public plan type is Ydb.
         sourceType = "YdbExternal";
     }
 
@@ -124,7 +126,7 @@ public:
             return false;
         }
         const auto settings = source.Cast().Settings().Cast<TYdbExternalSourceSettings>();
-        properties["SourceType"] = "YdbExternal";
+        properties["SourceType"] = "Ydb";
         properties["Table"] = settings.Table().StringValue();
         properties["Database"] = State_->Clusters.at(settings.Cluster().StringValue()).Database;
         auto& columns = properties["ReadColumns"];

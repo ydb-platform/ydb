@@ -961,7 +961,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char ydbSourceName[] = "ydbSourceName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
         {   // Prepare connector mock
@@ -1814,7 +1814,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
-    Y_UNIT_TEST_F(StreamingQueryWithYdbJoin, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(StreamingQueryWithConnectorJoin, TStreamingTestFixture) {
         // Test that defaults are overridden for streaming queries
         auto& setting = *SetupAppConfig().MutableKQPConfig()->AddSettings();
         setting.SetName("HashJoinMode");
@@ -1831,7 +1831,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
         CreatePqSource(pqSourceName);
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
@@ -1929,7 +1929,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
-    Y_UNIT_TEST_F(StreamingQueryWithDoubleYdbJoin, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(StreamingQueryWithDoubleConnectorJoin, TStreamingTestFixture) {
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 
@@ -1941,7 +1941,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
         CreatePqSource(pqSourceName);
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         constexpr char ydbTable[] = "doubleYdbJoinLookup";
         ExecExternalQuery(fmt::format(R"(
@@ -2045,7 +2045,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
         CreatePqSource(pqSourceName);
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
@@ -2257,7 +2257,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
         CreatePqSource(pqSourceName);
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
@@ -2439,7 +2439,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
         CreatePqSource(pqSourceName);
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(
@@ -3945,7 +3945,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
         CreatePqSource(pqSourceName);
-        CreateYdbSource(ydbSourceName);
+        CreateConnectorSource(ydbSourceName);
 
         const auto ydbTable = MakeExternalName("lookup");
         ExecExternalQuery(fmt::format(R"(

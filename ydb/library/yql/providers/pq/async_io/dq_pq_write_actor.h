@@ -14,6 +14,8 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+#include <functional>
+
 namespace NYql::NDq {
 
 constexpr i64 DqPqDefaultFreeSpace = 16_MB;
@@ -35,6 +37,15 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     i64 currentExecutionGeneration = 0,
     bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag = true,
     bool hasCheckpoints = false);
+
+void RegisterDqPqWriteActorFactory(
+    TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const IPqStaticGateway::TPtr& pqGateway,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    bool enableStreamingQueriesCounters,
+    std::function<bool()> getEnableDeduplicationFeatureFlag);
 
 void RegisterDqPqWriteActorFactory(
     TDqAsyncIoFactory& factory,

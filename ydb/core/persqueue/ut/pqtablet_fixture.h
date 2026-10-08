@@ -283,6 +283,8 @@ protected:
     TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, const ui32 partitionId = 0);
     void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0,
                                   ui64 seqNo = 0, const TString& data = "123test123", ui64 cookie = 123, bool waitResponse = true);
+    void ProposeKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
+    void WaitTransactionCompleted(ui64 txId, ui64 planStep);
     void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0},
                                 ui64 planStep = 100);
 
@@ -293,7 +295,7 @@ protected:
     TVector<TString> ReadMainPartitionMessages(ui32 partitionId = 0, ui32 count = 10);
     NKikimrClient::TCmdReadResult CmdReadCapture(const TPQCmdReadSettings& settings);
     void CommitTopicTransaction(const TWriteId& writeId, ui32 supportivePartitionId, ui64 txId,
-                                const std::vector<ui32>& partitionIds = {0});
+                                const std::vector<ui32>& partitionIds = {0}, ui64 planStep = 100);
     void SendSupportivePartitionWrite(
         const TWriteId& writeId,
         const TString& ownerCookie,
@@ -306,7 +308,8 @@ protected:
         const TWriteId& writeId,
         ui64 txId,
         NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
-        const std::vector<ui32>& partitionIds = {0});
+        const std::vector<ui32>& partitionIds = {0},
+        ui64 planStep = 100);
     void AbortDeferredPublicationFinalize(
         const TWriteId& writeId,
         ui64 txId,

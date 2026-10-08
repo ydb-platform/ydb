@@ -35,6 +35,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     counters_ut.cpp
+    end_write_timestamp_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp
     inflight_limiter_ut.cpp

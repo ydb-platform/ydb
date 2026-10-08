@@ -638,7 +638,7 @@ void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceI
     UNIT_ASSERT_VALUES_EQUAL(cookie, response->Record.GetPartitionResponse().GetCookie());
 }
 
-void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds, ui64 planStep) {
+void TPQTabletFixture::ProposeKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds) {
     TProposeTransactionParams params;
     params.TxId = txId;
     params.Senders = {Ctx->TabletId};
@@ -650,11 +650,19 @@ void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId produc
     SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-    SendPlanStep({.Step=planStep, .TxIds={txId}});
+}
+
+void TPQTabletFixture::WaitTransactionCompleted(ui64 txId, ui64 planStep) {
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
     WaitPlanStepAck({.Step=planStep, .TxIds={txId}}); // TEvPlanStepAck для координатора
     WaitPlanStepAccepted({.Step=planStep});
+}
+
+void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds, ui64 planStep) {
+    ProposeKafkaTransaction(producerInstanceId, txId, partitionIds);
+    SendPlanStep({.Step=planStep, .TxIds={txId}});
+    WaitTransactionCompleted(txId, planStep);
 }
 
 TString TPQTabletFixture::CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, const ui32 partitionId) {
@@ -849,7 +857,8 @@ void TPQTabletFixture::CommitTopicTransaction(
     const TWriteId& writeId,
     const ui32 supportivePartitionId,
     const ui64 txId,
-    const std::vector<ui32>& partitionIds)
+    const std::vector<ui32>& partitionIds,
+    const ui64 planStep)
 {
     EnsurePipeExist();
 
@@ -868,18 +877,16 @@ void TPQTabletFixture::CommitTopicTransaction(
     SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-    SendPlanStep({.Step=100, .TxIds={txId}});
-    WaitProposeTransactionResponse({.TxId=txId,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    WaitPlanStepAck({.Step=100, .TxIds={txId}});
-    WaitPlanStepAccepted({.Step=100});
+    SendPlanStep({.Step=planStep, .TxIds={txId}});
+    WaitTransactionCompleted(txId, planStep);
 }
 
 void TPQTabletFixture::CommitDeferredPublicationFinalize(
     const TWriteId& writeId,
     ui64 txId,
     NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp op,
-    const std::vector<ui32>& partitionIds)
+    const std::vector<ui32>& partitionIds,
+    const ui64 planStep)
 {
     EnsurePipeExist();
 
@@ -894,11 +901,8 @@ void TPQTabletFixture::CommitDeferredPublicationFinalize(
     SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-    SendPlanStep({.Step=100, .TxIds={txId}});
-    WaitProposeTransactionResponse({.TxId=txId,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    WaitPlanStepAck({.Step=100, .TxIds={txId}});
-    WaitPlanStepAccepted({.Step=100});
+    SendPlanStep({.Step=planStep, .TxIds={txId}});
+    WaitTransactionCompleted(txId, planStep);
 }
 
 void TPQTabletFixture::AbortDeferredPublicationFinalize(

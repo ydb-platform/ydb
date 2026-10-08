@@ -1572,6 +1572,122 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         }
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(DenseEncoding) {
+        // An empty object has no stored values for that row and is read back as an absent document.
+        const TString script = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                    `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a":"one"}')), (2u, JsonDocument('{}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"a":"two"}')), (4u, JsonDocument('{"a":"one"}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"a\":\"one\"}"]];[2u;#];[3u;["{\"a\":\"two\"}"]];[4u;["{\"a\":\"one\"}"]]]
+        )";
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
+    Y_UNIT_TEST(UnsupportedDenseEncodingVersionFailsQuery) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+        TKikimrRunner kikimr(settings);
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<TUnsupportedDenseEncodingVersionController>();
+
+        auto execute = [&](const TString& query) {
+            return kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        };
+
+        auto result = execute(R"(
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2,
+                `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                `DICTIONARY_UNIQUE_FRACTION`=`1`, `DENSE_ENCODING_VERSION`=`1`);
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+
+        controller->Enable();
+        result = execute(R"(
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a":"one"}'));
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        UNIT_ASSERT(controller->IsVersionChanged());
+
+        result = kikimr.GetQueryClient()
+                     .ExecuteQuery("SELECT Col2 FROM `/Root/ColumnTable` ORDER BY Col1;", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                     .GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_C(result.GetIssues().ToOneLineString().contains("unsupported dense encoding version"), result.GetIssues().ToOneLineString());
+    }
+
+    // YDBBUGS-934: one TestInit row makes Kind = "TestInit" a one-value predicate, so OR skips the JSON_VALUE assembler
+    // after the shared filter fetch already stored the Stats fetcher. The projection must still return the full Stats value.
+    // SIMPLE and TRIVIAL both use IDataSource::DoApplyPendingFetcher; the plain column stays PLAIN so it does not reset the reader.
+    TString scriptDuplicateStatsFetch = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Id Uint64 NOT NULL,
+            Kind Utf8 NOT NULL,
+            Success Uint32 NOT NULL,
+            Stats JsonDocument,
+            PRIMARY KEY (Id)
+        )
+        PARTITION BY HASH(Id)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`$$SIMPLE|TRIVIAL$$`)
+        ------
+        SCHEMA:
+        $$ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`)|ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)$$
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES
+            (1u, "TestInit", 1u, JsonDocument('{"aggregation_level":"none","note":"init-a"}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES
+            (3u, "Stability", 0u, JsonDocument('{"aggregation_level":"aggregate","note":"stab-yes"}')),
+            (4u, "Stability", 1u, JsonDocument('{"aggregation_level":"aggregate","note":"stab-success"}')),
+            (5u, "Stability", 0u, JsonDocument('{"aggregation_level":"row","note":"stab-no"}'))
+        ------
+        READ: SELECT Id, Kind, Stats FROM `/Root/ColumnTable` WHERE Kind = "TestInit" OR (JSON_VALUE(Stats, "$.aggregation_level") = "aggregate" AND Success = 0) ORDER BY Id;
+        EXPECTED: [[1u;"TestInit";["{\"aggregation_level\":\"none\",\"note\":\"init-a\"}"]];[3u;"Stability";["{\"aggregation_level\":\"aggregate\",\"note\":\"stab-yes\"}"]]]
+
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(DuplicateStatsFetch, scriptDuplicateStatsFetch) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+>>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
 }
 
 namespace {

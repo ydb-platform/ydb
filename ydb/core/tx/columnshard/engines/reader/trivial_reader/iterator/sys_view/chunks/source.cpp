@@ -374,6 +374,7 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
     return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
 }
 
+<<<<<<< HEAD
 void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
         auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
@@ -381,7 +382,46 @@ void TSourceData::DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& cont
             AFL_VERIFY(OriginalData);
             NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
             fetcher->OnDataCollected(fetchContext);
+=======
+TConclusionStatus TSourceData::DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) {
+    if (entityId != NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
+        return TBase::DoApplyPendingFetcher(context, entityId);
+    }
+    if (!HasStageData()) {
+        return TConclusionStatus::Success();
+    }
+    auto fetcher = MutableStageData().ExtractFetcherOptional(entityId);
+    // No stored fetcher: do not publish an empty ChunkDetails column.
+    if (!fetcher) {
+        return TConclusionStatus::Success();
+    }
+    MutableStageData().AddFetcher(fetcher);
+    return DoAssembleAccessor(context, entityId, TString());
+}
+
+TConclusionStatus TSourceData::DoAssembleAccessor(
+    const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+    if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
+        // Already published by a pending drain. Building again would read OriginalData empty and insert a second column.
+        if (context.GetResources().GetAccessorOptional(columnId)) {
+            if (HasStageData()) {
+                MutableStageData().ExtractFetcherOptional(columnId);
+            }
+            return TConclusionStatus::Success();
         }
+        if (HasStageData()) {
+            if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
+                AFL_VERIFY(OriginalData);
+                auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+                NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+                auto conclusion = fetcher->OnDataCollected(fetchContext);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+            }
+>>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
+        }
+        return TBase::DoAssembleAccessor(context, columnId, TString());
     }
     TBase::DoAssembleAccessor(context, columnId, subColumnName);
 }

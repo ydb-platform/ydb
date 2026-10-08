@@ -297,7 +297,17 @@ private:
     virtual TConclusion<bool> DoStartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) = 0;
 
+<<<<<<< HEAD
     virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
+=======
+    // A previous fetch of this entity can still sit in the scan stage after an AND/OR short-circuit skipped its
+    // assembler. Default is a no-op: in-memory sources have no such leftover.
+    virtual TConclusionStatus DoApplyPendingFetcher(const TProcessorContext& /*context*/, const ui32 /*entityId*/) {
+        return TConclusionStatus::Success();
+    }
+
+    virtual TConclusion<TExecutionResult> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& /*context*/,
+>>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
         const THashMap<ui32, IDataSource::TDataAddress>& /*columns*/, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/,
         const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& /*policy*/) {
@@ -320,9 +330,7 @@ public:
     }
 
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> StartFetchHeader(
-        const TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
-        return DoStartFetchHeader(context, fetchContext);
-    }
+        const TProcessorContext& context, const TFetchHeaderContext& fetchContext);
 
     TConclusion<NArrow::TColumnFilter> CheckHeader(const TProcessorContext& context, const TCheckHeaderContext& fetchContext) {
         return DoCheckHeader(context, fetchContext);
@@ -338,10 +346,9 @@ public:
         return DoCheckIndex(context, fetchContext, value);
     }
 
+    // Fetches only the part of addr that is not in the resources yet. An empty result means nothing is left to fetch.
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> StartFetchData(
-        const TProcessorContext& context, const TDataAddress& addr) {
-        return DoStartFetchData(context, addr);
-    }
+        const TProcessorContext& context, const TDataAddress& addr);
 
     void AssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
         DoAssembleAccessor(context, columnId, subColumnName);

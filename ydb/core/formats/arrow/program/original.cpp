@@ -12,6 +12,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
     THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
+<<<<<<< HEAD
         auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
         THashSet<TString> subColumnsToFetch;
         for (auto&& sc : i.GetSubColumnNames(true)) {
@@ -26,6 +27,9 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
             continue;
         }
         auto conclusion = source->StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
+=======
+        auto conclusion = source.StartFetchData(context, i);
+>>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
@@ -56,10 +60,14 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         }
     }
     for (auto&& [_, i] : HeaderContext) {
+<<<<<<< HEAD
         if (context.GetResources().GetAccessorOptional(i.GetColumnId())) {
             continue;
         }
         auto conclusion = source->StartFetchHeader(context, i);
+=======
+        auto conclusion = source.StartFetchHeader(context, i);
+>>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {

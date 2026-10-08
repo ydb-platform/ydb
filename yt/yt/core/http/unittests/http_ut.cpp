@@ -1834,6 +1834,29 @@ TEST_W(TContentEncodingServerTest, RequestIsDecodedPerContentEncoding)
     EXPECT_EQ(ToString(body), ReadAll(rsp));
 }
 
+TEST_W(TContentEncodingServerTest, DecodedRequestHeadersDescribeDecodedBody)
+{
+    Server->AddHandler("/echo", BIND([] (const IRequestPtr& req, const IResponseWriterPtr& rsp) {
+        EXPECT_FALSE(req->GetHeaders()->Find("Content-Encoding"));
+        EXPECT_FALSE(req->GetHeaders()->Find("Content-Length"));
+        EXPECT_EQ("preserved", req->GetHeaders()->GetOrThrow("X-Test"));
+        New<TEchoHttpHandler>()->HandleRequest(req, rsp);
+    }));
+    Server->Start();
+
+    auto body = TSharedRef::FromString(std::string(10'000, 'd'));
+    auto encodedBody = Encode(body, "gzip");
+    auto headers = New<THeaders>();
+    headers->Set("Content-Encoding", "gzip");
+    headers->Set("Content-Length", ToString(encodedBody.Size()));
+    headers->Set("X-Test", "preserved");
+    auto rsp = WaitFor(Client->Post(TestUrl + "/echo", encodedBody, headers))
+        .ValueOrThrow();
+
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
+    EXPECT_EQ(ToString(body), ReadAll(rsp));
+}
+
 TEST_W(TContentEncodingServerTest, UnsupportedRequestContentEncodingIsRejected)
 {
     Server->AddHandler("/echo", New<TEchoHttpHandler>());

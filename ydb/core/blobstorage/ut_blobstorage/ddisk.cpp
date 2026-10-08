@@ -5,10 +5,13 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 
+#include <algorithm>
+
 Y_UNIT_TEST_SUITE(DDisk) {
 
     struct TDDiskTestContext {
         TEnvironmentSetup Env;
+        NKikimrBlobStorage::TConfigRequest PoolRequest;
 
         const ui32 BlockSize = 4096;
         ui32 SurfaceSize;
@@ -33,7 +36,9 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 std::optional<ui32> preallocateFreeSpaceThresholdPercent = std::nullopt,
                 std::optional<ui32> deallocateFreeSpaceThresholdPercent = std::nullopt,
                 std::optional<ui32> deallocateThresholdSeconds = std::nullopt,
-                bool enableChecksums = true)
+                bool enableChecksums = true,
+                std::optional<NKikimrBlobStorage::EPersistentBufferAllocationMode> allocationMode = std::nullopt,
+                ui32 drivesPerNode = 0, ui32 numDDiskGroups = 3)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -62,12 +67,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }) {
             SurfaceSize = surfaceSize;
             SurfaceBlocks = SurfaceSize / BlockSize;
-            Env.CreateBoxAndPool();
+            Env.CreateBoxAndPool(drivesPerNode);
             Env.Sim(TDuration::Seconds(30));
 
             {
-                NKikimrBlobStorage::TConfigRequest request;
-                auto *cmd = request.AddCommand()->MutableDefineDDiskPool();
+                auto *cmd = PoolRequest.AddCommand()->MutableDefineDDiskPool();
                 cmd->SetBoxId(1);
                 cmd->SetName("ddisk_pool");
                 auto *g = cmd->MutableGeometry();
@@ -79,8 +83,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 g->SetNumFailDomainsPerFailRealm(5);
                 g->SetNumVDisksPerFailDomain(1);
                 cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
-                cmd->SetNumDDiskGroups(3);
-                auto res = Env.Invoke(request);
+                cmd->SetNumDDiskGroups(numDDiskGroups);
+                if (allocationMode) {
+                    cmd->SetPersistentBufferAllocationMode(*allocationMode);
+                }
+                auto res = Env.Invoke(PoolRequest);
                 UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
             }
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
@@ -677,6 +684,70 @@ Y_UNIT_TEST_SUITE(DDisk) {
             }
         }
     };
+
+    void CheckPersistentBufferAllocationMode(NKikimrBlobStorage::EPersistentBufferAllocationMode mode, ui32 drivesPerNode) {
+        TDDiskTestContext f(64_KB, 128_MB, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+            true, mode == NKikimrBlobStorage::BALANCED
+                ? std::nullopt : std::optional(mode), drivesPerNode, 16);
+        std::map<std::pair<ui32, ui32>, std::set<ui32>> slotsPerPDisk;
+        auto collect = [&](ui64 firstGroupId) {
+            for (ui64 i = 0; i < 64; ++i) {
+                auto group = f.DefineDirectBlockGroup(firstGroupId + i, 3, 1, 3);
+                for (const auto& pb : group.GetPersistentBufferDDiskId()) {
+                    slotsPerPDisk[{pb.GetNodeId(), pb.GetPDiskId()}].insert(pb.GetDDiskSlotId());
+                }
+            }
+        };
+        collect(1);
+        if (mode == NKikimrBlobStorage::ONE_PER_PDISK) {
+            for (const auto& [_, slots] : slotsPerPDisk) {
+                UNIT_ASSERT_VALUES_EQUAL(slots.size(), 1);
+            }
+            f.Env.RestartNode(f.Env.Settings.ControllerNodeId);
+            f.Edge = f.Env.Runtime->AllocateEdgeActor(f.Env.Settings.ControllerNodeId, __FILE__, __LINE__);
+            collect(100);
+            for (const auto& [_, slots] : slotsPerPDisk) {
+                UNIT_ASSERT_VALUES_EQUAL(slots.size(), 1);
+            }
+        } else {
+            UNIT_ASSERT(std::ranges::any_of(slotsPerPDisk, [](const auto& item) { return item.second.size() > 1; }));
+        }
+        if (drivesPerNode > 1) {
+            std::map<ui32, std::set<ui32>> pdisksPerNode;
+            for (const auto& [pdisk, _] : slotsPerPDisk) {
+                pdisksPerNode[pdisk.first].insert(pdisk.second);
+            }
+            UNIT_ASSERT(std::ranges::any_of(pdisksPerNode, [](const auto& item) { return item.second.size() > 1; }));
+        }
+
+        auto& cmd = *f.PoolRequest.MutableCommand(0)->MutableDefineDDiskPool();
+        cmd.SetItemConfigGeneration(1);
+        cmd.ClearPersistentBufferAllocationMode();
+        auto result = f.Env.Invoke(f.PoolRequest);
+        UNIT_ASSERT_C(result.GetSuccess(), result.GetErrorDescription());
+        cmd.SetItemConfigGeneration(2);
+        cmd.SetPersistentBufferAllocationMode(mode);
+        result = f.Env.Invoke(f.PoolRequest);
+        UNIT_ASSERT_C(result.GetSuccess(), result.GetErrorDescription());
+        cmd.SetItemConfigGeneration(3);
+        cmd.SetPersistentBufferAllocationMode(mode == NKikimrBlobStorage::BALANCED
+            ? NKikimrBlobStorage::ONE_PER_PDISK : NKikimrBlobStorage::BALANCED);
+        result = f.Env.Invoke(f.PoolRequest);
+        UNIT_ASSERT(!result.GetSuccess());
+        UNIT_ASSERT_C(result.GetErrorDescription().Contains("PersistentBufferAllocationMode"), result.GetErrorDescription());
+    }
+
+    Y_UNIT_TEST(PersistentBufferAllocationBalanced) {
+        CheckPersistentBufferAllocationMode(NKikimrBlobStorage::BALANCED, 1);
+    }
+
+    Y_UNIT_TEST(PersistentBufferAllocationOnePerPDisk) {
+        CheckPersistentBufferAllocationMode(NKikimrBlobStorage::ONE_PER_PDISK, 1);
+    }
+
+    Y_UNIT_TEST(PersistentBufferAllocationMultiplePDisks) {
+        CheckPersistentBufferAllocationMode(NKikimrBlobStorage::ONE_PER_PDISK, 2);
+    }
 
     Y_UNIT_TEST(SystemViewMarksDDiskSlots) {
         TDDiskTestContext f;

@@ -76,9 +76,15 @@ bool GuaranteesRepeatableReads(NKqpProto::EIsolationLevel isolationLevel) {
 }
 
 bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfiguration& config, bool rollbackTx,
-    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery)
+    bool commitTx, const NKqpProto::TKqpPhyQuery& physicalQuery, bool isStreamingQuery)
 {
     Y_UNUSED(config);
+
+    if (isStreamingQuery) {
+        // Streaming queries must never acquire a snapshot: they are long-running
+        // and each read must see the latest committed data.
+        return false;
+    }
 
     if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
         *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&

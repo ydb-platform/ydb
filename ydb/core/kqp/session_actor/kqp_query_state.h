@@ -474,7 +474,8 @@ public:
     }
 
     bool NeedSnapshot(const NYql::TKikimrConfiguration& config) const {
-        return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
+        return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery(),
+            UserRequestContext && UserRequestContext->IsStreamingQuery);
     }
 
     TVector<NKikimr::TTableId> GetTableIdsForSnapshot() const {

@@ -1313,6 +1313,7 @@ public:
     }
 
     void AcquireMvccSnapshot() {
+        AFL_ENSURE(!QueryState->UserRequestContext || !QueryState->UserRequestContext->IsStreamingQuery);
         QueryState->AcquireSnapshotSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::SessionAcquireSnapshot,
             QueryState->KqpSessionSpan.GetTraceId(), {
                 .Name = "Acquire snapshot",

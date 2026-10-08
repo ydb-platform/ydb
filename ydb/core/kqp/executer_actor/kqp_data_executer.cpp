@@ -124,12 +124,15 @@ public:
     }
 
     bool ForceAcquireSnapshot() const {
+        const TUserRequestContext* userRequestContext = TasksGraph.GetMeta().UserRequestContext.Get();
+        const bool isStreamingQuery = userRequestContext && userRequestContext->IsStreamingQuery;
         const bool forceSnapshot = (
             !GetSnapshot().IsValid() &&
             ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&
             !HasOlapTable &&
+            !isStreamingQuery &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
         AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
@@ -970,6 +973,11 @@ private:
 
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
+
+        // This state is only entered when ForceAcquireSnapshot() returned true,
+        // which is guaranteed to be false for streaming queries.
+        const TUserRequestContext* userRequestContext = TasksGraph.GetMeta().UserRequestContext.Get();
+        AFL_ENSURE(!(userRequestContext && userRequestContext->IsStreamingQuery));
 
         YDB_LOG_TRACE("Read snapshot result",
             {"marker", "KQPDATA"},

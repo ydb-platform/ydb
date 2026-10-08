@@ -5,6 +5,8 @@ on:
     types: [opened, reopened, synchronize, ready_for_review, labeled, closed, converted_to_draft]
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
   checks: write
 jobs:
   gate:
@@ -18,14 +20,14 @@ jobs:
       admitted: ${{ steps.gate.outputs.admitted }}
       stop: ${{ steps.gate.outputs.stop }}
     steps:
-      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@doc-review-stable
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.2.0
         id: gate
         with:
           mode: gate
-          admission-token: ${{ secrets.YDB_GH_TOKEN }}
+          admission-token: ${{ github.token }}
           budget-rub: ${{ vars.YDBDOC_REVIEW_MAX_RUN_COST_RUB }}
           rules-sha: ${{ vars.YDBDOC_REVIEW_RULES_SHA }}
-          publish-token: ${{ secrets.YDB_GH_TOKEN }}
+          publish-token: ${{ github.token }}
           ydb-endpoint: ${{ vars.YDB_ENDPOINT }}
           ydb-database: ${{ vars.YDB_DATABASE }}
           ydb-token: ${{ secrets.YDB_TOKEN }}
@@ -39,16 +41,16 @@ jobs:
       group: doc-policy-review-${{ github.repository }}-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@doc-review-stable
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.2.0
         with:
           mode: run
-          admission-token: ${{ secrets.YDB_GH_TOKEN }}
+          admission-token: ${{ github.token }}
           budget-rub: ${{ vars.YDBDOC_REVIEW_MAX_RUN_COST_RUB }}
           rules-sha: ${{ vars.YDBDOC_REVIEW_RULES_SHA }}
-          publish-token: ${{ secrets.YDB_GH_TOKEN }}
+          publish-token: ${{ github.token }}
           ydb-endpoint: ${{ vars.YDB_ENDPOINT }}
           ydb-database: ${{ vars.YDB_DATABASE }}
           ydb-token: ${{ secrets.YDB_TOKEN }}
           ydb-sa-key: ${{ secrets.YDB_SA_KEY }}
-          api-key: ${{ secrets.YANDEX_API_KEY }}
-          folder-id: ${{ vars.YANDEX_FOLDER_ID }}
+          api-key: ${{ secrets.YANDEX_CLOUD_API_KEY_DOC_REVIEW }}
+          folder-id: ${{ secrets.YANDEX_CLOUD_FOLDER_DOC_REVIEW }}

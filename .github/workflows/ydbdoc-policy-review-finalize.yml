@@ -6,6 +6,8 @@ on:
     types: [completed]
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
   actions: read
   checks: write
 jobs:
@@ -14,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@doc-review-stable
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.2.0
         with:
           mode: finalize
-          publish-token: ${{ secrets.YDB_GH_TOKEN }}
+          publish-token: ${{ github.token }}
           ydb-endpoint: ${{ vars.YDB_ENDPOINT }}
           ydb-database: ${{ vars.YDB_DATABASE }}
           ydb-token: ${{ secrets.YDB_TOKEN }}

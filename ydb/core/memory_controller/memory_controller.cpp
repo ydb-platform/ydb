@@ -174,7 +174,6 @@ using TStatsWriter = void (*)(NKikimrMemory::TMemoryStats& stats, const TConsume
 
 MEMORY_STATS_WRITER(MemTable)
 MEMORY_STATS_WRITER(SharedCache)
-MEMORY_STATS_WRITER(HnswCache)
 MEMORY_STATS_WRITER(Compaction)
 MEMORY_STATS_WRITER(QueryExecution)
 
@@ -298,17 +297,6 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         .WriteStats = &WriteSharedCacheStats,
         .StatsSummed = true,
         .StatsWithLimit = false,
-    },
-    {
-        .Kind = EMemoryConsumerKind::HnswCache,
-        .ElasticLimit = true,
-        .CanZeroLimit = true,
-        .GetMinBytes = &GetHnswCacheMinBytes,
-        .GetMaxBytes = &GetHnswCacheMaxBytes,
-        .LimitDelivery = ELimitDelivery::LimitShares,
-        .WriteStats = &WriteHnswCacheStats,
-        .StatsSummed = false,
-        .StatsWithLimit = true,
     },
 };
 

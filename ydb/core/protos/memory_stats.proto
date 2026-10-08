@@ -43,8 +43,6 @@ message TMemoryStats {
     optional uint64 CompactionDemand = 30;
     optional uint64 CompactionReclaimable = 31;
 
-    optional uint64 HnswCacheConsumption = 32;
-    optional uint64 HnswCacheLimit = 33;
-    optional uint64 HnswCacheDemand = 34;
-    optional uint64 HnswCacheReclaimable = 35;
+    // HNSW memory is included in SharedCacheConsumption/SharedCacheDemand.
+    reserved 32 to 35;
 }

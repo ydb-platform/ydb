@@ -6238,8 +6238,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(settings);
         helper.CreateCustomTable("exact-vector", {
             {"key", "Uint32", true, false}, {"emb", "String", false, false},
@@ -6282,8 +6282,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(settings);
         helper.CreateCustomTable("small-hnsw", {
             {"key", "Uint32", true, false}, {"emb", "String", false, false}}, true);
@@ -6384,8 +6384,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings settings(pm.GetPort(2134));
         settings.SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(settings, 1, Followers);
         helper.CreateCustomTable("hnsw-flag", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
@@ -6475,8 +6475,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(settings, 1, true);
         helper.CreateCustomTable("hnsw-follower-edge", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
@@ -6564,8 +6564,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings, 1, Followers);
         helper.CreateCustomTable("table-vector-prefix", {
             {"parent", "Uint64", true, false},
@@ -6639,13 +6639,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
     }
 
-    Y_UNIT_TEST(HnswUsesDedicatedBudgetAndEvictsOnLimit) {
+    Y_UNIT_TEST(HnswSharesPageCacheBudgetAndEvictsOnLimit) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
         helper.CreateCustomTable("table-vector-memory", {
             {"parent", "Uint32", true, false},
@@ -6666,7 +6666,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         std::optional<ui64> limitOverride;
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == shardActor) {
-                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::HnswCache);
+                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
                 ++registrations;
             } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == shardActor) {
                 consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
@@ -6710,7 +6710,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(consumer);
         UNIT_ASSERT_GT(consumer->GetReport().Used, 0);
         UNIT_ASSERT_GT(shard->GetHnswCacheMemoryLimit(), 0);
-        UNIT_ASSERT_LE(shard->GetHnswCacheMemoryLimit(), 64_MB);
+        UNIT_ASSERT_LT(shard->GetHnswCacheMemoryLimit(), 64_MB);
         UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 1);
 
         // Simulate an active reader pinning a graph and its write deltas.
@@ -6740,8 +6740,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false);
         serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         serverSettings.SetNeedStatsCollectors(true);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
 
         TVector<TShardedTableOptions::TColumn> columns = {
@@ -6833,8 +6833,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         settings.AppConfig->MutableDataShardConfig()->SetKeepSnapshotTimeout(1000);
         settings.AppConfig->MutableDataShardConfig()->SetCleanupSnapshotPeriod(100);
         TTestHelper helper(settings);
@@ -6967,8 +6967,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
         settings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMinBytes(64_MB);
-        settings.AppConfig->MutableMemoryControllerConfig()->SetHnswCacheMaxBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(settings);
         helper.CreateCustomTable("hnsw-cold", {
             {"key", "Uint32", true, false}, {"emb", "String", false, false}}, true);

@@ -15,7 +15,6 @@ enum class EMemoryConsumerKind {
     ColumnTablesColumnDataCache,
     ColumnTablesDeduplicationGroupedMemory,
     ColumnTablesPortionsMetaDataCache,
-    HnswCache,
 };
 
 struct TConsumerReport {

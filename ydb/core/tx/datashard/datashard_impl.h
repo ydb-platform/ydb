@@ -1951,8 +1951,10 @@ public:
     ui64 GetHnswCacheMemoryLimit() {
         if (!HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
+            // Graphs, build buffers and MVCC journals share the node-wide
+            // SharedCache quota with the shared table-page cache.
             Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::HnswCache),
+                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();

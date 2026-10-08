@@ -1195,7 +1195,8 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Versions`;");
 
-        for (size_t i = 0; i < 40; ++i) {
+        // In-flight list can take ~4s to report the drop; recreation starts only after that.
+        for (size_t i = 0; i < 200; ++i) {
             auto versionsTable = server.PQClient().TryRunYqlDataQuery(
                 "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;");
             if (versionsTable.Defined()) {

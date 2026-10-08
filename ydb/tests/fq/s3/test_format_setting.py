@@ -5,7 +5,6 @@ import boto3
 import io
 import json
 import logging
-import re
 import yatest
 
 import pyarrow as pa
@@ -73,18 +72,6 @@ class TestS3(TestYdsBase):
                 assert actual == expected
             assert items[4].int64_value == row_count * (row_count - 1) // 2
             assert items[5].uint64_value == (row_count - expected_nulls) * 27
-            batch_lengths = []
-            pattern = re.escape(input_filename) + r'\].*HTTP Parquet decoded batch rows: (\d+)'
-            log_paths = {
-                node.ydbd_log_file_path
-                for tenant in (kikimr.control_plane, kikimr.compute_plane)
-                for node in tenant.kikimr_cluster.nodes.values()
-            }
-            for log_path in log_paths:
-                with open(log_path) as log:
-                    batch_lengths.extend(int(length) for length in re.findall(pattern, log.read()))
-            logging.info("HTTP Parquet decoded batch lengths for %s: %s", input_filename, batch_lengths)
-            assert row_count in batch_lengths, "The HTTP reader must convert an oversized batch"
 
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_settings")

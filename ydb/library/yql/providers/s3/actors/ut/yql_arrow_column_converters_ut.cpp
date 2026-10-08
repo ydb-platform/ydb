@@ -136,6 +136,56 @@ void CheckTimestampToString(bool utf8, size_t length, bool withNulls = false) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
+    Y_UNIT_TEST(TimestampConversionRangeChecks) {
+        const i64 maxTimestamp = NUdf::MAX_TIMESTAMP;
+        for (const bool nullable : {false, true}) {
+            for (const auto typeId : {NUdf::TDataType<NUdf::TTimestamp>::Id, NUdf::TDataType<char*>::Id, NUdf::TDataType<NUdf::TUtf8>::Id}) {
+                TTestFixture f;
+                if (nullable) {
+                    f.AddOptionalColumn("ts", typeId);
+                } else {
+                    f.AddColumn("ts", typeId);
+                }
+                const auto targetType = typeId == NUdf::TDataType<NUdf::TTimestamp>::Id ? arrow::uint64()
+                    : typeId == NUdf::TDataType<NUdf::TUtf8>::Id ? arrow::utf8() : arrow::binary();
+                for (const auto unit : {arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO}) {
+                    const i64 multiplier = unit == arrow::TimeUnit::SECOND ? 1000000 : unit == arrow::TimeUnit::MILLI ? 1000 : 1;
+                    const auto sourceType = arrow::timestamp(unit);
+                    const auto converter = BuildColumnConverter("ts", sourceType, targetType, f.RowTypes.at("ts"), f.Settings);
+                    auto makeInput = [&](const std::vector<i64>& values) {
+                        arrow::TimestampBuilder builder(sourceType, arrow::system_memory_pool());
+                        for (const auto value : values) {
+                            UNIT_ASSERT(builder.Append(value).ok());
+                        }
+                        if (nullable) {
+                            UNIT_ASSERT(builder.AppendNull().ok());
+                        }
+                        std::shared_ptr<arrow::Array> input;
+                        UNIT_ASSERT(builder.Finish(&input).ok());
+                        return input;
+                    };
+                    const auto output = converter(makeInput({0, maxTimestamp / multiplier}));
+                    UNIT_ASSERT_C(output->ValidateFull().ok(), output->ValidateFull().ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(output->length(), nullable ? 3 : 2);
+                    UNIT_ASSERT_VALUES_EQUAL(output->null_count(), nullable ? 1 : 0);
+                    if (typeId == NUdf::TDataType<NUdf::TTimestamp>::Id) {
+                        const auto& timestamps = static_cast<const arrow::UInt64Array&>(*output);
+                        UNIT_ASSERT_VALUES_EQUAL(timestamps.Value(0), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(timestamps.Value(1), maxTimestamp / multiplier * multiplier);
+                    }
+                    for (const i64 value : {i64{-1}, maxTimestamp + 1}) {
+                        const TString message = TStringBuilder() << "timestamp in parquet is out of range [0, " << maxTimestamp << "]: " << value;
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(converter(makeInput({value})), parquet::ParquetException, message);
+                    }
+                    if (multiplier > 1) {
+                        const i64 value = maxTimestamp / multiplier + 1;
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(converter(makeInput({value})), parquet::ParquetException, "after transformation");
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(TimestampToStringChunkBoundary) {
         for (const size_t length : {1, 9102, 9103}) {
             CheckTimestampToString<false>(false, length);

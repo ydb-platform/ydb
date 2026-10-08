@@ -238,7 +238,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(const std::shared_ptr<arro
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
+        if (baseValue < 0 || baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
             throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
         }
 
@@ -268,7 +268,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
+        if (baseValue < 0 || baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
             throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
         }
 

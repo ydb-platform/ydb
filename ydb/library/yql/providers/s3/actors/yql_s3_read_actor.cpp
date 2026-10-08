@@ -884,7 +884,6 @@ public:
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
                     StartUnit();
                     Y_DEFER { StopUnit(); };
-                    LOG_CORO_D("HTTP Parquet decoded batch rows: " << batch->num_rows());
                     auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;

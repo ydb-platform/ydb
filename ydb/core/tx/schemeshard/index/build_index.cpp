@@ -79,6 +79,19 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
     Execute(CreateTxBilling(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const TActorContext& ctx) {
+    const auto id = TIndexBuildId(ev->Get()->BuildId);
+    const auto it = IndexBuilds.find(id);
+    if (it == IndexBuilds.end()) {
+        return;
+    }
+    auto& buildInfo = *it->second;
+    buildInfo.HnswProgressScheduled = false;
+    if (buildInfo.State == TIndexBuildInfo::EState::Applying && buildInfo.ApplyTxDone) {
+        Execute(CreateTxProgress(id), ctx);
+    }
+}
+
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
     Y_ENSURE(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
     auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info.Id);
@@ -137,6 +150,7 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                     std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
                 break;
@@ -194,6 +208,7 @@ void TSchemeShard::PersistBuildIndexSpecializedDescription(NIceDb::TNiceDb& db, 
 
     switch (info.IndexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
             *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
                 std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
             break;

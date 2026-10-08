@@ -442,6 +442,7 @@ public:
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
+    bool EnableHnswIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
@@ -466,6 +467,7 @@ public:
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
     ui32 MaxStoredIndexBuilds = 0;
+    TDuration HnswIndexBuildWaitTimeout = TDuration::Hours(2);
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -2060,6 +2062,7 @@ public:
     void Handle(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressHnswIndexBuild::TPtr& ev, const TActorContext& ctx);
 
     void Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);
     void SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx);

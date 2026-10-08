@@ -55,6 +55,7 @@ public:
 
                 // Remove otherwise untracked changes
                 txc.DB.RemoveTx(localTid, txId);
+                Self->AbortHnswIndexChanges(localTid, txId, txc.DB);
                 ++removed;
             }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "detailed_metrics_binding.h"
+#include "detailed_metrics_tree.h"
 
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/sys_view.pb.h>
@@ -22,7 +23,25 @@ namespace NKikimr {
         virtual void DropNode(ui32 nodeId) = 0;
 
         virtual void RecalculateAllCounters() = 0;
+
+        /**
+         * Sets the output limit of the shared budget and folds at once if over it.
+         *
+         * @param[in] restorePercent A budget fold restores at or below this percent of maxBytes
+         * @param[in] prefixLabels The labels above targetCounterGroup, written in every series
+         */
+        virtual void SetOutputLimit(
+            ui64 maxBytes, ui64 restorePercent, const NDetailedMetrics::TSubgroupPath& prefixLabels) = 0;
+
+        // Folds at once if over the limit; never restores
+        virtual void FitOutput() = 0;
+
+        // The estimated JSON bytes of the unfolded output
+        virtual ui64 GetEstimatedOutputBytes() const = 0;
     };
+
+    // RecalculateAllCounters calls in a row that fit, before a folded database restores
+    constexpr ui32 DETAILED_OUTPUT_RESTORE_TICKS = 12;
 
     using TProcessorDatabaseMetricsAggregatorPtr = TIntrusivePtr<TProcessorDatabaseMetricsAggregator>;
 
@@ -43,11 +62,18 @@ namespace NKikimr {
      *
      * Every TABLE partial and leaf feeds the public rollup, and leaves are published under tablet_id/follower_id.
      *
+     * The aggregators of one budgetScope share the limit of SetOutputLimit on their estimated JSON output.
+     * Over it, the databases with the most leaf bytes fold: their leaves keep feeding the rollup unpublished.
+     * Folding is immediate; restoring takes DETAILED_OUTPUT_RESTORE_TICKS fitting RecalculateAllCounters
+     * in a row. A scoped aggregator starts folded.
+     *
      * @param[in] getDescriptor Replaced by the tests only
+     * @param[in] budgetScope One budget per scope (a node's ydb_detailed group); null: private, starts unfolded
      */
     TProcessorDatabaseMetricsAggregatorPtr CreateProcessorDatabaseMetricsAggregator(
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
-        TDetailedMetricsDescriptorGetter getDescriptor = &GetDetailedMetricsDescriptor);
+        TDetailedMetricsDescriptorGetter getDescriptor = &GetDetailedMetricsDescriptor,
+        NMonitoring::TDynamicCounterPtr budgetScope = nullptr);
 
 } // namespace NKikimr

@@ -1497,6 +1497,42 @@ TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
     return joinSettings;
 }
 
+bool BlocksBlockHashJoin(const TTypeAnnotationNode* type) {
+    while (type && (type->GetKind() == ETypeAnnotationKind::Tagged || type->GetKind() == ETypeAnnotationKind::Optional)) {
+        if (type->GetKind() == ETypeAnnotationKind::Tagged) {
+            type = type->Cast<TTaggedExprType>()->GetBaseType();
+        } else {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+    }
+    if (!type) {
+        return true;
+    }
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* element : type->Cast<TTupleExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(element)) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
 TExprBase DqBuildHashJoin(
     const TDqJoin& join,
     EHashJoinMode mode,
@@ -1524,6 +1560,13 @@ TExprBase DqBuildHashJoin(
 
     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
+
+    for (const auto* item : leftStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+    }
+    for (const auto* item : rightStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+    }
 
     const auto& leftItems = leftStructType->GetItems();
     const auto& rightItems = rightStructType->GetItems();

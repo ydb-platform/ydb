@@ -109,7 +109,7 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     TPredicateExtractorSettings settings;
     settings.MergeAdjacentPointRanges = true;
     settings.HaveNextValueCallable = true;
-    settings.BuildLiteralRange = false;
+    settings.BuildLiteralRange = true;
     settings.IsValidForRange = IsValidForRange;
 
     if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
@@ -122,6 +122,79 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
         settings.ExternalParameterMaxSize = kqpCtx.QueryCtx->RuntimeParameterSizeLimit;
     }
     return settings;
+}
+
+// Returns a bound value of a literal range in the form the read source takes as is: a literal, a null or a parameter
+// of the key column type. The extractor converts the value to the key column type: it retypes an integer literal
+// itself and wraps a Utf8 literal for a String key in ToString, which is folded here because the literal text stays
+// the same. Null if the value has to be computed.
+TExprNode::TPtr GetLiteralBoundValue(const TExprNode::TPtr& value, const TTypeAnnotationNode& keyType, TExprContext& ctx) {
+    const TTypeAnnotationNode* type = value->GetTypeAnn();
+    if (!type) {
+        return nullptr;
+    }
+
+    if (value->IsCallable("Just")) {
+        return GetLiteralBoundValue(value->HeadPtr(), keyType, ctx);
+    }
+
+    if (!IsSameAnnotation(*RemoveOptionalType(type), *RemoveOptionalType(&keyType))) {
+        return nullptr;
+    }
+
+    if (TCoDataCtor::Match(value.Get()) || TCoPgConst::Match(value.Get()) || TCoNothing::Match(value.Get())
+        || TCoParameter::Match(value.Get())) {
+        return value;
+    }
+
+    if (!value->IsCallable("ToString") || !value->Head().IsCallable("Utf8")) {
+        return nullptr;
+    }
+
+    auto folded = ctx.NewCallable(value->Pos(), "String", {TCoDataCtor(value->HeadPtr()).Literal().Ptr()});
+    folded->SetTypeAnn(type);
+    return folded;
+}
+
+// Returns the ranges as a KqlKeyRange, which the read source takes as is, when the extractor found them to be a single
+// range known at compile time and every bound value is a literal, a null or a parameter. Null otherwise.
+TExprNode::TPtr BuildLiteralRange(const IPredicateRangeExtractor::TBuildResult& result, const TVector<TString>& keyColumns,
+                                  const TStructExprType& schemeType, TPositionHandle pos, TExprContext& ctx) {
+    if (!result.LiteralRange) {
+        return nullptr;
+    }
+
+    using TBound = IPredicateRangeExtractor::TBuildResult::TLiteralRange::TLiteralRangeBound;
+    auto buildBound = [&](const TBound& bound) -> TMaybeNode<TKqlKeyTuple> {
+        Y_ENSURE(bound.Columns.size() <= keyColumns.size());
+        TExprNode::TListType values;
+        for (size_t i = 0; i < bound.Columns.size(); ++i) {
+            const auto* keyType = schemeType.FindItemType(keyColumns[i]);
+            auto value = keyType ? GetLiteralBoundValue(bound.Columns[i], *keyType, ctx) : nullptr;
+            if (!value) {
+                return {};
+            }
+            values.push_back(std::move(value));
+        }
+
+        if (bound.Inclusive) {
+            return Build<TKqlKeyInc>(ctx, pos).Add(values).Done().Cast<TKqlKeyTuple>();
+        }
+        return Build<TKqlKeyExc>(ctx, pos).Add(values).Done().Cast<TKqlKeyTuple>();
+    };
+
+    const auto from = buildBound(result.LiteralRange->Left);
+    const auto to = buildBound(result.LiteralRange->Right);
+    if (!from || !to) {
+        return nullptr;
+    }
+
+    // clang-format off
+    return Build<TKqlKeyRange>(ctx, pos)
+        .From(from.Cast())
+        .To(to.Cast())
+    .Done().Ptr();
+    // clang-format on
 }
 
 // The extractor needs the complete table schema, including keys absent from the Read.
@@ -490,6 +563,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     TIntrusivePtr<TKikimrTableMetadata> lookupIndexMeta;
     IPredicateRangeExtractor::TBuildResult lookupResult;
+    TVector<TString> lookupKeyColumns;
     TVector<TString> lookupReadColumns;
 
     auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
@@ -546,6 +620,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             } else {
                 lookupIndexMeta = indexMeta;
                 lookupResult = std::move(indexResult);
+                lookupKeyColumns = std::move(indexKeyColumns);
                 lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
                 chosenIndexMeta.Reset();
             }
@@ -563,6 +638,9 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             .PointPrefixLen = lookupResult.PointPrefixLen,
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
+        if (GetStorageType(*lookupIndexMeta) == NYql::EStorageType::RowStorage) {
+            rangeInfo.LiteralRange = BuildLiteralRange(lookupResult, lookupKeyColumns, *schemeType, read->Pos, ctx);
+        }
 
         TUnorderedIUs indexColumns;
         THashMap<TString, TInfoUnitId> indexIds;
@@ -611,6 +689,14 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         .ExpectedMaxRanges = chosen.ExpectedMaxRanges ? TMaybe<size_t>(*chosen.ExpectedMaxRanges) : TMaybe<size_t>(),
     };
     const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->GetTableStorageType();
+
+    // Only the row storage read source takes a literal range.
+    if (storageType == NYql::EStorageType::RowStorage) {
+        rangeInfo.LiteralRange = BuildLiteralRange(chosen, chosenKeyColumns, *schemeType, read->Pos, ctx);
+        if (rangeInfo.LiteralRange) {
+            YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Literal range: " << KqpExprToPrettyString(*rangeInfo.LiteralRange, ctx);
+        }
+    }
 
     // Point lookup is only applicable to row storage tables.
     if (storageType == NYql::EStorageType::RowStorage && chosen.PointPrefixLen > 0) {

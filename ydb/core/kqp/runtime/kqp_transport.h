@@ -14,7 +14,7 @@ namespace NKqp {
 
 class TKqpProtoBuilder : private TNonCopyable {
 public:
-    TKqpProtoBuilder(const NMiniKQL::IFunctionRegistry& funcRegistry);
+    TKqpProtoBuilder();
 
     TKqpProtoBuilder(NMiniKQL::TScopedAlloc* alloc, NMiniKQL::TTypeEnvironment* typeEnv,
         NMiniKQL::THolderFactory* holderFactory);
@@ -36,7 +36,7 @@ private:
         NMiniKQL::TMemoryUsageInfo MemInfo;
         NMiniKQL::THolderFactory HolderFactory;
 
-        explicit TSelfHosted(const NMiniKQL::IFunctionRegistry& funcRegistry);
+        TSelfHosted();
     };
     THolder<TSelfHosted> SelfHosted;
 };

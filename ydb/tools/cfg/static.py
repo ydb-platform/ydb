@@ -59,6 +59,7 @@ class StaticConfigGenerator(object):
         local_binary_path=None,
         skip_location=False,
         schema_validator=None,
+        grpcs_port=None,
         **kwargs
     ):
         self.__proto_configs = {}
@@ -84,6 +85,7 @@ class StaticConfigGenerator(object):
         self._skip_location = skip_location
         self.__node_broker_port = node_broker_port
         self.__grpc_port = grpc_port
+        self.__grpcs_port = grpcs_port
         self.__ic_port = ic_port
         self.__mon_port = mon_port
         self.__kikimr_home = cfg_home
@@ -593,6 +595,8 @@ class StaticConfigGenerator(object):
                     mon_address=self.__cluster_details.monitor_address,
                     cert_params=self.__cluster_details.ic_cert_params,
                     use_auth_token_file=self._use_auth_token_file,
+                    dynamic_node=self.__cluster_details.get_service("dynamic_node"),
+                    grpcs_port=self.__grpcs_port,
                 )
 
             return kikimr_cfg_for_dynamic_node(
@@ -612,6 +616,7 @@ class StaticConfigGenerator(object):
                 audit_txt_enabled=self.audit_txt_enabled,
                 fq_txt_enabled=self.fq_txt_enabled,
                 use_auth_token_file=self._use_auth_token_file,
+                grpc_port=self.__grpc_port,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:

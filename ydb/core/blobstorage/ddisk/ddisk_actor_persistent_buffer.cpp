@@ -782,6 +782,7 @@ namespace NKikimr::NDDisk {
             PersistentBufferDataSectorsInfo.clear();
 
             PersistentBufferBarriersManager.RestoreBarriers(PersistentBuffers, PersistentBufferSpaceAllocator);
+            UpdateRegisteredTabletsCounter();
             // Without an ownership marker, remnants of a retired registration are not live data.
             std::erase_if(PersistentBuffers, [this](const auto& item) {
                 return !PersistentBufferBarriersManager.HasBarrier(item.first.TabletId, item.first.DirectBlockGroupIndex);
@@ -2153,6 +2154,12 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    void TDDiskActor::UpdateRegisteredTabletsCounter() {
+        // Track the in-memory barriers used for ownership checks, including pending writes.
+        // After a failed write, PB stays Broken until recovery restores the durable state.
+        *Counters.PersistentBuffer.RegisteredTablets = PersistentBufferBarriersManager.PersistentBufferBarriersLocation.size();
+    }
+
     void TDDiskActor::BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn,
             TPersistentBufferDiskOperationInFlight::EBarrierOperation operation) {
         Counters.Interface.ErasePersistentBuffer.Request(0);
@@ -2184,6 +2191,8 @@ namespace NKikimr::NDDisk {
         auto [oldChunkIdx, oldSectorIdx, barrier] = operation == TPersistentBufferDiskOperationInFlight::EBarrierOperation::Remove
             ? PersistentBufferBarriersManager.RemoveBarrier(creds.TabletId, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex))
             : PersistentBufferBarriersManager.MoveBarrier(creds.TabletId, creds.Generation, lsn, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex));
+
+        UpdateRegisteredTabletsCounter();
 
         if (oldChunkIdx != Max<ui32>()) {
             inflightRecord->second.Records[0].Sectors.push_back({.ChunkIdx = oldChunkIdx, .SectorIdx = oldSectorIdx});

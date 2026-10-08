@@ -94,8 +94,12 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
 
     // Check that range ends are sorted in ascending order
     TVector<TCell> prevKey(keyColTypeIds.size()); // Start from (NULL, NULL, .., NULL)
+    // The cells of prevKey point into the buffer of the previous key, so that
+    // key must stay alive (it is a copy of EndOfRange, not a view into it).
+    TVector<TSerializedCellVec> keys;
+    keys.reserve(partitions.size());
     for (ui32 i = 0; i < partitions.size(); ++i) {
-        TSerializedCellVec key(partitions[i].EndOfRange);
+        const TSerializedCellVec& key = keys.emplace_back(partitions[i].EndOfRange);
         if (CompareBorders<true, true>(prevKey, key.GetCells(), true, true, keyColTypeIds) >= 0) {
             errStr = Sprintf("Partition ranges are not sorted at index %u", i);
             return false;

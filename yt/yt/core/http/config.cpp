@@ -70,7 +70,7 @@ void TServerConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Parameter("enable_content_encoding", &TThis::EnableContentEncoding)
-        .Default(false);
+        .Default();
     registrar.Parameter("compression_thread_count", &TThis::CompressionThreadCount)
         .Default(1)
         .GreaterThan(0);

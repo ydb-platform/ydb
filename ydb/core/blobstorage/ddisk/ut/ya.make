@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     ddisk_actor_ut.cpp
+    metric_rates_ut.cpp
     ddisk_actor_batch_write_ut.cpp
     ddisk_actor_checksum_ut.cpp
     ddisk_actor_pdisk_ut.cpp

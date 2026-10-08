@@ -325,6 +325,7 @@ inline TLogEvent CreateLogEvent(
     event.ThreadName = loggingContext.ThreadName;
     event.FiberId = loggingContext.FiberId;
     event.TraceId = loggingContext.TraceId;
+    event.SpanId = loggingContext.SpanId;
     event.RequestId = loggingContext.RequestId;
     return event;
 }
@@ -360,6 +361,7 @@ inline void LogEventImpl(
         .ThreadName = loggingContext.ThreadName,
         .FiberId = loggingContext.FiberId,
         .TraceId = loggingContext.TraceId,
+        .SpanId = loggingContext.SpanId,
         .RequestId = loggingContext.RequestId,
         .SourceFile = sourceLocation.File,
         .SourceLine = sourceLocation.Line,

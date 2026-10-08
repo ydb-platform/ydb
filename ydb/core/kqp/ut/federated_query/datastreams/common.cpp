@@ -20,6 +20,9 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#include <util/string/builder.h>
+
+#include <atomic>
 
 namespace NKikimr::NKqp {
 
@@ -67,6 +70,12 @@ private:
 };
 
 } // anonymous namespace
+
+TString MakeExternalName(TStringBuf prefix) {
+    // Recipes are shared by multiple tests; the counter distinguishes calls within one clock tick.
+    static std::atomic<ui64> sequence{0};
+    return TStringBuilder() << prefix << "_" << TInstant::Now().MicroSeconds() << "_" << sequence.fetch_add(1, std::memory_order_relaxed);
+}
 
 TStreamingTestFixture::~TStreamingTestFixture () {
     if (PqGatewayDriver) {

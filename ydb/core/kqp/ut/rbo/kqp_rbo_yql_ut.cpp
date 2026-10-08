@@ -14,13 +14,12 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include "kqp_rbo_test_helpers.h"
-#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_aggregation_builder.h>
-#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_join_builder.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace_output.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/statistics/ut_common/ut_common.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -42,6 +41,8 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
+#include <util/string/split.h>
+
 #include <algorithm>
 #include <array>
 #include <ctime>
@@ -49,6 +50,10 @@
 #include <regex>
 #include <fstream>
 #include <utility>
+
+// These headers import NKikimr::NKqp into the global namespace, so include them last
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_aggregation_builder.h>
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_join_builder.h>
 
 namespace {
 
@@ -75,6 +80,36 @@ std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
     auto counters = TKqpCounters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
     return {counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val(),
             counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val()};
+}
+
+// Keeps every log record on its own line.
+class TLineLogStream : public TStringStream {
+    void DoWrite(const void* data, size_t size) override {
+        TStringStream::DoWrite(data, size);
+        TStringStream::DoWrite("\n", 1);
+    }
+};
+
+// Returns the `request` object of the [REQ_JSON] completed record whose query text contains `marker`.
+std::optional<NJson::TJsonValue> FindReqJsonCompleted(TStringBuf logs, TStringBuf marker) {
+    constexpr TStringBuf fieldPrefix = "requestJson=";
+    for (TStringBuf line : StringSplitter(logs).Split('\n')) {
+        const auto pos = line.find(fieldPrefix);
+        if (!line.Contains("[REQ_JSON]") || pos == TStringBuf::npos) {
+            continue;
+        }
+        std::string::size_type valuePos = pos + fieldPrefix.size();
+        const auto value = NActors::NStructuredLog::TTextWriter::UnescapeFieldValue(TString(line), valuePos);
+        NJson::TJsonValue json;
+        if (!value || !NJson::ReadJsonTree(*value, &json, /*throwOnError=*/false)) {
+            continue;
+        }
+        const auto& request = json["request"];
+        if (request["event"].GetStringSafe("") == "completed" && request["data"].GetStringSafe("").Contains(marker)) {
+            return request;
+        }
+    }
+    return std::nullopt;
 }
 
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
@@ -249,6 +284,27 @@ const NJson::TJsonValue* FindConnectionNode(const NJson::TJsonValue& node, const
     }
 
     return nullptr;
+}
+
+// A partial aggregate must reduce rows in its input's stage, so no stage
+// connection may separate it from its input. Returns the number of partials.
+ui32 CountPartialAggregatesInInputStages(const NJson::TJsonValue& node, const TString& plan) {
+    bool partial = false;
+    if (node["Operators"].IsArray()) {
+        for (const auto& op : node["Operators"].GetArraySafe()) {
+            partial |= op["Phase"].IsString() && op["Phase"].GetStringSafe() == "Intermediate";
+        }
+    }
+    ui32 partials = partial;
+    if (node["Plans"].IsArray()) {
+        for (const auto& child : node["Plans"].GetArraySafe()) {
+            const auto& type = child["PlanNodeType"];
+            UNIT_ASSERT_C(!partial || !type.IsString() || type.GetStringSafe() != "Connection",
+                "Partial aggregate reads another stage:\n" << plan);
+            partials += CountPartialAggregatesInInputStages(child, plan);
+        }
+    }
+    return partials;
 }
 
 void CollectOperatorIds(const NJson::TJsonValue& planNode, THashSet<i64>& operatorIds) {
@@ -2143,6 +2199,93 @@ FROM (
         const auto compileCountersAfter = GetNewRBOCompileCounters(kikimr);
         UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.first, compileCountersBefore.first);
         UNIT_ASSERT_VALUES_EQUAL(compileCountersAfter.second, compileCountersBefore.second + 1);
+    }
+
+    Y_UNIT_TEST(ReqJsonLogsActualOptimizer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TLineLogStream logs;
+        auto logsMutex = std::make_shared<TMutex>();
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogStream(&logs);
+        settings.LogStreamMutex = logsMutex;
+        // Successful queries are logged to [REQ_JSON] at DEBUG.
+        settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_REQUEST, NActors::NLog::PRI_DEBUG);
+        settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
+
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `doc` (
+                `id` String,
+                `flag` Bool,
+                PRIMARY KEY (`id`)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        // Log records are written asynchronously, so wait for the one of the query marked with `marker`.
+        const auto getCompletedRequest = [&](TStringBuf marker) -> NJson::TJsonValue {
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+            while (true) {
+                TString text;
+                {
+                    TGuard<TMutex> guard(*logsMutex);
+                    text = logs.Str();
+                }
+
+                if (auto request = FindReqJsonCompleted(text, marker)) {
+                    UNIT_ASSERT_C(request->Has("used_new_rbo"), request->GetStringRobust());
+                    return std::move(*request);
+                }
+
+                UNIT_ASSERT_C(TInstant::Now() < deadline, "No [REQ_JSON] record for " << marker << " in logs:\n" << text);
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        auto newRboResult = querySession.ExecuteQuery(R"(
+            /* req-json-new-rbo */
+            SELECT `id` FROM `doc` WHERE `flag`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(newRboResult.IsSuccess(), newRboResult.GetIssues().ToString());
+        const auto newRboRequest = getCompletedRequest("req-json-new-rbo");
+        UNIT_ASSERT_C(newRboRequest["used_new_rbo"].GetBooleanSafe(), newRboRequest.GetStringRobust());
+
+        // New RBO does not support this query, so it is compiled again with the old one.
+        auto fallbackResult = querySession.ExecuteQuery(R"(
+            /* req-json-fallback */
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(fallbackResult.IsSuccess(), fallbackResult.GetIssues().ToString());
+        const auto fallbackRequest = getCompletedRequest("req-json-fallback");
+        UNIT_ASSERT_C(!fallbackRequest["used_new_rbo"].GetBooleanSafe(), fallbackRequest.GetStringRobust());
+
+        auto allNewRboResult = querySession.ExecuteQuery(R"(
+            /* req-json-all-new-rbo */
+            SELECT `id` FROM `doc` WHERE `flag`;
+            SELECT `id` FROM `doc` WHERE NOT `flag`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(allNewRboResult.IsSuccess(), allNewRboResult.GetIssues().ToString());
+        const auto allNewRboRequest = getCompletedRequest("req-json-all-new-rbo");
+        UNIT_ASSERT_C(allNewRboRequest["used_new_rbo"].GetBooleanSafe(), allNewRboRequest.GetStringRobust());
+
+        // Statements are compiled together, so one unsupported statement sends the whole query to the old RBO.
+        auto mixedResult = querySession.ExecuteQuery(R"(
+            /* req-json-mixed */
+            SELECT `id` FROM `doc` WHERE `flag`;
+            SELECT `d`.`id` FROM (SELECT `d_src`.* FROM `doc` AS `d_src` WHERE `d_src`.`flag`) AS `d`;
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(mixedResult.IsSuccess(), mixedResult.GetIssues().ToString());
+        const auto mixedRequest = getCompletedRequest("req-json-mixed");
+        UNIT_ASSERT_C(!mixedRequest["used_new_rbo"].GetBooleanSafe(), mixedRequest.GetStringRobust());
     }
 
     Y_UNIT_TEST(CorrelatedScalarAggregateReuseDoesNotDuplicateVisibleColumns) {
@@ -8109,8 +8252,6 @@ FROM (
         const auto producerStage = graph.AddStage(), unionStage = graph.AddStage();
         hub->GetInput()->Props.StageId = producerStage;
         leftPtr->Props.StageId = rightPtr->Props.StageId = producerStage;
-        leftPtr->Props.StageOutputIndex = 0;
-        rightPtr->Props.StageOutputIndex = 1;
         mergePtr->Props.StageId = unionStage;
         graph.Connect(producerStage, unionStage, MakeIntrusive<TMergeConnection>(TSortIUs{{b, {true, true}}}, 0));
         graph.Connect(producerStage, unionStage, MakeIntrusive<TShuffleConnection>(TOrderedIUs<>{rightC}, 1));
@@ -10565,6 +10706,152 @@ FROM (
         }
     }
 
+    // Creates `table` and runs `check` while it is empty and again after
+    // `addRows`, with and without the physical-stage peephole and block hash
+    // operators; `pragmas` selects the settings.
+    void RunReplicateAggregationQueries(bool columnTables, const TString& table, const TString& columns,
+        const std::function<void(NYdb::TValueBuilder&)>& addRows,
+        const std::function<void(NYdb::NQuery::TSession&, const TString& pragmas, bool populated, bool peephole)>& check)
+    {
+        if (columnTables) {
+            // Column-shard schema caches are process-wide and keyed by path ID,
+            // which every new runner reuses; TTestHelper drops them likewise.
+            NOlap::TSchemaCachesManager::DropCaches();
+        }
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+        const auto created = dbSession.ExecuteSchemeQuery(TStringBuilder() << "CREATE TABLE `" << table << "` ("
+            << columns << ")" << (columnTables ? " WITH (STORE = column);" : ";")).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const bool populated : {false, true}) {
+            if (populated) {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                addRows(rows);
+                const auto inserted = db.BulkUpsert(table, rows.EndList().Build()).GetValueSync();
+                UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            }
+            for (const bool peephole : {false, true}) {
+                for (const bool blocks : {false, true}) {
+                    const TString pragmas = TStringBuilder() << SqlInPeepholePragma(peephole)
+                        << "PRAGMA ydb.DqHashOperatorsUseBlocks = \"" << (blocks ? "true" : "false") << "\";\n";
+                    check(session, pragmas, populated, peephole);
+                }
+            }
+        }
+    }
+
+    void TestReplicateBranchPushdown(bool columnTables) {
+        struct TCase {
+            TString Query;
+            TString Expected;
+            TString EmptyExpected = "[]";
+        };
+        const TVector<TCase> cases{
+            {R"(
+                SELECT k, SUM(b) AS v FROM $input GROUP BY k
+                UNION ALL
+                SELECT k, b AS v FROM $input
+                ORDER BY k, v;
+            )", R"([[0;20];[0;40];[0;60];[0;120];[1;10];[1;30];[1;50];[1;90]])"},
+            {R"(
+                $grouped = SELECT k, SUM(b) AS v FROM $input WHERE b >= 30 GROUP BY k;
+                $scalar = SELECT SUM(b) AS total, COUNT(*) AS n FROM $input;
+                SELECT g.k, g.v, s.total, s.n FROM $grouped AS g CROSS JOIN $scalar AS s ORDER BY g.k;
+            )", R"([[0;100;[210];6u];[1;80;[210];6u]])"},
+            {R"(
+                $unique = SELECT DISTINCT k FROM $input;
+                SELECT t.k, t.b FROM $input AS t INNER JOIN $unique AS u ON t.k = u.k ORDER BY t.k, t.b;
+            )", R"([[0;20];[0;40];[0;60];[1;10];[1;30];[1;50]])"},
+            {R"(
+                SELECT COUNT(*) AS n FROM $input WHERE b >= 30
+                UNION ALL SELECT COUNT(*) AS n FROM $input ORDER BY n;
+            )", R"([[4u];[6u]])", R"([[0u];[0u]])"},
+            {R"(
+                $filtered = SELECT k, b + 1 AS b FROM $input WHERE b >= 30;
+                $counts = SELECT k, COUNT(*) AS n FROM $filtered GROUP BY k;
+                SELECT f.k AS k, f.b AS b, c.n AS n FROM $filtered AS f INNER JOIN $counts AS c ON f.k = c.k
+                UNION ALL
+                SELECT k, b, CAST(0 AS Uint64) AS n FROM $input WHERE b < 30
+                ORDER BY k, b, n;
+            )", R"([[0;20;[0u]];[0;41;[2u]];[0;61;[2u]];[1;10;[0u]];[1;31;[2u]];[1;51;[2u]]])"},
+        };
+        RunReplicateAggregationQueries(columnTables, "/Root/replicate", "a Int64 NOT NULL, b Int64 NOT NULL, PRIMARY KEY(a)",
+            [](NYdb::TValueBuilder& rows) {
+                for (i64 a = 1; a <= 6; ++a) {
+                    rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(a * 10).EndStruct();
+                }
+            },
+            [&](NYdb::NQuery::TSession& session, const TString& pragmas, bool populated, bool peephole) {
+                for (const auto& testCase : cases) {
+                    const TString query = TStringBuilder() << pragmas
+                        << "$input = SELECT COALESCE(a % 2, 0) AS k, b FROM `/Root/replicate`;\n" << testCase.Query;
+                    const auto explained = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+                    UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString() << "\n" << query);
+                    const auto ast = *explained.GetStats()->GetAst();
+                    UNIT_ASSERT_C(peephole || ast.find("Switch") != std::string::npos, ast);
+                    // Every case aggregates a Replicate port directly, so some
+                    // partial must run inside the shared stage's Switch branch.
+                    const TString plan{*explained.GetStats()->GetPlan()};
+                    UNIT_ASSERT_C(CountPartialAggregatesInInputStages(GetSimplifiedPlan(plan), plan) > 0, plan);
+                    const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\n" << query);
+                    CompareYson(populated ? testCase.Expected : testCase.EmptyExpected,
+                        FormatResultSetYson(result.GetResultSet(0)));
+                }
+            });
+    }
+
+    Y_UNIT_TEST_TWIN(ReplicateBranchPushdown, ColumnStore) {
+        TestReplicateBranchPushdown(ColumnStore);
+    }
+
+    void TestMixedDistinctAggregationBeforeHashShuffle(bool columnTables) {
+        RunReplicateAggregationQueries(columnTables, "/Root/partsupp",
+            "ps_partkey Int64 NOT NULL, ps_suppkey Int64 NOT NULL, PRIMARY KEY(ps_partkey, ps_suppkey)",
+            [](NYdb::TValueBuilder& rows) {
+                for (i64 part = 1; part <= 6; ++part) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("ps_partkey").Int64(part)
+                        .AddMember("ps_suppkey").Int64((part + 1) / 2)
+                        .EndStruct();
+                }
+            },
+            [](NYdb::NQuery::TSession& session, const TString& pragmas, bool populated, bool) {
+                // https://github.com/ydb-platform/ydb/issues/53613
+                const TString query = pragmas + "SELECT COUNT(DISTINCT ps_suppkey), COUNT(*) FROM partsupp;";
+                const auto plan = ExecuteExplain(session, query);
+                const auto simplifiedPlan = GetSimplifiedPlan(plan);
+                const auto* shuffle = FindConnectionNode(simplifiedPlan, "HashShuffle");
+                UNIT_ASSERT_C(shuffle, plan);
+                // A partial DISTINCT must reduce this branch before rows
+                // leave the shared scan stage through the hash shuffle.
+                const auto* partial = FindOperatorByStringField(*shuffle, "Phase", "Intermediate");
+                UNIT_ASSERT_C(partial, "Partial DISTINCT must precede HashShuffle:\n" << plan);
+                UNIT_ASSERT_C(GetStringField(*partial, "GroupBy").Contains("ps_suppkey"), plan);
+                UNIT_ASSERT_C(FindOperatorByStringField(*shuffle, "Name", "TableFullScan"), plan);
+
+                const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << "\n" << query);
+                // The COUNT(*) branch must keep duplicates and emit zero
+                // on empty input, independently of DISTINCT's row reduction.
+                CompareYson(populated ? "[[3u;6u]]" : "[[0u;0u]]", FormatResultSetYson(result.GetResultSet(0)));
+            });
+    }
+
+    Y_UNIT_TEST_TWIN(MixedDistinctAggregationBeforeHashShuffle, ColumnStore) {
+        TestMixedDistinctAggregationBeforeHashShuffle(ColumnStore);
+    }
+
     void TestBlockHashCombine(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -10756,6 +11043,110 @@ FROM (
         const std::vector<bool> expectedResult{true, true, true};
         TestFallbackToYql(/*fallbackToYqlEnabled=*/true, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult, NQuery::EExecMode::Execute);
+    }
+
+    Y_UNIT_TEST_TWIN(SysViewNodes, NewRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetNodeCount(3));
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        const auto firstNode = kikimr.GetTestServer().GetRuntime()->GetNodeId(0);
+        const auto countersBefore = GetNewRBOCompileCounters(kikimr);
+
+        const TVector<std::pair<TString, TString>> queries = {
+            // The test runtime reports zero CPU threads; the sum must still be non-NULL.
+            {"SELECT SUM(CpuThreads) FROM `/Root/.sys/nodes`;", "[[[0u]]]"},
+            {"SELECT COUNT(*) FROM `/Root/.sys/nodes`;", "[[3u]]"},
+            {"SELECT NodeId, Host FROM `/Root/.sys/nodes` ORDER BY NodeId;",
+                Sprintf(R"([[[%du];["::1"]];[[%du];["::1"]];[[%du];["::1"]]])",
+                    firstNode, firstNode + 1, firstNode + 2)},
+            {Sprintf("SELECT NodeId FROM `/Root/.sys/nodes` WHERE NodeId = %du;", firstNode + 1),
+                Sprintf("[[[%du]]]", firstNode + 1)},
+            {Sprintf("SELECT NodeId FROM `/Root/.sys/nodes` WHERE NodeId > %du ORDER BY NodeId DESC;", firstNode),
+                Sprintf("[[[%du]];[[%du]]]", firstNode + 2, firstNode + 1)},
+            {Sprintf("SELECT SUM(CpuThreads), COUNT(*) FROM `/Root/.sys/nodes` WHERE NodeId > %du;", firstNode + 2),
+                "[[#;0u]]"},
+        };
+        for (const auto& [query, expected] : queries) {
+            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, query);
+        }
+
+        auto scan = kikimr.GetTableClient().StreamExecuteScanQuery(queries.front().first).GetValueSync();
+        UNIT_ASSERT_C(scan.IsSuccess(), scan.GetIssues().ToString());
+        CompareYson(queries.front().second, StreamResultToYson(scan));
+
+        const auto countersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.first - countersBefore.first, NewRbo ? queries.size() + 1 : 0);
+    }
+
+    void TestLegacyOptimizerWithStats(const TString& query, bool fallbackEnabled, bool profile) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackEnabled);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateSimpleTable(kikimr);
+
+        TValueBuilder rows;
+        rows.BeginList();
+        for (i64 key : {1, 2}) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("a").Int64(key)
+                .AddMember("b").Int64(key + 1)
+                .AddMember("c").Int64(key + 2)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsert = kikimr.GetTableClient().BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        const auto countersBefore = GetNewRBOCompileCounters(kikimr);
+        for (bool fromCache : {false, true}) {
+            auto result = session.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().StatsMode(profile ? NQuery::EStatsMode::Profile : NQuery::EStatsMode::Full))
+                .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+            UNIT_ASSERT(result.GetStats().has_value());
+            UNIT_ASSERT(result.GetStats()->GetPlan().has_value());
+
+            const TString plan = *result.GetStats()->GetPlan();
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(plan, &json, true), plan);
+            UNIT_ASSERT_C(json.Has("SimplifiedPlan"), plan);
+            UNIT_ASSERT_VALUES_EQUAL(json["Plan"]["Node Type"].GetStringSafe(), "Query");
+            UNIT_ASSERT_VALUES_EQUAL(json["Plan"]["Stats"]["Compilation"]["FromCache"].GetBooleanSafe(), fromCache);
+        }
+
+        const auto countersAfter = GetNewRBOCompileCounters(kikimr);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.first, countersBefore.first);
+        UNIT_ASSERT_VALUES_EQUAL(countersAfter.second, countersBefore.second + (fallbackEnabled ? 1 : 0));
+    }
+
+    Y_UNIT_TEST_TWIN(SemiJoinFallbackWithStats, Profile) {
+        TestLegacyOptimizerWithStats(R"(
+            SELECT l.a FROM `/Root/t1` AS l
+            LEFT SEMI JOIN `/Root/t1` AS r ON l.b = r.a;
+        )", /*fallbackEnabled=*/true, Profile);
+    }
+
+    Y_UNIT_TEST_TWIN(SamplingWithStatsUsesLegacyOptimizer, Profile) {
+        // Sampling selects the legacy pipeline inside the host, without an
+        // unsuccessful RBO compilation or an error-fallback retry.
+        TestLegacyOptimizerWithStats(R"(
+            SELECT a FROM `/Root/t1`
+            WITH (sampling_rate="1", sampling_seed="42", sampling_memtable_stride="1")
+            ORDER BY a LIMIT 1;
+        )", /*fallbackEnabled=*/false, Profile);
     }
 
     Y_UNIT_TEST(FallbackToYqlDisabledExecute) {

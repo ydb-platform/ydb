@@ -348,7 +348,7 @@ Device authentication is optional and configured independently: the mechanism ca
 
 {% note info %}
 
-In **Service Account Key** mode, the application builds a JWT using the host system clock. If the system clock is ahead or behind, IAM may reject the token request. For diagnostics and recommendations, see [{#T}](../troubleshooting/client-clock-skew.md).
+When using **Service Account Key** authentication, the client (SDK or CLI) builds a [JWT](https://www.rfc-editor.org/rfc/rfc7519) using the host system clock. If the system clock is ahead or behind, IAM may reject the token request. For diagnostics and recommendations, see [{#T}](../troubleshooting/client-clock-skew.md).
 
 {% endnote %}
 

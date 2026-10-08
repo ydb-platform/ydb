@@ -24,6 +24,8 @@ A client establishes a session with `TEvConnect` for each DDisk or PB recipient.
 
 Connections are keyed by `(TabletId, DirectBlockGroupIndex)`. An older generation, or an older DDisk session sequence within the same generation, cannot supersede an active newer session: such a connect returns `BLOCKED`. An ordinary request with stale or invalid session credentials returns `SESSION_MISMATCH`. The instance GUID is generated for each actor incarnation, not only after detected data loss. Connecting, disconnecting, replacing a session, and restarting the service affect token validity. A client must restore a valid connection before retrying operations under its retry policy.
 
+Read, write, and Sync validation resolve credentials into native `TQueryCredentials` without rewriting the request protobuf. Write and Sync retain the original credentials across allocation and metadata-ownership waits. With checksums enabled, their shared `ExecuteDataWrite` coroutine acquires every affected metadata pair and then revalidates the session before loading cold metadata or submitting data. This final check is the admission point; a request whose token was replaced while parked does not load metadata or submit its data or metadata writes. With checksums disabled, credentials are revalidated after allocation, immediately before data submission. A read validates credentials once, before chunk lookup, and does not wait for an in-flight allocation. Disconnecting and reconnecting invalidates an old parked token even when generation and session numbers are unchanged. A write rejected at admission reports `SESSION_MISMATCH`; Sync reports it for the affected input and returns an aggregate failure. After admission, a later client-token change, including during a cold metadata load, does not cancel the write and its integrity update. Device errors and actor shutdown retain their separate failure and drain rules. Read validation describes a recognized old token as “stale” and an unrecognized token as “invalid”. Repeating connect without changing the token remains valid.
+
 Internal DDisk/PB forwarding uses `TQueryCredentials::ForInternal`. This has different validation from an ordinary client request, including support for a peer without an existing client connection. It is a server-to-server mechanism, not a replacement for client session establishment.
 
 ## Addressing and Writes
@@ -32,11 +34,44 @@ Internal DDisk/PB forwarding uses `TQueryCredentials::ForInternal`. This has dif
 
 Reads and writes operate on nonempty ranges aligned to the 4 KiB integrity unit and contained within a PDisk chunk. Write payloads may be fragmented or have unaligned buffer addresses: direct I/O preparation copies them into aligned storage when needed, while suitably aligned rope chunks can use scatter/gather I/O. Use the event payload helpers; the payload ID is an event-local reference, not a persistent data identifier.
 
-The `interface/UnalignedWritePayloads` counter counts incoming writes with fragmented payloads or buffer addresses not aligned to the device sector size. Each request is counted once, including when chunk allocation or write serialization delays its execution.
+Public `TEvWrite` requests are limited to 1 MiB, whether checksums are enabled or disabled. Larger requests receive `INCORRECT_REQUEST` before allocation or I/O. Exactly 1 MiB remains valid, including the data copier's current request size. Clients with a configurable larger write size must split those requests; large reads and Sync segments are not subject to this public-write limit.
 
-The first write to a virtual chunk can park while data and integrity resources are allocated. With checksums enabled, a write acknowledgment waits for both the data write and the integrity update. Writes to the same integrity extent are serialized through that path; independent extents can proceed concurrently.
+Callers guarantee at most one active Sync for any given block set, disjoint active data ranges, and exclusion of ordinary writes from reads and Sync. Syncs over disjoint block sets may run concurrently. DDisk relies on these guarantees without implementing their admission protocol. Disjoint writers may share integrity metadata pairs; DDisk serializes their metadata modifications.
 
-An unallocated virtual chunk reads as zeroes. Chunk allocation and restored integrity state affect how the implementation recognizes never-written blocks within an allocated chunk; do not treat a successful read as evidence that the range has previously been written.
+The `interface/UnalignedWritePayloads` counter counts incoming writes with fragmented payloads or buffer addresses not aligned to the device sector size. Each request is counted once, including when chunk allocation delays its execution.
+
+The first write to a virtual chunk can wait while data and integrity resources are allocated. Concurrent requests for that virtual chunk share one allocation. With checksums enabled, a write acknowledgment waits for the data write, integrity update, and durable allocation mapping. The write handler moves its reply route, original credentials, payload, and checksums into a frame-owned record and releases the incoming event.
+
+`ExecuteDataWrite` is the one flat coroutine for the destination data and metadata of both Write and Sync; a Write is a single piece whose payload came with the request. With checksums enabled, after allocation it acquires metadata pairs in ascending order, waits for occupied pairs, and revalidates the session at admission. A cold metadata image is read in a batch of its own and transformed on the actor thread; a warm image needs no read. Only then are data and metadata writes prepared and submitted as one batch. Both operations complete before actor-side metadata publication and writer release. Failure still drains every accepted sibling, and a metadata load or transformation failure submits no data. The mapping-log durability gate precedes a successful reply. A client-token change after admission does not interrupt the request, including its cold load. A chunk pin protects the mapping and physical chunk through accepted I/O and mapping commits.
+
+DDisk coroutine frames use the actor runtime's shared [TLS allocator](../actor-system/coroutine-actors.md), without a private actor-owned cache or allocator override. Cache occupancy statistics measure idle frames retained by executor threads, not live DDisk frames; request registries, chunk pins, and completion drain determine whether an actor's work has retired.
+
+A read is validated by an ordinary handler, so a misaligned range, a tablet whose chunks are being deleted, and a virtual chunk with no published physical chunk are answered without allocating a coroutine frame. For an allocated, formatted chunk the handler moves the reply route, resolved credentials, selector, and span into an owned record and starts `ExecuteDataRead`. With checksums disabled it submits and awaits data. With checksums enabled, the coroutine uses four paths:
+
+| Path | Processing |
+| --- | --- |
+| Warm metadata | Capture response-owned checksums and hole information; submit and await data only, unless the range is entirely zero. |
+| Small read initiating cold loads | Submit the owned metadata read and data in one batch. Publish completed metadata and finish the initiating request before notifying its metadata waiters, when all dependencies are complete. |
+| Cold read of at least 32 KiB (`MetadataFirstReadThreshold`) | Await metadata, capture the result, and release metadata waiters before any subsequent data wait. Skip data I/O for an entirely zero range. |
+| Follower of existing metadata work | Start data immediately, await it, then inspect the retained metadata result. Await the metadata event only if that result is still incomplete. |
+
+A request can own some metadata loads and join others. It publishes completed loads and notifies their waiters before suspending on another dependency. Followers retain a completion result independently of cache residency: a reference to the non-sticky `TAsyncEvent` alone would miss a completion followed by cache eviction while data is outstanding. If speculative data turns out to cover only never-written blocks, its completion still retires before the zero reply.
+
+`TBatchedIOAwaiter` joins a frame's device I/O in two phases. Preparation reserves stationary result slots and adds operations without submitting them. Awaiting the batch publishes the actor runtime's generic callback bridge and submits all prepared operations under an extra pending-count guard. The guard prevents inline callbacks from completing a partially submitted batch. Each operation completes once, including across retries. The frame and submitted operations retain the batch through `std::shared_ptr`; callbacks write separate result slots and decrement the atomic pending count. The last completion resumes the bridge, which schedules continuation on the actor's mailbox. If all operations complete during submission, the awaiter returns the bridge handle and the runtime continues the frame without suspending. Device callbacks never resume actor-local continuations directly.
+
+The batch supports inline completion and reuse after all results have been consumed. Callbacks acquire shared batch ownership only at submission, so prepared operations do not create an ownership cycle. Cooperative shutdown cannot unwind a frame still holding accepted device buffers. During forced frame destruction, the waiter atomically withdraws and destroys the bridge if no completion has taken it. A bridge already taken by a callback relies on the runtime's dead-actor handling and cannot re-enter the destroyed frame. Accepted operations retain shared callback storage through retirement.
+
+Before I/O submission, a read stores its requester, interconnect session, client cookie, tablet/chunk identity, and start time in an inline coroutine reply context and releases the incoming event. The frame retains the trace span, while its shared `TBatchedIOAwaiter` owns the `TDDiskReadResult` and completed payload buffers, without a completion registry or a heap-allocated I/O result event. Each `TDDiskIoOp` retains the class callback until recycling or destruction. Callbacks write disjoint slots, which is what makes concurrent io_uring completions into one batch safe. Integrity loads additionally mark their operation critical, which keeps the session-loss rule for metadata reads. The span is retained until terminal processing, including cancellation.
+
+A logical read uses an ordinary scalar router operation for its data range, when needed, and at most one newly claimed metadata read. Metadata for several claimed pairs is read as one contiguous range and split by the integrity manager. A small initiating read joins data and metadata in one `TBatchedIOAwaiter` batch; a large initiating read awaits metadata before deciding whether to read data. Stable buffers and result slots are allocated before submission, and callbacks may complete in any order, including before a submission call returns. The router handles queue pressure and short reads separately for each accepted scalar operation.
+
+If the router rejects a submission, DDisk completes that operation locally through the same callback path and schedules a transition to Stopping. Each remaining prepared operation also receives a terminal outcome. The batch still waits for every accepted sibling, including error and drop callbacks. PDisk fallback sends one raw-read message per part and joins the same batch. The read also joins metadata loads already owned by another operation; it can finish its own I/O while still waiting for a shared load. Chunk pins and the frame itself remain alive until both I/O and shared metadata settle. Accepted buffers remain owned through callback retirement and actor-side terminal-result processing.
+
+`TReadPayload` owns either no data, a native `TRcBuf`, or a fallback `TRope`. I/O callbacks move this ownership into the shared batch's result, keeping native buffers native until reply preparation. `FinishDDiskRead` zeroes holes in mixed ranges through the payload helper, then converts native client data to rope once before optional payload checksum validation and attachment. This transfers successful data without copying the payload. Broken-state handling, status mapping, byte accounting, short-I/O counters, and tracing still apply; error replies carry neither payload nor checksums. `TEvReadResult` consumes a `TConstArrayRef<ui64>` immediately into protobuf, with no retained view or intermediate checksum-vector copy.
+
+Reads capture only their required checksums and hole information in owned immutable results. Once captured, these results do not pin metadata images and remain valid across neighboring metadata changes and eviction. A warm pair remains readable during a metadata write using its existing immutable image. A reader encountering a cold metadata read/modify/write waits for the final write completion. These cache properties do not enforce the caller's data-range and operation-exclusion guarantees.
+
+An unallocated virtual chunk reads as zeroes. An allocation that has not yet published its physical chunk leaves the virtual chunk unallocated, so a concurrent read returns zeroes instead of waiting. Chunk allocation and restored integrity state affect how the implementation recognizes never-written blocks within an allocated chunk; do not treat a successful read as evidence that the range has previously been written.
 
 ## Integrity
 
@@ -44,13 +79,39 @@ Wire checksums are unsalted XXH3-64 values, one per 4 KiB payload block. When `T
 
 DDisk stores integrity metadata separately from data. Stored checksums are sealed with logical and physical identity information, while the wire protocol and checksum cache use the pure payload checksum. Each integrity metadata block uses a pair of slots, self-checksums, identity/generation checks, and a sequence number to select a valid durable version after recovery. The implementation supports layouts for different device atomic-write properties; their exact format belongs to [ddisk_checksums.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_checksums.h).
 
+`TIntegrityManager` performs no physical I/O. It keeps stable cache entries in a node-based hash map with `Missing`, `WaitingRead`, `Data`, and `WaitingWrite` states. Preparation looks up each relevant pair once and retains stable handles while an operation requires ownership. Compact per-pair used-block bitmaps, expected digests, and current-slot information are retained independently of evictable checksum images. Slot selection, identity and digest checks, and lost-write detection therefore remain effective after eviction.
+
+`PrepareRead` constructs an immediate result in the caller's empty optional or returns a pending handle and at most one descriptor for newly claimed metadata loads. Existing loads are joined without duplication. `TReadChecksums` stores a singleton checksum inline and owns storage for larger snapshots. A single-block result selects zero or passthrough without a mask; multi-block results retain a mask only for mixed ranges. Read results own their checksums and hole information rather than retaining cached metadata. Pending handles retain the final result even after notification and eviction.
+
+Read preparation exposes `MetadataReads` as `TMetadataReads` (`absl::InlinedVector<TMetadataRead, 1>`). Its optional descriptor identifies a contiguous metadata read with an opaque ID; DDisk supplies the `TMetadataReadResult` to `CompleteMetadataReads`. The read covers the range from the first newly claimed pair through the last, and the manager extracts each claimed pair's two integrity slots from that image. In the base format a pair covers 492 data blocks, so an 8 KiB data read at offset `491 * 4096` loads one contiguous 16 KiB metadata image if both pairs are cold. A pair already owned by another operation is joined instead of claimed again. Callback result storage is sized before submission and stays stationary until callbacks retire.
+
+`CompleteMetadataReads` validates and publishes images, captures affected read results, and defers dependency notifications to `NotifyCompleted()`. The small initiating reader can finish before its waiters are notified. When other dependencies remain, and for large metadata-first reads, DDisk notifies completed-load waiters before its next suspension. Active loads and writes retain their entries. `WaitingWrite` keeps the previous immutable image when warm; a cold RMW has no readable image until its final write succeeds.
+
+`TWriteOperation` owns exclusive pair claims. Writers acquire multiple pairs in ascending order. Queued writers and the next writer selected for resumption keep stable entries alive. Successful release wakes one next writer; cancellation releases its claims, and terminal failure or shutdown resolves all affected waits. This explicit ownership replaces mutation/durability versions, write tickets, dirty coalescing, and checksum-flush runners.
+
+`TMetadataWrite` is an owned operation context prepared by the manager. A fully warm operation constructs replacement images without metadata reads. A cold operation reads one complete pair, or the contiguous two-pair region when either affected pair is cold: at most four 4 KiB blocks. Transformation validates images and expected digests, selects current slots, applies the new checksums, and updates sequences and digests. One pair writes its replacement slot. Two pairs write the contiguous middle slots when those are the replacements; otherwise they write all four blocks while preserving each unchanged current image. The 1 MiB public-write limit bounds a write to at most two pairs. The disk format and recovery rules remain unchanged.
+
+The coroutine prepares a cold metadata load with `PrepareMetadataRead` as an ordinary critical read and awaits it separately. After successful completion, it transforms the owned `TMetadataWrite` context on the actor thread, then prepares and batches the data and metadata image writes. A failed load, a failed transformation, Broken, or Stopping prevents further data submission. Successful metadata is published into the cache on the actor thread after the write batch completes.
+
+PDisk fallback follows the same coroutine flow through actor-side raw I/O. Data and critical metadata errors retain separate results. Metadata overloads retain the existing retry limits and delays for the cold read and metadata write independently. Completion processing continues during Stopping, and every accepted sibling retains buffer and chunk ownership until retirement. `TDataRequestGuard` counts client, allocation, and formatting coroutines through submission, actor-side processing, notification, and cleanup. Reservation release and Gone wait for these operations as well as callback retirement. With checksums disabled, one coroutine zero-formats a chunk in sequential slices.
+
+New extent placement and readiness are separate milestones. One allocation coroutine starts the extent, awaits placement, publishes the physical data chunk, awaits formatting readiness, submits the mapping log, awaits durability, and publishes commit. Readiness requires both extent formatting and all three integrity-chunk headers. The allocation ownership registry retains its token, physical chunk, and whether a mapping log was submitted; a zero physical chunk denotes a pending reservation. Token identity is checked after suspensions, and submitted commits retain conservative physical ownership during failure and shutdown. Deleted extents retain their slots until deletion is durable and outstanding formatting has retired.
+
+PDisk log records use optional completion tickets. Allocation, PB allocation/deallocation, deletion, and reclamation apply completion-dependent effects after awaiting successful completion; snapshot/map construction and quarantine happen before submission. Background reclamation can submit a snapshot without a waiter when it has no completion-dependent effect. Every LSN and delivery cookie remains tracked, including records without waiters; background snapshots need no ticket allocation. Completion handling detaches the entire matching batch before waking any waiter.
+
 Changing checksum modes is a format and recovery concern, not only a performance setting. DDisk validates checksum-mode compatibility against restored state. PB has a separate on-disk checksum setting, described in [{#T}](persistent-buffer.md#integrity).
 
 ## Synchronization
 
 `TEvSync` is the unified pull-and-write operation used for both PB-to-DDisk flush and DDisk-to-DDisk repair. It contains source identities and segments; each segment selects either a PB record or a DDisk source range. The destination issues reads to those services, validates the returned data, and writes the destination range.
 
-All destination segments in one request must belong to one virtual chunk. The sync handler checks nonempty aligned ranges and chunk bounds. `TSegmentManager` tracks overlapping synchronization ranges so that a delayed source read cannot blindly overwrite a newer synchronization request. Changes to this path need coverage for both request ordering and late replies.
+All destination segments in one request must belong to one virtual chunk. The handler validates the complete request, including nonempty aligned ranges, exactly one segment kind per input, and chunk bounds, before issuing any work. The caller's guarantees of one active Sync per block set, disjoint ranges, and ordinary-write exclusion apply. The wire `OUTDATED` status remains available for source-service results; DDisk treats such a source reply as a failed input.
+
+The handler releases its incoming event and launches `ExecuteDataWrite`, which runs one coroutine loop. It processes original segments in input order and aligned pieces of at most 512 KiB in increasing offset order. For each piece it awaits one source reply, validates status, exact payload size, checksum count and configured checksum hashes, executes allocation as needed, and performs the destination write. With checksums enabled, destination admission follows pair ownership and session revalidation; any cold metadata load and transformation precede the data-plus-metadata write batch. A missing destination is allocated only after a valid source reply. The next source read starts only after the current destination operations retire. DDisk and PB sources both support subrange reads. There is no slot scheduler, admission queue, metadata prefetch, or per-slot subscription; bounded cooperative yielding limits uninterrupted synchronous work.
+
+Every source request receives a fresh cookie identifying the owning Sync and expected event kind. Source handlers retain a result and wake the root coroutine; the root makes workflow decisions. Stale replies are ignored, and wrong-kind replies preserve the valid route. Accepted local callbacks retain their shared batch storage through forced frame destruction.
+
+The reply contains one result per original segment in input order. A piece failure skips the rest of that segment, preserves completed writes, drains accepted local branches, and continues later segments while the actor remains healthy. Data, metadata, and session outcomes retain their error precedence, including metadata corruption overriding a session mismatch for the failed piece. Broken or Stopping abandons pending source replies, prevents new destination work, and drains accepted local work. An already accepted native piece may succeed during Stopping after both branches retire and its mapping is committed. Before replying, Sync also waits for the final mapping-commit gate, including an error behind an unrelated allocation already in progress.
 
 The operation reports `TEvSyncResult` after processing its destination work. It does not erase source PB records. The client decides when enough replicas have been flushed, whether repair is required, and when [PB erase](persistent-buffer.md#erase) is safe. A PB source can be remote even when it occupies the same logical DBG index as the destination DDisk.
 
@@ -80,6 +141,22 @@ balances counters and publishes results before the final mailbox barrier.
 Existing completions may finish writes only when their integrity and allocation
 log durability conditions are satisfied; shutdown starts no further I/O.
 
+Broken and Stopping wake logical waits that cannot progress, but do not cancel
+accepted router-I/O waits. A failed request joins already-submitted sibling I/O
+before replying; its buffers and physical chunk pins remain owned until terminal
+results are consumed. Logical operations and outstanding physical producers
+both protect chunks from deletion. Remaining logical waits and request replies
+finish before the final mailbox barrier and Gone. Batch completions are published
+in both running and Stopping states. `TDataRequestGuard` counts client, allocation, and formatting coroutines in the same
+`DataRequestsInFlight` counter through submission, result processing, notifications,
+and cleanup. Reservation release and shutdown completion wait for that counter to
+reach zero as well as callback drain, including when callbacks have retired but a
+batch result is still queued. Forced destruction drains callbacks before releasing any remaining
+registry pins.
+
+Chunk-map `TEvLog` requests track delivery; a nondelivery notification correlated
+with an outstanding request by its cookie enters Stopping.
+
 After its own I/O drain and terminal-result processing, DDisk requests release
 of its known reservations through `TEvChunkForget`, provided PDisk initialization
 and log replay have completed. Candidates include unused reserved chunks,
@@ -99,7 +176,7 @@ late replies can trigger further forget requests while the actor remains alive.
 Each chunk is submitted for release at most once per actor incarnation, so
 follow-up requests contain only new IDs, regardless of earlier forget replies.
 
-An outstanding reserve request (`ReserveInFlight`) prevents DDisk from publishing
+An outstanding reserve request (`ChunkManager.IsReservationInFlight()`) prevents DDisk from publishing
 Gone, even after its own drain and PB shutdown finish. Every terminal reserve
 reply clears this barrier; successful replies contribute their chunks to the
 release set, and release waits for the existing I/O barrier. Reserve delivery is
@@ -129,8 +206,13 @@ waits indefinitely for stalled I/O or an unresolved reservation.
 
 The callback retirement count and stopping flag share one atomic state. Callback
 cleanup and result publication precede retirement; completion and retry
-cancellation events finish before actor destruction. Forced actor destruction
-retains all members while waiting up to 10 seconds using monotonic time, then
+cancellation events finish before actor destruction. Forced mailbox cleanup
+destroys coroutine frames before the actor destructor runs. This clears their
+active batch continuations and releases the frames'
+shared owners; outstanding operations retain each `TBatchedIOAwaiter`, so late
+callbacks can safely write
+their results during the destructor's drain. The destructor retains all actor
+members while waiting up to 10 seconds using monotonic time, then
 aborts if callbacks still own actor state. This forced-destruction deadline is
 separate from the 60-second stalled-I/O diagnostic and does not bound normal
 shutdown waits.
@@ -185,9 +267,10 @@ additional actor-Gone ordering of a requested restart.
 |---|---|---|
 | Actor state and sessions | [ddisk_actor.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor.cpp), [ddisk_actor_connect.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor_connect.cpp) | `ut/ddisk_actor_ut.cpp` |
 | Boot, log, and chunks | [ddisk_actor_boot.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor_boot.cpp), [ddisk_actor_chunks.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor_chunks.cpp) | `ut/ddisk_actor_pdisk_ut.cpp` |
+| Reservation bookkeeping and allocation ordering | [chunk_manager.h](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/chunk_manager.h) | `ut/chunk_manager_ut.cpp` |
 | Read/write and I/O adapters | [ddisk_actor_read_write.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor_read_write.cpp), [direct_io_op.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/direct_io_op.cpp) | `ut/ddisk_actor_checksum_ut.cpp`, `ut/ddisk_actor_ut.cpp` |
 | Integrity state | [integrity_manager.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/integrity_manager.cpp) | `ut/integrity_manager_ut.cpp` |
-| Synchronization | [ddisk_actor_sync.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor_sync.cpp), [segment_manager.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/segment_manager.cpp) | `ut/ddisk_sync_ut.cpp`, `ut/segment_manager_ut.cpp` |
+| Synchronization | [ddisk_actor_sync.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/ddisk/ddisk_actor_sync.cpp) | `ut/ddisk_sync_ut.cpp`, `ut/ddisk_actor_ut.cpp` |
 
 Paths in the test column are relative to `ydb/core/blobstorage/ddisk`. `ut_large` contains longer PDisk-backed I/O and synchronization scenarios. Select the relevant target and test cases rather than running the entire distributed storage test tree for a local change.
 

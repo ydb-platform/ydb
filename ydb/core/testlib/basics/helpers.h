@@ -50,6 +50,9 @@ namespace NFake {
                                                            const THashMap<ui32, TVector<ui32>>& pileIdToNodeIds);
     TStateStorageSetupper CreateDefaultStateStorageSetupper();
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
+    // Configure before Initialize; models may outlive the runtime. Does not create NodeWarden.
+    void SetupMockBlobStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
+                             TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig);

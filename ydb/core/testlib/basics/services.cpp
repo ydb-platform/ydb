@@ -12,8 +12,9 @@
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/control/immediate_control_board_actor.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/blobstorage/subsystem/mock/mock.h>
+#include <ydb/core/blobstorage/subsystem/subsystem.h>
 #include <ydb/core/quoter/quoter_service.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -64,9 +65,32 @@ namespace NKikimr {
         if (const auto& poolIds = runtime.GetBlobStorageExecutorPoolIds(); !poolIds.empty()) {
             nodeWardenConfig->BlobStorageExecutorPoolIds = poolIds;
         }
-        runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
-            TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig), TMailboxType::Revolving, 0),
-            nodeIndex);
+        auto previous = std::move(runtime.SetupNodeSubSystems);
+        runtime.SetupNodeSubSystems = [nodeIndex, nodeWardenConfig, previous = std::move(previous)](
+                ui32 currentNode, TActorSystemSetup* setup) {
+            if (previous) {
+                previous(currentNode, setup);
+            }
+            if (currentNode == nodeIndex) {
+                InstallBlobStorageSubsystem(*setup, CreateBlobStorageSubsystem(
+                    nodeWardenConfig, 0, TMailboxType::Revolving));
+            }
+        };
+    }
+
+    void SetupMockBlobStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
+            TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies)
+    {
+        auto previous = std::move(runtime.SetupNodeSubSystems);
+        runtime.SetupNodeSubSystems = [nodeIndex, dsProxies = std::move(dsProxies), previous = std::move(previous)](
+                ui32 currentNode, TActorSystemSetup* setup) {
+            if (previous) {
+                previous(currentNode, setup);
+            }
+            if (currentNode == nodeIndex) {
+                InstallBlobStorageSubsystem(*setup, CreateMockBlobStorageSubsystem(dsProxies));
+            }
+        };
     }
 
     void SetupSchemeCache(TTestActorRuntime& runtime, ui32 nodeIndex, const TString& root)
@@ -474,13 +498,19 @@ namespace NKikimr {
                 keyConfig = it->second;
             }
             SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex], app.Dcb[nodeIndex]);
-            for (const auto& dsProxy : dsProxies) {
-                runtime.AddLocalService(
-                    MakeBlobStorageProxyID(dsProxy->GetGroupId()),
-                    TActorSetupCmd(CreateBlobStorageGroupProxyMockActor(dsProxy), TMailboxType::ReadAsFilled, 0),
-                    nodeIndex);
+            auto nodeWardenConfig = disk.MakeWardenConf(*app.Domains, keyConfig);
+            if (dsProxies.empty()) {
+                SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig);
+            } else {
+                SetupMockBlobStorage(runtime, nodeIndex, dsProxies);
+                // Legacy fixtures use NodeWarden even with externally supplied
+                // mock proxies. Keep it until those fixtures opt into mock-only setup.
+                if (const auto& poolIds = runtime.GetBlobStorageExecutorPoolIds(); !poolIds.empty()) {
+                    nodeWardenConfig->BlobStorageExecutorPoolIds = poolIds;
+                }
+                runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
+                    TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig), TMailboxType::Revolving, 0), nodeIndex);
             }
-            SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);
             SetupTabletPipePerNodeCaches(runtime, nodeIndex, forceFollowers);

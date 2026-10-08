@@ -35,6 +35,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
+#include <ydb/core/blobstorage/subsystem/subsystem.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h>
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
@@ -1335,9 +1336,8 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
     ObtainPDiskKey(&nodeWardenConfig->PDiskKey, Config.GetPDiskKeyConfig());
 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeBlobStorageNodeWardenID(NodeId),
-                                                                       TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig.Release()),
-                                                                                      TMailboxType::ReadAsFilled, appData->SystemPoolId)));
+    InstallBlobStorageSubsystem(*setup, CreateBlobStorageSubsystem(
+        nodeWardenConfig, appData->SystemPoolId, TMailboxType::ReadAsFilled));
 
     setup->LocalServices.emplace_back(MakeUniversalSchedulerActorId(), TActorSetupCmd(CreateUniversalSchedulerActor(),
         TMailboxType::ReadAsFilled, appData->SystemPoolId));

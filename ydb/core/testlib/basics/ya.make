@@ -15,6 +15,8 @@ PEERDIR(
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/subsystem
+    ydb/core/blobstorage/subsystem/mock
     ydb/core/client/server
     ydb/core/control
     ydb/core/formats

@@ -510,7 +510,7 @@ class TExecutor
     ui64 UsedTabletMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
-    bool BackupSnapshotInProgress = false;
+    TActorId BackupSnapshotWriter;
     std::optional<TBackoff> BackupRetry;
 
     TActorContext SelfCtx() const;

@@ -359,6 +359,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteSnapshot, Handle);
+            cFunc(TEvStop::EventType, PassAway);
         }
     }
 

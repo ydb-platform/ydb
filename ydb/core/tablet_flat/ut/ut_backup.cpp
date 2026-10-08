@@ -3,6 +3,7 @@
 #include "flat_executor_recovery.h"
 #include "flat_executor_ut_common.h"
 
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -39,6 +40,28 @@ void AssertChangelogEquals(const TString& actual, const TString& expected) {
         return TString(result);
     };
     UNIT_ASSERT_VALUES_EQUAL(normalize(actual), normalize(expected));
+}
+
+void AssertOpenSnapshotFiles(const TString& backupRoot, size_t expected) {
+#if defined(_linux_)
+    const TString prefix = TFsPath(backupRoot).RealPath().GetPath() + "/";
+    TVector<TFsPath> descriptors;
+    TFsPath("/proc/self/fd").List(descriptors);
+    size_t count = 0;
+    for (const auto& descriptor : descriptors) {
+        // The descriptor used to list /proc/self/fd is already closed.
+        if (descriptor.IsSymlink()) {
+            const auto target = descriptor.ReadLink().GetPath();
+            if (target.StartsWith(prefix) && target.Contains("/snapshot.tmp/")) {
+                ++count;
+            }
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(count, expected);
+#else
+    Y_UNUSED(backupRoot);
+    Y_UNUSED(expected);
+#endif
 }
 
 } // anonymous namespace
@@ -3439,6 +3462,98 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         UNIT_ASSERT_C(!incompleteDir1.Exists(), "Incomplete backup dir must be deleted after restart");
         UNIT_ASSERT_C(!incompleteDir2.Exists(), "Incomplete backup dir must be deleted after restart");
+    }
+
+    Y_UNIT_TEST(StopSnapshotWithQueuedScans) {
+        TEnv env;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        env.InitSchema();
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TBlockEvents<NResourceBroker::TEvResourceBroker::TEvSubmitTask> scans(env.Env,
+            [](const auto& ev) { return ev->Get()->Task.Type == "system_tablet_backup"; });
+        TActorId writer;
+        auto stats = env->AddObserver<TEvSnapshotStats>([&](TEvSnapshotStats::TPtr& ev) {
+            writer = ev->Sender;
+        });
+
+        TFsPath previousBackup;
+        for (ui32 i = 0; i < 5; ++i) {
+            writer = {};
+            scans.clear();
+            env.FireDummyTablet(TestTabletFlags);
+            env->WaitFor("snapshot writer and queued scans", [&] {
+                return writer && scans.size() == 2;
+            });
+
+            UNIT_ASSERT(env->FindActor(writer));
+            const auto backup = env.GetLastBackupPath();
+            const auto snapshot = backup.Child("snapshot.tmp");
+            UNIT_ASSERT(snapshot.Child("schema.json").Exists());
+            UNIT_ASSERT(snapshot.Child("Data.json").Exists());
+            UNIT_ASSERT(snapshot.Child("CompositePKData.json").Exists());
+            UNIT_ASSERT(!backup.Child("snapshot").Exists());
+            if (previousBackup.IsDefined()) {
+                UNIT_ASSERT(!previousBackup.Exists());
+            }
+
+            // Removing files does not release the writer's descriptors.
+            AssertOpenSnapshotFiles(env->GetTempDir(), 4);
+            snapshot.ForceDelete();
+            AssertOpenSnapshotFiles(env->GetTempDir(), 4);
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env->WaitFor("snapshot writer stopped", [&] {
+                return !env->FindActor(writer);
+            }, TDuration::Seconds(1));
+            AssertOpenSnapshotFiles(env->GetTempDir(), 0);
+            UNIT_ASSERT(!backup.Child("snapshot").Exists());
+            previousBackup = backup;
+        }
+
+        scans.Stop();
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        UNIT_ASSERT(env.GetLastBackupPath().Child("snapshot").Exists());
+    }
+
+    Y_UNIT_TEST(StopSnapshotWithRunningScans) {
+        TEnv env;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        env.InitSchema();
+        env.WriteBinaryValue(1, TString(2_MB, 'x'));
+
+        TBlockEvents<TEvWriteSnapshot> writes(env.Env);
+        env.RestartTablet(TestTabletFlags);
+        env->WaitFor("snapshot scan waiting for acknowledgement", [&] {
+            for (const auto& ev : writes) {
+                if (ev->Get()->ScanStatus == EScanStatus::InProgress) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        const auto writer = writes.front()->GetRecipientRewrite();
+        const auto backup = env.GetLastBackupPath();
+        UNIT_ASSERT(env->FindActor(writer));
+        UNIT_ASSERT(backup.Child("snapshot.tmp").Child("Data.json").Exists());
+
+        // Keep scan completion events blocked: stopping the owner must suffice.
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env->WaitFor("snapshot writer stopped", [&] {
+            return !env->FindActor(writer);
+        }, TDuration::Seconds(1));
+        AssertOpenSnapshotFiles(env->GetTempDir(), 0);
+        UNIT_ASSERT(!backup.Child("snapshot").Exists());
+
+        // Late scan writes must not affect the next snapshot.
+        writes.Stop().Unblock();
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        UNIT_ASSERT(env.GetLastBackupPath().Child("snapshot").Exists());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadBinaryValue(1), TString(2_MB, 'x'));
     }
 
     Y_UNIT_TEST(DeleteSuccessfulBackups) {

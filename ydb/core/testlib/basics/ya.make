@@ -53,6 +53,7 @@ ENDIF()
 END()
 
 RECURSE(
+    core
     default
     pg
 )

@@ -83,7 +83,7 @@ IYdbConnection::TPtr CreateLocalYdbConnection(
     const TString& db,
     const TString& tablePathPrefix,
     ui64 maxActiveSessions,
-    const NMonitoring::TDynamicCounterPtr& counters = {});
+    const ::NMonitoring::TDynamicCounterPtr& counters = {});
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
     const TExternalStorageSettings& config,

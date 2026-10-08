@@ -21,7 +21,7 @@ namespace {
 
 struct TLocalYdbTableClient : public IYdbTableClient {
     
-    TLocalYdbTableClient(ui64 maxActiveSessions, const NMonitoring::TDynamicCounterPtr& counters);
+    TLocalYdbTableClient(ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters);
 
     NYdb::TAsyncStatus RetryOperation(
         TOperationFunc&& operation,
@@ -187,7 +187,7 @@ private:
     TMonotonic SessionStartedAt;
 };
 
-TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions, const NMonitoring::TDynamicCounterPtr& counters)
+TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters)
     : MaxActiveSessions(maxActiveSessions) {
     if (counters) {
         ActiveSessionsCounter = counters->GetCounter("ActiveSessions");
@@ -236,7 +236,7 @@ void TLocalYdbTableClient::ReleaseSession(TDuration holdDuration) {
 
 } // namespace
 
-IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions, const NMonitoring::TDynamicCounterPtr& counters) {
+IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions, const ::NMonitoring::TDynamicCounterPtr& counters) {
     return MakeIntrusive<TLocalYdbTableClient>(maxActiveSessions, counters);
 }
 

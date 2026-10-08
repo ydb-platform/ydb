@@ -91,7 +91,7 @@ The `HAS_APP_NAME` value is set by the client and is not authenticated by the se
 
 Setting the application identifier on the client:
 
-- **{{ ydb-ui-name }}** — fixed value `ydb-ui`, set by {{ ydb-ui-name }} and not user-configurable.
+- **{{ ydb-ui-name }}** — fixed value `ydb-ui`, set by the viewer and not user-configurable.
 - **YDB CLI** — not supported: the client application identifier is not sent in requests.
 - **YDB C++ SDK** — per request via the `Header` parameter of [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, where the [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) constant equals `x-ydb-application-name`.
 - **YDB Go SDK** — at the driver level via the [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) option in the `ydb.Open` call.

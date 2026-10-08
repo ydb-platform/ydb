@@ -22,8 +22,8 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <ydb/library/yql/providers/ydb/query/common/read_limits.h>
-#include <ydb/library/yql/providers/ydb/query/provider/yql_ydb_provider.h>
+#include <ydb/library/yql/providers/ydb/common/read_limits.h>
+#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -142,7 +142,7 @@ namespace {
     std::shared_ptr<NYdb::TDriver> MakeYdbDriver() {
         NYdb::TDriverConfig config;
         config.SetDiscoveryMode(NYdb::EDiscoveryMode::Off);
-        config.SetMaxInboundMessageSize(NYql::NYdbQuery::MaxInboundMessageBytes);
+        config.SetMaxInboundMessageSize(NYql::NYdb::MaxInboundMessageBytes);
         return MakeSharedYdbDriverWithStop(std::make_unique<NYdb::TDriver>(config));
     }
 

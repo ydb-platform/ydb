@@ -4,6 +4,6 @@ RECURSE_FOR_TESTS(
     datastreams
     generic_ut
     large_results
-    ydb_query
+    ydb
     s3
 )

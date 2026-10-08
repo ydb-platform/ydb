@@ -1062,7 +1062,7 @@ private:
             const auto output = GetStageOutput(maybeSinkEffect.Cast());
             AFL_ENSURE(output);
             auto dataSink = TCoDataSink(output.Cast().DataSink().Ptr());
-            if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
+            if (dataSink.Category() == KikimrProviderName) {
                 return true;
             }
         }

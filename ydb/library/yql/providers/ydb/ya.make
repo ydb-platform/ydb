@@ -1,7 +1,7 @@
 RECURSE(
     actors
-    comp_nodes
+    common
     expr_nodes
+    proto
     provider
-    query
 )

@@ -1,9 +1,8 @@
-#include <ydb/library/yql/providers/ydb/query/common/provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include "external_source_factory.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NKikimr::NExternalSource {
 namespace {
@@ -22,10 +21,10 @@ NKikimrSchemeOp::TExternalDataSourceDescription MakeDescription() {
 Y_UNIT_TEST_SUITE(YdbSourceFactory) {
     Y_UNIT_TEST(DefaultRoutesYdbTablesToQuerySdk) {
         const auto factory = CreateExternalSourceFactory({});
-        UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::Ydb)->GetName(), NYql::YdbQueryProviderName);
+        UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::Ydb)->GetName(), "ydb");
         UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::PostgreSQL)->GetName(), NYql::GenericProviderName);
         UNIT_ASSERT_VALUES_EQUAL(factory->GetOrCreate(NYql::EDatabaseType::YT)->GetName(), NYql::YtProviderName);
-        UNIT_ASSERT(factory->IsAvailableProvider(TString(NYql::YdbQueryProviderName)));
+        UNIT_ASSERT(factory->IsAvailableProvider(TString(NYql::YdbProviderName)));
         UNIT_ASSERT(NYql::GetAllExternalDataSourceTypes().contains("Ydb"));
         UNIT_ASSERT(NYql::GetAllExternalDataSourceDatabaseTypes().contains(NYql::EDatabaseType::Ydb));
         UNIT_ASSERT(NYql::DatabaseTypeFromString("Ydb") == NYql::EDatabaseType::Ydb);
@@ -47,7 +46,7 @@ Y_UNIT_TEST_SUITE(YdbSourceFactory) {
                 const auto factory = CreateExternalSourceFactory({}, nullptr, 50000, nullptr,
                     false, false, false, available);
                 UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::GenericProviderName)), generic);
-                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YdbQueryProviderName)), ydb);
+                UNIT_ASSERT_VALUES_EQUAL(factory->IsAvailableProvider(TString(NYql::YdbProviderName)), ydb);
                 for (const auto type : {NYql::EDatabaseType::Ydb, NYql::EDatabaseType::PostgreSQL}) {
                     if (available.contains(type)) {
                         UNIT_ASSERT_NO_EXCEPTION(factory->GetOrCreate(type));

@@ -1,88 +1,89 @@
 #include "yql_ydb_provider_impl.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 
-
-namespace NYql {
+namespace NYql::NYdb {
+namespace {
 
 using namespace NNodes;
 
-namespace {
-
-class TYdbLogicalOptProposalTransformer : public TOptimizeTransformerBase {
+class TLogicalOptimizer final : public TOptimizeTransformerBase {
 public:
-    TYdbLogicalOptProposalTransformer(TYdbState::TPtr state)
-        : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderYdb, {})
-        , State_(state)
+    explicit TLogicalOptimizer(TState::TPtr state)
+        : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderDq, {})
+        , State_(std::move(state))
     {
-#define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TYdbLogicalOptProposalTransformer::name)
-        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
-        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
-#undef HNDL
+        AddHandler(0, &TCoExtractMembers::Match, "YdbExtractMembersRight", Hndl(&TLogicalOptimizer::ExtractMembersRead<TCoRight>));
+        AddHandler(0, &TCoExtractMembers::Match, "YdbExtractMembersReadWrap", Hndl(&TLogicalOptimizer::ExtractMembersRead<TDqReadWrap>));
+        AddHandler(0, &TCoExtractMembers::Match, "YdbExtractMembersSource", Hndl(&TLogicalOptimizer::ExtractMembersSource));
+        AddHandler(0, &TDqLookupSourceWrap::Match, "YdbRejectLookup", Hndl(&TLogicalOptimizer::RejectLookup));
     }
 
-    TMaybeNode<TExprBase> ExtractMembers(TExprBase node, TExprContext& ctx) const {
-        const auto& extract = node.Cast<TCoExtractMembers>();
-        const auto& read = extract.Input().Maybe<TCoRight>().Input().Maybe<TYdbReadTable>();
+private:
+    template <class TWrap>
+    TMaybeNode<TExprBase> ExtractMembersRead(TExprBase node, TExprContext& ctx) const {
+        const auto extract = node.Cast<TCoExtractMembers>();
+        const auto wrapper = extract.Input().Maybe<TWrap>();
+        const auto read = wrapper.Input().template Maybe<TYdbReadTable>();
         if (!read) {
             return node;
         }
-
-        const auto& cast = read.Cast();
-        return Build<TCoRight>(ctx, extract.Pos())
-            .Input<TYdbReadTable>()
-                .World(cast.World())
-                .DataSource(cast.DataSource())
-                .Table(cast.Table())
+        // Only push a projection directly on a read. Common optimizers retain
+        // columns used by intervening local filters before producing this shape.
+        return Build<TWrap>(ctx, node.Pos())
+            .InitFrom(wrapper.Cast())
+            .template Input<TYdbReadTable>()
+                .InitFrom(read.Cast())
                 .Columns(extract.Members())
             .Build()
             .Done();
     }
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) const {
-        const auto& extract = node.Cast<TCoExtractMembers>();
-        const auto& input = extract.Input();
-        if (const auto& read = input.Maybe<TDqSourceWrap>().Input().Maybe<TYdbSourceSettings>()) {
-            const auto& cast = read.Cast();
-            return Build<TDqSourceWrap>(ctx, node.Pos())
-                .Input<TYdbSourceSettings>()
-                    .InitFrom(cast)
-                    .Columns(extract.Members())
-                    .Build()
-                .DataSource(input.Cast<TDqSourceWrap>().DataSource())
-                .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
-                .Done();
+    TMaybeNode<TExprBase> ExtractMembersSource(TExprBase node, TExprContext& ctx) const {
+        const auto extract = node.Cast<TCoExtractMembers>();
+        const auto wrapper = extract.Input().Maybe<TDqSourceWrap>();
+        const auto source = wrapper.Input().Maybe<TYdbSourceSettings>();
+        if (!source) {
+            return node;
         }
-        if (const auto& read = input.Maybe<TDqReadWrap>().Input().Maybe<TYdbReadTable>()) {
-            const auto& cast = read.Cast();
-            return Build<TDqReadWrap>(ctx, node.Pos())
-                .InitFrom(input.Cast<TDqReadWrap>())
-                .Input<TYdbReadTable>()
-                    .InitFrom(cast)
-                    .Columns(extract.Members())
-                    .Build()
-                .Done();
+        auto columns = extract.Members().Ptr();
+        if (!columns->ChildrenSize()) {
+            // A physical carrier preserves row count for COUNT(*) and constant
+            // projections. The public RowType remains the empty projected type.
+            const auto& table = State_->Tables.at(TState::TTableKey(
+                source.Cast().Cluster().StringValue(), source.Cast().Table().StringValue()));
+            columns = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), table.RowType->GetItems().front()->GetName())});
+        }
+        return Build<TDqSourceWrap>(ctx, node.Pos())
+            .InitFrom(wrapper.Cast())
+            .Input<TYdbSourceSettings>()
+                .InitFrom(source.Cast())
+                .Columns(columns)
+            .Build()
+            .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> RejectLookup(TExprBase node, TExprContext& ctx) const {
+        if (node.Cast<TDqLookupSourceWrap>().Input().Maybe<TYdbSourceSettings>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Ydb streamlookup joins are not supported"));
+            return {};
         }
         return node;
-
     }
-private:
-    const TYdbState::TPtr State_;
+
+    const TState::TPtr State_;
 };
 
+} // namespace
+
+THolder<IGraphTransformer> CreateLogicalOptimizer(TState::TPtr state) {
+    return MakeHolder<TLogicalOptimizer>(std::move(state));
 }
 
-THolder<IGraphTransformer> CreateYdbLogicalOptProposalTransformer(TYdbState::TPtr state) {
-    return MakeHolder<TYdbLogicalOptProposalTransformer>(state);
-}
-
-} // namespace NYql
+} // namespace NYql::NYdb

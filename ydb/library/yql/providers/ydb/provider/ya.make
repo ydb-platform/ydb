@@ -1,53 +1,38 @@
-YQL_LIBRARY()
+LIBRARY()
 
 SRCS(
-    yql_ydb_datasink.cpp
-    yql_ydb_datasink_execution.cpp
-    yql_ydb_datasink_type_ann.cpp
-    yql_ydb_datasource.cpp
-    yql_ydb_datasource_type_ann.cpp
+    yql_ydb_config.cpp
     yql_ydb_dq_integration.cpp
-    yql_ydb_exec.cpp
-    yql_ydb_io_discovery.cpp
     yql_ydb_load_meta.cpp
     yql_ydb_logical_opt.cpp
-    yql_ydb_physical_opt.cpp
-    yql_ydb_mkql_compiler.cpp
     yql_ydb_provider.cpp
-    yql_ydb_provider_impl.cpp
-    yql_ydb_settings.cpp
+    yql_ydb_type_ann.cpp
 )
 
+YQL_LAST_ABI_VERSION()
+
 PEERDIR(
-    library/cpp/random_provider
-    library/cpp/time_provider
-    library/cpp/yson/node
-    ydb/core/fq/libs/common
-    yql/essentials/ast
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/providers/common/structured_token
-    ydb/library/yql/providers/common/token_accessor/client
-    yql/essentials/core
-    yql/essentials/core/type_ann
+    ydb/library/yql/providers/ydb/common
+    library/cpp/json
+    library/cpp/threading/future
     ydb/library/yql/dq/expr_nodes
-    yql/essentials/core/dq_integration
-    yql/essentials/providers/common/config
-    ydb/library/yql/providers/common/db_id_async_resolver
-    yql/essentials/providers/common/dq
-    yql/essentials/providers/common/mkql
-    yql/essentials/providers/common/proto
-    yql/essentials/providers/common/provider
-    yql/essentials/providers/common/schema/expr
-    yql/essentials/providers/common/transform
-    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/dq/expr_nodes
-    yql/essentials/providers/result/expr_nodes
+    ydb/library/yql/providers/dq/mkql
+    ydb/library/yql/providers/native
     ydb/library/yql/providers/ydb/expr_nodes
     ydb/library/yql/providers/ydb/proto
-    ydb/public/lib/experimental
-    ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/table
+    yql/essentials/core
+    yql/essentials/core/dq_integration
+    yql/essentials/core/sql_types
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/structured_token
+    yql/essentials/providers/common/transform
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

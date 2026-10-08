@@ -1,53 +1,38 @@
 #pragma once
 
-#include <yql/essentials/core/yql_data_provider.h>
-#include "yql_ydb_settings.h"
-
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <yql/essentials/core/yql_data_provider.h>
 
-namespace NKikimr::NMiniKQL {
-   class IFunctionRegistry;
-}
+#include <util/datetime/base.h>
+#include <functional>
 
 namespace NYql {
 
-struct TYdbState : public TThrRefBase
-{
-    using TPtr = TIntrusivePtr<TYdbState>;
+class IYdbMetadataClientCache {
+public:
+    virtual ~IYdbMetadataClientCache() = default;
 
-    struct TTableMeta {
-        const TStructExprType* ItemType = nullptr;
-        std::vector<NUdf::TDataTypeId>  KeyTypes;
-        TVector<TString> ColumnOrder;
-        NYdb::NClickhouseInternal::TSnapshotHandle Snapshot;
-        std::vector<std::array<TString, 2U>> Partitions;
-        bool ReadAsync = false;
-    };
-
-    std::unordered_map<std::pair<TString, TString>, TTableMeta, THash<std::pair<TString, TString>>> Tables;
-
-    TTypeAnnotationContext* Types = nullptr;
-    TYdbConfiguration::TPtr Configuration;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
-    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
+    virtual std::shared_ptr<::NYdb::NTable::TTableClient> GetClient(
+        const TString& endpoint, const TString& database, bool useTls,
+        const TString& structuredToken, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) = 0;
 };
 
-TDataProviderInitializer GetYdbDataProviderInitializer(
-    NYdb::TDriver driver,
+// Shares clients across compilations, with a bounded number of credential-isolated
+// entries. Expired entries are discarded on access; destruction releases the cache.
+std::shared_ptr<IYdbMetadataClientCache> CreateYdbMetadataClientCache(
+    const ::NYdb::TDriver& driver, const ::NYdb::TDriver& tlsDriver,
+    size_t maxEntries = 64, TDuration idleTimeout = TDuration::Minutes(10));
+
+using TYdbMetadataClientCacheFactory = std::function<std::shared_ptr<IYdbMetadataClientCache>()>;
+
+TDataProviderInfo CreateYdbDataProviders(
+    TTypeAnnotationContext* types,
+    // Called only when metadata is needed, so registering the provider does not
+    // create SDK drivers for queries that never read a Ydb source.
+    TYdbMetadataClientCacheFactory metadataClientCacheFactory,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory = CreateStructuredTokenCredentialsFactory(),
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr
-);
-
-TIntrusivePtr<IDataProvider> CreateYdbDataSource(
-    TYdbState::TPtr state,
-    NYdb::TDriver driver
-);
-
-TIntrusivePtr<IDataProvider> CreateYdbDataSink(TYdbState::TPtr state);
+    TInstant metadataDeadline = TInstant::Max());
 
 } // namespace NYql

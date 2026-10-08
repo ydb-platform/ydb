@@ -963,6 +963,12 @@ R"json(
         // Verify that NO targets exist under Aggregate names (only Partition)
         UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.row_count"));
         UNIT_ASSERT(!targetCountersGroup->FindNamedCounter("name", "table.datashard.consumed_cpu_us"));
+
+        // An app counter reported late is still mapped
+        appGroup->GetNamedCounter("sensor", "DataShard/EngineHostRowReads", true)->Set(7);
+        mapper->TransferCounterValues();
+        UNIT_ASSERT_VALUES_EQUAL(
+            targetCountersGroup->FindNamedCounter("name", "table.datashard.partition.read.rows")->Val(), 7);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "hulldb_compstrat_defs.h"
+#include "hulldb_compstrat_yield.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h>
 #include <util/digest/numeric.h>
@@ -28,11 +29,13 @@ namespace NKikimr {
             TStrategyStorageRatio(TIntrusivePtr<THullCtx> hullCtx,
                                   const TLevelIndexSnapshot &levelSnap,
                                   TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> &&barriersEssence,
-                                  bool allowGarbageCollection)
+                                  bool allowGarbageCollection,
+                                  TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , BarriersEssence(std::move(barriersEssence))
                 , AllowGarbageCollection(allowGarbageCollection)
+                , Yield(yield)
             {}
 
 
@@ -57,6 +60,7 @@ namespace NKikimr {
             const TLevelIndexSnapshot &LevelSnap;
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
             const bool AllowGarbageCollection;
+            TCompactionYield* const Yield;
 
             struct TStat {
                 ui32 SstsChecked = 0;
@@ -137,6 +141,7 @@ namespace NKikimr {
                 TSstIterator it(&LevelSnap.SliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(Yield);
                     TLevelSstPtr p = it.Get();
                     vec.push_back(TTimeSst(GetNextCalculationTime(p, startTime, calcPeriod), p));
                     it.Next();
@@ -145,6 +150,8 @@ namespace NKikimr {
             }
 
             void UpdateStorageRatioForDb(TInstant startTime, TStat &stat) {
+                const auto calcStart = TActivationContext::Monotonic();
+                const TDuration suspendedBefore = Yield ? Yield->GetSuspendedTime() : TDuration::Zero();
                 const TDuration &calcPeriod = HullCtx->HullCompStorageRatioCalcPeriod;
                 const TDuration &calcDuration = HullCtx->HullCompStorageRatioMaxCalcDuration;
 
@@ -155,6 +162,7 @@ namespace NKikimr {
 
                 // calculate storage ratio, don't spend much time on it, skip ssts that are actualized
                 for (const auto &x : vec) {
+                    CheckCompactionYield(Yield);
                     if (startTime >= x.NextCalculationTime) {
                         TSstRatioPtr newRatio = CalculateSstRatio(x.LevelSstPtr.SstPtr, startTime);
                         x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio, newRatio->Time);
@@ -165,8 +173,10 @@ namespace NKikimr {
                     }
 
                     // avoid spending too much time on storage ratio calculation
-                    TInstant now = TAppData::TimeProvider->Now();
-                    if (now > startTime + calcDuration) {
+                    const auto now = TActivationContext::Monotonic();
+                    const TDuration suspended = Yield ? Yield->GetSuspendedTime() - suspendedBefore : TDuration::Zero();
+                    // Queueing between coroutine turns must not consume the calculation budget.
+                    if (now - suspended > calcStart + calcDuration) {
                         stat.BreakedTimeout = true;
                         break;
                     }
@@ -185,9 +195,10 @@ namespace NKikimr {
                 // for the whole level index
                 TLevelIt dbIt(HullCtx, &LevelSnap);
 
-                auto newItem = [] (const TMemIterator &subsIt, const TIndexRecordMerger &subsMerger) {
+                auto newItem = [this] (const TMemIterator &subsIt, const TIndexRecordMerger &subsMerger) {
                     Y_UNUSED(subsIt);
                     Y_UNUSED(subsMerger);
+                    CheckCompactionYield(Yield);
                 };
 
                 auto doMerge = [this, ratio] (const TMemIterator &subsIt,

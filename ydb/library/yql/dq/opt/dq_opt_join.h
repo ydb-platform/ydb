@@ -63,9 +63,6 @@ NNodes::TExprBase DqBuildHashJoin(
     bool useBlockHashJoin = false,
     bool blockHashJoinBuildSideLeft = false);
 
-// Settings on TDqPhyBlockHashJoin: optional BuildSide=Left for a reverse block join.
-// EqualNulls is not emitted here. The legacy optimizer has no per-key
-// IS NOT DISTINCT FROM bit, so a global flag would turn every equijoin null-safe.
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,
     EJoinAlgoType joinAlgo,

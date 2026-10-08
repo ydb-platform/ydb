@@ -17,6 +17,9 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Node>().Key(NodeId).Delete();
         auto restrictionsRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Range(NodeId).Select();
+        if (!restrictionsRowset.IsReady()) {
+            return false;
+        }
         while (!restrictionsRowset.EndOfSet()) {
             db.Table<Schema::TabletAvailabilityRestrictions>().Key(restrictionsRowset.GetKey()).Delete();
             if (!restrictionsRowset.Next()) {

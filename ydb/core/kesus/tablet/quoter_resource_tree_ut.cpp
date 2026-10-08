@@ -34,6 +34,7 @@ public:
     UNIT_TEST(TestInactiveSessionDisconnectsAndThenConnectsAgain)
     UNIT_TEST(TestActiveMultiresourceSessionDisconnectsAndThenConnectsAgain)
     UNIT_TEST(TestInactiveMultiresourceSessionDisconnectsAndThenConnectsAgain)
+    UNIT_TEST(TestSessionCountersInitializedOnDetailedCountersModeEnabled)
     UNIT_TEST_SUITE_END();
 
     void SetUp() override {
@@ -627,6 +628,34 @@ public:
 
     void TestInactiveMultiresourceSessionDisconnectsAndThenConnectsAgain() {
         TestSessionDisconnectsAndThenConnectsAgainImpl(false, 5);
+    }
+
+    void TestSessionCountersInitializedOnDetailedCountersModeEnabled() {
+        auto quoterCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        Resources->SetQuoterCounters(quoterCounters);
+
+        AddResource("/Root", 100);
+        auto* leaf = AddResource("/Root/Leaf", 100);
+
+        // Non-root resources have no counters until detailed mode is enabled.
+        auto activeSession = CreateSession(leaf, true, 10);
+        auto inactiveSession = CreateSession(leaf, false, 0);
+        UNIT_ASSERT(!leaf->GetCounters().ResourceCounters);
+
+        Resources->EnableDetailedCountersMode(true);
+        UNIT_ASSERT(leaf->GetCounters().ResourceCounters);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().Sessions->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().ActiveSessions->Val(), 1);
+
+        // Closing sessions that existed before the counters were bound must not
+        // drive the gauges below zero.
+        Resources->CloseSession(activeSession.Session->GetClientId(), leaf->GetResourceId());
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().Sessions->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().ActiveSessions->Val(), 0);
+
+        DisconnectSession(inactiveSession.Session);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().Sessions->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(leaf->GetCounters().ActiveSessions->Val(), 0);
     }
 
 private:

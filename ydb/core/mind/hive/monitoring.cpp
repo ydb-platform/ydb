@@ -1769,6 +1769,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:50px'>";
@@ -1896,17 +1899,33 @@ public:
                            </div>
                            <div class='modal-body'>
                                <div class='row'>
-                                   <div class='col-md-12'>
+                                   <div class='col-md-6'>
                                        <h2> Run Balancer</h2>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <h2> Currently running</h2>
                                    </div>
                                </div>
                                <div class='row'>
-                                   <div class='col-md-2'>
+                                   <div class='col-md-3'>
                                        <label for='balancer_max_movements'>Max movements</label>
                                        <div in='balancer_max_movements' class='input-group'>
                                            <input id='balancer_max_movements' type='number' value='1000' class='form-control'>
                                        </div>
                                        <br>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <label for='balancer_in_flight'>In-flight</label>
+                                       <div in='balancer_in_flight' class='input-group'>
+                                           <input id='balancer_in_flight' type='number' value='1' class='form-control'>
+                                       </div>
+                                       <br>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <table id='current_balancers' class='table table-stripped'>
+                                       <tbody>
+                                       </tbody>
+                                       </table>
                                    </div>
                                </div>
                                <div class='row'>
@@ -1926,16 +1945,15 @@ public:
                                </div>
                                <div class='row'>
                                    <div class='col-md-8'>
+                                       <details>
+                                       <summary style='display:list-item'> This will restart all tablets. You probably don't want do that on a running production database.</summary>
                                        <label for='tenant_name'> Please enter the tenant name to confirm you know what you are doing</label>
                                        <div in='tenant_name' class='input-group' style='width:100%'>
                                            <input id='tenant_name' type='text' class='form-control'>
                                        </div>
                                        <br>
-                                   </div>
-                              </div>
-                              <div class='row'>
-                                   <div class='col-md-2'>
                                        <button id='button_rebalance' type='submit' class='btn btn-danger' onclick='rebalanceTabletsFromScratch();' data-dismiss='modal'>Run</button>
+                                       </details>
                                    </div>
                               </div>
                               <div class='row'>
@@ -2138,9 +2156,9 @@ function drainNode(element, nodeId) {
 }
 
 function rebalanceTablets() {
-    $('#balancerProgress').html('o.O');
     var max_movements = $('#balancer_max_movements').val();
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
+    var in_flight = $('#balancer_in_flight').val();
+    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight});
 }
 
 function rebalanceTabletsFromScratch(element) {
@@ -2269,6 +2287,7 @@ function fillDataShort(result) {
             $('#resourceScatterMemory').html(result.ScatterHtml.Memory);
             $('#resourceScatterNetwork').html(result.ScatterHtml.Network);
 
+            $('#current_balancers > tbody > tr').remove();
             for (var b = 0; b < result.Balancers.length; b++) {
                 var balancerObj = result.Balancers[b];
                 var balancerHtml = $('#balancer' + b)[0];
@@ -2282,7 +2301,9 @@ function fillDataShort(result) {
                     balancerHtml.cells[4].innerHTML = '';
                 }
                 if (balancerObj.IsRunningNow && balancerObj.CurrentMaxMovements > 0) {
-                    balancerHtml.cells[5].innerHTML = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                    var progress = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                    balancerHtml.cells[5].innerHTML = progress;
+                    $('#current_balancers > tbody').append("<tr><td>" + balancerHtml.cells[0].innerHTML + "</td><td>" + progress +"</td></tr>");
                 } else {
                     balancerHtml.cells[5].innerHTML = '';
                 }
@@ -2639,7 +2660,10 @@ public:
                 TNodeInfo& node = *nodeInfo;
                 TNodeId id = node.Id;
 
-                if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
+                if (!node.IsAlive()
+                    && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine
+                    && !node.Down
+                    && !node.Freeze) {
                     continue;
                 }
 
@@ -2943,6 +2967,7 @@ class TTxMonEvent_Rebalance : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     int MaxMovements = 1000;
+    ui64 MaxInFlight = 1;
     TString Response = "{}";
     TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
@@ -2954,6 +2979,7 @@ public:
     {
         auto cgi = GetParams(ev->Get());
         MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
+        MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2966,7 +2992,8 @@ public:
         }
         Self->StartHiveBalancer({
             .Type = EBalancerType::Manual,
-            .MaxMovements = MaxMovements
+            .MaxMovements = MaxMovements,
+            .MaxInFlight = MaxInFlight,
         });
         return true;
     }
@@ -3046,7 +3073,7 @@ public:
             return true;
         }
         for (const auto& tablet : Self->Tablets) {
-            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+            Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
         return true;
     }
@@ -3059,7 +3086,7 @@ public:
 class TReassignTabletWaitActor : public TActor<TReassignTabletWaitActor>, public ISubActor {
 public:
     TActorId Source;
-    ui32 TabletsTotal = std::numeric_limits<ui32>::max();
+    ui32 TabletsTotal = 0;
     ui32 TabletsDone = 0;
     THive* Hive;
     NJson::TJsonValue Response;
@@ -3087,8 +3114,12 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
-        ++TabletsDone;
+    void AddTablet(TLeaderTabletInfo* tablet) {
+        tablet->ActorsToNotifyOnRestart.push_back(SelfId());
+        ++TabletsTotal;
+    }
+
+    void CheckCompletion() {
         if (TabletsDone >= TabletsTotal) {
             Response["total"] = TabletsDone;
             Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
@@ -3098,6 +3129,11 @@ public:
 
     void AddContext(const TString& key, const TString& value) {
         Response[key] = value;
+    }
+
+    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
+        ++TabletsDone;
+        CheckCompletion();
     }
 
     STATEFN(StateWork) {
@@ -3255,7 +3291,7 @@ public:
                 continue;
             }
             if (Wait) {
-                tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
+                waitActor->AddTablet(tablet);
             }
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
             if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
@@ -3266,7 +3302,7 @@ public:
             }
         }
         if (Wait) {
-            waitActor->TabletsTotal = operations.size();
+            waitActor->CheckCompletion();
         }
         for (auto& op : operations) {
             ctx.Send(Self->SelfId(), op.Release());
@@ -4796,6 +4832,160 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
+class TTxMonEvent_ManualOps : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr&, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        TStringStream out;
+        out << "<div>";
+        out << "<form id='dynamicForm' method='POST'>";
+        out << R"(
+            <div class="form-group">
+                <label for='page' style='display:block'>Operation type</label>
+                <select id='page' name='page' onchange='toggleCustomInput()'>
+                    <option>SetDown</option>
+                    <option>SetFreeze</option>
+                    <option>ReassignTablet</option>
+                    <option>InitMigration</option>
+                    <option>MoveTablet</option>
+                    <option>StopTablet</option>
+                    <option>ResumeTablet</option>
+                    <option>CreateTablet</option>
+                    <option>ResetTablet</option>
+                    <option>DeleteTablet</option>
+                    <option>UpdateResources</option>
+                    <option>StorageRebalance</option>
+                    <option>TabletAvailability</option>
+                    <option>SetDomain</option>
+                    <option value="other">Other...</option>
+                </select>
+                <input type="text" id="custom_page" name="custom_page"
+                       style='display:none'>
+            </div>
+        )";
+
+        for (auto& param : {"node", "tablet", "wait"}) {
+            out << "<div class='form-group'>";
+            out << "<label style='display:block' for='" << param << "'>" << param << "</label>";
+            out << "<input type='text' id='" << param << "' name='" << param << "'>";
+            out << "</div>";
+        }
+
+        out << R"(
+            <div class="form-group">
+                <label>Custom params</label>
+                <div id="keyValuePairs">
+                    <div class="key-value-pair">
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' onclick='removeKeyValuePair(this)' style='border:none'></button>
+                    </div>
+                </div>
+                <button type='button' class='glyphicon glyphicon-plus' onclick='addKeyValuePair()' style='border:none'></button>
+            </div>
+        )";
+
+        out << "<button type='button' class='btn btn-info' onclick='prepareAndSubmit()'>Send request</button>";
+
+        out << "</form></div>";
+
+        out << "<script>";
+        out << "var hiveId = '" << Self->TabletID() << "';";
+
+        out << R"(
+                function toggleCustomInput() {
+                    const pageSelect = document.getElementById('page');
+                    const customInput = document.getElementById('custom_page');
+
+                    if (pageSelect.value === 'other') {
+                        customInput.style.display = 'block';
+                        customInput.focus();
+                    } else {
+                        customInput.style.display = 'none';
+                        customInput.value = '';
+                    }
+                }
+
+                function addKeyValuePair() {
+                    const container = document.getElementById('keyValuePairs');
+                    const newPair = document.createElement('div');
+                    newPair.className = 'key-value-pair';
+                    newPair.innerHTML = `
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' style='border:none' onclick='removeKeyValuePair(this)'></button>
+                    `;
+                    container.appendChild(newPair);
+                }
+
+                function removeKeyValuePair(button) {
+                    button.parentElement.remove();
+                }
+
+                function prepareAndSubmit() {
+                    const form = document.getElementById('dynamicForm');
+                    const formData = new FormData(form);
+                    const data = {};
+                    data['TabletID'] = hiveId;
+
+                    for (let [key, value] of formData.entries()) {
+                        if (key === 'key[]' || key === 'value[]') {
+                            continue;
+                        }
+
+                        if (key === 'page' && value === 'other') {
+                            const customValue = document.getElementById('custom_page').value;
+                            if (customValue.trim()) {
+                                data[key] = customValue;
+                            } else {
+                                data[key] = value;
+                            }
+                        } else {
+                            data[key] = value;
+                        }
+                    }
+                    const keys = formData.getAll('key[]');
+                    const values = formData.getAll('value[]');
+
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys[i].trim() && values[i].trim()) {
+                            data[keys[i]] = values[i];
+                        }
+                    }
+                    sendPostRequest(data);
+                }
+
+                function sendPostRequest(data) {
+                    $.ajax({
+                        url: 'app',
+                        method: 'POST',
+                        data: data,
+                        success: function(d) {
+                            alert(JSON.stringify(d));
+                        },
+                        error: function(d) {
+                            alert(JSON.stringify(d));
+                        }
+                    });
+                }
+            </script>
+        )";
+
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
@@ -4965,6 +5155,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "OperationsLog") {
         return Execute(new TTxMonEvent_OperationsLog(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ManualOperations") {
+        return Execute(new TTxMonEvent_ManualOps(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

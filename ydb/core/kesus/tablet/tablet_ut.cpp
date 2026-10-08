@@ -3,6 +3,7 @@
 #include "ut_helpers.h"
 #include "rate_accounting.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/testlib/actors/block_events.h>
@@ -2348,6 +2349,144 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // Kill pipe and then session must be deactivated on kesus.
         ctx.Runtime->Send(new IEventHandle(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill()));
         WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource.
+    }
+
+    Y_UNIT_TEST(TestSessionCloseCommand) {
+        // Client-initiated session garbage collection: TEvUpdateConsumptionState with
+        // CloseSession=true must destroy the session cleanly, be idempotent, keep the
+        // PipeServerIdToSession index consistent (so a later pipe disconnect does not
+        // crash), and allow a fresh session on resubscribe.
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(100.0);
+        ctx.AddQuoterResource("Root", cfg);
+
+        const TActorId edge = ctx.Runtime->AllocateEdgeActor();
+        TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
+
+        auto subscribe = [&](const TActorId& pipe) -> ui64 {
+            auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
+            ActorIdToProto(edge, req->Record.MutableActorID());
+            auto* reqRes = req->Record.AddResources();
+            reqRes->SetResourcePath("Root");
+            reqRes->SetStartConsuming(true);
+            reqRes->SetInitialAmount(std::numeric_limits<double>::infinity());
+            ctx.Runtime->SendToPipe(
+                ctx.TabletId, edge, req.Release(), 0, GetPipeConfigWithRetries(), pipe, 0);
+            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvSubscribeOnResourcesResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.ResultsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                result->Record.GetResults(0).GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            return result->Record.GetResults(0).GetResourceId();
+        };
+
+        const ui64 resourceId = subscribe(sessionPipe);
+
+        // The session should be consuming the whole resource.
+        {
+            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                result->Record.GetResourcesInfo(0).GetStateNotification().GetStatus(),
+                Ydb::StatusIds::SUCCESS);
+        }
+
+        // Client asks Kesus to destroy the session.
+        ctx.CloseQuoterSession(edge, edge, resourceId);
+
+        // Idempotent: closing an already-closed session is a silent no-op (still acked).
+        ctx.CloseQuoterSession(edge, edge, resourceId);
+
+        // Killing the pipe after the session was closed must not crash the tablet:
+        // the session must have been removed from the PipeServerIdToSession index.
+        ctx.Runtime->Send(new IEventHandle(sessionPipe, edge, new TEvents::TEvPoisonPill()));
+
+        // A fresh subscribe on a new pipe re-establishes the session without errors.
+        sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
+        const ui64 resourceId2 = subscribe(sessionPipe);
+        UNIT_ASSERT_VALUES_EQUAL(resourceId2, resourceId);
+
+        auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result->Record.GetResourcesInfo(0).GetStateNotification().GetStatus(),
+            Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(TestQuoterBilledCounters) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        // Resource counters for non-root resources are exported only in detailed mode.
+        const TString kesusPath = "/Root/Kesus";
+        Ydb::Coordination::Config config = MakeConfig(kesusPath);
+        config.set_rate_limiter_counters_mode(Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED);
+        ctx.SetConfig(12345, config, 42);
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource root;
+        root.SetResourcePath("/Root");
+        root.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0);
+        root.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(300.0);
+        ctx.AddQuoterResource(root);
+
+        auto makeChild = [](const TString& path) {
+            NKikimrKesus::TStreamingQuoterResource child;
+            child.SetResourcePath(path);
+            child.MutableHierarchicalDRRResourceConfig();
+            auto& acc = *child.MutableAccountingConfig();
+            acc.SetEnabled(true);
+            auto& onDemand = *acc.MutableOnDemand();
+            onDemand.SetEnabled(true);
+            onDemand.SetBillingPeriodSec(2);
+            onDemand.SetCloudId("cloud");
+            onDemand.SetFolderId("folder");
+            onDemand.SetResourceId("resource");
+            return child;
+        };
+        ctx.AddQuoterResource(makeChild("/Root/Res1"));
+        ctx.AddQuoterResource(makeChild("/Root/Res2"));
+        ctx.AddQuoterResource(makeChild("/Root/Res2/Sub"));
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const auto sub1 = ctx.SubscribeOnResource(client, edge, "/Root/Res1", false, 0);
+        const auto sub2 = ctx.SubscribeOnResource(client, edge, "/Root/Res2", false, 0);
+        const auto sub3 = ctx.SubscribeOnResource(client, edge, "/Root/Res2/Sub", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        ctx.AccountResources(client, edge, sub1.GetResults(0).GetResourceId(), start, interval, {30.0});
+        ctx.AccountResources(client, edge, sub2.GetResults(0).GetResourceId(), start, interval, {20.0});
+        ctx.AccountResources(client, edge, sub3.GetResults(0).GetResourceId(), start, interval, {10.0});
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        auto quoterCounters = GetServiceCounters(ctx.Runtime->GetAppData().Counters, "quoter_service")
+            ->GetSubgroup("quoter", kesusPath);
+        auto resourceCounters = [&](const TString& resourcePath) {
+            return quoterCounters->GetSubgroup("resource", resourcePath);
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(resourceCounters("Root")->GetCounter("Limit", false)->Val(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(resourceCounters("Root/Res1")->GetCounter("OnDemand", true)->Val(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(resourceCounters("Root/Res2")->GetCounter("OnDemand", true)->Val(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(resourceCounters("Root/Res2/Sub")->GetCounter("OnDemand", true)->Val(), 10);
     }
 }
 

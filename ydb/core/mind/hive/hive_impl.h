@@ -265,6 +265,7 @@ protected:
     ITransaction* CreateBlockStorageResult(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateRestartTablet(TFullTabletId tabletId, TNodeId preferredNodeId);
+    ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
     ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
@@ -1017,7 +1018,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     }
 
     ui64 GetNodeRestartsForPenalty() const {
-        return CurrentConfig.GetNodeRestartsForPenalty();
+        return CurrentConfig.GetNodeRestartsForPenalty() ?: Max<ui64>();
     }
 
     i64 GetMaxDeleteTabletInProgress() const {
@@ -1064,6 +1065,7 @@ protected:
         TNodeId MaxUsageNodeId;
         double Scatter;
         TResourceNormalizedValues ScatterByResource;
+        TResourceNormalizedValues MinResourceNormValues;
         std::vector<TNodeStat> Values;
     };
 

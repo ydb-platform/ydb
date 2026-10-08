@@ -28,7 +28,6 @@ from ydb.tests.library.common.types import Erasure
 
 PRE_INSTALLED_ACCOUNTS = ("prod", "test")
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -236,10 +235,6 @@ class LogbrokerFederation(object):
                 count=1,
             )
 
-            kafka_port = slots[0].kafka_api_port
-            _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
-            logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
-
             if account in PRE_INSTALLED_ACCOUNTS:
                 kafka_port = slots[0].kafka_api_port
                 _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
@@ -345,7 +340,6 @@ class LogbrokerFederation(object):
                     prefetch_coefficient=-1.0,
                 )),
             ]
-
             for account in ('admin',) + PRE_INSTALLED_ACCOUNTS:
                 kesus_path = "/Root/PersQueue/System/Quoters/{}".format(account)
                 account_resources = list(_resources)

@@ -173,7 +173,35 @@ class TestLogbroker(StreamingTestBase):
 
             cluster_names = list(logbroker_federation.ydb_cluster_endpoints)
             assert len(cluster_names) == 3, cluster_names
+            expected_messages = []
+            actual_messages = []
+            read_counts = {name: 0 for name in cluster_names}
+
+            def check_read_write(available_clusters, phase):
+                clients = {name: self.logbrokers_client[name] for name in available_clusters}
+                for cluster_name, client in clients.items():
+                    for partition_id in range(4):
+                        message = f"{phase}, {cluster_name}, partition {partition_id}"
+                        client.topic_write(self.input_topic, [message], partition_id=partition_id)
+                        expected_messages.append(message)
+
+                # Output can be distributed across any of the available clusters.
+                counts = wait_topic_messages(clients, self.output_topic, len(expected_messages))
+                for cluster_name, count in counts.items():
+                    unread_count = count - read_counts[cluster_name]
+                    if unread_count:
+                        actual_messages.extend(clients[cluster_name].topic_read(
+                            self.output_topic, self.consumer, unread_count
+                        ))
+                    read_counts[cluster_name] = count
+                assert sorted(actual_messages) == sorted(expected_messages), counts
+
+                state = self.get_query_state(kikimr, self.query_name)
+                assert state.Status == "RUNNING", state
+                assert state.RetryCount == retry_count, state
+
             cluster2 = cluster_names[-2]
+            cleanup.callback(logbroker_federation.start_cluster, cluster2)
             logging.info("Stopping cluster %s", cluster2)
             logbroker_federation.stop_cluster(cluster2)
             logging.info("Cluster %s stopped; checking that query %s stays running without retries for 20 seconds", cluster2, self.query_name)
@@ -194,11 +222,12 @@ class TestLogbroker(StreamingTestBase):
                 time.sleep(1)
 
             self.wait_available_clusters(kikimr, 2)
+            check_read_write([name for name in cluster_names if name != cluster2], "cluster stopped")
             logging.info("Starting cluster %s", cluster2)
             logbroker_federation.start_cluster(cluster2)
             logging.info("Cluster %s started; waiting for availability to recover", cluster2)
             self.wait_available_clusters(kikimr, 3)
-            cleanup.callback(logbroker_federation.start_cluster, cluster2)
+            check_read_write(cluster_names, "cluster restored")
             logging.info("Stopping cluster %s again", cluster2)
             logbroker_federation.stop_cluster(cluster2)
             logging.info("Cluster %s stopped", cluster2)

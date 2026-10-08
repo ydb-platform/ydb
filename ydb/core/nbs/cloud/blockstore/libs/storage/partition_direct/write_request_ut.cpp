@@ -55,14 +55,22 @@ void CaptureDirectWriteChecksums(
 {
     fixture.DirectBlockGroup->WriteBlocksToPBufferHandler =
         [&fixture, received](
-            ui32 /*vChunkIndex*/,
-            THostIndex /*hostIndex*/,
-            TPBufferKey /*pBufferKey*/,
-            TBlockRange16 /*range*/,
-            const TGuardedSgList& /*guardedSglist*/,
+            ui32 vChunkIndex,
+            THostIndex hostIndex,
+            TPBufferKey pBufferKey,
+            TBlockRange16 range,
+            const TGuardedSgList& guardedSglist,
             const TBlockChecksums& checksums,
-            const NWilson::TTraceId& /*traceId*/)
+            const NWilson::TTraceId& traceId)
     {
+        Y_UNUSED(
+            vChunkIndex,
+            hostIndex,
+            pBufferKey,
+            range,
+            guardedSglist,
+            traceId);
+
         received->push_back(checksums);
 
         auto response = NewPromise<TDBGWriteBlocksResponse>();
@@ -804,17 +812,27 @@ Y_UNIT_TEST_SUITE(TWriteRequestWithPBufferReplicationTest)
 
         TBlockChecksums received;
         DirectBlockGroup->WriteBlocksToManyPBuffersHandler =
-            [&](ui32 /*vChunkIndex*/,
-                THostIndex /*coordinatorHostIndex*/,
-                THostMask /*hostIndexes*/,
-                TPBufferKey /*pBufferKey*/,
-                TBlockRange16 /*range*/,
-                TDuration /*replyTimeout*/,
-                const TGuardedSgList& /*guardedSglist*/,
+            [&](ui32 vChunkIndex,
+                THostIndex coordinatorHostIndex,
+                THostMask hostIndexes,
+                TPBufferKey pBufferKey,
+                TBlockRange16 range,
+                TDuration replyTimeout,
+                const TGuardedSgList& guardedSglist,
                 const TBlockChecksums& checksums,
-                const NWilson::TTraceId& /*traceId*/,
+                const NWilson::TTraceId& traceId,
                 IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
         {
+            Y_UNUSED(
+                vChunkIndex,
+                coordinatorHostIndex,
+                hostIndexes,
+                pBufferKey,
+                range,
+                replyTimeout,
+                guardedSglist,
+                traceId);
+
             received = checksums;
             callback(CreateOkResponse());
         };

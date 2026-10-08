@@ -49,7 +49,6 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
     bool blockHashJoinBuildSideLeft = false,
-    bool enableBlockHashJoinEqualNulls = false,
     bool useScalarHashJoinForMap = false
 );
 
@@ -62,17 +61,15 @@ NNodes::TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin = false,
-    bool blockHashJoinBuildSideLeft = false,
-    bool enableBlockHashJoinEqualNulls = false);
+    bool blockHashJoinBuildSideLeft = false);
 
-// Settings on TDqPhyBlockHashJoin: optional BuildSide=Left; when enableEqualNulls,
-// one EqualNulls Uint32 per join-key position (IS NOT DISTINCT FROM).
+// Settings on TDqPhyBlockHashJoin: optional BuildSide=Left for a reverse block join.
+// EqualNulls is not emitted here. The legacy optimizer has no per-key
+// IS NOT DISTINCT FROM bit, so a global flag would turn every equijoin null-safe.
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,
     EJoinAlgoType joinAlgo,
-    ui32 keyCount,
-    TExprContext& ctx,
-    bool enableEqualNulls = false);
+    TExprContext& ctx);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

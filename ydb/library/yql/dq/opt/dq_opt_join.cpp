@@ -1471,9 +1471,7 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,
     EJoinAlgoType joinAlgo,
-    ui32 keyCount,
-    TExprContext& ctx,
-    bool enableEqualNulls)
+    TExprContext& ctx)
 {
     TVector<TCoNameValueTuple> joinSettings;
     if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
@@ -1482,17 +1480,6 @@ TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
                 .Name().Build("BuildSide")
                 .Value<TCoAtom>().Build("Left")
                 .Done());
-    }
-    if (enableEqualNulls) {
-        for (ui32 keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
-            joinSettings.push_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name().Build("EqualNulls")
-                    .Value<TCoUint32>()
-                        .Literal().Build(ToString(keyIndex))
-                        .Build()
-                    .Done());
-        }
     }
     return joinSettings;
 }
@@ -1506,8 +1493,7 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft,
-    bool enableBlockHashJoinEqualNulls
+    bool blockHashJoinBuildSideLeft
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1879,8 +1865,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                const auto joinSettings = BuildBlockHashJoinSettings(
-                    join.Pos(), joinAlgo, leftKeys.size(), ctx, enableBlockHashJoinEqualNulls);
+                const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)

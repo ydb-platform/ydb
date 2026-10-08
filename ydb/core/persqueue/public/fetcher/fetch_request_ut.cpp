@@ -511,8 +511,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         auto ev = Fetch(runtime, settings);
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
         AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::OK);
-        // ReadTimestampMs is reflected in CmdReadResult.ReadFromTimestampMs.
-        UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().GetReadFromTimestampMs(), readTs);
+        // Explicit read_from in 1970 is raised to the retention boundary.
+        UNIT_ASSERT_GT(ev->Response.GetPartResult(0).GetReadResult().GetReadFromTimestampMs(), readTs);
     }
 
     Y_UNIT_TEST(TimestampType) {

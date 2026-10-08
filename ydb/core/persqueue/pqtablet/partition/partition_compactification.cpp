@@ -16,6 +16,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequ
         3000, // timeout
         std::numeric_limits<ui32>::max(), // size
         false, // readToBlobEnd
+        false, // limitReadToRetention
         0, // maxTimeLagMs
         0, // readTimestampMs
         "unknown", // clientDC

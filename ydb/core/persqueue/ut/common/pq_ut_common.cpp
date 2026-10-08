@@ -174,6 +174,9 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
         auto* consumer = tabletConfig.AddConsumers();
         consumer->SetName(u.Name);
         consumer->SetImportant(u.Important);
+        if (u.AvailabilityPeriodMs.has_value()) {
+            consumer->SetAvailabilityPeriodMs(*u.AvailabilityPeriodMs);
+        }
         if (u.MonitoringProjectId.has_value()) {
             consumer->SetMonitoringProjectId(*u.MonitoringProjectId);
         }

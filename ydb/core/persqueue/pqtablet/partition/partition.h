@@ -308,7 +308,12 @@ private:
     void ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx);
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
-    bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    enum class EProcessHasDataRequestResult {
+        HasResult, // there is readable data or partition was read up to the end
+        PostponeUntilEndOffsetChange, // partition was read up to the end, wait for new messages to be written
+        PostponeUntilEndWriteTimestampChange, // partiton wasn't read up to the end, but all stored messages are too old
+    };
+    EProcessHasDataRequestResult ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
     void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);

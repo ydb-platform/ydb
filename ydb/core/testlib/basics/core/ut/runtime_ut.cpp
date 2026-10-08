@@ -26,8 +26,7 @@ void CheckMockRuntime(bool realThreads) {
             configuredNodes.push_back(nodeIndex);
             return CreateMockBlobStorageSubsystem({model});
         });
-        runtime.Initialize({new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr),
-            nullptr, nullptr, {}, {}});
+        SetupTabletServicesWithBlobStorage(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(previousCalls, 2);
         UNIT_ASSERT_VALUES_EQUAL(configuredNodes.size(), 2);
@@ -38,6 +37,11 @@ void CheckMockRuntime(bool realThreads) {
             UNIT_ASSERT(system->LookupLocalService(MakeBlobStorageProxyID(model->GetGroupId())));
             UNIT_ASSERT(!system->LookupLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(node))));
             UNIT_ASSERT(system->LookupLocalService(GetNameserviceActorId()));
+            const auto edge = runtime.AllocateEdgeActor(node);
+            runtime.Send(new IEventHandle(MakeBlobStorageProxyID(model->GetGroupId()), edge,
+                new TEvBlobStorage::TEvStatus(TInstant::Max())), node);
+            const auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvStatusResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
         }
         UNIT_ASSERT(runtime.GetActorSystem(0)->GetSubSystem<IBlobStorageSubsystem>() !=
             runtime.GetActorSystem(1)->GetSubSystem<IBlobStorageSubsystem>());

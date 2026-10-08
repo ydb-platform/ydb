@@ -1,5 +1,6 @@
 #pragma once
 
+#include "helpers.h"
 #include "runtime.h"
 
 #include <ydb/core/blobstorage/subsystem/interface/subsystem.h>
@@ -13,5 +14,8 @@ using TBlobStorageSubsystemFactory = std::function<std::unique_ptr<IBlobStorageS
 // Configure before Initialize. Each node gets a separate subsystem instance;
 // the caller chooses the implementation and owns any external storage models.
 void ConfigureBlobStorage(NActors::TTestActorRuntime& runtime, TBlobStorageSubsystemFactory factory);
+
+// Requires an explicitly configured storage implementation.
+void SetupTabletServicesWithBlobStorage(NActors::TTestActorRuntime& runtime, TAppPrepare* app = nullptr);
 
 }

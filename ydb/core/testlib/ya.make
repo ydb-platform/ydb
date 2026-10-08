@@ -23,6 +23,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/testlib/tablet_helpers
     ydb/apps/version
     ydb/core/audit/audit_config
     ydb/library/actors/core
@@ -152,4 +153,5 @@ RECURSE(
     default
     grpc_request
     pg
+    tablet_helpers
 )

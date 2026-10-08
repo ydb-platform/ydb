@@ -269,6 +269,7 @@ public:
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId);
 
     void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakReadLocksForTable(const TUnifiedPathId& pathId);
     void BreakConflictingTxs(const ui64 lockId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;

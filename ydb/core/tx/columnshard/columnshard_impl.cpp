@@ -305,9 +305,7 @@ void TColumnShard::RunSchemaTx(
             return;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
-            NIceDb::TNiceDb db(txc.DB);
-            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(body.GetTruncateTable());
-            TablesManager.TruncateTableProgress(db, version, schemeShardLocalPathId);
+            RunTruncateTable(body.GetTruncateTable(), version, txc);
             return;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
@@ -487,6 +485,15 @@ void TColumnShard::RunCopyTable(
     const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
     const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
     TablesManager.CopyTableProgress(db, version, srcPathId, dstPathId);
+}
+
+void TColumnShard::RunTruncateTable(
+    const NKikimrTxColumnShard::TTruncateTable& truncateProto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
+    const auto pathId = TablesManager.TruncateTableProgress(schemeShardLocalPathId, version, db);
+    OperationsManager->BreakReadLocksForTable(TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
 }
 
 void TColumnShard::RunAlterStore(
@@ -994,6 +1001,13 @@ void TColumnShard::SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotH
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
         NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("CLEANUP_PORTIONS", cleanupPortionsStageMemoryLimit);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
+    if (changes->GetPortionsToAccess().empty()) {
+        changes->SetFetchedDataAccessors(NOlap::TDataAccessorsResult(), NOlap::TDataAccessorsInitializationContext(actualIndexInfo));
+        auto event = std::make_unique<TEvPrivate::TEvWriteIndex>(changes, false);
+        event->SetPutStatus(NKikimrProto::OK);
+        Send(SelfId(), event.release());
+        return;
+    }
     NOlap::NDataFetcher::TRequestInput rInput(changes->GetPortionsToAccess(), actualIndexInfo,
         NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard, TabletID());
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);

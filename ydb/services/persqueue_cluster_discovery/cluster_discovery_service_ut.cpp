@@ -1136,6 +1136,17 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
 
+        // Version 1 is published in the same handler that starts CREATE TABLE Balancer.
+        bool balancerCreated = false;
+        for (size_t i = 0; i < 40; ++i) {
+            if (server.PQClient().TryRunYqlDataQuery("SELECT name, clusters FROM `/Root/PQ/Config/V2/Balancer`;").Defined()) {
+                balancerCreated = true;
+                break;
+            }
+            wrapper.Wait();
+        }
+        UNIT_ASSERT_C(balancerCreated, "Balancer table was not created");
+
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
         wrapper.WaitForExactClustersDataVersion(2);
 

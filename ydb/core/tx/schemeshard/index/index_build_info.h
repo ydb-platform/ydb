@@ -75,6 +75,41 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     virtual ~TIndexBuildInfo() = default;
 
+    struct THnswBuildStatus {
+        bool LeaderReported = false;
+        ui32 Followers = 0;
+        THashMap<ui32, bool> FollowerBuilds;
+
+        bool HasAllReplies() const {
+            return LeaderReported && FollowerBuilds.size() >= Followers;
+        }
+        bool HasActiveBuilds() const {
+            if (Building) {
+                return true;
+            }
+            for (const auto& [_, building] : FollowerBuilds) {
+                if (building) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        bool StatisticsReady = false;
+        bool StatisticsDisabled = false;
+        bool Building = false;
+        ui32 ShardState = 0;
+        ui64 DataSize = 0;
+        bool CanSplit = false;
+    };
+    // Transient: after SchemeShard restart the persisted Applying state starts
+    // a new probe round against the then-current posting-table partitions.
+    TPathId HnswPostingPathId;
+    ui64 HnswProbeRound = 0;
+    THashSet<ui64> HnswProbeTablets;
+    THashMap<ui64, THnswBuildStatus> HnswBuildStatuses;
+    TInstant HnswProbeSentAt;
+    bool HnswProgressScheduled = false;
+
     enum class EState: ui32 {
         Invalid = 0,
         AlterMainTable = 5,
@@ -319,6 +354,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 private:
     TString Issue;
 public:
+    TInstant HnswWaitStartedAt; // Persisted readiness deadline origin.
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
     bool IsBroken = false;
@@ -605,6 +641,7 @@ public:
         }
         indexInfo->StartTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::StartTime>());
         indexInfo->EndTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::EndTime>());
+        indexInfo->HnswWaitStartedAt = TInstant::MicroSeconds(row.template GetValueOrDefault<Schema::IndexBuild::HnswWaitStartedAt>());
 
         indexInfo->LockTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(

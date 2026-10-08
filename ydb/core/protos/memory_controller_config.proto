@@ -28,4 +28,8 @@ message TMemoryControllerConfig {
 
     optional float CompactionLimitPercent = 130 [default = 10];
     optional uint64 CompactionLimitBytes = 131;
+
+    // HNSW graph memory uses the SharedCache quota and limits.
+    // Retire the former independent HNSW budget's wire numbers.
+    reserved 140 to 143;
 }

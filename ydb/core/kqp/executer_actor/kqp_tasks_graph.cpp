@@ -1098,6 +1098,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         if (limit) {
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
+            out.SetHnswEfSearch(in.HasHnswEfSearch() ? in.GetHnswEfSearch() : 15);
             *out.MutableSettings() = in.GetSettings();
             auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
             out.SetTargetVector(TString(target.AsStringRef()));
@@ -1208,8 +1209,10 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         settings->SetTopK(static_cast<ui32>(std::min<ui64>(raw, Max<ui32>())));
     }
     settings->SetLevelTop(vectorSearch.GetLevelTop());
+    settings->SetHnswEfSearch(vectorSearch.HasHnswEfSearch() ? vectorSearch.GetHnswEfSearch() : 15);
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
+    settings->SetFullRangeHnsw(vectorSearch.GetFullRangeHnsw());
 
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 2);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas[0].TableConstInfo;
@@ -3168,7 +3171,15 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
             settings->SetPoolId(poolId);
         }
 
-        settings->SetIsTableImmutable(source.GetIsTableImmutable());
+        // Direct full-range posting-table searches do not load the main
+        // table's index metadata, so the compiler cannot mark them like the
+        // vector-index lookup path. Resolve the actual table kind here and
+        // apply the same stale-read policy, including across partitions.
+        const bool staleVectorPosting = source.HasVectorTopK()
+            && GetMeta().RequestIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE
+            && stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindVectorIndexTable
+            && stageInfo.Meta.TablePath.EndsWith(TStringBuilder() << '/' << NTableIndex::NKMeans::PostingTable);
+        settings->SetIsTableImmutable(source.GetIsTableImmutable() || staleVectorPosting);
         settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
         for (const auto& keyColumn : keyTypes) {
@@ -3260,6 +3271,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
             if (limit) {
                 auto& out = *settings->MutableVectorTopK();
                 out.SetColumn(in.GetColumn());
+                out.SetHnswEfSearch(in.HasHnswEfSearch() ? in.GetHnswEfSearch() : 15);
                 *out.MutableSettings() = in.GetSettings();
                 auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
                 out.SetTargetVector(TString(target.AsStringRef()));

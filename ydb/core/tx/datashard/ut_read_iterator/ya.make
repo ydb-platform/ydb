@@ -18,6 +18,7 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/kqp/runtime
     ydb/core/kqp/ut/common
+    ydb/core/memory_controller
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy

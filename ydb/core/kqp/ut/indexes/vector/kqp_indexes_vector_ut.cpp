@@ -1,16 +1,23 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/indexes/common/kqp_indexes_ttl_ut_common.h>
 
+#include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -381,8 +388,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     // Test that vector index queries work when selecting only non-PK columns
     Y_UNIT_TEST_QUAD(VectorIndexSelectWithoutPkColumns, Overlap, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -421,8 +429,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                  << " enableVectorSearchActor=" << enableVectorSearchActor << Endl;
 
             NKikimrConfig::TFeatureFlags featureFlags;
+            featureFlags.SetEnableHnswIndex(true);
             auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings()
+            auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
                 .SetFeatureFlags(featureFlags)
                 .SetKqpSettings({setting});
             if (enableIndexStreamWrite) {
@@ -513,8 +522,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -562,7 +572,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // vector ORDER BY ... LIMIT is lowered into the specialized TKqpCnVectorSearch connection
         // (rendered as a "VectorSearch" plan node); when off, it falls back to the legacy
         // StreamLookup chain (rendered as "TableLookup" nodes) and no VectorSearch node appears.
-        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true).SetKqpSettings({NKikimrKqp::TKqpSetting()});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
         TKikimrRunner kikimr(serverSettings);
@@ -608,10 +618,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             return;
         }
 
-        // Selecting only key columns: the embedding is still read (the actor ranks on it) and a
-        // non-covering index does not store it in the posting table, so the main table is read
-        // after all. Regression guard: the plan used to derive "covering" from the index key and
-        // data columns, which counts the embedding as covered, and hid that read.
+        // Ranking still needs the main-table embedding for a non-covering
+        // k-means index, even when the projection contains only primary keys.
         const TString keyOnlyQuery(Q1_(R"(
             $target = "\x67\x71\x02";
             SELECT pk FROM `/Root/TestTable` VIEW index1
@@ -644,8 +652,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(BadFormat, OnBuild, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -700,8 +709,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -749,8 +759,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(OrderByNoUnwrap, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -801,8 +812,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // made it return an empty result set.
         for (bool enableVectorSearchActor : {false, true}) {
             NKikimrConfig::TFeatureFlags featureFlags;
+            featureFlags.SetEnableHnswIndex(true);
             auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings()
+            auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
                 .SetFeatureFlags(featureFlags)
                 .SetKqpSettings({setting});
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
@@ -847,8 +859,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // (e.g. `$topK + 1`) failed to compile.
         for (bool enableVectorSearchActor : {false, true}) {
             NKikimrConfig::TFeatureFlags featureFlags;
+            featureFlags.SetEnableHnswIndex(true);
             auto setting = NKikimrKqp::TKqpSetting();
-            auto serverSettings = TKikimrSettings()
+            auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
                 .SetFeatureFlags(featureFlags)
                 .SetKqpSettings({setting});
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
@@ -886,7 +899,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // Inconsistent online RO takes neither an MVCC snapshot nor a lock, so the reads
         // must carry AllowInconsistentReads. Regression guard: the vector search actor did
         // not pass it on, and the read actor failed the query with UNAVAILABLE.
-        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true).SetKqpSettings({NKikimrKqp::TKqpSetting()});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
         TKikimrRunner kikimr(serverSettings);
@@ -917,7 +930,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // is a deferred effect, so the search has to force a flush before reading. Regression
         // guard: the vector search connection used to be treated as pass-through by
         // HasUncommittedChangesRead, so the search silently read the pre-write snapshot.
-        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true).SetKqpSettings({NKikimrKqp::TKqpSetting()});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
 
         TKikimrRunner kikimr(serverSettings);
@@ -956,8 +969,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(BuildIndexTimesAndUser, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -1000,8 +1014,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(VectorIndexNoBulkUpsert, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -1038,8 +1053,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexDelete(const TString& deleteQuery, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         if (enableIndexStreamWrite) {
@@ -1108,8 +1124,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -1172,8 +1189,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexUpdateNoChange(int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         if (enableIndexStreamWrite) {
@@ -1223,8 +1241,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdateNoClusterChange, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -1272,17 +1291,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             }
         } else {
             const TString updated = ReadTablePartToYson(session, TString(PostingTablePath));
-            if (Covered) {
-                SubstGlobal(orig, "\"\x76\x76\\2\"", "\"\x76\x75\\2\"");
-            }
+            SubstGlobal(orig, "\"\x76\x76\\2\"", "\"\x76\x75\\2\"");
             UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
         }
     }
 
     void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         if (enableIndexStreamWrite) {
@@ -1356,8 +1374,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdateClosesReadIterators, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -1405,8 +1424,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(VectorIndexUpdateDestroyReadActorNoRace) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false)
@@ -1473,8 +1493,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
     Y_UNIT_TEST_QUAD(EmptyVectorIndexUpdate, Partitioned, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
 
@@ -1530,7 +1551,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
+    Y_UNIT_TEST_QUAD(CoveredVectorIndexWithFollowers, StaleRO, Hnsw) {
         const TString mainTableName = "/Root/TestTable";
         const TString levelTableName = "/Root/TestTable/index/indexImplLevelTable";
         const TString postingTableName = "/Root/TestTable/index/indexImplPostingTable";
@@ -1541,9 +1562,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         };
 
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         featureFlags.SetEnableAccessToIndexImplTables(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetEnableForceFollowers(true)
             .SetKqpSettings({setting});
@@ -1556,13 +1578,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForVectorIndex(db, flags);
         {
-            const TString createIndex(Q_(R"(
+            const TString createIndex(Q_(Sprintf(R"(
                 ALTER TABLE `/Root/TestTable`
                     ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
+                    GLOBAL USING %s
                     ON (emb) COVER (emb, data)
                     WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
+            )", Hnsw ? "hnsw" : "vector_kmeans_tree")));
 
             auto result = session.ExecuteSchemeQuery(createIndex)
                           .ExtractValueSync();
@@ -1607,23 +1629,1740 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             CheckTableReads(session, postingTableName, true, false);
         }
 
-        if (StaleRO) {
-            CheckTableReads(session, levelTableName, false, false);
-            CheckTableReads(session, levelTableName, true, true);
-        } else {
-            CheckTableReads(session, levelTableName, false, true);
-            CheckTableReads(session, levelTableName, true, false);
-        }
+        // HNSW searches posting partitions directly. Only k-means
+        // traverses the level table, using the same leader/follower read mode.
+        CheckTableReads(session, levelTableName, false, !Hnsw && !StaleRO);
+        CheckTableReads(session, levelTableName, true, !Hnsw && StaleRO);
 
         // Etalon reads from main table
         CheckTableReads(session, mainTableName, false, true);
         CheckTableReads(session, mainTableName, true, false);
     }
 
+    Y_UNIT_TEST(FollowerHnswCacheInvalidatedOnRedo) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
+        featureFlags.SetEnableAccessToIndexImplTables(true);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        auto serverSettings = TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)
+            .SetFeatureFlags(featureFlags)
+            .SetEnableForceFollowers(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto execute = [&session](const TString& query, TTxSettings txSettings) {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        {
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                CREATE TABLE `/Root/HnswFollower` (
+                    pk Int64 NOT NULL,
+                    emb String,
+                    PRIMARY KEY (pk)
+                );
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswFollower` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([0.0f, -1.0f]), "FloatVector"));
+        )"), TTxSettings::SerializableRW());
+        {
+            auto result = session.ExecuteSchemeQuery(Q_(R"(
+                ALTER TABLE `/Root/HnswFollower`
+                    ADD INDEX index
+                    GLOBAL USING hnsw
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                          levels=1, clusters=2, min_rows=1);
+            )")).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        for (const TStringBuf table : {
+                "/Root/HnswFollower/index/indexImplLevelTable",
+                "/Root/HnswFollower/index/indexImplPostingTable"}) {
+            const TString alter = TStringBuilder()
+                << "ALTER TABLE `" << table
+                << "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");";
+            auto result = session.ExecuteSchemeQuery(alter).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswFollower` VIEW index
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+
+        // The first read starts the follower's lazy HNSW build. Give the build
+        // actor time to install it, then exercise the cached path once.
+        execute(search, TTxSettings::StaleRO());
+        Sleep(TDuration::Seconds(1));
+        execute(search, TTxSettings::StaleRO());
+
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswFollower` (pk, emb) VALUES
+                (100, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"), TTxSettings::SerializableRW());
+
+        // Observe the inserted posting row through the same follower before
+        // checking vector search, so replication lag cannot mask a stale cache.
+        bool followerCaughtUp = false;
+        for (ui32 attempt = 0; attempt < 50 && !followerCaughtUp; ++attempt) {
+            auto result = execute(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/HnswFollower/index/indexImplPostingTable`
+                WHERE pk = 100;
+            )"), TTxSettings::StaleRO());
+            followerCaughtUp = NYdb::FormatResultSetYson(result.GetResultSet(0)) == "[[1u]]";
+            if (!followerCaughtUp) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        }
+        UNIT_ASSERT_C(followerCaughtUp, "posting-table follower did not catch up");
+
+        auto result = execute(search, TTxSettings::StaleRO());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[100]]");
+    }
+
+    void TestHnswBuildAfterAlterWithColdPages(bool rejectInstall) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false));
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto schemeQuery = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(query,
+                    TExecSchemeQuerySettings().OperationTimeout(TDuration::Seconds(30))).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        schemeQuery(Q_(R"(
+            CREATE TABLE `/Root/HnswColdPages` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        auto write = kikimr.RunCall([&] {
+            return ExecuteDataQuery(session, Q_(R"(
+                UPSERT INTO `/Root/HnswColdPages` (pk, emb) VALUES
+                    (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                    (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+            )"));
+        });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        WaitForCompaction(&kikimr.GetTestServer(), "/Root/HnswColdPages");
+        const auto sender = runtime->AllocateEdgeActor();
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), sender, "/Root/HnswColdPages");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        RebootTablet(*runtime, shards.front(), sender);
+
+        // Attach the same eager-build metadata as index finalization to an
+        // ALTER of a compacted, cold table. This deterministically exercises
+        // a page fault after AlterTable has forbidden transaction restarts.
+        ui64 buildTxId = 0;
+        ui64 pageRequests = 0;
+        ui64 buildResults = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable()) {
+                        auto* alter = tx.MutableAlterTable();
+                        alter->SetVectorIndexHnsw(true);
+                        alter->SetVectorIndexEmbeddingColumn("emb");
+                        alter->SetVectorIndexEmbeddingColumnId(2);
+                        auto* settings = alter->MutableVectorIndexKmeansTreeDescription()
+                            ->MutableSettings()->mutable_settings();
+                        settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+                        settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+                        settings->set_vector_dimension(2);
+                        settings->set_min_rows(1);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                        buildTxId = record.GetTxId();
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == NSharedCache::TEvRequest::EventType && buildTxId) {
+                ++pageRequests;
+            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvAsyncJobComplete::EventType
+                    && buildTxId && ev->Cookie == buildTxId) {
+                ++buildResults;
+                if (rejectInstall) {
+                    auto* shard = dynamic_cast<NDataShard::TDataShard*>(runtime->FindActor(ev->Recipient));
+                    UNIT_ASSERT(shard);
+                    shard->InvalidateHnswIndex(shard->GetUserTables().begin()->second->LocalTid);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        // The first and only ALTER must wait for its memory grant and
+        // build the graph, even when registration and page reads are cold.
+        schemeQuery("ALTER TABLE `/Root/HnswColdPages` ADD COLUMN extra String;");
+        UNIT_ASSERT_C(buildTxId, "eager HNSW build was not requested");
+        UNIT_ASSERT_C(pageRequests > 0, "cold table did not require disk pages");
+        UNIT_ASSERT_VALUES_EQUAL(buildResults, rejectInstall ? 3u : 1u);
+        const auto firstRead = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswColdPages`
+                ORDER BY Knn::CosineDistance(emb, $q) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::OnlineRO(
+                TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(firstRead.IsSuccess(), firstRead.GetIssues().ToString());
+        AssertTableReads(firstRead, "/Root/HnswColdPages", rejectInstall ? 2 : 1);
+    }
+
+    Y_UNIT_TEST(HnswBuildAfterAlterWithColdPages) {
+        TestHnswBuildAfterAlterWithColdPages(false);
+    }
+
+    Y_UNIT_TEST(HnswEagerBuildRetriesBounded) {
+        TestHnswBuildAfterAlterWithColdPages(true);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswBuildCompletesWithWarmCache, ConstrainedGrant) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(query,
+                    TExecSchemeQuerySettings().OperationTimeout(TDuration::Seconds(30))).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswReady` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswReady` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        TActorId postingShard;
+        ui32 constrainedGrants = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                const auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().HasVectorIndexEmbeddingColumnId()) {
+                        postingShard = ev->GetRecipientRewrite();
+                    }
+                }
+            } else if (ConstrainedGrant && postingShard && ev->Recipient == postingShard
+                    && ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType
+                    && constrainedGrants < 3 && ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes > 0) {
+                // Force admission to retry, not silently publish a cold cache.
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = 1;
+                ++constrainedGrants;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswReady` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (distance=euclidean, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )"));
+        UNIT_ASSERT_C(postingShard, "posting finalization did not carry HNSW metadata");
+        if (ConstrainedGrant) {
+            UNIT_ASSERT_VALUES_EQUAL(constrainedGrants, 3);
+        }
+        // No warmup or readiness probes: the first query after CREATE INDEX
+        // must materialize only its top-1 candidate from the installed graph.
+        const auto result = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswReady/idx/indexImplPostingTable`
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::OnlineRO(
+                TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[3]]");
+        AssertTableReads(result, "/Root/HnswReady/idx/indexImplPostingTable", 1);
+    }
+
+    Y_UNIT_TEST(HnswBuildWithoutMemoryControllerRemainsUsable) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true).SetUseRealThreads(false)};
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(query,
+                    TExecSchemeQuerySettings().OperationTimeout(TDuration::Seconds(30))).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswNoController` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswNoController` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswNoController` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (distance=euclidean, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )"));
+        const auto describe = kikimr.RunCall([&] {
+            return session.DescribeTable("/Root/HnswNoController").ExtractValueSync();
+        });
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetIndexDescriptions().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            describe.GetTableDescription().GetIndexDescriptions().front().GetIndexType(),
+            EIndexType::GlobalHnsw);
+        const auto result = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswNoController/idx/indexImplPostingTable`
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::OnlineRO(
+                TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[2]]");
+    }
+
+    Y_UNIT_TEST(HnswCacheLabeledCountersContainIndexPaths) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        auto serverSettings = TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto schemeQuery = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(query).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        auto dataQuery = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        schemeQuery(Q_(R"(
+            CREATE TABLE `/Root/HnswCounters` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        dataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswCounters` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"));
+        schemeQuery(Q_(R"(
+            ALTER TABLE `/Root/HnswCounters`
+                ADD INDEX index
+                GLOBAL USING hnsw
+                ON (emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows=1);
+        )"));
+
+        // Add another posting row before restarting the shard.
+        dataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswCounters` (pk, emb) VALUES
+                (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )"));
+
+        ui64 hits = 0;
+        ui64 misses = 0;
+        ui64 counterEvents = 0;
+        bool counterNamesPresent = false;
+        TString counterNames;
+        TString counterGroup;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTabletCounters::TEvTabletAddLabeledCounters::EventType) {
+                const auto* event = ev->Get<TEvTabletCounters::TEvTabletAddLabeledCounters>();
+                const auto& counters = *event->LabeledCounters;
+                TVector<TString> groupLabels;
+                StringSplitter(counters.GetGroup()).Split('/').Collect(&groupLabels);
+                if (groupLabels.size() == 2
+                        && groupLabels[0] == "%2FRoot%2FHnswCounters"
+                        && groupLabels[1] == "%2FRoot%2FHnswCounters%2Findex") {
+                    ++counterEvents;
+                    bool hasHits = false;
+                    bool hasMisses = false;
+                    for (ui32 i = 0; i < counters.GetCounters().Size(); ++i) {
+                        const TStringBuf name = counters.GetCounterName(i);
+                        counterNames += TStringBuilder() << '[' << i << ":" << name << ']';
+                        if (name.EndsWith("/HnswCacheHits")) {
+                            hasHits = true;
+                            hits = Max(hits, counters.GetCounters()[i].Get());
+                        } else if (name.EndsWith("/HnswCacheMisses")) {
+                            hasMisses = true;
+                            misses = Max(misses, counters.GetCounters()[i].Get());
+                        }
+                    }
+                    counterNamesPresent = counterNamesPresent || (hasHits && hasMisses);
+                    counterGroup = counters.GetGroup();
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswCounters` VIEW index
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+
+        auto readQuery = [&](const TString& query) {
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query,
+                    TTxControl::BeginTx(TTxSettings::OnlineRO(
+                        TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        // Wait for a controller grant, reconstruction, and a reported hit.
+        for (ui32 attempt = 0; attempt < 20 && hits == 0; ++attempt) {
+            readQuery(search);
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+        runtime->SimulateSleep(TDuration::Seconds(120));
+
+        // Reboot clears the in-memory graph. The next read records a miss and
+        // starts lazy reconstruction; result correctness still uses brute force.
+        const auto sender = runtime->AllocateEdgeActor();
+        const auto postingShards = GetTableShards(
+            &kikimr.GetTestServer(), sender,
+            "/Root/HnswCounters/index/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(postingShards.size(), 1u);
+        RebootTablet(*runtime, postingShards.front(), sender);
+        readQuery(search);
+        runtime->SimulateSleep(TDuration::Seconds(120));
+
+        UNIT_ASSERT_C(counterEvents > 0, "HNSW labeled counters were not emitted");
+        UNIT_ASSERT_C(counterNamesPresent,
+            "HNSW labeled counter names are missing: " << counterNames);
+        UNIT_ASSERT_C(misses > 0, "HnswCacheMisses was not incremented");
+        UNIT_ASSERT_C(hits > 0, "HnswCacheHits was not incremented");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswGenerations");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswDeltaVersions");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswRebuilds");
+        UNIT_ASSERT_STRING_CONTAINS(counterNames, "HnswCandidateFallbacks");
+        UNIT_ASSERT_STRING_CONTAINS(counterGroup, "%2FRoot%2FHnswCounters");
+        UNIT_ASSERT_STRING_CONTAINS(counterGroup, "%2FRoot%2FHnswCounters%2Findex");
+
+        TVector<TString> labels;
+        StringSplitter(counterGroup).Split('/').Collect(&labels);
+        UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(labels[0], "%2FRoot%2FHnswCounters");
+        UNIT_ASSERT_VALUES_EQUAL(labels[1], "%2FRoot%2FHnswCounters%2Findex");
+    }
+
+    Y_UNIT_TEST_TWIN(HnswFullRangeUsesCachedSettings, Parameterized) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswFullRange` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        const auto write = ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswFullRange` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswFullRange`
+                ADD INDEX index GLOBAL USING hnsw ON (emb)
+                WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows=1);
+        )"));
+
+        // Like the benchmark, search the posting table directly. Its query
+        // requests auto-detected dimensions and omits the graph's tuning.
+        const TString target = Parameterized
+            ? "DECLARE $q AS List<Float>; $target = Knn::ToBinaryStringFloat($q);"
+            : "$target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);";
+        const TString query = target + Q_(R"(
+            SELECT pk FROM `/Root/HnswFullRange/index/indexImplPostingTable`
+            ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT 1;
+        )");
+        auto params = db.GetParamsBuilder();
+        if (Parameterized) {
+            params.AddParam("$q").BeginList()
+                .AddListItem().Float(1.0f)
+                .AddListItem().Float(0.0f)
+                .EndList().Build();
+        }
+        const auto values = params.Build();
+        const auto settings = TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic);
+        ui32 cacheHits = 0;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        while (cacheHits < 2 && TInstant::Now() < deadline) {
+            const auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                values, settings).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[3]]");
+            ui64 rows = 0;
+            for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    rows += access.reads().rows();
+                }
+            }
+            if (rows == 1) {
+                ++cacheHits;
+            } else {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(cacheHits, 2);
+
+        // Hold a read-only snapshot across a write. The versioned graph must
+        // preserve the old result and accelerate it without taking read locks.
+        auto snapshot = session.ExecuteDataQuery(query,
+            TTxControl::BeginTx(TTxSettings::SnapshotRW()),
+            values, settings).ExtractValueSync();
+        UNIT_ASSERT_C(snapshot.IsSuccess(), snapshot.GetIssues().ToString());
+        const auto tx = snapshot.GetTransaction();
+        UNIT_ASSERT(tx);
+        auto writer = db.CreateSession().GetValueSync().GetSession();
+        const auto update = ExecuteDataQuery(writer, Q_(R"(
+            UPSERT INTO `/Root/HnswFullRange` (pk, emb) VALUES
+                (3, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+        snapshot = session.ExecuteDataQuery(query, TTxControl::Tx(*tx).CommitTx(),
+            values, settings).ExtractValueSync();
+        UNIT_ASSERT_C(snapshot.IsSuccess(), snapshot.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(snapshot.GetResultSet(0)), "[[3]]");
+        AssertTableReads(snapshot, "/Root/HnswFullRange/index/indexImplPostingTable", 1);
+    }
+
+    Y_UNIT_TEST(HnswBuildReadinessTimeoutSurvivesRestart) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableSchemeShardConfig()->SetHnswIndexBuildWaitTimeoutSeconds(30);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        const auto create = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswTimeout` (pk Int64 NOT NULL, emb String, PRIMARY KEY(pk));
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswTimeout` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        ui64 probes = 0;
+        ui64 schemeShardId = 0;
+        ui64 buildId = 0;
+        const auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvGetTableStatsResult::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvGetTableStatsResult>()->Record;
+                if (record.GetHnswIndexBuildId()) {
+                    buildId = record.GetHnswIndexBuildId();
+                    schemeShardId = record.GetTableOwnerId();
+                    ++probes;
+                    record.SetHnswBuildInProgress(true);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        auto build = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/HnswTimeout` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (similarity=cosine, vector_type=float, vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )");
+        runtime.WaitFor("readiness probe", [&] { return probes != 0; });
+        runtime.SimulateSleep(TDuration::Seconds(20));
+        UNIT_ASSERT(!build.HasValue());
+        const auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, schemeShardId, sender);
+        runtime.SimulateSleep(TDuration::Seconds(15));
+        runtime.SendToPipe(schemeShardId, sender,
+            new NSchemeShard::TEvIndexBuilder::TEvGetRequest("/Root", buildId));
+        const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvGetResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        runtime.WaitFuture(build);
+    }
+
+    Y_UNIT_TEST_QUAD(HnswBuildWaitsForPostingShards, Split, Followers) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto buildSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        const auto create = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswBuildWait` (pk Int64 NOT NULL, emb String, PRIMARY KEY(pk));
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswBuildWait` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 5.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+
+        bool holdStatus = true;
+        bool holdBuildResults = Split;
+        ui64 probes = 0;
+        ui64 followerProbes = 0;
+        ui64 schemeShardId = 0;
+        ui64 buildId = 0;
+        bool sawDisabledStats = false;
+        ui64 forceSplitTablet = 0;
+        ui64 forceSplitParent = 0;
+        TVector<TAutoPtr<IEventHandle>> buildResults;
+        // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        const auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if ((Followers || !Split) && ev->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType) {
+                auto& record = ev->Get<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                for (auto& tx : *record.MutableTransaction()) {
+                    if (tx.HasInitiateIndexBuild() && tx.GetInitiateIndexBuild().GetIndex().GetName() == "idx") {
+                        auto* index = tx.MutableInitiateIndexBuild()->MutableIndex();
+                        index->ClearIndexImplTableDescriptions();
+                        index->AddIndexImplTableDescriptions(); // level table
+                        auto* config = index->AddIndexImplTableDescriptions()->MutablePartitionConfig();
+                        if (Followers) {
+                            auto* group = config->AddFollowerGroups();
+                            group->SetFollowerCount(1);
+                        }
+                        if (!Split) {
+                            config->SetDisableStatisticsCalculation(true);
+                        }
+                    }
+                }
+            } else if (!Split && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasAlterTable() && tx.GetAlterTable().GetVectorIndexHnsw()) {
+                        tx.MutableAlterTable()->MutablePartitionConfig()->SetDisableStatisticsCalculation(true);
+                        UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvGetTableStatsResult::EventType) {
+                auto& record = ev->Get<TEvDataShard::TEvGetTableStatsResult>()->Record;
+                if (record.HasHnswIndexBuildId()) {
+                    ++probes;
+                    schemeShardId = record.GetTableOwnerId();
+                    buildId = record.GetHnswIndexBuildId();
+                    sawDisabledStats |= !record.GetFollowerId() && record.GetHnswStatisticsDisabled();
+                    followerProbes += bool(record.GetFollowerId());
+                    if ((holdStatus && (!Followers || record.GetFollowerId())) || (Followers && !followerProbes)) {
+                        record.SetHnswBuildInProgress(true);
+                    }
+                    if (forceSplitTablet && record.GetDatashardId() == forceSplitTablet && !record.GetFollowerId()
+                            && record.GetFullStatsReady() && record.GetHnswStatsFresh()) {
+                        // Model the large posting shard from the regression:
+                        // its eager graph is done, but a size split is pending.
+                        record.SetHnswBuildInProgress(false);
+                        auto* stats = record.MutableTableStats();
+                        stats->SetDataSize(3_GB);
+                        stats->SetSplitProtocolVersion(3);
+                        stats->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(
+                            TVector<TCell>{TCell::Make(forceSplitParent)}));
+                        holdStatus = false;
+                    }
+                }
+            } else if (holdBuildResults && ev->GetTypeRewrite() == hnswBuildResultEvent) {
+                buildResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+        auto build = kikimr.RunInThreadPool([&] { return buildSession.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/HnswBuildWait` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )").ExtractValueSync(); });
+        runtime.WaitFor("HNSW readiness probe", [&] { return probes > 0 && (!Followers || followerProbes > 0); }, TDuration::Seconds(60));
+        if (!Split) {
+            UNIT_ASSERT_C(sawDisabledStats, "Fixture did not disable posting-table statistics");
+        }
+        runtime.SimulateSleep(TDuration::Seconds(6));
+        UNIT_ASSERT_C(!build.HasValue(), "Index build completed before its posting shards were ready");
+
+        const TString posting = "/Root/HnswBuildWait/idx/indexImplPostingTable";
+        const auto sender = runtime.AllocateEdgeActor();
+        auto shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        if (Split) {
+            runtime.SimulateSleep(TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+            const auto parents = kikimr.RunCall([&] { return ExecuteDataQuery(session,
+                "SELECT DISTINCT __ydb_parent FROM `" + posting + "` ORDER BY __ydb_parent;"); });
+            UNIT_ASSERT_C(parents.IsSuccess(), parents.GetIssues().ToString());
+            TResultSetParser parser(parents.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT(parser.TryNextRow());
+            forceSplitTablet = shards.front();
+            forceSplitParent = parser.ColumnParser(0).GetUint64();
+            runtime.WaitFor("split-child HNSW builders", [&] { return buildResults.size() == 2; }, TDuration::Seconds(60));
+            shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+            holdStatus = false;
+        }
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_C(!build.HasValue(), "Index build ignored unfinished replacement-shard builders before restart");
+        auto getState = [&] {
+            runtime.SendToPipe(schemeShardId, sender, new NSchemeShard::TEvIndexBuilder::TEvGetRequest("/Root", buildId));
+            const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvIndexBuilder::TEvGetResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            return response->Get()->Record.GetIndexBuild().GetState();
+        };
+        {
+            const auto previousProbes = probes;
+            RebootTablet(runtime, schemeShardId, sender);
+            runtime.WaitFor("HNSW readiness after SchemeShard restart", [&] { return probes > previousProbes; },
+                TDuration::Seconds(60));
+        }
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        // Restart can terminate the waiting SQL RPC. The durable operation
+        // must nevertheless remain pending until the shard work completes.
+        UNIT_ASSERT_VALUES_EQUAL(getState(), Ydb::Table::IndexBuildState::STATE_APPLYING);
+        holdStatus = false;
+        holdBuildResults = false;
+        for (auto& event : buildResults) {
+            runtime.Send(event.Release());
+        }
+        for (ui32 attempt = 0; attempt < 30 && getState() != Ydb::Table::IndexBuildState::STATE_DONE; ++attempt) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(getState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        runtime.WaitFuture(build);
+        // Size-based merges may change the layout again while graphs build.
+        shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        const auto query = kikimr.RunCall([&] { return session.ExecuteDataQuery(R"(
+            $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswBuildWait` VIEW idx
+            ORDER BY Knn::InnerProductSimilarity(emb, $q) DESC LIMIT 1;
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(),
+            TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync(); });
+        UNIT_ASSERT_C(query.IsSuccess(), query.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(query.GetResultSet(0)), "[[3]]");
+        AssertTableReads(query, posting, shards.size());
+    }
+
+    Y_UNIT_TEST_QUAD(HnswIndexViewRebuildUsesStoredSettings, Followers, Split) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswFullRange` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswFullRange` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 5.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"));
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswFullRange`
+                ADD INDEX index GLOBAL USING hnsw ON (emb)
+                WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows=1);
+        )"));
+
+        const TString posting = "/Root/HnswFullRange/index/indexImplPostingTable";
+        const auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+        ui32 backgroundBuilds = 0;
+        bool holdMemoryGrants = !Followers;
+        THashSet<TActorId> backgroundConsumers;
+        THashMap<TActorId, std::pair<TActorId, ui64>> memoryGrants;
+        // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        const auto previousObserver = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (holdMemoryGrants && ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType
+                    && ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache) {
+                backgroundConsumers.insert(ev->Sender);
+            }
+            if (holdMemoryGrants && ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType
+                    && backgroundConsumers.contains(ev->Recipient)) {
+                auto* limit = ev->Get<NMemory::TEvConsumerLimit>();
+                if (limit->LimitBytes) {
+                    memoryGrants[ev->Recipient] = {ev->Sender, limit->LimitBytes};
+                }
+                limit->LimitBytes = 0;
+            }
+            if (ev->GetTypeRewrite() == hnswBuildResultEvent) {
+                ++backgroundBuilds;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(previousObserver); };
+        if (Split) {
+            // SchemeShard learns that the finalized tablet is ready through
+            // periodic statistics before it can accept a split request.
+            runtime->SimulateSleep(TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+            const auto parents = kikimr.RunCall([&] {
+                return ExecuteDataQuery(session,
+                    "SELECT DISTINCT __ydb_parent FROM `" + posting + "` ORDER BY __ydb_parent;");
+            });
+            UNIT_ASSERT_C(parents.IsSuccess(), parents.GetIssues().ToString());
+            TResultSetParser parser(parents.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_C(parser.TryNextRow(), "Expected two populated vector clusters");
+            const ui64 splitParent = parser.ColumnParser(0).GetUint64();
+            const auto status = kikimr.RunCall([&] {
+                return kikimr.GetTestClient().SplitTable(posting, shards.front(), splitParent);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+            shards = GetTableShards(&kikimr.GetTestServer(), sender, posting);
+            UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        }
+        if (Followers) {
+            scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+        } else if (!Split) {
+            for (const auto shard : shards) {
+                RebootTablet(*runtime, shard, sender);
+            }
+        }
+
+        if (!Followers) {
+            runtime->WaitFor("background HNSW memory registration", [&] { return memoryGrants.size() >= shards.size(); },
+                TDuration::Seconds(30));
+            runtime->SimulateSleep(TDuration::Seconds(2));
+            UNIT_ASSERT_VALUES_EQUAL(backgroundBuilds, 0u);
+            holdMemoryGrants = false;
+            for (const auto& [recipient, grant] : memoryGrants) {
+                runtime->Send(new IEventHandle(recipient, grant.first, new NMemory::TEvConsumerLimit(grant.second)));
+            }
+            // Neither split children nor restarted leaders should need a search
+            // query to trigger construction of their replacement graphs.
+            runtime->WaitFor("background HNSW construction", [&] { return backgroundBuilds >= shards.size(); },
+                TDuration::Seconds(30));
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        }
+
+        // VIEW must search every posting partition, ignoring k-means pruning,
+        // and reuse the persisted graph settings after splits and restarts.
+        const TString target = "DECLARE $q AS List<Float>; $target = Knn::ToBinaryStringFloat($q);";
+        const TString query = target + Q_(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "1";
+            SELECT pk FROM `/Root/HnswFullRange` VIEW index
+            ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT 1;
+        )");
+        auto params = db.GetParamsBuilder();
+        {
+            params.AddParam("$q").BeginList()
+                .AddListItem().Float(1.0f)
+                .AddListItem().Float(0.0f)
+                .EndList().Build();
+        }
+        const auto values = params.Build();
+        const auto settings = TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic);
+        bool accelerated = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::SnapshotRO()).CommitTx(),
+                values, settings).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[3]]");
+            ui64 rows = 0;
+            const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    rows += access.reads().rows();
+                }
+            }
+            if (!Followers && attempt == 0) {
+                UNIT_ASSERT_VALUES_EQUAL_C(rows, shards.size(), "First search did not use the background-built HNSW cache");
+            }
+            if (rows == shards.size()) {
+                accelerated = true;
+            } else {
+                accelerated = false;
+            }
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(accelerated, "HNSW cache was not reconstructed with persisted min_rows=1");
+
+        if (Followers) {
+            WaitForCompaction(&kikimr.GetTestServer(), posting);
+            runtime->SimulateSleep(TDuration::Seconds(1));
+            const auto compacted = kikimr.RunCall([&] { return session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx(),
+                values, settings).ExtractValueSync(); });
+            UNIT_ASSERT_C(compacted.IsSuccess(), compacted.GetIssues().ToString());
+            AssertTableReads(compacted, posting, shards.size());
+        }
+
+        const auto update = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswFullRange` (pk, emb) VALUES
+                (3, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )")); });
+        UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+        bool updated = false;
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(Followers ? TTxSettings::StaleRO() : TTxSettings::SnapshotRO()).CommitTx(),
+                values, settings).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (NYdb::FormatResultSetYson(result.GetResultSet(0)) == "[[2]]") {
+                updated = true;
+                break;
+            }
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(updated, "HNSW cache concealed a replicated vector update");
+    }
+
+    Y_UNIT_TEST_QUAD(HnswIndexViewSkipsClusterTraversal, Followers, EnableVectorSearchActor) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(EnableVectorSearchActor);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)
+            .SetEnableForceFollowers(Followers).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswView` (pk Uint64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            $rows = ListMap(ListFromRange(0ul, 128ul), ($key) -> {
+                RETURN AsStruct($key AS pk,
+                    Untag(Knn::ToBinaryStringFloat([
+                        IF($key < 64ul, -1000.0f, 1000.0f), Unwrap(CAST($key % 64ul AS Float))
+                    ]), "FloatVector") AS emb);
+            });
+            UPSERT INTO `/Root/HnswView` SELECT * FROM AS_TABLE($rows);
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswView` ADD INDEX vidx GLOBAL USING hnsw ON (emb)
+            WITH (distance=euclidean, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1, M=24, ef_construction=100,
+                  delta_rows=5);
+        )"));
+        const auto description = kikimr.RunCall([&] {
+            return session.DescribeTable("/Root/HnswView").ExtractValueSync();
+        });
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        const auto indexes = description.GetTableDescription().GetIndexDescriptions();
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1u);
+        const auto& index = indexes.front();
+        UNIT_ASSERT_VALUES_EQUAL(index.GetIndexType(), EIndexType::GlobalHnsw);
+        const auto& vectorSettings = std::get<TKMeansTreeSettings>(index.GetIndexSettings()).Settings;
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.MinRows, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.M, 24u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.EfConstruction, 100u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.DeltaRows, 5u);
+        const auto show = kikimr.RunCall([&] {
+            return kikimr.GetQueryClient().ExecuteQuery("SHOW CREATE TABLE `/Root/HnswView`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(show.IsSuccess(), show.GetIssues().ToString());
+        TResultSetParser createParser(show.GetResultSet(0));
+        UNIT_ASSERT(createParser.TryNextRow());
+        const TString createText = createParser.ColumnParser(0).GetOptionalUtf8().value_or("");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "USING hnsw");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "min_rows = 1");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "M = 24");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "ef_construction = 100");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "delta_rows = 5");
+        UNIT_ASSERT(!createText.Contains("hnsw_search_candidates"));
+
+        const TString posting = "/Root/HnswView/vidx/indexImplPostingTable";
+        if (Followers) {
+            for (const TString& path : {TString("/Root/HnswView"),
+                    TString("/Root/HnswView/vidx/indexImplLevelTable"), posting}) {
+                scheme("ALTER TABLE `" + path + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+            }
+            runtime->SimulateSleep(TDuration::Seconds(5));
+        }
+        ui32 expectedEfSearch = 15;
+        ui64 vectorReads = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                const auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                if (read.HasVectorTopK()) {
+                    UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetHnswEfSearch(), expectedEfSearch);
+                    ++vectorReads;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        // A query override must reach the shard without changing later defaults.
+        for (const bool positive : {false, true, false}) {
+            expectedEfSearch = positive ? 50 : 15;
+            const ui64 readsBefore = vectorReads;
+            const TString query = TStringBuilder()
+                << (positive ? "PRAGMA ydb.HNSWEfSearch = \"50\"; " : "")
+                << "PRAGMA ydb.KMeansTreeSearchTopSize = \"1\"; "
+                << "$q = Knn::ToBinaryStringFloat([" << (positive ? "1000.0f" : "-1000.0f") << ", 32.0f]); "
+                << "SELECT pk FROM `/Root/HnswView` VIEW vidx "
+                << "ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;";
+            bool accelerated = false;
+            for (ui32 attempt = 0; attempt < 30; ++attempt) {
+                const auto result = kikimr.RunCall([&] {
+                    return session.ExecuteDataQuery(query,
+                        TTxControl::BeginTx(Followers ? TTxSettings::StaleRO()
+                            : TTxSettings::SnapshotRO()).CommitTx(),
+                        TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+                });
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), positive ? "[[96u]]" : "[[32u]]");
+                ui64 rowsRead = 0;
+                for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                    for (const auto& access : phase.table_access()) {
+                        UNIT_ASSERT_C(!access.name().EndsWith("/indexImplLevelTable"),
+                            "hnsw VIEW must not traverse k-means clusters");
+                        if (access.name() == posting) {
+                            rowsRead += access.reads().rows();
+                        }
+                    }
+                }
+                if (rowsRead == 1) {
+                    accelerated = true;
+                    break;
+                }
+                runtime->SimulateSleep(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_C(accelerated, "VIEW vidx did not use its partition-local HNSW graph");
+            UNIT_ASSERT_GT(vectorReads, readsBefore);
+        }
+        expectedEfSearch = 75;
+        const ui64 readsBefore = vectorReads;
+        const auto direct = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                PRAGMA ydb.HNSWEfSearch = "75";
+                $q = Knn::ToBinaryStringFloat([1000.0f, 32.0f]);
+                SELECT pk FROM `/Root/HnswView/vidx/indexImplPostingTable`
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(direct.IsSuccess(), direct.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(direct.GetResultSet(0)), "[[96u]]");
+        UNIT_ASSERT_GT(vectorReads, readsBefore);
+    }
+
+    Y_UNIT_TEST_TWIN(HnswAutomaticRoutingSettings, Prefixed) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true)
+            .SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& sql) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(sql).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(R"(
+            CREATE TABLE `/Root/HnswAutomatic` (
+                pk Int64 NOT NULL, prefix Uint32, emb String, PRIMARY KEY(pk));
+        )");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswAutomatic` (pk, prefix, emb) VALUES
+                (1, 1u, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, 1u, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (3, 2u, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(TStringBuilder() << "ALTER TABLE `/Root/HnswAutomatic` ADD INDEX idx GLOBAL USING hnsw ON ("
+            << (Prefixed ? "prefix, emb" : "emb") << ") WITH (distance=cosine, vector_type=float, vector_dimension=2, min_rows=1);");
+        auto checkSettings = [&](const TString& table) {
+            const auto result = kikimr.RunCall([&] { return session.DescribeTable(table).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& proto = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+            UNIT_ASSERT_VALUES_EQUAL(proto.indexes_size(), 1);
+            const auto& settings = proto.indexes(0).global_hnsw_index().vector_settings();
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), 1);
+            UNIT_ASSERT(!settings.adaptive_clusters());
+        };
+        checkSettings("/Root/HnswAutomatic");
+        const auto query = kikimr.RunCall([&] { return session.ExecuteDataQuery(TStringBuilder()
+            << "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f]); SELECT pk FROM `/Root/HnswAutomatic` VIEW idx "
+            << (Prefixed ? "WHERE prefix=1u " : "")
+            << "ORDER BY Knn::CosineDistance(emb, $q) LIMIT 1;",
+            TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+        UNIT_ASSERT_C(query.IsSuccess(), query.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(query.GetResultSet(0)), "[[1]]");
+        scheme("ALTER TABLE `/Root/HnswAutomatic` REBUILD INDEX idx WITH (clusters=1);");
+        checkSettings("/Root/HnswAutomatic");
+        scheme(R"(
+            CREATE TABLE `/Root/HnswAutomaticEmpty` (
+                pk Int64 NOT NULL, emb String, PRIMARY KEY(pk),
+                INDEX idx GLOBAL USING hnsw ON (emb)
+                WITH (distance=cosine, vector_type=float, vector_dimension=2));
+        )");
+        checkSettings("/Root/HnswAutomaticEmpty");
+    }
+
+    Y_UNIT_TEST_TWIN(HnswFeatureFlagCreation, Enabled) {
+        NKikimrConfig::TFeatureFlags defaults;
+        UNIT_ASSERT(!defaults.GetEnableHnswIndex());
+        auto settings = TKikimrSettings();
+        if (Enabled) {
+            settings.SetEnableHnswIndex(true);
+        }
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto check = [&](const auto& status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(status.IsSuccess(), Enabled, status.GetIssues().ToString());
+            if (!Enabled) {
+                UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "EnableHnswIndex");
+            }
+        };
+        check(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswInlineFlag` (
+                id Uint64 NOT NULL, emb String, PRIMARY KEY(id),
+                INDEX vidx GLOBAL USING hnsw ON (emb)
+                    WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=1, clusters=2)
+            );
+        )").ExtractValueSync());
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswAlterFlag` (id Uint64 NOT NULL, emb String, PRIMARY KEY(id));
+            CREATE TABLE `/Root/KmeansFlag` (
+                id Uint64 NOT NULL, emb String, PRIMARY KEY(id),
+                INDEX vidx GLOBAL USING vector_kmeans_tree ON (emb)
+                    WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=1, clusters=2)
+            );
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        check(session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/HnswAlterFlag` ADD INDEX vidx GLOBAL USING hnsw ON (emb)
+                WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=1, clusters=2);
+        )").ExtractValueSync());
+    }
+
+    Y_UNIT_TEST(HnswFeatureFlagExistingIndex) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        config.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(config).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetUseRealThreads(false)};
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        const auto create = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/HnswFlagExisting` (id Uint64 NOT NULL, emb String, PRIMARY KEY(id));
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, R"(
+            UPSERT INTO `/Root/HnswFlagExisting` (id, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 5.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([3.0f, 0.0f]), "FloatVector"));
+        )"); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        const auto added = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/HnswFlagExisting` ADD INDEX idx GLOBAL USING hnsw ON (emb)
+            WITH (similarity=inner_product, vector_type=float, vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )").ExtractValueSync(); });
+        UNIT_ASSERT_C(added.IsSuccess(), added.GetIssues().ToString());
+        auto read = [&] {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(R"(
+                $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT id FROM `/Root/HnswFlagExisting` VIEW idx
+                ORDER BY Knn::InnerProductSimilarity(emb, $q) DESC LIMIT 1;
+            )", TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[3u]]");
+            return result;
+        };
+        const TString posting = "/Root/HnswFlagExisting/idx/indexImplPostingTable";
+        AssertTableReads(read(), posting, 1);
+        NKikimrConfig::TAppConfig update;
+        update.MutableFeatureFlags()->SetEnableHnswIndex(false);
+        update.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            runtime.GetAppData(node).UpdateRuntimeFlags(update.GetFeatureFlags());
+            const auto sender = runtime.AllocateEdgeActor(node);
+            for (const auto service : {MakeKqpProxyID(runtime.GetNodeId(node)), MakeKqpCompileServiceID(runtime.GetNodeId(node))}) {
+                auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                *request->Record.MutableConfig() = update;
+                runtime.Send(service, sender, request.Release());
+                UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TDuration::Seconds(10)));
+            }
+        }
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *request->Record.MutableConfig() = update;
+        runtime.SendToPipe(Tests::SchemeRoot, sender, request.Release());
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender, TDuration::Seconds(10)));
+        AssertTableReads(read(), posting, 3);
+        const auto rebuild = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/HnswFlagExisting` REBUILD INDEX idx;").ExtractValueSync(); });
+        UNIT_ASSERT_C(!rebuild.IsSuccess(), "HNSW rebuild was accepted with the feature disabled");
+        UNIT_ASSERT_STRING_CONTAINS(rebuild.GetIssues().ToString(), "EnableHnswIndex");
+        AssertTableReads(read(), posting, 3);
+        const auto drop = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/HnswFlagExisting` DROP INDEX idx;").ExtractValueSync(); });
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(HnswEfSearchPragmaValidation) {
+        TKikimrRunner kikimr{TKikimrSettings().SetEnableHnswIndex(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        for (const TString& value : {"0", "1001", "-1", "invalid"}) {
+            const auto result = session.ExplainDataQuery(
+                "PRAGMA ydb.HNSWEfSearch = \"" + value + "\"; SELECT 1;").ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "HNSWEfSearch");
+        }
+        for (const TString& value : {"1", "15", "1000"}) {
+            const auto result = session.ExplainDataQuery(
+                "PRAGMA ydb.HNSWEfSearch = \"" + value + "\"; SELECT 1;").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(HnswDoesNotAccelerateOrdinaryPartitions) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto create = session.ExecuteSchemeQuery(Q_(R"(
+            CREATE TABLE `/Root/HnswPartitions` (
+                pk Uint64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            ) WITH (PARTITION_AT_KEYS = (10001));
+        )")).ExtractValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        // Each ordinary partition exceeds the default HNSW min_rows threshold.
+        const auto write = ExecuteDataQuery(session, Q_(R"(
+            $rows = ListMap(ListFromRange(0ul, 20002ul), ($key) -> {
+                RETURN AsStruct($key AS pk,
+                    Untag(Knn::ToBinaryStringFloat([CAST($key AS Float), 1.0f]), "FloatVector") AS emb);
+            });
+            UPSERT INTO `/Root/HnswPartitions` SELECT * FROM AS_TABLE($rows);
+        )"));
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        WaitForCompaction(&kikimr.GetTestServer(), "/Root/HnswPartitions");
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(
+            NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_NOTICE);
+        auto read = [&](const TString& filter) {
+            const auto result = session.ExecuteDataQuery(
+                "$target = Knn::ToBinaryStringFloat([1.0f, 0.0f]); "
+                "SELECT pk FROM `/Root/HnswPartitions` " + filter
+                    + " ORDER BY Knn::InnerProductSimilarity(emb, $target) DESC LIMIT 1;",
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        for (ui32 attempt = 0; attempt < 3; ++attempt) {
+            const auto result = read("");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[20001u]]");
+            AssertTableReads(result, "/Root/HnswPartitions", 20002);
+            Sleep(TDuration::MilliSeconds(200));
+        }
+
+        // Restricted reads must also keep exact top-K semantics.
+        const auto filtered = read("WHERE pk < 5");
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(filtered.GetResultSet(0)), "[[4u]]");
+        AssertTableReads(filtered, "/Root/HnswPartitions", 5);
+    }
+
+    Y_UNIT_TEST(HnswCacheTracksLeaderWrites) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto execute = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        auto scheme = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswWrites` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswWrites` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([0.0f, -1.0f]), "FloatVector"));
+        )"));
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswWrites`
+                ADD INDEX index
+                GLOBAL USING hnsw
+                ON (emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows=1);
+        )"));
+
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswWrites` VIEW index
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+        auto nearest = [&] {
+            auto result = session.ExecuteDataQuery(search,
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        // Exercise the eagerly-built graph before updating it through normal
+        // DataShard writes.
+        nearest();
+        nearest();
+
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswWrites` (pk, emb) VALUES
+                (4, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[4]]");
+
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswWrites` (pk, emb) VALUES
+                (4, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[2]]");
+
+        execute(Q_(R"(DELETE FROM `/Root/HnswWrites` WHERE pk = 2;)"));
+        UNIT_ASSERT_UNEQUAL(nearest(), "[[2]]");
+
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswWrites` (pk, emb) VALUES
+                (1, NULL),
+                (3, "malformed");
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[4]]");
+    }
+
+    Y_UNIT_TEST_TWIN(HnswMvccPendingCommitAndRollback, Commit) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto reader = db.CreateSession().GetValueSync().GetSession();
+        auto writer = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            auto result = reader.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswPending` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));
+        )"));
+        auto initial = reader.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswPending` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(initial.IsSuccess(), initial.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswPending` ADD INDEX index GLOBAL USING hnsw ON (emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                    levels=1, clusters=2, min_rows=1,
+                    delta_rows=1000);
+        )"));
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswPending` VIEW index
+                ORDER BY Knn::CosineDistance(emb, $target) LIMIT 1;
+        )"));
+        auto nearest = [&] {
+            auto result = reader.ExecuteDataQuery(search,
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return NYdb::FormatResultSetYson(result.GetResultSet(0));
+        };
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[1]]");
+        auto pending = writer.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswPending` (pk, emb) VALUES
+                (3, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+        UNIT_ASSERT_C(pending.IsSuccess(), pending.GetIssues().ToString());
+        auto tx = pending.GetTransaction();
+        UNIT_ASSERT(tx);
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), "[[1]]");
+        // Own writes use the transaction-aware table path until ANN conflict
+        // observation supports this context.
+        auto own = writer.ExecuteDataQuery(search, TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_C(own.IsSuccess(), own.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(own.GetResultSet(0)), "[[3]]");
+        if (Commit) {
+            const auto result = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            const auto result = tx->Rollback().ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(nearest(), Commit ? "[[3]]" : "[[1]]");
+    }
+
+    Y_UNIT_TEST(HnswSnapshotReadsUseCacheByDefault) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto reader = db.CreateSession().GetValueSync().GetSession();
+        auto writer = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            const auto result = writer.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        auto write = [&](const TString& query) {
+            const auto result = writer.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswSnapshotDefault` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        write(Q_(R"(
+            UPSERT INTO `/Root/HnswSnapshotDefault` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (3, Untag(Knn::ToBinaryStringFloat([0.0f, 1.0f]), "FloatVector"));
+        )"));
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswSnapshotDefault` ADD INDEX index
+                GLOBAL USING hnsw ON (emb)
+                WITH (distance=euclidean, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows=1);
+        )"));
+        const TString posting = "/Root/HnswSnapshotDefault/index/indexImplPostingTable";
+        const TString search = "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f]); SELECT pk FROM `"
+            + posting + "` ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;";
+        const auto stats = TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic);
+        auto check = [&](const TDataQueryResult& result, const TString& expected) {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), expected);
+            AssertTableReads(result, posting, 1);
+        };
+        // No feature flag or inconsistent-read option: a consistent snapshot
+        // must use the graph immediately after index construction.
+        auto snapshot = reader.ExecuteDataQuery(search,
+            TTxControl::BeginTx(TTxSettings::SnapshotRO()), stats).ExtractValueSync();
+        check(snapshot, "[[1]]");
+        auto tx = snapshot.GetTransaction();
+        UNIT_ASSERT(tx);
+        write(Q_(R"(
+            UPSERT INTO `/Root/HnswSnapshotDefault` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"));
+        const auto current = writer.ExecuteDataQuery(search,
+            TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx(), stats).ExtractValueSync();
+        check(current, "[[2]]");
+        // The held snapshot still sees its original nearest vector through
+        // the versioned cache after a newer committed value becomes visible.
+        snapshot = reader.ExecuteDataQuery(search, TTxControl::Tx(*tx).CommitTx(), stats).ExtractValueSync();
+        check(snapshot, "[[1]]");
+    }
+
+    Y_UNIT_TEST(HnswSnapshotConsistencyAcrossWrites) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto snapshotSession = db.CreateSession().GetValueSync().GetSession();
+        auto headSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto scheme = [&](const TString& query) {
+            auto result = headSession.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        auto head = [&](const TString& query) {
+            auto result = headSession.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswMvcc` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        head(Q_(R"(
+            UPSERT INTO `/Root/HnswMvcc` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"));
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswMvcc`
+                ADD INDEX index
+                GLOBAL USING hnsw
+                ON (emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows=1);
+        )"));
+
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswMvcc` VIEW index
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+        auto oldResult = snapshotSession.ExecuteDataQuery(search,
+            TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+        UNIT_ASSERT_C(oldResult.IsSuccess(), oldResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(oldResult.GetResultSet(0)), "[[1]]");
+        auto snapshot = oldResult.GetTransaction();
+        UNIT_ASSERT(snapshot);
+
+        head(Q_(R"(
+            UPSERT INTO `/Root/HnswMvcc` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector"));
+        )"));
+        auto headResult = headSession.ExecuteDataQuery(search,
+            TTxControl::BeginTx(TTxSettings::OnlineRO(
+                TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(headResult.IsSuccess(), headResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(headResult.GetResultSet(0)), "[[2]]");
+
+        oldResult = snapshotSession.ExecuteDataQuery(search,
+            TTxControl::Tx(*snapshot).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(oldResult.IsSuccess(), oldResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(oldResult.GetResultSet(0)), "[[1]]");
+    }
+
+    Y_UNIT_TEST(HnswRetriesAfterCacheMemoryIsReleased) {
+        NKikimrConfig::TAppConfig appConfig;
+        // One two-vector graph and its snapshot-scan buffer fit, while two
+        // graphs exceed this HNSW budget, independently of page-cache use.
+        appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(1536);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(1536);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        for (const TString name : {"HnswBudgetOwner", "HnswBudgetWaiter"}) {
+            scheme("CREATE TABLE `/Root/" + name + "` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+            const auto write = ExecuteDataQuery(session,
+                "UPSERT INTO `/Root/" + name + "` (pk, emb) VALUES "
+                "(1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), \"FloatVector\")), "
+                "(2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), \"FloatVector\"));");
+            UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+            scheme("ALTER TABLE `/Root/" + name + "` ADD INDEX index GLOBAL USING hnsw "
+                "ON (emb) WITH (similarity=inner_product, vector_type=\"float\", vector_dimension=2, "
+                "levels=1, clusters=2, min_rows=1);");
+        }
+        auto read = [&](const TString& name) {
+            const auto result = session.ExecuteDataQuery(
+                "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f]); SELECT pk FROM `/Root/" + name
+                    + "/index/indexImplPostingTable` ORDER BY Knn::InnerProductSimilarity(emb, $q) DESC LIMIT 1;",
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[2]]");
+            ui64 rows = 0;
+            for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    rows += access.reads().rows();
+                }
+            }
+            return rows;
+        };
+        read("HnswBudgetOwner");
+        read("HnswBudgetWaiter");
+        // Allow both registrants to report their demand. Eager construction
+        // may leave either graph resident, but the budget cannot fit both.
+        Sleep(TDuration::Seconds(2));
+        const ui64 ownerRows = read("HnswBudgetOwner");
+        const ui64 waiterRows = read("HnswBudgetWaiter");
+        UNIT_ASSERT_C(ownerRows == 2 || waiterRows == 2, "both graphs exceeded their shared budget");
+        const TString survivor = ownerRows == 2 ? "HnswBudgetOwner" : "HnswBudgetWaiter";
+        const TString removed = ownerRows == 2 ? "HnswBudgetWaiter" : "HnswBudgetOwner";
+        scheme("DROP TABLE `/Root/" + removed + "`;");
+        const auto deadline = TInstant::Now() + TDuration::Seconds(12);
+        ui64 rows = 2;
+        while (TInstant::Now() < deadline && rows != 1) {
+            Sleep(TDuration::MilliSeconds(100));
+            rows = read(survivor);
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(rows, 1, "released cache memory did not re-enable HNSW construction");
+    }
+
+    void TestHnswFallback(ui64 cacheBytes, ui64 minRows) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(cacheBytes);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(cacheBytes);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto scheme = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        auto execute = [&](const TString& query) {
+            auto result = session.ExecuteDataQuery(query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        scheme(Q_(R"(
+            CREATE TABLE `/Root/HnswFallback` (
+                pk Int64 NOT NULL,
+                emb String,
+                PRIMARY KEY (pk)
+            );
+        )"));
+        execute(Q_(R"(
+            UPSERT INTO `/Root/HnswFallback` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector"));
+        )"));
+        scheme(Q1_(std::format(R"(
+            ALTER TABLE `/Root/HnswFallback`
+                ADD INDEX index
+                GLOBAL USING hnsw
+                ON (emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, min_rows={});
+        )", minRows)));
+
+        const TString search(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswFallback` VIEW index
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            auto result = session.ExecuteDataQuery(search,
+                TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1]]");
+        }
+    }
+
+    Y_UNIT_TEST(HnswFallbackBelowMinRows) {
+        TestHnswFallback(64_MB, 3);
+    }
+
+    Y_UNIT_TEST(HnswFallbackWithCacheDisabled) {
+        TestHnswFallback(0, 1);
+    }
+
+    Y_UNIT_TEST(HnswFallbackWithInsufficientMemory) {
+        TestHnswFallback(1, 1);
+    }
+
     Y_UNIT_TEST_TWIN(OrderByReject, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
@@ -1675,8 +3414,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_TWIN(VectorResolveDuplicateEvent, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableHnswIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags)
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false)
@@ -1725,6 +3465,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             });
             UNIT_ASSERT(result.IsSuccess());
         }
+        runtime->SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
     }
 
     TVector<TEvStateStorage::TEvInfo::TFollowerInfo> ResolveFollowers(TTestActorRuntime & runtime, ui64 tabletId, ui32 nodeIndex) {
@@ -1737,12 +3480,160 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return std::move(ev->Get()->Followers);
     }
 
+    Y_UNIT_TEST(HnswFollowerCoveredRowsDoNotFetchDataPages) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        appConfig.MutableSharedCacheConfig()->SetMemoryLimit(0);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(true).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswCoveredCache` (pk Int64 NOT NULL, emb String, payload String, PRIMARY KEY (pk));");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswCoveredCache` (pk, emb, payload) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([10.0f, 0.0f, 0.0f, 0.0f]), "FloatVector"), "one"),
+                (2, Untag(Knn::ToBinaryStringFloat([0.0f, 2.0f, 0.0f, 0.0f]), "FloatVector"), "two");
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswCoveredCache` ADD INDEX index GLOBAL USING hnsw
+            ON (emb) COVER (payload) WITH (distance=cosine, vector_type="float", vector_dimension=4,
+                  levels=1, clusters=2, min_rows=1);
+        )"));
+        const TString posting = "/Root/HnswCoveredCache/index/indexImplPostingTable";
+        WaitForCompaction(&kikimr.GetTestServer(), posting);
+        scheme("ALTER TABLE `" + posting + "` SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\");");
+        auto read = [&](bool payload) {
+            auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(
+                "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f, 0.0f, 0.0f]); SELECT pk, emb"
+                    + TString(payload ? ", payload" : "") + " FROM `" + posting
+                    + "` ORDER BY Knn::CosineDistance(emb, $q) LIMIT 1;",
+                TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx(),
+                TExecDataQuerySettings().CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+        bool cacheReady = false;
+        for (ui32 i = 0; i < 100; ++i) {
+            const auto result = read(false);
+            ui64 rowsRead = 0;
+            for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+                for (const auto& access : phase.table_access()) {
+                    rowsRead += access.reads().rows();
+                }
+            }
+            if (rowsRead == 1) {
+                cacheReady = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+            runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(cacheReady, "follower graph did not become ready");
+        runtime->SimulateSleep(TDuration::Seconds(2));
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), posting);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        ui64 pageRequests = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSharedCache::TEvRequest::EventType
+                    && ev->Get<NSharedCache::TEvRequest>()->PageCollection->Label().TabletID() == shards.front()) {
+                ++pageRequests;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        auto covered = read(false);
+        AssertTableReads(covered, posting, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(pageRequests, 0, "covered HNSW result fetched database pages");
+        TResultSetParser parser(covered.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("pk").GetInt64(), 1);
+        const auto embedding = parser.ColumnParser("emb").GetOptionalString();
+        const float values[] = {10.0f, 0.0f, 0.0f, 0.0f};
+        TString expected(reinterpret_cast<const char*>(values), sizeof(values));
+        expected.push_back(char(1));
+        UNIT_ASSERT(embedding);
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(embedding->data(), embedding->size()), expected);
+
+        // Extra covered-index payload is not present in the graph and must
+        // still be fetched from the table.
+        auto uncovered = read(true);
+        TResultSetParser withPayload(uncovered.GetResultSet(0));
+        UNIT_ASSERT(withPayload.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(*withPayload.ColumnParser("payload").GetOptionalString(), "one");
+    }
+
+    Y_UNIT_TEST(HnswSearchUsesMultipleReadReplicas) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
+        appConfig.MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig).SetEnableHnswIndex(true).SetNeedsStatsCollectors(true).SetEnableForceFollowers(true).SetUseRealThreads(false)};
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto scheme = [&](const TString& query) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(query).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        scheme("CREATE TABLE `/Root/HnswReplicas` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));");
+        const auto write = kikimr.RunCall([&] { return ExecuteDataQuery(session, Q_(R"(
+            UPSERT INTO `/Root/HnswReplicas` (pk, emb) VALUES
+                (1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), "FloatVector")),
+                (2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), "FloatVector"));
+        )")); });
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswReplicas` ADD INDEX index GLOBAL USING hnsw ON (emb)
+            WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
+                  levels=1, clusters=2, min_rows=1);
+        )"));
+        scheme(Q_(R"(
+            ALTER TABLE `/Root/HnswReplicas/index/indexImplPostingTable`
+            SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+        )"));
+        runtime->SimulateSleep(TDuration::Seconds(5));
+        const auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(),
+            "/Root/HnswReplicas/index/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        const auto followers = ResolveFollowers(*runtime, shards.front(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(followers.size(), 3u);
+        THashSet<TActorId> followerActors;
+        for (const auto& follower : followers) {
+            followerActors.insert(follower.FollowerTablet);
+        }
+        THashSet<TActorId> usedFollowers;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType
+                    && followerActors.contains(ev->GetRecipientRewrite())) {
+                usedFollowers.insert(ev->GetRecipientRewrite());
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        for (ui32 i = 0; i < 64; ++i) {
+            const auto result = kikimr.RunCall([&] { return session.ExecuteDataQuery(Q_(R"(
+                $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+                SELECT pk FROM `/Root/HnswReplicas/index/indexImplPostingTable`
+                ORDER BY Knn::InnerProductSimilarity(emb, $q) DESC LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[2]]");
+        }
+        UNIT_ASSERT_C(usedFollowers.size() > 1,
+            "all vector searches were pinned to one replica despite PER_AZ:3");
+    }
+
     Y_UNIT_TEST_QUAD(VectorSearchPushdown, Covered, Followers) {
         auto setting = NKikimrKqp::TKqpSetting();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
 
-        auto serverSettings = TKikimrSettings(appConfig)
+        auto serverSettings = TKikimrSettings(appConfig).SetEnableHnswIndex(true)
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false)
             .SetEnableForceFollowers(Followers)
@@ -1775,16 +3666,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         constexpr static ui32 levelType = 1, postingType = 2, mainType = 3;
         constexpr static ui32 followerTypeFlag = 8;
-        THashMap<TActorId, ui32> actorTypes;
+        auto actorTypes = std::make_shared<THashMap<TActorId, ui32>>();
         auto resolveActors = [&](const char* tableName, ui32 type) {
             auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), tableName);
             for (auto shardId: shards) {
                 auto actorId = ResolveTablet(*runtime, shardId);
-                actorTypes[actorId] = type;
+                (*actorTypes)[actorId] = type;
                 if (Followers) {
                     auto followers = ResolveFollowers(*runtime, shardId, 0);
                     for (const auto& followerInfo: followers) {
-                        actorTypes[followerInfo.FollowerTablet] = type | followerTypeFlag;
+                        (*actorTypes)[followerInfo.FollowerTablet] = type | followerTypeFlag;
                     }
                 }
             }
@@ -1793,9 +3684,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
         resolveActors("/Root/TestTable", mainType);
 
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        auto captureEvents = [actorTypes](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
-                ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
+                const auto it = actorTypes->find(ev->GetRecipientRewrite());
+                if (it == actorTypes->end()) {
+                    return false;
+                }
+                ui32 shardType = it->second;
                 bool isFollower = (shardType & followerTypeFlag);
                 shardType = shardType & ~followerTypeFlag;
                 // Check that level & posting are read from followers
@@ -1805,10 +3700,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     // Level table reads do full scan for caching (VectorTopK cleared by cache layer)
                     UNIT_ASSERT(!read.HasVectorTopK());
                 } else if (shardType == (Covered ? mainType : postingType)) {
-                    // Non-covering index does topK on main table, covering does it on posting
+                    // Non-covering k-means ranks on the main-table embedding.
                     UNIT_ASSERT(!read.HasVectorTopK());
                 } else {
-                    UNIT_ASSERT(shardType != 0);
                     UNIT_ASSERT(read.HasVectorTopK());
                     auto & topK = read.GetVectorTopK();
                     // Check that target and limit are pushed down
@@ -1841,11 +3735,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             });
             UNIT_ASSERT(result.IsSuccess());
         }
+        runtime->SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexTruncateTable, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        featureFlags.SetEnableHnswIndex(true);
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -1886,7 +3784,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     void DoTestCustomParallel(const TString& createIndex, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
             .SetUseRealThreads(false);
         if (enableIndexStreamWrite) {
@@ -1926,7 +3824,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexRebuildCustomParallel, EnableIndexStreamWrite) {
-        auto serverSettings = TKikimrSettings()
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetUseRealThreads(false);
         if (EnableIndexStreamWrite) {
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -1970,7 +3868,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexRebuildAllowsQueries, EnableIndexStreamWrite, Covering) {
-        auto settings = TKikimrSettings().SetUseRealThreads(false);
+        auto settings = TKikimrSettings().SetEnableHnswIndex(true).SetUseRealThreads(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
         TKikimrRunner kikimr(settings);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -2040,7 +3938,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
 
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings(appConfig)
+        auto serverSettings = TKikimrSettings(appConfig).SetEnableHnswIndex(true)
             // SetUseRealThreads(false) is required to capture events
             .SetUseRealThreads(false)
             .SetKqpSettings({setting});
@@ -2160,7 +4058,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(300_MB);
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings(appConfig)
+        auto serverSettings = TKikimrSettings(appConfig).SetEnableHnswIndex(true)
             .SetUseRealThreads(false)
             .SetKqpSettings({setting});
 
@@ -2258,7 +4156,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(HalfVectorIndex, BFloat16) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto kikimr = TKikimrRunner{TKikimrSettings().SetEnableHnswIndex(true).SetWithSampleTables(false)};
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         const TString type = BFloat16 ? "BFloat16" : "Float16";
         const TString sqlType = BFloat16 ? "bfloat16" : "float16";
@@ -2331,34 +4229,35 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     };
 
     Y_UNIT_TEST(TtlNotAllowed_Both) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto kikimr = TKikimrRunner{TKikimrSettings().SetEnableHnswIndex(true).SetWithSampleTables(false)};
         TestTtlNotAllowedBoth(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtl) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto kikimr = TKikimrRunner{TKikimrSettings().SetEnableHnswIndex(true).SetWithSampleTables(false)};
         TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndex) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto kikimr = TKikimrRunner{TKikimrSettings().SetEnableHnswIndex(true).SetWithSampleTables(false)};
         TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterTtlIndex) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto kikimr = TKikimrRunner{TKikimrSettings().SetEnableHnswIndex(true).SetWithSampleTables(false)};
         TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
-        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto kikimr = TKikimrRunner{TKikimrSettings().SetEnableHnswIndex(true).SetWithSampleTables(false)};
         TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
     }
 
     Y_UNIT_TEST_TWIN(RoundingNoEmptyClusters, Partitioned) {
         NSchemeShard::gVectorIndexSeed = 1337;
         NKikimrConfig::TFeatureFlags featureFlags;
-        auto serverSettings = TKikimrSettings()
+        featureFlags.SetEnableHnswIndex(true);
+        auto serverSettings = TKikimrSettings().SetEnableHnswIndex(true)
             .SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);

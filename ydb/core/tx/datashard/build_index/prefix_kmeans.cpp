@@ -170,7 +170,7 @@ public:
         }
         ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, toBuild, EmbeddingPos, DataPos);
         // tags: __ydb_foreign [embedding] data... sourcePK...
-        // DataPos always includes the embedding column
+        // Intermediate outputs include embeddings; final outputs follow DataColumns.
         DataColumnCount = ScanTags.size() - request.GetSourcePrimaryKeyColumns().size() - DataPos;
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
         if (request.HasKeyRange()) {
@@ -753,8 +753,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("Should be requested at least one cluster");
         }
 
         if (!request.GetLevelName()) {

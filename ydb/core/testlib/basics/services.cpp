@@ -112,6 +112,10 @@ namespace NKikimr {
             TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
         runtime.AddLocalService(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
             TActorSetupCmd(CreatePipePerNodeCache(persistentPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        for (ui32 i = 0; i < VectorReadFollowerPipeCacheCount; ++i) {
+            runtime.AddLocalService(MakeVectorReadFollowerPipeCacheID(i),
+                TActorSetupCmd(CreatePipePerNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+        }
     }
 
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig)

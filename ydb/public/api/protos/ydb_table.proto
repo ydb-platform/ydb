@@ -92,6 +92,26 @@ message VectorIndexSettings {
     optional VectorType vector_type = 2;
 
     optional uint32 vector_dimension = 3;
+
+    // HNSW is used only for partitions with at least this many rows. Smaller
+    // partitions are searched by brute force. The default is 10000 rows.
+    optional uint64 min_rows = 4;
+
+    // Graph construction parameters. Defaults: M=16, ef_construction=200.
+    optional uint32 m = 5;
+    optional uint32 ef_construction = 6;
+    // Search breadth is a query setting (PRAGMA ydb.HNSWEfSearch).
+    reserved 7;
+    reserved "hnsw_search_candidates";
+
+    // The former percentage threshold must not be interpreted as a row count.
+    reserved 8;
+    reserved "hnsw_rebuild_threshold_percent";
+
+    // Rebuild when the number of distinct rows with committed vector changes
+    // since the graph snapshot exceeds this absolute count. The default is 10000.
+    // Zero requests rebuilding after any changed row.
+    optional uint64 delta_rows = 9;
 }
 
 message KMeansTreeSettings {
@@ -411,6 +431,7 @@ message TableIndex {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 11;
        GlobalJsonIndex global_json_index = 12;
        LocalMinMaxIndex local_min_max_index = 14;
+       GlobalVectorKMeansTreeIndex global_hnsw_index = 15;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -443,6 +464,7 @@ message TableIndexDescription {
        LocalBloomNgramFilterIndex local_bloom_ngram_filter_index = 13;
        GlobalJsonIndex global_json_index = 14;
        LocalMinMaxIndex local_min_max_index = 15;
+       GlobalVectorKMeansTreeIndex global_hnsw_index = 16;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

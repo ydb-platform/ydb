@@ -915,6 +915,14 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
     Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
+void TTableDescription::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalHnsw, indexColumns, indexSettings);
+}
+
+void TTableDescription::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalHnsw, indexColumns, dataColumns, indexSettings);
+}
+
 void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexType indexType, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
     Impl_->AddFulltextIndex(indexName, indexType, indexColumns, indexSettings);
 }
@@ -1438,6 +1446,16 @@ TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexN
 
 TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
     TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddHnswIndex(indexName, indexColumns, dataColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddHnswIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 
@@ -2717,6 +2735,35 @@ TIndexDescription TIndexDescription::CreatePrefixedVectorIndex(
     );
 }
 
+TIndexDescription TIndexDescription::CreateHnswIndex(
+    const std::string& name,
+    const std::string& vectorColumn,
+    const TKMeansTreeSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& levelTableSettings,
+    const TGlobalIndexSettings& postingTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalHnsw, {vectorColumn}, dataColumns,
+        {levelTableSettings, postingTableSettings}, specializedIndexSettings
+    );
+}
+
+TIndexDescription TIndexDescription::CreatePrefixedHnswIndex(
+    const std::string& name,
+    const std::vector<std::string>& indexColumns,
+    const TKMeansTreeSettings& specializedIndexSettings,
+    const std::vector<std::string>& dataColumns,
+    const TGlobalIndexSettings& levelTableSettings,
+    const TGlobalIndexSettings& postingTableSettings,
+    const TGlobalIndexSettings& prefixTableSettings
+) {
+    return TIndexDescription(
+        name, EIndexType::GlobalHnsw, indexColumns, dataColumns,
+        {levelTableSettings, postingTableSettings, prefixTableSettings}, specializedIndexSettings
+    );
+}
+
 TIndexDescription TIndexDescription::CreateFulltextPlainIndex(
     const std::string& name,
     const std::vector<std::string>& indexColumns,
@@ -2917,6 +2964,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         .Metric = covertMetric(),
         .VectorType = convertVectorType(),
         .VectorDimension = proto.vector_dimension(),
+        .MinRows = proto.has_min_rows() ? proto.min_rows() : 10000,
+        .M = proto.has_m() ? proto.m() : 16,
+        .EfConstruction = proto.has_ef_construction() ? proto.ef_construction() : 200,
+        .DeltaRows = proto.has_delta_rows() ? proto.delta_rows() : 10000,
     };
 }
 
@@ -2960,6 +3011,18 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     settings.set_metric(convertMetric());
     settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
+    if (MinRows != 10000) {
+        settings.set_min_rows(MinRows);
+    }
+    if (M != 16) {
+        settings.set_m(M);
+    }
+    if (EfConstruction != 200) {
+        settings.set_ef_construction(EfConstruction);
+    }
+    if (DeltaRows != 10000) {
+        settings.set_delta_rows(DeltaRows);
+    }
 }
 
 void TVectorIndexSettings::Out(IOutputStream& o) const {
@@ -3261,6 +3324,22 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
+    case TProto::kGlobalHnswIndex: {
+        type = EIndexType::GlobalHnsw;
+        const auto& vectorProto = proto.global_hnsw_index();
+        const bool prefixVectorIndex = indexColumns.size() > 1;
+        globalIndexSettings.resize(prefixVectorIndex ? 3 : 2);
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.level_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePostingTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings());
+        if (prefixVectorIndex) {
+            globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition] =
+                TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings());
+        }
+        specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
+        break;
+    }
     case TProto::kGlobalFulltextPlainIndex: {
         type = EIndexType::GlobalFulltextPlain;
         const auto& fulltextProto = proto.global_fulltext_plain_index();
@@ -3345,8 +3424,11 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
             GlobalIndexSettings_.at(0).SerializeTo(settings);
         break;
     }
-    case EIndexType::GlobalVectorKMeansTree: {
-        auto* global_vector_kmeans_tree_index = proto.mutable_global_vector_kmeans_tree_index();
+    case EIndexType::GlobalVectorKMeansTree:
+    case EIndexType::GlobalHnsw: {
+        auto* global_vector_kmeans_tree_index = IndexType_ == EIndexType::GlobalHnsw
+            ? proto.mutable_global_hnsw_index()
+            : proto.mutable_global_vector_kmeans_tree_index();
         auto& level_settings = *global_vector_kmeans_tree_index->mutable_level_table_settings();
         auto& posting_settings = *global_vector_kmeans_tree_index->mutable_posting_table_settings();
         auto& vector_settings = *global_vector_kmeans_tree_index->mutable_vector_settings();
@@ -3451,6 +3533,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:
+    case EIndexType::GlobalHnsw:
         if (auto settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             o << ", vector_settings: " << *settings;
         }

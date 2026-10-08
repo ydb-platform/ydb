@@ -158,17 +158,14 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
                             NTable::TSessionPoolSettings()
                                 .MaxActiveSessions(10+Threads));
     TableClient = std::make_unique<NTable::TTableClient>(*Driver, tableClientSettings);
-    if (QueryExecuterType == "data") {
-        // nothing to do
-    } else if (QueryExecuterType == "generic") {
-        auto queryClientSettings = NQuery::TClientSettings()
-                            .SessionPoolSettings(
-                                NQuery::TSessionPoolSettings()
-                                    .MaxActiveSessions(10+Threads));
-        QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, queryClientSettings);
-    } else {
+    if (QueryExecuterType != "data" && QueryExecuterType != "generic") {
         throw TMisuseException() << "Unexpected executor Type: " << QueryExecuterType;
     }
+    // Workload initialization (for example vector sampling and recall) uses
+    // QueryClient even when timed requests use the Table API executor.
+    auto queryClientSettings = NQuery::TClientSettings()
+        .SessionPoolSettings(NQuery::TSessionPoolSettings().MaxActiveSessions(10+Threads));
+    QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, queryClientSettings);
 }
 
 void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerator& workloadGen, const int type) {
@@ -203,7 +200,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             auto result = queryInfo.TableOperation(*TableClient);
             return result;
         } else {
-            auto mode = queryInfo.UseStaleRO ? NYdb::NTable::TTxSettings::StaleRO() : NYdb::NTable::TTxSettings::SerializableRW();
+            auto mode = queryInfo.UseStaleRO ? NYdb::NTable::TTxSettings::StaleRO()
+                : queryInfo.UseSnapshotRO ? NYdb::NTable::TTxSettings::SnapshotRO()
+                : NYdb::NTable::TTxSettings::SerializableRW();
             auto result = session.ExecuteDataQuery(queryInfo.Query.c_str(),
                 NYdb::NTable::TTxControl::BeginTx(mode).CommitTx(),
                 queryInfo.Params, dataQuerySettings
@@ -223,7 +222,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
         if (queryInfo.AlterTable) {
             throw TMisuseException() << "Generic query doesn't support alter table. Use data query (--executer data)";
         } else {
-            auto mode = queryInfo.UseStaleRO ? NYdb::NQuery::TTxSettings::StaleRO() : NYdb::NQuery::TTxSettings::SerializableRW();
+            auto mode = queryInfo.UseStaleRO ? NYdb::NQuery::TTxSettings::StaleRO()
+                : queryInfo.UseSnapshotRO ? NYdb::NQuery::TTxSettings::SnapshotRO()
+                : NYdb::NQuery::TTxSettings::SerializableRW();
             auto result = session.ExecuteQuery(queryInfo.Query.c_str(),
                 NYdb::NQuery::TTxControl::BeginTx(mode).CommitTx(),
                 queryInfo.Params, genericQuerySettings

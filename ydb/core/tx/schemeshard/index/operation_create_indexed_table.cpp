@@ -212,7 +212,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     THashMap<TString, TTableColumns> indexes;
 
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
-    for (auto& indexDescription: indexedTable.GetIndexDescription()) {
+    for (auto& indexDescription: *indexedTable.MutableIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
         const auto indexType = GetIndexType(indexDescription);
 
@@ -247,9 +247,18 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
                 }
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
+                if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !context.SS->EnableHnswIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+                        "HNSW index support is disabled (EnableHnswIndex)")};
+                }
                 TString msg;
-                if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                auto& treeSettings = *indexDescription.MutableVectorIndexKmeansTreeDescription()->MutableSettings();
+                const bool valid = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                    ? NKikimr::NKMeans::AutoSelectHnswSettings(treeSettings, 0, msg)
+                    : NKikimr::NKMeans::ValidateSettingsPartial(treeSettings, msg);
+                if (!valid) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
                 }
                 if (NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings().settings())) {
@@ -455,7 +464,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc, uniqueKeySize)));
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
                 NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
@@ -466,7 +476,13 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                     }
                 }
-                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                // HNSW ranks candidates using the posting-table embedding.
+                if (GetIndexType(indexDescription) == NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
+                    const auto indexColumns = NTableIndex::ExtractInfo(indexDescription);
+                    Y_ENSURE(!indexColumns.KeyColumns.empty());
+                    indexDataColumns.insert(indexColumns.KeyColumns.back());
+                }
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
                 if (prefixVectorIndex) {

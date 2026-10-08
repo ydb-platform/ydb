@@ -42,8 +42,9 @@ namespace NKikimr::NDetailedMetrics {
     NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(
         NMonitoring::TDynamicCounterPtr tableGroup);
 
-    NMonitoring::TDynamicCounterPtr GetOrCreateTabletGroup(
-        NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet);
+    // Publishes a leaf group under tablet_id/follower_id; the follower_id path must be free
+    void RegisterTabletGroup(
+        NMonitoring::TDynamicCounterPtr parentGroup, const TTabletKey& tablet, NMonitoring::TDynamicCounterPtr group);
 
     NMonitoring::TDynamicCounterPtr GetOrCreateTypeGroup(
         NMonitoring::TDynamicCounterPtr bucketGroup, TTabletTypes::EType tabletType);

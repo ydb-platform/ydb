@@ -65,7 +65,7 @@ public:
 public:
     void CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const;
 
-    static NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage GetMessage(ui64 offset, const TString& data);
+    static TMessageStreamRecord GetRecord(ui64 offset, const TString& data);
 
 public:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemoryInfo;

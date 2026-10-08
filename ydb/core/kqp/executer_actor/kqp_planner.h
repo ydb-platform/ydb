@@ -23,6 +23,15 @@ namespace NKikimr::NKqp {
 class TExecutionTrace;
 class IQueryQuotaManager;
 
+struct TKqpStatsReportingSettings {
+    bool WithProgressStats = false;
+    bool CollectCurrentQueryStats = false;
+    TMaybe<NYql::NDq::TReportStatsSettings> RemoteReportStatsSettings;
+    TMaybe<NYql::NDq::TReportStatsSettings> LocalReportStatsSettings;
+};
+
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod);
+
 class TKqpPlanner {
 
     struct TRequestData {
@@ -51,7 +60,7 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
-        const bool WithProgressStats;
+        const TKqpStatsReportingSettings& StatsReportingSettings;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
         const TExecutionTrace* Trace = nullptr;
@@ -103,7 +112,7 @@ public:
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    TString ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
+    std::unique_ptr<IEventHandle> ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
@@ -124,7 +133,7 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
-    const bool WithProgressStats;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;

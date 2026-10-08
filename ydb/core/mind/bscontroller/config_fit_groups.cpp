@@ -649,6 +649,14 @@ namespace NKikimr {
                     pdisk.Location = State.HostRecords->GetLocation(id.NodeId);
                     pdisk.Usable = usable;
                     pdisk.NumActiveSlots = info.NumActiveDynamicSlots + info.StaticSlotUsage;
+                    pdisk.NumActiveUnits = info.StaticSlotUsage; // static groups are single-unit
+                    for (const auto& [_, slot] : info.VSlotsOnPDisk) {
+                        if (!slot->IsBeingDeleted()) {
+                            const auto* group = State.Groups.Find(slot->GroupId);
+                            Y_ABORT_UNLESS(group);
+                            pdisk.NumActiveUnits += Max(1u, group->GroupSizeInUnits);
+                        }
+                    }
                     info.ExtractInferredPDiskSettings(pdisk.ExpectedSlotCount, pdisk.SlotSizeInUnits);
                     pdisk.SlotSizeInBytes = info.GetEffectiveExpectedSlotSize();
                     pdisk.Space = TGroupMapper::CapturePDiskSpace(info.Metrics);

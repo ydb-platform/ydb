@@ -780,24 +780,38 @@ public:
 
             // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
+                // Footer sizes are signed, user-controlled metadata. Validate them even
+                // when an explicit reader count bypasses the heuristic.
+                ui64 compressedSize = 0;
+                for (int i = 0; i < fileMetadata->num_row_groups(); i++) {
+                    auto rowGroup = fileMetadata->RowGroup(i);
+                    for (const auto columnIndex : columnIndices) {
+                        const i64 chunkSize = rowGroup->ColumnChunk(columnIndex)->total_compressed_size();
+                        if (chunkSize < 0) {
+                            throw parquet::ParquetException("Invalid parquet metadata: negative total_compressed_size ", chunkSize,
+                                " of column ", columnIndex, " in row group ", i);
+                        }
+                        const ui64 unsignedChunkSize = static_cast<ui64>(chunkSize);
+                        if (unsignedChunkSize > Max<ui64>() - compressedSize) {
+                            throw parquet::ParquetException("Invalid parquet metadata: total_compressed_size sum overflow",
+                                " at column ", columnIndex, " in row group ", i);
+                        }
+                        compressedSize += unsignedChunkSize;
+                    }
+                }
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
                 } else {
                     // we want to read in parallel as much as 1/2 of fair share bytes
                     // (it's compressed size, after decoding it will grow)
-                    ui64 compressedSize = 0;
-                    for (int i = 0; i < fileMetadata->num_row_groups(); i++) {
-                        auto rowGroup = fileMetadata->RowGroup(i);
-                        for (const auto columIndex : columnIndices) {
-                            compressedSize += rowGroup->ColumnChunk(columIndex)->total_compressed_size();
-                        }
-                    }
                     // count = (fair_share / 2) / (compressed_size / num_group)
-                    auto desiredReaderCount = (SourceContext->FairShare() * numGroups) / (compressedSize * 2);
-                    // min is 1
+                    // min is 1, also for empty or implausibly large compressed sizes
                     // max is 5 (should be also tuned probably)
-                    if (desiredReaderCount) {
-                        readerCount = std::min(desiredReaderCount, 5ul);
+                    if (compressedSize && compressedSize <= Max<ui64>() / 2) {
+                        const auto desiredReaderCount = (static_cast<unsigned __int128>(SourceContext->FairShare()) * numGroups) / (compressedSize * 2);
+                        if (desiredReaderCount) {
+                            readerCount = static_cast<ui64>(std::min<unsigned __int128>(desiredReaderCount, 5));
+                        }
                     }
                 }
                 if (readerCount > numGroups) {
@@ -906,7 +920,7 @@ public:
                 if (nextGroup < numGroups) {
                     if (!columnIndices.empty()) {
                         CurrentRowGroupIndex = nextGroup;
-                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(nextGroup) : static_cast<int>(nextGroup) }, columnIndices));
+                        ThrowParquetNotOk(readers[readyReaderIndex]->WillNeedRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[nextGroup]) : static_cast<int>(nextGroup) }, columnIndices));
                         SourceContext->IncChunkCount();
                     }
                     RowGroupReaderIndex[nextGroup] = readyReaderIndex;
@@ -1470,9 +1484,11 @@ private:
 };
 
 class TS3ReadCoroActor : public TActorCoro {
+    static constexpr char ActorName[] = "S3_READ";
+
 public:
     explicit TS3ReadCoroActor(THolder<TS3ReadCoroImpl> impl)
-        : TActorCoro(std::move(impl))
+        : TActorCoro(std::move(impl), TStringBuf(ActorName))
     {}
 
 private:
@@ -1627,7 +1643,7 @@ public:
                 AllowLocalFiles,
                 WorkFactory));
         }
-        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
             FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
@@ -1897,7 +1913,6 @@ private:
         hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
@@ -2035,12 +2050,6 @@ private:
 
     void Handle(TEvS3Provider::TEvAck::TPtr& ev) {
         FileQueueEvents.OnEventReceived(ev);
-    }
-
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
-        if (FileQueueEvents.Heartbeat()) {
-            FileQueueEvents.Send(new TEvS3Provider::TEvAck());
-        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {

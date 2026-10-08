@@ -38,9 +38,7 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
 
             pdisk = pdisk_map[pdisk_id]
             vslot_used_sizes.append(vslot.VDiskMetrics.AllocatedSize)
-            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
-            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
-            vslot_fair_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            vslot_fair_size = common.get_vslot_quota_from_pdisk(group.GroupSizeInUnits, pdisk)
             vslot_fair_sizes.append(vslot_fair_size)
 
         min_vslot_fair_size = apply_func(min, vslot_fair_sizes)
@@ -106,6 +104,7 @@ def do(args):
         'MeanVDiskEstimatedUsage',
         'StdDevVDiskEstimatedUsage',
         'ItemConfigGeneration',
+        'VDiskHeapAllocatorNumLeadingDisks',
     ]
     visible_columns = [
         'BoxId:PoolId',
@@ -184,9 +183,7 @@ def do(args):
         pdisk = pdisk_map.get(common.get_pdisk_id(vslot.VSlotId))
         vdisk_slot_size = None
         if pdisk is not None:
-            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
-            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
-            vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            vdisk_slot_size = common.get_vslot_quota_from_pdisk(group.GroupSizeInUnits, pdisk)
 
         if vdisk_slot_size is not None:
             vslots['Limit'] = vslots.get('Limit', 0) + vdisk_slot_size
@@ -206,6 +203,10 @@ def do(args):
         row['DefaultGroupSizeInUnits'] = sp.DefaultGroupSizeInUnits
         row['VDiskKind'] = sp.VDiskKind
         row['ItemConfigGeneration'] = sp.ItemConfigGeneration
+        # a string, so that sorting by this column does not mix types
+        settings = sp.Settings
+        row['VDiskHeapAllocatorNumLeadingDisks'] = (str(settings.VDiskHeapAllocatorNumLeadingDisks)
+                                                    if settings.HasField('VDiskHeapAllocatorNumLeadingDisks') else 'inherit')
 
         pool = box_pool_map[sp.BoxId, sp.StoragePoolId]
 

@@ -46,15 +46,21 @@ private:
                 result = actor(recordsCountExt);
                 TCachedArrayData cache(result);
                 if (cache.GetSize() < MaxOneArrayMemorySize) {
-                    AFL_INFO(NKikimrServices::ARROW_HELPER)("event", "insert_to_cache")("key", key)("records", recordsCountExt)(
-                        "size", cache.GetSize());
+                    YDB_LOG_INFO_COMP(NKikimrServices::ARROW_HELPER, "",
+                        {"event", "insert_to_cache"},
+                        {"key", key},
+                        {"records", recordsCountExt},
+                        {"size", cache.GetSize()});
                     if (it != Arrays.End()) {
                         Arrays.Erase(it);
                     }
                     AFL_VERIFY(Arrays.Insert(key, result));
                 } else {
-                    AFL_INFO(NKikimrServices::ARROW_HELPER)("event", "too_big_to_add")("key", key)("records", recordsCountExt)(
-                        "size", cache.GetSize());
+                    YDB_LOG_INFO_COMP(NKikimrServices::ARROW_HELPER, "",
+                        {"event", "too_big_to_add"},
+                        {"key", key},
+                        {"records", recordsCountExt},
+                        {"size", cache.GetSize()});
                 }
             } else {
                 result = it->GetArray();
@@ -62,7 +68,11 @@ private:
         }
         AFL_VERIFY(result);
         AFL_VERIFY(recordsCountExt <= result->length())("result", result->length())("ext", recordsCountExt);
-        AFL_INFO(NKikimrServices::ARROW_HELPER)("event", "slice_from_cache")("key", key)("records", recordsCountExt)("count", result->length());
+        YDB_LOG_INFO_COMP(NKikimrServices::ARROW_HELPER, "",
+            {"event", "slice_from_cache"},
+            {"key", key},
+            {"records", recordsCountExt},
+            {"count", result->length()});
         return result->Slice(0, recordsCountExt);
     }
 

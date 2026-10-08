@@ -29,7 +29,9 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteEquiJoin(const NNodes::TExprBase&
 
 NNodes::TMaybeNode<NNodes::TExprBase> DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, int& joinCounter, const TEquiJoinCallbacks& callbacks = {});
 
-NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true);
+NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true, bool useScalarHashJoinForMap = false);
+
+bool DqCanUseScalarHashJoinForMap(const NNodes::TDqJoin& join, TExprContext& ctx);
 
 NNodes::TExprBase DqBuildJoin(
     const NNodes::TExprBase& node,
@@ -47,7 +49,8 @@ NNodes::TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true,
     bool blockHashJoinBuildSideLeft = false,
-    bool enableBlockHashJoinEqualNulls = false
+    bool enableBlockHashJoinEqualNulls = false,
+    bool useScalarHashJoinForMap = false
 );
 
 NNodes::TExprBase DqBuildHashJoin(

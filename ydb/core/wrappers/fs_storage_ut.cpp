@@ -219,6 +219,8 @@ class TFsStorageTests : public TFsStorageTestBase {
     UNIT_TEST(AbortMultipartUploadDeletesIncompleteFile);
     UNIT_TEST(DeleteObjectReturnsNotImplementedError);
     UNIT_TEST(ListObjectsReturnsFilesInDirectory);
+    UNIT_TEST(ListObjectsReturnsExactFile);
+    UNIT_TEST(ListObjectsReturnsEmptyForMissingFile);
     UNIT_TEST(CheckObjectExistsReturnsNotImplementedError);
     UNIT_TEST(UploadPartCopyReturnsNotImplementedError);
     UNIT_TEST(ConcurrentMultipartUploadSessionsForSameKey);
@@ -606,6 +608,37 @@ public:
             UNIT_ASSERT(allKeys.contains(file2));
             UNIT_ASSERT(allKeys.contains(file3));
         }
+    }
+
+    void ListObjectsReturnsExactFile() {
+        const TString key = KeyPath("data/data_00.csv");
+        for (const auto& file : {key + ".sha256", key, key + ".backup"}) {
+            auto result = PutObject(file, "data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        auto result = ListObjects(key, 1);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        const auto& contents = result.GetResult().GetContents();
+        UNIT_ASSERT_VALUES_EQUAL(contents.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TString(contents[0].GetKey().data(), contents[0].GetKey().size()), key);
+        UNIT_ASSERT(!result.GetResult().GetIsTruncated());
+
+        auto nextPage = ListObjects(key, 1, key);
+        UNIT_ASSERT_C(nextPage.IsSuccess(), nextPage.GetError().GetMessage());
+        UNIT_ASSERT(nextPage.GetResult().GetContents().empty());
+        UNIT_ASSERT(!nextPage.GetResult().GetIsTruncated());
+    }
+
+    void ListObjectsReturnsEmptyForMissingFile() {
+        const TString key = KeyPath("data/data_00.csv");
+        auto putResult = PutObject(key + ".sha256", "checksum");
+        UNIT_ASSERT_C(putResult.IsSuccess(), putResult.GetError().GetMessage());
+
+        auto result = ListObjects(key, 1);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        UNIT_ASSERT(result.GetResult().GetContents().empty());
+        UNIT_ASSERT(!result.GetResult().GetIsTruncated());
     }
 
     void CheckObjectExistsReturnsNotImplementedError() {

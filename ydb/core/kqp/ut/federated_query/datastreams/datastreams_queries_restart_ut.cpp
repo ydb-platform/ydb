@@ -21,7 +21,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
         InternalInitFederatedQuerySetupFactory = true;
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
-        config.MutableFeatureFlags()->SetEnableUpdatingPartitionsOnStreamingQueryRestart(true);
 
         const auto runTest = [&](bool local) {
             const std::string suffix = local ? "_local" : "_nonlocal";
@@ -30,9 +29,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
             const std::string sourceName      = std::string("restartAfterPartIncSource")      + suffix;
             const std::string queryName       = std::string("restartAfterPartIncQuery")       + suffix;
 
-            CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
+            CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
                 .PartitioningSettings(/* minActivePartitions */ 1, /* maxActivePartitions */ 1), local);
-            CreateTopic(outputTopicName, std::nullopt, local);
+            CreateScopedTopicExt(outputTopicName, std::nullopt, local);
 
             std::string inputRef, outputRef;
             if (local) {
@@ -122,12 +121,11 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
 
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsPredicatePushdown(true);
-        config.MutableFeatureFlags()->SetEnableUpdatingPartitionsOnStreamingQueryRestart(true);
 
         const ui32 initialPartitionCount = 4;
-        CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
             .PartitioningSettings(initialPartitionCount, initialPartitionCount));
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(sourceName);
 
         ExecQuery(fmt::format(R"(

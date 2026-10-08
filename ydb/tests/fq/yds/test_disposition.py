@@ -9,6 +9,8 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.fq_runner.fq_client import CONTROL_PLANE_REQUEST_TIMEOUT, FederatedQueryClient, StreamingDisposition
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+from ydb.tests.tools.datastreams_helpers.data_plane import READ_TOOL_TIMEOUT
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 
 
@@ -114,6 +116,8 @@ class TestDisposition(TestYdsBase):
     def test_disposition_from_time(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
         client.create_yds_connection(name="yds", database_id="FakeDatabaseId")
         self.init_topics("disposition_from_time")
+        timestamp_consumer = self.consumer_name + "_timestamps"
+        create_read_rule(self.input_topic, timestamp_consumer)
 
         query_name = "disposition-from-time-query"
         sql = Rf'''
@@ -124,8 +128,16 @@ class TestDisposition(TestYdsBase):
         '''
 
         def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            from_time = datetime.datetime.now()
             self.write_stream(input)
+            with kikimr.driver.topic_client.reader(self.input_topic, consumer=timestamp_consumer) as reader:
+                messages = [reader.receive_message(timeout=READ_TOOL_TIMEOUT) for _ in input]
+                assert [message.data.decode("utf-8") for message in messages] == input
+                for message in messages:
+                    reader.commit_with_ack(message, timeout=READ_TOOL_TIMEOUT)
+
+            # Topic write timestamps use the actor system's cached clock, which can
+            # lag behind the wall clock even for messages written after datetime.now().
+            from_time = min(message.written_at for message in messages).replace(tzinfo=datetime.timezone.utc)
 
             if query_id is None:
                 result: fq.CreateQueryResult = client.create_query(

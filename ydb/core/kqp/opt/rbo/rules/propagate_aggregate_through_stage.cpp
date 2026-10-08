@@ -13,14 +13,17 @@ bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connec
 bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const TIntrusivePtr<IOperator>& input, TPlanProps& props) {
     const auto aggregateStageId = *aggregate->Props.StageId;
     const auto inputStageId = *input->Props.StageId;
-    if (aggregateStageId == inputStageId || input->Kind == EOperator::Replicate) {
+    if (aggregateStageId == inputStageId) {
         return false;
     }
     const auto connection = props.StageGraph.GetConnections(inputStageId, aggregateStageId);
-    if (connection.size() > 1 || !IsValidConnectionToPushAggregation(connection.front())) {
+    if (connection.size() != 1 || !IsValidConnectionToPushAggregation(connection.front())) {
         return false;
     }
 
+    // A port qualifies even over a row-storage read: its aggregate lowers
+    // inside the Switch branch, which BuildSwitch places into that read's
+    // stage program.
     return (input->GetKind() != EOperator::Source || CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::ColumnStorage);
 }
 

@@ -346,7 +346,13 @@ void TDataShardUserDb::EraseRow(
     Counters.EraseRowBytes += keyBytes + 8;
 
     if (CollectAffectedRows && rowExists) {
-        Counters.NAffectedRows++;
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
+    }
+    if (rowExists) {
+        // rowExists can only be true when RowExists() was actually executed
+        // (see the CollectAffectedRows / OptimisticSnapshotIsolation gate
+        // above); that existence check is a real read, account it.
+        IncreaseSelectCounters(key);
     }
 }
 
@@ -371,7 +377,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 
     if (CollectAffectedRows) {
-        Counters.NAffectedRows++;
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
     }
 }
 
@@ -607,7 +613,14 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
 }
 
 void TDataShardUserDb::AddCommitTxId(const TTableId& tableId, ui64 txId) {
-    auto* dynamicTxMap = static_cast<NTable::TDynamicTransactionMap*>(GetReadTxMap(tableId).Get());
+    auto& txMap = TxMaps[tableId.PathId];
+    if (!txMap) {
+        GetReadTxMap(tableId);
+        if (!txMap) {
+            txMap = new NTable::TDynamicTransactionMap(Self.GetVolatileTxManager().GetTxMap());
+        }
+    }
+    auto* dynamicTxMap = static_cast<NTable::TDynamicTransactionMap*>(txMap.Get());
     dynamicTxMap->Add(txId, TRowVersion::Min());
 }
 
@@ -1049,7 +1062,9 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
         // remain in the localdb under their original LockTxId; without a TxMap entry
         // they are only visible at MvccVersion, which may be newer than SnapshotVersion.
         // Mapping them to TRowVersion::Min() makes them visible at any snapshot.
-        LockMode == ELockMode::OptimisticSnapshotIsolation && !CommittedTxIds.empty()
+        LockMode == ELockMode::OptimisticSnapshotIsolation && !CommittedTxIds.empty() ||
+        // Keep transaction IDs added to this table's map visible on later reads.
+        TxMaps.contains(tableId.PathId)
     );
 
     if (!needTxMap) {

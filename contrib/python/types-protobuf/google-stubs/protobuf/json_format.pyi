@@ -12,24 +12,22 @@ class EnumStringValueParseError(ParseError): ...
 
 def MessageToJson(
     message: Message,
+    including_default_value_fields: bool = False,
     preserving_proto_field_name: bool = False,
     indent: int | None = 2,
     sort_keys: bool = False,
     use_integers_for_enums: bool = False,
     descriptor_pool: DescriptorPool | None = None,
+    float_precision: int | None = None,
     ensure_ascii: bool = True,
-    always_print_fields_with_no_presence: bool = False,
-    *,
-    unquote_int64_if_possible: bool = False,
 ) -> str: ...
 def MessageToDict(
     message: Message,
-    always_print_fields_with_no_presence: bool = False,
+    including_default_value_fields: bool = False,
     preserving_proto_field_name: bool = False,
     use_integers_for_enums: bool = False,
     descriptor_pool: DescriptorPool | None = None,
-    *,
-    unquote_int64_if_possible: bool = False,
+    float_precision: int | None = None,
 ) -> dict[str, Any]: ...
 def Parse(
     text: bytes | str,

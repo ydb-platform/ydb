@@ -1,6 +1,8 @@
 #include "control.h"
 #include "session.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NExport {
 
 NKikimr::TConclusionStatus TConfirmSessionControl::DoApply(const std::shared_ptr<NBackground::ISessionLogic>& session) const {
@@ -14,8 +16,10 @@ NKikimr::TConclusionStatus TAbortSessionControl::DoApply(const std::shared_ptr<N
     auto exportSession = dynamic_pointer_cast<TSession>(session);
     AFL_VERIFY(exportSession);
     if (exportSession->IsFinished() || exportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_control_skipped_terminal_session")("is_finished", exportSession->IsFinished())(
-            "is_aborted", exportSession->IsReadyForRemoveOnFinished());
+        YDB_LOG_WARN("",
+            {"event", "abort_control_skipped_terminal_session"},
+            {"isFinished", exportSession->IsFinished()},
+            {"isAborted", exportSession->IsReadyForRemoveOnFinished()});
         return TConclusionStatus::Success();
     }
     exportSession->Abort("Aborted by user");

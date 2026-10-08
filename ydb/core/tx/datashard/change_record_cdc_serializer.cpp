@@ -364,6 +364,9 @@ protected:
         Y_ENSURE(record.GetSchema());
         auto schema = record.GetSchema();
 
+        NKikimrSchemeOp::TTableDescription fullSchema;
+        schema->GetSchema(fullSchema);
+
         for (const auto tag : schema->KeyColumnIds) {
             auto it = schema->Columns.find(tag);
             Y_ENSURE(it != schema->Columns.end());
@@ -391,12 +394,40 @@ protected:
             Y_ENSURE(id == 0 || name != "default",
                 "Cannot serialize unnamed non-default column family: " << id);
             auto& definition = families[name];
-            if (const auto& kind = family.StorageConfig.GetData().GetPreferredPoolKind()) {
-                definition["data"]["media"] = kind;
+            const auto& data = family.StorageConfig.GetData();
+            if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
+                definition["data"]["media"] = data.GetPreferredPoolKind();
             }
             definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
             definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
                 ? "regular" : "in_memory";
+        }
+
+        auto& indexes = table["indexes"];
+        indexes.SetType(NJson::JSON_MAP);
+        for (const auto& index : fullSchema.GetTableIndexes()) {
+            if (index.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                continue;
+            }
+
+            auto& value = indexes[index.GetName()];
+            const auto type = index.GetType();
+            const TString typeName = NKikimrSchemeOp::EIndexType_Name(type);
+            TStringBuf typeSuffix(typeName);
+            Y_ENSURE(type != NKikimrSchemeOp::EIndexTypeInvalid && typeSuffix.SkipPrefix("EIndexType"),
+                "Unknown index type: " << type);
+            value["type"] = type == NKikimrSchemeOp::EIndexTypeGlobal
+                ? "GlobalSync" : TString(typeSuffix);
+            auto& indexColumns = value["indexColumns"];
+            indexColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& column : index.GetKeyColumnNames()) {
+                indexColumns.AppendValue(column);
+            }
+            auto& dataColumns = value["dataColumns"];
+            dataColumns.SetType(NJson::JSON_ARRAY);
+            for (const auto& column : index.GetDataColumnNames()) {
+                dataColumns.AppendValue(column);
+            }
         }
 
         SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});

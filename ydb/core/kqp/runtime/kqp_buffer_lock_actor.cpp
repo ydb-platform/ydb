@@ -592,7 +592,7 @@ public:
 
         Settings.Counters->IteratorsShardResolve->Inc();
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request), 0, 0, LockActorSpan.GetTraceId());
         return true;
     }
 

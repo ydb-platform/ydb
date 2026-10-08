@@ -8,7 +8,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, get_sensors, max_json_depth
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes, get_sensors, max_json_depth
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
@@ -1045,6 +1045,132 @@ FROM `{table_name}`"""
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
+    @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
+    @pytest.mark.parametrize("committed_offset", [0, 1], ids=["zero_offset", "nonzero_offset"])
+    @pytest.mark.parametrize("checkpoint_has_data", [False, True], ids=["empty_checkpoint", "data_checkpoint"])
+    def test_restart_query_with_consumer_offset(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+        committed_offset: int,
+        checkpoint_has_data: bool,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, "consumer_offset", local_topics, entity_name)
+        create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
+        topic_client = self.get_ydb_client(kikimr, local_topics).driver.topic_client
+        query_name = entity_name("consumer_offset_query")
+        query_path = f"{kikimr.get_database_name()}/{query_name}"
+
+        def consumer_stats():
+            description = topic_client.describe_consumer(self.input_topic, self.consumer_name, include_stats=True)
+            assert len(description.partitions) == 1
+            stats = description.partitions[0].partition_consumer_stats
+            assert stats is not None
+            return stats
+
+        def wait_consumer_session(running):
+            assert wait_for(
+                lambda: bool(consumer_stats().read_session_id) == running,
+                timeout_seconds=60,
+                step_seconds=0.5,
+            ), f"Expected consumer session running={running}: {consumer_stats()}"
+
+        def commit_offset(offset):
+            topic_client.commit_offset(self.input_topic, self.consumer_name, partition_id=0, offset=offset)
+            assert wait_for(
+                lambda: consumer_stats().committed_offset == offset,
+                timeout_seconds=60,
+                step_seconds=0.5,
+            ), f"Expected committed offset {offset}: {consumer_stats()}"
+
+        if committed_offset:
+            self.write_stream(["already-committed"], endpoint=endpoint)
+            commit_offset(committed_offset)
+
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                PRAGMA pq.Consumer = "{self.consumer_name}";
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;
+        ''')
+        try:
+            wait_consumer_session(True)
+            if checkpoint_has_data:
+                self.write_stream(["before-checkpoint"], endpoint=endpoint)
+                assert self.read_stream(1, endpoint=endpoint) == ["before-checkpoint"]
+
+            # Complete checkpoints after the read session starts, including when it has delivered no data.
+            self.wait_completed_checkpoints(kikimr, query_name)
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+            wait_consumer_session(False)
+
+            saved_offset = committed_offset + int(checkpoint_has_data)
+            data = ["committed-while-stopped", "uncommitted-while-stopped"]
+            self.write_stream(data, endpoint=endpoint)
+            commit_offset(saved_offset + 1)
+
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+            if checkpoint_has_data:
+                # An offset saved after delivering data must still take precedence over an external commit.
+                expected_issue = (
+                    f"trying to read from position that is less than committed: "
+                    f"read {saved_offset} committed {saved_offset + 1}"
+                )
+
+                def query_issues():
+                    result_sets = kikimr.ydb_client.query(f'''
+                        SELECT Issues FROM `.sys/streaming_queries` WHERE Path = "{query_path}";
+                    ''')
+                    return result_sets[0].rows[0]["Issues"]
+
+                assert wait_for(
+                    lambda: expected_issue in query_issues(), timeout_seconds=60, step_seconds=0.5
+                ), query_issues()
+                kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+                wait_consumer_session(False)
+                commit_offset(saved_offset)
+                kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+                expected_data = data
+            else:
+                # An empty checkpoint must use the current consumer offset and the original starting timestamp.
+                expected_data = data[1:]
+
+            wait_consumer_session(True)
+            assert self.read_stream(len(expected_data), endpoint=endpoint) == expected_data
+            self.wait_completed_checkpoints(kikimr, query_name)
+            assert wait_for(
+                lambda: consumer_stats().committed_offset == saved_offset + len(data),
+                timeout_seconds=60,
+                step_seconds=0.5,
+            ), consumer_stats()
+            kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+            wait_consumer_session(False)
+            output = topic_client.describe_topic(self.output_topic, include_stats=True)
+            assert output.partitions[0].partition_stats.partition_end == int(checkpoint_has_data) + len(expected_data)
+        finally:
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
+    def test_read_topic_snapshot_at_consumer_end(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        inp, endpoint = self.get_input_name(kikimr, "snapshot_at_consumer_end", local_topics, entity_name)
+        create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
+        self.write_stream(["already-committed"], endpoint=endpoint)
+        topic_client = self.get_ydb_client(kikimr, local_topics).driver.topic_client
+        topic_client.commit_offset(self.input_topic, self.consumer_name, partition_id=0, offset=1)
+
+        result_sets = kikimr.ydb_client.query(f'''
+            PRAGMA pq.Consumer = "{self.consumer_name}";
+            SELECT Data FROM {inp} WITH (STREAMING = "FALSE");
+        ''', timeout=60)
+        assert len(result_sets) == 1
+        assert not result_sets[0].rows
+
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_insert_to_topic(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(
@@ -1141,7 +1267,11 @@ FROM `{table_name}`"""
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, query_name)
 
-    @pytest.mark.parametrize("local_topics", [True, False])
+    # SchemeShard counters cover the database, so each case needs a fresh cluster.
+    @pytest.mark.parametrize(
+        "local_topics,kikimr", [(True, {}), (False, {})],
+        indirect=["kikimr"], scope="function", ids=["True", "False"],
+    )
     def test_read_topic_restore_state(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
@@ -2573,65 +2703,6 @@ FROM `{table_name}`"""
         finally:
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
-    @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query_after_partition_increase(
-        self: StreamingTestBase,
-        kikimr: Kikimr,
-        entity_name: Callable[[str], str],
-        local_topics: bool,
-    ) -> None:
-        inp, out, endpoint = self.get_io_names(
-            kikimr,
-            f"test_restart_after_part_inc{local_topics!s:.1}",
-            local_topics,
-            entity_name,
-            partitions_count=1,
-        )
-
-        name = f"test_restart_after_part_inc_{local_topics!s:.1}"
-        sql = R'''
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                $in = SELECT value FROM {inp}
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(value String NOT NULL))
-                WHERE value LIKE "%data%";
-                INSERT INTO {out} SELECT value FROM $in;
-            END DO;'''
-
-        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
-        self.wait_completed_checkpoints(kikimr, name)
-
-        # Stop the query before altering the topic partition count
-        logger.debug(f"stopping query {name}")
-        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
-        time.sleep(0.5)
-
-        logger.debug(f"altering topic {self.input_topic} partition count to 20")
-        self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
-            self.input_topic, set_min_active_partitions=20
-        )
-
-        logger.debug(f"restarting query {name} without recompilation")
-        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
-        self.wait_completed_checkpoints(kikimr, name, timeout=30)
-
-        # Write data with random partition keys so messages land on different partitions
-        message_count = 20
-        for _ in range(message_count):
-            self.write_stream(
-                ['{"value": "my_data"}'],
-                topic_path=None,
-                partition_key=''.join(random.choices(string.digits, k=8)),
-                endpoint=endpoint,
-            )
-
-        expected_data = ["my_data" for _ in range(message_count)]
-        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
-
-        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
-
     @pytest.mark.parametrize(
         "max_tasks_per_stage, expected_actor_count",
         [(1, 1), (0, 6), (5, 5)],
@@ -2709,6 +2780,10 @@ FROM `{table_name}`"""
             f"_{local_topics!s:.1}_{max_tasks_per_stage or 'default'}"
         )
 
+        # Wait for resource exchange before creating the query.
+        original_node_count = len(counter_nodes(kikimr.cluster))
+        kikimr.wait_kqp_node_count(original_node_count)
+
         kikimr.ydb_client.query(f"""
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -2783,5 +2858,11 @@ FROM `{table_name}`"""
             # ), "Read tasks were not placed on every tenant slot"
 
         finally:
-            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
-            kikimr.cluster.unregister_and_stop_slots(added_slots)
+            try:
+                kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+            finally:
+                kikimr.cluster.unregister_and_stop_slots(added_slots)
+
+                # The fixture is shared: stopping processes does not immediately remove them
+                # from KQP placement snapshots. Wait before the next case creates a query.
+                kikimr.wait_kqp_node_count(original_node_count)

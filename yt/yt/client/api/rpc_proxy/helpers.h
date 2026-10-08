@@ -9,6 +9,8 @@
 
 #include <yt/yt/client/api/client.h>
 
+#include <yt/yt/client/chunk_client/public.h>
+
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
 #include <library/cpp/yt/memory/ref.h>
@@ -170,6 +172,22 @@ void FromProto(
 void ToProto(
     NProto::TTabletReadOptions* protoOptions,
     const NApi::TTabletReadOptionsBase& options);
+
+void ToProto(
+    NProto::TTimingStatistics* protoStatistics,
+    const NChunkClient::TTimingStatistics& statistics);
+
+void FromProto(
+    NChunkClient::TTimingStatistics* statistics,
+    const NProto::TTimingStatistics& protoStatistics);
+
+void ToProto(
+    NProto::TRemoteTableReaderTimingStatistics* protoStatistics,
+    const NApi::TRemoteTableReaderTimingStatistics& statistics);
+
+void FromProto(
+    NApi::TRemoteTableReaderTimingStatistics* statistics,
+    const NProto::TRemoteTableReaderTimingStatistics& protoStatistics);
 
 void ToProto(
     NProto::TQueryStatistics* protoStatistics,

@@ -53,7 +53,7 @@ namespace {
             return FromString<EJoinAlgoType>(dqJoin.Cast().JoinAlgo().StringValue());
         }
 
-        if (TMaybeNode<TDqPhyMapJoin>(input)) {
+        if (TMaybeNode<TDqPhyMapJoin>(input) || TMaybeNode<TDqPhyScalarHashJoin>(input)) {
             return EJoinAlgoType::MapJoin;
         }
 

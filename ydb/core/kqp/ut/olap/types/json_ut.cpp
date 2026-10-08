@@ -9,7 +9,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
-#include <ydb/core/formats/arrow/accessor/sub_columns/types.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

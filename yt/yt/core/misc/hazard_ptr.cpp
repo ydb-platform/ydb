@@ -4,10 +4,9 @@
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/finally.h>
 
+#include <library/cpp/yt/system/at_fork.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 #include <library/cpp/yt/system/thread_id.h>
-
-#include <library/cpp/yt/threading/at_fork.h>
-#include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <library/cpp/yt/containers/intrusive_linked_list.h>
 #include <library/cpp/yt/containers/ring_queue.h>
@@ -145,7 +144,7 @@ private:
 
     TRetireQueue<TRetiredPtr> RetireQueue_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ThreadRegistryLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, ThreadRegistryLock_);
     TIntrusiveLinkedList<THazardThreadState, THazardThreadStateToRegistryNode> ThreadRegistry_;
 
     THazardPointerManager();
@@ -176,7 +175,7 @@ static void* HazardPointerManagerInitializer = [] {
 
 THazardPointerManager::THazardPointerManager()
 {
-    NThreading::RegisterAtForkHandlers(
+    RegisterAtForkHandlers(
         [this] { BeforeFork(); },
         [this] { AfterForkParent(); },
         [this] { AfterForkChild(); });

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/base
@@ -60,6 +60,7 @@ SRCS(
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
+    tx_index_build.cpp
     tx_init.cpp
     tx_schema_change.cpp
     tx_init_schema.cpp
@@ -71,8 +72,6 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(replication.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -190,9 +190,12 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
 
         // --- Section 4: Chunks ------------------------------------------------------
         ui64 dataChunksInUse = 0;
-        for (const auto& [tabletId, perTablet] : ChunkRefs) {
+        ui64 tabletsWithChunks = 0;
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& perTablet = tablet.ChunkRefs;
             Y_UNUSED(tabletId);
             dataChunksInUse += perTablet.size();
+            tabletsWithChunks += !perTablet.empty();
         }
         const ui64 reservedFree = ChunkReserve.size();
         const ui64 commitsInFlight = ChunkMapIncrementsInFlight.size();
@@ -204,7 +207,7 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 TABLER() { TABLED() { str << "Reserve refill in flight"; } TABLED() { str << (ReserveInFlight ? "true" : "false"); } }
                 TABLER() { TABLED() { str << "Committed (data)"; } TABLED() { str << dataChunksInUse; } }
                 TABLER() { TABLED() { str << "Commits in flight"; } TABLED() { str << commitsInFlight; } }
-                TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << ChunkRefs.size(); } }
+                TABLER() { TABLED() { str << "Tablets using disk"; } TABLED() { str << tabletsWithChunks; } }
                 TABLER() { TABLED() { str << "Pending chunk allocations"; } TABLED() { str << ChunkAllocateQueue.size(); } }
                 TABLER() {
                     TABLED() { str << "Committed data bytes"; }

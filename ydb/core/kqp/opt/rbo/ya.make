@@ -1,6 +1,7 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
+    copy_logical_subtree.cpp
     global_inlining.cpp
     global_pruning.cpp
     kqp_expression.cpp
@@ -51,8 +52,6 @@ PEERDIR(
     ydb/library/formats/arrow/protos
     yql/essentials/core/extract_predicate
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

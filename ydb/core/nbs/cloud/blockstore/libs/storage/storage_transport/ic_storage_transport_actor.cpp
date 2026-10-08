@@ -1,5 +1,6 @@
 #include "ic_storage_transport_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_checksums.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
@@ -11,6 +12,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 using namespace NActors;
 using namespace NKikimr;
+
+static_assert(ChecksumUnitSize == NDDisk::IntegrityUnitSize);
 
 namespace {
 
@@ -97,9 +100,23 @@ void RejectRequestsForNode(
     }
 }
 
+// Attaches the payload. A non-empty checksums vector is the caller's
+// checksums and is sent verbatim. An empty vector is a temporary fallback:
+// compute the checksums after the copy when checksums are enabled.
 template <typename TRequest>
-void AttachPayload(TRequest& request, TRope rope, bool enableChecksums)
+void AttachPayload(
+    TRequest& request,
+    TRope rope,
+    const TBlockChecksums& checksums,
+    bool enableChecksums)
 {
+    if (!checksums.empty()) {
+        Y_DEBUG_ABORT_UNLESS(
+            checksums.size() == rope.size() / ChecksumUnitSize);
+        request.AddPayloadWithChecksum(std::move(rope), checksums);
+        return;
+    }
+
     if (enableChecksums) {
         request.AddPayloadThenChecksum(std::move(rope));
     } else {
@@ -461,7 +478,11 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        AttachPayload(*request, std::move(rope), EnableChecksums);
+        AttachPayload(
+            *request,
+            std::move(rope),
+            msg->Checksums,
+            EnableChecksums);
         // TODO(RFC 006): checksums should be computed by the Partition and
         // carried down to here rather than recomputed post-copy; computing it
         // after SgListCopy only covers corruption from this point on and bakes
@@ -603,7 +624,11 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        AttachPayload(*request, std::move(rope), EnableChecksums);
+        AttachPayload(
+            *request,
+            std::move(rope),
+            msg->Checksums,
+            EnableChecksums);
         // TODO(RFC 006): checksums should be computed by the Partition and
         // carried down to here rather than recomputed post-copy; computing it
         // after SgListCopy only covers corruption from this point on and bakes
@@ -745,7 +770,11 @@ void TICStorageTransportActor::HandleWriteToDDisk(
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
-        AttachPayload(*request, std::move(rope), EnableChecksums);
+        AttachPayload(
+            *request,
+            std::move(rope),
+            msg->Checksums,
+            EnableChecksums);
 
         SendWithUndeliveryTracking(
             ctx,

@@ -1711,24 +1711,25 @@ public:
         struct TBatchInfo {
             ui64 DataSize = 0;
         };
-        std::optional<TBatchInfo> PopBatches(const ui64 cookie) {
-            if (BatchesInFlight != 0 && Cookie == cookie) {
-                TBatchInfo result;
-                for (size_t index = 0; index < BatchesInFlight; ++index) {
-                    const i64 batchMemory = Batches.front().GetMemory();
-                    result.DataSize += batchMemory;
-                    Memory -= batchMemory;
-                    PendingBatches--;
-                    Batches.pop_front();
-                }
 
-                AdvanceCookie();
-                SendAttempts = 0;
-                BatchesInFlight = 0;
+        TBatchInfo PopBatches(const ui64 cookie) {
+            AFL_ENSURE(Cookie == cookie);
+            AFL_ENSURE(BatchesInFlight != 0);
 
-                return result;
+            TBatchInfo result;
+            for (size_t index = 0; index < BatchesInFlight; ++index) {
+                const i64 batchMemory = Batches.front().GetMemory();
+                result.DataSize += batchMemory;
+                Memory -= batchMemory;
+                PendingBatches--;
+                Batches.pop_front();
             }
-            return std::nullopt;
+
+            AdvanceCookie();
+            SendAttempts = 0;
+            BatchesInFlight = 0;
+
+            return result;
         }
 
         void PushBatch(TBatchWithMetadata&& batch) {
@@ -2263,18 +2264,15 @@ public:
         return result;
     }
 
-    std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
+    TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
         AFL_ENSURE(cookie != 0);
         const auto result = shardInfo->PopBatches(cookie);
-        if (result) {
-            return TMessageAcknowledgedResult {
-                .DataSize = result->DataSize,
-                .IsShardEmpty = shardInfo->IsEmpty(),
-            };
-        }
-        return std::nullopt;
+        return TMessageAcknowledgedResult {
+            .DataSize = result.DataSize,
+            .IsShardEmpty = shardInfo->IsEmpty(),
+        };
     }
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {

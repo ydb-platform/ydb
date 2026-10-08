@@ -2,6 +2,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
@@ -13,6 +14,7 @@
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -25,6 +27,7 @@
 
 #include <library/cpp/testing/hook/hook.h>
 
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <arrow/api.h>
@@ -42,6 +45,29 @@ using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
 using namespace NKikimr::Tests;
 
 namespace {
+
+    using NKikimr::EBackupTestDataFormat;
+
+    const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
+        switch (format) {
+            case EBackupTestDataFormat::Csv:
+                return "ydb_dump {}";
+            case EBackupTestDataFormat::Parquet:
+                return "parquet {}";
+        }
+        Y_ABORT("Unexpected backup test data format");
+    }
+
+    TString ExportDataFileExtension(EBackupTestDataFormat format) {
+        return NKikimr::NDataShard::NBackupRestoreTraits::DataFileExtension(
+            ToDataFormat(format), ECompressionCodec::None);
+    }
+
+    // Both flags are inert for CSV, so every format-parametrized test sets them.
+    void EnableParquetFormats(TTestBasicRuntime& runtime) {
+        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+    }
 
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
         NKikimr::InitAwsAPI();
@@ -1256,7 +1282,7 @@ namespace {
             return info;
         }
 
-        void VerifyColumnTableS3ExportHasData(const TString& destinationPrefix) {
+        void VerifyS3ExportHasData(const TString& destinationPrefix, EBackupTestDataFormat format) {
             const TString prefix = destinationPrefix.empty()
                 ? TString()
                 : (destinationPrefix.StartsWith('/') ? destinationPrefix : "/" + destinationPrefix);
@@ -1266,12 +1292,37 @@ namespace {
             bool hasDataFile = false;
             for (const auto& [path, content] : S3Mock().GetData()) {
                 // "metadata.json" contains "data" as a substring, so match a data-path component instead.
-                if (path.StartsWith(prefix + "/") && path.Contains("/data") && !content.empty()) {
+                if (path.StartsWith(prefix + "/")
+                    && path.Contains("/data")
+                    && path.EndsWith(ExportDataFileExtension(format))
+                    && !content.empty())
+                {
                     hasDataFile = true;
                     break;
                 }
             }
-            UNIT_ASSERT_C(hasDataFile, "Expected at least one non-empty data file under '" << (prefix.empty() ? "/" : prefix) << "'");
+            UNIT_ASSERT_C(hasDataFile,
+                "Expected at least one non-empty " << ExportDataFileExtension(format)
+                << " data file under '" << (prefix.empty() ? "/" : prefix) << "'");
+        }
+
+        ui64 CountColumnTableRows(const TString& path) {
+            const auto describe = DescribePrivatePath(Runtime(), path);
+            TestDescribeResult(describe, {NLs::PathExist, NLs::IsColumnTable});
+
+            const ui64 pathId = describe.GetPathId();
+            const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+            ui64 rows = 0;
+            for (const ui64 shardId : sharding.GetColumnShards()) {
+                NTxUT::TShardReader reader(Runtime(), shardId, pathId, NOlap::TSnapshot(0, 0));
+                reader.SetReplyColumnIds({1});
+                const auto batch = reader.ReadAll();
+                UNIT_ASSERT(reader.IsCorrectlyFinished());
+                if (batch) {
+                    rows += batch->num_rows();
+                }
+            }
+            return rows;
         }
 
         ui64 StartColumnTableS3Export(ui64& txId, const TString& tableName, const TString& destinationPrefix) {
@@ -2581,24 +2632,31 @@ partitioning_settings {
         ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 2}, Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST(ShouldRetryAtFinalStage) {
-        Env(); // Init test env
+    enum class EListObjectsFailure {
+        None,
+        Once,
+        Always,
+        AccessDenied,
+    };
+
+    void CheckMultipartUploadConfirmation(TTestBasicRuntime& runtime, TTestEnv& env, TS3Mock& s3Mock, ui16 s3Port,
+            EListObjectsFailure listFailure) {
         ui64 txId = 100;
 
-        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        Env().TestWaitNotification(Runtime(), txId);
+        env.TestWaitNotification(runtime, txId);
 
-        UpdateRow(Runtime(), "Table", 1, "valueA");
-        UpdateRow(Runtime(), "Table", 2, "valueB");
-        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        UpdateRow(runtime, "Table", 1, "valueA");
+        UpdateRow(runtime, "Table", 2, "valueB");
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -2636,31 +2694,107 @@ partitioning_settings {
         });
 
         const auto exportId = ++txId;
-        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+        TestExport(runtime, txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              number_of_retries: 10
+              number_of_retries: 2
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", s3Port));
 
         if (!injectResult) {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
                 return bool(injectResult);
             });
-            Runtime().DispatchEvents(opts);
+            runtime.DispatchEvents(opts);
         }
 
-        Runtime().SetObserverFunc(prevObserver);
-        Runtime().Send(injectResult.Release(), 0, true);
+        ui32 noSuchUploads = 0;
+        ui32 listRequests = 0;
+        ui32 listResponses = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            using namespace NWrappers::NExternalStorage;
+            switch (ev->GetTypeRewrite()) {
+                case EvCompleteMultipartUploadResponse: {
+                    const auto& result = ev->Get<TEvCompleteMultipartUploadResponse>()->Result;
+                    if (!result.IsSuccess() && result.GetError().GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
+                        ++noSuchUploads;
+                    }
+                    break;
+                }
+                case EvListObjectsRequest: {
+                    ++listRequests;
+                    UNIT_ASSERT_VALUES_EQUAL(noSuchUploads, listRequests);
+                    const auto& request = ev->Get<TEvListObjectsRequest>()->Request;
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetPrefix(), "data_00.csv");
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetMaxKeys(), 1);
+                    UNIT_ASSERT(request.GetMarker().empty());
+                    break;
+                }
+                case EvListObjectsResponse: {
+                    ++listResponses;
+                    auto& result = ev->Get<TEvListObjectsResponse>()->Result;
+                    UNIT_ASSERT(result.IsSuccess());
+                    if (listFailure == EListObjectsFailure::Always
+                        || listFailure == EListObjectsFailure::AccessDenied
+                        || (listFailure == EListObjectsFailure::Once && listResponses == 1)) {
+                        const bool retryable = listFailure != EListObjectsFailure::AccessDenied;
+                        Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                            retryable ? Aws::S3::S3Errors::SLOW_DOWN : Aws::S3::S3Errors::ACCESS_DENIED,
+                            retryable ? "SlowDown" : "AccessDenied", "Injected ListObjects failure", retryable);
+                        error.SetResponseCode(retryable
+                            ? Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE
+                            : Aws::Http::HttpResponseCode::FORBIDDEN);
+                        result = Aws::S3::Model::ListObjectsOutcome(std::move(error));
+                    }
+                    break;
+                }
+            }
+            return prevObserver(ev);
+        });
+        runtime.Send(injectResult.Release(), 0, true);
 
-        Env().TestWaitNotification(Runtime(), exportId);
-        TestGetExport(Runtime(), exportId, "/MyRoot");
+        env.TestWaitNotification(runtime, exportId);
+        runtime.SetObserverFunc(prevObserver);
+
+        const bool success = listFailure == EListObjectsFailure::None || listFailure == EListObjectsFailure::Once;
+        const auto desc = TestGetExport(runtime, exportId, "/MyRoot",
+            success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+        if (!success) {
+            const auto& entry = desc.GetResponse().GetEntry();
+            UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+            UNIT_ASSERT_C(TString(entry.GetIssues(0).message()).Contains("Injected ListObjects failure"), entry.DebugString());
+        }
+
+        const ui32 expectedRequests = listFailure == EListObjectsFailure::Once || listFailure == EListObjectsFailure::Always ? 2 : 1;
+        UNIT_ASSERT_VALUES_EQUAL(listRequests, expectedRequests);
+        UNIT_ASSERT_VALUES_EQUAL(listResponses, expectedRequests);
+        UNIT_ASSERT_VALUES_EQUAL(noSuchUploads, expectedRequests);
+
+        const auto* data = s3Mock.GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldRetryAtFinalStage) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::None);
+    }
+
+    Y_UNIT_TEST(ShouldRetryMultipartUploadConfirmation) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::Once);
+    }
+
+    Y_UNIT_TEST(ShouldFailMultipartUploadConfirmationAfterRetries) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::Always);
+    }
+
+    Y_UNIT_TEST(ShouldFailMultipartUploadConfirmationOnAccessDenied) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::AccessDenied);
     }
 
     Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
@@ -2761,23 +2895,23 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
     }
 
-    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
-        Env(); // Init test env
+    void CheckMissingMultipartUpload(TTestBasicRuntime& runtime, TTestEnv& env, TS3Mock& s3Mock, ui16 s3Port,
+            bool returnSimilarKey) {
         ui64 txId = 100;
 
-        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        Env().TestWaitNotification(Runtime(), txId);
+        env.TestWaitNotification(runtime, txId);
 
-        UpdateRow(Runtime(), "Table", 1, "valueA");
-        UpdateRow(Runtime(), "Table", 2, "valueB");
+        UpdateRow(runtime, "Table", 1, "valueA");
+        UpdateRow(runtime, "Table", 2, "valueB");
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -2829,7 +2963,7 @@ partitioning_settings {
         });
 
         const auto exportId = ++txId;
-        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+        TestExport(runtime, txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -2838,29 +2972,71 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", s3Port));
 
         if (!injectResult) {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
                 return bool(injectResult);
             });
-            Runtime().DispatchEvents(opts);
+            runtime.DispatchEvents(opts);
         }
 
-        Runtime().SetObserverFunc(prevObserver);
-        Runtime().Send(injectResult.Release(), 0, true);
+        ui32 listRequests = 0;
+        ui32 listResponses = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            using namespace NWrappers::NExternalStorage;
+            switch (ev->GetTypeRewrite()) {
+                case EvListObjectsRequest: {
+                    ++listRequests;
+                    const auto& request = ev->Get<TEvListObjectsRequest>()->Request;
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetPrefix(), "data_00.csv");
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetMaxKeys(), 1);
+                    UNIT_ASSERT(request.GetMarker().empty());
+                    break;
+                }
+                case EvListObjectsResponse: {
+                    ++listResponses;
+                    UNIT_ASSERT(ev->Get<TEvListObjectsResponse>()->Result.IsSuccess());
+                    Aws::S3::Model::ListObjectsResult result;
+                    if (returnSimilarKey) {
+                        result.AddContents(Aws::S3::Model::Object().WithKey("data_00.csv.sha256"));
+                    }
+                    ev->Get<TEvListObjectsResponse>()->Result = Aws::S3::Model::ListObjectsOutcome(std::move(result));
+                    break;
+                }
+            }
+            return prevObserver(ev);
+        });
+        runtime.Send(injectResult.Release(), 0, true);
 
-        Env().TestWaitNotification(Runtime(), exportId);
+        env.TestWaitNotification(runtime, exportId);
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(listRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResponses, 1);
 
         // The table's data object was never assembled by S3.
-        const auto& data = S3Mock().GetData();
+        const auto& data = s3Mock.GetData();
         UNIT_ASSERT_C(data.find("/data_00.csv") == data.end(),
             "precondition: CompleteMultipartUpload failed, so /data_00.csv must not exist");
 
         // Therefore the export must NOT report success. Reporting SUCCESS here means the backup
         // is recorded as complete while the exported table is missing from the bucket.
-        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_C(TString(entry.GetIssues(0).message()).Contains(
+            "Cannot confirm multipart upload completion after NoSuchUpload: object '/data_00.csv' was not found"),
+            entry.DebugString());
+    }
+
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+        CheckMissingMultipartUpload(Runtime(), Env(), S3Mock(), S3Port(), false);
+    }
+
+    Y_UNIT_TEST(ShouldNotConfirmMultipartUploadWithSimilarKey) {
+        CheckMissingMultipartUpload(Runtime(), Env(), S3Mock(), S3Port(), true);
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {
@@ -3505,9 +3681,12 @@ partitioning_settings {
         UNIT_ASSERT(dataChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
 
+        // Snapshot timestamps depend on system view initialization.
+        const auto* metadata = S3Mock().GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, NBackup::ComputeChecksum(*metadata) + " metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -3572,9 +3751,12 @@ partitioning_settings {
         UNIT_ASSERT(dataChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
 
+        // Snapshot timestamps depend on system view initialization.
+        const auto* metadata = S3Mock().GetData().FindPtr("/metadata.json");
+        UNIT_ASSERT(metadata);
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "a9e525da2604494bdbaa6f42b2762effd03b3658a538feb6f319d24e56c1de38 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, NBackup::ComputeChecksum(*metadata) + " metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
@@ -5565,9 +5747,11 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         });
     }
 
-    Y_UNIT_TEST(ExportImportRowAndColumnTablesTogether) {
+    Y_UNIT_TEST(ExportImportRowAndColumnTablesTogether, EBackupTestDataFormat) {
+        const auto format = Arg<0>();
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        EnableParquetFormats(Runtime());
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -5587,6 +5771,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
+              %s
               items {
                 source_path: "/MyRoot/RowTable"
                 destination_prefix: "RowExport"
@@ -5596,10 +5781,11 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
                 destination_prefix: "ColumnExport"
               }
             }
-        )", S3Port()));
+        )", S3Port(), ExportDataFormatSettings(format)));
         Env().TestWaitNotification(Runtime(), exportTxId);
         TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        VerifyColumnTableS3ExportHasData("ColumnExport");
+        VerifyS3ExportHasData("RowExport", format);
+        VerifyS3ExportHasData("ColumnExport", format);
 
         const ui64 importId = ++txId;
         TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
@@ -5624,6 +5810,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             NLs::PathExist,
             NLs::IsColumnTable,
         });
+        UNIT_ASSERT_VALUES_EQUAL(CountColumnTableRows("/MyRoot/ColumnImported"), 100u);
 
         {
             auto tableDesc = DescribePath(Runtime(), "/MyRoot/RowImported", true, false, true);
@@ -5638,9 +5825,11 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         }
     }
 
-    Y_UNIT_TEST(ExportImportColumnTableAfterAddAndDropColumns) {
+    Y_UNIT_TEST(ExportImportColumnTableAfterAddAndDropColumns, EBackupTestDataFormat) {
+        const auto format = Arg<0>();
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        EnableParquetFormats(Runtime());
         Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
@@ -5724,14 +5913,16 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
+              %s
               items {
                 source_path: "/MyRoot/ColumnTable"
                 destination_prefix: "AlteredColumnExport"
               }
             }
-        )", S3Port()));
+        )", S3Port(), ExportDataFormatSettings(format)));
         Env().TestWaitNotification(Runtime(), exportTxId);
         TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        VerifyS3ExportHasData("AlteredColumnExport", format);
 
         const ui64 importId = ++txId;
         TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
@@ -5754,6 +5945,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             UNIT_ASSERT(hasColumn(descr, "added"));
             UNIT_ASSERT(!hasColumn(descr, "to_drop"));
         }
+        UNIT_ASSERT_VALUES_EQUAL(CountColumnTableRows("/MyRoot/ColumnImported"), 100u);
     }
 
     Y_UNIT_TEST(ShouldWriteBillRecordOnColumnTableServerlessDb) {
@@ -5872,9 +6064,11 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         )", S3Port()), "", "", Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(ExportImportMultiShardColumnTable) {
+    Y_UNIT_TEST(ExportImportMultiShardColumnTable, EBackupTestDataFormat) {
+        const auto format = Arg<0>();
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        EnableParquetFormats(Runtime());
         Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
@@ -5926,15 +6120,16 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
+              %s
               items {
                 source_path: "/MyRoot/MultiShardColumnTable"
                 destination_prefix: "MultiShardExport"
               }
             }
-        )", S3Port()));
+        )", S3Port(), ExportDataFormatSettings(format)));
         Env().TestWaitNotification(Runtime(), exportTxId);
         TestGetExport(Runtime(), exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        VerifyColumnTableS3ExportHasData("MultiShardExport");
+        VerifyS3ExportHasData("MultiShardExport", format);
 
         const ui64 importId = ++txId;
         TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
@@ -5956,6 +6151,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
             const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 2);
         }
+        UNIT_ASSERT_VALUES_EQUAL(CountColumnTableRows("/MyRoot/MultiShardImported"), 100u);
     }
 
     Y_UNIT_TEST(ShouldFailImportColumnTableWithInvalidScheme) {

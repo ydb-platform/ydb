@@ -1,11 +1,8 @@
 #include "vector_index.h"
 
-#include <format>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/embedding.h>
 
-std::string ConvertVectorToBytes(const std::vector<float>& vector)
-{
-    return std::string{reinterpret_cast<const char*>(vector.data()), vector.size() * sizeof(float)} + "\x01";
-}
+#include <format>
 
 void DropVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName)
 {
@@ -42,7 +39,7 @@ void InsertItemsAsBytes(
         DECLARE $items AS List<Struct<
             id: Utf8,
             document: Utf8,
-            embedding: String
+            embedding: Bytes
         >>;
         UPSERT INTO `{0}`
         (
@@ -65,7 +62,7 @@ void InsertItemsAsBytes(
         valueBuilder.BeginStruct();
         valueBuilder.AddMember("id").Utf8(item.Id);
         valueBuilder.AddMember("document").Utf8(item.Document);
-        valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+        valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
         valueBuilder.EndStruct();
     }
     valueBuilder.EndList();
@@ -183,7 +180,7 @@ std::vector<TResultItem> SearchItemsAsBytes(
     std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
     std::string query = std::format(R"(
-        DECLARE $embedding as String;
+        DECLARE $embedding as Bytes;
         SELECT
             id,
             document,
@@ -195,9 +192,7 @@ std::vector<TResultItem> SearchItemsAsBytes(
     )", tableName, viewIndex, strategy, sortOrder, limit);
 
     auto params = NYdb::TParamsBuilder()
-        .AddParam("$embedding")
-            .String(ConvertVectorToBytes(embedding))
-            .Build()
+        .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
         .Build();
 
     std::vector<TResultItem> result;

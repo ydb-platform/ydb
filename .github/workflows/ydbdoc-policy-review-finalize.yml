@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.2.0
+      - uses: ydb-platform/ydbdoc-review-ng/.github/actions/policy-review@v1.0.1
         with:
           mode: finalize
           publish-token: ${{ github.token }}

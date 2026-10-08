@@ -4,6 +4,7 @@
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/core/fq/libs/ydb/local_session.h>
 #include <library/cpp/retry/retry_policy.h>
+#include <library/cpp/time_provider/monotonic.h>
 
 #include <ydb/core/fq/libs/ydb/table_client.h>
 
@@ -20,19 +21,22 @@ namespace {
 
 struct TLocalYdbTableClient : public IYdbTableClient {
     
-    TLocalYdbTableClient(ui64 maxActiveSessions);
+    TLocalYdbTableClient(ui64 maxActiveSessions, const NMonitoring::TDynamicCounterPtr& counters);
 
     NYdb::TAsyncStatus RetryOperation(
         TOperationFunc&& operation,
         const NYdb::NRetry::TRetryOperationSettings& settings = NYdb::NRetry::TRetryOperationSettings()) override;
 
     ISession::TPtr GetSession();
-    void ReleaseSession();
+    void ReleaseSession(TDuration holdDuration);
 
 private:
     ui64 MaxActiveSessions;
     ui64 ActiveSessions = 0;
     TMutex Mutex;
+    NMonitoring::TDynamicCounters::TCounterPtr ActiveSessionsCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr SessionLimitExceeded;
+    NMonitoring::THistogramPtr SessionHoldDurationMs;
 };
 
 class TRetryOperationActor : public NActors::TActorBootstrapped<TRetryOperationActor> {
@@ -75,7 +79,7 @@ public:
 
     ~TRetryOperationActor() override {
         if (Session) {
-            TableClient->ReleaseSession();
+            TableClient->ReleaseSession(TMonotonic::Now() - SessionStartedAt);
             Session = nullptr;
         }
         if (!Promise.HasValue()) {
@@ -102,7 +106,7 @@ private:
 
     void Handle(TEvPrivate::TEvResult::TPtr& ev) {
         if (Session) {
-            TableClient->ReleaseSession();
+            TableClient->ReleaseSession(TMonotonic::Now() - SessionStartedAt);
             Session = nullptr;
         }
         const auto& status = ev->Get()->Status;
@@ -115,6 +119,7 @@ private:
     }
 
     void StartOperation() {
+        SessionStartedAt = TMonotonic::Now();
         Session = TableClient->GetSession();
         if (!Session) {
             auto overloadedStatus = NYdb::TStatus(NYdb::EStatus::OVERLOADED, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue{"Active sessions limit exceeded"}});
@@ -179,10 +184,17 @@ private:
     IRetryPolicy::IRetryState::TPtr RetryState;
     TOperationFunc Operation;
     ISession::TPtr Session;
+    TMonotonic SessionStartedAt;
 };
 
-TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions)
+TLocalYdbTableClient::TLocalYdbTableClient(ui64 maxActiveSessions, const NMonitoring::TDynamicCounterPtr& counters)
     : MaxActiveSessions(maxActiveSessions) {
+    if (counters) {
+        ActiveSessionsCounter = counters->GetCounter("ActiveSessions");
+        SessionLimitExceeded = counters->GetCounter("SessionLimitExceeded", true);
+        SessionHoldDurationMs = counters->GetHistogram("SessionHoldDurationMs",
+            NMonitoring::ExplicitHistogram({1, 10, 100, 1000, 10000, 30000, 60000}));
+    }
 }
 
 NYdb::TAsyncStatus TLocalYdbTableClient::RetryOperation(
@@ -198,24 +210,34 @@ ISession::TPtr TLocalYdbTableClient::GetSession() {
     {
         TGuard<TMutex> guard(Mutex);
         if (ActiveSessions >= MaxActiveSessions) {
+            if (SessionLimitExceeded) {
+                SessionLimitExceeded->Inc();
+            }
             return nullptr;
         }
         ++ActiveSessions;
+        if (ActiveSessionsCounter) {
+            ActiveSessionsCounter->Inc();
+        }
     }
     return CreateLocalSession();
 }
 
-void TLocalYdbTableClient::ReleaseSession() {
+void TLocalYdbTableClient::ReleaseSession(TDuration holdDuration) {
     TGuard<TMutex> guard(Mutex);
     if (ActiveSessions > 0) {
         --ActiveSessions;
+        if (ActiveSessionsCounter) {
+            ActiveSessionsCounter->Dec();
+            SessionHoldDurationMs->Collect(holdDuration.MilliSeconds());
+        }
     }
 }
 
 } // namespace
 
-IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions) {
-    return MakeIntrusive<TLocalYdbTableClient>(maxActiveSessions);
+IYdbTableClient::TPtr CreateLocalTableClient(ui64 maxActiveSessions, const NMonitoring::TDynamicCounterPtr& counters) {
+    return MakeIntrusive<TLocalYdbTableClient>(maxActiveSessions, counters);
 }
 
 } // namespace NFq

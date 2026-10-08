@@ -1,6 +1,8 @@
 #include "common.h"
 
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -16,6 +18,88 @@ using namespace NYdb::NQuery;
 using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
+
+    Y_UNIT_TEST(LocalConnectionOperationTimeout) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetDispatchTimeout(TDuration::Seconds(10));
+
+        const auto connection = NFq::CreateLocalYdbConnection(
+            runtime.GetAppData().TenantName, ".metadata/streaming/checkpoints", 1);
+        const auto timeout = TDuration::MilliSeconds(100);
+        const auto proxyId = runtime.GetLocalServiceId(MakeKqpProxyID(runtime.GetNodeId(0)));
+        TVector<TAutoPtr<NActors::IEventHandle>> heldRequests;
+        auto observer = runtime.AddObserver<TEvKqp::TEvQueryRequest>([&](auto& ev) {
+            if (ev->Sender == proxyId && ev->Get()->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetOperationTimeout(), timeout);
+                // The proxy has installed its timeout timer before forwarding this request.
+                heldRequests.push_back(ev.Release());
+            }
+        });
+        // The session has not received the held query. Let the proxy's second timeout
+        // round reply instead of delivering an abort to an idle session.
+        auto abortObserver = runtime.AddObserver<TEvKqp::TEvAbortExecution>([](auto& ev) {
+            ev.Reset();
+        });
+
+        struct TRunOperationActor : NActors::TActorBootstrapped<TRunOperationActor> {
+            TRunOperationActor(NFq::IYdbTableClient::TPtr client, NFq::TOperationFunc operation,
+                NThreading::TPromise<TStatus> promise)
+                : Client(std::move(client))
+                , Operation(std::move(operation))
+                , Promise(promise)
+            {}
+
+            void Bootstrap() {
+                Client->RetryOperation(std::move(Operation),
+                    NYdb::NRetry::TRetryOperationSettings().MaxRetries(1))
+                    .Subscribe([promise = Promise](const NYdb::TAsyncStatus& result) mutable {
+                        promise.SetValue(result.GetValue());
+                    });
+                PassAway();
+            }
+
+            NFq::IYdbTableClient::TPtr Client;
+            NFq::TOperationFunc Operation;
+            NThreading::TPromise<TStatus> Promise;
+        };
+
+        TVector<EStatus> attemptStatuses;
+        const auto runQuery = [&](TDuration operationTimeout) {
+            auto promise = NThreading::NewPromise<TStatus>();
+            runtime.Register(new TRunOperationActor(connection->GetTableClient(),
+                [&, operationTimeout](NFq::ISession::TPtr session) {
+                    return session->ExecuteDataQuery("SELECT 1;", NFq::ISession::TTxControl::BeginAndCommitTx(),
+                        nullptr, NYdb::NTable::TExecDataQuerySettings().OperationTimeout(operationTimeout))
+                        .Apply([&](const NThreading::TFuture<NYdb::NTable::TDataQueryResult>& result) {
+                            const auto& status = result.GetValue();
+                            attemptStatuses.push_back(status.GetStatus());
+                            return TStatus(status);
+                        });
+                }, promise));
+            return runtime.WaitFuture(promise.GetFuture());
+        };
+
+        const auto timedOut = runQuery(timeout);
+        UNIT_ASSERT_VALUES_EQUAL(timedOut.GetStatus(), EStatus::INTERNAL_ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(timedOut.GetIssues().ToString(), "MaxRetries is reached");
+        UNIT_ASSERT_VALUES_EQUAL(heldRequests.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(attemptStatuses.size(), 2);
+        for (const auto status : attemptStatuses) {
+            UNIT_ASSERT_VALUES_EQUAL(status, EStatus::TIMEOUT);
+        }
+
+        observer.Remove();
+        abortObserver.Remove();
+        heldRequests.clear();
+        attemptStatuses.clear();
+        const auto success = runQuery(TDuration::Seconds(30));
+        UNIT_ASSERT_C(success.IsSuccess(), success.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(attemptStatuses.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(attemptStatuses.front(), EStatus::SUCCESS);
+    }
 
     Y_UNIT_TEST_F(RestartQueryAfterPartitionIncrease, TStreamingTestFixture) {
         InternalInitFederatedQuerySetupFactory = true;
@@ -63,6 +147,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
             ReadTopicMessages(outputTopicName, {"my_data_0"},
                 TInstant::Now() - TDuration::Seconds(100),
                 /* sort */ true, local);
+
+            const auto storageCounters = GetCounters()->FindSubgroup("subsystem", "checkpoints_storage_service");
+            UNIT_ASSERT_C(storageCounters, "Checkpoint storage counters are missing");
+            const auto tableClientCounters = storageCounters->FindSubgroup("component", "local_table_client");
+            UNIT_ASSERT_C(tableClientCounters, "Local table client counters are missing");
+            UNIT_ASSERT(tableClientCounters->FindCounter("ActiveSessions"));
+            UNIT_ASSERT(tableClientCounters->FindCounter("SessionLimitExceeded"));
+            UNIT_ASSERT(tableClientCounters->FindHistogram("SessionHoldDurationMs"));
 
             Sleep(TDuration::Seconds(2));
 

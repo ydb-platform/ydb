@@ -212,7 +212,7 @@ void TQueryBase::RunQuery() {
     }
 }
 
-void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
+void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl, TDuration operationTimeout) {
     using TExecuteDataQueryRequest = TGrpcRequestOperationCall<Table::ExecuteDataQueryRequest, Table::ExecuteDataQueryResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
@@ -228,6 +228,12 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     request.set_session_id(SessionId);
     *request.mutable_query()->mutable_yql_text() = std::move(sql);
     request.mutable_query_cache_policy()->set_keep_in_cache(true);
+
+    if (operationTimeout) {
+        auto* timeout = request.mutable_operation_params()->mutable_operation_timeout();
+        timeout->set_seconds(operationTimeout.Seconds());
+        timeout->set_nanos(operationTimeout.NanoSecondsOfSecond());
+    }
 
     if (params) {
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());

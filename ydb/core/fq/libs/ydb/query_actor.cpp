@@ -22,6 +22,7 @@ class TQuerySession final : public NKikimr::TQueryBase {
         std::shared_ptr<NYdb::TParamsBuilder> Params;
         TEvQuerySession::TTxControl TxControl;
         NThreading::TPromise<NYdb::NTable::TDataQueryResult> Promise;
+        TDuration OperationTimeout;
     };
 
 public:
@@ -61,7 +62,8 @@ private:
         Y_ABORT_UNLESS(!IsExecuting);
         Y_ABORT_UNLESS(!DataQuery);
 
-        DataQuery = TDataQuery{ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise};
+        DataQuery = TDataQuery{ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise,
+            ev->Get()->ExecDataQuerySettings.OperationTimeout_};
         ProcessQueries();
     }
 
@@ -119,7 +121,7 @@ private:
             {"logPrefix", LogPrefix()},
             {"sql", DataQuery->Sql},
             {"commit", tx.Commit_});
-        RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
+        RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx, DataQuery->OperationTimeout);
     }
 
     void DoPassAway() {

@@ -156,8 +156,8 @@ public:
             {"debug", Debug()});
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
-        const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
+        const bool toBuild = request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
+            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD;
         InForeign = OverlapClusters > 1 && (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
             || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
@@ -756,8 +756,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
             badRequest("Wrong upload");
         }
 
-        if (request.GetK() < 2) {
-            badRequest("Should be requested partition on at least two rows");
+        if (request.GetK() == 0) {
+            badRequest("Should be requested at least one cluster");
         }
 
         const auto parentFrom = request.GetParentFrom();

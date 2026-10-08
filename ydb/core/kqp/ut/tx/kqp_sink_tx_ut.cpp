@@ -13,6 +13,57 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpSinkTx) {
+    class TSelectBeforeWrite : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        }
+
+        void DoExecute() override {
+            auto session = Kikimr->GetQueryClient().GetSession().GetValueSync().GetSession();
+            const TVector<TString> writes = {
+                "UPDATE `/Root/KV` SET Value = 'Updated' WHERE Key = 1u;",
+                "UPDATE `/Root/KV` SET Value = 'Updated' WHERE Key = 2u;",
+                "DELETE FROM `/Root/KV` WHERE Value = 'Two';",
+                "UPDATE `/Root/KV` SET Value = 'Returned' WHERE Key = 1u RETURNING Key, Value;",
+            };
+            for (size_t i = 0; i < writes.size(); ++i) {
+                auto result = session.ExecuteQuery(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (1u, 'One'), (2u, 'Two');
+                )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                result = session.ExecuteQuery(
+                    TString("SELECT Key FROM `/Root/KV` WHERE Key = 1u;") + writes[i],
+                    TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, writes[i] << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), i == 3 ? 2 : 1);
+                CompareYson(R"([[1u]])", FormatResultSetYson(result.GetResultSet(0)));
+                if (i == 3) {
+                    CompareYson(R"([[1u;["Returned"]]])", FormatResultSetYson(result.GetResultSet(1)));
+                }
+
+                result = session.ExecuteQuery(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key IN (1u, 2u) ORDER BY Key;
+                )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                const TVector<TString> expected = {
+                    R"([[1u;["Updated"]];[2u;["Two"]]])",
+                    R"([[1u;["One"]];[2u;["Updated"]]])",
+                    R"([[1u;["One"]]])",
+                    R"([[1u;["Returned"]];[2u;["Two"]]])",
+                };
+                CompareYson(expected[i], FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(SelectBeforeWriteWithIndexStreamWrite) {
+        TSelectBeforeWrite tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
     class TDeferredEffects : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

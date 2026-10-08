@@ -218,7 +218,7 @@ public:
     bool IsAlive() const;
     bool CanBeAlive() const; // IsAlive() + <Unknown>
 
-    bool IsAliveOnLocal(const TActorId& local) const;
+    bool IsPresentOnLocal(const TActorId& local) const;
     bool IsStopped() const;
     bool InitiateBoot(TNodeId node = 0);
     bool BecomeStarting(TNodeId nodeId);

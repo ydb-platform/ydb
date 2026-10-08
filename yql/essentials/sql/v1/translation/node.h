@@ -25,6 +25,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -750,19 +751,6 @@ private:
     TString Repr_;
 };
 
-struct TTopicRef {
-    TString RefName;
-    TDeferredAtom Cluster;
-    TNodePtr Consumers;
-    TNodePtr Settings;
-    TNodePtr Keys;
-
-    TTopicRef() = default;
-    TTopicRef(TString refName, TDeferredAtom cluster, TNodePtr keys);
-    TTopicRef(const TTopicRef&) = default;
-    TTopicRef& operator=(const TTopicRef&) = default;
-};
-
 struct TIdentifier {
     TPosition Pos;
     TString Name;
@@ -1308,6 +1296,7 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
+        GlobalHnsw,
         GlobalFulltextPlain,
         GlobalFulltextRelevance,
         LocalBloomFilter,
@@ -1481,87 +1470,12 @@ public:
 
     TMaybe<TDeferredAtom> InheritPermissions;
 
+    // SOURCE="YC_IAM_DELEGATION" makes an external secret (no SOURCE: the value is stored); parameters of IAM delegation secrets:
+    TMaybe<TDeferredAtom> Source;
+    TMaybe<TDeferredAtom> ServiceAccountId;
+    TMaybe<TDeferredAtom> CloudId;
+
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
-};
-
-struct TTopicConsumerSettings {
-    struct TLocalSinkSettings {
-        // no special settings
-    };
-
-    TNodePtr Important;
-    NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
-    NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
-    NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
-    TNodePtr Type;
-    TNodePtr KeepMessagesOrder;
-    TNodePtr DefaultProcessingTimeout;
-    TNodePtr MaxProcessingAttempts;
-    TNodePtr DeadLetterPolicy;
-    TNodePtr DeadLetterQueue;
-    TNodePtr ReceiveMessageWaitTime;
-    TNodePtr ReceiveMessageDelay;
-};
-
-struct TTopicConsumerDescription {
-    explicit TTopicConsumerDescription(TIdentifier name)
-        : Name(std::move(name))
-    {
-    }
-
-    TIdentifier Name;
-    TTopicConsumerSettings Settings;
-};
-struct TTopicSettings {
-    NYql::TResetableSetting<TNodePtr, void> MinPartitions;
-    NYql::TResetableSetting<TNodePtr, void> MaxPartitions;
-    NYql::TResetableSetting<TNodePtr, void> RetentionPeriod;
-    NYql::TResetableSetting<TNodePtr, void> RetentionStorage;
-    NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
-    NYql::TResetableSetting<TNodePtr, void> PartitionWriteSpeed;
-    NYql::TResetableSetting<TNodePtr, void> PartitionWriteBurstSpeed;
-    NYql::TResetableSetting<TNodePtr, void> MeteringMode;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStabilizationWindow;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
-    NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
-    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
-    NYql::TResetableSetting<TNodePtr, void> ContentBasedDeduplication;
-
-    bool IsSet() const {
-        return MinPartitions ||
-               MaxPartitions ||
-               RetentionPeriod ||
-               RetentionStorage ||
-               SupportedCodecs ||
-               PartitionWriteSpeed ||
-               PartitionWriteBurstSpeed ||
-               MeteringMode ||
-               AutoPartitioningStabilizationWindow ||
-               AutoPartitioningUpUtilizationPercent ||
-               AutoPartitioningDownUtilizationPercent ||
-               AutoPartitioningStrategy ||
-               MetricsLevel ||
-               ContentBasedDeduplication;
-    }
-};
-
-struct TCreateTopicParameters {
-    TVector<TTopicConsumerDescription> Consumers;
-    TTopicSettings TopicSettings;
-    bool ExistingOk;
-};
-
-struct TAlterTopicParameters {
-    TVector<TTopicConsumerDescription> AddConsumers;
-    THashMap<TString, TTopicConsumerDescription> AlterConsumers;
-    TVector<TIdentifier> DropConsumers;
-    TTopicSettings TopicSettings;
-    bool MissingOk;
-};
-
-struct TDropTopicParameters {
-    bool MissingOk;
 };
 
 struct TStreamingQuerySettings {
@@ -1696,14 +1610,6 @@ TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
-TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
-                             const TString& transformLambda,
-                             std::map<TString, TNodePtr>&& settings,
-                             const TObjectOperatorContext& context);
-TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
-                            std::map<TString, TNodePtr>&& settings,
-                            const TObjectOperatorContext& context);
-TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
 TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);
@@ -1713,13 +1619,6 @@ TNodePtr BuildPragma(TPosition pos, const TString& prefix, const TString& name, 
 TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq);
 TNodePtr BuildWorldIfNode(TPosition pos, TNodePtr predicate, TNodePtr thenNode, TNodePtr elseNode, bool isEvaluate);
 TNodePtr BuildWorldForNode(TPosition pos, TNodePtr list, TNodePtr bodyNode, TNodePtr elseNode, bool isEvaluate, bool isParallel);
-
-TNodePtr BuildCreateTopic(TPosition pos, const TTopicRef& tr, const TCreateTopicParameters& params,
-                          TScopedStatePtr scoped);
-TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicParameters& params,
-                         TScopedStatePtr scoped);
-TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
-                        TScopedStatePtr scoped);
 
 TNodePtr BuildCreateSecret(
     TPosition pos,
@@ -1753,7 +1652,15 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback);
+struct TFuncInfo {
+    TString Kind;
+    TMaybe<size_t> ArgCount;
+    TMaybe<size_t> OptionalArgCount;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
+};
+
+void EnumerateBuiltins(const std::function<void(std::string_view name, const TFuncInfo& info)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

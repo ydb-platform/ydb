@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_file_yt_job_service.cpp
@@ -13,8 +13,6 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

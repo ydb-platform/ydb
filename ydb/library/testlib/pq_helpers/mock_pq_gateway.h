@@ -162,13 +162,15 @@ public:
 
 struct TMockPqGatewaySettings {
     struct TTopicInfo {
-        ui32  PartitionCount = 1;
+        ui32 PartitionCount = 1;
+        TVector<TString> Consumers{};
     };
 
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
     NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
+    TTopicInfo DefaultTopicSettings;
     std::unordered_map<TString, TTopicInfo> Topics;
 };
 

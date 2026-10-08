@@ -23,14 +23,48 @@ bool IsRunningFrame(const TOpWindowFrame& frame) {
             (frame.EndKind == EWindowFrameBound::Following && frame.EndValue == 0));
 }
 
-bool IsWholePartitionFrame(const TOpWindowFrame& frame) {
-    return (frame.Type == EWindowFrameType::Rows || frame.Type == EWindowFrameType::Range) &&
-           frame.BeginKind == EWindowFrameBound::UnboundedPreceding && frame.EndKind == EWindowFrameBound::UnboundedFollowing;
-}
-
 bool IsRangeRunningFrame(const TOpWindowFrame& frame) {
     return frame.Type == EWindowFrameType::Range && frame.BeginKind == EWindowFrameBound::UnboundedPreceding &&
            frame.EndKind == EWindowFrameBound::CurrentRow;
+}
+
+bool IsRowIncrementalFrame(const TOpWindowFrame& frame) {
+    return frame.Type == EWindowFrameType::Rows && frame.BeginKind == EWindowFrameBound::UnboundedPreceding &&
+           (frame.EndKind == EWindowFrameBound::Preceding || frame.EndKind == EWindowFrameBound::Following) && !IsRunningFrame(frame);
+}
+
+bool IsRowSuffixFrame(const TOpWindowFrame& frame) {
+    const bool startsAtCurrentRow = frame.BeginKind == EWindowFrameBound::CurrentRow ||
+                                    ((frame.BeginKind == EWindowFrameBound::Preceding || frame.BeginKind == EWindowFrameBound::Following) &&
+                                     frame.BeginValue == 0);
+    return frame.Type == EWindowFrameType::Rows && startsAtCurrentRow && frame.EndKind == EWindowFrameBound::UnboundedFollowing;
+}
+
+bool IsRangeOffsetFrame(const TOpWindowFrame& frame) {
+    return frame.Type == EWindowFrameType::Range && !IsRangeRunningFrame(frame) && !frame.IsWholePartition();
+}
+
+bool IsRangeIncrementalFrame(const TOpWindowFrame& frame) {
+    return frame.Type == EWindowFrameType::Range && frame.BeginKind == EWindowFrameBound::UnboundedPreceding &&
+           (frame.EndKind == EWindowFrameBound::Preceding || frame.EndKind == EWindowFrameBound::Following);
+}
+
+bool HasFrameOffset(const TOpWindowFrame& frame) {
+    auto isOffset = [](EWindowFrameBound kind) {
+        return kind == EWindowFrameBound::Preceding || kind == EWindowFrameBound::Following;
+    };
+    return isOffset(frame.BeginKind) || isOffset(frame.EndKind);
+}
+
+bool IsRangeOffsetType(const TTypeAnnotationNode* type) {
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+    if (type->GetKind() != ETypeAnnotationKind::Data) {
+        return false;
+    }
+    const auto slot = type->Cast<TDataExprType>()->GetSlot();
+    return IsDataTypeIntegral(slot) || slot == EDataSlot::Float || slot == EDataSlot::Double;
 }
 
 bool IsRangeComparableType(const TTypeAnnotationNode* type) {
@@ -73,17 +107,16 @@ bool IsRangeComparableType(const TTypeAnnotationNode* type) {
     }
 }
 
-const TTypeAnnotationNode* SortColumnType(const TOpWindow& window, const TSortElement& sortElement) {
+const TTypeAnnotationNode* SortColumnType(const TOpWindow& window, TInfoUnitId column) {
     const auto* inputType = window.GetInput()->Type;
     Y_ENSURE(inputType, "Window input has no type annotation");
-    const auto* type = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->FindItemType(
-        sortElement.SortColumn.GetFullName());
+    const auto* type = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->FindItemType(ToString(column));
     Y_ENSURE(type, "Cannot find a type for the window sort column");
     return type;
 }
 
 bool HasAggregate(const TOpWindow& window) {
-    for (const auto& func : window.GetWindowFuncs()) {
+    for (const auto& [output, func] : window.GetWindowFuncs().Items()) {
         if (func.Kind == EWindowFuncKind::Aggregate) {
             return true;
         }
@@ -110,12 +143,12 @@ std::pair<TString, TString> DecimalParams(const TTypeAnnotationNode* type) {
 } // anonymous namespace
 
 bool TPhysicalWindowBuilder::UsesWholePartition(const TOpWindow& window) {
-    if (!IsWholePartitionFrame(window.GetFrame())) {
+    if (!window.GetFrame().IsWholePartition()) {
         return false;
     }
 
     // For native function the frame means nothing.
-    for (const auto& func : window.GetWindowFuncs()) {
+    for (const auto& [output, func] : window.GetWindowFuncs().Items()) {
         if (func.Kind == EWindowFuncKind::Native) {
             return false;
         }
@@ -124,23 +157,23 @@ bool TPhysicalWindowBuilder::UsesWholePartition(const TOpWindow& window) {
 }
 
 bool TPhysicalWindowBuilder::UsesRangeCarry(const TOpWindow& window) {
-    if (!IsRangeRunningFrame(window.GetFrame()) || window.GetSortElements().size() != 1) {
+    if (!IsRangeRunningFrame(window.GetFrame()) || window.GetSortElements().Items().size() != 1) {
         return false;
     }
 
-    if (!IsRangeComparableType(SortColumnType(window, window.GetSortElements().front()))) {
+    if (!IsRangeComparableType(SortColumnType(window, window.GetSortElements().Items().front().first))) {
         return false;
     }
     return HasAggregate(window);
 }
 
 bool TPhysicalWindowBuilder::UsesRangePeerGroups(const TOpWindow& window) {
-    if (!IsRangeRunningFrame(window.GetFrame()) || window.GetSortElements().empty() || UsesRangeCarry(window)) {
+    if (!IsRangeRunningFrame(window.GetFrame()) || window.GetSortElements().Items().empty() || UsesRangeCarry(window)) {
         return false;
     }
 
-    for (const auto& sortElement : window.GetSortElements()) {
-        const auto* type = SortColumnType(window, sortElement);
+    for (const auto& sortElement : window.GetSortElements().Items()) {
+        const auto* type = SortColumnType(window, sortElement.first);
         if (type->GetKind() == ETypeAnnotationKind::Optional) {
             type = type->Cast<TOptionalExprType>()->GetItemType();
         }
@@ -151,19 +184,41 @@ bool TPhysicalWindowBuilder::UsesRangePeerGroups(const TOpWindow& window) {
     return HasAggregate(window);
 }
 
+bool TPhysicalWindowBuilder::UsesRowFrames(const TOpWindow& window) {
+    const auto& frame = window.GetFrame();
+    if (frame.Type != EWindowFrameType::Rows || IsRunningFrame(frame) || frame.IsWholePartition()) {
+        return false;
+    }
+    return HasAggregate(window);
+}
+
+bool TPhysicalWindowBuilder::UsesRangeFrames(const TOpWindow& window) {
+    const auto& frame = window.GetFrame();
+    if (!IsRangeOffsetFrame(frame) || window.GetSortElements().Items().size() != 1) {
+        return false;
+    }
+
+    const auto* sortColumnType = SortColumnType(window, window.GetSortElements().Items().front().first);
+    if (!(HasFrameOffset(frame) ? IsRangeOffsetType(sortColumnType) : IsRangeComparableType(sortColumnType))) {
+        return false;
+    }
+    return HasAggregate(window);
+}
+
 bool TPhysicalWindowBuilder::CanBuildWindow(const TOpWindow& window) {
     const bool running = IsRunningFrame(window.GetFrame());
     const bool wholePartition = UsesWholePartition(window);
     const bool rangeRunning = UsesRangeCarry(window) || UsesRangePeerGroups(window);
+    const bool rowFrames = UsesRowFrames(window) || UsesRangeFrames(window);
 
-    for (const auto& func : window.GetWindowFuncs()) {
+    for (const auto& [output, func] : window.GetWindowFuncs().Items()) {
         if (func.Kind == EWindowFuncKind::Native) {
-            if (!IsSupportedNativeFunction(func.Function) || !func.Arguments.empty()) {
+            if (!IsSupportedNativeFunction(func.Function) || !func.Arguments.Items().empty()) {
                 return false;
             }
             continue;
         }
-        if (!IsSupportedAggregationFunction(func.Function) || !(running || wholePartition || rangeRunning)) {
+        if (!IsSupportedAggregationFunction(func.Function) || !(running || wholePartition || rangeRunning || rowFrames)) {
             return false;
         }
     }
@@ -171,49 +226,63 @@ bool TPhysicalWindowBuilder::CanBuildWindow(const TOpWindow& window) {
     return true;
 }
 
-void TPhysicalWindowBuilder::Prepare(const TVector<TInfoUnit>& inputs) {
+void TPhysicalWindowBuilder::Prepare(const TVector<TInfoUnitId>& inputs) {
     Inputs = inputs;
     for (ui32 i = 0; i < inputs.size(); ++i) {
-        Indexes.emplace(inputs[i].GetFullName(), i);
+        Indexes.Add(inputs[i], i);
     }
-
-    const auto* inputType = Window->GetInput()->Type;
-    Y_ENSURE(inputType, "Window input has no type annotation");
-    InputStruct = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     OutputLayout = inputs;
-    for (const auto& func : Window->GetWindowFuncs()) {
-        OutputLayout.push_back(func.ResultColName);
+    for (const auto output : Window.GetWindowFuncs().Keys()) {
+        const auto& func = *Window.GetWindowFuncs().Find(output);
+        Functions.push_back(output);
+        OutputLayout.push_back(output);
         NeedsPeerKey = NeedsPeerKey || func.Function == "rank" || func.Function == "denserank";
     }
-    NeedsPeerKey = NeedsPeerKey && !Window->GetSortElements().empty();
-    WholePartition = UsesWholePartition(*Window);
-    RangeCarry = UsesRangeCarry(*Window);
-    RangePeerGroups = UsesRangePeerGroups(*Window);
+    NeedsPeerKey = NeedsPeerKey && !Window.GetSortElements().Items().empty();
+    WholePartition = UsesWholePartition(Window);
+    RangeCarry = UsesRangeCarry(Window);
+    RangePeerGroups = UsesRangePeerGroups(Window);
+    RowFrames = UsesRowFrames(Window);
+    RowIncremental = RowFrames && IsRowIncrementalFrame(Window.GetFrame());
+    RowSuffix = RowFrames && IsRowSuffixFrame(Window.GetFrame());
+    RangeFrames = UsesRangeFrames(Window);
+    RangeIncremental = RangeFrames && IsRangeIncrementalFrame(Window.GetFrame());
 }
 
-ui32 TPhysicalWindowBuilder::IndexOf(const TInfoUnit& column) const {
-    auto it = Indexes.find(column.GetFullName());
-    Y_ENSURE(it != Indexes.end(), "Cannot find window column " << column.GetFullName() << " in the wide input");
-    return it->second;
+ui32 TPhysicalWindowBuilder::IndexOf(TInfoUnitId column) const {
+    const auto* index = Indexes.Find(column);
+    Y_ENSURE(index, "Cannot find window column " << Names.Get(column) << " in the wide input");
+    return *index;
 }
 
-const TTypeAnnotationNode* TPhysicalWindowBuilder::InputItemType(const TInfoUnit& column) const {
-    const auto* type = InputStruct->FindItemType(column.GetFullName());
-    Y_ENSURE(type, "Cannot find a type for window column " << column.GetFullName());
+const TTypeAnnotationNode* TPhysicalWindowBuilder::InputItemType(TInfoUnitId column) const {
+    const auto* type = Window.GetInput()->GetIUType(column, Ctx);
+    Y_ENSURE(type, "Cannot find a type for window column " << Names.Get(column));
     return type;
 }
 
+TExprNode::TPtr TPhysicalWindowBuilder::BuildOutputRowType() const {
+    TVector<const TItemExprType*> fields;
+    fields.reserve(OutputLayout.size());
+    for (const auto id : OutputLayout) {
+        const auto* type = Window.GetIUType(id, Ctx);
+        Y_ENSURE(type, "Cannot find the window result type for " << Names.Get(id));
+        fields.push_back(Ctx.MakeType<TItemExprType>(Names.Get(id), type));
+    }
+    return ExpandType(Pos, *Ctx.MakeType<TStructExprType>(fields), Ctx);
+}
+
 TString TPhysicalWindowBuilder::AccumulatorName(ui32 funcIndex) const {
-    return "__kqp_win_acc_" + ToString(funcIndex);
+    return Names.GetTemporaryName("__kqp_win_acc_" + ToString(funcIndex) + "_");
 }
 
 TString TPhysicalWindowBuilder::PositionName(ui32 funcIndex) const {
-    return "__kqp_win_pos_" + ToString(funcIndex);
+    return Names.GetTemporaryName("__kqp_win_pos_" + ToString(funcIndex) + "_");
 }
 
 TString TPhysicalWindowBuilder::PeerName(ui32 sortIndex) const {
-    return "__kqp_win_peer_" + ToString(sortIndex);
+    return Names.GetTemporaryName("__kqp_win_peer_" + ToString(sortIndex) + "_");
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::Member(TExprNode::TPtr from, const TString& name) const {
@@ -261,7 +330,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::MakeOptional(TExprNode::TPtr value, bool
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalWindowBuilder::BuildSumCastTarget(const TInfoUnit& column) const {
+TExprNode::TPtr TPhysicalWindowBuilder::BuildSumCastTarget(TInfoUnitId column) const {
     const auto* itemType = InputItemType(column);
     const TTypeAnnotationNode* sumType = nullptr;
     Y_ENSURE(GetSumResultType(Pos, *itemType, sumType, Ctx), "Unsupported type for sum over a window");
@@ -286,16 +355,16 @@ TVector<TExprNode::TPtr> TPhysicalWindowBuilder::BuildSortKeys() const {
         // clang-format on
     };
 
-    for (const auto& key : Window->GetPartitionKeys()) {
+    for (const auto& key : Window.GetPartitionKeys().Items()) {
         add(IndexOf(key), true);
     }
-    for (const auto& element : Window->GetSortElements()) {
-        add(IndexOf(element.SortColumn), element.Ascending);
+    for (const auto& element : Window.GetSortElements().Items()) {
+        add(IndexOf(element.first), element.second.Ascending);
     }
     return keys;
 }
 
-TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorDataType(const TInfoUnit& column) const {
+TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorDataType(TInfoUnitId column) const {
     const auto* itemType = InputItemType(column);
     if (!IsDecimal(itemType)) {
         // clang-format off
@@ -320,7 +389,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorDataType(const TInfoU
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorType(const TInfoUnit& column) const {
+TExprNode::TPtr TPhysicalWindowBuilder::BuildAvgAccumulatorType(TInfoUnitId column) const {
     // clang-format off
     return Ctx.Builder(Pos)
         .Callable("TupleType")
@@ -339,14 +408,14 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildKeyExtractorLambda() const {
     }
 
     TExprNode::TListType results;
-    for (const auto& key : Window->GetPartitionKeys()) {
+    for (const auto& key : Window.GetPartitionKeys().Items()) {
         results.push_back(args[IndexOf(key)]);
     }
     return Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), std::move(results));
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildGroupSwitchLambda() const {
-    const auto& partitionKeys = Window->GetPartitionKeys();
+    const auto& partitionKeys = Window.GetPartitionKeys().Items();
 
     TExprNode::TListType args;
     TExprNode::TListType keyArgs;
@@ -426,8 +495,8 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildAccumulator(const TOpWindowFunc& fu
         // clang-format on
     }
 
-    const auto& argument = func.Arguments.front();
-    auto value = Member(itemArg, argument.GetFullName());
+    const auto& argument = func.Arguments.Items().front();
+    auto value = Member(itemArg, Names.Get(argument));
     const bool isOptional = InputItemType(argument)->IsOptionalOrNull();
 
     if (func.Function == "count") {
@@ -584,7 +653,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
         // clang-format on
     }
 
-    const auto& sortElements = Window->GetSortElements();
+    const auto& sortElements = Window.GetSortElements().Items();
     TExprNode::TPtr sortKeyChanged;
     if (update && NeedsPeerKey) {
         TExprNode::TListType comparisons;
@@ -592,7 +661,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
             // clang-format off
             comparisons.push_back(Ctx.Builder(Pos)
                 .Callable("AggrNotEquals")
-                    .Add(0, Member(itemArg, sortElements[k].SortColumn.GetFullName()))
+                    .Add(0, Member(itemArg, Names.Get(sortElements[k].first)))
                     .Add(1, Member(previousState, PeerName(k)))
                 .Seal().Build());
             // clang-format on
@@ -603,20 +672,20 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
     TVector<std::pair<TString, TExprNode::TPtr>> stateMembers;
     TVector<std::pair<TString, TExprNode::TPtr>> outputMembers;
     for (const auto& column : Inputs) {
-        outputMembers.emplace_back(column.GetFullName(), Member(itemArg, column.GetFullName()));
+        outputMembers.emplace_back(Names.Get(column), Member(itemArg, Names.Get(column)));
     }
 
-    const auto& funcs = Window->GetWindowFuncs();
+    const auto& funcs = Functions;
     for (ui32 f = 0; f < funcs.size(); ++f) {
-        const auto& func = funcs[f];
+        const auto& func = *Window.GetWindowFuncs().Find(funcs[f]);
         auto accumulator = BuildAccumulator(func, f, itemArg, previousState, sortKeyChanged, stateMembers);
         stateMembers.emplace_back(AccumulatorName(f), accumulator);
-        outputMembers.emplace_back(func.ResultColName.GetFullName(), BuildResultFromAccumulator(func, accumulator));
+        outputMembers.emplace_back(Names.Get(funcs[f]), BuildResultFromAccumulator(funcs[f], accumulator));
     }
 
     if (NeedsPeerKey) {
         for (ui32 k = 0; k < sortElements.size(); ++k) {
-            stateMembers.emplace_back(PeerName(k), Member(itemArg, sortElements[k].SortColumn.GetFullName()));
+            stateMembers.emplace_back(PeerName(k), Member(itemArg, Names.Get(sortElements[k].first)));
         }
     }
 
@@ -631,12 +700,27 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
     return Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), std::move(body));
 }
 
-TExprNode::TPtr TPhysicalWindowBuilder::BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const {
-    if (func.Kind == EWindowFuncKind::Native || func.Function != "avg") {
-        return accumulator;
+// Accumulators of sum, min, max and avg are optional, while a frame that is never empty declares
+// a non-optional result for a non-optional input.
+bool TPhysicalWindowBuilder::IsNonOptionalAggregate(TInfoUnitId column) const {
+    const auto& func = *Window.GetWindowFuncs().Find(column);
+    if (func.Kind != EWindowFuncKind::Aggregate || func.Function == "count") {
+        return false;
     }
+    const auto* type = Window.GetIUType(column, Ctx);
+    Y_ENSURE(type, "Cannot find the window result type for " << Names.Get(column));
+    return !type->IsOptionalOrNull();
+}
 
-    const auto& argument = func.Arguments.front();
+TExprNode::TPtr TPhysicalWindowBuilder::BuildResultFromAccumulator(TInfoUnitId column, TExprNode::TPtr accumulator) const {
+    const auto& func = *Window.GetWindowFuncs().Find(column);
+    auto result = func.Kind == EWindowFuncKind::Aggregate && func.Function == "avg" ? BuildAverage(func, std::move(accumulator))
+                                                                                   : std::move(accumulator);
+    return IsNonOptionalAggregate(column) ? Ctx.NewCallable(Pos, "Unwrap", {std::move(result)}) : result;
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildAverage(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const {
+    const auto& argument = func.Arguments.Items().front();
     const auto* itemType = InputItemType(argument);
 
     auto pairArg = Ctx.NewArgument(Pos, "avg_result");
@@ -726,7 +810,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildExpandFromChain(TExprNode::TPtr cha
                                     .Arg(0, "win_chained")
                                     .Atom(1, "0")
                                 .Seal()
-                                .Atom(1, OutputLayout[i].GetFullName())
+                                .Atom(1, Names.Get(OutputLayout[i]))
                             .Seal();
                     }
                     return parent;
@@ -737,7 +821,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildExpandFromChain(TExprNode::TPtr cha
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildChain(TExprNode::TPtr wideFlow) const {
-    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx);
+    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx, Names);
 
     // clang-format off
     auto chained = Ctx.Builder(Pos)
@@ -765,9 +849,13 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildFoldLambda(bool update) const {
     }
 
     TVector<std::pair<TString, TExprNode::TPtr>> stateMembers;
-    const auto& funcs = Window->GetWindowFuncs();
+    const auto& funcs = Functions;
     for (ui32 f = 0; f < funcs.size(); ++f) {
-        stateMembers.emplace_back(AccumulatorName(f), BuildAccumulator(funcs[f], f, itemArg, previousState, nullptr, stateMembers));
+        const auto& func = *Window.GetWindowFuncs().Find(funcs[f]);
+        if (func.Kind == EWindowFuncKind::Native) {
+            continue;
+        }
+        stateMembers.emplace_back(AccumulatorName(f), BuildAccumulator(func, f, itemArg, previousState, nullptr, stateMembers));
     }
 
     return Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), BuildStruct(stateMembers));
@@ -787,7 +875,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildExpandFromStructs(TExprNode::TPtr l
                         parent
                             .Callable(i, "Member")
                                 .Arg(0, "win_row")
-                                .Atom(1, OutputLayout[i].GetFullName())
+                                .Atom(1, Names.Get(OutputLayout[i]))
                             .Seal();
                     }
                     return parent;
@@ -798,14 +886,8 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildExpandFromStructs(TExprNode::TPtr l
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildWholePartition(TExprNode::TPtr wideFlow) const {
-    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx);
-
-    // clang-format off
-    auto rows = Ctx.Builder(Pos)
-        .Callable("Collect")
-            .Add(0, narrow)
-        .Seal().Build();
-    // clang-format on
+    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx, Names);
+    auto rows = Ctx.NewArgument(Pos, "win_partition_rows");
 
     // clang-format off
     auto folded = Ctx.Builder(Pos)
@@ -821,12 +903,11 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildWholePartition(TExprNode::TPtr wide
 
     TVector<std::pair<TString, TExprNode::TPtr>> outputMembers;
     for (const auto& column : Inputs) {
-        outputMembers.emplace_back(column.GetFullName(), Member(rowArg, column.GetFullName()));
+        outputMembers.emplace_back(Names.Get(column), Member(rowArg, Names.Get(column)));
     }
-    const auto& funcs = Window->GetWindowFuncs();
+    const auto& funcs = Functions;
     for (ui32 f = 0; f < funcs.size(); ++f) {
-        outputMembers.emplace_back(funcs[f].ResultColName.GetFullName(),
-                                   BuildResultFromAccumulator(funcs[f], Member(stateArg, AccumulatorName(f))));
+        outputMembers.emplace_back(Names.Get(funcs[f]), BuildResultFromAccumulator(funcs[f], Member(stateArg, AccumulatorName(f))));
     }
 
     auto rowLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {rowArg}), BuildStruct(outputMembers));
@@ -838,24 +919,26 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildWholePartition(TExprNode::TPtr wide
         .Seal().Build();
 
     auto perState = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {stateArg}), std::move(attach));
-    auto result = Ctx.Builder(Pos)
+    auto perPartition = Ctx.Builder(Pos)
         .Callable("OrderedFlatMap")
             .Callable(0, "ToList")
                 .Add(0, folded)
             .Seal()
             .Add(1, perState)
         .Seal().Build();
+
+    auto result = Ctx.Builder(Pos)
+        .Callable("OrderedFlatMap")
+            .Add(0, BuildPartitionList(narrow))
+            .Add(1, Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {rows}), std::move(perPartition)))
+        .Seal().Build();
     // clang-format on
 
     return BuildExpandFromStructs(result);
 }
 
-TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow) const {
-    Y_ENSURE(Window->GetSortElements().size() == 1, "A RANGE frame needs exactly one sort column here");
-    const auto& sortElement = Window->GetSortElements().front();
-    const auto sortedColumn = sortElement.SortColumn.GetFullName();
-
-    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx);
+TExprNode::TPtr TPhysicalWindowBuilder::BuildChainOutputs(TExprNode::TPtr wideFlow) const {
+    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx, Names);
 
     // clang-format off
     auto chained = Ctx.Builder(Pos)
@@ -865,7 +948,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow
             .Add(2, BuildChainLambda(/*update=*/true))
         .Seal().Build();
 
-    auto outputs = Ctx.Builder(Pos)
+    return Ctx.Builder(Pos)
         .Callable("OrderedMap")
             .Add(0, chained)
             .Lambda(1)
@@ -877,48 +960,72 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow
             .Seal()
         .Seal().Build();
     // clang-format on
+}
 
-    Y_ENSURE(Window->Type, "Window has no type annotation");
-    auto queueRowType = ExpandType(Pos, *Window->Type->Cast<TListExprType>()->GetItemType(), Ctx);
-    auto zero = Ctx.Builder(Pos).Callable("Uint64").Atom(0, "0").Seal().Build();
+TExprNode::TPtr TPhysicalWindowBuilder::BuildPartitionList(TExprNode::TPtr flow) const {
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("Condense1")
+            .Add(0, flow)
+            .Lambda(1)
+                .Param("partition_row")
+                .Callable("AsList")
+                    .Arg(0, "partition_row")
+                .Seal()
+            .Seal()
+            .Lambda(2)
+                .Param("partition_row")
+                .Param("partition_rows")
+                .Callable("Bool")
+                    .Atom(0, "false")
+                .Seal()
+            .Seal()
+            .Lambda(3)
+                .Param("partition_row")
+                .Param("partition_rows")
+                .Callable("Append")
+                    .Arg(0, "partition_rows")
+                    .Arg(1, "partition_row")
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildQueue(TExprNode::TPtr wideFlow) const {
+    Y_ENSURE(Window.Type, "Window has no type annotation");
 
     // clang-format off
-    auto queue = Ctx.Builder(Pos)
+    return Ctx.Builder(Pos)
         .Callable("QueueCreate")
-            .Add(0, queueRowType)
+            .Add(0, BuildOutputRowType())
             .Callable(1, "Void").Seal()
-            .Add(2, zero)
+            .Add(2, BuildUint64(0))
             .Callable(3, "DependsOn")
                 .Callable(0, "FromFlow")
                     .Add(0, wideFlow)
                 .Seal()
             .Seal()
         .Seal().Build();
+    // clang-format on
+}
 
-    auto bounds = Ctx.Builder(Pos)
+TExprNode::TPtr TPhysicalWindowBuilder::BuildFrameBounds(TExprNode::TListType rangeIncrementals, TExprNode::TListType rowIntervals,
+                                                         TExprNode::TListType rowIncrementals, TExprNode::TListType rangeIntervals) const {
+    // clang-format off
+    return Ctx.Builder(Pos)
         .Callable("AsStruct")
-            .List(0)
-                .Atom(0, "RangeIncrementals")
-                .List(1)
-                    .Callable(0, "AsStruct")
-                        .List(0).Atom(0, "Direction").Callable(1, "String").Atom(0, "Following").Seal().Seal()
-                        .List(1)
-                            .Atom(0, "Number")
-                            .Callable(1, "AsTagged")
-                                .Callable(0, "Void").Seal()
-                                .Atom(1, "zero")
-                            .Seal()
-                        .Seal()
-                        .List(2).Atom(0, "SortedColumn").Callable(1, "String").Atom(0, sortedColumn).Seal().Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-            .List(1).Atom(0, "RangeIntervals").List(1).Seal().Seal()
-            .List(2).Atom(0, "RowIncrementals").List(1).Seal().Seal()
-            .List(3).Atom(0, "RowIntervals").List(1).Seal().Seal()
+            .List(0).Atom(0, "RangeIncrementals").Add(1, Ctx.NewList(Pos, std::move(rangeIncrementals))).Seal()
+            .List(1).Atom(0, "RangeIntervals").Add(1, Ctx.NewList(Pos, std::move(rangeIntervals))).Seal()
+            .List(2).Atom(0, "RowIncrementals").Add(1, Ctx.NewList(Pos, std::move(rowIncrementals))).Seal()
+            .List(3).Atom(0, "RowIntervals").Add(1, Ctx.NewList(Pos, std::move(rowIntervals))).Seal()
         .Seal().Build();
+    // clang-format on
+}
 
-    auto collected = Ctx.Builder(Pos)
+TExprNode::TPtr TPhysicalWindowBuilder::BuildCollector(TExprNode::TPtr outputs, TExprNode::TPtr queue, TExprNode::TPtr bounds, bool ascending) const {
+    // clang-format off
+    return Ctx.Builder(Pos)
         .Callable("WinFramesCollector")
             .Callable(0, "FromFlow")
                 .Add(0, outputs)
@@ -928,34 +1035,50 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow
                 .List(0).Atom(0, "Bounds").Add(1, bounds).Seal()
                 .List(1)
                     .Atom(0, "SortOrder")
-                    .Callable(1, "String").Atom(0, sortElement.Ascending ? "Asc" : "Desc").Seal()
+                    .Callable(1, "String").Atom(0, ascending ? "Asc" : "Desc").Seal()
                 .Seal()
             .Seal()
         .Seal().Build();
     // clang-format on
+}
 
-    auto rowArg = Ctx.NewArgument(Pos, "range_row");
+TExprNode::TPtr TPhysicalWindowBuilder::BuildIncrementalCarry(TExprNode::TPtr wideFlow, TExprNode::TPtr bounds, bool isRange, bool ascending,
+                                                              bool mayBeEmpty) const {
+    auto queue = BuildQueue(wideFlow);
+    auto collected = BuildCollector(BuildChainOutputs(wideFlow), queue, bounds, ascending);
+
+    auto rowArg = Ctx.NewArgument(Pos, "carry_row");
     // clang-format off
-    auto groupLastRow = Ctx.Builder(Pos)
-        .Callable("Unwrap")
-            .Callable(0, "WinFrame")
-                .Add(0, queue)
-                .Add(1, zero)
-                .Callable(2, "Bool").Atom(0, "true").Seal()
-                .Callable(3, "Bool").Atom(0, "true").Seal()
-                .Callable(4, "Bool").Atom(0, "true").Seal()
-                .Callable(5, "DependsOn").Add(0, rowArg).Seal()
-            .Seal()
+    auto carriedRow = Ctx.Builder(Pos)
+        .Callable("WinFrame")
+            .Add(0, queue)
+            .Add(1, BuildUint64(0))
+            .Callable(2, "Bool").Atom(0, "true").Seal()
+            .Callable(3, "Bool").Atom(0, isRange ? "true" : "false").Seal()
+            .Callable(4, "Bool").Atom(0, "true").Seal()
+            .Callable(5, "DependsOn").Add(0, rowArg).Seal()
         .Seal().Build();
     // clang-format on
 
     TVector<std::pair<TString, TExprNode::TPtr>> members;
     for (const auto& column : Inputs) {
-        members.emplace_back(column.GetFullName(), Member(rowArg, column.GetFullName()));
+        members.emplace_back(Names.Get(column), Member(rowArg, Names.Get(column)));
     }
-    for (const auto& func : Window->GetWindowFuncs()) {
-        const auto name = func.ResultColName.GetFullName();
-        members.emplace_back(name, func.Kind == EWindowFuncKind::Aggregate ? Member(groupLastRow, name) : Member(rowArg, name));
+    for (const auto& [output, func] : Window.GetWindowFuncs().Items()) {
+        const auto name = Names.Get(output);
+        if (func.Kind == EWindowFuncKind::Native) {
+            members.emplace_back(name, Member(rowArg, name));
+        } else if (!mayBeEmpty) {
+            members.emplace_back(name, Member(Ctx.NewCallable(Pos, "Unwrap", {carriedRow}), name));
+        } else {
+            auto carriedArg = Ctx.NewArgument(Pos, "carried");
+            auto value = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {carriedArg}), Member(carriedArg, name));
+            if (func.Function == "count") {
+                members.emplace_back(name, Ctx.NewCallable(Pos, "Coalesce", {Ctx.NewCallable(Pos, "Map", {carriedRow, value}), BuildUint64(0)}));
+            } else {
+                members.emplace_back(name, Ctx.NewCallable(Pos, "FlatMap", {carriedRow, value}));
+            }
+        }
     }
 
     auto rowLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {rowArg}), BuildStruct(members));
@@ -972,33 +1095,89 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow
     return BuildExpandFromStructs(result);
 }
 
-TExprNode::TPtr TPhysicalWindowBuilder::BuildRangePeerGroups(TExprNode::TPtr wideFlow) const {
-    const auto& sortElements = Window->GetSortElements();
-    auto narrow = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(wideFlow, Inputs, Ctx);
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow) const {
+    Y_ENSURE(Window.GetSortElements().Items().size() == 1, "A RANGE frame needs exactly one sort column here");
+    const auto& sortElement = Window.GetSortElements().Items().front();
+
+    auto bound = BuildRangeBound(EWindowFrameBound::CurrentRow, 0, Names.Get(sortElement.first));
+    return BuildIncrementalCarry(wideFlow, BuildFrameBounds({bound}, {}, {}), /*isRange=*/true, sortElement.second.Ascending,
+                                 /*mayBeEmpty=*/false);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeIncremental(TExprNode::TPtr wideFlow) const {
+    const auto& frame = Window.GetFrame();
+    const auto& sortElement = Window.GetSortElements().Items().front();
+    const bool mayBeEmpty = frame.EndKind == EWindowFrameBound::Preceding && frame.EndValue > 0;
+    auto bound = BuildRangeBound(frame.EndKind, frame.EndValue, Names.Get(sortElement.first));
+    return BuildIncrementalCarry(wideFlow, BuildFrameBounds({bound}, {}, {}), /*isRange=*/true, sortElement.second.Ascending, mayBeEmpty);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRowIncremental(TExprNode::TPtr wideFlow) const {
+    const auto& frame = Window.GetFrame();
+    const bool mayBeEmpty = frame.EndKind == EWindowFrameBound::Preceding && frame.EndValue > 0;
+    return BuildIncrementalCarry(wideFlow, BuildFrameBounds({}, {}, {BuildRowBound(frame.EndKind, frame.EndValue)}),
+                                 /*isRange=*/false, /*ascending=*/true, mayBeEmpty);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRowSuffix(TExprNode::TPtr wideFlow) const {
+    auto rows = Ctx.NewArgument(Pos, "suffix_rows");
 
     // clang-format off
-    auto chained = Ctx.Builder(Pos)
-        .Callable("Chain1Map")
-            .Add(0, narrow)
-            .Add(1, BuildChainLambda(/*update=*/false))
-            .Add(2, BuildChainLambda(/*update=*/true))
-        .Seal().Build();
-
-    auto outputs = Ctx.Builder(Pos)
-        .Callable("OrderedMap")
-            .Add(0, chained)
-            .Lambda(1)
-                .Param("chained_row")
-                .Callable("Nth")
-                    .Arg(0, "chained_row")
-                    .Atom(1, "0")
+    auto suffixStates = Ctx.Builder(Pos)
+        .Callable("Reverse")
+            .Callable(0, "Chain1Map")
+                .Callable(0, "Reverse")
+                    .Add(0, rows)
                 .Seal()
+                .Add(1, BuildFoldLambda(/*update=*/false))
+                .Add(2, BuildFoldLambda(/*update=*/true))
             .Seal()
         .Seal().Build();
     // clang-format on
 
-    Y_ENSURE(Window->Type, "Window has no type annotation");
-    auto rowType = ExpandType(Pos, *Window->Type->Cast<TListExprType>()->GetItemType(), Ctx);
+    auto pairArg = Ctx.NewArgument(Pos, "suffix_pair");
+    auto rowOf = Ctx.NewCallable(Pos, "Nth", {pairArg, Ctx.NewAtom(Pos, "0")});
+    auto stateOf = Ctx.NewCallable(Pos, "Nth", {pairArg, Ctx.NewAtom(Pos, "1")});
+
+    TVector<std::pair<TString, TExprNode::TPtr>> members;
+    for (const auto& column : Inputs) {
+        members.emplace_back(Names.Get(column), Member(rowOf, Names.Get(column)));
+    }
+    const auto& funcs = Functions;
+    for (ui32 f = 0; f < funcs.size(); ++f) {
+        const auto& func = *Window.GetWindowFuncs().Find(funcs[f]);
+        const auto name = Names.Get(funcs[f]);
+        members.emplace_back(name, func.Kind == EWindowFuncKind::Native
+                                       ? Member(rowOf, name)
+                                       : BuildResultFromAccumulator(funcs[f], Member(stateOf, AccumulatorName(f))));
+    }
+
+    // clang-format off
+    auto perPartition = Ctx.Builder(Pos)
+        .Callable("OrderedMap")
+            .Callable(0, "Zip")
+                .Add(0, rows)
+                .Add(1, suffixStates)
+            .Seal()
+            .Add(1, Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {pairArg}), BuildStruct(members)))
+        .Seal().Build();
+
+    auto result = Ctx.Builder(Pos)
+        .Callable("OrderedFlatMap")
+            .Add(0, BuildPartitionList(BuildChainOutputs(wideFlow)))
+            .Add(1, Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {rows}), std::move(perPartition)))
+        .Seal().Build();
+    // clang-format on
+
+    return BuildExpandFromStructs(result);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangePeerGroups(TExprNode::TPtr wideFlow) const {
+    const auto& sortElements = Window.GetSortElements().Items();
+    auto outputs = BuildChainOutputs(wideFlow);
+
+    Y_ENSURE(Window.Type, "Window has no type annotation");
+    auto rowType = BuildOutputRowType();
     // clang-format off
     auto variantType = Ctx.Builder(Pos)
         .Callable("VariantType")
@@ -1023,7 +1202,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangePeerGroups(TExprNode::TPtr wid
     auto sortKey = [&](TExprNode::TPtr row) {
         TExprNode::TListType items;
         for (const auto& sortElement : sortElements) {
-            items.push_back(Member(row, sortElement.SortColumn.GetFullName()));
+            items.push_back(Member(row, Names.Get(sortElement.first)));
         }
         return Ctx.NewList(Pos, std::move(items));
     };
@@ -1040,7 +1219,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangePeerGroups(TExprNode::TPtr wid
     TExprNode::TListType comparisons;
     for (ui32 k = 0; k < sortElements.size(); ++k) {
         comparisons.push_back(Ctx.NewCallable(Pos, "AggrNotEquals",
-                                              {Member(switchRow, sortElements[k].SortColumn.GetFullName()), nth(nth(switchState, 0), k)}));
+                                              {Member(switchRow, Names.Get(sortElements[k].first)), nth(nth(switchState, 0), k)}));
     }
     auto switchBody = comparisons.size() == 1 ? comparisons.front() : Ctx.NewCallable(Pos, "Or", std::move(comparisons));
     auto switchLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {switchRow, switchState}), std::move(switchBody));
@@ -1087,10 +1266,10 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangePeerGroups(TExprNode::TPtr wid
     auto lastRowArg = Ctx.NewArgument(Pos, "last_row");
     TVector<std::pair<TString, TExprNode::TPtr>> members;
     for (const auto& column : Inputs) {
-        members.emplace_back(column.GetFullName(), Member(rowArg, column.GetFullName()));
+        members.emplace_back(Names.Get(column), Member(rowArg, Names.Get(column)));
     }
-    for (const auto& func : Window->GetWindowFuncs()) {
-        const auto name = func.ResultColName.GetFullName();
+    for (const auto& [output, func] : Window.GetWindowFuncs().Items()) {
+        const auto name = Names.Get(output);
         members.emplace_back(name, func.Kind == EWindowFuncKind::Aggregate ? Member(lastRowArg, name) : Member(rowArg, name));
     }
     auto rowLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {rowArg}), BuildStruct(members));
@@ -1130,23 +1309,221 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangePeerGroups(TExprNode::TPtr wid
     return BuildExpandFromStructs(result);
 }
 
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRowBound(EWindowFrameBound kind, ui64 value) const {
+    TString direction = "Following";
+    TExprNode::TPtr number;
+    switch (kind) {
+        case EWindowFrameBound::UnboundedPreceding:
+        case EWindowFrameBound::UnboundedFollowing:
+            direction = kind == EWindowFrameBound::UnboundedPreceding ? "Preceding" : "Following";
+            number = Ctx.NewCallable(Pos, "AsTagged", {Ctx.NewCallable(Pos, "Void", {}), Ctx.NewAtom(Pos, "inf")});
+            break;
+        case EWindowFrameBound::Preceding:
+        case EWindowFrameBound::Following:
+        case EWindowFrameBound::CurrentRow:
+            direction = kind == EWindowFrameBound::Preceding ? "Preceding" : "Following";
+            if (kind == EWindowFrameBound::CurrentRow) {
+                value = 0;
+            }
+            // clang-format off
+            number = Ctx.Builder(Pos)
+                .Callable("AsStruct")
+                    .List(0)
+                        .Atom(0, "FiniteValue")
+                        .Add(1, BuildUint64(value))
+                    .Seal()
+                .Seal().Build();
+            // clang-format on
+            break;
+    }
+
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("AsStruct")
+            .List(0).Atom(0, "Direction").Callable(1, "String").Atom(0, direction).Seal().Seal()
+            .List(1).Atom(0, "Number").Add(1, number).Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeBound(EWindowFrameBound kind, ui64 value, const TString& sortedColumn) const {
+    TString direction = "Following";
+    TExprNode::TPtr number;
+    switch (kind) {
+        case EWindowFrameBound::UnboundedPreceding:
+        case EWindowFrameBound::UnboundedFollowing:
+            direction = kind == EWindowFrameBound::UnboundedPreceding ? "Preceding" : "Following";
+            number = Ctx.NewCallable(Pos, "AsTagged", {Ctx.NewCallable(Pos, "Void", {}), Ctx.NewAtom(Pos, "inf")});
+            break;
+        case EWindowFrameBound::CurrentRow:
+            number = Ctx.NewCallable(Pos, "AsTagged", {Ctx.NewCallable(Pos, "Void", {}), Ctx.NewAtom(Pos, "zero")});
+            break;
+        case EWindowFrameBound::Preceding:
+        case EWindowFrameBound::Following:
+            direction = kind == EWindowFrameBound::Preceding ? "Preceding" : "Following";
+            // clang-format off
+            number = Ctx.Builder(Pos)
+                .Callable("AsStruct")
+                    .List(0)
+                        .Atom(0, "FiniteValue")
+                        .Callable(1, "Int32").Atom(0, ToString(value)).Seal()
+                    .Seal()
+                .Seal().Build();
+            // clang-format on
+            break;
+    }
+
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("AsStruct")
+            .List(0).Atom(0, "Direction").Callable(1, "String").Atom(0, direction).Seal().Seal()
+            .List(1).Atom(0, "Number").Add(1, number).Seal()
+            .List(2).Atom(0, "SortedColumn").Callable(1, "String").Atom(0, sortedColumn).Seal().Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRowFrames(TExprNode::TPtr wideFlow) const {
+    const auto& frame = Window.GetFrame();
+
+    // clang-format off
+    auto interval = Ctx.Builder(Pos)
+        .Callable("AsStruct")
+            .List(0).Atom(0, "Min").Add(1, BuildRowBound(frame.BeginKind, frame.BeginValue)).Seal()
+            .List(1).Atom(0, "Max").Add(1, BuildRowBound(frame.EndKind, frame.EndValue)).Seal()
+        .Seal().Build();
+    // clang-format on
+
+    return BuildFrameFold(wideFlow, BuildFrameBounds({}, {interval}, {}), /*isRange=*/false, /*ascending=*/true);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeFrames(TExprNode::TPtr wideFlow) const {
+    const auto& frame = Window.GetFrame();
+    const auto& sortElement = Window.GetSortElements().Items().front();
+    const auto sortedColumn = Names.Get(sortElement.first);
+
+    // clang-format off
+    auto interval = Ctx.Builder(Pos)
+        .Callable("AsStruct")
+            .List(0).Atom(0, "Min").Add(1, BuildRangeBound(frame.BeginKind, frame.BeginValue, sortedColumn)).Seal()
+            .List(1).Atom(0, "Max").Add(1, BuildRangeBound(frame.EndKind, frame.EndValue, sortedColumn)).Seal()
+        .Seal().Build();
+    // clang-format on
+
+    return BuildFrameFold(wideFlow, BuildFrameBounds({}, {}, {}, {interval}), /*isRange=*/true, sortElement.second.Ascending);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildFrameFold(TExprNode::TPtr wideFlow, TExprNode::TPtr bounds, bool isRange, bool ascending) const {
+    auto queue = BuildQueue(wideFlow);
+    auto zero = BuildUint64(0);
+    auto collected = BuildCollector(BuildChainOutputs(wideFlow), queue, bounds, ascending);
+
+    auto rowArg = Ctx.NewArgument(Pos, "frame_row");
+    // clang-format off
+    auto frameRows = Ctx.Builder(Pos)
+        .Callable("OrderedMap")
+            .Callable(0, "WinFrame")
+                .Add(0, queue)
+                .Add(1, zero)
+                .Callable(2, "Bool").Atom(0, "false").Seal()
+                .Callable(3, "Bool").Atom(0, isRange ? "true" : "false").Seal()
+                .Callable(4, "Bool").Atom(0, "false").Seal()
+                .Callable(5, "DependsOn").Add(0, rowArg).Seal()
+            .Seal()
+            .Lambda(1)
+                .Param("frame_item")
+                .Arg("frame_item")
+            .Seal()
+        .Seal().Build();
+
+    auto folded = Ctx.Builder(Pos)
+        .Callable("Fold1")
+            .Add(0, frameRows)
+            .Add(1, BuildFoldLambda(/*update=*/false))
+            .Add(2, BuildFoldLambda(/*update=*/true))
+        .Seal().Build();
+    // clang-format on
+
+    TVector<std::pair<TString, TExprNode::TPtr>> members;
+    for (const auto& column : Inputs) {
+        members.emplace_back(Names.Get(column), Member(rowArg, Names.Get(column)));
+    }
+    const auto& funcs = Functions;
+    for (ui32 f = 0; f < funcs.size(); ++f) {
+        const auto& func = *Window.GetWindowFuncs().Find(funcs[f]);
+        const auto name = Names.Get(funcs[f]);
+        if (func.Kind == EWindowFuncKind::Native) {
+            members.emplace_back(name, Member(rowArg, name));
+            continue;
+        }
+
+        auto stateArg = Ctx.NewArgument(Pos, "frame_state");
+        auto result = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {stateArg}),
+                                    BuildResultFromAccumulator(funcs[f], Member(stateArg, AccumulatorName(f))));
+        if (func.Function == "count") {
+            members.emplace_back(name, Ctx.NewCallable(Pos, "Coalesce", {Ctx.NewCallable(Pos, "Map", {folded, result}), BuildUint64(0)}));
+        } else if (IsNonOptionalAggregate(funcs[f])) {
+            members.emplace_back(name, Ctx.NewCallable(Pos, "Unwrap", {Ctx.NewCallable(Pos, "Map", {folded, result})}));
+        } else {
+            members.emplace_back(name, Ctx.NewCallable(Pos, "FlatMap", {folded, result}));
+        }
+    }
+
+    auto rowLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, {rowArg}), BuildStruct(members));
+    // clang-format off
+    auto result = Ctx.Builder(Pos)
+        .Callable("OrderedMap")
+            .Callable(0, "ToFlow")
+                .Add(0, collected)
+            .Seal()
+            .Add(1, rowLambda)
+        .Seal().Build();
+    // clang-format on
+
+    return BuildExpandFromStructs(result);
+}
+
 TExprNode::TPtr TPhysicalWindowBuilder::BuildPartitionHandler(TExprNode::TPtr wideFlow) const {
+    // f(x) OVER (PARTITION BY p), i.e. ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
     if (WholePartition) {
         return BuildWholePartition(wideFlow);
     }
+    // f(x) OVER (ORDER BY num), i.e. RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW over one numeric key.
     if (RangeCarry) {
         return BuildRangeCarry(wideFlow);
     }
+    // f(x) OVER (ORDER BY name, id), the same RANGE frame over any other keys.
     if (RangePeerGroups) {
         return BuildRangePeerGroups(wideFlow);
     }
+    // RANGE BETWEEN UNBOUNDED PRECEDING AND k PRECEDING (or k FOLLOWING).
+    if (RangeIncremental) {
+        return BuildRangeIncremental(wideFlow);
+    }
+    // RANGE BETWEEN n PRECEDING AND k FOLLOWING, or RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING.
+    if (RangeFrames) {
+        return BuildRangeFrames(wideFlow);
+    }
+    // ROWS BETWEEN UNBOUNDED PRECEDING AND k PRECEDING (or k FOLLOWING).
+    if (RowIncremental) {
+        return BuildRowIncremental(wideFlow);
+    }
+    // ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING.
+    if (RowSuffix) {
+        return BuildRowSuffix(wideFlow);
+    }
+    // ROWS BETWEEN n PRECEDING AND k FOLLOWING.
+    if (RowFrames) {
+        return BuildRowFrames(wideFlow);
+    }
+    // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW, or ranking functions only.
     return BuildChain(wideFlow);
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    Y_ENSURE(CanBuildWindow(*Window), "This window cannot be evaluated by a single forward pass");
+    Y_ENSURE(CanBuildWindow(Window), "This window cannot be evaluated by a single forward pass");
 
-    Prepare(NPhysicalConvertionUtils::GetLiveInputIUs(*Window, 0));
+    Prepare(NPhysicalConvertionUtils::GetLiveInputIUs(Window, 0));
 
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
@@ -1154,7 +1531,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, Inputs, Ctx);
+    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, Inputs, Ctx, Names);
 
     // Sort for the partitioning keys + order by keys.
     if (const auto sortKeys = BuildSortKeys(); !sortKeys.empty()) {
@@ -1168,12 +1545,12 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         // clang-format on
     }
 
-    if (Window->GetPartitionKeys().empty()) {
+    if (Window.GetPartitionKeys().Items().empty()) {
         // If no partitions we use whole stage as a partition.
         input = BuildPartitionHandler(input);
     } else {
         TExprNode::TListType handlerArgs;
-        for (ui32 i = 0; i < Window->GetPartitionKeys().size(); ++i) {
+        for (ui32 i = 0; i < Window.GetPartitionKeys().Items().size(); ++i) {
             handlerArgs.push_back(Ctx.NewArgument(Pos, "chop_key_" + ToString(i)));
         }
         auto flowArg = Ctx.NewArgument(Pos, "chop_flow");
@@ -1196,8 +1573,8 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(
         input,
         OutputLayout,
-        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Window)),
-        Ctx);
+        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Window), Names),
+        Ctx, Names);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

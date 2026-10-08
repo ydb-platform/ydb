@@ -182,13 +182,29 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
 
     static const THashMap<TString, TFlagValueParser> Parsers = {
         {
+            "GroupByLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByLimit)) {
+                    ThrowBad("GroupByLimit", args);
+                }
+            },
+        },
+        {
+            "GroupByCubeLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByCubeLimit)) {
+                    ThrowBad("GroupByCubeLimit", args);
+                }
+            },
+        },
+        {
             "YqlSelect",
             [](const TVector<TString>& args, TTranslationSettings& s) {
-                if (args.size() == 1 && args[0] == "disable") {
+                if (!args.empty() && args[0] == "disable") {
                     s.YqlSelect = EYqlSelect::Disable;
-                } else if (args.size() == 1 && args[0] == "auto") {
+                } else if (!args.empty() && args[0] == "auto") {
                     s.YqlSelect = EYqlSelect::Auto;
-                } else if (args.size() == 1 && args[0] == "force") {
+                } else if (!args.empty() && args[0] == "force") {
                     s.YqlSelect = EYqlSelect::Force;
                 } else {
                     ThrowBad("YqlSelect", args);
@@ -198,7 +214,7 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         {
             "MaxParseTreeDepth",
             [](const TVector<TString>& args, TTranslationSettings& s) {
-                if (args.size() != 1) {
+                if (args.empty()) {
                     ThrowBad("MaxParseTreeDepth", args);
                 }
 
@@ -218,6 +234,9 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         } else if (const auto* parser = Parsers.FindPtr(flag)) {
             (*parser)(args, settings);
         } else {
+            if (settings.StrictConfigValidation) {
+                throw yexception() << "Unknown SQL flag: " << flag;
+            }
             // Ignore unknown valuable flags, like we are
             // able to ignore TTranslationSettings::Flags.
         }

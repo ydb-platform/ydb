@@ -2,9 +2,9 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_topic_client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 
 namespace NYql {
 
@@ -15,7 +15,7 @@ struct TCompositeTopicReadSessionSettings {
     ui64 AmountPartitionsCount = 0;
     ui64 InputIndex = 0;
     NMonitoring::TDynamicCounterPtr Counters;
-    NYdb::NTopic::TReadSessionSettings BaseSettings;
+    NFq::TMessageStreamReadSessionSettings BaseSettings;
     TDuration IdleTimeout;
     TDuration MaxPartitionReadSkew;
     NActors::TActorId AggregatorActor; // TDqPqInfoAggregationActor
@@ -32,9 +32,9 @@ public:
     virtual TString GetInternalState() = 0;
 };
 
-std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
+std::pair<std::shared_ptr<NFq::IMessageStreamReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
     const NActors::TActorContext& ctx,
-    ITopicDataClient& topicClient,
+    NFq::IMessageStreamDataClient& topicClient,
     const TCompositeTopicReadSessionSettings& settings
 );
 

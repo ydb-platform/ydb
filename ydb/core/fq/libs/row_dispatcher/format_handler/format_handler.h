@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 #include <ydb/library/actors/util/rope.h>
 
 namespace NFq::NRowDispatcher {
@@ -58,7 +59,7 @@ public:
     };
 
 public:
-    virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
+    virtual void ParseRecords(const std::vector<TMessageStreamRecord>& records) = 0;
 
     virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId, ui64 maxBatchSize) = 0;
     virtual bool HasClientData(NActors::TActorId clientId) const = 0;

@@ -1480,6 +1480,8 @@ private:
             operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
+        } else if (auto maybeSort = TMaybeNode<TCoWideSort>(node)) {
+            operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
@@ -1508,6 +1510,8 @@ private:
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
         } else if (auto maybeBlockHashJoin = TMaybeNode<TDqBlockHashJoinCore>(node)) {
             operatorId = Visit(maybeBlockHashJoin.Cast(), planNode);
+        } else if (auto maybeScalarHashJoin = TMaybeNode<TDqScalarHashJoinCore>(node)) {
+            operatorId = Visit(maybeScalarHashJoin.Cast(), planNode);
         } else if (auto lookupJoin = TMaybeNode<TKqpIndexLookupJoin>(node)) {
             operatorId = Visit(lookupJoin.Cast(), planNode);
         } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
@@ -1745,6 +1749,39 @@ private:
         return AddOperator(planNode, "Sort", std::move(op));
     }
 
+    std::variant<ui32, TArgContext> Visit(const TCoWideSort& sort, TQueryPlanNode& planNode) {
+        const auto& input = sort.Input().Ref();
+        YQL_ENSURE(input.IsCallable("ExpandMap") && input.ChildrenSize() == 2);
+
+        const auto& expandLambda = input.Tail();
+        YQL_ENSURE(expandLambda.IsLambda());
+
+        TStringBuilder sortBy;
+        for (const auto& key : sort.Keys()) {
+            const auto index = FromString<ui32>(key.Index().Value());
+            YQL_ENSURE(index + 1 < expandLambda.ChildrenSize());
+
+            const TExprBase item(expandLambda.ChildPtr(index + 1));
+            const auto ascending = FromString<bool>(key.Direction().Cast<TCoBool>().Literal().Value());
+
+            if (sortBy.size()) {
+                sortBy << ", ";
+            }
+            if (const auto member = item.Maybe<TCoMember>()) {
+                sortBy << member.Cast().Name().Value();
+            } else {
+                sortBy << NPlanUtils::PrettyExprStr(item);
+            }
+            sortBy << (ascending ? " asc" : " desc");
+        }
+
+        TOperator op;
+        op.Properties["Name"] = "WideSort";
+        op.Properties["SortBy"] = TString(sortBy);
+
+        return AddOperator(planNode, "WideSort", std::move(op));
+    }
+
     std::variant<ui32, TArgContext> Visit(const TCoTop& top, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Top";
@@ -1963,6 +2000,18 @@ private:
 
     std::variant<ui32, TArgContext> Visit(const TDqBlockHashJoinCore& join, TQueryPlanNode& planNode) {
         const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (BlockHash)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        op.Properties["Condition"] = MakeJoinConditionString(join.LeftKeysColumnNames(), join.RightKeysColumnNames());
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TDqScalarHashJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (ScalarHash)";
 
         TOperator op;
         op.Properties["Name"] = name;
@@ -3825,6 +3874,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         auto& inputBytes = history.InsertValue("InputInflightBytes", NJson::JSON_ARRAY);
                         for (auto& u : node.GetGlobalMemoryUsageMB()) {
                             inputBytes.AppendValue(u.GetInputInflightBytes());
+                        }
+
+                        auto& queryAllocated = history.InsertValue("MemQueryAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            queryAllocated.AppendValue(u.GetMemQueryAllocated());
                         }
                     }
                 }

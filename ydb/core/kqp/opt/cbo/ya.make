@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     cbo_hints.cpp
@@ -24,7 +24,5 @@ PEERDIR(
 CHECK_DEPENDENT_DIRS(DENY PEERDIRS
     yql/essentials/core/cbo
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

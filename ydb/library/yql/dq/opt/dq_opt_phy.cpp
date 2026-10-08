@@ -350,6 +350,57 @@ TExprNode::TPtr MaybeAssumeChopped(TPositionHandle pos, TExprNode::TPtr sorted,
         .Build();
 }
 
+TExprNode::TPtr BuildWideSort(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNode::TPtr& sortDirections,
+    const TExprNode& sortKeySelector, const TStructExprType& structType, TExprContext& ctx)
+{
+    constexpr size_t wideLimit = 101;
+    const auto keyExprs = sortKeySelector.Tail().IsList()
+        ? sortKeySelector.Tail().ChildrenList()
+        : TExprNode::TListType{sortKeySelector.TailPtr()};
+    if (structType.GetSize() + keyExprs.size() > wideLimit) {
+        return {};
+    }
+
+    const auto& selectorArg = sortKeySelector.Head().Head();
+    auto row = ctx.NewArgument(pos, "row");
+    TExprNode::TListType wideItems;
+    TExprNode::TListType wideArgs;
+    TExprNode::TListType narrowItems;
+    for (const auto* item : structType.GetItems()) {
+        auto name = ctx.NewAtom(pos, item->GetName());
+        wideItems.push_back(ctx.NewCallable(pos, "Member", {row, name}));
+        wideArgs.push_back(ctx.NewArgument(pos, "field"));
+        narrowItems.push_back(ctx.NewList(pos, {std::move(name), wideArgs.back()}));
+    }
+
+    THashSet<ui32> usedIndexes;
+    TExprNode::TListType keys;
+    for (ui32 i = 0; i < keyExprs.size(); ++i) {
+        const auto& key = keyExprs[i];
+        ui32 index = wideItems.size();
+        if (key->IsCallable("Member") && &key->Head() == &selectorArg) {
+            index = *structType.FindItem(key->Tail().Content());
+        } else {
+            wideItems.push_back(ctx.ReplaceNode(TExprNode::TPtr(key), selectorArg, row));
+            wideArgs.push_back(ctx.NewArgument(pos, "key"));
+        }
+        // WideSort rejects repeated keys
+        if (usedIndexes.insert(index).second) {
+            keys.push_back(ctx.NewList(pos, {
+                ctx.NewAtom(pos, index),
+                sortDirections->IsList() ? sortDirections->ChildPtr(i) : sortDirections}));
+        }
+    }
+
+    auto wide = ctx.NewCallable(pos, "ExpandMap", {
+        ctx.NewCallable(pos, "ToFlow", {input}),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {std::move(row)}), std::move(wideItems))});
+    auto sorted = ctx.NewCallable(pos, "WideSort", {std::move(wide), ctx.NewList(pos, std::move(keys))});
+    return ctx.NewCallable(pos, "NarrowMap", {std::move(sorted),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(wideArgs)),
+            ctx.NewCallable(pos, "AsStruct", std::move(narrowItems)))});
+}
+
 template <typename TPartition>
 TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto pos = partition.Pos();
@@ -369,13 +420,21 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
         sortKeySelector = ctx.DeepCopyLambda(keyExtractor.Ref());
     }
 
-    auto sorted = ctx.Builder(pos)
-        .Callable("Sort")
-            .Add(0, input)
-            .Add(1, std::move(sortDirections))
-            .Add(2, std::move(sortKeySelector))
-        .Seal()
-        .Build();
+    TExprNode::TPtr sorted;
+    if (const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+        itemType && itemType->GetKind() == ETypeAnnotationKind::Struct)
+    {
+        sorted = BuildWideSort(pos, input, sortDirections, *sortKeySelector, *itemType->template Cast<TStructExprType>(), ctx);
+    }
+    if (!sorted) {
+        sorted = ctx.Builder(pos)
+            .Callable("Sort")
+                .Add(0, input)
+                .Add(1, std::move(sortDirections))
+                .Add(2, std::move(sortKeySelector))
+            .Seal()
+            .Build();
+    }
 
     return MaybeAssumeChopped(pos, std::move(sorted),
         keyExtractor.Body().Ref(), keyExtractor.Args().Arg(0).Ref(),
@@ -3206,7 +3265,8 @@ TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap,
     bool buildCollectStage,
     bool blockHashJoinBuildSideLeft,
-    bool enableBlockHashJoinEqualNulls
+    bool enableBlockHashJoinEqualNulls,
+    bool useScalarHashJoinForMap
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -3220,6 +3280,7 @@ TExprBase DqBuildJoin(
 
     if (streaming) {
         useGraceCoreForMap = false;
+        useScalarHashJoinForMap = false;
     }
 
     auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
@@ -3276,7 +3337,8 @@ TExprBase DqBuildJoin(
     // separate stage to receive data from both sides of join.
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
-    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage);
+    useScalarHashJoinForMap = useScalarHashJoinForMap && DqCanUseScalarHashJoinForMap(join, ctx);
+    return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage, useScalarHashJoinForMap);
 }
 
 TExprBase DqPrecomputeToInput(const TExprBase& node, TExprContext& ctx) {

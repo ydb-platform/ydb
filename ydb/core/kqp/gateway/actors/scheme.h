@@ -22,13 +22,13 @@ public:
     using TResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
     using TResult = NYql::IKikimrGateway::TGenericResult;
 
-    TSchemeOpRequestHandler(TRequest* request, NThreading::TPromise<TResult> promise, bool failedOnAlreadyExists)
-        : TBase(request, promise, {})
+    TSchemeOpRequestHandler(TRequest* request, NThreading::TPromise<TResult> promise, bool failedOnAlreadyExists, NWilson::TTraceId traceId = {})
+        : TBase(request, promise, {}, std::move(traceId))
         , FailedOnAlreadyExists(failedOnAlreadyExists)
         {}
 
-    TSchemeOpRequestHandler(TRequest* request, NThreading::TPromise<TResult> promise, bool failedOnAlreadyExists, bool successOnNotExist)
-        : TBase(request, promise, {})
+    TSchemeOpRequestHandler(TRequest* request, NThreading::TPromise<TResult> promise, bool failedOnAlreadyExists, bool successOnNotExist, NWilson::TTraceId traceId = {})
+        : TBase(request, promise, {}, std::move(traceId))
         , FailedOnAlreadyExists(failedOnAlreadyExists)
         , SuccessOnNotExist(successOnNotExist)
         {}
@@ -36,7 +36,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId txproxy = MakeTxProxyID();
-        ctx.Send(txproxy, this->Request.Release());
+        ctx.Send(txproxy, this->Request.Release(), 0, 0, NWilson::TTraceId(this->TraceId));
 
         this->Become(&TSchemeOpRequestHandler::AwaitState);
     }
@@ -64,7 +64,7 @@ public:
                 if (response.HasSchemeShardOperationId()) {
                     OperationId = response.GetSchemeShardOperationId();
                 }
-                NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
+                NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release(), 0, NWilson::TTraceId(this->TraceId));
 
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::KQP_GATEWAY, "Sent TEvNotifyTxCompletion request",
                     {"txId", response.GetTxId()});

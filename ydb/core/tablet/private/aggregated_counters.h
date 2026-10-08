@@ -115,7 +115,10 @@ public:
 
     void Reserve(size_t hint);
 
-    void AddCounter(
+    // Returns whether the histogram is derivative (HIST_RATE, accumulates increments)
+    // rather than non-derivative (an Integral percentile counter or a HIST(x) aggregate,
+    // monlib HIST, holds the current state)
+    bool AddCounter(
         const char* name,
         const NKikimr::TTabletPercentileCounter& percentileCounter,
         THashMap<TString, THolder<THistogramCounter>>& histogramAggregates);

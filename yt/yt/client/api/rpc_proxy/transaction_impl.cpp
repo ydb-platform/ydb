@@ -197,7 +197,7 @@ void TTransaction::Detach()
     YT_UNUSED_FUTURE(req->Invoke());
 }
 
-void TTransaction::Abandon(TGuard<NThreading::TSpinLock>* /*guard*/)
+void TTransaction::Abandon(TGuard<TSpinLock>* /*guard*/)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -1117,7 +1117,7 @@ TFuture<void> TTransaction::FinishDistributedWriteFileSession(
 }
 
 TFuture<void> TTransaction::DoAbort(
-    TGuard<NThreading::TSpinLock>* guard,
+    TGuard<TSpinLock>* guard,
     const TTransactionAbortOptions& /*options*/)
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);

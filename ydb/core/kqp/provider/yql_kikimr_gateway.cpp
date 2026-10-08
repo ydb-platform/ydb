@@ -248,57 +248,80 @@ NKikimr::NExternalSource::TAuth TExternalSourceAuth::MakeExternalSourceAuth() co
 TExternalDataSource::TExternalDataSource(
     const NKikimrSchemeOp::TExternalDataSourceDescription& description,
     const TString& dataSourcePath)
-    : Type(description.GetSourceType())
+    : DatabaseType(DatabaseTypeFromString(description.GetSourceType()))
     , Location(description.GetLocation())
     , Installation(description.GetInstallation())
     , DataSourcePath(dataSourcePath)
     , Auth(description.GetAuth())
     , Properties(description.GetProperties())
 {
-    Y_ENSURE(!Type.empty(), "TExternalDataSource: Type is required");
-    Y_ENSURE(!IsYdbBased() || !Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
+    Y_ENSURE(!description.GetSourceType().empty(), "TExternalDataSource: Type is required");
+    Y_ENSURE(!IsYdb() || !Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
 }
 
 TExternalDataSource TExternalDataSource::CreateFromDescription(
     const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-    const TString& dataSourcePath)
+    const TString& dataSourcePath,
+    EKind kind)
 {
-    return TExternalDataSource(description, dataSourcePath);
+    auto source = TExternalDataSource(description, dataSourcePath);
+    if (kind != EKind::Unknown) {
+        source.InitObjectKind(kind);
+    }
+    return source;
 }
 
 TExternalDataSource TExternalDataSource::CreateForLocalTopic(const TString& cluster,
     const TString& database, const TString& transientToken)
 {
     NKikimrSchemeOp::TExternalDataSourceDescription description;
-    description.SetSourceType(ToString(EDatabaseType::YdbTopics));
+    description.SetSourceType(ToString(EDatabaseType::Ydb));
     description.MutableAuth()->MutableNone();
     (*description.MutableProperties()->mutable_properties())["database_name"] = database;
     if (!transientToken.empty()) {
         (*description.MutableProperties()->mutable_properties())["transient_token"] = transientToken;
     }
-    return CreateFromDescription(description, cluster);
+    return CreateFromDescription(description, cluster, EKind::MessageStream);
 }
 
 void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TString& dataSourcePath) {
     TExternalDataSource updated = *this;
-    updated.Type = type;
+    updated.DatabaseType = DatabaseTypeFromString(type);
+    if (updated.Kind == EKind::Unknown) {
+        updated.Kind = EKind::Table;
+    }
     updated.DataSourcePath = dataSourcePath;
-    Y_ENSURE(!updated.Type.empty(), "TExternalDataSource: Type is required");
-    Y_ENSURE(!updated.IsYdbBased() || !updated.Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
+    Y_ENSURE(updated.DatabaseType, "TExternalDataSource: unknown source type: " << type);
+    Y_ENSURE(!updated.IsYdb() || !updated.Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
     *this = std::move(updated);
 }
 
-void TExternalDataSource::SetYdbTopicType() {
-    Y_ENSURE(IsYdb(), "TExternalDataSource: only a Ydb source can resolve to a topic");
-    Type = ToString(EDatabaseType::YdbTopics);
+void TExternalDataSource::InitObjectKind(EKind kind) {
+    const bool isYt = DatabaseType == EDatabaseType::YT;
+    Y_ENSURE((IsYdb() || isYt) && Kind == EKind::Unknown,
+        "TExternalDataSource: only an unresolved Ydb or YT source can initialize object kind");
+    Y_ENSURE(kind == EKind::Table || kind == EKind::MessageStream,
+        "TExternalDataSource: object kind does not match the connection type");
+    Kind = kind;
+}
+
+TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const {
+    YQL_ENSURE(externalSourceFactory, "External source factory is null");
+    if (IsMessageStream()) {
+        YQL_ENSURE(IsYdb() || DatabaseType == EDatabaseType::YT,
+            "A message stream must use a Ydb or YT connection");
+        return IsYdb() ? TString{NYql::PqProviderName} : TString{NYql::YtProviderName};
+    }
+    YQL_ENSURE(DatabaseType, "Unknown source type for external data source \"" << DataSourcePath << "\"");
+    return externalSourceFactory->GetOrCreate(*DatabaseType)->GetName();
 }
 
 bool TExternalDataSource::IsYdb() const {
-    return Type == ToString(EDatabaseType::Ydb);
+    return DatabaseType == EDatabaseType::Ydb;
 }
 
-bool TExternalDataSource::IsYdbTopics() const {
-    return Type == ToString(EDatabaseType::YdbTopics);
+bool TExternalDataSource::IsMessageStream() const {
+    return Kind == EKind::MessageStream;
 }
 
 TString TExternalDataSource::GetDatabaseName() const {
@@ -322,7 +345,7 @@ THashMap<TString, TString> TExternalDataSource::BuildConnectorProperties() const
     THashMap<TString, TString> properties;
     properties["location"] = Location;
     properties["installation"] = Installation;
-    properties["source_type"] = Type;
+    properties["source_type"] = ToStringDatabaseType(DatabaseType);
 
     properties.insert(Properties.GetProperties().begin(), Properties.GetProperties().end());
 
@@ -337,7 +360,7 @@ NKikimr::NExternalSource::TMetadata TExternalDataSource::MakeExternalSourceMetad
     NKikimr::NExternalSource::TMetadata metadata;
     metadata.DataSourceLocation = Location;
     metadata.DataSourcePath = DataSourcePath;
-    metadata.Type = Type;
+    metadata.Type = ToStringDatabaseType(DatabaseType);
     metadata.Auth = Auth.MakeExternalSourceAuth();
     return metadata;
 }
@@ -345,10 +368,10 @@ NKikimr::NExternalSource::TMetadata TExternalDataSource::MakeExternalSourceMetad
 TExternalTable TExternalTable::CreateFromDescription(const NKikimrSchemeOp::TExternalTableDescription& description)
 {
     TExternalTable table;
-    table.State = TUnresolved{description.GetSourceType(), description.GetDataSourcePath()};
+    table.State = TUnresolved{DatabaseTypeFromString(description.GetSourceType()), description.GetDataSourcePath()};
     table.Location = description.GetLocation();
     table.Content = description.GetContent();
-    Y_ENSURE(!table.GetType().empty(), "TExternalTable: Type is required");
+    Y_ENSURE(!description.GetSourceType().empty(), "TExternalTable: Type is required");
     return table;
 }
 
@@ -357,9 +380,9 @@ void TExternalTable::InitExternalDataSource(const TKikimrTableMetadataPtr& metad
     Y_ENSURE(metadata && metadata->IsExternalDataSource(), "TExternalTable: underlying data source metadata is required");
     const auto& dataSource = metadata->ExternalDataSource();
     const auto& unresolved = std::get<TUnresolved>(State);
-    Y_ENSURE(unresolved.Type == dataSource.GetType(),
-        "TExternalTable: type mismatch, expected: " << unresolved.Type
-        << ", but underlying external data source has type: " << dataSource.GetType());
+    Y_ENSURE(unresolved.DatabaseType == dataSource.GetDatabaseType(),
+        "TExternalTable: type mismatch, expected: " << ToStringDatabaseType(unresolved.DatabaseType, "<unknown>")
+        << ", but underlying external data source has type: " << ToStringDatabaseType(dataSource.GetDatabaseType(), "<unknown>"));
     State = TResolved{metadata};
 }
 
@@ -527,7 +550,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs || ExternalDataChannelsCount;
+        || StoreExternalBlobs || ExternalDataChannelsCount || MetricsLevel;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
@@ -692,6 +715,55 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
             outTier->mutable_delete_();
         }
     }
+}
+
+bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error) {
+    static constexpr Ydb::Table::MetricsSettings::MetricsLevel numericLevels[] = {
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION,
+    };
+
+    const TString value = to_lower(TString(raw));
+    ui64 numericVal = 0;
+    if (TryFromString<ui64>(value, numericVal) && numericVal >= 1 && numericVal <= std::size(numericLevels)) {
+        out = numericLevels[numericVal - 1];
+    } else if (value == "database") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE;
+    } else if (value == "table") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE;
+    } else if (value == "partition") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION;
+    } else {
+        error = TStringBuilder() << "METRICS_LEVEL is invalid: " << raw;
+        return false;
+    }
+
+    return true;
+}
+
+bool ParseDatabaseTablesMetricsLevel(TStringBuf raw,
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error)
+{
+    Ydb::Table::MetricsSettings::MetricsLevel level;
+    if (ParseTablesMetricsLevel(raw, level, error)) {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+            return true;
+        default:
+            break;
+        }
+    }
+
+    error = TStringBuilder() << "TABLES_METRICS_LEVEL is invalid: " << raw;
+    return false;
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

@@ -318,6 +318,7 @@ bool TPropose::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationCon
             context.SS);
 
     context.SS->SubDomains.Set(pathId, alter);
+    context.SS->UpdateDatabaseSpaceSubscriptions();
     context.SS->PersistSubDomain(db, pathId, *alter);
     context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter);
 

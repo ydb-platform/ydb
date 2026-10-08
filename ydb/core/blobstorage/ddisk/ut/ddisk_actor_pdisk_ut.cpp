@@ -91,9 +91,74 @@ void TestWriteAndReadPayloadLayout(NDDisk::TDDiskConfig config, EPayloadLayout l
     }
 }
 
+void TestDevNullWriteAndRead(bool checksums) {
+    NDDisk::TDDiskConfig config;
+    config.DevNullMode = true;
+    config.EnableChecksums = checksums;
+    config.CheckChecksumBeforeWrite = true;
+    config.CheckChecksumWhenRead = true;
+    TTestContext ctx(config);
+    const auto creds = Connect(ctx, 702, 1);
+    const TString zeros(2 * MinBlockSize, '\0');
+    // With checksums enabled, zero writes seed resident metadata for used blocks.
+    // Nonzero writes without checksums demonstrate that the payload is discarded.
+    const TString payload = checksums ? zeros : MakeData('D', zeros.size());
+    for (ui32 attempt = 0; attempt < 2; ++attempt) {
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(7, MinBlockSize, payload.size()), NDDisk::TWriteInstruction(0));
+        if (checksums) {
+            write->AddPayloadThenChecksum(MakeAlignedRope(payload));
+        } else {
+            write->AddPayload(MakeAlignedRope(payload));
+        }
+        AssertStatus<NDDisk::TEvWriteResult>(
+            ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        auto read = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {7, MinBlockSize, static_cast<ui32>(zeros.size())}, {true}));
+        AssertReadResult(read, zeros, checksums);
+    }
+    ctx.StopDDisk(0);
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
+    Y_UNIT_TEST(SectorMapRejectsMultiplePDisks) {
+        auto sectors = MakeIntrusive<NPDisk::TSectorMap>(64_GB);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TTestContext({}, NLog::PRI_ERROR, 2, ChunkSize, false, false, sectors),
+            yexception, "SectorMap supports exactly one PDisk");
+
+        TTestContext ctx({.ForcePDiskFallback = true}, NLog::PRI_ERROR, 1,
+            ChunkSize, false, false, sectors);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ctx.AddPDisk(), yexception,
+            "SectorMap supports exactly one PDisk");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ctx.AddDisk(), yexception,
+            "SectorMap supports exactly one PDisk");
+        UNIT_ASSERT_VALUES_EQUAL(ctx.PDisks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Disks.size(), 1);
+
+        // Rejected additions must leave the existing PDisk usable.
+        const auto creds = Connect(ctx, 703, 1);
+        const TString data = MakeData('S', MinBlockSize);
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
+        write->AddPayloadThenChecksum(MakeAlignedRope(data));
+        AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+            new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true})), data);
+    }
+
+    Y_UNIT_TEST(DevNullDiscardsNonzeroWritesWithoutChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestDevNullWriteAndRead(false);
+    }
+
+    Y_UNIT_TEST(DevNullVerifiesZeroWritesAndReadsWithChecksums_Uring) {
+        if (!NPDisk::RequireUring()) { return; }
+        TestDevNullWriteAndRead(true);
+    }
+
     Y_UNIT_TEST(StartupRepairsAbandonedReservations_PDiskFallback) {
         TestShutdownReleasesReservations({.ForcePDiskFallback = true}, true);
     }

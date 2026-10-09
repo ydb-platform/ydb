@@ -13,6 +13,7 @@ using namespace NKikimrIamDelegation;
 enum class EReadStatus { Ready, Missing, Retry };
 enum class EExecution { Complete, Retry };
 
+constexpr ui32 MaxPageSize = 1000;
 constexpr ui32 MaxClaimSize = 100;
 constexpr ui64 MinLeaseUs = 1'000'000;
 constexpr ui64 MaxLeaseUs = 60'000'000;
@@ -624,6 +625,43 @@ struct TIamDelegationTablet::TTxRequest final
         return Reply(record, record.HasSecret() ? &secret : nullptr);
     }
 
+    EExecution ListInventory(NIceDb::TNiceDb& db, const TListInventoryRequest& request) {
+        if (!ValidId(request.GetDatabaseIncarnation()) || !request.GetPageSize() || request.GetPageSize() > MaxPageSize
+            || request.GetAfterOperationId().size() > 256
+            || (!request.GetAfterOperationId().empty() && !request.GetInventoryRevision())) {
+            return Error(INVALID_ARGUMENT, "A bounded page size and revision-bound continuation are required");
+        }
+        TDatabaseRecord database;
+        if (const auto status = ReadDatabase(db, request.GetDatabaseIncarnation(), database); status != EReadStatus::Ready) {
+            return ReadError(status, "Database incarnation");
+        }
+        if (request.GetInventoryRevision() && request.GetInventoryRevision() != database.GetInventoryRevision()) {
+            return Error(SNAPSHOT_EXPIRED, "Inventory changed; restart enumeration from its first page");
+        }
+        auto rows = db.Table<TSchema::Inventory>()
+            .GreaterOrEqual(request.GetDatabaseIncarnation(), request.GetAfterOperationId())
+            .LessOrEqual(request.GetDatabaseIncarnation())
+            .Select<TSchema::Inventory::OperationId, TSchema::Inventory::Data>();
+        if (!rows.IsReady()) {
+            return EExecution::Retry;
+        }
+        while (!rows.EndOfSet()) {
+            const auto operationId = rows.GetValue<TSchema::Inventory::OperationId>();
+            if (operationId != request.GetAfterOperationId()) {
+                if (Response->Record.DelegationsSize() == request.GetPageSize()) {
+                    Response->Record.SetNextAfterOperationId(Response->Record.GetDelegations(request.GetPageSize() - 1).GetOperationId());
+                    break;
+                }
+                Parse(rows.GetValue<TSchema::Inventory::Data>(), *Response->Record.AddDelegations());
+            }
+            if (!rows.Next()) {
+                return EExecution::Retry;
+            }
+        }
+        *Response->Record.MutableDatabase() = database;
+        return EExecution::Complete;
+    }
+
     EExecution ClaimRevocations(NIceDb::TNiceDb& db, const TClaimRevocationsRequest& request, ui64 nowUs) {
         if (!ValidId(request.GetWorkerId()) || !request.GetLimit() || request.GetLimit() > MaxClaimSize
             || request.GetLeaseUs() < MinLeaseUs || request.GetLeaseUs() > MaxLeaseUs) {
@@ -744,6 +782,7 @@ struct TIamDelegationTablet::TTxRequest final
             case TRequest::kDropSecret: result = DropSecret(db, request.GetDropSecret(), nowUs); break;
             case TRequest::kGetSecret: result = GetSecret(db, request.GetGetSecret()); break;
             case TRequest::kGetDelegation: result = GetDelegation(db, request.GetGetDelegation()); break;
+            case TRequest::kListInventory: result = ListInventory(db, request.GetListInventory()); break;
             case TRequest::kClaimRevocations: result = ClaimRevocations(db, request.GetClaimRevocations(), nowUs); break;
             case TRequest::kFinishRevocation: result = FinishRevocation(db, request.GetFinishRevocation(), nowUs); break;
             case TRequest::COMMAND_NOT_SET: result = Error(INVALID_ARGUMENT, "A tablet command is required"); break;

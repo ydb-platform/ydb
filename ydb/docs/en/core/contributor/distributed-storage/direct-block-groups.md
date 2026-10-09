@@ -22,7 +22,7 @@ The protocol's `DirectBlockGroupIndex` is another distinction: it selects a clie
 
 The optional `PersistentBufferAllocationMode` field in `DefineDDiskPool` selects PB allocation for the pool: `BALANCED` (the default) considers all pool slots, while `ONE_PER_PDISK` considers only the slot with the smallest `TDDiskId` on each physical disk (`NodeId`, `PDiskId`). Set the mode when creating the pool. It cannot be changed afterwards: an explicit change is rejected, and omitting the field when updating the pool preserves its stored mode.
 
-`ONE_PER_PDISK` filters candidates for new PB assignments; existing assignments are not migrated. The other slots remain available for data allocation, and their PB actors and reserved resources are not disabled or released. If the pool's slots change, the representative is selected again from its current slots.
+`ONE_PER_PDISK` filters candidates for new PB assignments; existing assignments are not migrated. The other slots remain available for data allocation, and their PB actors and reserved resources are not disabled or released. If the pool's slots change, the representative is selected again from its current slots. The representative remains stable only while the eligible slots are unchanged. Clients must coordinate migration when a referenced slot is removed or reconfigured.
 
 A client then sends `TEvControllerAllocateDDiskBlockGroup` with its tablet ID, data pool name, PB pool name, and requested operations. The controller persists the resulting allocation and updates two counters on each affected VSlot:
 
@@ -37,7 +37,7 @@ Similarly, data chunk claims are controller bookkeeping. Current allocator candi
 
 Data placement enforces the pool's common realm constraints and distinct failure domains. It uses claim ordering and placement counts to distribute selected DDisks across nodes, PDisks, and slots.
 
-PB placement follows its pool's own geometry. While defining the initial PB list, the allocator uses the data DDisk at the corresponding index as a co-location hint. It first tries that data DDisk's node, then preferred nodes if supplied, then other eligible nodes. Within a node it considers PB reference counts and can prefer a different slot from the hinted data slot.
+PB placement follows its pool's own geometry and allocation mode. While defining the initial PB list, the allocator uses the data DDisk at the corresponding index as a co-location hint. It first tries that data DDisk's node, then preferred nodes if supplied, then other eligible nodes. The corresponding data DDisk ID is excluded from PB candidates. If all PB candidates on a node are excluded, the allocator skips that node and tries other nodes.
 
 Consequently, `data[k]` and `pb[k]` are positionally paired, but neither identical slot IDs nor identical node IDs are guaranteed. A flush must use the returned PB ID rather than constructing one from the data DDisk ID.
 

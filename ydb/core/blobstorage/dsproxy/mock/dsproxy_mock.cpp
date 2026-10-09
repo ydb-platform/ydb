@@ -2,8 +2,7 @@
 #include "model.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/dsproxy_events.h>
-#include <ydb/core/util/stlog.h>
-#include <util/random/fast.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY
 

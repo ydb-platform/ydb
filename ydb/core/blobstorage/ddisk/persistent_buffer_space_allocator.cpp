@@ -1,6 +1,5 @@
 #include "persistent_buffer_space_allocator.h"
 
-#include <ydb/core/util/stlog.h>
 
 #include <algorithm>
 

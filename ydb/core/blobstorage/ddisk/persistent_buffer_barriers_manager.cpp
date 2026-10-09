@@ -1,7 +1,6 @@
 #include "ddisk.h"
 #include "persistent_buffer_barriers_manager.h"
 
-#include <ydb/core/util/stlog.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_DDISK
 

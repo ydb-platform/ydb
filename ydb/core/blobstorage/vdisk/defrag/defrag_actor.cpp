@@ -10,7 +10,6 @@
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
-#include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/invoke.h>
 
 namespace NKikimr {

@@ -11,7 +11,7 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
-#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>

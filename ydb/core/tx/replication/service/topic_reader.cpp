@@ -248,7 +248,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         case NYdb::EStatus::SCHEME_ERROR:
             if (Settings.RetryOnSchemeError_) {
                 // Only the base-table CDC snapshot authorizes index removal.
-                return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+                return false;
             }
 
             [[fallthrough]];

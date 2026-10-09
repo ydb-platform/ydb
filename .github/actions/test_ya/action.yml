@@ -213,6 +213,7 @@ runs:
         CUSTOM_YA_BIN_S3_URI: ${{ inputs.custom_ya_bin_s3_uri }}
       run: |
         set -ex
+        . .github/scripts/custom_ya_launch.sh
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
         trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
@@ -375,22 +376,7 @@ runs:
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
         echo "::debug::get version"
-        YA_BIN="./ya"
-        if [ -n "${CUSTOM_YA_BIN_S3_URI}" ]; then
-          CUSTOM_YA_DIR="${RUNNER_TEMP}/custom-ya"
-          rm -rf "$CUSTOM_YA_DIR"
-          mkdir -p "$CUSTOM_YA_DIR"
-          s3cmd get --force "${CUSTOM_YA_BIN_S3_URI}" "$CUSTOM_YA_DIR/ya-bin.tar.gz"
-          tar -xzf "$CUSTOM_YA_DIR/ya-bin.tar.gz" -C "$CUSTOM_YA_DIR"
-          YA_BIN="$(find "$CUSTOM_YA_DIR" -type f -name ya-bin | head -1)"
-          if [ -z "$YA_BIN" ]; then
-            echo "ya-bin not found in ${CUSTOM_YA_BIN_S3_URI}"
-            exit 1
-          fi
-          chmod +x "$YA_BIN"
-          export YA_SOURCE_ROOT="${YA_SOURCE_ROOT:-$GITHUB_WORKSPACE}"
-          echo "Using custom ya-bin $YA_BIN from ${CUSTOM_YA_BIN_S3_URI}"
-        fi
+        use_custom_ya_bin
         "$YA_BIN" --version
 
         if [ true = ${{ inputs.run_tests }} ]; then
@@ -552,27 +538,7 @@ runs:
 
           # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
           # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
-          # Custom ya-bin caps each test at REQUIREMENTS(cpu) via cgroup v2 cpu.max.
-          # That needs a delegated parent: move this scope's processes into ya-runtime,
-          # enable the cpu controller, and hand the directory to the runner user.
-          DELEGATE_CPU=()
-          if [ -n "${CUSTOM_YA_BIN_S3_URI}" ]; then
-            DROP_PRIVS=(bash .github/scripts/ya_cgroup_exec.sh "$(id -u)" "$(id -g)")
-            DELEGATE_CPU=(-p Delegate=yes)
-          else
-            DROP_PRIVS=(setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --)
-          fi
-          if [ "${COLLECT_COREDUMPS}" = "true" ] || [ -n "${CUSTOM_YA_BIN_S3_URI}" ]; then
-            YA_MAKE_RUN_CMD=(
-              prlimit --core=unlimited:unlimited
-              "${DROP_PRIVS[@]}"
-              "${YA_MAKE_CMD[@]}"
-            )
-          else
-            YA_MAKE_RUN_CMD=(
-              sudo -n -E -u "$(id -un)" -- "${YA_MAKE_CMD[@]}"
-            )
-          fi
+          install_cpu_quota_wrapper
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')

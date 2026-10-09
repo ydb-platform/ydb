@@ -593,11 +593,17 @@ std::shared_ptr<ISpillerFactory> CreateSpillerFactory()
     );
 }
 
-// Spiller whose writes never complete: deterministically parks the spilling
-// coroutine on a pending future (models a query abort mid-spill).
+// Spiller that parks the coroutine on a selected write to model a query abort mid-spill
 class TPendingSpiller: public ISpiller {
 public:
+    explicit TPendingSpiller(size_t pauseOnWrite)
+        : PauseOnWrite(pauseOnWrite)
+    {}
+
     NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&&) override {
+        if (++WriteCount < PauseOnWrite) {
+            return NThreading::MakeFuture<TKey>(WriteCount);
+        }
         Promises.push_back(NThreading::NewPromise<TKey>());
         return Promises.back().GetFuture();
     }
@@ -615,19 +621,35 @@ public:
     void ReportFree(ui64) override {
     }
 
+    size_t GetWriteCount() const {
+        return WriteCount;
+    }
+
 private:
+    const size_t PauseOnWrite;
+    size_t WriteCount = 0;
     std::vector<NThreading::TPromise<TKey>> Promises;
 };
 
 class TPendingSpillerFactory: public ISpillerFactory {
 public:
+    explicit TPendingSpillerFactory(size_t pauseOnWrite = 1)
+        : Spiller(std::make_shared<TPendingSpiller>(pauseOnWrite))
+    {}
+
     void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>&) override {
     }
     void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback, ISpiller::TMemoryReportCallback) override {
     }
     ISpiller::TPtr CreateSpiller() override {
-        return std::make_shared<TPendingSpiller>();
+        return Spiller;
     }
+    size_t GetWriteCount() const {
+        return Spiller->GetWriteCount();
+    }
+
+private:
+    std::shared_ptr<TPendingSpiller> Spiller;
 };
 
 class TPendingReadSpiller: public TPreallocatedSpiller {
@@ -710,6 +732,66 @@ private:
     std::function<TRow(size_t)> Generate;
     size_t Row = 0;
 };
+
+template<bool LLVM>
+void RunTeardownDuringInputSpillingTest(bool useFlow, bool disableDehydration) {
+    TDqSetup<LLVM, true> setup(GetDqNodeFactory());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto& pb = setup.GetDqProgramBuilder();
+    auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    auto* tupleType = pb.NewTupleType({stringType});
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType({stringType, tupleType, stringType}))).Build();
+    TRuntimeNode input(source, false);
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = pb.DqHashAggregate(input, true,
+        [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList) -> TRuntimeNode::TList {
+            return {pb.template NewDataLiteral<ui64>(1)};
+        },
+        [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList) { return keys; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    auto graph = setup.BuildGraph(root, {source});
+    if (disableDehydration) {
+        DisableDehydration(graph);
+    }
+    // Only one state bucket is nonempty; the next write contains input rows
+    auto spiller = std::make_shared<TPendingSpillerFactory>(2);
+    graph->GetContext().SpillerFactory = spiller;
+    NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string key for input spilling"));
+    NUdf::TUnboxedValue extra = NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string beyond the state record width"));
+    size_t rowsGenerated = 0;
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(3, [&](size_t row) {
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            ++rowsGenerated;
+            NUdf::TUnboxedValue* items = nullptr;
+            NUdf::TUnboxedValue payload = graph->GetHolderFactory().CreateDirectArrayHolder(1, items);
+            // Exceed the 5 MB spill buffer so the last input row remains unwritten at the yield
+            items[0] = NUdf::TUnboxedValuePod(NUdf::TStringValue(
+                row == 1 ? TString(6_MB, 'x') : TString("small input payload")));
+            return std::vector<NUdf::TUnboxedValue>{key, std::move(payload), extra};
+        })));
+    auto stream = graph->GetValue();
+    NUdf::TUnboxedValue output;
+    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(&output, 1), NUdf::EFetchStatus::Yield);
+    UNIT_ASSERT_VALUES_EQUAL(rowsGenerated, 3);
+    UNIT_ASSERT_VALUES_EQUAL(spiller->GetWriteCount(), 2);
+
+    auto memInfo = TIntrusivePtr<TMemoryUsageInfo>(&graph->GetMemInfo());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    output = {};
+    stream = {};
+    graph.Destroy();
+    UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(extra.RefCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(memInfo->GetUsage(), 0);
+}
 
 template<bool LLVM>
 void RunTeardownDuringStateReadBackTest(bool useFlow, bool disableDehydration, size_t pauseOnRead) {
@@ -1409,6 +1491,12 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             false,
             std::make_shared<TPendingSpillerFactory>()
         );
+    }
+
+    Y_UNIT_TEST_QUAD(TestTeardownDuringInputSpilling, UseLLVM, UseFlow) {
+        for (bool disableDehydration : {false, true}) {
+            RunTeardownDuringInputSpillingTest<UseLLVM>(UseFlow, disableDehydration);
+        }
     }
 
     Y_UNIT_TEST_QUAD(TestTeardownDuringStateReadBack, UseLLVM, UseFlow) {

@@ -49,6 +49,9 @@ struct TSchema : NIceDb::Schema {
 
     // A covering index provides full pages without reading every database row.
     struct Inventory : Table<6> {
+        // The caller bounds iteration by page size; do not preload the whole range.
+        using Precharge = NoAutoPrecharge;
+
         struct Incarnation : Column<1, NScheme::NTypeIds::String> {};
         struct OperationId : Column<2, NScheme::NTypeIds::String> {};
         struct Data : Column<3, NScheme::NTypeIds::String> {};
@@ -57,6 +60,9 @@ struct TSchema : NIceDb::Schema {
     };
 
     struct Revocations : Table<7> {
+        // A claim reads only its bounded batch, even when the due queue is large.
+        using Precharge = NoAutoPrecharge;
+
         struct DueAtUs : Column<1, NScheme::NTypeIds::Uint64> {};
         struct OperationId : Column<2, NScheme::NTypeIds::String> {};
         using TKey = TableKey<DueAtUs, OperationId>;

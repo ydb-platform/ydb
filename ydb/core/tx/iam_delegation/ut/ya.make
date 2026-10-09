@@ -9,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    cold_scan_ut.cpp
     durability_ut.cpp
     iam_delegation_ut.cpp
     lifecycle_recovery_ut.cpp

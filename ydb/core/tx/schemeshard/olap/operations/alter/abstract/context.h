@@ -87,16 +87,16 @@ public:
 class TUpdateStartContext {
 private:
     const TPath* ObjectPath = nullptr;
-    TProposeContext* SSOperationContext = nullptr;
+    TOperationContext* SSOperationContext = nullptr;
 public:
     const TPath* GetObjectPath() const {
         return ObjectPath;
     }
-    const TProposeContext* GetSSOperationContext() const {
+    const TOperationContext* GetSSOperationContext() const {
         return SSOperationContext;
     }
 
-    TUpdateStartContext(const TPath* objectPath, TProposeContext* ssOperationContext)
+    TUpdateStartContext(const TPath* objectPath, TOperationContext* ssOperationContext)
         : ObjectPath(objectPath)
         , SSOperationContext(ssOperationContext)
     {

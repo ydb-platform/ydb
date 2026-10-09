@@ -390,13 +390,8 @@ public:
         return result;
     }
 
-<<<<<<< HEAD
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TAlterColumnTable");
-=======
-    void AbortPropose(TProposeContext& context) override {
+    void AbortPropose(TOperationContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
->>>>>>> 5433431e3c9 (Fix scheme objects for local indexes (#53625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

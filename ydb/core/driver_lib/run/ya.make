@@ -48,6 +48,7 @@ PEERDIR(
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/other
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/subsystem
     ydb/core/blobstorage/vdisk/common
     ydb/core/client/minikql_compile
     ydb/core/client/scheme_cache_lib

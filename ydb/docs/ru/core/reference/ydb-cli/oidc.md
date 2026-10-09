@@ -12,7 +12,7 @@
 | `client`, секрет приложения | Автоматическое задание получает токен по идентификатору и секрету зарегистрированного приложения без участия пользователя. | [Client Credentials Grant, RFC 6749, раздел 4.4](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.4). В запросе к IdP используется `grant_type=client_credentials`. |
 | `device`, код устройства | Пользователь подтверждает вход в браузере по показанному коду, а CLI ожидает результат от IdP. | [Device Authorization Grant, RFC 8628](https://www.rfc-editor.org/rfc/rfc8628.html). В запросе токена используется `grant_type=urn:ietf:params:oauth:grant-type:device_code`. |
 
-`client` и `device` являются названиями режимов CLI. Поле `grant_type` в запросе к IdP обозначает соответствующий способ получения токена в протоколе OAuth 2.0. Способ проверки самого приложения, например [`client_secret_basic`](#client), задаётся отдельно.
+`client` и `device` являются названиями режимов CLI. Поле `grant_type` в запросе к IdP обозначает соответствующий способ получения токена в протоколе OAuth 2.0. [Способ проверки самого приложения](#client) (например, `client_secret_basic`) задаётся отдельно.
 
 Примеры команд для каждого режима находятся в [рецептах OIDC для CLI](../../recipes/ydb-cli/auth-oidc.md).
 
@@ -27,15 +27,15 @@
 
 Обмен CLI с IdP служит для получения и обновления токенов. Запросы CLI к базе данных идут по отдельному соединению. Получение токена не предоставляет прав на объекты базы данных и не гарантирует, что сервер примет этот токен.
 
-[Токен доступа `access_token`](https://www.rfc-editor.org/rfc/rfc6749.html#section-1.4) передаётся серверу {{ ydb-short-name }}. Необязательный [токен обновления `refresh_token`](https://www.rfc-editor.org/rfc/rfc6749.html#section-1.5) используется только для получения нового токена у IdP. Тип [`Bearer`](https://www.rfc-editor.org/rfc/rfc6750.html#section-1.2) означает использование токена предъявителем без отдельного доказательства владения ключом.
+[Токен доступа](https://www.rfc-editor.org/rfc/rfc6749.html#section-1.4) `access_token` передаётся серверу {{ ydb-short-name }}. Необязательный [токен обновления](https://www.rfc-editor.org/rfc/rfc6749.html#section-1.5) `refresh_token` используется только для получения нового токена у IdP. [Тип токена](https://www.rfc-editor.org/rfc/rfc6750.html#section-1.2) `Bearer` означает использование токена предъявителем без отдельного доказательства владения ключом.
 
-[Токен результата аутентификации `id_token`](https://openid.net/specs/openid-connect-core-1_0.html#IDToken) содержит сведения о входе пользователя. OIDC-аутентификация CLI его не использует. Также не реализованы [обмен кода авторизации `authorization_code`](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1), [приём перенаправления браузера локальным HTTP-сервером](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3) и [проверка `id_token`](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation).
+[Токен результата аутентификации](https://openid.net/specs/openid-connect-core-1_0.html#IDToken) `id_token` содержит сведения о входе пользователя. OIDC-аутентификация CLI его не использует. Также не реализованы [обмен кода авторизации](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1) `authorization_code`, [приём перенаправления браузера локальным HTTP-сервером](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3) и [проверка](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation) `id_token`.
 
 ## Предварительная настройка {#prerequisites}
 
 Перед первым подключением настройте получение токена у IdP и его проверку сервером {{ ydb-short-name }}:
 
-1. **Зарегистрируйте приложение в IdP.** Для режима `client` разрешите получение токена по секрету приложения (`client_credentials`) и [проверку секрета через `client_secret_basic`](#client). Для `device` разрешите вход по коду устройства для приложения без секрета. Названия настроек зависят от IdP. Для `static` получите токен вне CLI.
+1. **Зарегистрируйте приложение в IdP.** Для режима `client` разрешите получение токена по секрету приложения (`client_credentials`) и [проверку секрета](#client) через `client_secret_basic`. Для `device` разрешите вход по коду устройства для приложения без секрета. Названия настроек зависят от IdP. Для `static` получите токен вне CLI.
 2. **Проверьте доступность [Discovery-документа](#discovery)** по HTTPS, если CLI должен получать или обновлять токены. Он содержит адреса служб IdP и поддерживаемые способы проверки приложения.
 3. **Проверьте формат токена доступа.** Для встроенной проверки внешнего IdP сервером {{ ydb-short-name }} нужен подписанный [JWT](https://www.rfc-editor.org/rfc/rfc7519.html#section-3), соответствующий [требованиям к токену и ключам](../../security/authentication.md#trebovaniya-k-tokenu-i-klyucham).
 4. **Настройте [проверку внешнего IdP](../configuration/auth_config.md#external-idp-auth-config) и [права доступа](../../security/authorization.md)** на сервере {{ ydb-short-name }}. Согласуйте издателя и ожидаемого получателя токена с настройками IdP.
@@ -50,7 +50,7 @@ JWT содержит **утверждения (claims)**, именованные
 
 CLI не проверяет подпись, издателя и получателя JWT. Это делает сервер.
 
-После настройки проверьте вход командой [`discovery whoami`](commands/discovery-whoami.md) по [рецепту выбранного режима](../../recipes/ydb-cli/auth-oidc.md). Если токен получен, но сервер отклоняет запрос, отдельно проверьте [требования к токену](../../security/authentication.md#trebovaniya-k-tokenu-i-klyucham), [параметры серверной проверки](../configuration/auth_config.md#external-idp-auth-config) и [назначенные права](../../security/authorization.md).
+После настройки проверьте вход [командой](commands/discovery-whoami.md) `discovery whoami` по [рецепту выбранного режима](../../recipes/ydb-cli/auth-oidc.md). Если токен получен, но сервер отклоняет запрос, отдельно проверьте [требования к токену](../../security/authentication.md#trebovaniya-k-tokenu-i-klyucham), [параметры серверной проверки](../configuration/auth_config.md#external-idp-auth-config) и [назначенные права](../../security/authorization.md).
 
 ## Обнаружение адресов IdP {#discovery}
 
@@ -58,10 +58,10 @@ CLI не проверяет подпись, издателя и получате
 
 | Поле | Назначение |
 | --- | --- |
-| [`issuer`](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata) | Идентификатор издателя. Должен точно совпадать с настройкой CLI, включая завершающий `/`. |
-| [`token_endpoint`](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.2) | Адрес получения и обновления токенов. |
-| [`device_authorization_endpoint`](https://www.rfc-editor.org/rfc/rfc8628.html#section-4) | Адрес выдачи кода устройства. Нужен для начала нового входа в режиме `device`. |
-| [`token_endpoint_auth_methods_supported`](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata) | Список способов проверки приложения. Если поле присутствует, для режима `client` в нём должен быть `client_secret_basic`. При отсутствии поля CLI использует этот способ без дополнительной проверки списка. |
+| `issuer` | [Идентификатор издателя](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata). Должен точно совпадать с настройкой CLI, включая завершающий `/`. |
+| `token_endpoint` | [Адрес получения и обновления токенов](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.2). |
+| `device_authorization_endpoint` | [Адрес выдачи кода устройства](https://www.rfc-editor.org/rfc/rfc8628.html#section-4). Нужен для начала нового входа в режиме `device`. |
+| `token_endpoint_auth_methods_supported` | [Список способов проверки приложения](https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderMetadata). Если поле присутствует, для режима `client` в нём должен быть `client_secret_basic`. При отсутствии поля CLI использует этот способ без дополнительной проверки списка. |
 
 Адреса IdP и ссылки для входа должны использовать HTTPS. Имя пользователя, пароль и фрагмент URL запрещены. У `issuer` также запрещены параметры запроса. Полученные адреса сохраняются в текущем экземпляре провайдера учётных данных. Чтобы применить изменение адресов в Discovery-документе к работающему CLI, перезапустите процесс. Режим `static` и использование пригодного кеша могут обойтись без обращения к IdP.
 
@@ -71,11 +71,11 @@ CLI поддерживает интерактивный вход, автомат
 
 ### Вход пользователя через браузер {#device}
 
-Для входа пользователя используйте режим `device` и [идентификатор зарегистрированного приложения `client_id`](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.2). Пример подключения приведён в [рецепте входа по коду устройства](../../recipes/ydb-cli/auth-oidc.md#device).
+Для входа пользователя используйте режим `device` и [идентификатор зарегистрированного приложения](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.2) `client_id`. Пример подключения приведён в [рецепте входа по коду устройства](../../recipes/ydb-cli/auth-oidc.md#device).
 
-CLI выведет в стандартный поток ошибок ссылку на страницу IdP и код. Откройте ссылку в браузере, при необходимости введите код и подтвердите вход. Браузер можно открыть на другом устройстве. CLI автоматически его не запускает. Если IdP вернул готовую ссылку [`verification_uri_complete`](https://www.rfc-editor.org/rfc/rfc8628.html#section-3.2) с включённым кодом или эквивалентными данными, CLI также покажет её.
+CLI выведет в стандартный поток ошибок ссылку на страницу IdP и код. Откройте ссылку в браузере, при необходимости введите код и подтвердите вход. Браузер можно открыть на другом устройстве. CLI автоматически его не запускает. Если IdP вернул [готовую ссылку](https://www.rfc-editor.org/rfc/rfc8628.html#section-3.2) `verification_uri_complete` с включённым кодом или эквивалентными данными, CLI также покажет её.
 
-Область [`openid`](#scopes) добавляется автоматически. Область [`offline_access`](#scopes) нужно запросить явно, если её поддерживает IdP. Её наличие само по себе не гарантирует выдачу токена обновления.
+[Область доступа](#scopes) `openid` добавляется автоматически. [Область доступа](#scopes) `offline_access` нужно запросить явно, если её поддерживает IdP. Её наличие само по себе не гарантирует выдачу токена обновления.
 
 Команда продолжит работу после подтверждения. Отказ или истечение срока действия кода завершает попытку ошибкой. Для повторного входа запустите команду заново. Чтобы сохранить вход между запусками, настройте [файловый кеш](#cache).
 
@@ -89,9 +89,9 @@ CLI выведет в стандартный поток ошибок ссылк�
 
 ### Подключение приложения по секрету {#client}
 
-Для автоматического задания выберите `client` и укажите путь к файлу с [секретом приложения `client_secret`](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1), известным только приложению и IdP. Пример находится в [рецепте подключения автоматического задания](../../recipes/ydb-cli/auth-oidc.md#client).
+Для автоматического задания выберите `client` и укажите путь к файлу с [секретом приложения](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1) `client_secret`, известным только приложению и IdP. Пример находится в [рецепте подключения автоматического задания](../../recipes/ydb-cli/auth-oidc.md#client).
 
-CLI получает токен способом [`client_credentials`](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.4). Приложение в IdP должно разрешать [`client_secret_basic`](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication): проверку идентификатора и секрета приложения через HTTP Basic. Они передаются в заголовке `Authorization` по [правилам RFC 6749, раздел 2.3.1](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1). Способ `client_secret_post`, при котором секрет передаётся в теле запроса, не поддерживается. IdP также должен разрешать область доступа [`openid`](#scopes). Наличие файла секрета не выбирает режим `client` автоматически, поэтому указывайте `--oidc-flow client` явно.
+CLI получает токен [способом получения токена по секрету приложения](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.4) `client_credentials`. Приложение в IdP должно разрешать `client_secret_basic`: [проверку идентификатора и секрета приложения через HTTP Basic](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication). Они передаются в заголовке `Authorization` по [правилам RFC 6749, раздел 2.3.1](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.3.1). Способ `client_secret_post`, при котором секрет передаётся в теле запроса, не поддерживается. IdP также должен разрешать [область доступа](#scopes) `openid`. Наличие файла секрета не выбирает режим `client` автоматически, поэтому указывайте `--oidc-flow client` явно.
 
 ### Подключение с готовым токеном {#static}
 
@@ -110,7 +110,7 @@ CLI получает токен способом [`client_credentials`](https://
 | `--oidc-config PATH` | Нет | Путь к отдельному [файлу YAML или JSON](#config-file). |
 | `--oidc-issuer URL` | `YDB_OIDC_ISSUER` | HTTPS-адрес [издателя токенов](#discovery). Обязателен при настройке прямыми параметрами. |
 | `--oidc-flow VALUE` | `YDB_OIDC_FLOW` | [Способ получения токена](#flows): `static`, `client` или `device`. |
-| `--oidc-client-id VALUE` | `YDB_OIDC_CLIENT_ID` | [Идентификатор приложения `client_id`](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.2) для `client` и `device`. Это не имя пользователя. |
+| `--oidc-client-id VALUE` | `YDB_OIDC_CLIENT_ID` | [Идентификатор приложения](https://www.rfc-editor.org/rfc/rfc6749.html#section-2.2) `client_id` для `client` и `device`. Это не имя пользователя. |
 | `--oidc-client-secret-file PATH` | `YDB_OIDC_CLIENT_SECRET` | Файл [секрета приложения](#client) для `client`, переменная содержит **сам секрет**, а не путь. |
 | `--oidc-access-token-file PATH` | `YDB_OIDC_ACCESS_TOKEN` | Файл [токена доступа](#tokens) для `static`, переменная содержит **сам токен**, а не путь. |
 | `--oidc-scope VALUE` | `YDB_OIDC_SCOPE` | [Области доступа](#scopes) для `client` и `device`, разделённые пробелами. Параметр можно повторять. |
@@ -126,11 +126,11 @@ CLI получает токен способом [`client_credentials`](https://
 
 ### Области доступа {#scopes}
 
-[`scope`](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.3) задаёт именованные области доступа, их допустимые значения и влияние на токен определяет IdP. В OpenID Connect используются, в частности:
+`scope` задаёт именованные [области доступа](https://www.rfc-editor.org/rfc/rfc6749.html#section-3.3), их допустимые значения и влияние на токен определяет IdP. В OpenID Connect используются, в частности:
 
-- [`openid`](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest) обозначает запрос OpenID Connect. CLI добавляет эту область, если её нет, в режимах `client` и `device`.
-- [`offline_access`](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess) запрашивает доступ без присутствия пользователя с помощью токена обновления. CLI не добавляет эту область автоматически. Возможность её использования в выбранном режиме зависит от IdP.
-- [`profile`](https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims) запрашивает сведения профиля пользователя. Набор утверждений именно в токене доступа определяется IdP.
+- `openid` [обозначает запрос OpenID Connect](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest). CLI добавляет эту область, если её нет, в режимах `client` и `device`.
+- `offline_access` [запрашивает доступ без присутствия пользователя с помощью токена обновления](https://openid.net/specs/openid-connect-core-1_0.html#OfflineAccess). CLI не добавляет эту область автоматически. Возможность её использования в выбранном режиме зависит от IdP.
+- `profile` [запрашивает сведения профиля пользователя](https://openid.net/specs/openid-connect-core-1_0.html#ScopeClaims). Набор утверждений именно в токене доступа определяется IdP.
 
 Области доступа не заменяют [права на объекты {{ ydb-short-name }}](../../security/authorization.md).
 
@@ -154,9 +154,9 @@ CLI получает токен способом [`client_credentials`](https://
 | --- | --- |
 | `issuer` | Непустая строка с HTTPS-адрес [издателя](#discovery). |
 | `cache_path` | Необязательная непустая строка с путём к [кешу токенов](#cache). Для `static_credentials` не используется. |
-| `static_credentials` | [Готовый токен](#static): путь `access_token_file` либо значение из `YDB_OIDC_ACCESS_TOKEN`, необязательный [срок `expires_at`](#static-config). |
-| `client_credentials_grant` | [Секрет приложения](#client): обязательный `client_id`, путь `client_secret_file` либо секрет из `YDB_OIDC_CLIENT_SECRET`, необязательный список [областей `scope`](#scopes). |
-| `device_authorization_grant` | [Код устройства](#device): обязательный `client_id`, необязательный список [областей `scope`](#scopes). |
+| `static_credentials` | [Готовый токен](#static): путь `access_token_file` либо значение из `YDB_OIDC_ACCESS_TOKEN`, необязательный [срок действия](#static-config) `expires_at`. |
+| `client_credentials_grant` | [Секрет приложения](#client): обязательный `client_id`, путь `client_secret_file` либо секрет из `YDB_OIDC_CLIENT_SECRET`, необязательный список [областей доступа](#scopes) `scope`. |
+| `device_authorization_grant` | [Код устройства](#device): обязательный `client_id`, необязательный список [областей доступа](#scopes) `scope`. |
 
 Относительные пути `access_token_file`, `client_secret_file` и `cache_path` внутри этого файла разрешаются относительно его каталога. Путь, заданный параметром `--oidc-config`, разрешается относительно рабочего каталога запуска. Используйте абсолютные пути или обычные относительные пути, не рассчитывайте на раскрытие `~` внутри YAML.
 
@@ -170,7 +170,7 @@ CLI получает токен способом [`client_credentials`](https://
 
 ### Файл для готового токена {#static-config}
 
-В блоке `static_credentials` поле `expires_at` задаёт абсолютный момент истечения срока действия токена в целых секундах Unix, отсчитываемых от 1 января 1970 года UTC. Оно имеет приоритет над [утверждением `exp` в JWT](https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1.4). Если поле отсутствует, CLI пытается извлечь срок из JWT. Нулевой срок означает уже истёкший токен, строка в кавычках вместо числа не принимается.
+В блоке `static_credentials` поле `expires_at` задаёт абсолютный момент истечения срока действия токена в целых секундах Unix, отсчитываемых от 1 января 1970 года UTC. Оно имеет приоритет над [утверждением](https://www.rfc-editor.org/rfc/rfc7519.html#section-4.1.4) `exp` в JWT. Если поле отсутствует, CLI пытается извлечь срок из JWT. Нулевой срок означает уже истёкший токен, строка в кавычках вместо числа не принимается.
 
 Токен читается из `access_token_file` либо из `YDB_OIDC_ACCESS_TOKEN`. При использовании окружения и отсутствии явного срока блок может не содержать полей. Если ни файл, ни переменная не заданы, конфигурация отклоняется. Пример YAML находится в [рецепте готового токена](../../recipes/ydb-cli/auth-oidc.md#static-config).
 
@@ -182,13 +182,13 @@ CLI получает токен способом [`client_credentials`](https://
 - `client_id` из одних цифр нужно заключить в кавычки, чтобы YAML не превратил его в число;
 - `expires_at` должен быть неотрицательным целым числом секунд Unix в поддерживаемом диапазоне;
 - `access_token` и `client_secret` в самом документе запрещены. Используются файлы или окружение;
-- [токен обновления `refresh_token`](#tokens), [адрес выдачи токенов `token_endpoint`](#discovery), получатель токена `audience`, настройки тайм-аутов и отключение HTTPS в этом формате не предусмотрены.
+- [токен обновления](#tokens) `refresh_token`, [адрес выдачи токенов](#discovery) `token_endpoint`, получатель токена `audience`, настройки тайм-аутов и отключение HTTPS в этом формате не предусмотрены.
 
 Токен обновления клиент получает от IdP и сохраняет через кеш. Адрес получения токенов определяется через [Discovery-документ](#discovery). Получатель и утверждения токена настраиваются в IdP и согласуются с [проверкой на сервере](../configuration/auth_config.md#external-idp-auth-config).
 
 ## Профили CLI {#profiles}
 
-Профиль сохраняет параметры соединения и способ получения токенов. Для настройки OIDC используйте [`config profile create` или `config profile update`](profile/create.md).
+Профиль сохраняет параметры соединения и способ получения токенов. Для настройки OIDC используйте [команды управления профилями](profile/create.md) `config profile create` или `config profile update`.
 
 Команды создания и проверки профилей, а также примеры их YAML-представления приведены в [рецепте настройки профилей OIDC](../../recipes/ydb-cli/auth-oidc.md#profiles).
 
@@ -230,7 +230,7 @@ CLI получает токен способом [`client_credentials`](https://
 
 ## Получение токена для другого инструмента {#get-token}
 
-Команда [`auth get-token`](auth-get-token.md) получает текущие данные аутентификации выбранным способом. Для OIDC результатом будет одна строка с префиксом `Bearer`, пробелом и токеном доступа. [Токен обновления и `id_token`](#tokens) не выводятся.
+[Команда](auth-get-token.md) `auth get-token` получает текущие данные аутентификации выбранным способом. Для OIDC результатом будет одна строка с префиксом `Bearer`, пробелом и токеном доступа. [Токен обновления](#tokens) и `id_token` не выводятся.
 
 Команды сохранения токена в файл с ограниченным доступом приведены в [рецепте передачи токена другому инструменту](../../recipes/ydb-cli/auth-oidc.md#get-token).
 
@@ -247,8 +247,8 @@ CLI получает токен способом [`client_credentials`](https://
 | Ошибка формата `scope` | В отдельном файле нужен список, в прямом профиле строка, в параметрах список через пробелы. |
 | `discovery issuer mismatch` | Сравните `issuer` конфигурации с полем [Discovery-документа](#discovery) побайтно, включая завершающий `/`. |
 | `client_secret_basic is not supported` | Разрешите [проверку секрета приложения через HTTP Basic](#client) в IdP. |
-| [`invalid_client`, `unauthorized_client` или `invalid_scope`](https://www.rfc-editor.org/rfc/rfc6749.html#section-5.2) | Соответственно: приложение не прошло проверку, ему не разрешён способ получения токена либо недопустимы запрошенные области доступа. Проверьте идентификатор, секрет, режим и [области доступа](#scopes), включая `openid`. |
-| `device authorization expired` или [`access_denied`](https://www.rfc-editor.org/rfc/rfc8628.html#section-3.5) | Срок действия кода истёк либо вход отклонён пользователем или IdP. Повторите команду и завершите вход до истечения срока действия нового кода. |
+| `invalid_client`, `unauthorized_client` или `invalid_scope` | [Ошибки получения токена](https://www.rfc-editor.org/rfc/rfc6749.html#section-5.2) означают соответственно: приложение не прошло проверку, ему не разрешён способ получения токена либо недопустимы запрошенные области доступа. Проверьте идентификатор, секрет, режим и [области доступа](#scopes), включая `openid`. |
+| `device authorization expired` или `access_denied` | Срок действия кода истёк либо [вход отклонён пользователем или IdP](https://www.rfc-editor.org/rfc/rfc8628.html#section-3.5). Повторите команду и завершите вход до истечения срока действия нового кода. |
 | При каждом запуске требуется вход через браузер | Проверьте путь, права и предупреждения кеша, наличие и срок действия токена обновления, а также настройки его выдачи в IdP. |
 | `identity differs; use a separate cache path` | Настройки отличаются от записанных в кеше. Выберите отдельный файл. |
 | Токен получен, но {{ ydb-short-name }} отклоняет запрос | Проверьте [требования к токену и ключам](../../security/authentication.md#trebovaniya-k-tokenu-i-klyucham), [настройки серверной проверки](../configuration/auth_config.md#external-idp-auth-config) и [права пользователя](../../security/authorization.md). |
@@ -257,7 +257,7 @@ CLI получает токен способом [`client_credentials`](https://
 
 ## Срок действия и обновление {#refresh}
 
-В режимах `client` и `device` CLI обновляет токен в процессе работы. Если IdP вернул [`expires_in`](https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1), срок отсчитывается в секундах от начала запроса токена. Иначе клиент пытается прочитать `exp` из JWT. При известном сроке обновление планируется примерно через половину оставшегося времени.
+В режимах `client` и `device` CLI обновляет токен в процессе работы. Если IdP вернул `expires_in`, [срок действия токена](https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1) отсчитывается в секундах от начала запроса токена. Иначе клиент пытается прочитать `exp` из JWT. При известном сроке обновление планируется примерно через половину оставшегося времени.
 
 Для [обновления по RFC 6749, раздел 6](https://www.rfc-editor.org/rfc/rfc6749.html#section-6) CLI сначала использует пригодный `refresh_token`. Если его нет, он истёк или IdP отклонил его постоянной ошибкой `invalid_grant`, повторяется первоначальный способ получения токена. Для `device` это может потребовать нового подтверждения пользователя. Другие постоянные ошибки, например `invalid_client`, не запускают повторный вход. Значения этих ошибок определены в [RFC 6749, раздел 5.2](https://www.rfc-editor.org/rfc/rfc6749.html#section-5.2).
 

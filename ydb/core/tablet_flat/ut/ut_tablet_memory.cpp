@@ -381,7 +381,9 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
     const auto marker = env.Env.AllocateEdgeActor();
     const auto systemTablet = env.ControllerReports.back().SystemTablet;
     UNIT_ASSERT(systemTablet);
-    NMetrics::TResourceMetrics metrics(env.Tablet, 0, env.Edge, marker, systemTablet);
+    // Edge replies may be grabbed without dispatching observers. Use a live mailbox
+    // and consume the synthetic metrics before the tablet receives them.
+    NMetrics::TResourceMetrics metrics(env.Tablet, 0, env.TabletActor, marker, systemTablet);
     ui64 cpu = 0;
     TVector<NMemory::TConsumerReport> reports;
     const auto observer = env.Env.AddObserver<TEvLocal::TEvTabletMetrics>([&](auto& event) {
@@ -393,7 +395,8 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
     });
     const auto update = [&](ui64 used, ui64 demand, ui64 reclaimable, bool expected) {
         env.Env.SimulateSleep(TDuration::Seconds(2));
-        env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto*, const auto& ctx) {
+        const auto before = reports.size();
+        env.SendEv(env.TabletActor, new NFake::TEvCall([&, used, demand, reclaimable, expected](auto*, const auto& ctx) {
             metrics.CPU.Set(cpu, ctx.Now());
             metrics.Memory.Set(0);
             metrics.Network.Set(0, ctx.Now());
@@ -403,12 +406,15 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
             ctx.Send(env.Edge, new TEvents::TEvWakeup);
         }));
         env.WaitForWakeUp();
+        env.Env.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), before + (expected ? 1u : 0u));
     };
     update(10_MB + 100_KB, 12_MB + 100_KB, 1_MB + 100_KB, true);
     update(10_MB + 100_KB + 1, 12_MB + 100_KB + 1, 1_MB + 100_KB + 1, false);
     // A legacy metric send carries the complete current snapshot even below its own threshold.
     cpu = 200000;
     update(10_MB + 100_KB + 2, 12_MB + 100_KB + 2, 1_MB + 100_KB + 2, true);
+    UNIT_ASSERT(!reports.empty());
     UNIT_ASSERT_VALUES_EQUAL(reports.back().Used, 10_MB + 100_KB + 2);
     update(100_KB, 200_KB, 1, true);
     update(100_KB, 200_KB, 2, false);

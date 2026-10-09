@@ -11,6 +11,7 @@ PEERDIR(
 SRCS(
     durability_ut.cpp
     iam_delegation_ut.cpp
+    lifecycle_recovery_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

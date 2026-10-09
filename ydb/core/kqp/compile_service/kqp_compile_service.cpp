@@ -578,7 +578,6 @@ private:
                         {"actualSid", userSid});
                 }
             } else {
-                Counters->ReportQueryCacheHit(dbCounters, false);
                 YDB_LOG_DEBUG_CTX(ctx, "Query not found",
                     {"sender", ev->Sender},
                     {"queryUid", *request.Uid});
@@ -624,11 +623,6 @@ private:
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
-        if (compileSettings.Action == ECompileActorAction::COMPILE) {
-            return EnqueueCacheMiss(std::move(compileRequest), ctx);
-        }
-
-        // Parsing or splitting can still lead to a cache hit in a subsequent request.
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
@@ -754,7 +748,7 @@ private:
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
                     Reply(request.Sender, compileResult, compileStats, ctx,
-                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
+                        request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan), &request);
                 }
             } else {
                 if (!hasTempTablesNameClashes) {
@@ -766,7 +760,7 @@ private:
 
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
-                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+                compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan), &compileRequest);
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
@@ -840,11 +834,6 @@ private:
         }
     }
 
-    void EnqueueCacheMiss(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
-        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
-        EnqueueCompileRequest(std::move(compileRequest), ctx);
-    }
-
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
@@ -871,16 +860,15 @@ private:
             {"queryId", compileRequest.Query.SerializeToString()},
             {"ast", queryAst.Ast->Root->ToString()});
 
-        auto compileResult = QueryCache->FindByAst(
-            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
-            compileRequest.CompileSettings.IsWarmupCompilation
-                ? EWarmupAttributionMode::Warmup
-                : EWarmupAttributionMode::Client,
-            Counters,
-            compileRequest.TempTablesState);
-
-        if (!compileRequest.FindInCache) {
-            compileResult = nullptr;
+        TKqpCompileResult::TConstPtr compileResult;
+        if (compileRequest.FindInCache) {
+            compileResult = QueryCache->FindByAst(
+                compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+                compileRequest.CompileSettings.IsWarmupCompilation
+                    ? EWarmupAttributionMode::Warmup
+                    : EWarmupAttributionMode::Client,
+                Counters,
+                compileRequest.TempTablesState);
         }
 
         if (compileResult) {
@@ -902,7 +890,7 @@ private:
 
         compileRequest.QueryAst = std::move(queryAst);
 
-        EnqueueCacheMiss(std::move(compileRequest), ctx);
+        EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1009,8 +997,17 @@ private:
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
-        NLWTrace::TOrbit orbit, NWilson::TSpan span)
+        NLWTrace::TOrbit orbit, NWilson::TSpan span, const TKqpCompileRequest* request = nullptr)
     {
+        // Only completed client compilations contribute a miss. Service errors have no
+        // request context; forced recompiles, warmup and intermediate stages are separate work.
+        if (request && !compileStats.FromCache && !compileResult->NeedToSplit
+                && request->FindInCache && !request->CompileSettings.IsWarmupCompilation
+                && request->CompileSettings.Action != ECompileActorAction::SPLIT
+                && request->IsIntrestedInResult()) {
+            Counters->ReportQueryCacheHit(request->DbCounters, false);
+        }
+
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
             orbit,

@@ -468,7 +468,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Y_ENSURE(!CompactionLogic);
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher, SelfId());
+    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher, SelfId(), Owner->Tablet());
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
@@ -519,7 +519,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     VacuumLogic = MakeHolder<TVacuumLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher, SelfId());
+    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher, SelfId(), Owner->Tablet());
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();

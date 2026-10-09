@@ -263,14 +263,16 @@ struct TEvLocal {
         NKikimrTabletBase::TMetrics ResourceValues;
         // The MC attribution is separate from the total memory metric sent to Hive.
         TActorId Executor;
+        TActorId SystemTablet; // identifies the originating tablet incarnation
         std::optional<NMemory::TConsumerReport> TabletMemoryReport;
 
         TEvTabletMetrics(ui64 tabletId, ui32 followerId, const NKikimrTabletBase::TMetrics& resourceValues,
-                        const TActorId& executor = {}, std::optional<NMemory::TConsumerReport> tabletMemoryReport = std::nullopt)
+                        const TActorId& executor = {}, std::optional<NMemory::TConsumerReport> tabletMemoryReport = std::nullopt, const TActorId& systemTablet = {})
             : TabletId(tabletId)
             , FollowerId(followerId)
             , ResourceValues(resourceValues)
             , Executor(executor)
+            , SystemTablet(systemTablet)
             , TabletMemoryReport(tabletMemoryReport)
         {}
     };

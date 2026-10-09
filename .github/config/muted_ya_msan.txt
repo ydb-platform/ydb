@@ -7,6 +7,7 @@ ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCs
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
 ydb/core/kqp/ut/sysview KqpSystemView.CompileCacheUserIsolation
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
@@ -38,6 +39,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPa
 ydb/library/actors/interconnect/ut InterconnectSessionV2.RepeatedDisconnectChurnUnderLoad
 ydb/library/actors/interconnect/ut InterconnectSessionV2.ValidatingLoadVariedPayloads
 ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestLoadFromSeveralStates
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead

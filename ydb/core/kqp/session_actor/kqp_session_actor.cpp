@@ -1169,10 +1169,8 @@ public:
                     secureParams.emplace(secretName, "");
                 }
 
-                // An unsafe truncate has no stages and a type of its own, so leaving it in would
-                // trip the tasks graph on "mixed physical tx types" as soon as a query holds both
-                // it and data transactions.
-                if (tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE) {
+                // Unsafe truncate has no stages and is executed outside the tasks graph.
+                if (tx->HasUnsafeTruncate()) {
                     continue;
                 }
 
@@ -1589,12 +1587,8 @@ public:
         // transactions does carry them, and takes the branches above instead.
         auto checkNoSinkTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
-                switch (tx.GetType()) {
-                    case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-                    case NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE:
-                        break;
-                    default:
-                        return false;
+                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && !tx.HasUnsafeTruncate()) {
+                    return false;
                 }
             }
             return true;
@@ -2021,6 +2015,11 @@ public:
             return false;
         }
 
+        if (tx->HasUnsafeTruncate()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for unsafe truncate");
+            return false;
+        }
+
         if (const auto txType = tx->GetType(); !IsIn({NKqpProto::TKqpPhyTx::TYPE_DATA, NKqpProto::TKqpPhyTx::TYPE_GENERIC, NKqpProto::TKqpPhyTx::TYPE_COMPUTE}, txType)) {
             ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Save state of query is not supported for this tx type: " << NKqpProto::TKqpPhyTx::EType_Name(txType));
             return false;
@@ -2165,22 +2164,22 @@ public:
                     SendToSchemeExecuter(tx);
                     return false;
 
-                case NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE:
-                    // Deliberately skips the "scheme operations inside transaction" guard above:
-                    // this is a data-plane operation and its whole point is to run inside the
-                    // user transaction. It is still its own distributed transaction, applied
-                    // immediately and never rolled back with the surrounding one.
-                    if (QueryState->TxCtx->Readonly) {
-                        ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
-                        return true;
+                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                    if (tx->HasUnsafeTruncate()) {
+                        // Unsafe truncate runs in its own distributed transaction, applied
+                        // immediately and never rolled back with the surrounding user transaction.
+                        if (QueryState->TxCtx->Readonly) {
+                            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                                "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
+                            return true;
+                        }
+                        YQL_ENSURE(tx->StagesSize() == 0);
+                        SendToUnsafeTruncateExecuter(tx);
+                        return false;
                     }
-                    YQL_ENSURE(tx->StagesSize() == 0);
-                    SendToUnsafeTruncateExecuter(tx);
-                    return false;
+                    [[fallthrough]];
 
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
-                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
                     if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Data operations cannot be executed outside of transaction");

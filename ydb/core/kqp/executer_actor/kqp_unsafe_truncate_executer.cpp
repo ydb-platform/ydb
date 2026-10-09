@@ -73,7 +73,8 @@ public:
         , TxAlloc(std::move(txAlloc))
     {
         YQL_ENSURE(PhyTx);
-        YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE);
+        YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_GENERIC);
+        YQL_ENSURE(PhyTx->HasUnsafeTruncate());
 
         MainTablePath = PhyTx->GetUnsafeTruncate().GetTablePath();
         YQL_ENSURE(!MainTablePath.empty());

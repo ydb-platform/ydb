@@ -45,6 +45,9 @@ enum ESetupState {
 enum EDelegationState {
     DELEGATION_STATE_UNSPECIFIED = 0;
     PENDING = 1;
+    ACTIVE = 2;
+    WAITING_SETUP = 3;
+    REVOCATION_PENDING = 4;
     CANCELLED = 7;
 }
 
@@ -59,11 +62,14 @@ message TDelegation {
     optional ESetupState SetupState = 8;
     optional EDelegationState State = 9;
     optional string SetupOperationId = 10;
+    optional uint64 ActivatedRevision = 12;
+    optional uint64 DueAtUs = 14;
 }
 
 enum ESecretState {
     SECRET_STATE_UNSPECIFIED = 0;
     SECRET_LIVE = 1;
+    SECRET_DROPPED = 2;
 }
 
 message TSecretRecord {
@@ -89,6 +95,7 @@ message TRegisterDatabaseRequest {
 enum EStageMode {
     STAGE_MODE_UNSPECIFIED = 0;
     CREATE = 1;
+    ALTER = 2;
 }
 
 message TStageRequest {
@@ -122,6 +129,22 @@ message TSetSetupResultRequest {
     optional string SetupOperationId = 4;
 }
 
+message TPromoteRequest {
+    optional string OperationId = 1;
+    optional uint64 ExpectedRevision = 2;
+    optional uint64 ExpectedSecretRevision = 3;
+}
+
+message TDropSecretRequest {
+    // OperationId is exclusively for an unbound CREATE; once bound, use Secret.
+    oneof Target {
+        TSecretIdentity Secret = 1;
+        string OperationId = 2;
+    }
+    // Secret revision for Secret, delegation revision for OperationId.
+    optional uint64 ExpectedRevision = 3;
+}
+
 message TGetSecretRequest {
     optional TSecretIdentity Secret = 1;
 }
@@ -137,6 +160,8 @@ message TRequest {
         TBindSecretRequest BindSecret = 3;
         TStartSetupRequest StartSetup = 4;
         TSetSetupResultRequest SetSetupResult = 5;
+        TPromoteRequest Promote = 6;
+        TDropSecretRequest DropSecret = 7;
         TGetSecretRequest GetSecret = 8;
         TGetDelegationRequest GetDelegation = 9;
     }

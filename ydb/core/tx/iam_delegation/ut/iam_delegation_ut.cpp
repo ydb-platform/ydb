@@ -65,6 +65,22 @@ NProto::TRequest StageCreateRequest(const TString& operationId = "create-1",
     return request;
 }
 
+NProto::TRequest StageAlterRequest(const NProto::TSecretRecord& secret,
+    const TString& operationId, const NProto::TIamBinding& binding)
+{
+    NProto::TRequest request;
+    auto* stage = request.MutableStage();
+    stage->SetMode(NProto::ALTER);
+    stage->SetOperationId(operationId);
+    stage->SetDatabaseIncarnation(secret.GetIdentity().GetDatabaseIncarnation());
+    stage->SetSecretPath(secret.GetSecretPath());
+    stage->SetCreateTxId(secret.GetCreateTxId());
+    stage->MutableSecret()->CopyFrom(secret.GetIdentity());
+    stage->SetExpectedSecretRevision(secret.GetRevision());
+    stage->MutableBinding()->CopyFrom(binding);
+    return request;
+}
+
 NProto::TRequest BindRequest(const NProto::TDelegation& delegation,
     const NProto::TSecretIdentity& secret = SecretIdentity())
 {
@@ -96,6 +112,31 @@ NProto::TRequest SetupResultRequest(const NProto::TDelegation& delegation,
     return request;
 }
 
+NProto::TRequest PromoteRequest(const NProto::TDelegation& delegation, ui64 secretRevision) {
+    NProto::TRequest request;
+    auto* promote = request.MutablePromote();
+    promote->SetOperationId(delegation.GetOperationId());
+    promote->SetExpectedRevision(delegation.GetRevision());
+    promote->SetExpectedSecretRevision(secretRevision);
+    return request;
+}
+
+NProto::TRequest DropRequest(const NProto::TSecretRecord& secret) {
+    NProto::TRequest request;
+    auto* drop = request.MutableDropSecret();
+    drop->MutableSecret()->CopyFrom(secret.GetIdentity());
+    drop->SetExpectedRevision(secret.GetRevision());
+    return request;
+}
+
+NProto::TRequest DropRequest(const NProto::TDelegation& delegation) {
+    NProto::TRequest request;
+    auto* drop = request.MutableDropSecret();
+    drop->SetOperationId(delegation.GetOperationId());
+    drop->SetExpectedRevision(delegation.GetRevision());
+    return request;
+}
+
 NProto::TDelegation GetDelegation(TTestContext& ctx, const TString& operationId) {
     NProto::TRequest request;
     request.MutableGetDelegation()->SetOperationId(operationId);
@@ -106,6 +147,19 @@ NProto::TSecretRecord GetSecret(TTestContext& ctx, const NProto::TSecretIdentity
     NProto::TRequest request;
     request.MutableGetSecret()->MutableSecret()->CopyFrom(identity);
     return ctx.Call(std::move(request)).GetSecret();
+}
+
+NProto::TResponse CompleteSetup(TTestContext& ctx, const NProto::TDelegation& delegation) {
+    const auto started = ctx.Call(StartRequest(delegation));
+    return ctx.Call(SetupResultRequest(started.GetDelegation(), NProto::SETUP_SUCCEEDED));
+}
+
+NProto::TResponse CreateActive(TTestContext& ctx) {
+    ctx.Call(RegisterRequest(DatabaseIdentity()));
+    const auto staged = ctx.Call(StageCreateRequest());
+    const auto bound = ctx.Call(BindRequest(staged.GetDelegation()));
+    const auto setup = CompleteSetup(ctx, bound.GetDelegation());
+    return ctx.Call(PromoteRequest(setup.GetDelegation(), GetSecret(ctx).GetRevision()));
 }
 
 void AssertBinding(const NProto::TDelegation& delegation, const NProto::TIamBinding& expected) {
@@ -204,9 +258,96 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         ctx.Call(StartRequest(restored), NProto::PRECONDITION_FAILED);
         UNIT_ASSERT_VALUES_EQUAL(restored.GetSecret().GetPathLocalId(), SecretIdentity().GetPathLocalId());
         const auto setup = ctx.Call(SetupResultRequest(restored, NProto::SETUP_SUCCEEDED));
-        UNIT_ASSERT_VALUES_EQUAL(setup.GetDelegation().GetSetupState(), NProto::SETUP_SUCCEEDED);
-        UNIT_ASSERT_VALUES_EQUAL(GetSecret(ctx).GetPendingOperationId(), staged.GetOperationId());
-        AssertBinding(setup.GetDelegation(), Binding());
+        const auto secret = GetSecret(ctx);
+        const auto promoted = ctx.Call(PromoteRequest(setup.GetDelegation(), secret.GetRevision()));
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetDelegation().GetState(), NProto::ACTIVE);
+        UNIT_ASSERT_VALUES_EQUAL(GetSecret(ctx).GetCurrentOperationId(), staged.GetOperationId());
+        AssertBinding(promoted.GetDelegation(), Binding());
+    }
+
+    Y_UNIT_TEST(PromotionAtomicallyQueuesPredecessorAndPersistsBinding) {
+        TTestContext ctx;
+        CreateActive(ctx);
+        const auto original = GetDelegation(ctx, "create-1");
+        const auto oldSecret = GetSecret(ctx);
+        auto replacementBinding = Binding("ydb.delegation.replacement");
+        replacementBinding.SetCloudId("replacement-cloud");
+        replacementBinding.SetServiceAccountId("replacement-service-account");
+        const auto staged = ctx.Call(StageAlterRequest(oldSecret, "alter-1", replacementBinding));
+        ctx.Call(PromoteRequest(staged.GetDelegation(), GetSecret(ctx).GetRevision()),
+            NProto::PRECONDITION_FAILED);
+        const auto setup = CompleteSetup(ctx, staged.GetDelegation());
+        ctx.Call(PromoteRequest(setup.GetDelegation(), oldSecret.GetRevision()),
+            NProto::PRECONDITION_FAILED);
+        const auto promoteRequest = PromoteRequest(setup.GetDelegation(), GetSecret(ctx).GetRevision());
+        const auto promoted = ctx.Call(promoteRequest);
+        ctx.Reboot();
+
+        const auto secret = GetSecret(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetCurrentOperationId(), "alter-1");
+        UNIT_ASSERT(secret.GetPendingOperationId().empty());
+        const auto predecessor = GetDelegation(ctx, "create-1");
+        const auto replacement = GetDelegation(ctx, "alter-1");
+        UNIT_ASSERT_VALUES_EQUAL(predecessor.GetState(), NProto::REVOCATION_PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(replacement.GetState(), NProto::ACTIVE);
+        AssertBinding(predecessor, original.GetBinding());
+        AssertBinding(replacement, replacementBinding);
+        const auto replay = ctx.Call(promoteRequest);
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetDelegation().GetRevision(), promoted.GetDelegation().GetRevision());
+
+    }
+
+    Y_UNIT_TEST(DroppedUnknownSetupRemainsVisibleAndCannotBeClaimed) {
+        TTestContext ctx;
+        ctx.Call(RegisterRequest(DatabaseIdentity()));
+        const auto staged = ctx.Call(StageCreateRequest());
+        const auto bound = ctx.Call(BindRequest(staged.GetDelegation()));
+        const auto started = ctx.Call(StartRequest(bound.GetDelegation()));
+        ctx.Call(SetupResultRequest(started.GetDelegation(), NProto::SETUP_UNKNOWN, ""));
+        ctx.Call(DropRequest(GetSecret(ctx)));
+        ctx.Reboot();
+
+        const auto dropped = GetSecret(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(dropped.GetState(), NProto::SECRET_DROPPED);
+        const auto unknown = GetDelegation(ctx, "create-1");
+        UNIT_ASSERT_VALUES_EQUAL(unknown.GetState(), NProto::WAITING_SETUP);
+        UNIT_ASSERT_VALUES_EQUAL(unknown.GetSetupState(), NProto::SETUP_UNKNOWN);
+        UNIT_ASSERT(unknown.GetSetupOperationId().empty());
+        ctx.AdvanceTime(TDuration::Days(1));
+
+        const auto resolved = ctx.Call(SetupResultRequest(unknown, NProto::SETUP_SUCCEEDED));
+        UNIT_ASSERT_VALUES_EQUAL(resolved.GetDelegation().GetState(), NProto::REVOCATION_PENDING);
+    }
+
+    Y_UNIT_TEST(DropBeforeSetupCancelsIntentAndReleasesName) {
+        TTestContext ctx;
+        ctx.Call(RegisterRequest(DatabaseIdentity()));
+        const auto staged = ctx.Call(StageCreateRequest()).GetDelegation();
+        ctx.Call(DropRequest(staged));
+        ctx.Reboot();
+        const auto cancelled = GetDelegation(ctx, staged.GetOperationId());
+        UNIT_ASSERT_VALUES_EQUAL(cancelled.GetState(), NProto::CANCELLED);
+        ctx.Call(StartRequest(cancelled), NProto::PRECONDITION_FAILED);
+        const auto replacement = ctx.Call(StageCreateRequest("create-2", Binding("ydb.delegation.second"),
+            "/Root/database/secret", "database-incarnation-1", 20));
+        UNIT_ASSERT_VALUES_EQUAL(replacement.GetDelegation().GetState(), NProto::PENDING);
+    }
+
+    Y_UNIT_TEST(StaleUnboundDropCannotRetireBoundSecret) {
+        TTestContext ctx;
+        ctx.Call(RegisterRequest(DatabaseIdentity()));
+        const auto staged = ctx.Call(StageCreateRequest()).GetDelegation();
+        const auto unboundDrop = DropRequest(staged);
+        const auto bound = ctx.Call(BindRequest(staged));
+        UNIT_ASSERT_VALUES_EQUAL(staged.GetRevision(), bound.GetSecret().GetRevision());
+        UNIT_ASSERT(bound.GetDelegation().GetRevision() > staged.GetRevision());
+
+        ctx.Call(unboundDrop, NProto::PRECONDITION_FAILED);
+        ctx.Reboot();
+        const auto secret = GetSecret(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetState(), NProto::SECRET_LIVE);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetPendingOperationId(), staged.GetOperationId());
+        UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, staged.GetOperationId()).GetState(), NProto::PENDING);
     }
 
     Y_UNIT_TEST(StaleRevisionCannotChangeSetupOutcome) {
@@ -221,6 +362,56 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         const auto failed = ctx.Call(SetupResultRequest(unknown.GetDelegation(), NProto::SETUP_FAILED));
         UNIT_ASSERT_VALUES_EQUAL(failed.GetDelegation().GetSetupState(), NProto::SETUP_FAILED);
         ctx.Call(SetupResultRequest(failed.GetDelegation(), NProto::SETUP_SUCCEEDED), NProto::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(FailedAlterReleasesPendingWithoutLosingCurrent) {
+        TTestContext ctx;
+        CreateActive(ctx);
+        const auto staged = ctx.Call(StageAlterRequest(GetSecret(ctx), "failed-alter",
+            Binding("ydb.delegation.failed")));
+        const auto started = ctx.Call(StartRequest(staged.GetDelegation()));
+        ctx.Call(SetupResultRequest(started.GetDelegation(), NProto::SETUP_FAILED));
+        ctx.Reboot();
+
+        const auto secret = GetSecret(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetState(), NProto::SECRET_LIVE);
+        UNIT_ASSERT_VALUES_EQUAL(secret.GetCurrentOperationId(), "create-1");
+        UNIT_ASSERT(secret.GetPendingOperationId().empty());
+        UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, "create-1").GetState(), NProto::ACTIVE);
+        UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, "failed-alter").GetState(), NProto::CANCELLED);
+
+        const auto replacement = ctx.Call(StageAlterRequest(secret, "next-alter",
+            Binding("ydb.delegation.next")));
+        UNIT_ASSERT_VALUES_EQUAL(replacement.GetDelegation().GetState(), NProto::PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(GetSecret(ctx).GetCurrentOperationId(), "create-1");
+        UNIT_ASSERT_VALUES_EQUAL(GetSecret(ctx).GetPendingOperationId(), "next-alter");
+    }
+
+    Y_UNIT_TEST(FailedCreateKeepsNameUntilDropAndRetainsTombstones) {
+        TTestContext ctx;
+        ctx.Call(RegisterRequest(DatabaseIdentity()));
+        const auto originalRequest = StageCreateRequest();
+        const auto staged = ctx.Call(originalRequest);
+        const auto bound = ctx.Call(BindRequest(staged.GetDelegation()));
+        const auto started = ctx.Call(StartRequest(bound.GetDelegation()));
+        ctx.Call(SetupResultRequest(started.GetDelegation(), NProto::SETUP_FAILED));
+        ctx.Reboot();
+
+        const auto replay = ctx.Call(originalRequest);
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetDelegation().GetState(), NProto::CANCELLED);
+        const auto replacement = StageCreateRequest("create-2", Binding("ydb.delegation.second"),
+            "/Root/database/secret", "database-incarnation-1", 20);
+        ctx.Call(replacement, NProto::CONFLICT);
+        ctx.Call(DropRequest(GetSecret(ctx)));
+        const auto replacementIntent = ctx.Call(replacement).GetDelegation();
+        ctx.Call(BindRequest(replacementIntent), NProto::CONFLICT);
+        ctx.Call(BindRequest(replacementIntent, SecretIdentity(43)));
+
+        auto reuseOperation = replacement;
+        reuseOperation.MutableStage()->SetOperationId("create-1");
+        ctx.Call(reuseOperation, NProto::CONFLICT);
+        ctx.Call(StageCreateRequest("reuse-referrer", Binding(), "/Root/database/other",
+            "database-incarnation-1", 30), NProto::CONFLICT);
     }
 
     Y_UNIT_TEST(KnownIamOperationCannotBeReplacedByAnotherResult) {

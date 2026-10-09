@@ -79,6 +79,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  custom_ya_bin_s3_uri:
+    type: string
+    required: false
+    default: ""
+    description: "s3:// URI of a ya-bin tarball (ya-bin at archive root). Replaces ./ya for the make invocation and enables per-test CPU cgroup quotas."
 
 outputs:
   success:
@@ -205,6 +210,7 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
+        CUSTOM_YA_BIN_S3_URI: ${{ inputs.custom_ya_bin_s3_uri }}
       run: |
         set -ex
         . .github/scripts/utils/analytics/github_actions/analytics.sh
@@ -369,12 +375,28 @@ runs:
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
         echo "::debug::get version"
-        ./ya --version
+        YA_BIN="./ya"
+        if [ -n "${CUSTOM_YA_BIN_S3_URI}" ]; then
+          CUSTOM_YA_DIR="${RUNNER_TEMP}/custom-ya"
+          rm -rf "$CUSTOM_YA_DIR"
+          mkdir -p "$CUSTOM_YA_DIR"
+          s3cmd get --force "${CUSTOM_YA_BIN_S3_URI}" "$CUSTOM_YA_DIR/ya-bin.tar.gz"
+          tar -xzf "$CUSTOM_YA_DIR/ya-bin.tar.gz" -C "$CUSTOM_YA_DIR"
+          YA_BIN="$(find "$CUSTOM_YA_DIR" -type f -name ya-bin | head -1)"
+          if [ -z "$YA_BIN" ]; then
+            echo "ya-bin not found in ${CUSTOM_YA_BIN_S3_URI}"
+            exit 1
+          fi
+          chmod +x "$YA_BIN"
+          export YA_SOURCE_ROOT="${YA_SOURCE_ROOT:-$GITHUB_WORKSPACE}"
+          echo "Using custom ya-bin $YA_BIN from ${CUSTOM_YA_BIN_S3_URI}"
+        fi
+        "$YA_BIN" --version
 
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        YA_MAKE_COMMAND="\"$YA_BIN\" make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
@@ -522,7 +544,7 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            "$YA_BIN" make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
@@ -530,10 +552,49 @@ runs:
 
           # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
           # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
-          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          # Custom ya-bin caps each test at REQUIREMENTS(cpu) via cgroup v2 cpu.max.
+          # That needs a delegated parent: move this scope's processes into ya-runtime,
+          # enable the cpu controller, and hand the directory to the runner user.
+          DELEGATE_CPU=()
+          if [ -n "${CUSTOM_YA_BIN_S3_URI}" ]; then
+            CPU_CGROUP_EXEC="${RUNNER_TEMP}/ya-cgroup-exec.sh"
+            cat > "$CPU_CGROUP_EXEC" << 'EOF'
+#!/bin/bash
+set -euo pipefail
+target_uid="$1"
+target_gid="$2"
+shift 2
+cg_rel="$(sed -n 's/^0:://p' /proc/self/cgroup)"
+dir="/sys/fs/cgroup${cg_rel}"
+mkdir -p "$dir/ya-runtime"
+for _ in 1 2 3 4 5 6 7 8; do
+  mapfile -t pids < "$dir/cgroup.procs"
+  if [ "${#pids[@]}" -eq 0 ]; then
+    break
+  fi
+  for pid in "${pids[@]}"; do
+    [ -n "$pid" ] || continue
+    echo "$pid" > "$dir/ya-runtime/cgroup.procs" 2>/dev/null || true
+  done
+done
+if ! grep -qw cpu "$dir/cgroup.subtree_control"; then
+  echo '+cpu' > "$dir/cgroup.subtree_control"
+fi
+chown "$target_uid:$target_gid" "$dir" "$dir/ya-runtime"
+export YA_CPU_CGROUP_ROOT="$dir"
+echo "YA_CPU_CGROUP_ROOT=$dir"
+exec setpriv --reuid="$target_uid" --regid="$target_gid" --init-groups -- "$@"
+EOF
+            chmod +x "$CPU_CGROUP_EXEC"
+            DROP_PRIVS=(bash "$CPU_CGROUP_EXEC" "$(id -u)" "$(id -g)")
+            DELEGATE_CPU=(-p Delegate=yes)
+          else
+            DROP_PRIVS=(setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --)
+          fi
+          if [ "${COLLECT_COREDUMPS}" = "true" ] || [ -n "${CUSTOM_YA_BIN_S3_URI}" ]; then
             YA_MAKE_RUN_CMD=(
               prlimit --core=unlimited:unlimited
-              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
+              "${DROP_PRIVS[@]}"
               "${YA_MAKE_CMD[@]}"
             )
           else
@@ -555,6 +616,7 @@ runs:
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
+             "${DELEGATE_CPU[@]}" \
              -- "${YA_MAKE_RUN_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e

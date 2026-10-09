@@ -47,6 +47,11 @@ on:
         required: false
         type: string
         default: '52'
+      custom_ya_bin_s3_uri:
+        description: 's3:// URI of a replacement ya-bin tarball (per-test CPU quota experiment)'
+        required: false
+        type: string
+        default: ''
       collect_coredumps:
         description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
         required: false
@@ -100,6 +105,10 @@ on:
         description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false
         default: '52'
+      custom_ya_bin_s3_uri:
+        description: 's3:// URI of a replacement ya-bin tarball (per-test CPU quota experiment)'
+        required: false
+        default: ''
 
 jobs:
   prepare:
@@ -387,6 +396,7 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ env.threads_count }}
+          custom_ya_bin_s3_uri: ${{ inputs.custom_ya_bin_s3_uri }}
           custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
           put_build_results_to_cache: true
           collect_coredumps: ${{ inputs.collect_coredumps != false }}

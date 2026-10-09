@@ -20,14 +20,12 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     if (CPU.IsValueReady()) {
         metrics.SetCPU(CPU.GetValue());
     }
-    if (Memory.IsValueReady()) {
+    if (MemoryReport) {
+        metrics.SetMemory(MemoryReport->Used);
+        metrics.SetMemoryDemand(MemoryReport->Demand);
+        metrics.SetMemoryReclaimable(MemoryReport->Reclaimable);
+    } else if (Memory.IsValueReady()) {
         metrics.SetMemory(Memory.GetValue());
-    }
-    if (MemoryDemand.IsValueReady()) {
-        metrics.SetMemoryDemand(MemoryDemand.GetValue());
-    }
-    if (MemoryReclaimable.IsValueReady()) {
-        metrics.SetMemoryReclaimable(MemoryReclaimable.GetValue());
     }
     if (Network.IsValueReady()) {
         metrics.SetNetwork(Network.GetValue());
@@ -159,7 +157,26 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         have = true;
     }
 
-    if (src.Memory.IsValueReady()) {
+    if (src.MemoryReport) {
+        const ui64 memory = src.MemoryReport->Used;
+        const ui64 demand = src.MemoryReport->Demand;
+        const ui64 reclaimable = src.MemoryReport->Reclaimable;
+        const ui32 levelMemory = memory / SignificantChangeMemory;
+        const ui32 levelDemand = demand / SignificantChangeMemory;
+        const ui32 levelReclaimable = reclaimable / SignificantChangeMemory;
+        if (levelMemory != LevelMemory || levelDemand != LevelMemoryDemand ||
+            levelReclaimable != LevelMemoryReclaimable || force)
+        {
+            // Partial updates can violate Reclaimable <= Used <= Demand at the receiver.
+            metrics.SetMemory(memory);
+            metrics.SetMemoryDemand(demand);
+            metrics.SetMemoryReclaimable(reclaimable);
+            LevelMemory = levelMemory;
+            LevelMemoryDemand = levelDemand;
+            LevelMemoryReclaimable = levelReclaimable;
+            have = true;
+        }
+    } else if (src.Memory.IsValueReady()) {
         auto memory = !src.Memory.IsValueObsolete(now) ? src.Memory.GetValue() : 0;
         ui32 levelMemory = memory / SignificantChangeMemory;
         if (levelMemory != LevelMemory || force) {
@@ -171,27 +188,6 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         src.Memory.Set(0);
         metrics.SetMemory(0);
         have = true;
-    }
-
-    // Untouched by a tablet that does not report its memory, so nothing of these reaches the wire
-    if (src.MemoryDemand.IsValueReady()) {
-        const ui64 demand = !src.MemoryDemand.IsValueObsolete(now) ? src.MemoryDemand.GetValue() : 0;
-        const ui32 level = demand / SignificantChangeMemory;
-        if (level != LevelMemoryDemand || force) {
-            metrics.SetMemoryDemand(demand);
-            LevelMemoryDemand = level;
-            have = true;
-        }
-    }
-
-    if (src.MemoryReclaimable.IsValueReady()) {
-        const ui64 reclaimable = !src.MemoryReclaimable.IsValueObsolete(now) ? src.MemoryReclaimable.GetValue() : 0;
-        const ui32 level = reclaimable / SignificantChangeMemory;
-        if (level != LevelMemoryReclaimable || force) {
-            metrics.SetMemoryReclaimable(reclaimable);
-            LevelMemoryReclaimable = level;
-            have = true;
-        }
     }
 
     if (src.Network.IsValueReady()) {

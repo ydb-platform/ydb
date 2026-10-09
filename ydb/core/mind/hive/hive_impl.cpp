@@ -97,7 +97,12 @@ void THive::RestartPipeTx(ui64 tabletId) {
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
-        BLOG_I("TryToDeleteNode(" << node->Id << "): deleting");
+        RecordNodeEvent(*node, EHiveEventType::Deleted, EHiveEventReason::NodeExpired,
+            TStringBuilder() << "lastAlive=" << TInstant::MilliSeconds(node->Statistics.GetLastAliveTimestamp())
+                << " nodeDeletePeriod=" << GetNodeDeletePeriod());
+        if (node->Down) {
+            UpdateCounterNodesDown(-1);
+        }
         DeleteNode(node->Id);
         return true;
     }
@@ -822,8 +827,7 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         NodesInfo[node->NodeId] = nodeInfo;
         TNodeInfo* hiveNodeInfo = FindNode(nodeInfo.NodeId);
         if (hiveNodeInfo != nullptr) {
-            hiveNodeInfo->Location = nodeInfo.Location;
-            hiveNodeInfo->LocationAcquired = true;
+            hiveNodeInfo->SetLocation(nodeInfo.Location, EHiveEventReason::NameService);
             BLOG_D("TEvInterconnect::TEvNodeInfo NodeId " << nodeInfo.NodeId << " Location " << GetLocationString(hiveNodeInfo->Location));
         }
     }
@@ -852,7 +856,7 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
             Send(SelfId(), event.Release());
         }
     } else {
-        KillNode(event->NodeId, event->Local);
+        KillNode(event->NodeId, event->Local, EHiveEventReason::InterconnectDisconnected);
     }
 }
 
@@ -885,7 +889,7 @@ void THive::Handle(TEvPrivate::TEvKickTablet::TPtr &ev) {
             Execute(CreateRestartTablet(tabletId));
         }
     } else {
-        Execute(CreateRestartTablet(tabletId));
+        Execute(CreateForceRestartTablet(tabletId));
     }
 }
 
@@ -980,7 +984,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
                 // ping continiousily until we fully disconnected from the node
                 node->Ping();
             } else {
-                KillNode(node->Id, node->Local);
+                KillNode(node->Id, node->Local, EHiveEventReason::PingUndelivered);
             }
         }
         ProcessNodePingQueue();
@@ -1647,7 +1651,7 @@ TTabletCategoryInfo& THive::GetTabletCategory(TTabletCategoryId tabletCategoryId
     return it->second;
 }
 
-void THive::KillNode(TNodeId nodeId, const TActorId& local) {
+void THive::KillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails) {
     TNodeInfo* node = FindNode(nodeId);
     if (node != nullptr) {
         TVector<TTabletInfo*> tabletsToKill;
@@ -1660,7 +1664,7 @@ void THive::KillNode(TNodeId nodeId, const TActorId& local) {
             Execute(CreateRestartTablet(tablet->GetFullTabletId()));
         }
     }
-    Execute(CreateKillNode(nodeId, local));
+    Execute(CreateKillNode(nodeId, local, reason, std::move(reasonDetails)));
 }
 
 void THive::UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff) {
@@ -2371,6 +2375,7 @@ THive::THiveStats THive::GetStats() const {
     auto minValuesToBalance = GetMinNodeUsageToBalance();
     maxValues = piecewise_max(maxValues, minValuesToBalance);
     minValues = piecewise_max(minValues, minValuesToBalance);
+    stats.MinResourceNormValues = minValues;
     auto discrepancy = maxValues - minValues;
     auto& counterDiscrepancy = std::get<NMetrics::EResource::Counter>(discrepancy);
     if (counterDiscrepancy * CurrentConfig.GetMaxResourceCounter() <= 1.5) {
@@ -2451,6 +2456,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         nodeUsageHistogram.IncrementFor(record.Usage * 100);
     }
 
+    std::optional<TBalancerSettings> settings;
+    const auto maybeStartBalancer = [&settings, this]() -> bool {
+        Y_DEBUG_ABORT_UNLESS(settings);
+        if (LastBalancerTrigger == settings->Type
+            && BalancerStats[static_cast<size_t>(settings->Type)].LastRunMovements == 0) {
+            return false;
+        }
+        StartHiveBalancer(std::move(*settings));
+        return true;
+    };
+
     double minUsageToKick = GetMaxNodeUsageToKick() - GetNodeUsageRangeToKick();
     if (stats.MaxUsage >= GetMaxNodeUsageToKick() && stats.MinUsage < minUsageToKick) {
         std::vector<TNodeId> overloadedNodes;
@@ -2461,15 +2477,17 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         }
 
         if (!overloadedNodes.empty()) {
-            BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
-            StartHiveBalancer({
+            BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - triggered balancer");
+            settings.emplace(TBalancerSettings{
                 .Type = EBalancerType::Emergency,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                 .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                 .MaxInFlight = GetEmergencyBalancerInflight(),
                 .FilterNodeIds = std::move(overloadedNodes),
             });
-            return;
+            if (maybeStartBalancer()) {
+                return;
+            }
         }
     }
 
@@ -2478,24 +2496,19 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     }
 
     if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
-        TInstant now = TActivationContext::Now();
-        if (LastBalancerTrigger != EBalancerType::SpreadNeighbours
-            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunMovements != 0
-            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1) < now) {
-            auto objectToBalance = ObjectDistributions.GetObjectToBalance();
-            BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - starting balancer for object " << objectToBalance.ObjectId);
-            StartHiveBalancer({
-                .Type = EBalancerType::SpreadNeighbours,
-                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-                .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-                .MaxInFlight = GetBalancerInflight(),
-                .FilterNodeIds = std::move(objectToBalance.Nodes),
-                .ResourceToBalance = EResourceToBalance::Counter,
-                .FilterObjectId = objectToBalance.ObjectId,
-            });
+        auto objectToBalance = ObjectDistributions.GetObjectToBalance();
+        BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - triggered balancer for object " << objectToBalance.ObjectId);
+        settings.emplace(TBalancerSettings{
+            .Type = EBalancerType::SpreadNeighbours,
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(objectToBalance.Nodes),
+            .ResourceToBalance = EResourceToBalance::Counter,
+            .FilterObjectId = objectToBalance.ObjectId,
+        });
+        if (maybeStartBalancer()) {
             return;
-        } else {
-            BLOG_D("Skipping SpreadNeigbours Balancer, now: " << now << ", allowed: " << BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1));
         }
     }
 
@@ -2519,15 +2532,41 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 balancerType = EBalancerType::Scatter;
                 break;
         }
-        BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
-                   << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
-        StartHiveBalancer({
-            .Type = balancerType,
-            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-            .MaxInFlight = GetBalancerInflight(),
-            .ResourceToBalance = *scatteredResource,
-        });
+        const auto resource = *scatteredResource;
+        const double minScatter = TTabletInfo::ExtractResourceUsage(GetMinScatterToBalance(), resource);
+        if (minScatter >= 0.0 && minScatter < 1.0) {
+            const double minUsage = TTabletInfo::ExtractResourceUsage(stats.MinResourceNormValues, resource);
+            const double usageThreshold = minUsage / (1.0 - minScatter);
+
+            std::vector<TNodeId> nodeIds;
+            nodeIds.reserve(stats.Values.size());
+            for (const auto& node : stats.Values) {
+                const double usage = TTabletInfo::ExtractResourceUsage(node.ResourceNormValues, resource);
+                if (usage > usageThreshold) {
+                    nodeIds.push_back(node.NodeId);
+                }
+            }
+            // An empty filter means all nodes to the balancer.
+            if (!nodeIds.empty()) {
+                BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
+                           << GetMinScatterToBalance() << " - triggered balancer " << EBalancerTypeName(balancerType));
+                settings.emplace(TBalancerSettings{
+                    .Type = balancerType,
+                    .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+                    .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+                    .MaxInFlight = GetBalancerInflight(),
+                    .FilterNodeIds = std::move(nodeIds),
+                    .ResourceToBalance = *scatteredResource,
+                });
+                if (maybeStartBalancer()) {
+                    return;
+                }
+            }
+        }
+    }
+
+    if (settings) {
+        StartHiveBalancer(std::move(*settings));
         return;
     }
 

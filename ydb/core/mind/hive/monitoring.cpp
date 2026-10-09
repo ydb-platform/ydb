@@ -338,6 +338,11 @@ public:
     }
 };
 
+// link to the NodeInfo page (node details and event history) shown instead of a bare node id
+static TString GetNodeInfoLink(ui64 hiveId, TNodeId nodeId) {
+    return TStringBuilder() << "<a href='?TabletID=" << hiveId << "&page=NodeInfo&node=" << nodeId << "'>" << nodeId << "</a>";
+}
+
 class TTxMonEvent_MemStateNodes : public TTransactionBase<THive> {
 public:
     const TActorId Source;
@@ -387,7 +392,7 @@ public:
         for (const auto& [nodeId, nodeInfoPtr] : nodeIdIndex) {
             const TNodeInfo& x = *nodeInfoPtr;
             out << "<tr>";
-            out << "<td>" << nodeId << "</td>";
+            out << "<td>" << GetNodeInfoLink(Self->TabletID(), nodeId) << "</td>";
             out << "<td>" << x.Local << "</td>";
             out << "<td>" << x.ServicedDomains << "</td>";
             out << "<td>" << x.GetTabletsScheduled() << "</td>";
@@ -1499,8 +1504,10 @@ public:
         auto changeType = ParseTabletType(cgi.Get("changetype"));
         auto maxCount = TryFromString<ui64>(cgi.Get("maxcount"));
         auto resetType = ParseTabletType(cgi.Get("resettype"));
+        TStringBuilder eventDetails;
         if (changeType != TTabletTypes::TypeInvalid && maxCount) {
             ChangeRequest = true;
+            eventDetails << "type=" << GetTabletTypeShortName(changeType) << " maxCount=" << *maxCount << " ";
             NJson::TJsonValue jsonUpdate;
             jsonUpdate["Type"] = GetTabletTypeShortName(changeType);
             jsonUpdate["MaxCount"] = *maxCount;
@@ -1514,6 +1521,7 @@ public:
         }
         if (resetType != TTabletTypes::TypeInvalid) {
             ChangeRequest = true;
+            eventDetails << "type=" << GetTabletTypeShortName(resetType) << " maxCount=default ";
             NJson::TJsonValue jsonUpdate;
             jsonUpdate["Type"] = GetTabletTypeShortName(resetType);
             jsonUpdate["MaxCount"] = "[default]";
@@ -1538,6 +1546,7 @@ public:
             Self->ObjectDistributions.AddNode(*Node);
             Self->ProcessWaitQueue();
             WriteOperation(db, jsonOperation);
+            Self->RecordNodeEvent(*Node, EHiveEventType::AvailabilityChanged, EHiveEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
         }
         return true;
     }
@@ -1748,6 +1757,9 @@ public:
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=OperationsLog&max=100\";' style='width:138px'>Operations Log</button>";
         out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"?TabletID=" << Self->HiveId << "&page=Events\";' style='width:138px'>Events</button>";
+        out << "</div>";
         out << "</div>";
 
         out << "<div class='row' style='margin-top:10px'>";
@@ -1768,6 +1780,9 @@ public:
         out << "</div>";
         out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
         out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=Subactors\";' style='width:138px'>SubActors</button>";
+        out << "</div>";
+        out << "<div class='col-sm-1 col-md-1' style='text-align:center'>";
+        out << "<button type='button' class='btn btn-info' onclick='location.href=\"app?TabletID=" << Self->HiveId << "&page=ManualOperations\";' style='width:138px'>Manual Ops</button>";
         out << "</div>";
         out << "</div>";
 
@@ -1896,17 +1911,33 @@ public:
                            </div>
                            <div class='modal-body'>
                                <div class='row'>
-                                   <div class='col-md-12'>
+                                   <div class='col-md-6'>
                                        <h2> Run Balancer</h2>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <h2> Currently running</h2>
                                    </div>
                                </div>
                                <div class='row'>
-                                   <div class='col-md-2'>
+                                   <div class='col-md-3'>
                                        <label for='balancer_max_movements'>Max movements</label>
                                        <div in='balancer_max_movements' class='input-group'>
                                            <input id='balancer_max_movements' type='number' value='1000' class='form-control'>
                                        </div>
                                        <br>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <label for='balancer_in_flight'>In-flight</label>
+                                       <div in='balancer_in_flight' class='input-group'>
+                                           <input id='balancer_in_flight' type='number' value='1' class='form-control'>
+                                       </div>
+                                       <br>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <table id='current_balancers' class='table table-stripped'>
+                                       <tbody>
+                                       </tbody>
+                                       </table>
                                    </div>
                                </div>
                                <div class='row'>
@@ -1926,16 +1957,15 @@ public:
                                </div>
                                <div class='row'>
                                    <div class='col-md-8'>
+                                       <details>
+                                       <summary style='display:list-item'> This will restart all tablets. You probably don't want do that on a running production database.</summary>
                                        <label for='tenant_name'> Please enter the tenant name to confirm you know what you are doing</label>
                                        <div in='tenant_name' class='input-group' style='width:100%'>
                                            <input id='tenant_name' type='text' class='form-control'>
                                        </div>
                                        <br>
-                                   </div>
-                              </div>
-                              <div class='row'>
-                                   <div class='col-md-2'>
                                        <button id='button_rebalance' type='submit' class='btn btn-danger' onclick='rebalanceTabletsFromScratch();' data-dismiss='modal'>Run</button>
+                                       </details>
                                    </div>
                               </div>
                               <div class='row'>
@@ -2138,9 +2168,9 @@ function drainNode(element, nodeId) {
 }
 
 function rebalanceTablets() {
-    $('#balancerProgress').html('o.O');
     var max_movements = $('#balancer_max_movements').val();
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
+    var in_flight = $('#balancer_in_flight').val();
+    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight});
 }
 
 function rebalanceTabletsFromScratch(element) {
@@ -2269,6 +2299,7 @@ function fillDataShort(result) {
             $('#resourceScatterMemory').html(result.ScatterHtml.Memory);
             $('#resourceScatterNetwork').html(result.ScatterHtml.Network);
 
+            $('#current_balancers > tbody > tr').remove();
             for (var b = 0; b < result.Balancers.length; b++) {
                 var balancerObj = result.Balancers[b];
                 var balancerHtml = $('#balancer' + b)[0];
@@ -2282,7 +2313,9 @@ function fillDataShort(result) {
                     balancerHtml.cells[4].innerHTML = '';
                 }
                 if (balancerObj.IsRunningNow && balancerObj.CurrentMaxMovements > 0) {
-                    balancerHtml.cells[5].innerHTML = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                    var progress = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                    balancerHtml.cells[5].innerHTML = progress;
+                    $('#current_balancers > tbody').append("<tr><td>" + balancerHtml.cells[0].innerHTML + "</td><td>" + progress +"</td></tr>");
                 } else {
                     balancerHtml.cells[5].innerHTML = '';
                 }
@@ -2329,7 +2362,7 @@ function onFreshDataLong(result) {
                 if (old_node) {
                     nodeElement = old_node.NodeElement;
                 } else {
-                    nodeElement = $('<tr id="node' + node.Id + '"><td>' + node.Id + '</td>'
+                    nodeElement = $('<tr id="node' + node.Id + '"><td><a href="?TabletID=' + hiveId + '&page=NodeInfo&node=' + node.Id + '" title="Node info">' + node.Id + '</a></td>'
                         + '<td></td>'
                         + '<td></td>'
                         + '<td></td>'
@@ -2639,7 +2672,10 @@ public:
                 TNodeInfo& node = *nodeInfo;
                 TNodeId id = node.Id;
 
-                if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
+                if (!node.IsAlive()
+                    && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine
+                    && !node.Down
+                    && !node.Freeze) {
                     continue;
                 }
 
@@ -2712,6 +2748,8 @@ public:
     TString Response;
     TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
+    EHiveEventReason Reason = EHiveEventReason::SetDownRequest;
+    TString ReasonDetails;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(hive)
@@ -2720,7 +2758,10 @@ public:
         , NodeId(nodeId)
         , Down(down)
         , Event(ev->Release())
-    {}
+    {
+        Reason = EHiveEventReason::MonitoringRequest;
+        ReasonDetails = TStringBuilder() << "user=" << GetUserForLog();
+    }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
 
@@ -2733,7 +2774,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
-            node->SetDown(Down);
+            node->SetDown(Down, Reason, ReasonDetails);
             db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
@@ -2782,7 +2823,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
-            node->SetFreeze(Freeze);
+            node->SetFreeze(Freeze, EHiveEventReason::MonitoringRequest, TStringBuilder() << "user=" << GetUserForLog());
             db.Table<Schema::Node>().Key(NodeId).Update(NIceDb::TUpdate<Schema::Node::Freeze>(Freeze));
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
@@ -2943,6 +2984,7 @@ class TTxMonEvent_Rebalance : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     int MaxMovements = 1000;
+    ui64 MaxInFlight = 1;
     TString Response = "{}";
     TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
@@ -2954,6 +2996,7 @@ public:
     {
         auto cgi = GetParams(ev->Get());
         MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
+        MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2966,7 +3009,8 @@ public:
         }
         Self->StartHiveBalancer({
             .Type = EBalancerType::Manual,
-            .MaxMovements = MaxMovements
+            .MaxMovements = MaxMovements,
+            .MaxInFlight = MaxInFlight,
         });
         return true;
     }
@@ -3046,7 +3090,7 @@ public:
             return true;
         }
         for (const auto& tablet : Self->Tablets) {
-            Self->Execute(Self->CreateRestartTablet(tablet.second.GetFullTabletId()));
+            Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
         return true;
     }
@@ -3059,7 +3103,7 @@ public:
 class TReassignTabletWaitActor : public TActor<TReassignTabletWaitActor>, public ISubActor {
 public:
     TActorId Source;
-    ui32 TabletsTotal = std::numeric_limits<ui32>::max();
+    ui32 TabletsTotal = 0;
     ui32 TabletsDone = 0;
     THive* Hive;
     NJson::TJsonValue Response;
@@ -3087,8 +3131,12 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
-        ++TabletsDone;
+    void AddTablet(TLeaderTabletInfo* tablet) {
+        tablet->ActorsToNotifyOnRestart.push_back(SelfId());
+        ++TabletsTotal;
+    }
+
+    void CheckCompletion() {
         if (TabletsDone >= TabletsTotal) {
             Response["total"] = TabletsDone;
             Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
@@ -3098,6 +3146,11 @@ public:
 
     void AddContext(const TString& key, const TString& value) {
         Response[key] = value;
+    }
+
+    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
+        ++TabletsDone;
+        CheckCompletion();
     }
 
     STATEFN(StateWork) {
@@ -3255,7 +3308,7 @@ public:
                 continue;
             }
             if (Wait) {
-                tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
+                waitActor->AddTablet(tablet);
             }
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
             if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
@@ -3266,7 +3319,7 @@ public:
             }
         }
         if (Wait) {
-            waitActor->TabletsTotal = operations.size();
+            waitActor->CheckCompletion();
         }
         for (auto& op : operations) {
             ctx.Send(Self->SelfId(), op.Release());
@@ -4796,6 +4849,440 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
+static void RenderNodeEventRow(IOutputStream& out, const THiveEvent& event) {
+    out << "<td>" << event.GetTimestamp().ToString() << "</td>"
+        << "<td>" << EHiveEventTypeName(event.Type) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(EHiveEventReasonName(event.Reason)) << "</td>"
+        << "<td>" << EncodeHtmlPcdata(event.Details) << "</td>";
+}
+
+static NJson::TJsonValue NodeEventToJson(const THiveEvent& event) {
+    NJson::TJsonValue json;
+    json["Timestamp"] = event.TimestampMs;
+    json["Event"] = TString(EHiveEventTypeName(event.Type));
+    json["Reason"] = TString(EHiveEventReasonName(event.Reason));
+    json["Details"] = event.Details;
+    return json;
+}
+
+// Recent events across the whole Hive: node events now, tablet events are expected to join on the same page
+class TTxMonEvent_Events : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    ui64 MaxCount = THive::RECENT_NODE_EVENTS_SIZE;
+    bool Json = false;
+
+    TTxMonEvent_Events(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        auto params = GetParams(Event.Get());
+        MaxCount = FromStringWithDefault(params.Get("max"), MaxCount);
+        Json = params.Get("format") == "json";
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_EVENTS; }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        const auto& history = Self->RecentNodeEvents;
+        if (Json) {
+            NJson::TJsonValue json;
+            NJson::TJsonValue& events = json["Events"];
+            events.SetType(NJson::JSON_ARRAY);
+            ForEachNewestFirst(history, MaxCount, [&](const TRecentNodeEvent& recent) {
+                NJson::TJsonValue& jsonEvent = events.AppendValue(NodeEventToJson(recent.Event));
+                jsonEvent["NodeId"] = recent.NodeId;
+                if (const TNodeInfo* node = Self->FindNode(recent.NodeId)) {
+                    jsonEvent["NodeName"] = node->Name;
+                }
+            });
+            TStringStream out;
+            NJson::WriteJson(&out, &json);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(out.Str()));
+            return true;
+        }
+        TStringStream out;
+        out << "<head>";
+        out << "<style>";
+        out << "table.simple-table2 th { text-align: left; }";
+        out << "table.simple-table2 td { text-align: left; white-space: nowrap; }";
+        out << "table.simple-table2 td:last-child { white-space: normal; }";
+        out << "</style>";
+        out << "</head>";
+        out << "<body>";
+        out << "<p>Last " << THive::RECENT_NODE_EVENTS_SIZE << " node events across all nodes, kept in memory since Hive start. "
+            << "Click a node id for its info and full history (last " << TNodeInfo::EVENT_HISTORY_SIZE << " events per node). "
+            << "Add &format=json for machine-readable output.</p>";
+        out << "<table class='table simple-table2'>";
+        out << "<thead>";
+        out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th><th>Node</th><th>Name</th></tr>";
+        out << "</thead>";
+        out << "<tbody>";
+        ForEachNewestFirst(history, MaxCount, [&](const TRecentNodeEvent& recent) {
+            const TNodeInfo* node = Self->FindNode(recent.NodeId);
+            out << "<tr>";
+            RenderNodeEventRow(out, recent.Event);
+            out << "<td>" << GetNodeInfoLink(Self->TabletID(), recent.NodeId) << "</td>";
+            out << "<td>" << (node ? EncodeHtmlPcdata(node->Name) : TString("(deleted)")) << "</td>";
+            out << "</tr>";
+        });
+        out << "</tbody>";
+        out << "</table>";
+        out << "</body>";
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
+// Everything Hive knows about one node plus the node's event history
+class TTxMonEvent_NodeInfo : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+    TNodeId NodeId = 0;
+    bool Json = false;
+
+    TTxMonEvent_NodeInfo(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+        , Event(ev->Release())
+    {
+        auto params = GetParams(Event.Get());
+        NodeId = FromStringWithDefault<TNodeId>(params.Get("node"), 0);
+        Json = params.Get("format") == "json";
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_NODE_INFO; }
+
+    TString GetHost() const {
+        auto it = Self->NodesInfo.find(NodeId);
+        if (it == Self->NodesInfo.end()) {
+            return {};
+        }
+        const auto& ni = it->second;
+        return ni.Host.empty() ? ni.Address : ni.Host;
+    }
+
+    TString GetDomainNames(const TVector<TSubDomainKey>& domains) const {
+        TStringBuilder str;
+        for (const auto& domain : domains) {
+            if (!str.empty()) {
+                str << ", ";
+            }
+            str << Self->GetDomainName(domain) << " (" << domain << ")";
+        }
+        return str;
+    }
+
+    // ordered list of (name, value) pairs rendered both as HTML and as JSON
+    std::vector<std::pair<TString, TString>> CollectInfo(const TNodeInfo& node) const {
+        TInstant now = TActivationContext::Now();
+        std::vector<std::pair<TString, TString>> info;
+        auto add = [&info](TString name, auto&& value) {
+            info.emplace_back(std::move(name), TStringBuilder() << value);
+        };
+        add("Id", node.Id);
+        add("Name", node.Name);
+        add("Host", GetHost());
+        add("Local", node.Local);
+        add("State", TNodeInfo::EVolatileStateName(node.GetVolatileState()));
+        add("Alive", node.IsAlive());
+        add("Down", node.Down);
+        add("BecomeUpOnRestart", node.BecomeUpOnRestart);
+        add("Freeze", node.Freeze);
+        add("Drain", node.Drain);
+        add("DrainSeqNo", node.DrainSeqNo);
+        add("DrainInitiators", node.DrainInitiators.size());
+        add("ServicedDomains", GetDomainNames(node.ServicedDomains));
+        add("LastSeenServicedDomains", GetDomainNames(node.LastSeenServicedDomains));
+        add("DataCenter", node.GetDataCenter());
+        add("Location", node.LocationAcquired ? GetLocationString(node.Location) : TString("(not acquired)"));
+        //add("BridgePile", node.BridgePileId);
+        add("StartTime", node.StartTime ? node.StartTime.ToStringLocalUpToSeconds() : TString());
+        add("Uptime", node.IsAlive() && node.StartTime ? GetDurationString(now - node.StartTime) : TString());
+        add("LastAlive", node.Statistics.HasLastAliveTimestamp()
+            ? TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()).ToStringLocalUpToSeconds() : TString());
+        add("RestartsInPeriod", node.GetRestartsPerPeriod());
+        add("RestartsRemembered", node.Statistics.RestartTimestampSize());
+        add("DeletionScheduled", node.DeletionScheduled);
+        add("PipeServers", node.PipeServers.size());
+        for (const auto& [state, tablets] : node.Tablets) {
+            add(TStringBuilder() << "Tablets" << TTabletInfo::EVolatileStateName(state), tablets.size());
+        }
+        {
+            TStringBuilder byType;
+            for (const auto& [type, tablets] : node.TabletsRunningByType) {
+                if (!tablets.empty()) {
+                    byType << (byType.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << tablets.size();
+                }
+            }
+            add("TabletsRunningByType", byType);
+        }
+        add("LockedTablets", node.LockedTablets.size());
+        add("FrozenTablets", node.FrozenTablets.size());
+        //add("HighImpactTablets", node.HighImpactTablets.size());
+        add("Overloaded", node.IsOverloaded());
+        add("NodeUsage", Sprintf("%.3f", node.GetNodeUsage()));
+        add("NodeTotalUsage", Sprintf("%.3f", node.NodeTotalUsage));
+        add("ResourceValues", GetResourceValuesText(node.ResourceValues));
+        add("ResourceTotalValues", GetResourceValuesText(node.ResourceTotalValues));
+        add("ResourceMaximumValues", GetResourceValuesText(node.ResourceMaximumValues));
+        add("MaxTabletsScheduled", node.GetMaxTabletsScheduled());
+        {
+            TStringBuilder availability;
+            for (const auto& [type, avail] : node.TabletAvailability) {
+                availability << (availability.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=";
+                if (avail.EffectiveMaxCount == TNodeInfo::MAX_TABLET_COUNT_DEFAULT_VALUE) {
+                    availability << "default";
+                } else {
+                    availability << avail.EffectiveMaxCount;
+                }
+                if (avail.FromLocal.GetMaxCount() != avail.EffectiveMaxCount) {
+                    availability << " (local=" << avail.FromLocal.GetMaxCount() << ")";
+                }
+            }
+            add("TabletAvailability", availability);
+        }
+        {
+            TStringBuilder restrictions;
+            for (const auto& [type, maxCount] : node.TabletAvailabilityRestrictions) {
+                restrictions << (restrictions.empty() ? "" : ", ") << GetTabletTypeShortName(type) << "=" << maxCount;
+            }
+            add("TabletAvailabilityRestrictions", restrictions);
+        }
+        return info;
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        const TNodeInfo* node = Self->FindNode(NodeId);
+        if (Json) {
+            NJson::TJsonValue json;
+            if (node == nullptr) {
+                json["error"] = TStringBuilder() << "Node " << NodeId << " not found";
+            } else {
+                NJson::TJsonValue& jsonInfo = json["Node"];
+                for (const auto& [name, value] : CollectInfo(*node)) {
+                    jsonInfo[name] = value;
+                }
+                NJson::TJsonValue& events = json["Events"];
+                events.SetType(NJson::JSON_ARRAY);
+                ForEachNewestFirst(node->EventHistory, Max<size_t>(), [&events](const THiveEvent& event) {
+                    events.AppendValue(NodeEventToJson(event));
+                });
+            }
+            TStringStream out;
+            NJson::WriteJson(&out, &json);
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(out.Str()));
+            return true;
+        }
+        TStringStream out;
+        out << "<head>";
+        out << "<style>";
+        out << "table.simple-table2 th { text-align: left; }";
+        out << "table.simple-table2 td { text-align: left; white-space: nowrap; }";
+        out << "table.simple-table2 td:last-child { white-space: normal; }";
+        out << "</style>";
+        out << "</head>";
+        out << "<body>";
+        if (node == nullptr) {
+            out << "<p>Node " << NodeId << " is not known to this Hive.</p>";
+        } else {
+            out << "<h3>Node " << NodeId << " " << EncodeHtmlPcdata(node->Name) << "</h3>";
+            out << "<p><a href='?TabletID=" << Self->TabletID() << "&page=Events'>All recent events</a>"
+                << " | <a href='?TabletID=" << Self->TabletID() << "&page=NodeInfo&node=" << NodeId << "&format=json'>JSON</a></p>";
+            out << "<table class='table simple-table2'>";
+            out << "<tbody>";
+            for (const auto& [name, value] : CollectInfo(*node)) {
+                out << "<tr><th>" << name << "</th><td>" << EncodeHtmlPcdata(value) << "</td></tr>";
+            }
+            out << "</tbody>";
+            out << "</table>";
+            out << "<h4>Events</h4>";
+            out << "<p>Last " << TNodeInfo::EVENT_HISTORY_SIZE << " events of this node, newest first, kept in memory since Hive start.</p>";
+            out << "<table class='table simple-table2'>";
+            out << "<thead>";
+            out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr>";
+            out << "</thead>";
+            out << "<tbody>";
+            ForEachNewestFirst(node->EventHistory, Max<size_t>(), [&out](const THiveEvent& event) {
+                out << "<tr>";
+                RenderNodeEventRow(out, event);
+                out << "</tr>";
+            });
+            out << "</tbody>";
+            out << "</table>";
+        }
+        out << "</body>";
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
+class TTxMonEvent_ManualOps : public TTransactionBase<THive> {
+public:
+    const TActorId Source;
+    THolder<NMon::TEvRemoteHttpInfo> Event;
+
+    TTxMonEvent_ManualOps(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr&, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        TStringStream out;
+        out << "<div>";
+        out << "<form id='dynamicForm' method='POST'>";
+        out << R"(
+            <div class="form-group">
+                <label for='page' style='display:block'>Operation type</label>
+                <select id='page' name='page' onchange='toggleCustomInput()'>
+                    <option>SetDown</option>
+                    <option>SetFreeze</option>
+                    <option>ReassignTablet</option>
+                    <option>InitMigration</option>
+                    <option>MoveTablet</option>
+                    <option>StopTablet</option>
+                    <option>ResumeTablet</option>
+        )";
+        if (Self->GetEnableDestroyOperations()) {
+            out << R"(
+                    <option>ResetTablet</option>
+                    <option>DeleteTablet</option>
+            )";
+        }
+        out << R"(
+                    <option>UpdateResources</option>
+                    <option>StorageRebalance</option>
+                    <option>TabletAvailability</option>
+                    <option>SetDomain</option>
+                    <option value="other">Other...</option>
+                </select>
+                <input type="text" id="custom_page" name="custom_page"
+                       style='display:none'>
+            </div>
+        )";
+
+        for (auto& param : {"node", "tablet", "wait"}) {
+            out << "<div class='form-group'>";
+            out << "<label style='display:block' for='" << param << "'>" << param << "</label>";
+            out << "<input type='text' id='" << param << "' name='" << param << "'>";
+            out << "</div>";
+        }
+
+        out << R"(
+            <div class="form-group">
+                <label>Custom params</label>
+                <div id="keyValuePairs">
+                    <div class="key-value-pair">
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' onclick='removeKeyValuePair(this)' style='border:none'></button>
+                    </div>
+                </div>
+                <button type='button' class='glyphicon glyphicon-plus' onclick='addKeyValuePair()' style='border:none'></button>
+            </div>
+        )";
+
+        out << "<button type='button' class='btn btn-info' onclick='prepareAndSubmit()'>Send request</button>";
+
+        out << "</form></div>";
+
+        out << "<script>";
+        out << "var hiveId = '" << Self->TabletID() << "';";
+
+        out << R"(
+                function toggleCustomInput() {
+                    const pageSelect = document.getElementById('page');
+                    const customInput = document.getElementById('custom_page');
+
+                    if (pageSelect.value === 'other') {
+                        customInput.style.display = 'block';
+                        customInput.focus();
+                    } else {
+                        customInput.style.display = 'none';
+                        customInput.value = '';
+                    }
+                }
+
+                function addKeyValuePair() {
+                    const container = document.getElementById('keyValuePairs');
+                    const newPair = document.createElement('div');
+                    newPair.className = 'key-value-pair';
+                    newPair.innerHTML = `
+                        <input type="text" name="key[]" placeholder="key">
+                        <input type="text" name="value[]" placeholder="value">
+                        <button type='button' class='glyphicon glyphicon-remove-sign' style='border:none' onclick='removeKeyValuePair(this)'></button>
+                    `;
+                    container.appendChild(newPair);
+                }
+
+                function removeKeyValuePair(button) {
+                    button.parentElement.remove();
+                }
+
+                function prepareAndSubmit() {
+                    const form = document.getElementById('dynamicForm');
+                    const formData = new FormData(form);
+                    const data = {};
+                    data['TabletID'] = hiveId;
+
+                    for (let [key, value] of formData.entries()) {
+                        if (key === 'key[]' || key === 'value[]') {
+                            continue;
+                        }
+
+                        if (key === 'page' && value === 'other') {
+                            const customValue = document.getElementById('custom_page').value;
+                            if (customValue.trim()) {
+                                data[key] = customValue;
+                            } else {
+                                data[key] = value;
+                            }
+                        } else {
+                            data[key] = value;
+                        }
+                    }
+                    const keys = formData.getAll('key[]');
+                    const values = formData.getAll('value[]');
+
+                    for (let i = 0; i < keys.length; i++) {
+                        if (keys[i].trim() && values[i].trim()) {
+                            data[keys[i]] = values[i];
+                        }
+                    }
+                    sendPostRequest(data);
+                }
+
+                function sendPostRequest(data) {
+                    $.ajax({
+                        url: 'app',
+                        method: 'POST',
+                        data: data,
+                        success: function(d) {
+                            alert(JSON.stringify(d));
+                        },
+                        error: function(d) {
+                            alert(JSON.stringify(d));
+                        }
+                    });
+                }
+            </script>
+        )";
+
+        ctx.Send(Source, new NMon::TEvRemoteHttpInfoRes(out.Str()));
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {}
+};
+
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
@@ -4965,6 +5452,15 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "OperationsLog") {
         return Execute(new TTxMonEvent_OperationsLog(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ManualOperations") {
+        return Execute(new TTxMonEvent_ManualOps(ev->Sender, ev, this), ctx);
+    }
+    if (page == "Events") {
+        return Execute(new TTxMonEvent_Events(ev->Sender, ev, this), ctx);
+    }
+    if (page == "NodeInfo") {
+        return Execute(new TTxMonEvent_NodeInfo(ev->Sender, ev, this), ctx);
     }
     return Execute(new TTxMonEvent_Landing(ev->Sender, ev, this), ctx);
 }

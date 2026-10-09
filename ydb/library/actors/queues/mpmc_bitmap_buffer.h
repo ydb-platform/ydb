@@ -2,6 +2,7 @@
 
 #include <library/cpp/threading/chunk_queue/queue.h>
 #include <util/system/mutex.h>
+#include <util/generic/bitops.h>
 
 #include <atomic>
 #include <optional>
@@ -9,7 +10,7 @@
 
 
 namespace NActors {
-    
+
 
 struct TMPMCBitMapBuffer {
 
@@ -55,7 +56,7 @@ struct TMPMCBitMapBuffer {
 
 
     TMPMCBitMapBuffer(ui64 sizeBits)
-        : MaxSize(1ull << sizeBits) 
+        : MaxSize(1ull << sizeBits)
         , SizeBits(sizeBits)
         , Buffer(new std::atomic<ui64>[MaxSize])
         , Bitmap(new NThreading::TPadded<std::atomic<ui64>>[MaxSize / 64])
@@ -67,7 +68,7 @@ struct TMPMCBitMapBuffer {
             Buffer[idx] = TSlot::MakeEmpty(0);
         }
     }
-    
+
     ui32 ConvertIdx(ui32 idx) {
         idx = idx % MaxSize;
         if (MaxSize < 0x100) {
@@ -228,7 +229,7 @@ struct TMPMCBitMapBuffer {
     std::optional<ui32> Find(ui64 pos, TPred pred) {
         // // Cerr << "Find\n";
         ui64 tailSize = TailSize.load(std::memory_order_acquire);
-        TTailSize hts = TTailSize::Recognise(tailSize, SizeBits); 
+        TTailSize hts = TTailSize::Recognise(tailSize, SizeBits);
         if (!hts.Size) {
             // // Cerr << "Didn't have elements" << Endl;
             return std::nullopt;

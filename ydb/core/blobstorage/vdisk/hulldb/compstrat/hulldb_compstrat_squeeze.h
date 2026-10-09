@@ -28,10 +28,12 @@ namespace NKikimr {
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TLevelIndexSnapshot &levelSnap,
                     TTask *task,
-                    TInstant squeezeBefore)
+                    TInstant squeezeBefore,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Yield(yield)
                 , SqueezeBefore(squeezeBefore)
             {}
 
@@ -63,6 +65,7 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            TCompactionYield* const Yield;
             const TInstant SqueezeBefore;
 
             EAction SelectQuantum() {
@@ -74,6 +77,7 @@ namespace NKikimr {
                 TSstIterator it(&sliceSnap);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(Yield);
                     TLevelSstPtr p = it.Get();
                     if (p.Level > 0) {
                         if (p.SstPtr->Info.CTime < SqueezeBefore) {

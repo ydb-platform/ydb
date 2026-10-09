@@ -630,6 +630,280 @@ public:
     }
 };
 
+class TPendingReadSpiller: public TPreallocatedSpiller {
+public:
+    TPendingReadSpiller(TBuffer& dataStore, size_t pauseOnRead)
+        : TPreallocatedSpiller(dataStore)
+        , PauseOnRead(pauseOnRead)
+    {}
+
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) override {
+        if (++ReadCount == PauseOnRead) {
+            PendingKey = key;
+            return PendingRead.GetFuture();
+        }
+        return TPreallocatedSpiller::Get(key);
+    }
+
+    size_t GetReadCount() const {
+        return ReadCount;
+    }
+
+    void ResumeRead(bool missing) {
+        PendingRead.SetValue(missing ? std::nullopt : TPreallocatedSpiller::Get(PendingKey).ExtractValueSync());
+    }
+
+private:
+    const size_t PauseOnRead;
+    size_t ReadCount = 0;
+    TKey PendingKey = 0;
+    NThreading::TPromise<std::optional<NYql::TChunkedBuffer>> PendingRead =
+        NThreading::NewPromise<std::optional<NYql::TChunkedBuffer>>();
+};
+
+class TPendingReadSpillerFactory: public ISpillerFactory {
+public:
+    explicit TPendingReadSpillerFactory(size_t pauseOnRead)
+        : DataStore(4_MB)
+        , Spiller(std::make_shared<TPendingReadSpiller>(DataStore, pauseOnRead))
+    {}
+
+    void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>&) override {
+    }
+    void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback, ISpiller::TMemoryReportCallback) override {
+    }
+    ISpiller::TPtr CreateSpiller() override {
+        return Spiller;
+    }
+    size_t GetReadCount() const {
+        return Spiller->GetReadCount();
+    }
+    void ResumeRead(bool missing) {
+        Spiller->ResumeRead(missing);
+    }
+
+private:
+    TBuffer DataStore;
+    std::shared_ptr<TPendingReadSpiller> Spiller;
+};
+
+class TGeneratedWideStream final: public NUdf::TBoxedValue {
+public:
+    using TRow = std::vector<NUdf::TUnboxedValue>;
+    TGeneratedWideStream(size_t rowCount, std::function<TRow(size_t)> generate)
+        : RowCount(rowCount)
+        , Generate(std::move(generate))
+    {}
+
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) final {
+        if (Row == RowCount) {
+            return NUdf::EFetchStatus::Finish;
+        }
+        auto values = Generate(Row++);
+        UNIT_ASSERT_VALUES_EQUAL(width, values.size());
+        std::move(values.begin(), values.end(), output);
+        return NUdf::EFetchStatus::Ok;
+    }
+
+private:
+    const size_t RowCount;
+    std::function<TRow(size_t)> Generate;
+    size_t Row = 0;
+};
+
+template<bool LLVM>
+void RunTeardownDuringStateReadBackTest(bool useFlow, bool disableDehydration, size_t pauseOnRead) {
+    TDqSetup<LLVM, true> setup(GetDqNodeFactory());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto& pb = setup.GetDqProgramBuilder();
+    const size_t inputWidth = 16;
+    const size_t rowCount = 4096;
+    std::vector<TType*> types(inputWidth, pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    types[0] = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType(types))).Build();
+    TRuntimeNode input(source, false);
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = pb.DqHashAggregate(input, true,
+        [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+        [](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
+        [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys[0], state[0]}; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    auto graph = setup.BuildGraph(root, {source});
+    auto spiller = std::make_shared<TPendingReadSpillerFactory>(pauseOnRead);
+    graph->GetContext().SpillerFactory = spiller;
+    if (disableDehydration) {
+        DisableDehydration(graph);
+    }
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(rowCount, [&](size_t row) {
+            // Spill the complete state so each Get starts a new bucket
+            if (row + 1 == rowCount) {
+                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            }
+            std::vector<NUdf::TUnboxedValue> values(inputWidth, NUdf::TUnboxedValuePod(ui64{1}));
+            values[0] = NUdf::TUnboxedValuePod(NUdf::TStringValue(Sprintf("read-back heap string key %08zu", row)));
+            return values;
+        })));
+    auto stream = graph->GetValue();
+    std::vector<NUdf::TUnboxedValue> output(2);
+    std::vector<NUdf::TUnboxedValue> drainedKeys;
+    NUdf::EFetchStatus status;
+    while ((status = stream.WideFetch(output.data(), output.size())) == NUdf::EFetchStatus::Ok) {
+        drainedKeys.push_back(output[0]);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(status, NUdf::EFetchStatus::Yield);
+    UNIT_ASSERT_VALUES_EQUAL(spiller->GetReadCount(), pauseOnRead);
+    UNIT_ASSERT_VALUES_EQUAL(drainedKeys.empty(), pauseOnRead == 1);
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    output.clear();
+    stream = {};
+    graph.Destroy();
+    for (const auto& key : drainedKeys) {
+        UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
+    }
+}
+
+template<bool LLVM>
+void RunPassthroughKeyInitFailureTest(bool useFlow, bool useBlocks, bool stringState) {
+    TDqSetup<LLVM> setup(GetDqNodeFactory());
+    auto& pb = setup.GetDqProgramBuilder();
+    auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    auto* optionalType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType({stringType, stringType, optionalType}))).Build();
+    TRuntimeNode input(source, false);
+    if (useBlocks) {
+        input = pb.WideToBlocks(input);
+    }
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = pb.DqHashAggregate(input, false,
+        [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {
+                stringState ? items[1] : pb.template NewDataLiteral<ui64>(1),
+                pb.Unwrap(items[2], pb.template NewDataLiteral<NUdf::EDataSlot::String>("passthrough key init failure"),
+                    __FILE__, __LINE__, 0)
+            };
+        },
+        [](TRuntimeNode::TList, TRuntimeNode::TList, TRuntimeNode::TList state) { return state; },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList) { return keys; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    if (useBlocks) {
+        root = pb.WideFromBlocks(root);
+    }
+    NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(NUdf::TStringValue("passthrough heap string key"));
+    NUdf::TUnboxedValue state = NUdf::TUnboxedValuePod(NUdf::TStringValue("partially initialized heap string state"));
+    auto graph = setup.BuildGraph(root, {source});
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(1, [&](size_t) {
+            return std::vector<NUdf::TUnboxedValue>{key, state, NUdf::TUnboxedValuePod{}};
+        })));
+    auto stream = graph->GetValue();
+    NUdf::TUnboxedValue output;
+    {
+        TThrowingBindTerminator terminator;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(&output, 1), TTerminateException, "passthrough key init failure");
+    }
+    stream = {};
+    graph.Destroy();
+    UNIT_ASSERT_VALUES_EQUAL(key.RefCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(state.RefCount(), 1);
+}
+
+enum class ESpillReplayStop {
+    PendingRead,
+    MissingInput,
+    ThrowingUpdate,
+    Output,
+};
+
+template<bool LLVM>
+void RunSpillReplayTeardownTest(bool useFlow, bool useBlocks, ESpillReplayStop stop) {
+    TDqSetup<LLVM, true> setup(GetDqNodeFactory());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    auto& pb = setup.GetDqProgramBuilder();
+    const bool throwOnUpdate = stop == ESpillReplayStop::ThrowingUpdate;
+    auto* stringType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    auto* keyType = throwOnUpdate ? pb.NewDataType(NUdf::TDataType<ui64>::Id) : stringType;
+    auto* optionalType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
+    const auto source = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode",
+        pb.NewStreamType(pb.NewMultiType({keyType, stringType, optionalType}))).Build();
+    TRuntimeNode input(source, false);
+    if (useBlocks) {
+        input = pb.WideToBlocks(input);
+    }
+    if (useFlow) {
+        input = pb.ToFlow(input, {});
+    }
+    auto root = pb.DqHashAggregate(input, true,
+        [](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[0]}; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList {
+            return {pb.NewTuple({items[1]}), pb.template NewDataLiteral<ui64>(1)};
+        },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            if (throwOnUpdate) {
+                return {pb.NewTuple({items[1]}),
+                    pb.Unwrap(items[2], pb.template NewDataLiteral<NUdf::EDataSlot::String>("spill replay update failure"),
+                        __FILE__, __LINE__, 0)};
+            }
+            return state;
+        },
+        [](TRuntimeNode::TList keys, TRuntimeNode::TList) { return keys; });
+    if (useFlow) {
+        root = pb.FromFlow(root);
+    }
+    if (useBlocks) {
+        root = pb.WideFromBlocks(root);
+    }
+    auto graph = setup.BuildGraph(root, {source});
+    auto spiller = std::make_shared<TPendingReadSpillerFactory>(2);
+    graph->GetContext().SpillerFactory = spiller;
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(
+        new TGeneratedWideStream(3, [&](size_t) {
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            return std::vector<NUdf::TUnboxedValue>{
+                throwOnUpdate ? NUdf::TUnboxedValuePod(ui64{1}) :
+                    NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string key for spill replay")),
+                NUdf::TUnboxedValuePod(NUdf::TStringValue("heap string inside boxed aggregation state")),
+                NUdf::TUnboxedValuePod{}};
+        })));
+    auto stream = graph->GetValue();
+    NUdf::TUnboxedValue output;
+    UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(&output, 1), NUdf::EFetchStatus::Yield);
+    UNIT_ASSERT_VALUES_EQUAL(spiller->GetReadCount(), 2);
+    if (stop != ESpillReplayStop::PendingRead) {
+        spiller->ResumeRead(stop == ESpillReplayStop::MissingInput);
+        if (stop == ESpillReplayStop::MissingInput) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(&output, 1), yexception,
+                "A spilled blob is missing while reading back spilled input rows");
+        } else if (throwOnUpdate) {
+            TThrowingBindTerminator terminator;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(stream.WideFetch(&output, 1), TTerminateException, "spill replay update failure");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stream.WideFetch(&output, 1), NUdf::EFetchStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(TString(output.AsStringRef()), "heap string key for spill replay");
+        }
+    }
+
+    auto memInfo = TIntrusivePtr<TMemoryUsageInfo>(&graph->GetMemInfo());
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    output = {};
+    stream = {};
+    graph.Destroy();
+    // Boxed allocation accounting is enabled in assertions-enabled builds
+    UNIT_ASSERT_VALUES_EQUAL(memInfo->GetUsage(), 0);
+}
+
 template<typename TMap>
 size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const ui32 resultWidth, const ui32 keyWidth, TMap& resultMap, const bool useBlocks, const bool sleepOnYield)
 {
@@ -1135,6 +1409,41 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             false,
             std::make_shared<TPendingSpillerFactory>()
         );
+    }
+
+    Y_UNIT_TEST_QUAD(TestTeardownDuringStateReadBack, UseLLVM, UseFlow) {
+        for (bool disableDehydration : {false, true}) {
+            for (size_t pauseOnRead : {1, 2}) {
+                RunTeardownDuringStateReadBackTest<UseLLVM>(UseFlow, disableDehydration, pauseOnRead);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestPassthroughKeyInitFailure, UseLLVM, UseFlow) {
+        for (bool useBlocks : {false, true}) {
+            for (bool stringState : {false, true}) {
+                RunPassthroughKeyInitFailureTest<UseLLVM>(UseFlow, useBlocks, stringState);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestTeardownDuringSpilledInputRead, UseLLVM, UseFlow) {
+        for (bool useBlocks : {false, true}) {
+            RunSpillReplayTeardownTest<UseLLVM>(UseFlow, useBlocks, ESpillReplayStop::PendingRead);
+            RunSpillReplayTeardownTest<UseLLVM>(UseFlow, useBlocks, ESpillReplayStop::MissingInput);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestTeardownAfterSpillReplayException, UseLLVM, UseFlow) {
+        for (bool useBlocks : {false, true}) {
+            RunSpillReplayTeardownTest<UseLLVM>(UseFlow, useBlocks, ESpillReplayStop::ThrowingUpdate);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(TestTeardownAfterSpilledBucketDrain, UseLLVM, UseFlow) {
+        for (bool useBlocks : {false, true}) {
+            RunSpillReplayTeardownTest<UseLLVM>(UseFlow, useBlocks, ESpillReplayStop::Output);
+        }
     }
 
     Y_UNIT_TEST_QUAD(TestEarlyStopAfterSpilling, UseLLVM, UseFlow) {

@@ -744,6 +744,7 @@ protected:
 
         Map->Clear();
         Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
+        StoreContainsInputRows = true;
     }
 
     [[nodiscard]] bool InitiateSpilling()
@@ -829,6 +830,8 @@ protected:
         MKQL_ENSURE(bucket < NumBuckets, "Trying to read past the last spilling bucket");
 
         Store->Format(1, KeyAndStatesByteSize);
+        StoreContainsInputRows = false;
+        ReadingSpilledBucket = true;
 
         const bool isDehydratedState = GenericAggregation->StateIsDehydrated();
         const ui32 keysCount = KeyTypes.size();
@@ -971,6 +974,7 @@ protected:
 
         ++currentSpill.CurrentBucket;
         DrainArenaIterator = Store->Iterator();
+        ReadingSpilledBucket = false;
     }
 
     [[nodiscard]] bool ReadBackNextSpillingBucket()
@@ -1104,6 +1108,11 @@ protected:
             persistentKeyBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
             memcpy(persistentKeyBuffer, keyBuf.data(), keyBuf.size_bytes());
             // std::copy(TempKeyBuffer.begin(), TempKeyBuffer.end(), persistentKeyBuffer);
+            if (PassthroughKeys) {
+                for (TUnboxedValuePod& k : keyBuf) {
+                    k.Ref();
+                }
+            }
             *static_cast<TUnboxedValuePod**>(Map->GetKeyPtr(mapIt)) = persistentKeyBuffer;
         } else {
             persistentKeyBuffer = Map->GetKeyValue(mapIt);
@@ -1119,10 +1128,6 @@ protected:
 
         if (!isNew) {
             DiscardComputedKey(keyBuf);
-        } else if (PassthroughKeys && isNew) {
-            for (TUnboxedValuePod& k : keyBuf) {
-                k.Ref();
-            }
         }
 
         auto canFitMoreKeys = [&]() -> bool {
@@ -1456,10 +1461,9 @@ protected:
 
     void ReleaseAggregationsFromArena()
     {
-        if (Map && Map->GetSize() > 0) {
-            // Either not yet spilling or already draining
+        if (!StoreContainsInputRows) {
             const ui32 keyWidth = KeyTypes.size();
-            if (!Draining) {
+            if (!Draining || ReadingSpilledBucket) {
                 DrainArenaIterator = Store->Iterator();
             }
             while (void* tuple = DrainArenaIterator.Next()) {
@@ -1473,7 +1477,7 @@ protected:
                     key->UnRef();
                 }
             }
-        } else if (!SpillingStack.empty()) {
+        } else {
             // Release input tuples not yet flushed to disk
             DrainArenaIterator = Store->Iterator();
             while (void* tuple = DrainArenaIterator.Next()) {
@@ -1529,12 +1533,14 @@ protected:
 
     using TStore = TSegmentedArena;
     std::unique_ptr<TStore> Store;
+    bool StoreContainsInputRows = false;
     TSegmentedArena::TIterator DrainArenaIterator;
     THolder<TMap> Map;
     std::vector<TUnboxedValuePod> TempKeyBuffer;
     TUnboxedValueVector InputBuffer;
     size_t StatesOffset;
     bool Draining;
+    bool ReadingSpilledBucket = false;
     bool SourceEmpty;
 
     bool SampleSpillingInput = true;

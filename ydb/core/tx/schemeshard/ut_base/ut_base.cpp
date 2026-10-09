@@ -1,6 +1,7 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
@@ -12082,6 +12083,413 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             WaitForSuppressed(runtime, suppressed, 3, defObserver);
         }
 
+    }
+
+    Y_UNIT_TEST_FLAG(DropNotNullCompositeCoverIndexSchema, CoveredColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key1" Type: "Int32" NotNull: true }
+                Columns { Name: "key2" Type: "Int32" NotNull: true }
+                Columns { Name: "col1" Type: "Int32" NotNull: true }
+                Columns { Name: "col2" Type: "Int32" NotNull: true }
+                Columns { Name: "col3" Type: "Int32" NotNull: true }
+                Columns { Name: "col4" Type: "Int32" NotNull: true }
+                KeyColumnNames: ["key1", "key2"]
+            }
+            IndexDescription { Name: "i" KeyColumnNames: ["col1", "col2"] DataColumnNames: ["col3", "col4"] }
+            IndexDescription { Name: "other" KeyColumnNames: ["col1"] DataColumnNames: ["col3"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString column = CoveredColumn ? "col4" : "col2";
+        TMap<TString, NKikimrSchemeOp::TTableDescription> before;
+        for (const TString& path : {TString("/MyRoot/Table"), TString("/MyRoot/Table/i/indexImplTable"),
+                TString("/MyRoot/Table/other/indexImplTable")})
+        {
+            const auto describe = DescribePrivatePath(runtime, path);
+            TestDescribeResult(describe, {NLs::PathExist});
+            before[path] = describe.GetPathDescription().GetTable();
+        }
+        const auto indexVersion = DescribePrivatePath(runtime, "/MyRoot/Table/i")
+            .GetPathDescription().GetTableIndex().GetSchemaVersion();
+        auto checkSchema = [&](bool dropped) {
+            for (const auto& [path, original] : before) {
+                const auto describe = DescribePrivatePath(runtime, path);
+                TestDescribeResult(describe, {NLs::PathExist});
+                const auto& table = describe.GetPathDescription().GetTable();
+                const bool affected = path != "/MyRoot/Table/other/indexImplTable";
+                UNIT_ASSERT_VALUES_EQUAL_C(table.GetTableSchemaVersion(),
+                    original.GetTableSchemaVersion() + (dropped && affected), path);
+                UNIT_ASSERT_VALUES_EQUAL_C(table.ColumnsSize(), original.ColumnsSize(), path);
+                UNIT_ASSERT_VALUES_EQUAL_C(TVector<TString>(table.GetKeyColumnNames().begin(), table.GetKeyColumnNames().end()),
+                    TVector<TString>(original.GetKeyColumnNames().begin(), original.GetKeyColumnNames().end()), path);
+                bool found = false;
+                for (const auto& col : table.GetColumns()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(col.GetNotNull(), !(dropped && col.GetName() == column),
+                        path << ": " << col.GetName());
+                    found |= col.GetName() == column;
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(found, affected, path);
+            }
+            const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/i");
+            TestDescribeResult(index, {NLs::PathExist, NLs::IndexKeys({"col1", "col2"}),
+                NLs::IndexDataColumns({"col3", "col4"}), NLs::ChildrenCount(1)});
+            UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetTableIndex().GetSchemaVersion(), indexVersion + dropped);
+            UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetChildren(0).GetVersion().GetTableSchemaVersion(),
+                before.at("/MyRoot/Table/i/indexImplTable").GetTableSchemaVersion() + dropped);
+        };
+        checkSchema(false);
+        TestAlterTable(runtime, ++txId, "/MyRoot", TStringBuilder()
+            << "Name: \"Table\" Columns { Name: \"" << column << "\" NotNull: false }");
+        env.TestWaitNotification(runtime, txId);
+        checkSchema(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkSchema(true);
+    }
+
+    Y_UNIT_TEST_FLAG(DropNotNullInternalDocumentId, UseRowId) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableFulltextIndex(true);
+        flags.SetEnableFulltextIndexRowId(true);
+        flags.SetEnableCompactFulltextIndex(!UseRowId);
+        runtime.GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "%s" NotNull: true }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "i" KeyColumnNames: ["text"] Type: %s
+                FulltextIndexDescription {
+                    Settings { columns { column: "text" analyzers { tokenizer: STANDARD } } }
+                }
+            }
+        )", UseRowId ? "Utf8" : "Uint64",
+            UseRowId ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextCompactRelevance"));
+        env.TestWaitNotification(runtime, txId);
+
+        const TString column = UseRowId ? "__ydb_row_id" : "key";
+        const TString implPath = "/MyRoot/Table/i/indexImplDocsTable";
+        const auto indexVersion = DescribePrivatePath(runtime, "/MyRoot/Table/i")
+            .GetPathDescription().GetTableIndex().GetSchemaVersion();
+        TMap<TString, TString> before;
+        for (const TString& path : {TString("/MyRoot/Table"), implPath}) {
+            const auto describe = DescribePrivatePath(runtime, path);
+            TestDescribeResult(describe, {NLs::PathExist});
+            const auto& table = describe.GetPathDescription().GetTable();
+            bool found = false;
+            for (const auto& col : table.GetColumns()) {
+                if (col.GetName() == column) {
+                    UNIT_ASSERT_C(col.GetNotNull(), path);
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_C(found, path);
+            before[path] = table.SerializeAsString();
+        }
+        // An administrator's direct Internal alter enables private-table access too.
+        auto* request = InternalTransaction(AlterTableRequest(++txId, "/MyRoot/Table/i", TStringBuilder()
+            << "Name: \"indexImplDocsTable\" Columns { Name: \"" << column << "\" NotNull: false }"));
+        request->Record.SetUserToken(NACLib::TUserToken("root@builtin", {}).SerializeAsString());
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusPreconditionFailed, "requires a non-null document id"}});
+        for (const auto& [path, schema] : before) {
+            UNIT_ASSERT_VALUES_EQUAL_C(DescribePrivatePath(runtime, path)
+                .GetPathDescription().GetTable().SerializeAsString(), schema, path);
+        }
+        const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/i");
+        TestDescribeResult(index, {NLs::PathExist, NLs::CheckPathState(), NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+        UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetTableIndex().GetSchemaVersion(), indexVersion);
+    }
+
+    Y_UNIT_TEST_FLAG(DropNotNullWithMetrics, EnableDetailedMetrics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(EnableDetailedMetrics);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value" Type: "Uint64" NotNull: true }
+                Columns { Name: "Other" Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription { Name: "byValue" KeyColumnNames: ["Value"] }
+            IndexDescription { Name: "byOther" KeyColumnNames: ["Other"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TMap<TString, ui64> versions;
+        for (const TString& path : {TString("/MyRoot/Table"), TString("/MyRoot/Table/byValue/indexImplTable"),
+                TString("/MyRoot/Table/byOther/indexImplTable")})
+        {
+            versions[path] = DescribePrivatePath(runtime, path).GetPathDescription().GetTable().GetTableSchemaVersion();
+        }
+        TString alter = R"(Name: "Table" Columns { Name: "Value" NotNull: false })";
+        if (EnableDetailedMetrics) {
+            alter += R"(DetailedMetricsSettings { Configured { MetricsLevel: MetricsLevelTable } })";
+        }
+        TestAlterTable(runtime, ++txId, "/MyRoot", alter);
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto& [path, version] : versions) {
+            const auto table = DescribePrivatePath(runtime, path).GetPathDescription().GetTable();
+            const bool containsValue = path != "/MyRoot/Table/byOther/indexImplTable";
+            // Both changes must share one ALTER, with one version increment per table.
+            UNIT_ASSERT_VALUES_EQUAL_C(table.GetTableSchemaVersion(),
+                version + (containsValue || EnableDetailedMetrics), path);
+            UNIT_ASSERT_VALUES_EQUAL_C(table.HasDetailedMetricsSettings(), EnableDetailedMetrics, path);
+            if (EnableDetailedMetrics) {
+                UNIT_ASSERT_C(table.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
+                    == NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable, path);
+            }
+            bool found = false;
+            for (const auto& column : table.GetColumns()) {
+                if (column.GetName() == "Value") {
+                    UNIT_ASSERT_C(!column.GetNotNull(), path);
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(found, containsValue, path);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(DropNotNullWithBusyIndex, ImplementationOnly) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value" Type: "Uint64" NotNull: true }
+                Columns { Name: "Covered" Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription { Name: "idx" KeyColumnNames: ["Value"] DataColumnNames: ["Covered"] Type: EIndexTypeGlobal }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> proposals(runtime);
+        const ui64 indexTxId = ++txId;
+        if (ImplementationOnly) {
+            // Start a standalone internal impl-table alter in a multi-transaction request.
+            // The preceding indexed-table creation enables access to private paths without
+            // altering the target index object, so only its impl table is busy.
+            auto request = CreateIndexedTableRequest(indexTxId, "/MyRoot", R"(
+                TableDescription {
+                    Name: "Unrelated" Columns { Name: "Key" Type: "Uint64" }
+                    Columns { Name: "Value" Type: "Uint64" } KeyColumnNames: ["Key"]
+                }
+                IndexDescription { Name: "idx" KeyColumnNames: ["Value"] }
+            )");
+            THolder<TEvSchemeShard::TEvModifySchemeTransaction> implAlter(
+                InternalTransaction(AlterTableRequest(indexTxId, "/MyRoot/Table/idx", R"(
+                    Name: "indexImplTable" Columns { Name: "Covered" NotNull: false }
+                )")));
+            *request->Record.AddTransaction() = implAlter->Record.GetTransaction(0);
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResults(runtime, indexTxId, {NKikimrScheme::StatusAccepted});
+        } else {
+            TestAlterTable(runtime, indexTxId, "/MyRoot/Table/idx", R"(
+                Name: "indexImplTable"
+                PartitionConfig { PartitioningPolicy { MinPartitionsCount: 2 } }
+            )");
+        }
+        runtime.WaitFor("index alteration to reach the shard", [&] { return proposals.size(); });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx"), {
+            NLs::CheckPathState(ImplementationOnly ? NKikimrSchemeOp::EPathStateNoChanges : NKikimrSchemeOp::EPathStateAlter),
+        });
+        const auto before = DescribePrivatePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable();
+        const auto indexBefore = DescribePrivatePath(runtime, "/MyRoot/Table/idx/indexImplTable").GetPathDescription().GetTable();
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "Value" NotNull: false }
+        )", {NKikimrScheme::StatusMultipleModifications});
+        const auto after = DescribePrivatePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable();
+        const auto indexAfter = DescribePrivatePath(runtime, "/MyRoot/Table/idx/indexImplTable").GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(before.GetTableSchemaVersion(), after.GetTableSchemaVersion());
+        UNIT_ASSERT_VALUES_EQUAL(indexBefore.GetTableSchemaVersion(), indexAfter.GetTableSchemaVersion());
+        for (const auto* table : {&after, &indexAfter}) {
+            bool found = false;
+            for (const auto& column : table->GetColumns()) {
+                if (column.GetName() == "Value") {
+                    UNIT_ASSERT(column.GetNotNull());
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+        }
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, indexTxId);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "Value" NotNull: false }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        for (const TString& path : {TString("/MyRoot/Table"), TString("/MyRoot/Table/idx/indexImplTable")}) {
+            const auto table = DescribePrivatePath(runtime, path).GetPathDescription().GetTable();
+            for (const auto& column : table.GetColumns()) {
+                if (column.GetName() == "Value") {
+                    UNIT_ASSERT(!column.GetNotNull());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(DropNotNullWithBusyUnchangedFulltextIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableFulltextIndex(true);
+        flags.SetEnableCompactFulltextIndex(false);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "Key" Type: "Uint64" NotNull: true }
+                Columns { Name: "Text" Type: "String" NotNull: true }
+                Columns { Name: "Covered" Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription {
+                Name: "idx" KeyColumnNames: ["Text"] DataColumnNames: ["Covered"]
+                Type: EIndexTypeGlobalFulltextPlain
+                FulltextIndexDescription {
+                    Settings { columns { column: "Text" analyzers { tokenizer: STANDARD } } }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const TString indexPath = "/MyRoot/Table/idx";
+        const TString implPath = indexPath + "/indexImplTable";
+        const ui64 indexTxId = ++txId;
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> proposals(runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetTxId() == indexTxId;
+        });
+        TestAlterTable(runtime, indexTxId, indexPath, R"(
+            Name: "indexImplTable"
+            PartitionConfig { PartitioningPolicy { MinPartitionsCount: 2 } }
+        )");
+        runtime.WaitFor("index alteration to reach the shard", [&] { return !proposals.empty(); });
+        const auto implBefore = DescribePrivatePath(runtime, implPath).GetPathDescription().GetTable();
+        for (const auto& column : implBefore.GetColumns()) {
+            UNIT_ASSERT_VALUES_UNEQUAL(column.GetName(), "Text");
+        }
+        const auto indexBefore = DescribePrivatePath(runtime, indexPath).GetPathDescription().GetTableIndex();
+        auto checkBusyIndex = [&] {
+            TestDescribeResult(DescribePrivatePath(runtime, indexPath), {
+                NLs::CheckPathState(NKikimrSchemeOp::EPathStateAlter),
+            });
+            TestDescribeResult(DescribePrivatePath(runtime, implPath), {
+                NLs::CheckPathState(NKikimrSchemeOp::EPathStateAlter),
+            });
+            UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, implPath)
+                .GetPathDescription().GetTable().SerializeAsString(), implBefore.SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, indexPath)
+                .GetPathDescription().GetTableIndex().SerializeAsString(), indexBefore.SerializeAsString());
+        };
+        checkBusyIndex();
+
+        auto expected = DescribePrivatePath(runtime, "/MyRoot/Table").GetPathDescription().GetTable();
+        bool found = false;
+        for (auto& column : *expected.MutableColumns()) {
+            if (column.GetName() == "Text") {
+                UNIT_ASSERT(column.GetNotNull());
+                column.SetNotNull(false);
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+        expected.SetTableSchemaVersion(expected.GetTableSchemaVersion() + 1);
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table" Columns { Name: "Text" NotNull: false }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(DescribePrivatePath(runtime, "/MyRoot/Table")
+            .GetPathDescription().GetTable().SerializeAsString(), expected.SerializeAsString());
+        checkBusyIndex();
+
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, indexTxId);
+        TestDescribeResult(DescribePrivatePath(runtime, indexPath), {NLs::CheckPathState()});
+        TestDescribeResult(DescribePrivatePath(runtime, implPath), {NLs::CheckPathState()});
+    }
+
+    Y_UNIT_TEST_FLAG(DropNotNullWithMigratedIndex, IndexedColumn) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "Tenant")");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "Key" Type: "Uint64" NotNull: true }
+                Columns { Name: "Indexed" Type: "Uint64" NotNull: true }
+                Columns { Name: "Other" Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription { Name: "idx" KeyColumnNames: ["Indexed"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "Tenant");
+        env.TestWaitNotification(runtime, txId);
+        TestUpgradeSubDomainDecision(runtime, ++txId, "/MyRoot", "Tenant", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::IsExternalSubDomain("Tenant"), NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+        UNIT_ASSERT_VALUES_UNEQUAL(tenantSchemeShard, TTestTxConfig::SchemeShard);
+        const TString indexPath = "/MyRoot/Tenant/Table/idx";
+        const auto indexBefore = DescribePrivatePath(runtime, tenantSchemeShard, indexPath).GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(indexBefore.GetSelf().GetSchemeshardId(), TTestTxConfig::SchemeShard);
+        TMap<TString, TString> before;
+        for (const TString& path : {TString("/MyRoot/Tenant/Table"), indexPath + "/indexImplTable"}) {
+            const auto describe = DescribePrivatePath(runtime, tenantSchemeShard, path);
+            TestDescribeResult(describe, {NLs::PathExist});
+            const auto& table = describe.GetPathDescription().GetTable();
+            for (const auto& column : table.GetColumns()) {
+                UNIT_ASSERT_C(column.GetNotNull(), path << ": " << column.GetName());
+            }
+            before[path] = table.SerializeAsString();
+        }
+
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", TStringBuilder()
+            << "Name: \"Table\" Columns { Name: \"" << (IndexedColumn ? "Indexed" : "Other") << "\" NotNull: false }",
+            {{NKikimrScheme::StatusPreconditionFailed, "Cannot alter migrated index"}});
+        auto checkUnchanged = [&] {
+            for (const auto& [path, schema] : before) {
+                const auto describe = DescribePrivatePath(runtime, tenantSchemeShard, path);
+                TestDescribeResult(describe, {NLs::PathExist, NLs::CheckPathState()});
+                UNIT_ASSERT_VALUES_EQUAL_C(describe.GetPathDescription().GetTable().SerializeAsString(), schema, path);
+            }
+            const auto index = DescribePrivatePath(runtime, tenantSchemeShard, indexPath);
+            TestDescribeResult(index, {NLs::PathExist, NLs::CheckPathState()});
+            UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetTableIndex().SerializeAsString(),
+                indexBefore.GetTableIndex().SerializeAsString());
+        };
+        checkUnchanged();
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        checkUnchanged();
     }
 
     Y_UNIT_TEST(AlterIndexTableDirectly) {

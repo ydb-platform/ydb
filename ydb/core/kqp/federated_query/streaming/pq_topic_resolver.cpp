@@ -1,15 +1,21 @@
-#include "kqp_pq_topic_resolver.h"
-#include "kqp_executer.h"
+#include "pq_topic_resolver.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/guid.h>
@@ -69,16 +75,16 @@ struct TPqTopicResolverSource {
     TString DatabaseForClusterConfig; // raw "database" field from the proto (may be cluster alias)
 };
 
-// Collect all PQ sources from a set of physical transactions.
+// Collect all PQ sources from a physical query.
 // Topics whose partition list was already fixed at compile time by a
 // __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
 TVector<TPqTopicResolverSource> CollectPqSources(
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+    const NKqpProto::TKqpPhyQuery& query,
     const TString& database)
 {
     TVector<TPqTopicResolverSource> result;
-    for (const auto& tx : transactions) {
-        for (const auto& stage : tx.Body->GetStages()) {
+    for (const auto& tx : query.GetTransactions()) {
+        for (const auto& stage : tx.GetStages()) {
             if (stage.SourcesSize() == 0) {
                 continue;
             }
@@ -374,12 +380,12 @@ private:
     }
 
     void ReplyOkAndDie() {
-        Send(Owner, new TEvKqpExecuter::TEvPqTopicResolveStatus());
+        Send(Owner, new TEvStreamingQueryPrepared());
         PassAway();
     }
 
     void ReplyErrorAndDie(const TString& errorMessage) {
-        auto* ev = new TEvKqpExecuter::TEvPqTopicResolveStatus();
+        auto* ev = new TEvStreamingQueryPrepared();
         ev->Status = Ydb::StatusIds::SCHEME_ERROR;
         ev->Issues.AddIssue(NYql::YqlIssue(
             {}, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
@@ -408,13 +414,12 @@ private:
 NActors::IActor* CreateKqpPqTopicResolver(
     const NActors::TActorId& owner,
     ui64 txId,
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions,
     const TString& database,
     THashMap<TString, TString> secureParams,
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
 {
-    auto sources = CollectPqSources(transactions, database);
+    auto sources = CollectPqSources(queryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery(), database);
     return new TKqpPqTopicResolver(
         owner, txId,
         std::move(sources),

@@ -16,6 +16,7 @@
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
+#include <ydb/core/kqp/common/kqp_streaming_query_controller.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -24,7 +25,6 @@
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/federated_query/physical_graph_rescaling.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -1657,9 +1657,9 @@ protected:
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
             .Query = Query,
-            .CheckpointCoordinator = CheckpointCoordinatorId,
+            .EnableCheckpoints = static_cast<bool>(CheckpointCoordinatorId),
             .EnableWatermarks = EnableWatermarks,
-            .StreamingQueryNodesManager = StreamingQueryNodesManagerId,
+            .StreamingQuery = CheckpointCoordinatorId || StreamingQueryNodesManagerId ? StreamingQuery.get() : nullptr,
         });
 
         auto err = Planner->PlanExecution();
@@ -2084,22 +2084,10 @@ protected:
             }
         }
 
-        if (StreamingQueryNodesManagerId) {
-            this->Send(StreamingQueryNodesManagerId, new NActors::TEvents::TEvPoisonPill());
+        if (StreamingQuery) {
+            StreamingQuery->Terminate();
             StreamingQueryNodesManagerId = TActorId{};
-        }
-
-
-        if (CheckpointCoordinatorId) {
-            this->Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
             CheckpointCoordinatorId = TActorId{};
-
-            const auto context = TasksGraph.GetMeta().UserRequestContext;
-            if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
-                auto counters = Counters->Counters->GetKqpCounters();
-                counters = counters->GetSubgroup("host", "");
-                counters->RemoveSubgroup("path", context->StreamingQueryPath);
-            }
         }
 
         if (KqpTableResolverId) {
@@ -2159,24 +2147,8 @@ protected:
         return TasksGraph.GetMeta().UserRequestContext;
     }
 
-    bool RestoreTasksGraph(bool& rescalingChangedTaskCount) {
+    bool RestoreTasksGraph() {
         if (Request.QueryPhysicalGraph) {
-            bool hasPqSources = false;
-            for (const auto& transaction : Request.Transactions) {
-                if (transaction.Body->GetHasPqSources()) {
-                    hasPqSources = true;
-                    break;
-                }
-            }
-
-            if (hasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
-                auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
-                    Request.QueryPhysicalGraph);
-                const auto taskCount = mutableGraph->TasksSize();
-                PatchQueryPhysicalGraphForRescaling(*mutableGraph, ResourcesSnapshot);
-                rescalingChangedTaskCount = mutableGraph->TasksSize() != taskCount;
-            }
-
             TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
         }
 
@@ -2300,6 +2272,7 @@ protected:
 
     THashSet<ui32> SentResultIndexes;
 
+    std::unique_ptr<IKqpStreamingQueryController> StreamingQuery;
     TActorId StreamingQueryNodesManagerId;
     TActorId CheckpointCoordinatorId;
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;

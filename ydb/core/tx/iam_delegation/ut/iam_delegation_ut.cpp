@@ -149,6 +149,29 @@ NProto::TSecretRecord GetSecret(TTestContext& ctx, const NProto::TSecretIdentity
     return ctx.Call(std::move(request)).GetSecret();
 }
 
+NProto::TRequest ClaimRequest(const TString& workerId = "worker-1", ui32 limit = 100) {
+    NProto::TRequest request;
+    auto* claim = request.MutableClaimRevocations();
+    claim->SetWorkerId(workerId);
+    claim->SetLimit(limit);
+    claim->SetLeaseUs(TDuration::Seconds(10).MicroSeconds());
+    return request;
+}
+
+NProto::TRequest FinishRequest(const NProto::TDelegation& delegation,
+    NProto::ERevokeOutcome outcome = NProto::REVOKE_SUCCEEDED,
+    TDuration retryAfter = TDuration::Zero())
+{
+    NProto::TRequest request;
+    auto* finish = request.MutableFinishRevocation();
+    finish->SetOperationId(delegation.GetOperationId());
+    finish->MutableClaim()->CopyFrom(delegation.GetClaim());
+    finish->SetOutcome(outcome);
+    finish->SetRevokeOperationId("iam-revoke-1");
+    finish->SetRetryAfterUs(retryAfter.MicroSeconds());
+    return request;
+}
+
 NProto::TResponse CompleteSetup(TTestContext& ctx, const NProto::TDelegation& delegation) {
     const auto started = ctx.Call(StartRequest(delegation));
     return ctx.Call(SetupResultRequest(started.GetDelegation(), NProto::SETUP_SUCCEEDED));
@@ -295,6 +318,10 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         const auto replay = ctx.Call(promoteRequest);
         UNIT_ASSERT_VALUES_EQUAL(replay.GetDelegation().GetRevision(), promoted.GetDelegation().GetRevision());
 
+        const auto claimed = ctx.Call(ClaimRequest());
+        UNIT_ASSERT_VALUES_EQUAL(claimed.DelegationsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(claimed.GetDelegations(0).GetOperationId(), "create-1");
+        AssertBinding(claimed.GetDelegations(0), original.GetBinding());
     }
 
     Y_UNIT_TEST(DroppedUnknownSetupRemainsVisibleAndCannotBeClaimed) {
@@ -313,10 +340,15 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT_VALUES_EQUAL(unknown.GetState(), NProto::WAITING_SETUP);
         UNIT_ASSERT_VALUES_EQUAL(unknown.GetSetupState(), NProto::SETUP_UNKNOWN);
         UNIT_ASSERT(unknown.GetSetupOperationId().empty());
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
         ctx.AdvanceTime(TDuration::Days(1));
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
 
         const auto resolved = ctx.Call(SetupResultRequest(unknown, NProto::SETUP_SUCCEEDED));
         UNIT_ASSERT_VALUES_EQUAL(resolved.GetDelegation().GetState(), NProto::REVOCATION_PENDING);
+        const auto claimed = ctx.Call(ClaimRequest());
+        UNIT_ASSERT_VALUES_EQUAL(claimed.DelegationsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(claimed.GetDelegations(0).GetOperationId(), "create-1");
     }
 
     Y_UNIT_TEST(DropBeforeSetupCancelsIntentAndReleasesName) {
@@ -327,6 +359,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         ctx.Reboot();
         const auto cancelled = GetDelegation(ctx, staged.GetOperationId());
         UNIT_ASSERT_VALUES_EQUAL(cancelled.GetState(), NProto::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
         ctx.Call(StartRequest(cancelled), NProto::PRECONDITION_FAILED);
         const auto replacement = ctx.Call(StageCreateRequest("create-2", Binding("ydb.delegation.second"),
             "/Root/database/secret", "database-incarnation-1", 20));
@@ -350,6 +383,59 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, staged.GetOperationId()).GetState(), NProto::PENDING);
     }
 
+    Y_UNIT_TEST(ClaimLeaseAndTabletGenerationFenceAcknowledgements) {
+        TTestContext ctx;
+        CreateActive(ctx);
+        ctx.Call(DropRequest(GetSecret(ctx)));
+        const auto firstBatch = ctx.Call(ClaimRequest("worker-1"));
+        UNIT_ASSERT_VALUES_EQUAL(firstBatch.DelegationsSize(), 1);
+        const auto first = firstBatch.GetDelegations(0);
+        UNIT_ASSERT_VALUES_EQUAL(first.GetState(), NProto::REVOKING);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest("worker-2")).DelegationsSize(), 0);
+
+        ctx.AdvanceTime(TDuration::Seconds(11));
+        const auto secondBatch = ctx.Call(ClaimRequest("worker-2"));
+        UNIT_ASSERT_VALUES_EQUAL(secondBatch.DelegationsSize(), 1);
+        const auto second = secondBatch.GetDelegations(0);
+        UNIT_ASSERT(second.GetClaim().GetAttempt() > first.GetClaim().GetAttempt());
+        ctx.Call(FinishRequest(first), NProto::STALE_CLAIM);
+        ctx.Reboot();
+        ctx.Call(FinishRequest(second), NProto::STALE_CLAIM);
+
+        ctx.AdvanceTime(TDuration::Seconds(11));
+        const auto thirdBatch = ctx.Call(ClaimRequest("worker-3"));
+        UNIT_ASSERT_VALUES_EQUAL(thirdBatch.DelegationsSize(), 1);
+        const auto third = thirdBatch.GetDelegations(0);
+        UNIT_ASSERT(third.GetClaim().GetGeneration() > second.GetClaim().GetGeneration());
+        UNIT_ASSERT(third.GetClaim().GetAttempt() > second.GetClaim().GetAttempt());
+        ctx.Call(FinishRequest(third));
+        ctx.Reboot();
+        const auto revoked = GetDelegation(ctx, "create-1");
+        UNIT_ASSERT_VALUES_EQUAL(revoked.GetState(), NProto::REVOKED);
+        UNIT_ASSERT_VALUES_EQUAL(revoked.GetRevokeOperationId(), "iam-revoke-1");
+        AssertBinding(revoked, Binding());
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
+    }
+
+    Y_UNIT_TEST(RetryDefersRevocationAndCannotOverwriteNewClaim) {
+        TTestContext ctx;
+        CreateActive(ctx);
+        ctx.Call(DropRequest(GetSecret(ctx)));
+        const auto firstBatch = ctx.Call(ClaimRequest());
+        UNIT_ASSERT_VALUES_EQUAL(firstBatch.DelegationsSize(), 1);
+        const auto first = firstBatch.GetDelegations(0);
+        ctx.Call(FinishRequest(first, NProto::REVOKE_RETRY, TDuration::Seconds(30)));
+        ctx.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
+        ctx.AdvanceTime(TDuration::Seconds(31));
+        const auto secondBatch = ctx.Call(ClaimRequest("worker-2"));
+        UNIT_ASSERT_VALUES_EQUAL(secondBatch.DelegationsSize(), 1);
+        const auto second = secondBatch.GetDelegations(0);
+        AssertBinding(second, Binding());
+        ctx.Call(FinishRequest(first), NProto::STALE_CLAIM);
+        ctx.Call(FinishRequest(second));
+    }
+
     Y_UNIT_TEST(StaleRevisionCannotChangeSetupOutcome) {
         TTestContext ctx;
         ctx.Call(RegisterRequest(DatabaseIdentity()));
@@ -362,6 +448,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         const auto failed = ctx.Call(SetupResultRequest(unknown.GetDelegation(), NProto::SETUP_FAILED));
         UNIT_ASSERT_VALUES_EQUAL(failed.GetDelegation().GetSetupState(), NProto::SETUP_FAILED);
         ctx.Call(SetupResultRequest(failed.GetDelegation(), NProto::SETUP_SUCCEEDED), NProto::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
     }
 
     Y_UNIT_TEST(FailedAlterReleasesPendingWithoutLosingCurrent) {
@@ -379,6 +466,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT(secret.GetPendingOperationId().empty());
         UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, "create-1").GetState(), NProto::ACTIVE);
         UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, "failed-alter").GetState(), NProto::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
 
         const auto replacement = ctx.Call(StageAlterRequest(secret, "next-alter",
             Binding("ydb.delegation.next")));

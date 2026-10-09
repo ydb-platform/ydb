@@ -25,8 +25,9 @@ struct TSchema : NIceDb::Schema {
         struct OperationId : Column<1, NScheme::NTypeIds::String> {};
         struct Data : Column<2, NScheme::NTypeIds::String> {};
         struct OriginalStage : Column<3, NScheme::NTypeIds::String> {};
+        struct LastFinish : Column<4, NScheme::NTypeIds::String> {};
         using TKey = TableKey<OperationId>;
-        using TColumns = TableColumns<OperationId, Data, OriginalStage>;
+        using TColumns = TableColumns<OperationId, Data, OriginalStage, LastFinish>;
     };
 
     // Referrers and operation IDs are never recycled, including after revocation.

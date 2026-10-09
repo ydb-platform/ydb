@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 
+#include <util/generic/map.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr::NIamDelegation {
@@ -11,6 +12,11 @@ using namespace NKikimrIamDelegation;
 
 enum class EReadStatus { Ready, Missing, Retry };
 enum class EExecution { Complete, Retry };
+
+constexpr ui32 MaxClaimSize = 100;
+constexpr ui64 MinLeaseUs = 1'000'000;
+constexpr ui64 MaxLeaseUs = 60'000'000;
+constexpr ui64 MaxRetryUs = 86'400'000'000;
 
 bool ValidId(const TString& value) {
     return !value.empty() && value.size() <= 256;
@@ -47,7 +53,7 @@ bool SameSecret(const TSecretIdentity& lhs, const TSecretIdentity& rhs) {
 }
 
 bool InQueue(const TDelegation& record) {
-    return record.GetState() == REVOCATION_PENDING;
+    return record.GetState() == REVOCATION_PENDING || record.GetState() == REVOKING;
 }
 
 template <class T>
@@ -82,10 +88,10 @@ EReadStatus ReadSecret(NIceDb::TNiceDb& db, const TSecretIdentity& identity, TSe
 }
 
 EReadStatus ReadDelegation(NIceDb::TNiceDb& db, const TString& operationId, TDelegation& result,
-    TString* originalStage = nullptr)
+    TString* originalStage = nullptr, TString* lastFinish = nullptr)
 {
     auto row = db.Table<TSchema::Delegations>().Key(operationId)
-        .Select<TSchema::Delegations::Data, TSchema::Delegations::OriginalStage>();
+        .Select<TSchema::Delegations::Data, TSchema::Delegations::OriginalStage, TSchema::Delegations::LastFinish>();
     if (!row.IsReady()) {
         return EReadStatus::Retry;
     }
@@ -95,6 +101,9 @@ EReadStatus ReadDelegation(NIceDb::TNiceDb& db, const TString& operationId, TDel
     Parse(row.GetValue<TSchema::Delegations::Data>(), result);
     if (originalStage) {
         *originalStage = row.GetValue<TSchema::Delegations::OriginalStage>();
+    }
+    if (lastFinish) {
+        *lastFinish = row.GetValue<TSchema::Delegations::LastFinish>();
     }
     return EReadStatus::Ready;
 }
@@ -131,7 +140,7 @@ void WriteDelegation(NIceDb::TNiceDb& db, const TDelegation& record, const TDele
     const TString data = record.SerializeAsString();
     db.Table<TSchema::Delegations>().Key(record.GetOperationId())
         .Update(NIceDb::TUpdate<TSchema::Delegations::Data>(data));
-    if (record.GetState() == CANCELLED) {
+    if (record.GetState() == REVOKED || record.GetState() == CANCELLED) {
         db.Table<TSchema::Inventory>().Key(record.GetDatabaseIncarnation(), record.GetOperationId()).Delete();
     } else {
         db.Table<TSchema::Inventory>().Key(record.GetDatabaseIncarnation(), record.GetOperationId())
@@ -615,6 +624,108 @@ struct TIamDelegationTablet::TTxRequest final
         return Reply(record, record.HasSecret() ? &secret : nullptr);
     }
 
+    EExecution ClaimRevocations(NIceDb::TNiceDb& db, const TClaimRevocationsRequest& request, ui64 nowUs) {
+        if (!ValidId(request.GetWorkerId()) || !request.GetLimit() || request.GetLimit() > MaxClaimSize
+            || request.GetLeaseUs() < MinLeaseUs || request.GetLeaseUs() > MaxLeaseUs) {
+            return Error(INVALID_ARGUMENT, "Claims require a bounded worker ID, limit 1..100 and lease 1..60 seconds");
+        }
+        auto rows = db.Table<TSchema::Revocations>().LessOrEqual(nowUs).Select<TSchema::Revocations::OperationId>();
+        if (!rows.IsReady()) {
+            return EExecution::Retry;
+        }
+        TVector<TString> operations;
+        while (!rows.EndOfSet() && operations.size() < request.GetLimit()) {
+            operations.push_back(rows.GetValue<TSchema::Revocations::OperationId>());
+            if (!rows.Next()) {
+                return EExecution::Retry;
+            }
+        }
+        TVector<TDelegation> records;
+        TMap<TString, TDatabaseRecord> databases;
+        for (const auto& operationId : operations) {
+            TDelegation record;
+            if (const auto status = ReadDelegation(db, operationId, record); status != EReadStatus::Ready) {
+                return ReadError(status, "Revocation delegation");
+            }
+            Y_ABORT_UNLESS(InQueue(record) && record.GetSetupState() == SETUP_SUCCEEDED);
+            if (!databases.contains(record.GetDatabaseIncarnation())) {
+                TDatabaseRecord database;
+                if (const auto status = ReadDatabase(db, record.GetDatabaseIncarnation(), database); status != EReadStatus::Ready) {
+                    return ReadError(status, "Database");
+                }
+                databases.emplace(record.GetDatabaseIncarnation(), std::move(database));
+            }
+            records.push_back(std::move(record));
+        }
+        for (auto& record : records) {
+            const auto previous = record;
+            auto* claim = record.MutableClaim();
+            claim->SetGeneration(Self->Executor()->Generation());
+            claim->SetAttempt(claim->GetAttempt() + 1);
+            claim->SetWorkerId(request.GetWorkerId());
+            claim->SetDeadlineUs(nowUs + request.GetLeaseUs());
+            record.SetState(REVOKING);
+            record.SetDueAtUs(claim->GetDeadlineUs());
+            record.SetRevision(record.GetRevision() + 1);
+            WriteDelegation(db, record, &previous);
+            *Response->Record.AddDelegations() = record;
+        }
+        for (auto& [incarnation, database] : databases) {
+            Y_UNUSED(incarnation);
+            WriteDatabase(db, database);
+        }
+        return EExecution::Complete;
+    }
+
+    EExecution FinishRevocation(NIceDb::TNiceDb& db, const TFinishRevocationRequest& request, ui64 nowUs) {
+        if ((request.GetOutcome() != REVOKE_SUCCEEDED && request.GetOutcome() != REVOKE_RETRY)
+            || request.GetRetryAfterUs() > MaxRetryUs || request.GetRevokeOperationId().size() > 256) {
+            return Error(INVALID_ARGUMENT, "A bounded retry or successful revocation outcome is required");
+        }
+        TDelegation record;
+        TString lastFinish;
+        if (const auto status = ReadDelegation(db, request.GetOperationId(), record, nullptr, &lastFinish); status != EReadStatus::Ready) {
+            return ReadError(status, "Delegation");
+        }
+        if (request.GetClaim().GetGeneration() != Self->Executor()->Generation()
+            || !request.GetClaim().GetAttempt()
+            || request.GetClaim().SerializeAsString() != record.GetClaim().SerializeAsString()) {
+            return Error(STALE_CLAIM, "Revocation claim is no longer current");
+        }
+        // A repeated acknowledgement is harmless until another claim supersedes it.
+        if ((record.GetState() == REVOKED && request.GetOutcome() == REVOKE_SUCCEEDED)
+            || (record.GetState() == REVOCATION_PENDING && request.GetOutcome() == REVOKE_RETRY)) {
+            if (lastFinish != request.SerializeAsString()) {
+                return Error(CONFLICT, "The claim was already completed with a different result");
+            }
+            return Reply(record);
+        }
+        if (record.GetState() != REVOKING || record.GetClaim().GetDeadlineUs() <= nowUs) {
+            return Error(STALE_CLAIM, "Revocation lease has expired or was already completed");
+        }
+        TDatabaseRecord database;
+        if (const auto status = ReadDatabase(db, record.GetDatabaseIncarnation(), database); status != EReadStatus::Ready) {
+            return ReadError(status, "Database");
+        }
+        const auto previous = record;
+        if (!request.GetRevokeOperationId().empty()) {
+            record.SetRevokeOperationId(request.GetRevokeOperationId());
+        }
+        if (request.GetOutcome() == REVOKE_SUCCEEDED) {
+            record.SetState(REVOKED);
+            record.ClearDueAtUs();
+        } else {
+            record.SetState(REVOCATION_PENDING);
+            record.SetDueAtUs(nowUs + request.GetRetryAfterUs());
+        }
+        record.SetRevision(record.GetRevision() + 1);
+        WriteDelegation(db, record, &previous);
+        db.Table<TSchema::Delegations>().Key(record.GetOperationId())
+            .Update(NIceDb::TUpdate<TSchema::Delegations::LastFinish>(request.SerializeAsString()));
+        WriteDatabase(db, database);
+        return Reply(record, nullptr, &database);
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         // Execute may restart after a page fault. Do not keep a partial response.
         Response = MakeHolder<TEvIamDelegationTablet::TEvResponse>();
@@ -633,6 +744,8 @@ struct TIamDelegationTablet::TTxRequest final
             case TRequest::kDropSecret: result = DropSecret(db, request.GetDropSecret(), nowUs); break;
             case TRequest::kGetSecret: result = GetSecret(db, request.GetGetSecret()); break;
             case TRequest::kGetDelegation: result = GetDelegation(db, request.GetGetDelegation()); break;
+            case TRequest::kClaimRevocations: result = ClaimRevocations(db, request.GetClaimRevocations(), nowUs); break;
+            case TRequest::kFinishRevocation: result = FinishRevocation(db, request.GetFinishRevocation(), nowUs); break;
             case TRequest::COMMAND_NOT_SET: result = Error(INVALID_ARGUMENT, "A tablet command is required"); break;
         }
         return result == EExecution::Complete;

@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include "kqp_host_impl.h"
 #include "kqp_statement_rewrite.h"
 
@@ -23,7 +23,7 @@
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
-#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
+#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -34,7 +34,6 @@
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
@@ -712,6 +711,35 @@ const TTypedUnboxedValue* ValidateParameter(const TString& name, const TTypeAnno
     return parameter;
 }
 
+// Expand nested DO blocks before redirecting global PRAGMA ydb.* to KQP settings.
+// Reads, writes and cluster-scoped configuration stay with their own provider.
+TAutoPtr<IGraphTransformer> CreateYdbPragmaTransformer(TTypeAnnotationContext& types) {
+    return CreateFunctorTransformer([&types](const TExprNode::TPtr& input,
+        TExprNode::TPtr& output, TExprContext& ctx) {
+        TExprNode::TPtr expanded;
+        const auto status = ExpandApplyNoRepeat(input, expanded, ctx, types);
+        if (status.Level == IGraphTransformer::TStatus::Error) {
+            return status;
+        }
+        TOptimizeExprSettings settings(nullptr);
+        settings.VisitChanges = false;
+        return OptimizeExpr(expanded, output,
+            [](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                if (!node->IsCallable(ConfigureName) || node->ChildrenSize() < 3 ||
+                    !node->Child(2)->IsAtom("Attr")) {
+                    return node;
+                }
+                const auto source = node->Child(1);
+                if (!source->IsCallable(TCoDataSource::CallableName()) || source->ChildrenSize() != 2 ||
+                    !source->Child(0)->IsAtom(YdbProviderName) || !source->Child(1)->IsAtom(ALL_CLUSTERS)) {
+                    return node;
+                }
+                return ctx.ChangeChild(*node, 1, ctx.ChangeChild(*source, 0,
+                    ctx.NewAtom(source->Child(0)->Pos(), KikimrProviderName)));
+            }, ctx, settings);
+    });
+}
+
 // EvaluateExpr nodes containing parameter references cannot be evaluated at compile time
 // because parameter values are not available in the evaluation context for DDL queries.
 // However, secret values can be set in SQL statements with parameters.
@@ -1114,7 +1142,7 @@ private:
                 || node.Maybe<TYtDSource>()
                 || node.Maybe<TYtDSink>()
                 || node.Maybe<TGenDataSource>()
-                || (node.Maybe<TCoDataSource>() && node.Cast<TCoDataSource>().Category().Value() == YdbExternalProviderName);
+                || (node.Maybe<TCoDataSource>() && node.Cast<TCoDataSource>().Category().Value() == YdbProviderName);
 
             return !hasFederatedSorcesOrSinks;
         });
@@ -1946,6 +1974,7 @@ private:
 
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
+            .Add(CreateYdbPragmaTransformer(*TypesCtx), "YdbPragmas")
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddIOAnnotation()
@@ -2016,18 +2045,18 @@ private:
         TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
     }
 
-    void InitYdbExternalProvider() {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YdbExternalProviderName))) {
+    void InitYdbProvider() {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YdbProviderName))) {
             return;
         }
 
-        const auto& resources = FederatedQuerySetup->YdbExternalResources;
-        YQL_ENSURE(resources, "Missing YdbExternal resources");
-        auto provider = NYql::CreateYdbExternalDataProviders(
+        const auto& resources = FederatedQuerySetup->YdbResources;
+        YQL_ENSURE(resources, "Missing Ydb resources");
+        auto provider = NYql::CreateYdbDataProviders(
             TypesCtx.Get(), [resources] { return resources->GetMetadataClientCache(); },
             FederatedQuerySetup->CredentialsFactory);
-        TypesCtx->AddDataSource(NYql::YdbExternalProviderName, std::move(provider.Source));
-        TypesCtx->AddDataSink(NYql::YdbExternalProviderName, std::move(provider.Sink));
+        TypesCtx->AddDataSource(NYql::YdbProviderName, std::move(provider.Source));
+        TypesCtx->AddDataSink(NYql::YdbProviderName, std::move(provider.Sink));
     }
 
     void InitGenericProvider() {
@@ -2177,7 +2206,6 @@ private:
 
         THashSet<TString> providerNames {
             TString(KikimrProviderName),
-            TString(YdbProviderName),
         };
 
         // Kikimr provider
@@ -2214,7 +2242,7 @@ private:
             if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
                 InitS3Provider(queryType);
                 InitGenericProvider();
-                InitYdbExternalProvider();
+                InitYdbProvider();
                 InitSolomonProvider();
 
                 if (FederatedQuerySetup->YtGateway) {
@@ -2288,6 +2316,7 @@ private:
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformer", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
+            .Add(CreateYdbPragmaTransformer(*TypesCtx), "YdbPragmas")
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
@@ -2350,6 +2379,7 @@ private:
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("YqlTransformerNewRBO", NYql::NLog::EComponent::ProviderKqp,
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
+            .Add(CreateYdbPragmaTransformer(*TypesCtx), "YdbPragmas")
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
             .AddExpressionEvaluation(*FuncRegistry)
@@ -2367,6 +2397,7 @@ private:
 
         DataQueryAstTransformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
+            .Add(CreateYdbPragmaTransformer(*TypesCtx), "YdbPragmas")
             .AddIntentDeterminationTransformer()
             .AddTableMetadataLoaderTransformer()
             .AddTypeAnnotationTransformer()

@@ -22,8 +22,8 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <ydb/library/yql/providers/ydb_external/common/read_limits.h>
-#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
+#include <ydb/library/yql/providers/ydb/common/read_limits.h>
+#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -68,18 +68,21 @@ namespace {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         const TString& path,
         bool addRoot) {
-        auto driver = federatedQuerySetup->Driver;
+        // Object-kind resolution shares the native provider's TLS-isolated
+        // drivers, including setups that do not initialize the topic SDK driver.
+        auto driver = federatedQuerySetup->YdbResources->GetDriver(useTls);
 
         NYdb::TCommonClientSettings opts;
         opts
             .DiscoveryEndpoint(endpoint)
             .Database(addRoot ? "/Root" + database : database)
             .SslCredentials(NYdb::TSslCredentials(useTls))
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .DiscoveryMode(NYdb::EDiscoveryMode::Off)
             .CredentialsProviderFactory(credentialsProviderFactory);
         auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
 
-        return schemeClient->DescribePath(addRoot ? "/Root" + path : path)
+        return schemeClient->DescribePath(addRoot ? "/Root" + path : path,
+                NYdb::NScheme::TDescribePathSettings().ClientTimeout(TDuration::Seconds(60)).OperationTimeout(TDuration::Seconds(60)))
             .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, credentialsProviderFactory, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 TGetSchemeEntryResult res;
@@ -87,14 +90,11 @@ namespace {
                     if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
                         return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
                     }
-                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
-                    YDB_LOG_WARN_CTX(*actorSystem, message,
-                        {"issues", describePathResult.GetIssues()});
-                    auto rootIssue = NYql::TIssue(message);
-                    for (const auto& issue : describePathResult.GetIssues()) {
-                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));
-                    }
-                    res.Issues.AddIssue(rootIssue);
+                    // Remote issues may echo credentials. Keep object-kind
+                    // resolution as safe as the native table metadata/read path.
+                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed with status " << ToString(describePathResult.GetStatus()) << ".";
+                    YDB_LOG_WARN_CTX(*actorSystem, message);
+                    res.Issues.AddIssue(NYql::TIssue(message));
                 } else {
                     NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
                     res.EntryType = entry.Type;
@@ -139,24 +139,24 @@ namespace {
         });
     }
 
-    std::shared_ptr<NYdb::TDriver> MakeYdbExternalDriver() {
+    std::shared_ptr<NYdb::TDriver> MakeYdbDriver() {
         NYdb::TDriverConfig config;
         config.SetDiscoveryMode(NYdb::EDiscoveryMode::Off);
-        config.SetMaxInboundMessageSize(NYql::NYdbExternal::MaxInboundMessageBytes);
+        config.SetMaxInboundMessageSize(NYql::NYdb::MaxInboundMessageBytes);
         return MakeSharedYdbDriverWithStop(std::make_unique<NYdb::TDriver>(config));
     }
 
-    class TYdbExternalResources::TImpl {
+    class TYdbResources::TImpl {
     public:
         std::shared_ptr<NYdb::TDriver> GetDriver(bool useTls) {
             std::lock_guard lock(Mutex);
             return GetDriverLocked(useTls);
         }
 
-        std::shared_ptr<NYql::IYdbExternalMetadataClientCache> GetMetadataClientCache() {
+        std::shared_ptr<NYql::IYdbMetadataClientCache> GetMetadataClientCache() {
             std::lock_guard lock(Mutex);
             if (!MetadataClientCache) {
-                MetadataClientCache = NYql::CreateYdbExternalMetadataClientCache(
+                MetadataClientCache = NYql::CreateYdbMetadataClientCache(
                     *GetDriverLocked(false), *GetDriverLocked(true));
             }
             return MetadataClientCache;
@@ -166,7 +166,7 @@ namespace {
         std::shared_ptr<NYdb::TDriver> GetDriverLocked(bool useTls) {
             auto& driver = useTls ? TlsDriver : Driver;
             if (!driver) {
-                driver = MakeYdbExternalDriver();
+                driver = MakeYdbDriver();
             }
             return driver;
         }
@@ -175,19 +175,19 @@ namespace {
         // Keep drivers alive until clients have been released.
         std::shared_ptr<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::TDriver> TlsDriver;
-        std::shared_ptr<NYql::IYdbExternalMetadataClientCache> MetadataClientCache;
+        std::shared_ptr<NYql::IYdbMetadataClientCache> MetadataClientCache;
     };
 
-    TYdbExternalResources::TYdbExternalResources()
+    TYdbResources::TYdbResources()
         : Impl_(std::make_shared<TImpl>())
     {
     }
 
-    std::shared_ptr<NYdb::TDriver> TYdbExternalResources::GetDriver(bool useTls) {
+    std::shared_ptr<NYdb::TDriver> TYdbResources::GetDriver(bool useTls) {
         return Impl_->GetDriver(useTls);
     }
 
-    std::shared_ptr<NYql::IYdbExternalMetadataClientCache> TYdbExternalResources::GetMetadataClientCache() {
+    std::shared_ptr<NYql::IYdbMetadataClientCache> TYdbResources::GetMetadataClientCache() {
         return Impl_->GetMetadataClientCache();
     }
 
@@ -365,7 +365,7 @@ namespace {
 
         auto result = TKqpFederatedQuerySetup{
             Driver,
-            YdbExternalResources,
+            YdbResources,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
@@ -474,7 +474,7 @@ namespace {
         bool useTls,
         const TString& structuredTokenJson,
         const TString& path) {
-        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
+        if (!federatedQuerySetup || !federatedQuerySetup->YdbResources || !endpoint || !database) {
             YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
                 {"path", path},
                 {"database", database},
@@ -491,9 +491,9 @@ namespace {
                     federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
                     path,
                     false);
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             TGetSchemeEntryResult result;
-            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Failed to get scheme entry type: " << e.what()));
+            result.Issues.AddIssue(NYql::TIssue("Failed to get external YDB entity type"));
             return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
         }
     };

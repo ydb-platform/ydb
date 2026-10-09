@@ -1724,7 +1724,7 @@ private:
         THashMap<TString, THashSet<TString>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
-        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
+        if (IsIn({NYql::KikimrProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
             FillDqInput(source.Ptr(), stageProto, protoSource, dataSourceCategory, ctx, true);
@@ -2605,7 +2605,6 @@ private:
 
     bool IsTableSink(const TStringBuf dataSinkCategory) const {
         return dataSinkCategory == NYql::KikimrProviderName
-            || dataSinkCategory == NYql::YdbProviderName
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 

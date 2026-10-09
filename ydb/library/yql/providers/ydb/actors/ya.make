@@ -1,21 +1,24 @@
-YQL_LIBRARY()
+LIBRARY()
 
 SRCS(
-    yql_ydb_read_actor.cpp
-    yql_ydb_source_factory.cpp
+    dq_ydb_read_actor.cpp
+    read_stream.cpp
 )
 
 PEERDIR(
-    ydb/core/scheme
-    yql/essentials/minikql/computation
-    ydb/library/yql/providers/common/token_accessor/client
-    yql/essentials/public/types
-    yql/essentials/utils/log
-    ydb/public/lib/experimental
-    ydb/public/sdk/cpp/adapters/issue
-    ydb/public/sdk/cpp/src/client/driver
-    ydb/library/yql/dq/actors/compute
+    contrib/libs/apache/arrow
+    ydb/library/yql/providers/native
+    ydb/library/yql/providers/ydb/common
     ydb/library/yql/providers/ydb/proto
+    ydb/library/yql/providers/common/token_accessor/client
+    ydb/public/sdk/cpp/src/client/arrow
+    ydb/public/sdk/cpp/src/client/query
+    yql/essentials/public/udf/arrow
 )
 
+ADDINCL(contrib/libs/flatbuffers/include)
+
+YQL_LAST_ABI_VERSION()
 END()
+
+RECURSE_FOR_TESTS(ut)

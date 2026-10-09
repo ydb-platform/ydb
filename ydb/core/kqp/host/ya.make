@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/ydb_external/common
+    ydb/library/yql/providers/ydb/common
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/query_data
@@ -28,7 +28,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/dq/helper
     ydb/library/yql/providers/generic/provider
-    ydb/library/yql/providers/ydb_external/provider
+    ydb/library/yql/providers/ydb/provider
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/s3/expr_nodes

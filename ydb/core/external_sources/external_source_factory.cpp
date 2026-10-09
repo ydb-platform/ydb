@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include "external_source_factory.h"
 #include "object_storage.h"
 #include "external_data_source.h"
@@ -156,11 +156,9 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
-        },
-        {
-            ToString(NYql::EDatabaseType::YdbExternal),
-            CreateExternalDataSource(TString{NYql::YdbExternalProviderName}, {"NONE", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
+            // Ydb connections serve both tables (Query SDK) and topics (PQ).
+            // Keep the existing DDL contract; each provider validates its own capabilities.
+            CreateExternalDataSource(TString{NYql::YdbProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),

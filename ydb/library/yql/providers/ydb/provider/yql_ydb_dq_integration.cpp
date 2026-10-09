@@ -1,165 +1,149 @@
-#include "yql_ydb_dq_integration.h"
-#include "yql_ydb_mkql_compiler.h"
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include "yql_ydb_provider_impl.h"
+
+#include <library/cpp/json/json_value.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/mkql/parser.h>
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 #include <ydb/library/yql/providers/ydb/proto/source.pb.h>
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 
-namespace NYql {
+namespace NYql::NYdb {
+namespace {
 
 using namespace NNodes;
 
-namespace {
-
-class TYdbDqIntegration: public TDqIntegrationBase {
-    static constexpr ui64 DefaultMaxPartitions = 1000;
-
+class TDqIntegration final : public TDqIntegrationBase {
 public:
-    TYdbDqIntegration(TYdbState::TPtr state)
-        : State_(state)
+    explicit TDqIntegration(TState::TPtr state)
+        : State_(std::move(state))
     {
     }
 
-    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
-        TString cluster, table;
-        if (const TMaybeNode<TDqSource> source = &node) {
-            cluster = source.Cast().DataSource().Cast<TYdbDataSource>().Cluster().Value();
-            table = source.Cast().Settings().Cast<TYdbSourceSettings>().Table().Value();
-        } else if (const TMaybeNode<TYdbReadTable> read = &node) {
-            cluster = read.Cast().DataSource().Cluster().Value();
-            table = read.Cast().Table().Value();
-        }
+    bool CanRead(const TExprNode& node, TExprContext&, bool) override {
+        return TYdbReadTable::Match(&node);
+    }
 
-        auto& meta = State_->Tables[std::make_pair(cluster, table)];
-        meta.ReadAsync = settings.EnableComputeActor.GetOrElse(false); // TODO: Use special method for get settings.
-        auto parts = meta.Partitions;
-
-        auto maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
-        if (maxPartitions && parts.size() > maxPartitions) {
-            if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
-                const auto dropsPerTask = (parts.size() - 1ULL) / maxPartitions;
-                for (auto it = parts.begin(); parts.end() > it;) {
-                    auto to = it + std::min(dropsPerTask, std::distance(it, parts.end()) - 1ULL);
-                    it->back() = std::move(to->back());
-                    it = parts.erase(++it, ++to);
-                }
-            } else {
-                const auto dropEachPart = maxPartitions / extraParts;
-                for (auto it = parts.begin(); parts.size() > maxPartitions;) {
-                    const auto to = it + dropEachPart;
-                    it = to - 1U;
-                    it->back() = std::move(to->back());
-                    it = parts.erase(to);
-                }
+    TMaybe<ui64> EstimateReadSize(ui64, ui32, const TVector<const TExprNode*>& nodes, TExprContext&) override {
+        for (const auto* node : nodes) {
+            if (!TYdbReadTable::Match(node)) {
+                return Nothing();
             }
-        }
-
-        partitions.reserve(parts.size());
-        for (const auto& part : parts) {
-            NYdb::TKeyRange range;
-            range.set_from_key(part.front());
-            range.set_to_key(part.back());
-            partitions.emplace_back();
-            TStringOutput out(partitions.back());
-            range.Save(&out);
         }
         return 0;
     }
 
-    bool CanRead(const TExprNode& read, TExprContext&, bool ) override {
-        return TYdbReadTable::Match(&read);
-    }
-
-    TMaybe<ui64> EstimateReadSize(ui64 /*dataSizePerJob*/, ui32 /*maxTasksPerStage*/, const TVector<const TExprNode*>& read, TExprContext&) override {
-        if (AllOf(read, [](const auto val) { return TYdbReadTable::Match(val); })) {
-            return 0ul; // TODO: return real size
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& node, TExprContext& ctx, const TWrapReadSettings&) override {
+        if (!TYdbReadTable::Match(node.Get())) {
+            return node;
         }
-        return Nothing();
-    }
-
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
-        if (const auto& maybeYdbReadTable = TMaybeNode<TYdbReadTable>(read)) {
-            const auto& ydbReadTable = maybeYdbReadTable.Cast();
-            YQL_ENSURE(ydbReadTable.Ref().GetTypeAnn(), "No type annotation for node " << ydbReadTable.Ref().Content());
-            const auto& clusterName = ydbReadTable.DataSource().Cluster().Value();
-            const auto token = "cluster:default_" + TString(clusterName);
-            YQL_CLOG(INFO, ProviderYdb) << "Wrap " << read->Content() << " with token: " << token;
-
-            const auto rowType = ydbReadTable.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
-            auto columns = ydbReadTable.Columns().Ptr();
-            if (!columns->IsList()) {
-                const auto pos = columns->Pos();
-                const auto& items = rowType->Cast<TStructExprType>()->GetItems();
-                TExprNode::TListType cols;
-                cols.reserve(items.size());
-                std::transform(items.cbegin(), items.cend(), std::back_inserter(cols), [&](const TItemExprType* item) { return ctx.NewAtom(pos, item->GetName()); });
-                columns = ctx.NewList(pos, std::move(cols));
-            }
-
-            return Build<TDqSourceWrap>(ctx, read->Pos())
-                .Input<TYdbSourceSettings>()
-                    .World(ydbReadTable.World())
-                    .Table(ydbReadTable.Table())
-                    .Token<TCoSecureParam>()
-                        .Name().Build(token)
-                        .Build()
-                    .Columns(std::move(columns))
-                    .Build()
-                .RowType(ExpandType(ydbReadTable.Pos(), *rowType, ctx))
-                .DataSource(ydbReadTable.DataSource().Cast<TCoDataSource>())
-                .Done().Ptr();
+        const TYdbReadTable read(node);
+        const auto* row = node->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        TExprNode::TListType columns;
+        for (const auto* item : row->GetItems()) {
+            columns.emplace_back(ctx.NewAtom(node->Pos(), item->GetName()));
         }
-        return read;
+        if (columns.empty()) {
+            // COUNT(*) and constant projections still need the number of remote rows.
+            // Read a carrier column; RowType remains empty so only block length is exposed.
+            const auto& table = State_->Tables.at(TState::TTableKey(read.DataSource().Cluster().StringValue(), read.Table().StringValue()));
+            columns.emplace_back(ctx.NewAtom(node->Pos(), table.RowType->GetItems().front()->GetName()));
+        }
+        return Build<TDqSourceWrap>(ctx, node->Pos())
+            .Input<TYdbSourceSettings>()
+                .World(read.World())
+                .Cluster(read.DataSource().Cluster())
+                .Table(read.Table())
+                .Token<TCoSecureParam>()
+                    .Name().Build(TString("cluster:default_") + read.DataSource().Cluster().StringValue())
+                .Build()
+                .Columns(ctx.NewList(node->Pos(), std::move(columns)))
+            .Build()
+            .RowType(ExpandType(node->Pos(), *row, ctx))
+            .DataSource(read.DataSource().Cast<TCoDataSource>())
+            .Done().Ptr();
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
+        if (const auto source = TMaybeNode<TDqSource>(&node); source && source.Settings().Maybe<TYdbSourceSettings>()) {
+            // A single Query Service stream owns a single snapshot for this split.
+            partitions.assign(1, TString());
+        }
+        return 0;
+    }
+
+    void FillSourceSettings(const TExprNode& node, google::protobuf::Any& proto, TString& sourceType, size_t, TExprContext&) override {
         const TDqSource source(&node);
-        if (const auto maySettings = source.Settings().Maybe<TYdbSourceSettings>()) {
-            const auto settings = maySettings.Cast();
-
-            const auto& cluster = source.DataSource().Cast<TYdbDataSource>().Cluster().StringValue();
-            const auto& table = settings.Table().StringValue();
-            const auto& token = settings.Token().Name().StringValue();
-
-            const auto& connect =  State_->Configuration->Clusters[cluster];
-
-            NYdb::TSource srcDesc;
-            srcDesc.SetTable(table);
-            srcDesc.SetDatabase(connect.Database);
-            srcDesc.SetEndpoint(connect.Endpoint);
-            srcDesc.SetSecure(connect.Secure);
-            srcDesc.SetAddBearerToToken(connect.AddBearerToToken);
-            srcDesc.SetToken(token);
-
-            const auto& columns = settings.Columns();
-            for (auto i = 0U; i < columns.Size(); ++i)
-                srcDesc.AddColumns(columns.Item(i).StringValue());
-
-            for (const auto type : State_->Tables[std::make_pair(cluster, table)].KeyTypes)
-                srcDesc.AddKeyColumnTypes(type);
-
-            protoSettings.PackFrom(srcDesc);
-            sourceType = "YdbSource";
+        const auto settings = source.Settings().Cast<TYdbSourceSettings>();
+        const auto& clusterName = settings.Cluster().StringValue();
+        const auto& cluster = State_->Clusters.at(clusterName);
+        const auto& table = State_->Tables.at(TState::TTableKey(clusterName, settings.Table().StringValue()));
+        TSource payload;
+        payload.SetVersion(1);
+        payload.SetEndpoint(cluster.Endpoint);
+        payload.SetDatabase(cluster.Database);
+        const auto path = settings.Table().StringValue();
+        payload.SetTable(path.StartsWith('/') ? path : cluster.Database + "/" + path);
+        payload.SetToken(settings.Token().Name().StringValue());
+        payload.SetUseTls(cluster.UseTls);
+        // Fixed internal budget for the experimental provider, not an EDS option.
+        payload.SetReadTimeoutMs(TSource::default_instance().GetReadTimeoutMs());
+        for (const auto column : settings.Columns()) {
+            auto* target = payload.AddColumns();
+            target->SetName(column.StringValue());
+            *target->MutableType() = table.ColumnTypes.at(column.StringValue());
         }
+        proto.PackFrom(payload);
+        sourceType = "Ydb";
+    }
+
+    void FillLookupSourceSettings(const TExprNode&, google::protobuf::Any&, TString&) override {
+        // The logical optimizer reports this as a query issue. Keep the planner
+        // boundary guarded as well instead of reaching TDqIntegrationBase's ENSURE.
+        throw yexception() << "Ydb streamlookup joins are not supported";
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
-        RegisterDqYdbMkqlCompilers(compiler, State_);
+        compiler.ChainCallable(TDqSourceWideBlockWrap::CallableName(),
+            [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+                const TDqSourceWideBlockWrap wrapper(&node);
+                if (wrapper.DataSource().Category().Value() == YdbProviderName) {
+                    return *TryWrapWithParserForArrowIPCStreaming(wrapper, ctx);
+                }
+                return NKikimr::NMiniKQL::TRuntimeNode();
+            });
+    }
+
+    bool FillSourcePlanProperties(const TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        const auto source = node.Maybe<TDqSource>();
+        if (!source || !source.Settings().Maybe<TYdbSourceSettings>()) {
+            return false;
+        }
+        const auto settings = source.Cast().Settings().Cast<TYdbSourceSettings>();
+        properties["SourceType"] = "Ydb";
+        properties["Table"] = settings.Table().StringValue();
+        properties["Database"] = State_->Clusters.at(settings.Cluster().StringValue()).Database;
+        auto& columns = properties["ReadColumns"];
+        columns.SetType(NJson::JSON_ARRAY);
+        for (const auto column : settings.Columns()) {
+            columns.AppendValue(column.StringValue());
+        }
+        properties["ReadTimeoutMs"] = TSource::default_instance().GetReadTimeoutMs();
+        return true;
     }
 
 private:
-    const TYdbState::TPtr State_;
+    const TState::TPtr State_;
 };
 
+} // namespace
+
+THolder<IDqIntegration> CreateDqIntegration(TState::TPtr state) {
+    return MakeHolder<TDqIntegration>(std::move(state));
 }
 
-THolder<IDqIntegration> CreateYdbDqIntegration(TYdbState::TPtr state) {
-    return MakeHolder<TYdbDqIntegration>(state);
-}
-
-}
+} // namespace NYql::NYdb

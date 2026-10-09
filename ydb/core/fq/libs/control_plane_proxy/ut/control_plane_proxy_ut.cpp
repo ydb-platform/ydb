@@ -1,5 +1,6 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
+#include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
@@ -490,6 +491,102 @@ TVector<TString> AllPermissionsExcept(const TVector<TString>& exceptItems) {
 } // namespace
 
 //////////////////////////////////////////////////////
+
+Y_UNIT_TEST_SUITE(TControlPlaneProxyStreamingQueryAccess) {
+    void CheckCreateQuery(bool enabled, const TVector<TString>& allowedFolders,
+                          FederatedQuery::QueryContent::QueryType queryType, bool rejected) {
+        for (const auto mode : {FederatedQuery::SAVE, FederatedQuery::RUN}) {
+            NConfig::TControlPlaneProxyConfig config;
+            config.SetEnablePermissions(true);
+            auto& access = *config.MutableStreamingQueryAccess();
+            access.SetEnabled(enabled);
+            for (const auto& folder : allowedFolders) {
+                access.AddAllowedFolderIds(folder);
+            }
+            TTestBootstrap bootstrap(config);
+            ui32 storageRequests = 0;
+            ui32 tenantRequests = 0;
+            ui32 rateLimiterRequests = 0;
+            bootstrap.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == TEvControlPlaneStorage::TEvCreateQueryRequest::EventType) {
+                    ++storageRequests;
+                } else if (event->GetTypeRewrite() == TEvControlPlaneConfig::TEvGetTenantInfoRequest::EventType) {
+                    ++tenantRequests;
+                } else if (event->GetTypeRewrite() == TEvRateLimiter::TEvCreateResource::EventType) {
+                    ++rateLimiterRequests;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+
+            FederatedQuery::CreateQueryRequest proto;
+            proto.mutable_content()->set_name("query");
+            proto.mutable_content()->set_type(queryType);
+            proto.mutable_content()->set_text("SELECT 42");
+            proto.set_execute_mode(mode);
+            const auto sender = bootstrap.Runtime->AllocateEdgeActor();
+            auto request = std::make_unique<TEvControlPlaneProxy::TEvCreateQueryRequest>(
+                "yandexcloud://my_folder", proto, "test_user@staff", "",
+                TVector<TString>{"yq.queries.create@as", "yq.queries.invoke@as"});
+            request->CloudId = "cloud";
+            request->SubjectType = "user_account";
+            constexpr ui64 cookie = 42;
+            bootstrap.Runtime->Send(new IEventHandle(ControlPlaneProxyActorId(), sender, request.release(), 0, cookie));
+
+            if (rejected) {
+                const auto response = bootstrap.Runtime->GrabEdgeEventRethrow<TEvControlPlaneProxy::TEvCreateQueryResponse>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+                UNIT_ASSERT(response->Get()->Issues);
+                UNIT_ASSERT_VALUES_EQUAL(response->Get()->Issues.back().IssueCode, static_cast<ui32>(TIssuesIds::ACCESS_DENIED));
+                UNIT_ASSERT_STRING_CONTAINS(response->Get()->Issues.ToString(),
+                    "Creating streaming queries is disabled for this folder");
+                UNIT_ASSERT_VALUES_EQUAL(storageRequests, 0);
+                UNIT_ASSERT_VALUES_EQUAL(tenantRequests, 0);
+                UNIT_ASSERT_VALUES_EQUAL(rateLimiterRequests, 0);
+            } else {
+                const auto forwarded = bootstrap.MetaStorageGrab->GetRequest();
+                const auto* event = forwarded->Get<TEvControlPlaneStorage::TEvCreateQueryRequest>();
+                UNIT_ASSERT_VALUES_EQUAL(event->Scope, "yandexcloud://my_folder");
+                UNIT_ASSERT_VALUES_EQUAL(event->Request.content().text(), "SELECT 42");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(event->Request.content().type()),
+                    static_cast<int>(queryType));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    static_cast<int>(event->Request.execute_mode()),
+                    static_cast<int>(mode));
+                UNIT_ASSERT_VALUES_EQUAL(storageRequests, 1);
+            }
+            bootstrap.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>&) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+    }
+
+    Y_UNIT_TEST(DisabledByDefault) {
+        NConfig::TControlPlaneProxyConfig config;
+        UNIT_ASSERT(!config.GetStreamingQueryAccess().GetEnabled());
+        CheckCreateQuery(false, {}, FederatedQuery::QueryContent::STREAMING, false);
+    }
+
+    Y_UNIT_TEST(DisabledRestrictionIgnoresAllowlist) {
+        CheckCreateQuery(false, {"other_folder"}, FederatedQuery::QueryContent::STREAMING, false);
+    }
+
+    Y_UNIT_TEST(AllowedFolderCanCreateStreamingQuery) {
+        CheckCreateQuery(true, {"other_folder", "my_folder"}, FederatedQuery::QueryContent::STREAMING, false);
+    }
+
+    Y_UNIT_TEST(UnlistedFolderCannotCreateStreamingQuery) {
+        CheckCreateQuery(true, {"other_folder", "my_folder_suffix"}, FederatedQuery::QueryContent::STREAMING, true);
+    }
+
+    Y_UNIT_TEST(EmptyAllowlistRejectsStreamingQueries) {
+        CheckCreateQuery(true, {}, FederatedQuery::QueryContent::STREAMING, true);
+    }
+
+    Y_UNIT_TEST(RestrictionDoesNotAffectAnalytics) {
+        CheckCreateQuery(true, {}, FederatedQuery::QueryContent::ANALYTICS, false);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TControlPlaneProxyTest) {
     Y_UNIT_TEST(ShouldSendCreateQuery)

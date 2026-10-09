@@ -12,6 +12,7 @@ SRCS(
     durability_ut.cpp
     iam_delegation_ut.cpp
     lifecycle_recovery_ut.cpp
+    storage_reopen_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,6 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <strstream>
+#include <utility>
+#include <vector>
 
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
@@ -31,7 +33,58 @@ TKafkaRecordBatch ReadProduceRecords(const TKafkaBytes& records) {
     return batch;
 }
 
+namespace {
+    template <class TProtocol, class TStorage>
+    void CheckOwnedBytesLifetime(TStorage TProtocol::* storage, TKafkaBytes TProtocol::* bytes) {
+        for (const TString& payload : {TString(), TString("abc"), TString(128, 'a')}) {
+            TProtocol copy;
+            std::vector<TProtocol> moved;
+            {
+                TProtocol original;
+                original.*storage = payload;
+                original.*bytes = original.*storage;
+                copy = original;
+                moved.push_back(std::move(original));
+            }
+            moved.reserve(moved.capacity() + 1);
+            for (const TProtocol* value : {&copy, &moved.front()}) {
+                const auto& data = value->*bytes;
+                UNIT_ASSERT(data);
+                UNIT_ASSERT_VALUES_EQUAL(data->size(), (value->*storage).size());
+                if (!data->empty()) {
+                    UNIT_ASSERT(data->data() == (value->*storage).data());
+                }
+                UNIT_ASSERT_VALUES_EQUAL(TStringBuf(data->data(), data->size()), payload);
+            }
+        }
+    }
+} // namespace
+
 Y_UNIT_TEST_SUITE(Serialization) {
+
+Y_UNIT_TEST(SyncGroupRequestOwnedBytes) {
+    using TAssignment = TSyncGroupRequestData::TSyncGroupRequestAssignment;
+    CheckOwnedBytesLifetime(&TAssignment::AssignmentStr, &TAssignment::Assignment);
+}
+
+Y_UNIT_TEST(SyncGroupResponseOwnedBytes) {
+    CheckOwnedBytesLifetime(&TSyncGroupResponseData::AssignmentStr, &TSyncGroupResponseData::Assignment);
+}
+
+Y_UNIT_TEST(DescribeGroupMemberOwnedBytes) {
+    using TMember = TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember;
+    CheckOwnedBytesLifetime(&TMember::MemberAssignmentStr, &TMember::MemberAssignment);
+    CheckOwnedBytesLifetime(&TMember::MemberMetadataStr, &TMember::MemberMetadata);
+}
+
+Y_UNIT_TEST(JoinGroupMemberOwnedBytes) {
+    using TMember = TJoinGroupResponseData::TJoinGroupResponseMember;
+    CheckOwnedBytesLifetime(&TMember::MetaStr, &TMember::Metadata);
+}
+
+Y_UNIT_TEST(SaslAuthenticateOwnedBytes) {
+    CheckOwnedBytesLifetime(&TSaslAuthenticateResponseData::AuthBytesStr, &TSaslAuthenticateResponseData::AuthBytes);
+}
 
 Y_UNIT_TEST(RequestHeader) {
     TKafkaWriteBuffer sb(BUFFER_SIZE);

@@ -44,7 +44,7 @@ LINUX_SDK_DEFAULT = "ubuntu-16"
 MACOS_VERSION_MIN = "11.0"
 MACOS_VERSION_MIN_AS_INT = "110000"
 IOS_VERSION_MIN = "13.0"
-WINDOWS_VERSION_MIN = WindowsVersion.Windows07
+WINDOWS_VERSION_MIN = WindowsVersion.Windows08
 
 
 def init_logger(verbose):

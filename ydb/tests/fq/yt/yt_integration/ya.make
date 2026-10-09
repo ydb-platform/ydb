@@ -1,7 +1,5 @@
-# Integration tests for YT Queue API with local YT in Docker.
+# Integration tests for QYT with local YT in Docker.
 # Uses docker-compose to spin up a YT cluster for each test run.
-# Reproduces the scenario from:
-# https://ytsaurus.tech/docs/ru/user-guide/dynamic-tables/queues#primer-ispolzovaniya
 
 PY3TEST()
 
@@ -10,10 +8,17 @@ SET(DOCKER_COMPOSE_FILE ydb/tests/fq/yt/yt_integration/yt_in_docker/docker-compo
 ENV(COMPOSE_HTTP_TIMEOUT=600)
 
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
+
+DEPENDS(ydb/apps/ydb)
 
 PEERDIR(
     contrib/python/pytest
     library/python/testing/yatest_common
+    ydb/tests/fq/streaming_common
+    ydb/tests/tools/datastreams_helpers
+    ydb/tests/library
+    ydb/public/sdk/python
 )
 
 DATA(
@@ -22,6 +27,7 @@ DATA(
 
 TEST_SRCS(
     test_queue_api.py
+    test_qyt_read.py
     yt_in_docker/__init__.py
     yt_in_docker/yt_client.py
 )

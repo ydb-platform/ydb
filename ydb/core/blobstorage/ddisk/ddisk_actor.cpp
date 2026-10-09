@@ -281,6 +281,8 @@ namespace {
                 COUNTER(DirectIO, RunningCount, false)
             },
             .PersistentBuffer = {
+                COUNTER(PersistentBuffer, RegisteredTablets, false)
+                COUNTER(PersistentBuffer, RegisteredTabletsLimit, false)
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)
                 COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
@@ -296,6 +298,12 @@ namespace {
                 COUNTER(Checksums, IntegrityLostWriteDetected, true)
             },
         };
+
+        if (IsPersistentBufferActor) {
+            *Counters.PersistentBuffer.RegisteredTablets = 0;
+            *Counters.PersistentBuffer.RegisteredTabletsLimit =
+                TPersistentBufferBarriersManager::MaxRegistrations(PersistentBufferFormat.MaxBarriersLimit);
+        }
 
 #undef COUNTER_VALUE
 #undef HISTOGRAM_VALUE
@@ -344,6 +352,7 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = Register(new TWritePersistentBuffersRequestActor(SelfId()));
+            InitMemoryMetrics();
             CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
@@ -832,6 +841,7 @@ namespace {
                 reply->Rewrite(TEvInterconnect::EvForward, sync.InterconnectionSessionId);
             }
             Counters.Interface.Sync.Reply(false);
+            *Counters.Interface.Sync.BytesInFlight -= sync.RequestedBytes;
             sync.Span.End();
             TActivationContext::Send(reply.release());
         }
@@ -914,6 +924,8 @@ namespace {
         }
         Stopping = true;
         MemoryMetric.Close();
+        SpaceMetric.Close();
+        OperationMetric.Close();
         PersistentBufferRegistrationTokens.clear();
         Become(&TThis::StateFuncStopping);
         YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});

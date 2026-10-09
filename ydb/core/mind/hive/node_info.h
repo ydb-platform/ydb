@@ -2,6 +2,7 @@
 
 #include "hive.h"
 #include "tablet_info.h"
+#include "event_history.h"
 
 #include <util/generic/intrlist.h>
 
@@ -107,6 +108,9 @@ public:
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
+    static constexpr size_t EVENT_HISTORY_SIZE = 50;
+    // newest events of this node, see THive::RecordNodeEvent; capacity is reserved upfront (EVENT_HISTORY_SIZE * sizeof(THiveEvent))
+    TStaticRingBuffer<THiveEvent, EVENT_HISTORY_SIZE> EventHistory;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -267,8 +271,10 @@ public:
     void DeregisterInDomains();
     void Ping();
     void SendReconnect(const TActorId& local);
-    void SetDown(bool down);
-    void SetFreeze(bool freeze);
+    // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
+    void SetDown(bool down, EHiveEventReason reason, TString details = {});
+    void SetFreeze(bool freeze, EHiveEventReason reason, TString details = {});
+    void SetLocation(const TNodeLocation& location, EHiveEventReason reason);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);
 
     TResourceRawValues GetResourceCurrentValues() const;

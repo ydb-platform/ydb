@@ -4,6 +4,7 @@
 
 #include "ddisk.h"
 #include "tablet_stats_actor.h"
+#include "space_metrics.h"
 #include "integrity_manager.h"
 #include "persistent_buffer.h"
 #include "persistent_buffer_header.h"
@@ -211,6 +212,10 @@ namespace NKikimr::NDDisk {
             } DirectIO;
 
             struct {
+                // Registrations are keyed by (TabletId, DirectBlockGroupIndex), including empty ones.
+                // In production, a tablet registers only one direct block group per buffer.
+                NMonitoring::TDynamicCounters::TCounterPtr RegisteredTablets;
+                NMonitoring::TDynamicCounters::TCounterPtr RegisteredTabletsLimit;
                 NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
                 NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
                 NMonitoring::TDynamicCounters::TCounterPtr PendingEventsQueueSize;
@@ -528,7 +533,10 @@ namespace NKikimr::NDDisk {
 
         void CollectPbStatsSnapshot();
 
-        TLine<TRawLineFrontend<ui64>> MemoryMetric;
+        TLine<TMemoryMetricsFrontend> MemoryMetric;
+        TLine<TSpaceMetricsFrontend> SpaceMetric;
+        TLine<TOperationMetricsFrontend> OperationMetric;
+        void RecordOperationMetrics(TMonotonic sampledAt);
         void InitMemoryMetrics();
         void CollectMemoryMetrics();
 
@@ -644,6 +652,7 @@ namespace NKikimr::NDDisk {
             bool CanRetire() const { return ChunkRefs.empty(); }
         };
 
+        ui64 MonMappedDataChunks = 0;
         THashMap<ui64, TTabletState> Tablets; // TabletId -> state
         TIntrusivePtr<TPDiskParams> PDiskParams;
         std::vector<TChunkIdx> OwnedChunksOnBoot;
@@ -1103,6 +1112,7 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex = 0;
             ui64 FirstRequestId = Max<ui64>();
             TStringBuilder ErrorReason;
+            ui64 RequestedBytes = 0;
         };
 
         using TSyncIt = THashMap<ui64, TSyncInFlight>::iterator;
@@ -1251,6 +1261,7 @@ namespace NKikimr::NDDisk {
         // The flag requests reclamation once this sector's own write has completed.
         absl::flat_hash_map<TPersistentBufferLocation, bool> PersistentBufferBarrierWrites;
         void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
+        void UpdateRegisteredTabletsCounter();
         void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
         struct TPersistentBufferRegistrationToken {

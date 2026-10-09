@@ -39,6 +39,7 @@ namespace NKikimr::NDDisk {
             }
 
             auto& sync = syncIt->second;
+            *counters.BytesInFlight -= sync.RequestedBytes;
             std::vector<TSegmentManager::TSegment> removedSegments;
             if (sync.FirstRequestId != Max<ui64>()) {
                 for (ui64 requestId = sync.FirstRequestId; requestId < sync.FirstRequestId + sync.Requests.size(); ++requestId) {
@@ -194,6 +195,10 @@ namespace NKikimr::NDDisk {
                     .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                     .Selector=selector
                 });
+                // Logical source bytes admitted to this Sync, including overlapping ranges.
+                sync.RequestedBytes += selector.Size;
+                *counters.Bytes += selector.Size;
+                *counters.BytesInFlight += selector.Size;
 
                 for (auto& [outdatedSyncId, outdatedRequestId] : outdated) {
                     auto outdatedIt = SyncsInFlight.find(outdatedSyncId);
@@ -530,6 +535,7 @@ namespace NKikimr::NDDisk {
     }
 
     std::unique_ptr<IEventHandle> TDDiskActor::MakeSyncResult(const TSyncInFlight& sync) {
+        *Counters.Interface.Sync.BytesInFlight -= sync.RequestedBytes;
         std::unique_ptr<TEvSyncResult> ev;
         if (sync.ErrorReason) {
             ev = std::make_unique<TEvSyncResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);

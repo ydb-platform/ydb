@@ -45,6 +45,7 @@ namespace {
             //       before calling any other methods, like CreateTable() or AlterTable().
             //       And CreateSession() must see a successful response from the server
             //       in order to create a valid session.
+            ++CreateSessionRequests;
             Ydb::Table::CreateSessionResult result;
             result.set_session_id("fake-session-id");
 
@@ -121,6 +122,36 @@ namespace {
             return grpc::Status::OK;
         }
 
+        grpc::Status BeginTransaction(grpc::ServerContext*, const Ydb::Table::BeginTransactionRequest*,
+                                      Ydb::Table::BeginTransactionResponse* response) override {
+            Ydb::Table::BeginTransactionResult result;
+            result.mutable_tx_meta()->set_id("fake-transaction-id");
+            auto* operation = response->mutable_operation();
+            operation->set_ready(true);
+            operation->set_status(Ydb::StatusIds::SUCCESS);
+            operation->mutable_result()->PackFrom(result);
+            return grpc::Status::OK;
+        }
+
+        template <class TResponse>
+        grpc::Status FinishTransaction(TResponse* response) {
+            response->mutable_operation()->set_ready(true);
+            response->mutable_operation()->set_status(TransactionStatus);
+            return grpc::Status(TransactionGrpcStatus, "transaction response");
+        }
+
+        grpc::Status CommitTransaction(grpc::ServerContext*, const Ydb::Table::CommitTransactionRequest*,
+                                       Ydb::Table::CommitTransactionResponse* response) override {
+            return FinishTransaction(response);
+        }
+
+        grpc::Status RollbackTransaction(grpc::ServerContext*, const Ydb::Table::RollbackTransactionRequest*,
+                                         Ydb::Table::RollbackTransactionResponse* response) override {
+            return FinishTransaction(response);
+        }
+        Ydb::StatusIds::StatusCode TransactionStatus = Ydb::StatusIds::SUCCESS;
+        grpc::StatusCode TransactionGrpcStatus = grpc::StatusCode::OK;
+        std::atomic_uint CreateSessionRequests = 0;
         std::optional<Ydb::Table::CreateTableRequest> LastCreateTableRequest;
         std::optional<Ydb::Table::AlterTableRequest> LastAlterTableRequest;
         std::atomic_uint DeleteSessionRequests = 0;
@@ -228,6 +259,56 @@ TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {
     ASSERT_TRUE(analyzers.UseFilterStopwords.value_or(false));
     ASSERT_TRUE(analyzers.UseFilterSuperLemmer.value_or(false));
     ASSERT_NE(ToString(restored).find("use_filter_superlemmer: true"), TString::npos);
+}
+
+TEST(TableTest, TransactionSessionStatus) {
+    NTesting::InitPortManagerFromEnv();
+    for (const bool commit : {false, true}) {
+        for (const auto status : {EStatus::SUCCESS, EStatus::ABORTED, EStatus::BAD_SESSION, EStatus::CLIENT_DEADLINE_EXCEEDED}) {
+            SCOPED_TRACE(::testing::Message() << "commit=" << commit << ", status=" << static_cast<int>(status));
+            TMockTableService service;
+            service.TransactionStatus = status == EStatus::CLIENT_DEADLINE_EXCEEDED
+                                            ? Ydb::StatusIds::SUCCESS
+                                            : static_cast<Ydb::StatusIds::StatusCode>(status);
+            service.TransactionGrpcStatus = status == EStatus::CLIENT_DEADLINE_EXCEEDED
+                                                ? grpc::StatusCode::DEADLINE_EXCEEDED
+                                                : grpc::StatusCode::OK;
+            const auto port = NTesting::GetFreePort();
+            const auto endpoint = TStringBuilder() << "127.0.0.1:" << port;
+            auto server = StartGrpcServer(endpoint, service);
+            ASSERT_TRUE(server);
+            TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDiscoveryMode(EDiscoveryMode::Off).SetDatabase("/Root/My/DB"));
+            NTable::TTableClient client(driver, NTable::TClientSettings().SessionPoolSettings(
+                                                    NTable::TSessionPoolSettings().MaxActiveSessions(1).MinPoolSize(1)));
+            NTable::TAsyncCreateSessionResult nextSession;
+            {
+                auto sessionFuture = client.GetSession();
+                ASSERT_TRUE(sessionFuture.Wait(TDuration::Seconds(10)));
+                auto sessionResult = sessionFuture.ExtractValueSync();
+                ASSERT_TRUE(sessionResult.IsSuccess());
+                auto session = sessionResult.GetSession();
+                auto beginFuture = session.BeginTransaction(NTable::TTxSettings::SerializableRW());
+                ASSERT_TRUE(beginFuture.Wait(TDuration::Seconds(10)));
+                auto beginResult = beginFuture.ExtractValueSync();
+                ASSERT_TRUE(beginResult.IsSuccess());
+                auto transaction = beginResult.GetTransaction();
+                auto result = commit ? transaction.Commit().Apply([](auto future) {
+                    return TStatus(future.ExtractValue());
+                })
+                                     : transaction.Rollback();
+                ASSERT_TRUE(result.Wait(TDuration::Seconds(10)));
+                ASSERT_EQ(result.ExtractValueSync().GetStatus(), status);
+                ASSERT_EQ(client.GetActiveSessionCount(), 1);
+                nextSession = client.GetSession();
+                ASSERT_FALSE(nextSession.IsReady());
+            }
+            ASSERT_TRUE(nextSession.Wait(TDuration::Seconds(10)));
+            auto nextResult = nextSession.ExtractValueSync();
+            ASSERT_TRUE(nextResult.IsSuccess());
+            ASSERT_EQ(client.GetActiveSessionCount(), 1);
+            ASSERT_EQ(service.CreateSessionRequests.load(), status == EStatus::SUCCESS || status == EStatus::ABORTED ? 1u : 2u);
+        }
+    }
 }
 
 TEST(TableTest, SessionHandleDestructionSendsDeleteSession) {

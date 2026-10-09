@@ -232,7 +232,8 @@ public:
             DbDriverState_,
             rpcSettings);
 
-        return promise.GetFuture();
+        return NSessionPool::InjectSessionStatusInterception(
+            session.SessionImpl_, promise.GetFuture(), true, Settings_.SessionPoolSettings_.CloseIdleThreshold_);
     }
 
     TAsyncCommitTransactionResult CommitTransaction(const std::string& txId,
@@ -285,7 +286,8 @@ public:
             DbDriverState_,
             rpcSettings);
 
-        return promise.GetFuture();
+        return NSessionPool::InjectSessionStatusInterception(
+            session.SessionImpl_, promise.GetFuture(), true, Settings_.SessionPoolSettings_.CloseIdleThreshold_);
     }
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings,

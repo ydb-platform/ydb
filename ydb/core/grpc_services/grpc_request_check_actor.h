@@ -367,6 +367,15 @@ public:
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError: {
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Unknown resource database");
+            return ReplyUnavailableAndDie(issue);
+        }
+        case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+            // ResolveResourceDatabase sends no user token, so AccessDenied is unexpected.
+            // Treat it like other permanent resolution errors, not as a reason to retry.
+            [[fallthrough]];
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::GRPC_SERVER, "Unexpected status",
                 {"entry", entry});

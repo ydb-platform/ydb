@@ -11,6 +11,8 @@ LIBRARY()
         ddisk_actor_chunks.cpp
         ddisk_actor_connect.cpp
         ddisk_actor_mon.cpp
+        ddisk_actor_metrics.cpp
+        metric_rates.cpp
         ddisk_actor_persistent_buffer.cpp
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
@@ -29,6 +31,7 @@ LIBRARY()
     )
 
     PEERDIR(
+        library/cpp/json
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io

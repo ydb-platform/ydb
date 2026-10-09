@@ -10,6 +10,7 @@ import ydb
 import pytest
 import random
 import requests
+import re
 
 from collections import defaultdict
 from typing import List, Dict, Optional, Self
@@ -679,6 +680,33 @@ class Kikimr:
     def get_database_name(self) -> str:
         return self.endpoint.database
 
+    def wait_kqp_node_count(self, expected_count: int, timeout_seconds: int = 60) -> None:
+        node_counts = {}
+
+        def resources_updated() -> bool:
+            node_counts.clear()
+            for node_id in counter_nodes(self.cluster):
+                try:
+                    response = requests.get(
+                        monitoring_endpoint(self.cluster, node_id) + "/actors/kqp_resource_manager",
+                        headers={"Authorization": "root@builtin"},
+                        timeout=5,
+                    )
+                    response.raise_for_status()
+                except requests.RequestException as error:
+                    node_counts[node_id] = str(error)
+                    continue
+                # Read the published snapshot used by the planner. The
+                # RM/NodeNumberInSnapshot counter changes before it is published.
+                match = re.search(r"Nodes count: (\d+)", response.text)
+                node_counts[node_id] = int(match.group(1)) if match else 0
+            logger.info("KQP resource snapshot node counts: %s (expected %s)", node_counts, expected_count)
+            return bool(node_counts) and all(count == expected_count for count in node_counts.values())
+
+        assert wait_for(
+            resources_updated, timeout_seconds=timeout_seconds, step_seconds=0.5, multiply=1
+        ), f"Expected {expected_count} nodes in every KQP resource snapshot, got {node_counts}"
+
 
 class StreamingTestBase(TestYdsBase):
     def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
@@ -757,12 +785,15 @@ class StreamingTestBase(TestYdsBase):
         node.start()
 
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
-        """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
+        """Find and restart the node hosting the streaming query reader.
         Returns the restarted node ID."""
 
         def _find_node():
             for node_id in kikimr.cluster.slots:
-                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                if any(
+                    self.get_actor_count(kikimr, node_id, actor_name)
+                    for actor_name in ("DQ_MESSAGE_STREAM_READ_ACTOR", "DQ_PQ_READ_ACTOR")
+                ):
                     return node_id
             return None
 
@@ -772,7 +803,7 @@ class StreamingTestBase(TestYdsBase):
             step_seconds=1,
         )
         restart_node_id = _find_node()
-        assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
+        assert restart_node_id is not None, "No node found with a streaming query reader"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id
 

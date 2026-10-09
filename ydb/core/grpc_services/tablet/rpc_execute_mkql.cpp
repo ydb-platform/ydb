@@ -49,7 +49,7 @@ public:
             tx->MutableProgram()->SetText(req->program());
             if (const auto& params = req->parameters(); !params.empty()) {
                 auto* functionRegistry = AppData()->FunctionRegistry;
-                NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators());
+                NMiniKQL::TScopedAlloc alloc(__LOCATION__);
                 NMiniKQL::TTypeEnvironment env(alloc);
                 NMiniKQL::TMemoryUsageInfo memInfo("TRpcExecuteTabletMiniKQL");
                 NMiniKQL::THolderFactory factory(alloc.Ref(), memInfo, functionRegistry);
@@ -149,7 +149,7 @@ private:
             try {
                 const auto& protoResult = msg->Record.GetExecutionEngineEvaluatedResponse();
                 auto* functionRegistry = AppData()->FunctionRegistry;
-                NMiniKQL::TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators());
+                NMiniKQL::TScopedAlloc alloc(__LOCATION__);
                 NMiniKQL::TTypeEnvironment env(alloc);
                 NMiniKQL::TMemoryUsageInfo memInfo("TRpcExecuteTabletMiniKQL");
                 NMiniKQL::THolderFactory factory(alloc.Ref(), memInfo, functionRegistry);

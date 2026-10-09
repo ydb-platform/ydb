@@ -559,6 +559,126 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         UNIT_ASSERT_VALUES_EQUAL(cancelCount, 1);
     }
 
+    Y_UNIT_TEST(ReadRows_AllTypesMatchSelect) {
+        struct TTypeCase {
+            TStringBuf Name;
+            TStringBuf Type;
+            TStringBuf Value;
+        };
+
+        const TVector<TTypeCase> typeCases = {
+            {"Bool", "Bool", "true"},
+            {"Int8", "Int8", R"(Int8("-8"))"},
+            {"Uint8", "Uint8", R"(Uint8("8"))"},
+            {"Int16", "Int16", R"(Int16("-16"))"},
+            {"Uint16", "Uint16", R"(Uint16("16"))"},
+            {"Int32", "Int32", R"(Int32("-32"))"},
+            {"Uint32", "Uint32", R"(Uint32("32"))"},
+            {"Int64", "Int64", R"(Int64("-64"))"},
+            {"Uint64", "Uint64", R"(Uint64("64"))"},
+            {"Float", "Float", R"(Float("1.25"))"},
+            {"Double", "Double", R"(Double("2.5"))"},
+            {"String", "String", R"(String("bytes"))"},
+            {"Utf8", "Utf8", R"(Utf8("text"))"},
+            {"Date", "Date", R"(Date("2021-01-02"))"},
+            {"Datetime", "Datetime", R"(Datetime("2021-01-02T03:04:05Z"))"},
+            {"Timestamp", "Timestamp", R"(Timestamp("2021-01-02T03:04:05.123456Z"))"},
+            {"Interval", "Interval", R"(Interval("P1DT2H3M4.567890S"))"},
+            {"Date32", "Date32", R"(Date32("-2021-01-02"))"},
+            {"Datetime64", "Datetime64", R"(Datetime64("-2021-01-02T03:04:05Z"))"},
+            {"Timestamp64", "Timestamp64", R"(Timestamp64("-2021-01-02T03:04:05.123456Z"))"},
+            {"Interval64", "Interval64", R"(Interval64("P2DT3H4M5.678901S"))"},
+            {"Json", "Json", R"(Json("[1]"))"},
+            {"Yson", "Yson", R"(Yson("[2]"))"},
+            {"JsonDocument", "JsonDocument", R"(JsonDocument(@@{"value":3}@@))"},
+            {"Uuid", "Uuid", R"(Uuid("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"))"},
+            {"Decimal", "Decimal(22,9)", R"(Decimal("123.456789", 22, 9))"},
+            {"DyNumber", "DyNumber", R"(DyNumber("1.25e3"))"},
+        };
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString tableName = "/Root/ReadRowsAllTypes";
+        TStringBuilder createQuery;
+        createQuery << "CREATE TABLE `" << tableName << "` (\n"
+                    << "    `Key` Uint64 NOT NULL";
+        for (const auto& typeCase : typeCases) {
+            createQuery << ",\n    `Optional" << typeCase.Name << "` " << typeCase.Type
+                        << ",\n    `NotNull" << typeCase.Name << "` " << typeCase.Type << " NOT NULL";
+        }
+        createQuery << ",\n    PRIMARY KEY (`Key`)\n);";
+
+        auto schemeResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        TStringBuilder upsertQuery;
+        upsertQuery << "UPSERT INTO `" << tableName << "` (`Key`";
+        for (const auto& typeCase : typeCases) {
+            upsertQuery << ", `Optional" << typeCase.Name << "`"
+                        << ", `NotNull" << typeCase.Name << "`";
+        }
+        upsertQuery << R"() VALUES (Uint64("1"))";
+        for (const auto& typeCase : typeCases) {
+            upsertQuery << ", " << typeCase.Value << ", " << typeCase.Value;
+        }
+        upsertQuery << R"(), (Uint64("2"))";
+        for (const auto& typeCase : typeCases) {
+            upsertQuery << ", NULL, " << typeCase.Value;
+        }
+        upsertQuery << ");";
+
+        auto upsertResult = session.ExecuteDataQuery(
+            upsertQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        std::vector<std::string> resultColumns{"Key"};
+        TStringBuilder selectQuery;
+        selectQuery << "SELECT `Key`";
+        for (const auto& typeCase : typeCases) {
+            const TString optionalColumn = TStringBuilder() << "Optional" << typeCase.Name;
+            const TString notNullColumn = TStringBuilder() << "NotNull" << typeCase.Name;
+            resultColumns.emplace_back(optionalColumn.data(), optionalColumn.size());
+            resultColumns.emplace_back(notNullColumn.data(), notNullColumn.size());
+            selectQuery << ", `" << optionalColumn << "`, `" << notNullColumn << "`";
+        }
+        selectQuery << R"( FROM `)" << tableName
+                    << R"(` WHERE `Key` IN (Uint64("1"), Uint64("2")) ORDER BY `Key`;)";
+
+        auto queryResult = session.ExecuteDataQuery(
+            selectQuery,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(queryResult.GetResultSets().size(), 1);
+
+        TValueBuilder keys;
+        keys.BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(1)
+                .EndStruct()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(2)
+                .EndStruct()
+            .EndList();
+
+        auto readRowsResult = db.ReadRows(tableName, keys.Build(), resultColumns).GetValueSync();
+        UNIT_ASSERT_C(readRowsResult.IsSuccess(), readRowsResult.GetIssues().ToString());
+
+        const auto queryResultSet = TProtoAccessor::GetProto(queryResult.GetResultSet(0));
+        const auto readRowsResultSet = TProtoAccessor::GetProto(readRowsResult.GetResultSet());
+        UNIT_ASSERT_C(
+            queryResultSet.SerializeAsString() == readRowsResultSet.SerializeAsString(),
+            TStringBuilder()
+                << "SELECT result:\n" << queryResultSet.DebugString()
+                << "ReadRows result:\n" << readRowsResultSet.DebugString());
+    }
+
     TVector<::ReadRowsPgParam> readRowsPgParams
     {
         {.TypeId = BOOLOID, .TypeMod={}, .ValueContent="t"},

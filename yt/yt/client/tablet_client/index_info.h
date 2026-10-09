@@ -30,7 +30,7 @@ struct TUnfoldedColumns
 void ToProto(NProto::TUnfoldedColumns* serialized, const TUnfoldedColumns& original);
 void FromProto(TUnfoldedColumns* original, const NProto::TUnfoldedColumns& serialized);
 
-void FormatValue(TStringBuilderBase* builder, const TUnfoldedColumns& unfoldedColumns, TStringBuf /*spec*/);
+void FormatValue(TStringBuilderBase* builder, const TUnfoldedColumns& unfoldedColumns, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

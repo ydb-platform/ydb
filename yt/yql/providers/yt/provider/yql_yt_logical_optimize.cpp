@@ -53,6 +53,7 @@ public:
             TYtFill::CallableName()}), HNDL(RemoveRedundantWithWorldFromOperationLambdas));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         if (State_->Configuration->_ReplaceEmptyOpWithTouch.Get().GetOrElse(false)) {
+            AddHandler(0, &TCoLeft::Match, HNDL(BypassUnusedTouch));
             AddHandler(0, &TYtTransientOpBase::Match, HNDL(ReplaceEmptyOpWithTouch));
             AddHandler(0, &TYtTouch::Match, HNDL(FuseNestedTouches));
         }
@@ -1049,6 +1050,23 @@ protected:
         }
 
         return TExprBase(worlds.size() == 1 ? worlds.front() : ctx.NewCallable(node.Pos(), TCoSync::CallableName(), std::move(worlds)));
+    }
+
+    TMaybeNode<TExprBase> BypassUnusedTouch(TExprBase node, TExprContext&, const TGetParents& getParents) const {
+        const auto touch = node.Cast<TCoLeft>().Input().Maybe<TYtTouch>();
+        if (!touch || touch.Ref().StartsExecution() || touch.Ref().HasResult()) {
+            return node;
+        }
+
+        const auto* parents = getParents();
+        const auto parentsIt = parents->find(touch.Raw());
+        YQL_ENSURE(parentsIt != parents->end());
+        if (AnyOf(parentsIt->second, [](const auto* parent) { return !TCoLeft::Match(parent); })) {
+            return node;
+        }
+        // The touch is referenced only through Left!, so its empty output tables are unused.
+        // Keep its input world to preserve dependencies on preceding operations.
+        return touch.Cast().World();
     }
 
     TMaybeNode<TExprBase> ReplaceEmptyOpWithTouch(TExprBase node, TExprContext& ctx) const {

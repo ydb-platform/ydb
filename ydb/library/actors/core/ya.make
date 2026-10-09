@@ -66,7 +66,6 @@ SRCS(
     invoke.h
     io_dispatcher.cpp
     io_dispatcher.h
-    lease.h
     log.cpp
     log.h
     log_settings.cpp

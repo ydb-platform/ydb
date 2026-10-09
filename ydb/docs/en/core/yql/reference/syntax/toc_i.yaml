@@ -69,6 +69,7 @@ items:
 - { name: EXPORT and IMPORT,            href: export_import.md,              when: feature_mapreduce }
 - { name: INSERT,                       href: insert_into.md }
 - { name: INTO RESULT,                  href: into_result.md }
+- { name: KILL SESSION,                 href: kill-session.md,               when: backend_name == "YDB" }
 - { name: PRAGMA,                       href: pragma.md }
 - { name: PROCESS STREAM,               href: process.md,                    when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: PROCESS,                      href: process.md,                    when: feature_mapreduce and process_command == "PROCESS" }

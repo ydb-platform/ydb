@@ -6,6 +6,7 @@ ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.Sy
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/kqp/executer_actor/ut KqpExecuter.ResultChannelFlowControlPauseResume-ClientStats
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.RowDispatcherMemoryLimitOnParserCreation
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading-FromCheckpoint

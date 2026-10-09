@@ -9,6 +9,7 @@ from typing import Callable
 import ydb
 
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes, get_sensors, max_json_depth
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule, create_stream, delete_stream
@@ -2635,6 +2636,242 @@ FROM `{table_name}`"""
         second_node = list(kikimr.cluster.slots.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues(get_issues(client=second_ydb_client), "Lease expired")
+
+    @pytest.mark.parametrize(
+        argnames="table_role,table_store,kikimr",
+        argvalues=[
+            ("join", "row", {}),
+            ("join", "column", {}),
+            ("native_join", "row", {"kqp_constraints_transformer": False}),
+            ("output", "row", {}),
+            ("output", "column", {}),
+        ],
+        indirect=["kikimr"],
+        ids=[
+            "join-row",
+            "join-column",
+            "native_join-row",
+            "output-row",
+            "output-column",
+        ],
+    )
+    @pytest.mark.parametrize(
+        argnames="table_change", argvalues=["alter", "recreate", "drop"]
+    )
+    def test_query_after_table_change(
+        self, kikimr, entity_name, table_store, table_role, table_change
+    ):
+        """Table changes must preserve progress or restart execution on a table error."""
+        name = f"table_change_{table_store}_{table_role}_{table_change}"
+        inp, out, endpoint = self.get_io_names(
+            kikimr, name=name, local_topics=True, entity_name=entity_name
+        )
+        table_name = entity_name(name=f"{name}_table")
+        query_name = entity_name(name=f"{name}_query")
+        query_path = f"{kikimr.get_database_name()}/{query_name}"
+        timeout = plain_or_under_sanitizer(plain=180, sanitized=300)
+
+        def create_table():
+            storage = "WITH (STORE = COLUMN)" if table_store == "column" else ""
+            kikimr.ydb_client.query(statement=f"""
+                CREATE TABLE `{table_name}` (
+                    Key Int32 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) {storage};
+            """)
+
+        def fill_join_table(value):
+            if table_role != "output":
+                kikimr.ydb_client.query(statement=f"""
+                    UPSERT INTO `{table_name}` (Key, Value)
+                    VALUES (1, "{value}"), (2, "{value}");
+                """)
+
+        def query_state():
+            rows = kikimr.ydb_client.query(statement=f"""
+                SELECT Status, Issues, RetryCount, LastExecutionId
+                FROM `.sys/streaming_queries`
+                WHERE Path = "{query_path}";
+            """)[0].rows
+            assert len(rows) == 1, rows
+            return rows[0]
+
+        def execution_generation(execution_id):
+            rows = kikimr.ydb_client.query(statement=f"""
+                SELECT lease_generation FROM `.metadata/script_executions`
+                WHERE execution_id = "{execution_id}";
+            """)[0].rows
+            assert len(rows) == 1, rows
+            return rows[0]["lease_generation"]
+
+        def write_input(key, value):
+            self.write_stream(
+                data=[json.dumps(obj={"Key": key, "Value": value})], endpoint=endpoint
+            )
+
+        def check_output(key, value):
+            if table_role != "output":
+                assert self.read_stream(
+                    messages_count=1, endpoint=endpoint, timeout=timeout
+                ) == [value]
+            else:
+                expected = {"Key": key}
+                if value is not None:
+                    expected["Value"] = value.encode()
+
+                def has_row():
+                    rows = kikimr.ydb_client.query(statement=f"""
+                        SELECT * FROM `{table_name}` WHERE Key = {key};
+                    """)[0].rows
+                    return rows == [expected]
+
+                assert wait_for(
+                    predicate=has_row, timeout_seconds=timeout, step_seconds=1
+                ), query_state()
+
+        create_table()
+        try:
+            fill_join_table(value="before")
+            pragma = ""
+            if table_role == "output":
+                statement = f"UPSERT INTO `{table_name}` SELECT Key, Value FROM $input;"
+            elif table_role == "native_join":
+                # Pin the native runtime lookup instead of materializing the table.
+                pragma = """
+                    PRAGMA ydb.OptValidateStreamingConstraints = "false";
+                    PRAGMA ydb.OptimizerHints = @@ JoinType(i t Lookup) @@;
+                """
+                statement = f"""
+                    INSERT INTO {out} SELECT t.Value ?? "missing" AS Data
+                    FROM $input AS i LEFT JOIN `{table_name}` AS t ON i.Key = t.Key;
+                """
+            else:
+                # Exercise the lookup source with its fullscan/cache disabled.
+                statement = f"""
+                    INSERT INTO {out} SELECT t.Value ?? "missing" AS Data
+                    FROM $input AS i
+                    LEFT JOIN /*+ streamlookup(FullscanLimit 0 MaxCachedRows 0) */
+                        ANY `{table_name}` AS t ON i.Key = t.Key;
+                """
+
+            kikimr.ydb_client.query(statement=f"""
+                CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                    {pragma}
+                    $input = SELECT * FROM {inp} WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA = (Key Int32 NOT NULL, Value String NOT NULL)
+                    );
+                    {statement}
+                END DO;
+            """)
+            try:
+                self.wait_completed_checkpoints(kikimr, query_name)
+                write_input(key=1, value="before")
+                check_output(key=1, value="before")
+                self.wait_completed_checkpoints(kikimr, query_name)
+
+                before = query_state()
+                assert before["Status"] == "RUNNING", before
+                assert before["Issues"] == "{}", before
+                if table_role != "output":
+                    lookup = (
+                        "KqpCnStreamLookup"
+                        if table_role == "native_join"
+                        else "DqCnStreamLookup"
+                    )
+                    ast = kikimr.ydb_client.query(statement=f"""
+                        SELECT Ast FROM `.sys/streaming_queries`
+                        WHERE Path = "{query_path}";
+                    """)[0].rows[0]["Ast"]
+                    assert lookup in ast, ast
+
+                generation_before = execution_generation(before["LastExecutionId"])
+                if table_change == "alter":
+                    # Remove a referenced column from the current schema.
+                    kikimr.ydb_client.query(
+                        statement=f"ALTER TABLE `{table_name}` DROP COLUMN Value;"
+                    )
+                else:
+                    kikimr.ydb_client.query(statement=f"DROP TABLE `{table_name}`;")
+                    if table_change == "recreate":
+                        # Same path and schema, but a different physical table.
+                        create_table()
+                        fill_join_table(value="after")
+
+                # A new key forces a fresh lookup/write after the DDL has completed.
+                write_input(key=2, value="after")
+
+                # The lookup source queries by path and can read a recreated table.
+                # Column sinks can keep writing with a known older schema version;
+                # only Key remains visible after dropping Value.
+                lookup_recreated = table_role == "join" and table_change == "recreate"
+                column_sink_altered = (
+                    table_role == "output"
+                    and table_store == "column"
+                    and table_change == "alter"
+                )
+                if lookup_recreated or column_sink_altered:
+                    check_output(key=2, value=None if column_sink_altered else "after")
+                    self.wait_completed_checkpoints(kikimr, query_name)
+                    after = query_state()
+                    assert after == before, (before, after)
+                    assert execution_generation(before["LastExecutionId"]) == generation_before
+                    return
+
+                last_state = before
+
+                def has_table_error_and_retry():
+                    nonlocal last_state
+                    last_state = query_state()
+                    issues = last_state["Issues"]
+                    descriptions = (
+                        "scheme changed",
+                        "schema changed",
+                        "schema was updated",
+                        "schema version",
+                        "wrong schemaversion",
+                        "unknown column",
+                        "column not found",
+                        "member not found",
+                        "too many table resolve attempts",
+                        "failed to get partitioning for table",
+                        "cannot find table",
+                        "path does not exist",
+                        "table does not exist",
+                        "table not found",
+                    )
+                    return (
+                        last_state["RetryCount"] > before["RetryCount"]
+                        and "Previous query retries" in issues
+                        and "will be restarted" in issues
+                        and any(
+                            description in issues.lower()
+                            for description in descriptions
+                        )
+                    )
+
+                # Shard-write retries followed by table-resolution retries can take
+                # over a minute. A bounded wait also catches infinite local retries.
+                assert wait_for(
+                    predicate=has_table_error_and_retry,
+                    timeout_seconds=timeout,
+                    step_seconds=1,
+                ), f"No table error and whole-query retry after {table_change}: {last_state}"
+
+                assert wait_for(
+                    predicate=lambda: execution_generation(before["LastExecutionId"])
+                    > generation_before,
+                    timeout_seconds=timeout,
+                    step_seconds=1,
+                ), f"Retry was scheduled but execution did not restart: {query_state()}"
+
+            finally:
+                kikimr.ydb_client.query(
+                    statement=f"DROP STREAMING QUERY `{query_name}`;"
+                )
+        finally:
+            kikimr.ydb_client.query(statement=f"DROP TABLE IF EXISTS `{table_name}`;")
 
     @pytest.mark.parametrize(
         "local_topics, shared_reading",

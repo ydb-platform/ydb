@@ -283,6 +283,90 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::SCHEME_ERROR);
         UNIT_ASSERT(gone->Get()->ErrorDescription.contains("Cannot commit offset"));
     }
+
+    // LOGBROKER-10676: the reader-gone path must also treat UNAUTHORIZED as fatal.
+    // This is the primary path for the local-proxy fix: TLocalTopicPartitionReaderActor
+    // sends TEvTopicReaderGone with SCHEME_ERROR built from OnAccessDenied.
+    Y_UNIT_TEST(ReaderGoneUnauthorizedIsFatal) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        const auto worker = runtime.AllocateEdgeActor();
+        const auto ydbProxy = runtime.AllocateEdgeActor();
+        const auto readSession = runtime.AllocateEdgeActor();
+        const auto settings = TEvYdbProxy::TTopicReaderSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                .Path("/Root/topic")
+                .AppendPartitionIds(0)
+            );
+
+        const auto reader = runtime.Register(CreateRemoteTopicReader(ydbProxy, settings));
+        runtime.Send(reader, worker, new TEvWorker::TEvHandshake());
+        runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(ydbProxy);
+        runtime.Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCreateTopicReaderResponse(readSession));
+        runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker);
+        runtime.Send(reader, readSession,
+            new TEvYdbProxy::TEvStartTopicReadingSession(TString("read-session"), 7));
+        auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(worker);
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 7);
+
+        // The read session dies with UNAUTHORIZED (missing read permission).
+        runtime.Send(reader, readSession,
+            new TEvYdbProxy::TEvTopicReaderGone(NYdb::TStatus(NYdb::EStatus::UNAUTHORIZED, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("No ReadTopic permissions")})));
+
+        // The reader must leave with a fatal SCHEME_ERROR and a descriptive message.
+        auto gone = runtime.GrabEdgeEvent<TEvWorker::TEvGone>(worker);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::SCHEME_ERROR);
+        UNIT_ASSERT(gone->Get()->ErrorDescription.contains("Cannot read from topic"));
+    }
+
+    // Non-auth commit failures must stay retriable (UNAVAILABLE), pinning the
+    // fatal-vs-retriable split from the other side.
+    Y_UNIT_TEST(CommitOffsetUnavailableIsRetriable) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        const auto worker = runtime.AllocateEdgeActor();
+        const auto ydbProxy = runtime.AllocateEdgeActor();
+        const auto readSession = runtime.AllocateEdgeActor();
+        const auto settings = TEvYdbProxy::TTopicReaderSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                .Path("/Root/topic")
+                .AppendPartitionIds(0)
+            );
+
+        const auto reader = runtime.Register(CreateRemoteTopicReader(ydbProxy, settings));
+        runtime.Send(reader, worker, new TEvWorker::TEvHandshake());
+        runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(ydbProxy);
+        runtime.Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCreateTopicReaderResponse(readSession));
+        runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker);
+        runtime.Send(reader, readSession,
+            new TEvYdbProxy::TEvStartTopicReadingSession(TString("read-session"), 7));
+        auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(worker);
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 7);
+
+        // Trigger a commit; the reader sends a TEvCommitOffsetRequest to the proxy.
+        runtime.Send(reader, worker, new TEvWorker::TEvCommit(10));
+        auto requests = runtime.CaptureMailboxEvents(ydbProxy.Hint(), ydbProxy.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests.front()->GetTypeRewrite(), static_cast<ui32>(TEvYdbProxy::EvCommitOffsetRequest));
+
+        // The proxy fails the commit with a transient UNAVAILABLE.
+        runtime.Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCommitOffsetResponse(NYdb::TStatus(NYdb::EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue("Transient failure")})));
+
+        // The reader must leave with a retriable UNAVAILABLE, not a fatal SCHEME_ERROR.
+        auto gone = runtime.GrabEdgeEvent<TEvWorker::TEvGone>(worker);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::UNAVAILABLE);
+    }
 }
 
 }

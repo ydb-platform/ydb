@@ -44,6 +44,10 @@ protected:
         PassAway();
     }
 
+    void OnAccessDenied(const TString& errorReason) {
+        OnFatalError(errorReason);
+    }
+
     NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "LocalTopicPartitionCommitActor"},
@@ -79,6 +83,10 @@ private:
             {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
+
+        if (record.GetErrorCode() == NPersQueue::NErrorCode::ACCESS_DENIED) {
+            return OnAccessDenied(record.GetErrorReason());
+        }
 
         TString error;
         if (!NPQ::BasicCheck(record, error, false)) {

@@ -76,11 +76,7 @@ protected:
     }
 
     void OnAccessDenied(const TString& errorReason) {
-        OnFatalError(TStringBuilder()
-            << "Access denied: cannot read from topic '" << TopicPath << "' (partition " << PartitionId << ")"
-            << " with consumer '" << Consumer << "'."
-            << " Check read permissions (ydb.topic.read / ydb.generic.read) for the transfer credentials."
-            << " Original error: " << errorReason);
+        OnFatalError(errorReason);
     }
 
     NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {

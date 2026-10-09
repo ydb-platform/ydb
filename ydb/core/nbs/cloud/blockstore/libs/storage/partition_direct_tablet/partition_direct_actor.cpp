@@ -7,14 +7,18 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat/classic_volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -39,6 +43,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NActors;
 
+namespace {
+
+using TEvStatVolumeResponse =
+    NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse;
+
+}   // namespace
+
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
@@ -57,7 +68,25 @@ TPartitionActor::TPartitionActor(
         LogTitle.GetWithTime().c_str());
 }
 
-TPartitionActor::~TPartitionActor() = default;
+TPartitionActor::~TPartitionActor()
+{
+    if (!Session) {
+        return;
+    }
+    Session->Stop();
+    // Actor-system cleanup can destroy a partition without PassAway(). Its
+    // blockStoreFacade registration must not retain FastPath beyond the actor
+    // system.
+    if (!FrontendRegistrationClosed) {
+        if (auto service = GetNbsService();
+            service && service->BlockStoreFacade)
+        {
+            service->BlockStoreFacade->UnregisterVolume(
+                VolumeConfig.GetDiskId(),
+                Session->GetRegistrationId());
+        }
+    }
+}
 
 void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
@@ -113,17 +142,12 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         LogTitle.GetWithTime().c_str(),
         SelfId().ToString().data());
 
-    if (!Executor()->GetStats().IsFollower()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Executing InitSchema transaction",
-            LogTitle.GetWithTime().c_str());
-        ExecuteTx(ctx, CreateTx<TInitSchema>());
-    }
-
-    // allow pipes to connect
-    SignalTabletActive(ctx);
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Executing InitSchema transaction",
+        LogTitle.GetWithTime().c_str());
+    ExecuteTx(ctx, CreateTx<TInitSchema>());
 }
 
 void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
@@ -155,29 +179,16 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     // respond to all pending requests so that there are no leakage resources.
     // We will do this after the initiator of the request is stopped.
     auto failUpdateRequests =
-        [executingConfigPromises =
-             std::move(ExecutingUpdateVChunkConfigPromises),
-         pendingConfigRequests = std::move(PendingUpdateVChunkConfigRequests),
-         executingDirtyMapPromises =
-             std::move(ExecutingUpdateDirtyMapStatePromises),
-         pendingDirtyMapRequests =
-             std::move(PendingUpdateDirtyMapStateRequests),
+        [executingStatePromises = std::move(ExecutingUpdateVChunkStatePromises),
+         pendingStateRequests = std::move(PendingUpdateVChunkStateRequests),
          touchedVChunks = std::move(TouchedVChunks)]() mutable
     {
-        for (auto& promise: executingConfigPromises) {
+        for (auto& promise: executingStatePromises) {
             promise.TrySetValue(EPersistResult::Cancelled);
         }
-        for (auto& req: pendingConfigRequests) {
+        for (auto& req: pendingStateRequests) {
             req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
         }
-
-        for (auto& promise: executingDirtyMapPromises) {
-            promise.TrySetValue(EPersistResult::Cancelled);
-        }
-        for (auto& req: pendingDirtyMapRequests) {
-            req.UpdateCompleted.TrySetValue(EPersistResult::Cancelled);
-        }
-
         touchedVChunks.OnSaveInterrupted();
     };
 
@@ -198,20 +209,27 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
 
 void TPartitionActor::UnregisterFrontendVolume(const TActorContext& ctx)
 {
-    FrontendRegistrationClosed = true;
-    if (FrontendRegistrationId.empty()) {
+    if (FrontendRegistrationClosed) {
         return;
     }
-    if (auto& frontend = GetNbsService()->Frontend; frontend) {
-        frontend->UnregisterVolume(FrontendRegistrationId);
+    FrontendRegistrationClosed = true;
+    if (!Session) {
+        return;
+    }
+    Session->Stop();
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade;
+        blockStoreFacade)
+    {
+        blockStoreFacade->UnregisterVolume(
+            VolumeConfig.GetDiskId(),
+            Session->GetRegistrationId());
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Frontend unregister requested: registrationId=%s",
             LogTitle.GetWithTime().c_str(),
-            FrontendRegistrationId.c_str());
+            Session->GetRegistrationId().c_str());
     }
-    FrontendRegistrationId.clear();
 }
 
 void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
@@ -226,15 +244,15 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
     Die(ctx);
 }
 
-void TPartitionActor::ReportTabletState(const TActorContext& ctx)
+void TPartitionActor::ReportDiskId(const TActorContext& ctx)
 {
     auto service =
         NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
     auto request = std::make_unique<
-        NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
-        TabletID(),
-        STATE_WORK);
+        NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
+    request->Record.SetTabletId(TabletID());
+    request->Record.SetNbsDiskId(VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }
@@ -436,7 +454,10 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()));
+    SendToBsc(
+        ctx,
+        EBscRequest::InitialAllocation,
+        THolder<IEventBase>(request.release()));
 }
 
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
@@ -475,6 +496,7 @@ void TPartitionActor::Start(
         LogTitle.GetWithTime().c_str());
 
     DirectBlockGroupsConnections = std::move(directBlockGroupsConnections);
+    VChunkConfigs = vChunkConfigs;
 
     FastPathService = CreateFastPathService(vChunkConfigs, dirtyMapStates);
 
@@ -531,24 +553,36 @@ void TPartitionActor::HandleFastPathServiceReady(
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
-    if (auto& frontend = GetNbsService()->Frontend;
-        frontend && !FrontendRegistrationClosed)
+    // MVP: use either classic gRPC or the local NBS2 vhost endpoint for a disk,
+    // never both concurrently.
+    if (auto& blockStoreFacade = GetNbsService()->BlockStoreFacade;
+        blockStoreFacade && !FrontendRegistrationClosed)
     {
-        auto registration = frontend->RegisterVolume(VolumeConfig);
+        auto sessionState = TPartitionSession::Create(
+            VolumeConfig,
+            FastPathService,
+            FastPathService->GetVolumeConfig());
+        Y_ABORT_UNLESS(
+            !HasError(sessionState),
+            "%s",
+            FormatError(sessionState.GetError()).c_str());
+        Session = sessionState.ExtractResult();
+        auto registration = blockStoreFacade->RegisterVolume(
+            Session,
+            CreatePartitionSessionControl(ctx.ActorSystem(), SelfId()));
         Y_ABORT_UNLESS(
             !HasError(registration),
-            "%s Could not publish frontend metadata: %s",
+            "%s Could not publish volume: %s",
             LogTitle.GetWithTime().c_str(),
             FormatError(registration.GetError()).c_str());
 
-        FrontendRegistrationId = registration.ExtractResult();
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Frontend metadata published: registrationId=%s "
+            "%s Frontend backend published: registrationId=%s "
             "blockSize=%u blocksCount=%llu",
             LogTitle.GetWithTime().c_str(),
-            FrontendRegistrationId.c_str(),
+            registration.GetResult().c_str(),
             VolumeConfig.GetBlockSize(),
             static_cast<unsigned long long>(
                 VolumeConfig.GetPartitions(0).GetBlockCount()));
@@ -682,14 +716,31 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.DebugString().data());
 
-    // The first allocation response sets up the group; any later one is the
-    // result of the single in-flight membership op (add xor remove).
-    if (RemoveHostInFlight.has_value()) {
-        HandleRemoveHostAllocationResult(ev, ctx);
-    } else if (DDiskBlockGroupAllocated) {
-        HandleAddHostAllocationResult(ev, ctx);
-    } else {
-        HandleInitialAllocationResult(ev, ctx);
+    // The cookie identifies the operation that sent this request.
+    const auto request = BscRequestsInFlight.find(ev->Cookie);
+    if (request == BscRequestsInFlight.end()) {
+        LOG_WARN(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s BSC reply for unknown cookie %lu, dropped",
+            LogTitle.GetWithTime().c_str(),
+            ev->Cookie);
+        return;
+    }
+
+    const EBscRequest kind = request->second;
+    BscRequestsInFlight.erase(request);
+
+    switch (kind) {
+        case EBscRequest::InitialAllocation:
+            HandleInitialAllocationResult(ev, ctx);
+            break;
+        case EBscRequest::AddHost:
+            HandleAddHostAllocationResult(ev, ctx);
+            break;
+        case EBscRequest::RemoveHost:
+            HandleRemoveHostAllocationResult(ev, ctx);
+            break;
     }
 }
 
@@ -697,6 +748,16 @@ void TPartitionActor::HandleInitialAllocationResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    if (DDiskBlockGroupAllocated) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Ignore initial allocation result, the group is already "
+            "allocated",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
@@ -824,6 +885,65 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
+void TPartitionActor::HandleStatVolume(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    if (VolumeConfig.PartitionsSize() == 0) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Reject StatVolume: volume config is not loaded",
+            LogTitle.GetWithTime().c_str());
+
+        auto response = std::make_unique<TEvStatVolumeResponse>(
+            MakeError(E_REJECTED, "volume config is not loaded"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle StatVolume for %s",
+        LogTitle.GetWithTime().c_str(),
+        VolumeConfig.GetDiskId().c_str());
+
+    auto response = std::make_unique<TEvStatVolumeResponse>();
+    *response->Record.MutableVolume() = MakeClassicVolume(VolumeConfig);
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TPartitionActor::HandleMountSession(
+    const TEvPartitionSession::TEvMount::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    auto* request = ev->Get();
+    if (!Session || FrontendRegistrationClosed) {
+        request->Result.TrySetValue(
+            MakeError(E_REJECTED, "Partition registration is unavailable"));
+        return;
+    }
+    request->Result.TrySetValue(Session->Mount(request->ClientId));
+}
+
+void TPartitionActor::HandleUnmountSession(
+    const TEvPartitionSession::TEvUnmount::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    auto* request = ev->Get();
+    if (!Session || FrontendRegistrationClosed) {
+        request->Result.TrySetValue(
+            MakeError(E_REJECTED, "Partition registration is unavailable"));
+        return;
+    }
+    request->Result.TrySetValue(
+        Session->Unmount(request->ClientId, request->SessionId));
+}
+
 void TPartitionActor::HandleUpdateVChunkConfig(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -836,23 +956,15 @@ void TPartitionActor::HandleUpdateVChunkConfig(
         "%s Handle UpdateVChunkConfig %s %s",
         LogTitle.GetWithTime().c_str(),
         msg->VChunkConfig.DebugPrint().c_str(),
-        ExecutingUpdateVChunkConfig ? "later" : "now");
+        ExecutingUpdateVChunkState ? "later" : "now");
 
-    if (ExecutingUpdateVChunkConfig) {
-        PendingUpdateVChunkConfigRequests.push_back(
-            {.VChunkConfig = std::move(msg->VChunkConfig),
-             .UpdateCompleted = std::move(msg->UpdateCompleted)});
-    } else {
-        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkConfigRequests.empty());
-
-        ExecutingUpdateVChunkConfig = true;
-        ExecuteTx(
-            ctx,
-            CreateTx<TUpdateVChunkConfig>(
-                TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests{
-                    {.VChunkConfig = std::move(msg->VChunkConfig),
-                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
-    }
+    const ui32 vChunkIndex = msg->VChunkConfig.GetVChunkIndex();
+    EnqueueUpdateVChunkState(
+        {.VChunkIndex = vChunkIndex,
+         .VChunkConfig = std::move(msg->VChunkConfig),
+         .DirtyMapState = std::move(msg->DirtyMapState),
+         .UpdateCompleted = std::move(msg->UpdateCompleted)},
+        ctx);
 }
 
 void TPartitionActor::HandleUpdateDirtyMapState(
@@ -867,24 +979,30 @@ void TPartitionActor::HandleUpdateDirtyMapState(
         "%s Handle UpdateDirtyMapState vchunk %u %s",
         LogTitle.GetWithTime().c_str(),
         msg->VChunkIndex,
-        ExecutingUpdateDirtyMapState ? "later" : "now");
+        ExecutingUpdateVChunkState ? "later" : "now");
 
-    if (ExecutingUpdateDirtyMapState) {
-        PendingUpdateDirtyMapStateRequests.push_back(
-            {.VChunkIndex = msg->VChunkIndex,
-             .State = std::move(msg->State),
-             .UpdateCompleted = std::move(msg->UpdateCompleted)});
+    EnqueueUpdateVChunkState(
+        {.VChunkIndex = msg->VChunkIndex,
+         .DirtyMapState = std::move(msg->State),
+         .UpdateCompleted = std::move(msg->UpdateCompleted)},
+        ctx);
+}
+
+void TPartitionActor::EnqueueUpdateVChunkState(
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
+    const NActors::TActorContext& ctx)
+{
+    if (ExecutingUpdateVChunkState) {
+        PendingUpdateVChunkStateRequests.push_back(std::move(request));
     } else {
-        Y_DEBUG_ABORT_UNLESS(PendingUpdateDirtyMapStateRequests.empty());
+        Y_DEBUG_ABORT_UNLESS(PendingUpdateVChunkStateRequests.empty());
 
-        ExecutingUpdateDirtyMapState = true;
+        ExecutingUpdateVChunkState = true;
         ExecuteTx(
             ctx,
-            CreateTx<TUpdateDirtyMapState>(
-                TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests{
-                    {.VChunkIndex = msg->VChunkIndex,
-                     .State = std::move(msg->State),
-                     .UpdateCompleted = std::move(msg->UpdateCompleted)}}));
+            CreateTx<TUpdateVChunkState>(
+                TTxPartition::TUpdateVChunkState::TUpdateStateRequests{
+                    std::move(request)}));
     }
 }
 
@@ -904,8 +1022,8 @@ void TPartitionActor::HandleSetVChunkTouched(
 
 void TPartitionActor::SendToBsc(
     const TActorContext& ctx,
-    THolder<IEventBase> request,
-    ui64 cookie)
+    EBscRequest kind,
+    THolder<IEventBase> request)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
         LOG_INFO(
@@ -916,6 +1034,9 @@ void TPartitionActor::SendToBsc(
         return;
     }
 
+    const ui64 cookie = NextBscCookie++;
+    BscRequestsInFlight[cookie] = kind;
+
     if (!BscProxy) {
         BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
     }
@@ -924,6 +1045,7 @@ void TPartitionActor::SendToBsc(
 
 void TPartitionActor::StopBscProxy(const TActorContext& ctx)
 {
+    BscRequestsInFlight.clear();
     if (!BscProxy) {
         return;
     }
@@ -934,6 +1056,8 @@ void TPartitionActor::StopBscProxy(const TActorContext& ctx)
 void TPartitionActor::HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev)
 {
     switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPartitionSession::TEvMount, HandleMountSession);
+        HFunc(TEvPartitionSession::TEvUnmount, HandleUnmountSession);
         HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
         HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
@@ -977,6 +1101,9 @@ STFUNC(TPartitionActor::StateWork)
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
         HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolume);
+        HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
         HFunc(
@@ -988,6 +1115,7 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
+        HFunc(TEvPartitionDirectPrivate::TEvRenderMonPage, HandleRenderMonPage);
         HFunc(TEvPartitionDirectPrivate::TEvAddHostToDBG, HandleAddHostToDBG);
         HFunc(
             TEvPartitionDirectPrivate::TEvPersistHostHealth,

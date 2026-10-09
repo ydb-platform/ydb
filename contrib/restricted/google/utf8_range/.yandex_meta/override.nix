@@ -1,12 +1,12 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "36.0";
+  version = "36.2";
   passthru.version = version;
 
   src = fetchFromGitHub {
     owner = "protocolbuffers";
     repo = "protobuf";
     rev = "v${version}";
-    hash = "sha256-VGXFfqLm7IEJ9MQpMYhdVW5qPZbrYZ6q+0Y1TqQkjks=";
+    hash = "sha256-sY9Pmy6KMJ5k/GdQSAF7vsviLJYPaArMKJ3deb++0wM=";
   };
 
   patches = [];

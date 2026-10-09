@@ -26,14 +26,23 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             const TString& name,
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
-            const NJson::TJsonMap& attrs)
+            const NJson::TJsonMap& attrs,
+            bool schemaChanges,
+            bool skipInitialScan)
     {
         using namespace NYdb::NTable;
 
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
-            .WithInitialScan()
             .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+
+        if (!skipInitialScan) {
+            desc.WithInitialScan();
+        }
+
+        if (schemaChanges) {
+            desc.WithSchemaChanges();
+        }
 
         if (resolvedTimestamps) {
             desc
@@ -224,7 +233,54 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
     }
 
     void Reply(NYdb::TStatus&& status) {
-        Send(Parent, new TEvPrivate::TEvCreateStreamResult(ReplicationId, TargetId, std::move(status)));
+        if (status.IsSuccess() && Kind == TReplication::ETargetKind::Table) {
+            return DescribeStreamTable();
+        }
+
+        Finish(std::move(status));
+    }
+
+    void DescribeStreamTable() {
+        // Creation can replay an existing stream after the feature flag has
+        // changed. Record its actual capability, not the requested setting.
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath, NYdb::NTable::TDescribeTableSettings()));
+        Become(&TThis::StateDescribeStreamTable);
+    }
+
+    STATEFN(StateDescribeStreamTable) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            sFunc(TEvents::TEvWakeup, DescribeStreamTable);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                return Schedule(RetryDelay, new TEvents::TEvWakeup());
+            }
+
+            auto issues = result.GetIssues();
+            return Finish(NYdb::TStatus(result.GetStatus(), std::move(issues)));
+        }
+
+        for (const auto& stream : result.GetTableDescription().GetChangefeedDescriptions()) {
+            if (stream.GetName() == Changefeed.GetName()) {
+                return Finish(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()), stream.GetSchemaChanges());
+            }
+        }
+        NYdb::NIssue::TIssues issues;
+        issues.AddIssue(TStringBuilder() << "changefeed '" << Changefeed.GetName() << "' does not exist");
+        Finish(NYdb::TStatus(NYdb::EStatus::SCHEME_ERROR, std::move(issues)));
+    }
+
+    void Finish(NYdb::TStatus&& status, bool schemaChanges = false) {
+        auto result = MakeHolder<TEvPrivate::TEvCreateStreamResult>(ReplicationId, TargetId, std::move(status));
+        result->SchemaChanges = schemaChanges;
+        Send(Parent, result.Release());
         PassAway();
     }
 
@@ -244,7 +300,10 @@ public:
             const TDuration& retentionPeriod,
             const std::optional<TDuration>& resolvedTimestamps,
             bool supportsTopicAutopartitioning,
-            bool needCreate)
+            bool schemaChanges,
+            bool needCreate,
+            bool skipInitialScan,
+            bool describeOnly)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -255,16 +314,21 @@ public:
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
-            {"supports_topic_autopartitioning", supportsTopicAutopartitioning},
-        }))
+            // A schema barrier snapshots its partition membership, so topic
+            // repartitioning is unsupported for schema-aware streams.
+            {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
+        }, schemaChanges, skipInitialScan))
         , NeedCreate(needCreate)
+        , DescribeOnly(describeOnly)
         , LogPrefix(CreateActorLogPrefix("StreamCreator", ReplicationId, TargetId))
     {
     }
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
-        if (NeedCreate) {
+        if (DescribeOnly) {
+            DescribeStreamTable();
+        } else if (NeedCreate) {
             RequestPermission();
         } else {
             CheckConsumerExists();
@@ -289,11 +353,12 @@ private:
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const bool NeedCreate;
+    const bool DescribeOnly;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamCreator
 
-IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
+IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx, bool describeOnly) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
@@ -304,22 +369,25 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
         : std::nullopt;
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();
+    const bool schemaChanges = AppData()->FeatureFlags.GetEnableAsyncReplicationSchemaChanges();
+    const bool skipInitialScan = config.GetSkipInitialScan() && !target->IsIndexBuild();
 
     return CreateStreamCreator(ctx.SelfID, replication->GetYdbProxy(),
         replication->GetId(), target->GetId(),
         target->GetConfig(), target->GetStreamName(), target->GetStreamConsumerName(),
         TDuration::Seconds(AppData()->ReplicationConfig.GetRetentionPeriodSeconds()), resolvedTimestamps,
-        supportsTopicAutopartitioning, needCreate);
+        supportsTopicAutopartitioning, needCreate, schemaChanges, skipInitialScan, describeOnly);
 }
 
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         const TReplication::ITarget::IConfig::TPtr& config,
         const TString& streamName, const TString& consumerName, const TDuration& retentionPeriod,
         const std::optional<TDuration>& resolvedTimestamps,
-        bool supportsTopicAutopartitioning, bool needCreate)
+        bool supportsTopicAutopartitioning, bool needCreate, bool schemaChanges, bool skipInitialScan, bool describeOnly)
 {
     return new TStreamCreator(parent, proxy, rid, tid, config,
-        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning, needCreate);
+        streamName, consumerName, retentionPeriod, resolvedTimestamps, supportsTopicAutopartitioning,
+        schemaChanges, needCreate, skipInitialScan, describeOnly);
 }
 
 }

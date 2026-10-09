@@ -35,6 +35,7 @@ PEERDIR(
     ydb/library/wasm/engine
     ydb/library/yql/dq/proto
     yql/essentials/public/udf
+    yql/essentials/ast
     yql/essentials/minikql
     library/cpp/json
     contrib/restricted/wavm_llvm16/Lib

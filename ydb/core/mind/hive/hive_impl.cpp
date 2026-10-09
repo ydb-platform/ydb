@@ -146,9 +146,9 @@ void THive::RestartPipeTx(ui64 tabletId) {
 
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
-        YDB_LOG_INFO("TryToDeleteNode: deleting node",
-            {"logPrefix", GetLogPrefix()},
-            {"nodeId", node->Id});
+        RecordNodeEvent(*node, EHiveEventType::Deleted, EHiveEventReason::NodeExpired,
+            TStringBuilder() << "lastAlive=" << TInstant::MilliSeconds(node->Statistics.GetLastAliveTimestamp())
+                << " nodeDeletePeriod=" << GetNodeDeletePeriod());
         if (BridgeInfo) {
             auto& pileInfo = GetPile(node->BridgePileId);
             pileInfo.Nodes.erase(node->Id);
@@ -403,6 +403,8 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         }
         if (tablet->IsBooting()) {
             delayedTablets.push_back(record);
+        } else if (!(tablet->IsLeader() && tablet->AsLeader().IsBootingSuppressed())) {
+            tablet->InitiateStop(sideEffects);
         }
     }
     if (waitingTablets.size() == processedItems || BootQueue.WaitQueue.empty()) {
@@ -1064,8 +1066,7 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
         NodesInfo[node->NodeId] = nodeInfo;
         TNodeInfo* hiveNodeInfo = FindNode(nodeInfo.NodeId);
         if (hiveNodeInfo != nullptr) {
-            hiveNodeInfo->Location = nodeInfo.Location;
-            hiveNodeInfo->LocationAcquired = true;
+            hiveNodeInfo->SetLocation(nodeInfo.Location, EHiveEventReason::NameService);
             YDB_LOG_DEBUG("Handle TEvInterconnect::TEvNodeInfo: updated node location",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", nodeInfo.NodeId},
@@ -1097,7 +1098,7 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
             Send(SelfId(), event.Release());
         }
     } else {
-        KillNode(event->NodeId, event->Local);
+        KillNode(event->NodeId, event->Local, EHiveEventReason::InterconnectDisconnected);
     }
 }
 
@@ -1239,7 +1240,7 @@ void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
                 // ping continiousily until we fully disconnected from the node
                 node->Ping();
             } else {
-                KillNode(node->Id, node->Local);
+                KillNode(node->Id, node->Local, EHiveEventReason::PingUndelivered);
             }
         }
         ProcessNodePingQueue();
@@ -2004,7 +2005,7 @@ TTabletCategoryInfo& THive::GetTabletCategory(TTabletCategoryId tabletCategoryId
     return it->second;
 }
 
-void THive::KillNode(TNodeId nodeId, const TActorId& local) {
+void THive::KillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails) {
     TNodeInfo* node = FindNode(nodeId);
     if (node != nullptr) {
         TVector<TTabletInfo*> tabletsToKill;
@@ -2017,7 +2018,7 @@ void THive::KillNode(TNodeId nodeId, const TActorId& local) {
             Execute(CreateRestartTablet(tablet->GetFullTabletId()));
         }
     }
-    Execute(CreateKillNode(nodeId, local));
+    Execute(CreateKillNode(nodeId, local, reason, std::move(reasonDetails)));
 }
 
 void THive::UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff) {
@@ -2144,6 +2145,57 @@ void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_REASSIGNING];
         auto newValue = counter.Get() + tabletsReassigningDiff;
         counter.Set(newValue);
+    }
+}
+
+void THive::UpdateCounterShrinkRemainingHistory() {
+    if (TabletCounters == nullptr) {
+        return;
+    }
+    i64 pools = 0;
+    i64 entries = 0;
+    std::unordered_set<TTabletId> tablets;
+    for (const auto& [name, pool] : StoragePools) {
+        if (pool.RemainingHistory.empty()) {
+            continue;
+        }
+        ++pools;
+        entries += pool.RemainingHistory.size();
+        for (const auto& entry : pool.RemainingHistory) {
+            tablets.insert(entry.Tablet);
+        }
+    }
+    TabletCounters->Simple()[NHive::COUNTER_SHRINK_POOLS].Set(pools);
+    TabletCounters->Simple()[NHive::COUNTER_SHRINK_HISTORY_ENTRIES].Set(entries);
+    TabletCounters->Simple()[NHive::COUNTER_SHRINK_HISTORY_TABLETS].Set(tablets.size());
+}
+
+void THive::OnShrinkMoveDataSent(i64 inFlight, i64 queued) {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Cumulative()[NHive::COUNTER_SHRINK_MOVE_DATA_SENT].Increment(1);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_INFLIGHT].Set(inFlight);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_QUEUED].Set(queued);
+    }
+}
+
+void THive::OnShrinkMoveDataAnswered(i64 inFlight, i64 queued) {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Cumulative()[NHive::COUNTER_SHRINK_MOVE_DATA_ANSWERED].Increment(1);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_INFLIGHT].Set(inFlight);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_QUEUED].Set(queued);
+    }
+}
+
+void THive::OnShrinkMoveDataRetried() {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Cumulative()[NHive::COUNTER_SHRINK_MOVE_DATA_RETRIED].Increment(1);
+    }
+}
+
+void THive::OnShrinkMoveDataFinished() {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_INFLIGHT].Set(0);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_QUEUED].Set(0);
     }
 }
 
@@ -3496,7 +3548,7 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
     if (it == ObjectDistributions.Distributions.end()) {
         return 0;
     }
-    return it->second->GetImbalance();
+    return it->second->second.GetImbalance();
 }
 
 void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects) {
@@ -4611,6 +4663,18 @@ bool THive::ReassignInactiveGroups(TStoragePoolInfo& pool) {
 }
 
 bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
+    struct TShrinkPoolMoveDataCallback : IMoveDataCallback {
+        TString PoolName;
+
+        virtual IEventBase* MakeEvent(bool success, ui64) override {
+            return new TEvPrivate::TEvMoveDataComplete(PoolName, success);
+        }
+
+        TShrinkPoolMoveDataCallback(const TString& poolName)
+            : PoolName(poolName)
+        {}
+    };
+
     std::unordered_set<TStorageGroupId> inactiveGroups(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     std::vector<TTabletId> tabletsToMoveData;
     if (pool.RemainingHistory.empty()) {
@@ -4641,13 +4705,18 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
     } else {
         YDB_LOG_INFO("ShrinkPool: starting move data for tablets",
             {"logPrefix", GetLogPrefix()},
-            {"tabletsToMoveDataCount", tabletsToMoveData.size()});
-        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);
+            {"pool", pool.Name},
+            {"tabletsToMoveDataCount", tabletsToMoveData.size()},
+            {"remainingHistoryCount", pool.RemainingHistory.size()});
+        UpdateCounterShrinkRemainingHistory();
+        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, SelfId(), 1, TStringBuilder() << "shrink pool " << pool.Name, std::make_unique<TShrinkPoolMoveDataCallback>(pool.Name), true);
         return true;
     }
 }
 
 void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
+    // Every erase from RemainingHistory reaches here, so this is the one place the gauges need refreshing.
+    UpdateCounterShrinkRemainingHistory();
     if (!pool.RemainingHistory.empty() || pool.NeedShrinkFromTenant) {
         YDB_LOG_DEBUG("ShrinkPool: history entries remaining",
             {"logPrefix", GetLogPrefix()},

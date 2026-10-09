@@ -262,6 +262,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         GatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
     });
+    opts.AddLongOption("static-gateways-cfg", "Static gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
+        StaticGatewaysConfig = TFacadeRunOptions::ParseProtoConfig<TStaticGatewaysConfig>(file);
+    });
     opts.AddLongOption("fs-cfg", "Fs configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
         FsConfig = MakeHolder<TFileStorageConfig>();
         LoadFsConfigFromFile(file, *FsConfig);
@@ -486,7 +489,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
-    if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
+    if (EQPlayerMode::Replay != QPlayerMode && ProgramFile.empty()) {
         throw yexception() << "Either program or replay option should be specified";
     }
     if (GatewaysPatch && EQPlayerMode::Replay != QPlayerMode) {
@@ -510,7 +513,9 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    if (!StaticGatewaysConfig) {
+        StaticGatewaysConfig = MakeHolder<TStaticGatewaysConfig>();
+    }
     SyncWithStaticGateways(*StaticGatewaysConfig, *GatewaysConfig);
 
     {
@@ -719,11 +724,13 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
+        auto mounts = GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker);
+        if (mounts.empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
         }
+        RunOptions_.DataTable.insert(mounts.begin(), mounts.end());
     }
 
     TExprContext::TFreezeGuard freezeGuard(ctx);
@@ -871,6 +878,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.ClusterMapping = ClusterMapping_;
         ParseTranslationSettings(RunOptions_.SqlFlags, settings);
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
+        settings.Syntax = RunOptions_.Syntax;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
         settings.TestAntlr4 = RunOptions_.TestAntlr4;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;

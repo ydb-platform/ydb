@@ -1,5 +1,7 @@
 #include "long_tx_service.h"
 
+#include "snapshots_storage.h"
+
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
@@ -1013,6 +1015,88 @@ Y_UNIT_TEST_SUITE(LongTxService) {
     }
 
 } // Y_UNIT_TEST_SUITE(LongTxService)
+
+Y_UNIT_TEST_SUITE(SnapshotsMonPage) {
+
+    // Renders local/remote storages and the registry input without any actor infrastructure:
+    // the page logic must be deterministic and only depend on the storages content.
+    Y_UNIT_TEST(RenderSnapshotsMonPage) {
+        const TInstant now = TInstant::MilliSeconds(10'000'000);
+        const TDuration promotionTime = TDuration::Seconds(10);
+        const TRowVersion border(8'500'000, 42);
+
+        const NActors::TActorId localSessionActor(1, 0, 111, 0);
+        const NActors::TActorId remoteSessionActor(2, 0, 222, 0);
+        const TVector<::NKikimr::TTableId> tables{::NKikimr::TTableId(0, 1)};
+
+        TLocalSnapshotsStorage localStorage;
+        {
+            // Promoted (below cutoff) and below border: must be listed as registry input.
+            localStorage.Insert(TLocalSnapshotInfo(TRowVersion(8'000'000, 1), localSessionActor, tables));
+            // Too fresh for promotion: must not be listed.
+            localStorage.Insert(TLocalSnapshotInfo(TRowVersion(9'999'000, 2), localSessionActor, tables));
+            // Dead alive flag: must not be listed.
+            TLocalSnapshotInfo deadSnapshot(TRowVersion(7'000'000, 3), localSessionActor, tables);
+            const auto aliveFlag = deadSnapshot.AliveFlag;
+            localStorage.Insert(std::move(deadSnapshot));
+            aliveFlag->store(false);
+        }
+
+        TRemoteSnapshotsStorage remoteStorage;
+        {
+            TVector<TRemoteSnapshotInfo> remoteSnapshots;
+            remoteSnapshots.emplace_back(TRowVersion(7'500'000, 4), remoteSessionActor, tables);
+            THashMap<ui32, TInstant> nodeIdToCollectionTime{{remoteSessionActor.NodeId(), now - TDuration::Seconds(5)}};
+            remoteStorage.Init(remoteSnapshots, nodeIdToCollectionTime);
+            remoteStorage.UpdateBorder(border);
+        }
+
+        {
+            const TString page = RenderSnapshotsMonPage(localStorage, promotionTime, remoteStorage, now, TInstant(), nullptr);
+
+            // Summary contains the border.
+            UNIT_ASSERT_STRING_CONTAINS(page, "Snapshots border: [Step 8500000, TxId 42]");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Remote snapshots storage ready: true");
+            // Registry has never been built at this point.
+            UNIT_ASSERT_STRING_CONTAINS(page, "Last registry build time: (registry has not been built)");
+            UNIT_ASSERT_STRING_CONTAINS(page, "(not built)");
+
+            // Local: only the promoted and alive snapshot is listed, marked as registry input.
+            UNIT_ASSERT_STRING_CONTAINS(page, "Snapshot [Step 8000000, TxId 1]");
+            UNIT_ASSERT_STRING_CONTAINS(page, "[registry input]");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Total: 1");
+            UNIT_ASSERT(page.find("Step 9999000") == TString::npos);
+            UNIT_ASSERT(page.find("Step 7000000") == TString::npos);
+
+            // Remote: node collection time and its snapshot.
+            UNIT_ASSERT_STRING_CONTAINS(page, "Node 2 CollectionTime");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Snapshot [Step 7500000, TxId 4]");
+
+            // Registry input on the next maintenance: local and remote snapshots below border.
+            UNIT_ASSERT_STRING_CONTAINS(page, "[local]");
+            UNIT_ASSERT_STRING_CONTAINS(page, "[remote]");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Registry input on the next maintenance (promoted local + all remote snapshots below border)");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Total: 2");
+        }
+
+        {
+            auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
+            registryBuilder->SetSnapshotBorder(border);
+            registryBuilder->SetOldestCollectionTime(now - TDuration::Seconds(5));
+            registryBuilder->AddSnapshot(tables, TRowVersion(8'000'000, 1));
+            registryBuilder->AddSnapshot(tables, TRowVersion(7'500'000, 4));
+            const auto registry = std::move(*registryBuilder).Build();
+
+            const TInstant lastRegistryBuildTime = now - TDuration::Seconds(1);
+            const TString page = RenderSnapshotsMonPage(localStorage, promotionTime, remoteStorage, now, lastRegistryBuildTime, registry.get());
+
+            UNIT_ASSERT_STRING_CONTAINS(page, "Last registry build time:");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Current registry:");
+            UNIT_ASSERT_STRING_CONTAINS(page, "Border [Step 8500000, TxId 42]");
+            UNIT_ASSERT_STRING_CONTAINS(page, "OldestCollectionTime");
+        }
+    }
+} // Y_UNIT_TEST_SUITE(SnapshotsMonPage)
 
 Y_UNIT_TEST_SUITE(LockWaitGraph) {
 

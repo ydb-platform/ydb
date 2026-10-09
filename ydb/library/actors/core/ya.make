@@ -24,6 +24,8 @@ SRCS(
     actorid.h
     actorsystem.cpp
     actorsystem.h
+    allocation_cache_families.h
+    allocation_cache.h
     ask.cpp
     ask.h
     buffer.cpp
@@ -64,7 +66,6 @@ SRCS(
     invoke.h
     io_dispatcher.cpp
     io_dispatcher.h
-    lease.h
     log.cpp
     log.h
     log_settings.cpp

@@ -6,6 +6,8 @@
 
 #include <yt/yt/library/tz_types/tz_types.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/system/byteorder.h>
 
 namespace NYT::NFormats {
@@ -237,6 +239,28 @@ void CheckIntSize(TValueType value)
             value,
             wireType);
     }
+}
+
+template <typename TContainer>
+std::string FormatExpectedTypes(const TContainer& expected)
+{
+    YT_VERIFY(!std::empty(expected));
+
+    TStdStringStream expectationString;
+    if (expected.size() == 1) {
+        expectationString << Format("%Qlv", *expected.begin());
+    } else {
+        expectationString << "one of ";
+        bool first = true;
+        for (const auto& type : expected) {
+            if (!first) {
+                expectationString << ", ";
+            }
+            first = false;
+            expectationString << Format("%Qlv", type);
+        }
+    }
+    return std::move(expectationString).Str();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -49,7 +49,7 @@ TWorkerGraph::TWorkerGraph(
     TLangVersion langver,
     bool insideEvaluation,
     NYql::TRuntimeSettings::TConstPtr runtimeSettings)
-    : ScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+    : ScopedAlloc(__LOCATION__)
     , Env(ScopedAlloc)
     , FuncRegistry(funcRegistry)
     , RandomProvider(CreateDefaultRandomProvider())
@@ -648,7 +648,7 @@ void TPushStreamWorker::OnFinish() {
 
 void TPushStreamWorker::Release() {
     with_lock (GetScopedAlloc()) {
-        Consumer_.Destroy();
+        Consumer_.reset();
         if (SelfNode_) {
             SelfNode_->SetValue(Graph_.ComputationGraph->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
         }

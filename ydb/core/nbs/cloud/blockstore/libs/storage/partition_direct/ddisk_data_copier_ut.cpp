@@ -82,9 +82,8 @@ struct TFixture
             BlockSize,
             VChunkBlockCount);
 
-        VChunkConfig.PromoteHost(3, true);
-        VChunkConfig.SetWatermark(3, BlockSize * VChunkBlockCount);
-        DirtyMap->UpdateConfig(VChunkConfig, true);
+        VChunkConfig.PromoteHost(3);
+        DirtyMap->UpdateConfig(VChunkConfig, false);
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),
@@ -115,10 +114,10 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             DirtyMap->DebugPrintDDiskState());
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks
+            "H1*{Fresh+,0};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -176,7 +175,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
                 // Check state on 5th iteration
                 UNIT_ASSERT_VALUES_EQUAL(
                     "H0*{Operational,32768};"
-                    "H1*{Fresh+,1536};"   // Watermarks for reading
+                    "H1*{Fresh+,1536};"   // Readable prefix
                                           // and writing raised
                     "H2*{Operational,32768};"
                     "H3*{Operational,32768};"
@@ -210,7 +209,9 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         const ui64 firstCopyBlocks = firstCopyBytes / BlockSize;
         ui64 rangeStart = VChunkBlockCount - firstCopyBlocks;
 
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, rangeStart * BlockSize);
+        DirtyMap->SetReadablePrefixDebugOnly(
+            FreshDDisk,
+            rangeStart * BlockSize);
 
         ExpectedRange = TBlockRange16::WithLength(
             rangeStart,
@@ -235,7 +236,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         UNIT_ASSERT_VALUES_EQUAL(firstCopyBytes, Copier->GetBytesCopied());
         UNIT_ASSERT_VALUES_EQUAL(0, CopyProgressNotifications.size());
 
-        DirtyMap->UpdateWatermarkDebugOnly(
+        DirtyMap->SetReadablePrefixDebugOnly(
             FreshDDisk,
             (VChunkBlockCount - 1) * BlockSize);
         ExpectedRange = TBlockRange16::WithLength(VChunkBlockCount - 1, 1);
@@ -283,7 +284,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -301,7 +302,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks
+            "H1*{Fresh+,0};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -318,12 +319,14 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              THostIndex hostIndex,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);
             Y_UNUSED(range);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
             Y_UNUSED(traceId);
 
             return MakeFuture<TDBGWriteBlocksResponse>(
@@ -331,7 +334,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -354,7 +357,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks
+            "H1*{Fresh+,0};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -371,12 +374,14 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              THostIndex hostIndex,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);
             Y_UNUSED(range);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
             Y_UNUSED(traceId);
 
             return MakeFuture<TDBGWriteBlocksResponse>(
@@ -384,7 +389,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -415,7 +420,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H1*{Fresh+,0};"   // Readable prefix unchanged
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -449,7 +454,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -474,7 +479,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H1*{Fresh+,0};"   // Readable prefix unchanged
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -491,12 +496,14 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              THostIndex hostIndex,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);
             Y_UNUSED(range);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
             Y_UNUSED(traceId);
 
             return MakeFuture<TDBGWriteBlocksResponse>(
@@ -504,7 +511,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -533,7 +540,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks unchanged
+            "H1*{Fresh+,0};"   // Readable prefix unchanged
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -545,7 +552,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -588,7 +595,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             *DirtyMap->GetFreshRange(FreshDDisk));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,256};"   // Watermark advanced by one copy range
+            "H1*{Fresh+,256};"   // Readable prefix advanced by one copy range
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -626,12 +633,14 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
              THostIndex hostIndex,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
             Y_UNUSED(hostIndex);
             Y_UNUSED(range);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
             Y_UNUSED(traceId);
 
             ++writesCount;
@@ -641,7 +650,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         };
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -659,7 +668,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
             *DirtyMap->GetFreshRange(FreshDDisk));
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,0};"   // Watermarks
+            "H1*{Fresh+,0};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -671,7 +680,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         // Start data copying
         ExpectedRange = TBlockRange16::WithLength(0, BlocksPerCopy);
@@ -702,7 +711,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,256};"   // Watermarks
+            "H1*{Fresh+,256};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -737,7 +746,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,512};"   // Watermarks
+            "H1*{Fresh+,512};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -749,7 +758,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         Init();
 
         // Mark DDisk#1 partially fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, CopyRangeSize);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, CopyRangeSize);
 
         // Start data copy
         ExpectedRange = TBlockRange16::WithLength(256, BlocksPerCopy);
@@ -777,7 +786,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             "H0*{Operational,32768};"
-            "H1*{Fresh+,512};"   // Watermarks
+            "H1*{Fresh+,512};"   // Readable prefix
             "H2*{Operational,32768};"
             "H3*{Operational,32768};"
             "H4+{Disabled,0};",
@@ -800,7 +809,7 @@ Y_UNIT_TEST_SUITE(TDDiskDataCopierTest)
         RangeData = GenerateRandomString(CopyRangeSize * 3);
 
         // Mark DDisk#1 completely fresh.
-        DirtyMap->UpdateWatermarkDebugOnly(FreshDDisk, 0);
+        DirtyMap->SetReadablePrefixDebugOnly(FreshDDisk, 0);
 
         DirtyMap->RegisterInflightWrite(
             MakeKey(123),

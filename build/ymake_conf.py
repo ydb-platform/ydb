@@ -44,7 +44,7 @@ LINUX_SDK_DEFAULT = "ubuntu-16"
 MACOS_VERSION_MIN = "11.0"
 MACOS_VERSION_MIN_AS_INT = "110000"
 IOS_VERSION_MIN = "13.0"
-WINDOWS_VERSION_MIN = WindowsVersion.Windows07
+WINDOWS_VERSION_MIN = WindowsVersion.Windows08
 
 
 def init_logger(verbose):
@@ -204,6 +204,7 @@ class Platform(object):
 
         self.is_freertos = self.os == 'freertos'
         self.is_zephyr = self.os == 'zephyr'
+        self.is_zephyr_armv7_cortex_a35 = self.is_zephyr and self.is_armv7 and self.is_cortex_a35
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
@@ -247,6 +248,7 @@ class Platform(object):
             (self.is_armv6, 'ARCH_ARM6'),
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
+            (self.is_zephyr_armv7_cortex_a35, 'ARCH_ARMV7_CORTEX_A35'),
             (self.is_armv8, 'ARCH_ARM64'),
             (self.is_armv9a, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
@@ -566,6 +568,8 @@ def get_target_triple(target):
             (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
 
             (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
+
+            (target.is_zephyr_armv7_cortex_a35, 'arm-none-eabi'),
         ],
     )
 
@@ -1342,6 +1346,10 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-mcpu=cortex-m33+nodsp -mfpu=fpv5-sp-d16 -mabi=aapcs -mthumb -mfloat-abi=hard')
             self.setup_actions_zephyr_sdk()
 
+        if target.is_zephyr_armv7_cortex_a35:
+            self.c_flags_platform.append('-march=armv8-a -mthumb -mabi=aapcs -mfpu=neon-fp-armv8 -mfloat-abi=hard')
+            self.setup_zephyr_armv7()
+
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1425,6 +1433,9 @@ class GnuToolchain(Toolchain):
 
     def setup_actions_zephyr_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/actions_zephyr')
+
+    def setup_zephyr_armv7(self):
+        self.platform_projects.insert(0, 'build/internal/platform/zephyr_armv7')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
@@ -1646,6 +1657,9 @@ class GnuCompiler(Compiler):
         if self.target.is_zephyr:
             self.c_defines.append('-D__ZEPHYR__')
 
+        if self.target.is_zephyr_armv7_cortex_a35:
+            self.c_defines.append('-D_LIBUNWIND_IS_BAREMETAL')
+
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
@@ -1694,6 +1708,9 @@ class GnuCompiler(Compiler):
                 '-Wno-pessimizing-move',
                 '-Wno-undefined-var-template',
             ]
+
+            if self.target.is_zephyr_armv7_cortex_a35:
+                self.cxx_warnings.append('-Wno-missing-designated-field-initializers')
 
         elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
             self.c_foptions.append('-fno-delete-null-pointer-checks')
@@ -1816,14 +1833,14 @@ class Linker(object):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
 
-        if self.build.target.is_freertos or self.build.target.is_zephyr:
+        if self.tc.is_gcc and (self.build.target.is_freertos or self.build.target.is_zephyr):
             return Linker.BFD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
 
-        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd:
+        elif self.build.target.is_linux or self.build.target.is_macos or self.build.target.is_ios or self.build.target.is_wasm or self.build.target.is_freebsd or self.build.target.is_zephyr:
             return Linker.LLD
 
         # There is no linker choice on Windows (link.exe)
@@ -2644,7 +2661,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.9'
+            return '13.0'
 
         if not self.have_cuda.value:
             return None
@@ -2745,6 +2762,9 @@ class Cuda(object):
         if version >= (12, 9):
             architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
 
+        if version >= (13, 0):
+            architectures.extend(['sm_121', 'sm_121a', 'sm_121f'])
+
         return ':'.join(architectures)
 
     def auto_use_arcadia_cuda(self):
@@ -2826,7 +2846,7 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0', '9.20.0')
 
     def auto_cudnn_version(self):
         return '9.12.0'

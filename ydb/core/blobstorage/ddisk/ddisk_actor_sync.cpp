@@ -23,6 +23,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
         counters.Request(0);
+        CountTabletIo(creds.TabletId, ETabletOperation::Sync, 1, 0);
 
         if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
             counters.Reply(false);
@@ -38,6 +39,7 @@ namespace NKikimr::NDDisk {
             }
 
             auto& sync = syncIt->second;
+            *counters.BytesInFlight -= sync.RequestedBytes;
             std::vector<TSegmentManager::TSegment> removedSegments;
             if (sync.FirstRequestId != Max<ui64>()) {
                 for (ui64 requestId = sync.FirstRequestId; requestId < sync.FirstRequestId + sync.Requests.size(); ++requestId) {
@@ -188,10 +190,15 @@ namespace NKikimr::NDDisk {
                     Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
                 }
 
+                CountTabletIo(creds.TabletId, ETabletOperation::Sync, 0, selector.Size);
                 sync.Requests.emplace_back(TSyncReadRequest{
                     .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                     .Selector=selector
                 });
+                // Logical source bytes admitted to this Sync, including overlapping ranges.
+                sync.RequestedBytes += selector.Size;
+                *counters.Bytes += selector.Size;
+                *counters.BytesInFlight += selector.Size;
 
                 for (auto& [outdatedSyncId, outdatedRequestId] : outdated) {
                     auto outdatedIt = SyncsInFlight.find(outdatedSyncId);
@@ -354,7 +361,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        TChunkRef& chunkRef = ChunkRefs[sync.Creds.TabletId][sync.VChunkIndex];
+        TChunkRef& chunkRef = Tablets[sync.Creds.TabletId].ChunkRefs[sync.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
             // Park first: IssueChunkAllocation may place the extent synchronously from the
             // reserve and OpenDataChunkWritePath only drains already-queued events.
@@ -528,6 +535,7 @@ namespace NKikimr::NDDisk {
     }
 
     std::unique_ptr<IEventHandle> TDDiskActor::MakeSyncResult(const TSyncInFlight& sync) {
+        *Counters.Interface.Sync.BytesInFlight -= sync.RequestedBytes;
         std::unique_ptr<TEvSyncResult> ev;
         if (sync.ErrorReason) {
             ev = std::make_unique<TEvSyncResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, sync.ErrorReason);

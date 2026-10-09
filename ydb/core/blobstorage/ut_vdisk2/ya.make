@@ -12,8 +12,10 @@ ENDIF()
 SRCS(
     defs.h
     env.h
+    blob_stat.cpp
     huge.cpp
     compaction.cpp
+    space_report.cpp
 )
 
 PEERDIR(

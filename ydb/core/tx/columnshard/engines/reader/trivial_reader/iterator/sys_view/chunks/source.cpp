@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/tiering/tier/identifier.h>
 
 #include <library/cpp/json/writer/json.h>
 
@@ -58,8 +59,7 @@ public:
 
 }   // namespace
 
-bool TSourceData::DoStartFetchingAccessor(
-    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
+NReader::NCommon::TExecutionResult TSourceData::DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -69,9 +69,8 @@ bool TSourceData::DoStartFetchingAccessor(
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(GetPortion());
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
-    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
-    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
-    return true;
+    return NReader::NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber::TStartJob>(
+        GetContext()->GetCommonContext()->GetDataAccessorsManager(), std::move(request), step));
 }
 
 const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
@@ -230,11 +229,13 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         ForEachChunkInPKOrder(
             [&](const TColumnRecord& record) {
-                const TString tierName = Portion->GetEntityStorageId(record.GetEntityId(), PortionSchema->GetIndexInfo());
+                const TString tierName = NColumnShard::NTiers::TExternalStorageId::GetDisplayName(
+                    Portion->GetEntityStorageId(record.GetEntityId(), PortionSchema->GetIndexInfo()));
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
             },
             [&](const TIndexChunk& index) {
-                const TString tierName = Portion->GetEntityStorageId(index.GetEntityId(), PortionSchema->GetIndexInfo());
+                const TString tierName = NColumnShard::NTiers::TExternalStorageId::GetDisplayName(
+                    Portion->GetEntityStorageId(index.GetEntityId(), PortionSchema->GetIndexInfo()));
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
             });
         return NArrow::FinishBuilder(std::move(builder));
@@ -321,7 +322,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     return nullptr;
 }
 
-TConclusion<bool> TSourceData::DoStartFetchImpl(
+TConclusion<NReader::NCommon::TExecutionResult> TSourceData::DoStartFetchImpl(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     AFL_VERIFY(fetchersExt.size());
     if (!OriginalData) {
@@ -329,7 +330,7 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
     }
 
     TReadActionsCollection readActions;
-    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext contextFetch(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
@@ -341,16 +342,14 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
             MutableStageData().AddFetcher(i);
             AFL_VERIFY(readActions.IsEmpty());
         }
-        return false;
+        return NReader::NCommon::TExecutionResult::Done();
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
         AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
     }
-    NActors::TActivationContext::AsActorContext().Register(
-        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
-            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
-    return true;
+    return NReader::NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TColumnsFetcherTask::TStartJob>(
+        std::move(readActions), fetchers, GetExecutionContext().GetCursorStep(), "fetcher"));
 }
 
 TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetchData(
@@ -366,9 +365,8 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
             }
             if (PortionSchema->GetColumnLoaderVerified(i.GetEntityId())->GetAccessorConstructor()->GetType() ==
                 NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-                composite->Add(std::make_shared<NCommon::TSubColumnsFetchLogic>(i.GetEntityId(), PortionSchema,
-                    GetContext()->GetCommonContext()->GetStoragesManager(), GetPortionAccessor().GetPortionInfo().GetRecordsCount(),
-                    std::vector<TString>()));
+                composite->Add(std::make_shared<NCommon::TSubColumnsFetchLogic>(
+                    i.GetEntityId(), *this, PortionSchema, GetPortionAccessor().GetPortionInfo().GetRecordsCount(), std::vector<TString>()));
                 break;
             }
         }
@@ -387,9 +385,9 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
                 continue;
             }
             THashSet<NIndexes::NRequest::TOriginalDataAddress> dummyAddr;
-            dummyAddr.emplace(NIndexes::NRequest::TOriginalDataAddress(i.GetEntityId(), ""));
+            dummyAddr.emplace(NIndexes::NRequest::TOriginalDataAddress(i.GetEntityId(), {}));
             composite->Add(std::make_shared<NIndexes::TIndexFetcherLogic>(
-                dummyAddr, indexMeta.GetObjectPtr(), GetContext()->GetCommonContext()->GetStoragesManager(), PortionSchema));
+                dummyAddr, indexMeta.GetObjectPtr(), GetContext()->GetCommonContext()->GetStoragesManager()));
         }
 
         if (!composite->IsEmpty()) {
@@ -399,18 +397,44 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TSourceData::DoStartFetc
     return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
 }
 
+TConclusionStatus TSourceData::DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) {
+    if (entityId != NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
+        return TBase::DoApplyPendingFetcher(context, entityId);
+    }
+    if (!HasStageData()) {
+        return TConclusionStatus::Success();
+    }
+    auto fetcher = MutableStageData().ExtractFetcherOptional(entityId);
+    // No stored fetcher: do not publish an empty ChunkDetails column.
+    if (!fetcher) {
+        return TConclusionStatus::Success();
+    }
+    MutableStageData().AddFetcher(fetcher);
+    return DoAssembleAccessor(context, entityId, TString());
+}
+
 TConclusionStatus TSourceData::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
-        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-        if (auto fetcher = MutableStageData().ExtractFetcherOptional(NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId)) {
-            AFL_VERIFY(OriginalData);
-            NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
-            auto conclusion = fetcher->OnDataCollected(fetchContext);
-            if (conclusion.IsFail()) {
-                return conclusion;
+        // Already published by a pending drain. Building again would read OriginalData empty and insert a second column.
+        if (context.GetResources().GetAccessorOptional(columnId)) {
+            if (HasStageData()) {
+                MutableStageData().ExtractFetcherOptional(columnId);
+            }
+            return TConclusionStatus::Success();
+        }
+        if (HasStageData()) {
+            if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
+                AFL_VERIFY(OriginalData);
+                auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+                NCommon::TFetchingResultContext fetchContext(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+                auto conclusion = fetcher->OnDataCollected(fetchContext);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
             }
         }
+        return TBase::DoAssembleAccessor(context, columnId, TString());
     }
     return TBase::DoAssembleAccessor(context, columnId, subColumnName);
 }

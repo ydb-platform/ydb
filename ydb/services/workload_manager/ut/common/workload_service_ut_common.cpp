@@ -712,7 +712,7 @@ private:
         request->SetQuery(query);
         request->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->SetDatabase(settings.Database_ ? settings.Database_ : Settings_.DomainName_);
+        request->SetDatabase(settings.Database_ ? settings.Database_ : CanonizePath(Settings_.DomainName_));
         request->SetPoolId(*settings.PoolId_);
         if (!settings.ApplicationName_.empty()) {
             request->SetApplicationName(settings.ApplicationName_);
@@ -814,8 +814,6 @@ NResourcePool::TPoolSettings TYdbSetupSettings::GetDefaultPoolSettings() const {
     poolConfig.ConcurrentQueryLimit = ConcurrentQueryLimit_;
     poolConfig.QueueSize = QueueSize_;
     poolConfig.QueryCancelAfter = QueryCancelAfter_;
-    poolConfig.QueryMemoryLimitPercentPerNode = QueryMemoryLimitPercentPerNode_;
-    poolConfig.TotalMemoryLimitPercentPerNode = TotalMemoryLimitPercentPerNode_;
     poolConfig.DatabaseLoadCpuThreshold = DatabaseLoadCpuThreshold_;
     return poolConfig;
 }

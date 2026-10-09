@@ -2,7 +2,8 @@
 
 #include "yql_pq_deferred_publish_client.h"
 #include "yql_pq_federated_topic_client.h"
-#include "yql_pq_topic_client.h"
+
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
@@ -10,6 +11,8 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
+
+#include <memory>
 
 namespace NKikimr::NMiniKQL {
 
@@ -23,7 +26,7 @@ class IPqStaticGateway : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IPqStaticGateway>;
 
-    virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
+    virtual std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
 
     virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
 

@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+#include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -114,6 +115,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
     appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
     auto settings = TKikimrSettings(*appConfig);
+    settings.SetAuthToken(options.AuthToken);
 
     NYql::IHTTPGateway::TPtr httpGateway;
     const auto& queryServiceConfig = appConfig->GetQueryServiceConfig();
@@ -140,7 +142,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         solomonConfig,
         nullptr,
         NYql::NDq::CreateReadActorFactoryConfig(s3Config),
-        nullptr,
+        NYql::NDq::CreatePqDqTaskTransformFactory(),
         NYql::TPqGatewayConfig{},
         options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver, options.CredentialsFactory),
         nullptr,
@@ -162,6 +164,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         .SetWithSampleTables(false)
         .SetDomainRoot(options.DomainRoot)
         .SetNodeCount(options.NodeCount)
+        .SetUseRealThreads(options.UseRealThreads)
         .SetDynamicNodeCount(options.DynamicNodeCount)
         .SetEnableStorageProxy(true)
         .SetStoragePoolTypes(options.StoragePoolTypes)
@@ -169,6 +172,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         .SetUseLocalCheckpointsInStreamingQueries(options.UseLocalCheckpointsInStreamingQueries)
         .SetLogSettings(std::move(logSettings))
         .SetNeedsStatsCollectors(options.NeedsStatsCollectors)
+        .SetUseRealThreads(options.UseRealThreads)
         .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
 
     settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;

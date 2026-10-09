@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
@@ -15,6 +15,7 @@
 
 #include <util/generic/bitmap.h>
 #include <util/generic/set.h>
+#include <util/generic/vector.h>
 
 #include <algorithm>
 #include <thread>
@@ -31,10 +32,17 @@ using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
 class TEmptyTouchedProvider final: public ITouchedProvider
 {
 public:
-    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
-        ui32 startVChunkIndex) const override
+    // Implemented ITouchedProvider.
+    [[nodiscard]] bool Get(ui32 vChunkIndex) const override
     {
-        Y_UNUSED(startVChunkIndex);
+        Y_UNUSED(vChunkIndex);
+        return false;
+    }
+
+    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
+        ui32 regionIndex) const override
+    {
+        Y_UNUSED(regionIndex);
         return {};
     }
 };
@@ -58,8 +66,24 @@ public:
         return DisabledNodes.contains(nodeId);
     }
 
+    void ArmFaultRule(NTransport::TFaultRule rule) override
+    {
+        Rules.push_back(std::move(rule));
+    }
+
+    void ClearFaultRules() override
+    {
+        Rules.clear();
+    }
+
+    [[nodiscard]] TVector<NTransport::TFaultRule> GetFaultRules() const override
+    {
+        return Rules;
+    }
+
 private:
     TSet<ui32> DisabledNodes;
+    TVector<NTransport::TFaultRule> Rules;
 };
 
 void AssertChaosMode(
@@ -266,6 +290,29 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
             UNIT_ASSERT(service->GetDirectBlockGroup(i));
         }
         UNIT_ASSERT(!service->GetDirectBlockGroup(VChunkPerRegionCount));
+    }
+
+    Y_UNIT_TEST_F(ShouldTrackInflightWritesInOnWriteStarted, TFixture)
+    {
+        auto service = MakeService(0);
+
+        const ui64 first = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(1u, first);
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
+
+        const ui64 second = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(2u, second);
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetMonInfo().InflightWriteCount);
+
+        service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
+
+        service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetMonInfo().InflightWriteCount);
     }
 }
 

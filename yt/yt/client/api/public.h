@@ -148,6 +148,9 @@ struct TTabletRangeOptions;
 struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
 
+struct TTableReaderTimingStatistics;
+struct TRemoteTableReaderTimingStatistics;
+
 struct TGetCurrentUserOptions;
 struct TGetJobStderrOptions;
 struct TGetJobStderrResponse;

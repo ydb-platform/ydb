@@ -17,6 +17,7 @@ def snapshot_diagnostics(root):
     root = Path(root).resolve()
     destination = root / "results" / "diagnostics"
     paths = [root / "worker.json"]
+    paths.append(root / "results" / "configuration" / "cluster.yaml")
     paths.extend(sorted((root / "control").glob("*")))
     paths.extend(sorted((root / "nodes").glob("*/cluster.yaml")))
     for name in ("stdout.txt", "stderr.txt"):

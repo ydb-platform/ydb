@@ -523,6 +523,19 @@ public:
         return nullptr;
     }
 
+    void* GetFunctionInSameModule(void* exportedFunction, const std::string& name) override
+    {
+        auto* reference = Runtime::asObject(static_cast<Runtime::Function*>(exportedFunction));
+        for (const auto& instance : Instances_) {
+            for (auto* object : Runtime::getInstanceExports(instance)) {
+                if (object == reference) {
+                    return static_cast<void*>(Runtime::asFunctionNullable(Runtime::getInstanceExport(instance, name)));
+                }
+            }
+        }
+        return nullptr;
+    }
+
     void* GetFunction(size_t index) override
     {
         auto* tableElement = Runtime::getTableElement(GetGlobalOffsetTable(), std::bit_cast<Uptr>(index));
@@ -1537,6 +1550,24 @@ struct TCachedSdkImage
 
 using TCachedSdkImagePtr = NYT::TIntrusivePtr<TCachedSdkImage>;
 
+// The static SDK cache intentionally survives process teardown: destroying its
+// remaining images then races WAVM Module shutdown in unittests. WAVM keeps
+// part of their image graphs through GCPointers that LSan cannot trace, so mark
+// only construction of the persistent image as ignored. Clones returned to
+// callers remain fully checked by LSan.
+static TCachedSdkImagePtr CreateLeakyCachedSdkImage(const TModuleBytecode& bytecode)
+{
+#if defined(_asan_enabled_) || defined(_lsan_enabled_)
+    __lsan_disable();
+    Y_DEFER {
+        __lsan_enable();
+    };
+#endif
+    auto compartment = CreateEmptyImage();
+    compartment->AddSdk(bytecode);
+    return New<TCachedSdkImage>(std::move(compartment));
+}
+
 class TSdkImageCache
     : public NYT::TRefCounted
 {
@@ -1580,9 +1611,7 @@ public:
         }
 
         try {
-            auto compartment = CreateEmptyImage();
-            compartment->AddSdk(bytecode);
-            auto cachedImage = New<TCachedSdkImage>(std::move(compartment));
+            auto cachedImage = CreateLeakyCachedSdkImage(bytecode);
 
             with_lock (Lock_) {
                 if (Cache_.size() >= DefaultCapacity) {

@@ -1,10 +1,13 @@
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <ydb/library/yql/dq/common/rope_over_buffer.h>
-#include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/helpers.h>
+#include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -13,6 +16,7 @@
 #include <util/string/join.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -38,26 +42,37 @@ const TMessage Message6 = {600, "value6"};
 
 class TFixture : public TPqIoTestFixture {
 public:
-    TFixture()
-        : LocalRowDispatcherId(CaSetup->Runtime->AllocateEdgeActor())
+    explicit TFixture(ui32 nodeCount = 1)
+        : TPqIoTestFixture(nodeCount)
+        , LocalRowDispatcherId(CaSetup->Runtime->AllocateEdgeActor())
         , CoordinatorId1(CaSetup->Runtime->AllocateEdgeActor())
         , CoordinatorId2(CaSetup->Runtime->AllocateEdgeActor())
         , RowDispatcherId1(CaSetup->Runtime->AllocateEdgeActor())
         , RowDispatcherId2(CaSetup->Runtime->AllocateEdgeActor())
-    {}
+    {
+        // These protocol tests mock the row dispatcher and do not create a topic consumer.
+        Settings.ClearConsumerName();
+    }
 
     void InitRdSource(
         NYql::NPq::NProto::TDqPqTopicSource settings,
         i64 freeSpace = 1_MB,
-        ui64 partitionCount = PartitionId1 + 1
+        ui64 partitionCount = PartitionId1 + 1,
+        IPqStaticGateway::TPtr pqGateway = {},
+        ui64 firstPartitionId = PartitionId1
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
             auto* partitioningParams = params.AddPartitioningParams();
             partitioningParams->SetTopicPartitionsCount(partitionCount);
-            partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
+            partitioningParams->SetEachTopicPartitionGroupId(firstPartitionId);
             partitioningParams->SetDqPartitionsCount(1);
 
+            if (!pqGateway) {
+                pqGateway = CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()});
+            }
+            const auto controlPlaneId = CaSetup->Runtime->Register(
+                CreateDqPqControlPlaneActor(Driver, CredentialsFactory, pqGateway, {}));
             auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqRdReadActor(
                 actor.TypeEnv,
                 std::move(settings),
@@ -74,9 +89,10 @@ public:
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
-                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()}),
+                pqGateway,
                 true,
-                TDuration{}
+                TDuration{},
+                controlPlaneId
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -95,7 +111,9 @@ public:
         return eventHolder;
     }
 
-    void ExpectStartSession(const TMap<ui32, ui64>& expectedOffsets, NActors::TActorId rowDispatcherId, ui64 expectedGeneration) const {
+    ui64 ExpectStartSession(const TMap<ui32, ui64>& expectedOffsets, NActors::TActorId rowDispatcherId, ui64 expectedGeneration,
+        TMaybe<ui64> expectedStartingMessageTimestampMs = 0) const
+    {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT_VALUES_UNEQUAL(nullptr, eventHolder.Get());
         TMap<ui32, ui64> offsets;
@@ -104,7 +122,11 @@ public:
         }
         UNIT_ASSERT_VALUES_EQUAL(expectedOffsets, offsets);
         UNIT_ASSERT_VALUES_EQUAL(expectedGeneration, eventHolder->Cookie);
-        UNIT_ASSERT_VALUES_EQUAL(0, eventHolder->Get()->Record.GetStartingMessageTimestampMs());
+        const auto startingMessageTimestampMs = eventHolder->Get()->Record.GetStartingMessageTimestampMs();
+        if (expectedStartingMessageTimestampMs) {
+            UNIT_ASSERT_VALUES_EQUAL(*expectedStartingMessageTimestampMs, startingMessageTimestampMs);
+        }
+        return startingMessageTimestampMs;
     }
 
     void ExpectStopSession(NActors::TActorId rowDispatcherId, ui64 expectedGeneration) const {
@@ -222,6 +244,7 @@ public:
         NActors::TActorId rowDispatcherId,
         ui64 generation,
         ui64 partitionId,
+        TMaybe<ui64> nextOffset = Nothing(),
         NActors::TActorId readActorId = {}
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
@@ -238,9 +261,22 @@ public:
                 *event->Record.AddMessages() = message;
             }
             event->Record.SetPartitionId(partitionId);
-            event->Record.SetNextMessageOffset(offset);
+            event->Record.SetNextMessageOffset(nextOffset.GetOrElse(offset));
             CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
+    }
+
+    void AssertCheckpointOffsets(const TMap<ui32, ui64>& expected) const {
+        TSourceState state;
+        SaveSourceState(CreateCheckpoint(), state);
+        UNIT_ASSERT_VALUES_EQUAL(state.Data.size(), 1);
+        NPq::NProto::TDqPqTopicSourceState proto;
+        UNIT_ASSERT(proto.ParseFromString(state.Data.front().Blob));
+        TMap<ui32, ui64> offsets;
+        for (const auto& partition : proto.GetPartitions()) {
+            offsets[partition.GetPartition()] = partition.GetOffset();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(offsets, expected);
     }
 
     void MockSessionError(NActors::TActorId rowDispatcherId) const {
@@ -389,9 +425,214 @@ public:
     NActors::TActorId RowDispatcherId2;
 };
 
+class TRemoteFixture : public TFixture {
+public:
+    TRemoteFixture()
+        : TFixture(2)
+    {
+        RowDispatcherId1 = CaSetup->Runtime->AllocateEdgeActor(1);
+    }
+
+    void StartRemoteSession(bool acknowledge = true) const {
+        InitRdSource(Settings);
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
+        ExpectStartSession({}, RowDispatcherId1, 1);
+        if (acknowledge) {
+            MockAck(RowDispatcherId1, 1, PartitionId1, {}, 1);
+        }
+    }
+};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
+    Y_UNIT_TEST_TWIN_F(ReorderedStatisticsWaitForBatchReplay, Buffered, TRemoteFixture) {
+        StartRemoteSession();
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
+        ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
+        MockMessageBatch(0, std::vector{Message1}, RowDispatcherId1, 1, PartitionId1, 3);
+        if (!Buffered) {
+            ReadMessages({Message1});
+        }
+
+        // Statistics overtake batch 4 while reconnect replay is still pending.
+        MockStatistics(RowDispatcherId1, 1000, 1, PartitionId1, 5);
+        if (Buffered) {
+            ReadMessages({Message1});
+        }
+        AssertCheckpointOffsets({{PartitionId1, 1}});
+
+        MockMessageBatch(1, std::vector{Message2}, RowDispatcherId1, 1, PartitionId1, 4);
+        ReadMessages({Message2});
+        AssertCheckpointOffsets({{PartitionId1, 2}});
+
+        MockStatistics(RowDispatcherId1, 1000, 1, PartitionId1, 5);
+        AssertCheckpointOffsets({{PartitionId1, 1000}});
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 6);
+        auto request = ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Cookie, 1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetTransportMeta().GetConfirmedSeqNo(), 6);
+    }
+
+    Y_UNIT_TEST_F(ReorderedNotificationBeforeAckWaitsForReplay, TRemoteFixture) {
+        StartRemoteSession(false);
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
+        MockAck(RowDispatcherId1, 1, PartitionId1, {}, 1);
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
+        auto request = ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Cookie, 1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetTransportMeta().GetConfirmedSeqNo(), 2);
+
+        MockMessageBatch(0, std::vector{Message1}, RowDispatcherId1, 1, PartitionId1, 3);
+        ReadMessages({Message1});
+        MockMessageBatch(0, std::vector{Message1}, RowDispatcherId1, 1, PartitionId1, 3);
+        UNIT_ASSERT(SourceRead<TMessage>(UVPairParser).empty());
+        AssertCheckpointOffsets({{PartitionId1, 1}});
+    }
+
+    Y_UNIT_TEST_QUAD_F(SkipConsumerRewindForCurrentData, Fresh, RestoreTimestamp, TFixture) {
+        Settings.SetConsumerName(DefaultPqConsumer);
+        Settings.ClearDisposition();
+        if (Fresh) {
+            Settings.MutableDisposition()->mutable_fresh();
+        }
+        const auto beforeStart = TInstant::Now();
+        // The mock gateway rejects DescribeConsumer and CommitOffset. Starting a
+        // session with a consumer therefore also verifies that both RPCs are skipped.
+        InitRdSource(Settings);
+        if (RestoreTimestamp) {
+            NPq::NProto::TDqPqTopicSourceState proto;
+            proto.AddTopics()->SetTopicPath(Settings.GetTopicPath());
+            proto.SetStartingMessageTimestampMs(0);
+            TSourceState state;
+            state.Data.emplace_back(proto.SerializeAsString(), 1);
+            CaSetup->LoadSource(state);
+        }
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
+        const auto timestampMs = ExpectStartSession({}, RowDispatcherId1, 1, Nothing());
+        if (RestoreTimestamp) {
+            UNIT_ASSERT_VALUES_EQUAL(timestampMs, 0);
+        } else {
+            UNIT_ASSERT_LE(beforeStart.MilliSeconds(), timestampMs);
+            UNIT_ASSERT_LE(timestampMs, TInstant::Now().MilliSeconds());
+        }
+    }
+
+    Y_UNIT_TEST_F(SkipConsumerRewindForFutureTimestamp, TFixture) {
+        Settings.SetConsumerName(DefaultPqConsumer);
+        const auto futureTimestamp = TInstant::Seconds((TInstant::Now() + TDuration::Hours(1)).Seconds());
+        Settings.MutableDisposition()->mutable_from_time()->mutable_timestamp()->set_seconds(futureTimestamp.Seconds());
+        InitRdSource(Settings);
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
+        ExpectStartSession({}, RowDispatcherId1, 1, futureTimestamp.MilliSeconds());
+    }
+
+    Y_UNIT_TEST_F(ConsumerInitializationError, TFixture) {
+        auto settings = BuildPqTopicSourceSettings("RdNonExistentTopic");
+        TPqGatewayServices services(Driver, nullptr, CredentialsFactory, std::make_shared<TPqGatewayConfig>(), nullptr);
+        InitRdSource(std::move(settings), 1_MB, 1, CreatePqNativeGateway(std::move(services)), 0);
+        SourceRead<TMessage>(UVPairParser);
+        const auto error = CaSetup->AsyncInputPromises->FatalError.GetFuture();
+        UNIT_ASSERT(error.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToOneLineString(), "Failed to describe consumer");
+    }
+
+    Y_UNIT_TEST_F(RewindConsumerBeforeStartingSession, TFixture) {
+        const TString topicName = "RdRewindConsumerBeforeStartingSession";
+        PQCreateStream(topicName);
+        PQWrite({"message0", "message1", "message2"}, topicName);
+        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
+            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        const auto commit = client.CommitOffset(topicName, 0, DefaultPqConsumer, 3).GetValueSync();
+        UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+
+        auto settings = BuildPqTopicSourceSettings(topicName);
+        settings.MutableDisposition()->mutable_oldest();
+        TPqGatewayServices services(Driver, nullptr, CredentialsFactory, std::make_shared<TPqGatewayConfig>(), nullptr);
+        InitRdSource(std::move(settings), 1_MB, 1, CreatePqNativeGateway(std::move(services)), 0);
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+
+        const auto describe = client.DescribeConsumer(topicName, DefaultPqConsumer,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto& partitions = describe.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+        UNIT_ASSERT_VALUES_EQUAL(partitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), 0);
+
+        MockCoordinatorChanged(CoordinatorId1);
+        const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, 0}}, request->Cookie);
+        ExpectStartSession({}, RowDispatcherId1, 1, 0);
+    }
+
+    Y_UNIT_TEST_QUAD_F(SkipConsumerRewindForCheckpointOffset, FromLastCheckpoint, ZeroOffset, TFixture) {
+        Settings.SetConsumerName(DefaultPqConsumer);
+        if (FromLastCheckpoint) {
+            Settings.MutableDisposition()->mutable_from_last_checkpoint();
+        }
+        // The mock gateway rejects DescribeConsumer and CommitOffset.
+        InitRdSource(Settings);
+
+        NPq::NProto::TDqPqTopicSourceState proto;
+        proto.AddTopics()->SetTopicPath(Settings.GetTopicPath());
+        auto* partition = proto.AddPartitions();
+        partition->SetPartition(PartitionId1);
+        const ui64 offset = ZeroOffset ? 0 : 1;
+        partition->SetOffset(offset);
+        TSourceState state;
+        state.Data.emplace_back(proto.SerializeAsString(), 1);
+        CaSetup->LoadSource(state);
+
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
+        ExpectStartSession({{PartitionId1, offset}}, RowDispatcherId1, 1);
+    }
+
+    Y_UNIT_TEST_TWIN_F(SkipConsumerRewindFromLastCheckpointWithoutOffsets, RestoreTimestamp, TFixture) {
+        Settings.SetConsumerName(DefaultPqConsumer);
+        Settings.MutableDisposition()->mutable_from_last_checkpoint();
+        const auto beforeStart = TInstant::Now();
+        InitRdSource(Settings);
+        if (RestoreTimestamp) {
+            NPq::NProto::TDqPqTopicSourceState proto;
+            proto.AddTopics()->SetTopicPath(Settings.GetTopicPath());
+            proto.SetStartingMessageTimestampMs(0);
+            TSourceState state;
+            state.Data.emplace_back(proto.SerializeAsString(), 1);
+            CaSetup->LoadSource(state);
+        }
+
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        const auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
+        const auto timestampMs = ExpectStartSession({}, RowDispatcherId1, 1, Nothing());
+        if (RestoreTimestamp) {
+            UNIT_ASSERT_VALUES_EQUAL(timestampMs, 0);
+        } else {
+            UNIT_ASSERT_LE(beforeStart.MilliSeconds(), timestampMs);
+            UNIT_ASSERT_LE(timestampMs, TInstant::Now().MilliSeconds());
+        }
+    }
+
     Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession(Settings);
 
@@ -460,7 +701,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> firstBatch = {
             {Message1, TInstant::MicroSeconds(400)},
         };
-        MockMessageBatch(0, firstBatch, RowDispatcherId1, 1, PartitionId1, first);
+        MockMessageBatch(0, firstBatch, RowDispatcherId1, 1, PartitionId1, Nothing(), first);
         AssertDataWithWatermarks({Message1}, SourceRead<TMessage>(UVPairParser));
         if (DelayedCoordinator) {
             start(second);
@@ -468,7 +709,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> secondBatch = {
             {Message2, TInstant::MicroSeconds(200)},
         };
-        MockMessageBatch(0, secondBatch, RowDispatcherId1, 1, PartitionId1, second);
+        MockMessageBatch(0, secondBatch, RowDispatcherId1, 1, PartitionId1, Nothing(), second);
         ReadMessages({Message2, TInstant::MicroSeconds(200)});
     }
 

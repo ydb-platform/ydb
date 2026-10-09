@@ -98,7 +98,27 @@ public:
 
 class IMockPqDeferredPublishClient {
 public:
+    enum class EMethod {
+        Begin,
+        Publish,
+        Cancel,
+        List,
+    };
+
+    struct TRequest {
+        EMethod Method;
+        ui64 PublicationId = 0;
+        TString ExternalId;
+        std::optional<std::string> WriterIdentity;
+        std::function<void(NYdb::EStatus, std::vector<NYdb::NTopic::TPublicationSummary>)> Reply;
+    };
+
+    using TRequestHandler = std::function<void(TRequest)>;
+
     virtual ~IMockPqDeferredPublishClient() = default;
+
+    // When set, the handler replies to SDK requests instead of automatic publication bookkeeping.
+    virtual void SetRequestHandler(TRequestHandler handler) = 0;
 
     virtual void EnsureOpenedPublications(ui64 count, const TString& nameSubstring) = 0;
 
@@ -142,13 +162,15 @@ public:
 
 struct TMockPqGatewaySettings {
     struct TTopicInfo {
-        ui32  PartitionCount = 1;
+        ui32 PartitionCount = 1;
+        TVector<TString> Consumers{};
     };
 
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
     NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
+    TTopicInfo DefaultTopicSettings;
     std::unordered_map<TString, TTopicInfo> Topics;
 };
 

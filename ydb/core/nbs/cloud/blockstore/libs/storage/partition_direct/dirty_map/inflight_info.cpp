@@ -185,6 +185,10 @@ THostIndex TInflightInfo::RequestFlush(THostIndex destination)
 
 void TInflightInfo::ConfirmFlush(THostIndex host)
 {
+    if (!DesiredDDisks.Get(host)) {
+        return;
+    }
+
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
     Y_ABORT_UNLESS(FlushRequested.Get(host));
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
@@ -196,6 +200,10 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
 
 void TInflightInfo::FlushFailed(THostIndex host)
 {
+    if (!DesiredDDisks.Get(host)) {
+        return;
+    }
+
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
     Y_ABORT_UNLESS(FlushRequested.Get(host));
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
@@ -255,7 +263,42 @@ void TInflightInfo::EraseFailed(THostIndex host)
 
 THostMask TInflightInfo::GetEraseNeeded() const
 {
-    return WriteRequested.Exclude(EraseRequested).Exclude(EraseConfirmed);
+    return WriteRequested.Exclude(Disabled)
+        .Exclude(EraseRequested)
+        .Exclude(EraseConfirmed);
+}
+
+bool TInflightInfo::IsDataOnlyInPBuffers() const
+{
+    switch (State) {
+        case EState::PBufferPendingWrite:
+        case EState::PBufferIncompleteWrite:
+        case EState::PBufferWritten:
+        case EState::PBufferFlushing:
+            return true;
+        case EState::PBufferFlushed:
+        case EState::PBufferErasing:
+        case EState::PBufferErased:
+            return false;
+    }
+}
+
+bool TInflightInfo::CanBeCoveredByRestoreBarrier() const
+{
+    // The restore barrier ends only flushed records that no read holds.
+    if (IsDataOnlyInPBuffers() || PBuffersLockCount != 0) {
+        return false;
+    }
+    // Every host that has not confirmed the erase is disabled.
+    const THostMask unerased = WriteRequested.Exclude(EraseConfirmed);
+    return !unerased.Empty() && unerased.Exclude(Disabled).Empty();
+}
+
+void TInflightInfo::MarkCoveredByRestoreBarrier()
+{
+    Y_ABORT_UNLESS(CanBeCoveredByRestoreBarrier());
+
+    SetState(EState::PBufferErased);
 }
 
 void TInflightInfo::UpdateHosts(
@@ -263,9 +306,6 @@ void TInflightInfo::UpdateHosts(
     THostMask removed,
     THostMask disabled)
 {
-    // Removed hosts should be disabled too.
-    Y_ABORT_UNLESS(removed.Exclude(disabled).Empty());
-
     switch (State) {
         case EState::PBufferPendingWrite:
         case EState::PBufferIncompleteWrite:
@@ -277,12 +317,14 @@ void TInflightInfo::UpdateHosts(
         }
         case EState::PBufferFlushing: {
             // Just update DesiredDDisks and Disabled.
+            const auto unavailableDDisks = disabled.Include(removed);
             const auto droppedFlushes =
-                GetInflightFlushes().LogicalAnd(disabled);
+                GetInflightFlushes().LogicalAnd(unavailableDDisks);
 
             DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
             Disabled = disabled;
-            FlushRequested = FlushRequested.Exclude(disabled);
+            FlushRequested = FlushRequested.Exclude(unavailableDDisks);
+            FlushConfirmed = FlushConfirmed.Exclude(removed);
 
             auto notRequestsFlushes =
                 DesiredDDisks.Exclude(Disabled).Exclude(FlushRequested);
@@ -298,17 +340,12 @@ void TInflightInfo::UpdateHosts(
             MaybeAdvanceToFlushed();
             break;
         }
-        case EState::PBufferFlushed: {
-            // Already flushed to DDisk quorum, do not reconfigure
-            // DesiredDDisks.
-            Disabled = disabled;
-            break;
-        }
+        case EState::PBufferFlushed:
         case EState::PBufferErasing: {
             // Already flushed to DDisk quorum, do not reconfigure
             // DesiredDDisks.
             Disabled = disabled;
-            MaybeAdvanceToErased();
+            MaybeQueryErase();
             break;
         }
         case EState::PBufferErased: {
@@ -431,7 +468,9 @@ void TInflightInfo::SetState(EState newState)
             Y_ABORT_UNLESS(State == EState::PBufferFlushed);
             break;
         case EState::PBufferErased:
-            Y_ABORT_UNLESS(State == EState::PBufferErasing);
+            Y_ABORT_UNLESS(
+                State == EState::PBufferFlushed ||
+                State == EState::PBufferErasing);
             break;
     }
 
@@ -522,7 +561,7 @@ void TInflightInfo::MaybeAdvanceToErased()
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
-    if (EraseConfirmed.Exclude(Disabled) == WriteRequested.Exclude(Disabled)) {
+    if (AllPBuffersErased()) {
         SetState(EState::PBufferErased);
     }
 }
@@ -543,6 +582,11 @@ void TInflightInfo::MaybeQueryErase()
     if (!hostsToErase.Empty()) {
         ReadyQueue->Register(*this, IReadyQueue::EQueueType::Erase);
     }
+}
+
+bool TInflightInfo::AllPBuffersErased() const
+{
+    return WriteRequested.Exclude(EraseConfirmed).Empty();
 }
 
 TPBufferKey TInflightInfo::GetPBufferKey() const

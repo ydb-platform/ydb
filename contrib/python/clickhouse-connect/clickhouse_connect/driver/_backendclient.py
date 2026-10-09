@@ -18,21 +18,23 @@ from clickhouse_connect.driver._backend.models import QueryRuntime
 from clickhouse_connect.driver.binding import bind_query
 from clickhouse_connect.driver.client import Client
 from clickhouse_connect.driver.ctypes import RespBuffCls
+from clickhouse_connect.driver.exceptions import Error
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.query import QueryContext, QueryResult
+from clickhouse_connect.driver.streaming import _SyncStreamingInsertSource
 from clickhouse_connect.driver.summary import QuerySummary
 
 if TYPE_CHECKING:
     from clickhouse_connect.driver._backend.contracts import SyncBackend
-    from clickhouse_connect.driver.transform import NativeTransform
+    from clickhouse_connect.driver.transform import Transform
 
 logger = logging.getLogger(__name__)
 
 
 class SyncBackendClient(Client):
     _backend: SyncBackend
-    _transform: NativeTransform
+    _transform: Transform
     _write_format = "Native"
     _rename_response_column: str | None = None
 
@@ -67,17 +69,40 @@ class SyncBackendClient(Client):
 
         if context.compression is None:
             context.compression = self.write_compression
-        block_gen = self._transform.build_insert(context)
+        threaded = self._transform.threaded_insert
+        active_source = None
+        if threaded:
+            active_source = _SyncStreamingInsertSource(transform=self._transform, context=context, maxsize=10)
+            active_source.start_producer()
+            block_gen = active_source.gen
+        else:
+            block_gen = self._transform.build_insert(context)
 
         def rebuild_block_gen():
+            nonlocal active_source
+            recorded = context.insert_exception
+            if isinstance(recorded, Error):
+                # Deterministic client-side refusal; a rebuilt insert would fail identically.
+                context.insert_exception = None
+                raise recorded
+            # Reset so a failure on the rebuilt attempt is not masked by the first attempt's error.
+            context.insert_exception = None
+            if active_source is not None:
+                active_source.close(timeout=None)
             context.current_row = 0
             context.current_block = 0
+            if threaded:
+                active_source = _SyncStreamingInsertSource(transform=self._transform, context=context, maxsize=10)
+                active_source.start_producer()
+                return active_source.gen
             return self._transform.build_insert(context)
 
         runtime = QueryRuntime(database=self.database, settings=self._validate_settings(context.settings))
         try:
             return QuerySummary(self._backend.execute_data_insert(context, runtime, block_gen, rebuild_block_gen))
         finally:
+            if active_source is not None:
+                active_source.close()
             context.data = None
 
     def raw_insert(

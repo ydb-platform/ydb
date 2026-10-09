@@ -1637,7 +1637,7 @@ static bool TryParseField(const std::vector<TStringBuf>& fields, int index, TDur
 
 TBlockDeviceStat ParseBlockDeviceStat(const std::string& statLine)
 {
-    std::vector<TStringBuf> buffer = StringSplitter(statLine).Split(' ');
+    std::vector<TStringBuf> buffer = StringSplitter(statLine).Split(' ').SkipEmpty();
     TBlockDeviceStat result;
     TryParseField(buffer, 0, result.ReadsCompleted);
     TryParseField(buffer, 1, result.ReadsMerged);

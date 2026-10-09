@@ -262,12 +262,7 @@ TResult ApplyChangesInt( // create and alter
         return r;
     }
 
-    // With remote_mirror_rule, keep LocalDC/isLocal=true (msgbus semantics for
-    // rt3.<localDc>--* mirrors). ClientWriteDisabled must not force non-local:
-    // federation rejects "non-local in local cluster".
-    const bool local = settings.has_remote_mirror_rule()
-        ? true
-        : !settings.client_write_disabled();
+    const bool local = !settings.client_write_disabled();
 
     if (operation == EOperation::Create && !pqConfig.GetTopicsAreFirstClassCitizen()) {
         auto converter = NPersQueue::TTopicNameConverter::ForFederation(

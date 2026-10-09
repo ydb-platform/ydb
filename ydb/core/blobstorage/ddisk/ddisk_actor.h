@@ -3,6 +3,8 @@
 #include "defs.h"
 
 #include "ddisk.h"
+#include "tablet_stats_actor.h"
+#include "space_metrics.h"
 #include "integrity_manager.h"
 #include "persistent_buffer.h"
 #include "persistent_buffer_header.h"
@@ -17,6 +19,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
 #include <ydb/library/actors/core/mon.h>
+#include <ydb/library/actors/core/subsystems/metric_system.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -209,6 +212,10 @@ namespace NKikimr::NDDisk {
             } DirectIO;
 
             struct {
+                // Registrations are keyed by (TabletId, DirectBlockGroupIndex), including empty ones.
+                // In production, a tablet registers only one direct block group per buffer.
+                NMonitoring::TDynamicCounters::TCounterPtr RegisteredTablets;
+                NMonitoring::TDynamicCounters::TCounterPtr RegisteredTabletsLimit;
                 NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
                 NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
                 NMonitoring::TDynamicCounters::TCounterPtr PendingEventsQueueSize;
@@ -509,6 +516,7 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
+            WakeupCollectMemoryMetrics = 6,
         };
 
         struct TPbOpSnapshot {
@@ -524,6 +532,13 @@ namespace NKikimr::NDDisk {
         static constexpr TDuration PbStatsSnapshotPeriod = TDuration::Seconds(1);
 
         void CollectPbStatsSnapshot();
+
+        TLine<TMemoryMetricsFrontend> MemoryMetric;
+        TLine<TSpaceMetricsFrontend> SpaceMetric;
+        TLine<TOperationMetricsFrontend> OperationMetric;
+        void RecordOperationMetrics(TMonotonic sampledAt);
+        void InitMemoryMetrics();
+        void CollectMemoryMetrics();
 
         const bool IsPersistentBufferActor = false;
 
@@ -630,9 +645,19 @@ namespace NKikimr::NDDisk {
             std::queue<TPendingEvent> PendingSerializedWrites;
         };
 
-        THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
+        struct TTabletState {
+            THashMap<ui64, TChunkRef> ChunkRefs;
+            TTabletStatsEntry Stats;
+
+            bool CanRetire() const { return ChunkRefs.empty(); }
+        };
+
+        ui64 MonMappedDataChunks = 0;
+        THashMap<ui64, TTabletState> Tablets; // TabletId -> state
         TIntrusivePtr<TPDiskParams> PDiskParams;
         std::vector<TChunkIdx> OwnedChunksOnBoot;
+        std::queue<TChunkIdx> StartupOrphanChunks;
+        static constexpr ui64 StartupForgetCookie = Max<ui64>() - 1;
         ui64 ChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingQueries;
         bool HandlingQueries = false;
@@ -645,6 +670,10 @@ namespace NKikimr::NDDisk {
         void Handle(NPDisk::TEvYardInitResult::TPtr ev);
         void Handle(NPDisk::TEvReadLogResult::TPtr ev);
         void ValidateChecksumsModeAfterLogReplay();
+        void ReconcileStartupReservations();
+        void ForgetNextStartupOrphan();
+        void Handle(NPDisk::TEvChunkForgetResult::TPtr ev);
+        void FinishRecovery();
         void StartHandlingQueries();
         void HandleSingleQuery();
 
@@ -659,6 +688,8 @@ namespace NKikimr::NDDisk {
 
         // Chunk management code
 
+        void SetDataChunkMapping(ui64 tabletId, TChunkRef* ref, TChunkIdx chunkIdx);
+
         // DDisk may pull an integrity chunk from the same reserve as a data
         // chunk, so it keeps a larger reserve than PersistentBuffer.
         static constexpr ui32 MinChunksReservedDDisk = 4;
@@ -668,6 +699,9 @@ namespace NKikimr::NDDisk {
         // Newly reserved chunks are zeroed in slices before they become allocatable in
         // checksums-disabled mode. Value is the next byte offset to format.
         absl::flat_hash_map<TChunkIdx, ui32> FormattingChunks;
+        // Abandoned allocations may still have writes in flight. Never reuse them for PB.
+        absl::flat_hash_set<TChunkIdx> PendingChunkRelease;
+        absl::flat_hash_set<TChunkIdx> ShutdownChunkReleasesIssued;
         bool ReserveInFlight = false;
 
         struct TChunkForData {
@@ -710,6 +744,8 @@ namespace NKikimr::NDDisk {
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
+        void HandleStopping(NPDisk::TEvChunkReserveResult::TPtr ev);
+        void ReleaseUncommittedChunks();
         void HandleChunkReserved();
         size_t CountPendingPersistentBufferChunkAllocations() const;
         void IssueNextChunkFormatWrite(TChunkIdx chunkIdx);
@@ -1076,6 +1112,7 @@ namespace NKikimr::NDDisk {
             ui64 VChunkIndex = 0;
             ui64 FirstRequestId = Max<ui64>();
             TStringBuilder ErrorReason;
+            ui64 RequestedBytes = 0;
         };
 
         using TSyncIt = THashMap<ui64, TSyncInFlight>::iterator;
@@ -1224,6 +1261,7 @@ namespace NKikimr::NDDisk {
         // The flag requests reclamation once this sector's own write has completed.
         absl::flat_hash_map<TPersistentBufferLocation, bool> PersistentBufferBarrierWrites;
         void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
+        void UpdateRegisteredTabletsCounter();
         void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
         struct TPersistentBufferRegistrationToken {
@@ -1331,6 +1369,21 @@ namespace NKikimr::NDDisk {
         void HandleWakeup(TEvents::TEvWakeup::TPtr &ev);
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr ev);
         void UpdateFreeSpaceInfo();
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Per-tablet statistics (DDisk mode only)
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        TTabletStatsTracker<TTabletState> TabletStats{&Tablets};
+        TActorId TabletStatsActor;
+        bool TabletStatsActive = false;
+
+        void NotifyTabletStats();
+        void Handle(TEvCollectTabletStats::TPtr ev);
+        void Handle(TEvGetTabletStats::TPtr ev);
+        void CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 requests, ui64 bytes);
+        void CountTabletIo(ui64 tabletId, TTabletStatsEntry* entry, ETabletOperation operation, ui64 requests, ui64 bytes);
+        void CountTabletChunks(ui64 tabletId, i64 delta);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Monitoring page (DDisk mode only)

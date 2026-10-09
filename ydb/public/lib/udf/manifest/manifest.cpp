@@ -4,6 +4,24 @@
 #include <util/string/strip.h>
 
 namespace NYdb::NUdfManifest {
+namespace {
+void RejectAbiSelector(const NJson::TJsonValue& node, TStringBuf path) {
+    if (node.IsMap()) {
+        for (const auto& [key, value] : node.GetMap()) {
+            const TString child = TString(path) + "." + key;
+            if (key == "calling_convention") {
+                ythrow yexception() << child << " is not supported: WASM UDFs use bridge";
+            }
+            RejectAbiSelector(value, child);
+        }
+    } else if (node.IsArray()) {
+        for (const auto& value : node.GetArray()) {
+            RejectAbiSelector(value, path);
+        }
+    }
+}
+} // namespace
+
 TManifest Parse(TStringBuf json) {
     NJson::TJsonValue root;
     if (!NJson::ReadJsonTree(json, &root, true) || !root.IsMap()) {
@@ -16,6 +34,7 @@ TManifest Parse(TStringBuf json) {
         }
         return value.GetString();
     };
+    RejectAbiSelector(root, "manifest");
     TManifest result;
     result.Name = required("module_name");
     if (result.Name != Strip(result.Name)) {
@@ -38,7 +57,7 @@ TManifest Parse(TStringBuf json) {
         ythrow yexception() << "module_kind must be wasm or native";
     }
 
-    for (const auto field : {"functions", "objects", "calling_convention", "required_libraries"}) {
+    for (const auto field : {"functions", "objects", "required_libraries"}) {
         if (root.Has(field) && (result.Type != EModuleType::Module || result.Kind != EModuleKind::Wasm)) {
             ythrow yexception() << field << " is only applicable to WASM modules";
         }

@@ -86,86 +86,6 @@ namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYdb::NWasm;
 
-EUdfValueType ParseValueType(TStringBuf type) {
-    if (type == "int64") {
-        return EUdfValueType::Int64;
-    }
-    if (type == "uint64") {
-        return EUdfValueType::Uint64;
-    }
-    if (type == "double") {
-        return EUdfValueType::Double;
-    }
-    if (type == "boolean" || type == "bool") {
-        return EUdfValueType::Boolean;
-    }
-    if (type == "string") {
-        return EUdfValueType::String;
-    }
-    if (type == "null") {
-        return EUdfValueType::Null;
-    }
-    if (type == "int32") {
-        return EUdfValueType::Int32;
-    }
-    if (type == "uint32") {
-        return EUdfValueType::Uint32;
-    }
-    if (type == "float") {
-        return EUdfValueType::Float;
-    }
-    if (type == "utf8") {
-        return EUdfValueType::Utf8;
-    }
-    if (type == "date") {
-        return EUdfValueType::Date;
-    }
-    if (type == "datetime") {
-        return EUdfValueType::Datetime;
-    }
-    if (type == "timestamp") {
-        return EUdfValueType::Timestamp;
-    }
-    if (type == "decimal") {
-        return EUdfValueType::Decimal;
-    }
-    ythrow yexception() << "Unsupported wasm UDF descriptor type: " << type;
-}
-
-const char* ValueTypeToString(EUdfValueType type) {
-    switch (type) {
-        case EUdfValueType::Null:
-            return "null";
-        case EUdfValueType::Int64:
-            return "int64";
-        case EUdfValueType::Uint64:
-            return "uint64";
-        case EUdfValueType::Double:
-            return "double";
-        case EUdfValueType::Boolean:
-            return "boolean";
-        case EUdfValueType::String:
-            return "string";
-        case EUdfValueType::Int32:
-            return "int32";
-        case EUdfValueType::Uint32:
-            return "uint32";
-        case EUdfValueType::Float:
-            return "float";
-        case EUdfValueType::Utf8:
-            return "utf8";
-        case EUdfValueType::Date:
-            return "date";
-        case EUdfValueType::Datetime:
-            return "datetime";
-        case EUdfValueType::Timestamp:
-            return "timestamp";
-        case EUdfValueType::Decimal:
-            return "decimal";
-    }
-    return "unknown";
-}
-
 NYdb::NWasm::TModuleBytecode MakeModuleBytecode(
     TStringBuf wasmData,
     TStringBuf objectCode,
@@ -225,13 +145,6 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
     return compartment;
 }
 
-TUnversionedValue MakeEmptyValue() {
-    TUnversionedValue value{};
-    value.Type = EAbiValueType::Null;
-    value.Flags = EAbiValueFlags::None;
-    return value;
-}
-
 ui32 CheckedAbiLength(size_t size, TStringBuf what) {
     if (size > std::numeric_limits<ui32>::max()) {
         ythrow yexception()
@@ -239,11 +152,6 @@ ui32 CheckedAbiLength(size_t size, TStringBuf what) {
             << " exceeds ABI ui32 limit (" << std::numeric_limits<ui32>::max() << ")";
     }
     return static_cast<ui32>(size);
-}
-
-void StoreValue(IWebAssemblyCompartment* compartment, uintptr_t offset, const TUnversionedValue& value) {
-    auto* destination = PtrFromVM(compartment, std::bit_cast<TUnversionedValue*>(offset));
-    *destination = value;
 }
 
 TCurrentCompartmentGuard::TCurrentCompartmentGuard(IWebAssemblyCompartment* compartment)
@@ -255,6 +163,62 @@ TCurrentCompartmentGuard::TCurrentCompartmentGuard(IWebAssemblyCompartment* comp
 TCurrentCompartmentGuard::~TCurrentCompartmentGuard() {
     SetCurrentCompartment(Previous_);
 }
+
+namespace {
+
+std::string ReadGuestExceptionMessage(
+    IWebAssemblyCompartment* compartment,
+    void* runtimeFunction,
+    const WAVM::Runtime::Exception* exception)
+{
+    if (WAVM::Runtime::describeExceptionType(WAVM::Runtime::getExceptionType(exception)) != "__cpp_exception") {
+        return {};
+    }
+
+    // An opt-in export in the throwing module decodes the C++ ABI's unwind
+    // pointer. The host cannot interpret arbitrary guest C++ object layouts.
+    void* messageFunction = compartment->GetFunctionInSameModule(
+        runtimeFunction, "__ydb_wasm_exception_message");
+    if (!messageFunction) {
+        return {};
+    }
+
+    const std::array<EWebAssemblyValueType, 1> argumentTypes = {EWebAssemblyValueType::UintPtr};
+    const auto runtimeType = GetTypeId(
+        /*intrinsic*/ false,
+        EWebAssemblyValueType::UintPtr,
+        TRange(argumentTypes.data(), argumentTypes.size()));
+    TWavmPodValue argument{};
+    TWavmPodValue result{};
+    argument.Data = WAVM::Runtime::getExceptionArgument(exception, 0).u64;
+    NYdb::NWasm::NDetail::WavmInvoke(
+        compartment,
+        runtimeType,
+        messageFunction,
+        &result,
+        TRange(&argument, 1));
+
+    if (!result.Data) {
+        return {};
+    }
+
+    constexpr size_t maxMessageLength = 4096;
+    std::string message;
+    for (size_t i = 0; i < maxMessageLength; ++i) {
+        if (result.Data > std::numeric_limits<ui64>::max() - i) {
+            return {};
+        }
+        const auto* character = static_cast<const char*>(
+            compartment->GetHostPointer(result.Data + i, 1));
+        if (!*character) {
+            return message;
+        }
+        message.push_back(*character);
+    }
+    return message + "...";
+}
+
+} // namespace
 
 void InvokeUdfExport(
     IWebAssemblyCompartment* compartment,
@@ -300,6 +264,20 @@ void InvokeUdfExport(
     } catch (WAVM::Runtime::Exception* exception) {
         // Type/args from WAVM, but only user wasm frames in the stack (like ThrowException).
         std::string message = WAVM::Runtime::describeException(exception);
+        const auto stackPos = message.find("\nCall stack:");
+        if (stackPos != std::string::npos) {
+            message.resize(stackPos);
+        }
+        try {
+            const auto guestMessage = ReadGuestExceptionMessage(compartment, runtimeFunction, exception);
+            if (!guestMessage.empty()) {
+                message += ": " + guestMessage;
+            }
+        } catch (WAVM::Runtime::Exception* nestedException) {
+            WAVM::Runtime::destroyException(nestedException);
+        } catch (const std::exception&) {
+            // A malformed or absent guest diagnostic must not hide the original exception.
+        }
         TString stack;
         try {
             stack = FormatUserWasmCallStack(WAVM::Runtime::getExceptionCallStack(exception));
@@ -309,11 +287,6 @@ void InvokeUdfExport(
             stack = "<wasm call stack unavailable>\n";
         }
         WAVM::Runtime::destroyException(exception);
-
-        const auto stackPos = message.find("\nCall stack:");
-        if (stackPos != std::string::npos) {
-            message.resize(stackPos);
-        }
 
         // Plain throw: do not prefix with registry_helpers.cpp:line for users.
         throw yexception()

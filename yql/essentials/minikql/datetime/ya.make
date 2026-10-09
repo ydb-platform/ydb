@@ -1,13 +1,11 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datetime.cpp
 )
 
 PEERDIR(
-    yql/essentials/minikql/computation
+    yql/essentials/public/udf
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

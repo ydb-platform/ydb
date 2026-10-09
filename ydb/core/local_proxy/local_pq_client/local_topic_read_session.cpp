@@ -10,6 +10,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/persqueue_v1/actors/read_session_actor.h>
 
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/generic/guid.h>
@@ -142,6 +143,11 @@ class TLocalTopicReadSessionActor final
         std::optional<TDuration> MaxLag;
         std::vector<i64> PartitionIds;
         bool AutoPartitioningSupport = false;
+    };
+
+    struct TPartitionCommitState {
+        ui64 NextReadOffset = 0;
+        TDisjointIntervalTree<ui64> PendingRanges;
     };
 
 public:
@@ -291,25 +297,37 @@ private:
     }
 
     void Handle(TEvPartition::TEvOffsetsCommitRequest::TPtr& ev) {
-        const auto partitionSessionId = ev->Get()->PartitionSessionId;
-        const auto start = ev->Get()->StartOffset;
-        const auto end = ev->Get()->EndOffset;
-        YDB_LOG_DEBUG("Partition offsets commit request",
-            {"logPrefix", LogPrefix()},
-            {"session", partitionSessionId},
-            {"start", start},
-            {"end", end});
+        const auto& request = *ev->Get();
+        auto& ranges = PartitionCommitStates[request.PartitionSessionId].PendingRanges;
+        Y_VALIDATE(request.StartOffset < request.EndOffset, "Invalid commit offset range");
+        Y_VALIDATE(!ranges.Intersects(request.StartOffset, request.EndOffset), "Commit range overlaps skipped offsets");
+        ranges.InsertInterval(request.StartOffset, request.EndOffset);
 
-        TRpcIn message;
+        for (const auto& [start, end] : ranges) {
+            if (start >= request.EndOffset) {
+                break;
+            }
 
-        auto& commitRequest = *message.mutable_commit_offset_request()->add_commit_offsets();
-        commitRequest.set_partition_session_id(partitionSessionId);
+            const auto endOffset = Min(end, request.EndOffset);
+            YDB_LOG_DEBUG("Partition offsets commit request",
+                {"logPrefix", LogPrefix()},
+                {"session", request.PartitionSessionId},
+                {"start", start},
+                {"end", endOffset});
 
-        auto& offsets = *commitRequest.add_offsets();
-        offsets.set_start(start);
-        offsets.set_end(end);
+            TRpcIn message;
 
-        AddSessionEvent(std::move(message));
+            auto& commitRequest = *message.mutable_commit_offset_request()->add_commit_offsets();
+            commitRequest.set_partition_session_id(request.PartitionSessionId);
+
+            auto& offsets = *commitRequest.add_offsets();
+            offsets.set_start(start);
+            offsets.set_end(endOffset);
+
+            AddSessionEvent(std::move(message));
+        }
+
+        ranges.EraseInterval(0, request.EndOffset);
     }
 
     void Handle(TEvPartition::TEvConfirmCreate::TPtr& ev) {
@@ -335,6 +353,8 @@ private:
         }
         if (commitOffset) {
             startResponse.set_commit_offset(*commitOffset);
+            auto& nextOffset = PartitionCommitStates[partitionSessionId].NextReadOffset;
+            nextOffset = Max(nextOffset, *commitOffset);
         }
         if (maxOffset) {
             startResponse.set_max_offset(*maxOffset);
@@ -448,6 +468,15 @@ private:
                             createTime = TInstant::MilliSeconds(NKafka::GetRecordTimestamp(*codecResult.BatchBaseTimestampMs, decompressedMsg.Meta->TimestampDelta));
                         }
 
+                        if (!ReadSettings.Consumer.empty()) {
+                            auto& state = PartitionCommitStates[partitionSessionId];
+                            auto& nextOffset = state.NextReadOffset;
+                            if (offset > nextOffset) {
+                                state.PendingRanges.InsertInterval(nextOffset, offset);
+                            }
+                            nextOffset = Max(nextOffset, offset + 1);
+                        }
+
                         messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
                         Counters->BytesRead->Add(decompressedMsg.Data.size());
 
@@ -531,6 +560,11 @@ private:
             .TopicPath = info.path(),
             .ReadSessionId = SessionId,
         });
+
+        auto& commitState = PartitionCommitStates[partitionSessionId];
+        commitState.NextReadOffset = committedOffset;
+        commitState.PendingRanges.Clear();
+
         if (const auto [it, inserted] = PartitionSessions.emplace(partitionSessionId, partitionSession); !inserted) {
             // After internal server retry session may be reconnected
             YDB_LOG_NOTICE("Partition reconnected",
@@ -657,6 +691,7 @@ private:
     i64 ServerMemoryDelta = 0;
     TString SessionId;
     std::unordered_map<i64, TPartitionSession::TPtr> PartitionSessions;
+    std::unordered_map<i64, TPartitionCommitState> PartitionCommitStates;
 };
 
 // Supposed to be used from actor system, so all blocking methods are not supported.

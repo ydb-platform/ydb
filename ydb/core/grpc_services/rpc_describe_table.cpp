@@ -25,6 +25,7 @@ using TEvDescribeTableRequest = TGrpcRequestOperationCall<Ydb::Table::DescribeTa
 class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest> {
     using TBase = TRpcSchemeRequestActor<TDescribeTableRPC, TEvDescribeTableRequest>;
 
+    const TString TablePath;
     TString OverrideName;
     NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr PendingDescribeResult;
     TActorId ShardsResolverId;
@@ -47,14 +48,15 @@ class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDe
 
 public:
     TDescribeTableRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+        : TBase(msg)
+        , TablePath(Request_->NormalizePath(GetProtoRequest()->path()))
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
 
         const auto request = GetProtoRequest();
-        const auto& path = request->path();
-        const auto paths = NKikimr::SplitPath(path);
+        const auto paths = NKikimr::SplitPath(TablePath);
         if (paths.empty()) {
             Request_->RaiseIssue(NYql::TIssue("Invalid path"));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
@@ -66,7 +68,7 @@ public:
         entry.Path = paths;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = true;
-        entry.ShowPrivatePath = ShowPrivatePath(path);
+        entry.ShowPrivatePath = ShowPrivatePath(TablePath);
         NeedResolveShards = request->include_shard_nodes_info()
             && request->include_partition_stats()
             && request->include_table_stats();
@@ -110,7 +112,7 @@ private:
             OverrideName = entry.Path.back();
             SendProposeRequest(CanonizePath(ChildPath(entry.Path, list->Children.at(0).Name)), ctx);
         } else {
-            SendProposeRequest(GetProtoRequest()->path(), ctx);
+            SendProposeRequest(TablePath, ctx);
         }
     }
 
@@ -142,17 +144,25 @@ private:
                 if (OverrideName) {
                     selfEntry->set_name(OverrideName);
                 }
+                if (TablePath != GetProtoRequest()->path()) {
+                    const auto parts = NKikimr::SplitPath(TString{GetProtoRequest()->path()});
+                    selfEntry->set_name(parts.empty() ? TString("/") : parts.back());
+                }
 
                 if (pathDescription.HasColumnTableDescription()) {
                     const auto& tableDescription = pathDescription.GetColumnTableDescription();
                     FillColumnDescription(describeTableResult, tableDescription);
 
+                    // The actual number of partitions is always available,
+                    // no need to request shard boundaries or table stats
+                    const auto shardCount = tableDescription.GetSharding().GetColumnShards().size();
+                    describeTableResult.set_partition_count(shardCount);
+
                     try {
                         if (GetProtoRequest()->include_table_stats()) {
                             FillTableStats(describeTableResult, pathDescription, false, {});
 
-                            describeTableResult.mutable_table_stats()->set_partitions(
-                                tableDescription.GetColumnShardCount());
+                            describeTableResult.mutable_table_stats()->set_partitions(shardCount);
                         }
                     } catch (const std::exception& ex) {
                         return ReplyOnException(ex, "Unable to fill table stats");
@@ -180,6 +190,14 @@ private:
                 }
 
                 describeTableResult.mutable_primary_key()->CopyFrom(tableDescription.GetKeyColumnNames());
+
+                // Fallback to the partitions list keeps compatibility
+                // with an older schemeshard that does not fill the field yet.
+                if (tableDescription.HasPartitionCount()) {
+                    describeTableResult.set_partition_count(tableDescription.GetPartitionCount());
+                } else {
+                    describeTableResult.set_partition_count(pathDescription.TablePartitionsSize());
+                }
 
                 try {
                     FillTableBoundary(describeTableResult, tableDescription, splitKeyType);
@@ -216,6 +234,7 @@ private:
                 FillPartitioningSettings(describeTableResult, tableDescription);
                 FillKeyBloomFilter(describeTableResult, tableDescription);
                 FillReadReplicasSettings(describeTableResult, tableDescription);
+                FillMetricsSettings(describeTableResult, tableDescription);
 
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
             }

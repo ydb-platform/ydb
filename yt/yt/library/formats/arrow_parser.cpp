@@ -652,6 +652,18 @@ bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
     return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueYson;
 }
 
+void ValidateYsonValue(TStringBuf value)
+{
+    try {
+        ValidateAnyValue(value);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Value of a column with metadata %Qv=%Qv is not a valid YSON",
+            YTTypeMetadataKey,
+            YTTypeMetadataValueYson)
+            .With(ex);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TArraySimpleVisitor
@@ -1028,6 +1040,7 @@ private:
         // it directly to ParseStringLikeArray.
         return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
             if (HasYsonTypeInMetadata(SchemaField_)) {
+                ValidateYsonValue(value);
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
                 return MakeUnversionedStringValue(value, columnId);

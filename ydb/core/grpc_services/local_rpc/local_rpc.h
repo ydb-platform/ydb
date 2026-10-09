@@ -494,6 +494,11 @@ public:
     void Cancel() {
         FinishPromise.SetValue(EFinishStatus::CANCEL);
         Finished = true;
+        // with Finished stream queue is never populated and callback won't be called
+        NextReplyCallback = nullptr;
+        if (ResponseQueue.empty()) {
+            OnResponseCallback = nullptr;
+        }
     }
 
     bool IsFinished() const {
@@ -522,6 +527,9 @@ protected:
     }
 
     void SetNextReplyCallback(TOnNextReply&& callback) override {
+        if (Finished) {
+            return;
+        }
         NextReplyCallback = callback;
     }
 
@@ -595,6 +603,9 @@ private:
             OnResponseCallback(DoPopResponse());
             OnResponseCallback = nullptr;
         }
+        if (Finished) {
+            NextReplyCallback = nullptr;
+        }
     }
 
 private:
@@ -617,9 +628,26 @@ TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(ty
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
 
+    // The grpc stream context does not expose the base request's internal-call
+    // flag. Preserve it on the request consumed by the RPC actor.
+    class TLocalRpcStreamRequest final : public TRpc {
+    public:
+        TLocalRpcStreamRequest(TLocalRpcStreamCtx* ctx, bool internalCall)
+            : TRpc(ctx, [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {})
+            , InternalCall(internalCall)
+        {}
+
+        bool IsInternalCall() const override {
+            return InternalCall;
+        }
+
+    private:
+        const bool InternalCall;
+    };
+
     auto localRpcCtx = std::make_shared<TLocalRpcCtx<TRpc, TCbWrapper>>(std::move(proto), [](const typename TRpc::TResponse&) {}, database, token, requestType, internalCall);
     auto localRpcStreamCtx = MakeIntrusive<TLocalRpcStreamCtx>(std::move(localRpcCtx));
-    auto localRpcRequest = std::make_unique<TRpc>(localRpcStreamCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    auto localRpcRequest = std::make_unique<TLocalRpcStreamRequest>(localRpcStreamCtx.Get(), internalCall);
     // The stream wrapper drops the base request's token (unlike DoLocalRpc), so set it here — system-user stream calls like the warmup sysview fetch must pass the KqpProxy warmup gate.
     if (token && !token->empty()) {
         localRpcRequest->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));

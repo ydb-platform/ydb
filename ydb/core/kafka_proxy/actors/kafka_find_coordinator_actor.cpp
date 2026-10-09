@@ -28,7 +28,6 @@ void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {
         SendResponseOkAndDie(Context->Config.GetProxy().GetHostname(), Context->Config.GetProxy().GetPort(), NKafka::ProxyNodeId, ctx);
         return;
     }
-
     SendResponseOkAndDie(Context->Config.GetPublicHost(), Context->Config.GetListeningPort(), ctx.SelfID.NodeId(), ctx);
 }
 

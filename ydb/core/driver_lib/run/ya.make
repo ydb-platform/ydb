@@ -86,9 +86,13 @@ PEERDIR(
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
+    ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
+    ydb/core/subsystems/inmemory_metrics_monitoring
     ydb/core/mon
+    ydb/core/subsystems/actor_system_monitoring
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
     ydb/core/protos

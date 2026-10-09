@@ -74,6 +74,10 @@ Ordinary storage groups that are not [static](#static-group) are called **dynami
 
 **Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
 
+#### BlobDepot {#blob-depot}
+
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups.
+
 ### Storage pool {#storage-pool}
 
 **Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the cluster {{ ydb-short-name }}. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
@@ -145,6 +149,10 @@ If the client-side timeout is shorter than the query execution time on the {{ yd
 ### Implicit transactions {#implicit-transactions}
 
 **Implicit transaction** is a query execution mode in which [transaction mode](transactions.md#modes) is not specified. In this case, {{ ydb-short-name }} independently determines whether to wrap them in a transaction. This mode is described in more detail in [{#T}](transactions.md#implicit).
+
+### Interactive transactions {#interactive-transaction}
+
+An **interactive transaction** is a transaction in which multiple queries are executed, with application logic potentially running between them. It allows the program to send multiple queries and make decisions about the further course of the transaction based on the data received. Such a transaction can explicitly begin with a separate step (or open together with the first query) and complete separately. Unlike a single query that is executed and committed atomically, an interactive transaction enables building complex workflows in which multiple related operations are treated as a single atomic unit. At the same time, it incurs overhead on the system, as it requires holding [optimistic locks](#optimistic-locking) and uncommitted changes for longer, and also increases the complexity of the application-side code.
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -225,7 +233,7 @@ A **vector index** is a specialized type of [secondary index](#secondary-index) 
 
 #### Full-text index {#fulltext-index}
 
-A **full-text index** is an additional data structure used to speed up text search in a table column (by words and phrases, and, when using N-grams, also by substrings).
+A **full-text index** is an additional data structure used to speed up text search in a table column (by words and combinations of words, and, when using N-grams, also by substrings).
 
 The capabilities of full-text search and index parameters are described in the articles [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
@@ -695,7 +703,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### SelfHeal {#self-heal}
 
-**SelfHeal** is a mechanism for automatically maintaining and restoring cluster fault tolerance. SelfHeal of [storage](../maintenance/manual/selfheal.md) moves [VDisk](#vdisk) of storage groups after prolonged failures of nodes or disks. SelfHeal of [State Storage](../maintenance/manual/selfheal_statestorage.md) moves replicas of the metadata distribution subsystem after failures and adds replicas when new nodes appear.
+[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
 
 #### NodeBroker {#node-broker}
 
@@ -948,3 +956,7 @@ MiniKQL is a low-level language. End users of the system only see queries in [YQ
 ### KiKiMR {#kikimr}
 
 **KiKiMR** is the legacy name of {{ ydb-short-name }}, used before it became an [open-source product](https://github.com/ydb-platform/ydb) (open source). It may still be found in source code, old articles, videos, and so on.
+
+### Tablet Recovery Mode {#tablet-recovery-mode}
+
+**Recovery mode** is a mode in which a tablet is started and accessible via the [{{ ydb-ui-name }}](../reference/ydb-ui/index.md), but **does not respond to requests**, **does not perform any background activities**, and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets continue to operate normally, allowing the cluster to keep functioning, but operations and UI related to the tablet placed in Recovery mode will be unavailable.

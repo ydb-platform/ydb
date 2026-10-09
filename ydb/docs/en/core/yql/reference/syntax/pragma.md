@@ -64,6 +64,19 @@ SELECT * FROM test;`
 
 The prefix is not added if the table name is an absolute path (starts with /).
 
+### RelativePathPrefix {#relative-path-prefix}
+
+| Value type | Default |
+| --- | --- |
+| String | — |
+
+Sets the root of schema object paths relative to the base path supplied by the execution environment. The value must be relative (must not start with `/`). Specify the pragma only once and before SQL statements. Absolute schema object paths remain unchanged.
+
+```yql
+PRAGMA RelativePathPrefix = "folder";
+SELECT * FROM test;
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Value type | Default |
@@ -414,7 +427,7 @@ SELECT $foo, $bar;
 
 Treat the specified attached file as a library and override with it one of package's libraries.
 
-File name is expected to be given as ``project_name/package_name/maybe/nested/module/name.EXTENSION``, extensions analagous to [PRAGMA Library](#library) are supported.
+File name is expected to be given as ``project_name/package_name/maybe/nested/module/name.EXTENSION``, extensions analogous to [PRAGMA Library](#library) are supported.
 
 Example:
 
@@ -459,7 +472,7 @@ The default level is 2
 
 ### `ydb.OptimizerHints` {#optimizerhints}
 
-The pragma for query hints is desicribed in [a separate section](../../../dev/query-execution-optimization/query-hints.md).
+The pragma for query hints is desicribed in [a separate section](../../../dev/optimization/hints.md).
 
 ### `kikimr.IsolationLevel`
 

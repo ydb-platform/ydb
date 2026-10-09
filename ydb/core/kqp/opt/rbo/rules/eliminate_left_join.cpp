@@ -27,15 +27,16 @@ TIntrusivePtr<IOperator> TEliminateLeftJoinRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
-    auto& rhs = join->GetRightInput();
+    auto* rhs = join->GetRightInput().Get();
 
-    // R is should not be live
-    if (!IUSetIntersect(rhs->GetOutputIUs(), GetLiveOut(join.get())).empty()) {
+    // No RHS output may be live above the join.
+    if (rhs->GetOutputIUs().HasAny(GetLiveOut(join.Get()))) {
         return input;
     }
 
     // RHS key columns should be covered by RHS join keys.
-    if (rhs->Props.Metadata->KeyColumns.empty() || !IUIsSubset(rhs->Props.Metadata->KeyColumns, join->GetRHSKeys())) {
+    const auto& keys = rhs->Props.Metadata->KeyColumns.Unordered();
+    if (keys.Empty() || !keys.IsSubsetOf(join->GetRHSKeys())) {
         return input;
     }
 

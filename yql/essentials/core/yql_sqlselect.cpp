@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql {
 
@@ -41,7 +42,7 @@ TExprNode::TPtr ExpandYqlTraitsFactory(
     // clang-format on
 
     ctxExpr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr);
+    auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr, ctxTypes);
     YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
     return traits;
@@ -138,15 +139,15 @@ TExprNode::TPtr ExpandSqlWindowCall(
     }
 
     if (name == "cumedist" && argsCount == 0) {
+        TExprNode::TListType options;
+        if (!isYql || HasSetting(*call->Child(2), "ansi")) {
+            options.push_back(ctxExpr.NewList(call->Pos(), {ctxExpr.NewAtom(call->Pos(), "ansi")}));
+        }
         // clang-format off
         return ctxExpr.Builder(call->Pos())
             .Callable("CumeDist")
                 .Add(0, std::move(listType))
-                .List(1)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
+                .Add(1, ctxExpr.NewList(call->Pos(), std::move(options)))
             .Seal()
             .Build();
         // clang-format on
@@ -191,16 +192,47 @@ TExprNode::TPtr ExpandSqlWindowCall(
             YQL_ENSURE(false, "unexpected " << name);
         }
 
+        if (isYql && argsCount == 1) {
+            // Unlike SQL rank(), YqlSelect Rank(expr) uses expr as the rank key,
+            // which may differ from the window ORDER BY key in keyExtractor.
+            // Build a fresh lambda so rewrite() can bind expr to its own row argument.
+            // clang-format off
+            keyExtractor = ctxExpr.Builder(call->Pos())
+                .Lambda()
+                    .Param("row")
+                    .Callable("Void")
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+
+            keyExtractor = ctxExpr.ChangeChild(
+                *keyExtractor,
+                1,
+                rewrite(argAt(0), keyExtractor->Head().HeadPtr()));
+        }
+
+        TExprNode::TPtr options;
+        if (isYql) {
+            options = call->ChildPtr(2);
+        } else {
+            // clang-format off
+            options = ctxExpr.Builder(call->Pos())
+                .List()
+                    .List(0)
+                        .Atom(0, "ansi")
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+        }
+
         // clang-format off
         return ctxExpr.Builder(call->Pos())
             .Callable(callable)
                 .Add(0, std::move(listType))
                 .Add(1, keyExtractor)
-                .List(2)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
+                .Add(2, std::move(options))
             .Seal()
             .Build();
         // clang-format on
@@ -306,7 +338,7 @@ TExprNode::TPtr ExpandSqlWindowCall(
         }
 
         ctxExpr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-        auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr);
+        auto status = ExpandApplyNoRepeat(traits, traits, ctxExpr, ctxTypes);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
         return traits;

@@ -10,7 +10,7 @@ namespace NFq::NRowDispatcher {
 //// TTypeParser
 
 TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, TString memoryName)
-    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
+    : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), false)
     , FunctionRegistry(functionRegistry)
     , MemInfo("SharedReadingParser")
 {

@@ -68,6 +68,7 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD = false;
 constexpr ui64 DEFAULT_JOIN_COMMON_FLAT_PAYLOAD_COLUMN_LIMIT = 1024;
 
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
+constexpr bool DEFAULT_PASS_OPT_LLVM_TO_DQ_CODECS = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
 const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
@@ -172,8 +173,6 @@ constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disab
 constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
 
 const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
-
-constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = true;
 
 constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
 

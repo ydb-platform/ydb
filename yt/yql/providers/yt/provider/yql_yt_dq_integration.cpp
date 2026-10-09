@@ -882,6 +882,25 @@ public:
             }
             return true;
         }
+        if (auto maybeMaterialize = TMaybeNode<TYtMaterialize>(&node)) {
+            auto cluster = TString{maybeMaterialize.Cast().DataSink().Cluster().Value()};
+
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, false);
+                return false;
+            }
+
+            const auto contentRaw = maybeMaterialize.Cast().Input().Raw();
+            if (contentRaw->IsCallable({TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName()})
+                || contentRaw->GetConstraint<TSortedConstraintNode>()
+                || contentRaw->GetConstraint<TDistinctConstraintNode>()
+                || contentRaw->GetConstraint<TUniqueConstraintNode>()) {
+                AddInfo(ctx, "unsupported materialize of sorted/unique data", false);
+                return false;
+            }
+
+            return true;
+        }
 
         return Nothing();
     }

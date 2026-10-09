@@ -41,8 +41,8 @@
 
 #include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 
@@ -171,6 +171,9 @@ public:
     using TTypedRequest = TTypedServiceRequest<TRequestMessage>;
     using TTypedResponse = TTypedServiceResponse<TResponseMessage>;
 
+    using TRequestPool = TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>;
+    using TResponsePool = TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>;
+
     TGenericTypedServiceContext(
         TIntrusivePtr<TServiceContext> context,
         const THandlerInvocationOptions& options)
@@ -179,8 +182,8 @@ public:
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
         Response_ = underlyingContext->IsPooled()
-            ? ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>().Allocate()
-            : std::make_shared<TTypedResponse>();
+            ? ResponsePool().AllocateUnique()
+            : TResponsePool::AllocateUniqueUnpooled();
         Response_->Context_ = underlyingContext.Get();
 
         if (this->GetResponseCodec() == NCompression::ECodec::None) {
@@ -191,11 +194,9 @@ public:
     bool DeserializeRequest()
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
-        if (underlyingContext->IsPooled()) {
-            Request_ = ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>().Allocate();
-        } else {
-            Request_ = std::make_shared<TTypedRequest>();
-        }
+        Request_ = underlyingContext->IsPooled()
+            ? RequestPool().AllocateUnique()
+            : TRequestPool::AllocateUniqueUnpooled();
 
         Request_->Context_ = underlyingContext.Get();
         const auto& tracker = Request_->Context_->GetMemoryUsageTracker();
@@ -331,8 +332,18 @@ public:
 protected:
     const THandlerInvocationOptions Options_;
 
-    typename TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>::TObjectPtr Request_;
-    typename TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>::TObjectPtr Response_;
+    typename TRequestPool::TObjectUniquePtr Request_;
+    typename TResponsePool::TObjectUniquePtr Response_;
+
+    static TRequestPool& RequestPool()
+    {
+        return ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>();
+    }
+
+    static TResponsePool& ResponsePool()
+    {
+        return ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>();
+    }
 
     struct TSerializedResponse
     {
@@ -626,7 +637,7 @@ protected:
         //! Also system methods do not require authentication.
         bool System = false;
 
-        //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
+        //! Log level for the request and response log messages.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
         //! Log level for events emitted when method fails, by default |LogLevel| is used.
         std::optional<NLogging::ELogLevel> ErrorLogLevel;
@@ -826,7 +837,7 @@ protected:
 
         std::atomic<ERequestTracingMode> TracingMode = ERequestTracingMode::Enable;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RequestQueuesLock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, RequestQueuesLock);
         std::vector<TRequestQueue*> RequestQueues;
     };
 
@@ -963,13 +974,13 @@ private:
 
     std::atomic<bool> Active_ = false;
 
-    THashMap<std::string, TRuntimeMethodInfoPtr, THash<std::string>, TEqualTo<>> MethodMap_;
+    THashMap<std::string, TRuntimeMethodInfoPtr> MethodMap_;
 
     THashSet<int> SupportedServerFeatureIds_;
 
     struct TRequestBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<TRequestId, TWeakPtr<TServiceContext>> RequestIdToContext;
         THashMap<TRequestId, TPendingPayloadsEntry> RequestIdToPendingPayloads;
     };
@@ -985,7 +996,7 @@ private:
 
     struct TReplyBusBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<NYT::NBus::IBusPtr, TReplyBusData> ReplyBusToData;
     };
 
@@ -994,7 +1005,7 @@ private:
 
     struct TQueuedReplyBucket
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         THashMap<TRequestId, TFuture<void>> QueuedReplies;
     };
 
@@ -1025,7 +1036,7 @@ private:
 
     using TDiscoverRequestSet = TConcurrentHashMap<TCtxDiscoverPtr, int>;
     THashMap<std::string, TDiscoverRequestSet> DiscoverRequestsByPayload_;
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
     const TPerformanceCountersPtr PerformanceCounters_;
     const TMethodPerformanceCountersPtr UnknownMethodPerformanceCounters_;
@@ -1172,7 +1183,7 @@ private:
     const std::string Name_;
     const std::any Tag_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;
     TServiceBase* Service_;
     TServiceBase::TRuntimeMethodInfo* RuntimeInfo_ = nullptr;

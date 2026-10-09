@@ -14,7 +14,6 @@ enum class EUdfValueType {
     Double,
     Boolean,
     String,
-    //! Bridge only: the unversioned_value convention cannot carry these.
     Int32,
     Uint32,
     Float,
@@ -25,33 +24,12 @@ enum class EUdfValueType {
     Decimal,
 };
 
-//! Types the legacy unversioned_value convention can pass in a TUnversionedValue.
-inline bool IsUnversionedValueType(EUdfValueType type) {
-    switch (type) {
-        case EUdfValueType::Null:
-        case EUdfValueType::Int64:
-        case EUdfValueType::Uint64:
-        case EUdfValueType::Double:
-        case EUdfValueType::Boolean:
-        case EUdfValueType::String:
-            return true;
-        default:
-            return false;
-    }
-}
-
 enum class EWasmUdfBinding {
     Plain,
     TypeConfigCallable,
 };
 
-enum class EWasmCallingConvention {
-    UnversionedValue,
-    Bridge,
-};
-
-//! Recursive type descriptor for bridge (and future) calling conventions.
-//! Leaf kinds reuse EUdfValueType; the rest nest children.
+//! Owned recursive descriptor of an exact YQL type.
 struct TWasmTypeNode {
     enum class EKind {
         Leaf,
@@ -72,6 +50,9 @@ struct TWasmTypeNode {
 
     EKind Kind = EKind::Leaf;
     EUdfValueType Leaf = EUdfValueType::Null;
+    ui8 Precision = 0;
+    ui8 Scale = 0;
+    bool NamedVariant = false;
     std::shared_ptr<TWasmTypeNode> Item;      // Optional / List
     std::shared_ptr<TWasmTypeNode> Key;       // Dict
     std::shared_ptr<TWasmTypeNode> Payload;   // Dict
@@ -79,7 +60,7 @@ struct TWasmTypeNode {
     TVector<TMember> Members;
     //! Resource tag.
     TString Tag;
-    //! Callable return type (`returns` in manifest).
+    //! Callable return type.
     std::shared_ptr<TWasmTypeNode> CallableReturns;
 };
 
@@ -94,13 +75,10 @@ inline TWasmTypeNodePtr MakeLeafTypeNode(EUdfValueType leaf) {
 
 struct TWasmUdfDescriptor {
     TString Name;
-    TVector<EUdfValueType> Args;
-    EUdfValueType Result = EUdfValueType::Null;
-    //! Structured types for bridge CC (parallel to Args/Result when set).
     TVector<TWasmTypeNodePtr> ArgTypes;
     TWasmTypeNodePtr ResultType;
     EWasmUdfBinding Binding = EWasmUdfBinding::Plain;
-    EWasmCallingConvention CallingConvention = EWasmCallingConvention::UnversionedValue;
+    bool IsObjectConstructor = false;
     // For TypeConfigCallable: create/call/destroy exports (destroy optional).
     TString CreateExport;
     TString CallExport;
@@ -124,8 +102,6 @@ struct TWasmObjectMethodDescriptor {
     TString Name;
     TString Export;
     EWasmUdfBinding Binding = EWasmUdfBinding::TypeConfigCallable;
-    TVector<EUdfValueType> Args;
-    EUdfValueType Result = EUdfValueType::Null;
     TVector<TWasmTypeNodePtr> ArgTypes;
     TWasmTypeNodePtr ResultType;
 };
@@ -140,21 +116,9 @@ struct TWasmObjectDescriptor {
 struct TWasmManifest {
     TString ModuleName;
     TString ModuleExtension;
-    TString CallingConvention;
-    EWasmCallingConvention CallingConventionEnum = EWasmCallingConvention::UnversionedValue;
     TVector<TString> RequiredLibraries;
     TVector<TWasmUdfDescriptor> Functions;
     TVector<TWasmObjectDescriptor> Objects;
 };
-
-inline TStringBuf CallingConventionAsStr(EWasmCallingConvention cc) {
-    switch (cc) {
-        case EWasmCallingConvention::UnversionedValue:
-            return "unversioned_value";
-        case EWasmCallingConvention::Bridge:
-            return "bridge";
-    }
-    return "unknown";
-}
 
 } // namespace NKikimr::NUdfStore::NWasm

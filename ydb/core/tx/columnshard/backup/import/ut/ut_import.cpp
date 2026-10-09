@@ -1,3 +1,4 @@
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/tx/columnshard/backup/import/session.h>
 #include <ydb/core/tx/columnshard/backup/import/task.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -7,10 +8,12 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
@@ -94,6 +97,8 @@ Y_UNIT_TEST_SUITE(ImportSessionStateMachine) {
 }
 
 Y_UNIT_TEST_SUITE(Restore) {
+    using EDataFormat = NDataShard::NBackupRestoreTraits::EDataFormat;
+
     [[nodiscard]] TPlanStep ProposeTx(
         TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(txKind, sender, txId, txBody);
@@ -136,14 +141,18 @@ Y_UNIT_TEST_SUITE(Restore) {
         AFL_VERIFY(checker());
     }
 
-    Y_UNIT_TEST(ProposeRestore) {
+    void ProposeRestore(EDataFormat dataFormat) {
+        UNIT_ASSERT(dataFormat == EDataFormat::YdbDump || dataFormat == EDataFormat::Parquet);
+
+        const TString bucketName = dataFormat == EDataFormat::Parquet ? "test-parquet" : "test-csv";
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test", s3Client);
+        NTestUtils::CreateBucket(bucketName, s3Client);
 
         // backup
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
 
             const ui64 tableId = 1;
             const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -179,8 +188,14 @@ Y_UNIT_TEST_SUITE(Restore) {
             backupTask.SetTableId(tableId);
             backupTask.SetSnapshotStep(backupSnapshot.GetPlanStep());
             backupTask.SetSnapshotTxId(backupSnapshot.GetTxId());
-            backupTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
-            backupTask.MutableS3Settings()->SetBucket("test");
+            auto& s3Settings = *backupTask.MutableS3Settings();
+            s3Settings.SetEndpoint(GetEnv("S3_ENDPOINT"));
+            s3Settings.SetBucket(bucketName);
+            if (dataFormat == EDataFormat::Parquet) {
+                s3Settings.MutableExportDataSettings()->MutableParquet();
+            } else {
+                s3Settings.MutableExportDataSettings()->MutableYdbDump();
+            }
 
             auto& table = *backupTask.MutableTable();
             auto& tableDescription = *table.MutableColumnTableDescription();
@@ -213,7 +228,7 @@ Y_UNIT_TEST_SUITE(Restore) {
                 UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
             }
             TestWaitCondition(runtime, "export", [&]() {
-                return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+                return NTestUtils::GetObjectKeys(bucketName, s3Client).size() == 3;
             });
             VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
         }
@@ -222,6 +237,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         {
             TTestBasicRuntime runtime;
             TTester::Setup(runtime);
+            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
 
             const ui64 tableId = 1;
             const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
@@ -237,7 +253,7 @@ Y_UNIT_TEST_SUITE(Restore) {
             auto& restoreTask = *txBody.MutableRestoreTask();
             restoreTask.SetTableId(1);
             restoreTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
-            restoreTask.MutableS3Settings()->SetBucket("test");
+            restoreTask.MutableS3Settings()->SetBucket(bucketName);
 
             auto& schemaRestore = *restoreTask.MutableTableDescription();
 
@@ -301,6 +317,10 @@ Y_UNIT_TEST_SUITE(Restore) {
                     "\"23\",\n    \"24\"\n  ]\n");
             }
         }
+    }
+
+    Y_UNIT_TEST(ProposeRestore, EBackupTestDataFormat) {
+        ProposeRestore(ToDataFormat(Arg<0>()));
     }
 }
 

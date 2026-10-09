@@ -18,14 +18,17 @@ namespace NKikimr::NHullComp {
         const TSelectorParams& Params;
         TLevelIndexSnapshot& LevelSnap;
         TTask* const Task;
+        TCompactionYield* const Yield;
 
     public:
         TStrategyExplicit(TIntrusivePtr<THullCtx> hullCtx, const TSelectorParams& params, TLevelIndexSnapshot& levelSnap,
-                TTask *task)
+                TTask *task,
+                TCompactionYield* yield = nullptr)
             : HullCtx(std::move(hullCtx))
             , Params(params)
             , LevelSnap(levelSnap)
             , Task(task)
+            , Yield(yield)
         {}
 
         EAction Select() {
@@ -53,6 +56,7 @@ namespace NKikimr::NHullComp {
             auto& slice = LevelSnap.SliceSnap;
             typename TLevelSliceSnapshot<TKey, TMemRec>::TSstIterator iter(&slice);
             for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
+                CheckCompactionYield(Yield);
                 const ui32 level = iter.Get().Level;
 
                 if (levelOfInterest && *levelOfInterest != level) {
@@ -68,6 +72,7 @@ namespace NKikimr::NHullComp {
                     pending.push_back(iter.Get());
                     ui64 batchBytes = 0;
                     for (const auto& item : pending) {
+                        CheckCompactionYield(Yield);
                         batchBytes += TUtils::SstKeepBytes(*item.SstPtr);
                     }
 
@@ -81,6 +86,7 @@ namespace NKikimr::NHullComp {
 
                     keepBytes += batchBytes;
                     for (auto& item : pending) {
+                        CheckCompactionYield(Yield);
                         selected.push_back(item);
                     }
                     pending.clear();
@@ -109,6 +115,7 @@ namespace NKikimr::NHullComp {
             }
 
             Task->SetupAction(ActCompactSsts);
+            Task->SelectStrategy = ESelectStrategy::Explicit;
             auto& compact = Task->CompactSsts;
             compact.TargetLevel = *levelOfInterest;
             if (!*levelOfInterest) {
@@ -123,6 +130,7 @@ namespace NKikimr::NHullComp {
             }
 
             for (const auto& item : selected) {
+                CheckCompactionYield(Yield);
                 compact.TablesToDelete.PushBack(item); // removing this one table
 
                 if (auto& chains = compact.CompactionChains; chains.empty() || !*levelOfInterest) {
@@ -154,7 +162,8 @@ namespace NKikimr::NHullComp {
             if (Params.FreeChunksBudget == Max<ui32>()) {
                 return true;
             }
-            return TUtils::EstimateOutputChunks(keepBytes, HullCtx->ChunkSize) <= Params.FreeChunksBudget;
+            return TUtils::EstimateJobOutputChunks(keepBytes, HullCtx->ChunkSize,
+                Params.AppendBlockSize, Params.StripeSstBytes) <= Params.FreeChunksBudget;
         }
     };
 

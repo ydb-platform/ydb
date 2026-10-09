@@ -151,9 +151,9 @@ public:
 
     void Set(size_t bitIndex, bool value = true)
     {
-        if (Chunks_.size() * NBitmapDetail::Bits < bitIndex + 1) {
-            Chunks_.resize(NBitmapDetail::GetByteSize(bitIndex + 1), 0);
+        if (BitSize_ < bitIndex + 1) {
             BitSize_ = bitIndex + 1;
+            Chunks_.resize(GetByteSize(), 0);
         }
 
         TMutableBitmap(Chunks_.data()).Set(bitIndex, value);
@@ -184,7 +184,7 @@ public:
 
     size_t GetByteSize() const
     {
-        return AlignUp(Chunks_.size() * sizeof(TByte), NBitmapDetail::SerializationAlignment);
+        return AlignUp(NBitmapDetail::GetByteSize(BitSize_), NBitmapDetail::SerializationAlignment);
     }
 
     size_t GetMemoryUsage() const

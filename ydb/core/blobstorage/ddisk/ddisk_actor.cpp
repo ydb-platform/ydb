@@ -281,6 +281,8 @@ namespace {
                 COUNTER(DirectIO, RunningCount, false)
             },
             .PersistentBuffer = {
+                COUNTER(PersistentBuffer, RegisteredTablets, false)
+                COUNTER(PersistentBuffer, RegisteredTabletsLimit, false)
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)
                 COUNTER(PersistentBuffer, PendingEventsQueueSize, false)
@@ -296,6 +298,12 @@ namespace {
                 COUNTER(Checksums, IntegrityLostWriteDetected, true)
             },
         };
+
+        if (IsPersistentBufferActor) {
+            *Counters.PersistentBuffer.RegisteredTablets = 0;
+            *Counters.PersistentBuffer.RegisteredTabletsLimit =
+                TPersistentBufferBarriersManager::MaxRegistrations(PersistentBufferFormat.MaxBarriersLimit);
+        }
 
 #undef COUNTER_VALUE
 #undef HISTOGRAM_VALUE
@@ -344,11 +352,14 @@ namespace {
             InitUring();
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = Register(new TWritePersistentBuffersRequestActor(SelfId()));
+            InitMemoryMetrics();
             CollectPbStatsSnapshot();
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
+            TabletStatsActor = Register(CreateTabletStatsActor(SelfId()));
             RegisterMonPage();
+            InitMemoryMetrics();
             if (!Config.EnableChecksums) {
                 YDB_LOG_NOTICE("TDDiskActor booting with integrity checksums disabled",
                     {"marker", "BSDD55"},
@@ -455,6 +466,9 @@ namespace {
 
         for (auto& [key, allocation] : DataChunkAllocationsInFlight) {
             Y_UNUSED(key);
+            if (!allocation.LogIssued) {
+                PendingChunkRelease.insert(allocation.ChunkIdx);
+            }
             for (auto& parked : allocation.ParkedWriteResults) {
                 parked.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
                 parked.ErrorMessage = GetBrokenReason();
@@ -509,6 +523,16 @@ namespace {
                 && ev->Cookie == PBShutdownCookie && ev->Sender == PersistentBufferActorId) {
             PersistentBufferGone = true;
             TryCompleteStop();
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkReserve::EventType && ReserveInFlight) {
+            ReserveInFlight = false;
+            BeginStopping("PDisk reserve request was not delivered");
+            TryCompleteStop();
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkForget::EventType && ev->Cookie == StartupForgetCookie) {
+            BeginStopping("PDisk startup forget request was not delivered");
             return;
         }
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
@@ -577,6 +601,7 @@ namespace {
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
             cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
@@ -598,6 +623,8 @@ namespace {
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
+            hFunc(TEvCollectTabletStats, Handle)
+            hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
@@ -749,7 +776,8 @@ namespace {
 
     void TDDiskActor::RejectPendingDDiskQueries(
             NKikimrBlobStorage::NDDisk::TReplyStatus::E status, const TString& reason) {
-        for (auto& [tabletId, chunks] : ChunkRefs) {
+        for (auto& [tabletId, tablet] : Tablets) {
+            auto& chunks = tablet.ChunkRefs;
             Y_UNUSED(tabletId);
             for (auto& [vChunkIndex, chunk] : chunks) {
                 Y_UNUSED(vChunkIndex);
@@ -813,6 +841,7 @@ namespace {
                 reply->Rewrite(TEvInterconnect::EvForward, sync.InterconnectionSessionId);
             }
             Counters.Interface.Sync.Reply(false);
+            *Counters.Interface.Sync.BytesInFlight -= sync.RequestedBytes;
             sync.Span.End();
             TActivationContext::Send(reply.release());
         }
@@ -867,6 +896,9 @@ namespace {
             cFunc(TEvPrivate::EvFinishStopping, FinishStopping)
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
+            hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
+            hFunc(TEvCollectTabletStats, Handle)
+            hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
             default:
@@ -891,6 +923,9 @@ namespace {
             return;
         }
         Stopping = true;
+        MemoryMetric.Close();
+        SpaceMetric.Close();
+        OperationMetric.Close();
         PersistentBufferRegistrationTokens.clear();
         Become(&TThis::StateFuncStopping);
         YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});
@@ -917,7 +952,7 @@ namespace {
             // Includes fallback: cancellation results must precede destruction.
             Send(SelfId(), new TEvPrivate::TEvFinishStopping);
         }
-        if (previous || !PersistentBufferGone) {
+        if (previous || !PersistentBufferGone || ReserveInFlight) {
             Schedule(StopIoTimeout, new TEvPrivate::TEvStopIoTimeout);
         }
     }
@@ -930,7 +965,7 @@ namespace {
     }
 
     void TDDiskActor::TryCompleteStop() {
-        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone) {
+        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone || ReserveInFlight) {
             return;
         }
 #if defined(__linux__)
@@ -938,11 +973,16 @@ namespace {
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
         if (IsPersistentBufferActor) {
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+                new NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateDelete(BaseInfo.PDiskId, BaseInfo.VDiskSlotId, BaseInfo.InitOwnerRound));
             if (ParentDDiskId) {
                 Send(ParentDDiskId, new TEvents::TEvGone());
             }
         } else {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
+        if (TabletStatsActor) {
+            Send(TabletStatsActor, new TEvents::TEvPoison());
         }
         TActorBootstrapped::PassAway();
     }
@@ -973,6 +1013,9 @@ namespace {
             IoStalledCounter->Inc();
             YDB_LOG_ERROR("TDDiskActor I/O stalled during shutdown",
                 {"DDiskId", DDiskId}, {"persistentBuffer", IsPersistentBufferActor});
+        }
+        if (ReserveInFlight) {
+            YDB_LOG_ERROR("DDisk waiting for outstanding reservation", {"DDiskId", DDiskId});
         }
         if (!PersistentBufferGone) {
             YDB_LOG_ERROR("DDisk waiting for PersistentBuffer shutdown", {"DDiskId", DDiskId},
@@ -1012,6 +1055,7 @@ namespace {
             FlushParkedAllocationReplies(allocation);
         }
         ClearIoStalled();
+        ReleaseUncommittedChunks();
         // A queued retry can have posted a cancellation result ahead of this
         // barrier. Do not let child Gone bypass that final result turn.
         Send(SelfId(), new TEvPrivate::TEvCompleteStop);

@@ -1,17 +1,16 @@
-UNITTEST_FOR(ydb/library/yql/providers/pq/async_io)
-
-SIZE(MEDIUM)
+UNITTEST()
 
 SRCS(
-    dq_pq_info_aggregator_ut.cpp
+    dq_pq_cpu_quota_ut.cpp
+    dq_pq_read_state_ut.cpp
 )
 
 PEERDIR(
-    library/cpp/protobuf/interop
-    ydb/core/testlib/basics
-    ydb/library/testlib/common
+    ydb/library/yql/providers/common/message_stream/async_io
+    ydb/library/yql/providers/common/ut_helpers
     ydb/library/yql/providers/pq/async_io
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/stub
 )
 
 YQL_LAST_ABI_VERSION()

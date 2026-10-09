@@ -36,7 +36,7 @@ public:
         return true;
     }
 
-    NThreading::TThreadId GetThreadId() const override
+    TThreadId GetThreadId() const override
     {
         return {};
     }

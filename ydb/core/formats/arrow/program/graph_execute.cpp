@@ -5,6 +5,8 @@
 
 #include <yql/essentials/minikql/mkql_terminator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SSA_GRAPH_EXECUTION
+
 namespace NKikimr::NArrow::NSSA::NGraph::NExecution {
 
 class TResourceUsageInfo {
@@ -101,7 +103,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
         for (auto&& i : Nodes) {
             i.second->SortInputs();
             if (!i.second->GetOutputEdges().size()) {
-                if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
+                if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Filter ||
+                    i.second->GetProcessor()->GetProcessorType() == EProcessorType::DistinctMarker) {
                     AFL_VERIFY(!IsFilterRoot(i.second->GetIdentifier()));
                     FilterRoot.emplace_back(i.second);
                 } else if (i.second->GetProcessor()->GetProcessorType() == EProcessorType::Projection) {
@@ -159,12 +162,12 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-    AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
-//    Cerr << DebugDOT() << Endl;
+    YDB_LOG_TRACE("",
+        {"graphConstructed", DebugDOT()});
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
-    const std::shared_ptr<IDataSource>& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
+    IDataSource& source, std::unique_ptr<TAccessorsCollection>&& resources) const {
     TProcessorContext context(source, std::move(resources), std::nullopt, false);
     NMiniKQL::TThrowingBindTerminator bind;
     std::shared_ptr<TExecutionVisitor> visitor = std::make_shared<TExecutionVisitor>(std::move(context));
@@ -174,7 +177,7 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
             if (conclusion.IsFail()) {
                 return conclusion;
             } else {
-                AFL_VERIFY(*conclusion != IResourceProcessor::EExecutionResult::InBackground);
+                AFL_VERIFY(!conclusion->IsPending());
             }
         }
         if (visitor->MutableContext().GetResources().HasDataAndResultIsEmpty()) {

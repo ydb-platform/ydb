@@ -1,6 +1,7 @@
 #include "yql_arrow_column_converters.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
 
@@ -237,7 +238,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(const std::shared_ptr<arro
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
+        if (baseValue < 0 || baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
             throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
         }
 
@@ -267,7 +268,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
+        if (baseValue < 0 || baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
             throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
         }
 
@@ -279,7 +280,13 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
         TString result = format ? TInstant::FromValue(v).FormatGmTime(format.c_str()) : TInstant::FromValue(v).ToString();
         builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.size())));
     }
-    return builder.Build(true).make_array();
+    auto datum = builder.Build(true);
+    if (datum.is_array()) {
+        return datum.make_array();
+    }
+    auto result = arrow::Concatenate(datum.chunks(), arrow::system_memory_pool());
+    THROW_ARROW_NOT_OK(result.status());
+    return std::move(result).ValueOrDie();
 }
 
 template <bool isOptional>

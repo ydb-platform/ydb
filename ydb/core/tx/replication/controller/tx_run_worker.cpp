@@ -138,6 +138,7 @@ public:
 
         target->RemoveWorker(Id.WorkerId());
         target->Progress(ctx);
+        Self->RunTxIndexBuild(ctx);
     }
 };
 

@@ -34,6 +34,8 @@ struct TKikimrRunnerOptions {
     bool InternalInitFederatedQuerySetupFactory = false;
     bool NeedsStatsCollectors = false;
     TVector<TString> StoragePoolTypes;
+    bool UseRealThreads = true;
+    TString AuthToken;
 };
 
 std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

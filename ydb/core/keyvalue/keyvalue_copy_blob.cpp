@@ -197,6 +197,11 @@ public:
 
         CheckYellow(ev->Get()->StatusFlags, newGroupId);
 
+        if (!YellowStopChannels.empty()) {
+            ReplyYellowStop();
+            return;
+        }
+
         ReplySuccess();
     }
 
@@ -214,6 +219,13 @@ public:
         PassAway();
     }
 
+    void ReplyYellowStop() {
+        Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
+            TEvKeyValue::TEvBlobCopied::EResult::YELLOW_STOP, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+        PassAway();
+    }
+
     void HandleErrorAndDie() {
         YDB_LOG_ERROR_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: error while copying blob, send PoisonPill to the tablet",
             {"marker", "KVCB09"},
@@ -227,6 +239,7 @@ public:
     STFUNC(StateGet) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }
@@ -235,6 +248,7 @@ public:
     STFUNC(StatePut) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }

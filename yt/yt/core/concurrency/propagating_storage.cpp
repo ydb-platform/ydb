@@ -4,7 +4,7 @@
 
 #include <library/cpp/yt/containers/static_ring_queue.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
@@ -31,7 +31,7 @@ std::optional<std::any> TPropagatingStorageImpl::RemoveRaw(const std::type_info&
     if (iter == Data_.end()) {
         return std::nullopt;
     }
-    auto result = std::make_optional<std::any>(iter->second);
+    auto result = std::make_optional<std::any>(std::move(iter->second));
     Data_.erase(iter);
     return result;
 }

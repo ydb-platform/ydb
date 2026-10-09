@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             auto& hive = test.Hive;
             auto& node = hive.Node(1);
             auto& tablet = test.CreateStoppedTablet(1);
-            node.SetFreeze(true);
+            node.SetFreeze(true, EHiveEventReason::MonitoringRequest);
             if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
                 tablet.BecomeStarting(node.Id);
             } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             UNIT_ASSERT(!node.FrozenTablets.empty());
             tablet.BecomeStopped();
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
-            node.SetFreeze(false);
+            node.SetFreeze(false, EHiveEventReason::MonitoringRequest);
             UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, 0);
         }
     }
@@ -476,7 +476,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
                 UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsScheduled(), id == nodeId ? 1 : 0);
                 UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), id == nodeId ? 100 : 0);
                 // Boot failure handling must recognize the new Local and reject the old one.
-                UNIT_ASSERT_VALUES_EQUAL(tablet.IsAliveOnLocal(node.Local), id == nodeId);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.IsPresentOnLocal(node.Local), id == nodeId);
             }
         };
 

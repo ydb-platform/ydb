@@ -50,7 +50,6 @@ TVChunkConfig MakeCompactedConfig(
     THostRoles pbufferHosts;
     THostRoles ddiskHosts;
     THostMask enabledHosts;
-    TVector<std::optional<ui64>> watermarks;
     THostIndex liveSlot = 0;
     for (THostIndex slot = 0; slot < config.GetHostCount(); ++slot) {
         if (deadSlots.Get(slot)) {
@@ -61,15 +60,13 @@ TVChunkConfig MakeCompactedConfig(
         }
         pbufferHosts.AppendRole(config.GetPBufferRole(slot));
         ddiskHosts.AppendRole(config.GetDDiskRole(slot));
-        watermarks.push_back(config.GetWatermark(slot));
         ++liveSlot;
     }
     return TVChunkConfig::Make(
         config.GetVChunkIndex(),
         std::move(pbufferHosts),
         std::move(ddiskHosts),
-        enabledHosts,
-        std::move(watermarks));
+        enabledHosts);
 }
 
 // The dirty map constructor matches persisted entries to hosts by position,
@@ -84,6 +81,8 @@ TDirtyMapStateProto MakeCompactedDirtyMapState(
             *result.AddDDiskStates() = state.GetDDiskStates(slot);
         }
     }
+    // The restore barrier is not per slot: it survives the compaction.
+    *result.MutableRestoreBarrier() = state.GetRestoreBarrier();
     return result;
 }
 
@@ -190,6 +189,7 @@ void TPartitionActor::CompleteLoadState(
 {
     if (args.VolumeConfig.Defined()) {
         VolumeConfig = *args.VolumeConfig;
+        ReportDiskId(ctx);
 
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;
@@ -257,6 +257,11 @@ void TPartitionActor::CompleteLoadState(
             }
         }
     }
+
+    // Pipes stay closed until VolumeConfig and an in-flight host operation
+    // are loaded, so an earlier UpdateVolumeConfig cannot look like the
+    // initial allocation.
+    SignalTabletActive(ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

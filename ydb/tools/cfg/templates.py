@@ -73,6 +73,7 @@ kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_config}/config.yaml"
 kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_mon_threads:+ --mon-threads ${kikimr_mon_threads}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
+kikimr_arg="${kikimr_arg}${kikimr_grpcs_port:+ --grpcs-port ${kikimr_grpcs_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
 
 if [ ! -z "${kikimr_mon_address}" ]; then
@@ -136,7 +137,13 @@ kikimr_key_file="${kikimr_config}/key.txt"
 #Custom config
 [ -s /etc/default/kikimr.custom ] && . /etc/default/kikimr.custom
 
-kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_config}/config.yaml --tenant ${kikimr_tenant}"
+if [ -n "${tenant_main_dir}" ] && [ -f "${tenant_main_dir}/config.yaml" ]; then
+  kikimr_yaml_config="${tenant_main_dir}/config.yaml"
+else
+  kikimr_yaml_config="${kikimr_config}/config.yaml"
+fi
+
+kikimr_arg="${kikimr_arg} server --yaml-config ${kikimr_yaml_config} --tenant ${kikimr_tenant}"
 kikimr_arg="${kikimr_arg}${kikimr_mon_port:+ --mon-port ${kikimr_mon_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_grpc_port:+ --grpc-port ${kikimr_grpc_port}}"
 kikimr_arg="${kikimr_arg}${kikimr_ic_port:+ --ic-port ${kikimr_ic_port}}"
@@ -309,6 +316,7 @@ def local_vars(
     new_style_kikimr_cfg=False,
     mbus_enabled=False,
     use_auth_token_file=False,
+    grpcs_port=None,
 ):
     cur_vars = []
     if enable_cores:
@@ -326,6 +334,9 @@ def local_vars(
 
     if node_broker_port:
         cur_vars.append(('kikimr_node_broker_port', node_broker_port))
+
+    if grpcs_port:
+        cur_vars.append(('kikimr_grpcs_port', grpcs_port))
 
     cur_vars.append(('kikimr_mon_address', mon_address))
 
@@ -652,6 +663,7 @@ def kikimr_cfg_for_dynamic_node(
     yql_txt_enabled=False,
     fq_txt_enabled=False,
     use_auth_token_file=False,
+    grpc_port=2135,
 ):
     return "\n".join(
         [
@@ -659,6 +671,7 @@ def kikimr_cfg_for_dynamic_node(
                 tenant,
                 node_broker_port=node_broker_port,
                 ic_port=ic_port,
+                grpc_port=grpc_port,
                 mon_port=mon_port,
                 kikimr_home=kikimr_home,
                 kikimr_binaries_base_path=kikimr_binaries_base_path,
@@ -700,7 +713,15 @@ def kikimr_cfg_for_dynamic_node_new_style(
     mon_address="",
     cert_params=None,
     use_auth_token_file=False,
+    dynamic_node=None,
+    grpcs_port=None,
 ):
+    dynamic_node = dynamic_node or {}
+    ic_port = dynamic_node.get("ic_port", ic_port)
+    grpc_port = dynamic_node.get("grpc_port", grpc_port)
+    mon_port = dynamic_node.get("mon_port", mon_port)
+    if grpcs_port is None:
+        grpcs_port = dynamic_node.get("grpcs_port")
     return "\n".join(
         [
             local_vars(
@@ -708,6 +729,7 @@ def kikimr_cfg_for_dynamic_node_new_style(
                 node_broker_port=node_broker_port,
                 ic_port=ic_port,
                 grpc_port=grpc_port,
+                grpcs_port=grpcs_port,
                 mon_port=mon_port,
                 kikimr_home=kikimr_home,
                 kikimr_binaries_base_path=kikimr_binaries_base_path,

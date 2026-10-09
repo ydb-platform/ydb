@@ -685,7 +685,8 @@ public:
             ScanYtTableContentTables(dqWrite.Cast().Input().Ptr(), processTable);
         } else if (opBase.Maybe<TYtSort>() || opBase.Maybe<TYtMerge>()
                 || opBase.Maybe<TYtCopy>() || opBase.Maybe<TYtEquiJoin>()
-                || opBase.Maybe<TYtTouch>() || opBase.Maybe<TYtDropTable>()
+                || opBase.Maybe<TYtTouch>() || opBase.Maybe<TYtCreateSymlink>()
+                || opBase.Maybe<TYtDropTable>() || opBase.Maybe<TYtDropSymlink>()
                 || opBase.Maybe<TYtDropView>() || opBase.Maybe<TYtCreateView>()
                 || opBase.Maybe<TYtStatOut>()) {
             // Lambdaless ops: nothing to scan.
@@ -1147,6 +1148,10 @@ public:
         return Slave_->Publish(node, ctx, std::move(options));
     }
 
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& options) final {
+        return Slave_->UnlockTables(std::move(options));
+    }
+
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override {
         TMaybe<TFuture<TDropTablesResponse>> fmrFuture;
         TMaybe<TFuture<TDropTrackablesResult>> ytFuture;
@@ -1157,7 +1162,7 @@ public:
             std::vector<TString> fmrTableIds;
             TVector<IYtGateway::TDropTrackablesOptions::TClusterAndPath> ytPaths;
 
-            for (const auto& path : options.Pathes()) {
+            for (const auto& path : options.Paths()) {
                 TFmrTableId tableId(path.Cluster, path.Path);
 
                 auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
@@ -1182,7 +1187,7 @@ public:
             }
 
             if (!ytPaths.empty()) {
-                options.Pathes() = std::move(ytPaths);
+                options.Paths() = std::move(ytPaths);
                 ytFuture = Slave_->DropTrackables(std::move(options));
             }
 
@@ -1521,8 +1526,7 @@ public:
                             }
 
                             // Decode YT table-format rows to YQL result format via codec
-                            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                                functionRegistry->SupportsSizedAllocators());
+                            TScopedAlloc alloc(__LOCATION__);
                             TMemoryUsageInfo memInfo("FmrPull");
                             TTypeEnvironment env(alloc);
                             THolderFactory holderFactory(alloc.Ref(), memInfo, functionRegistry);
@@ -2943,13 +2947,12 @@ private:
                        kv.second.Usage.Test(EUserDataBlockUsage::Content);
             });
             if (hasUserFiles) {
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
                 size_t nodeCount = 0;
                 builder.UpdateLambdaCode(lambdaCode, nodeCount,
-                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks));
+                    TSimpleFileTransformProvider(execCtx->FunctionRegistry_, userDataBlocks, execCtx->FileStorage_));
                 fmrJob->SetLambdaCode(lambdaCode);
             }
 
@@ -3063,8 +3066,7 @@ private:
                     };
                 };
 
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
                     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
@@ -3090,7 +3092,7 @@ private:
         auto downloader = MakeYtNativeFileDownloader(execCtx->Gateway, sessionId, execCtx->Cluster_, execCtx->Options_.Config(), client, tmpFiles);
         TTransformerFiles transformerFiles;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TMapJobBuilder jobBuilder;
             // TODO - this function is the same for map and reduce, make function with template builder argument instead of method.
@@ -3280,8 +3282,7 @@ private:
 
         TString fillLambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
             fillLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, fill.Content(), ctx, false);
@@ -3640,8 +3641,7 @@ private:
             }
 
             {
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
                 mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx, false);
@@ -3710,8 +3710,7 @@ private:
 
         TString reduceLambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
             reduceLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, mapReduce.Reducer(), ctx);

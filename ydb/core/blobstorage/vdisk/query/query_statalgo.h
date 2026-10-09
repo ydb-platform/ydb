@@ -16,17 +16,20 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
     class TDbStatRecordMerger {
+        using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
+
     public:
         explicit TDbStatRecordMerger(TAggr* aggr)
             : Aggr(aggr)
         {}
 
-        void AddFromFresh(const TMemRec& memRec, const TRope*, const TKey& key, ui64) {
-            Aggr->Update(key, memRec);
+        void AddFromFresh(const TMemRec& memRec, const TRope* data, const TKey& key, ui64 lsn) {
+            Aggr->UpdateFreshRecord(memRec, data, key, lsn);
         }
 
-        void AddFromSegment(const TMemRec& memRec, const TDiskPart*, const TKey& key, ui64, const void*) {
-            Aggr->Update(key, memRec);
+        void AddFromSegment(const TMemRec& memRec, const TDiskPart* outbound, const TKey& key,
+                ui64 circaLsn, const TLevelSegment* sst) {
+            Aggr->UpdateLevelRecord(memRec, outbound, key, circaLsn, sst);
         }
 
         static constexpr bool HaveToMergeData() {
@@ -126,7 +129,9 @@ namespace NKikimr {
         TDbStatYieldChecker yieldChecker(std::move(yieldPolicy), std::move(monotonicTimeProvider));
         while (heap.Valid()) {
             const TKey key = heap.GetCurKey();
+            aggr->BeginKey(key);
             heap.PutToMergerAndAdvance(&merger);
+            aggr->FinishKey(key);
 
             if (heap.Valid() && shouldStop()) {
                 return TYieldedState{key};

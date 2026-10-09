@@ -159,7 +159,7 @@ private:
             request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = std::move(path);
+            entry.Path = ::NKikimr::SplitPath(Request->NormalizePath(table));
             if (entry.Path.empty()) {
                 return ReplyWithError(Ydb::StatusIds::NOT_FOUND, "Invalid table path specified", ctx);
             }
@@ -467,10 +467,18 @@ private:
         ReplyWithError(status, issues, ctx);
     }
 
+    void Handle(NKqp::TEvKqpCompute::TEvScanWarning::TPtr& ev, const TActorContext& ctx) {
+        YDB_LOG_WARN_CTX(ctx, "ReadColumns got system view scan warning",
+            {"actorId", SelfId()},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
+        Request->RaiseIssues(ev->Get()->Issues);
+    }
+
     STFUNC(StateSysViewScan) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqpCompute::TEvScanData, Handle);
             HFunc(NKqp::TEvKqpCompute::TEvScanError, Handle);
+            HFunc(NKqp::TEvKqpCompute::TEvScanWarning, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
 
             default:

@@ -26,7 +26,7 @@
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NYTree {
 
@@ -159,7 +159,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto yson = BuildStringFromProducer();
         response->set_value(ToProto(yson));
         context->Reply();
@@ -287,7 +287,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto yson = BuildStringFromProducer(options);
         response->set_value(ToProto(yson));
         context->Reply();
@@ -372,7 +372,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         auto yson = BuildStringFromProducer();
         response->set_value(ToProto(yson));
         context->Reply();
@@ -387,7 +387,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         TStringStream stream;
         {
@@ -425,7 +425,7 @@ private:
             return;
         }
 
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto limit = request->has_limit()
             ? std::optional(request->limit())
@@ -459,7 +459,7 @@ private:
 
     void ExistsRecursive(const TYPath& path, TReqExists* /*request*/, TRspExists* /*response*/, const TCtxExistsPtr& context) override
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
 
         auto consumer = CreateYPathDesignatedConsumer(path, EMissingPathMode::ThrowError, GetNullYsonConsumer());
         try {
@@ -527,7 +527,7 @@ private:
     const IInvokerPtr WorkerInvoker_;
     const TDuration UpdatePeriod_;
 
-    NThreading::TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
+    TAtomicObject<TYsonString> CachedString_ = {BuildYsonStringFluently().Entity()};
 
     void Produce(IYsonConsumer* consumer)
     {
@@ -686,7 +686,7 @@ public:
 private:
     const TErrorOr<INodePtr> TreeOrError_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock_);
     THashMap<TCacheKey, TSharedRefArray> KeyToResponseMessage_;
     TCacheProfilingCountersPtr ProfilingCounters_;
 };

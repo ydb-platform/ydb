@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ADDINCL(
     ydb/public/sdk/cpp
@@ -206,6 +206,7 @@ PEERDIR(
     ydb/core/grpc_services/counters
     ydb/core/grpc_services/local_rpc
     ydb/core/grpc_services/cancelation
+    ydb/core/grpc_streaming
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
@@ -265,8 +266,6 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         ydb/core/nbs/cloud/storage/core/libs/common
     )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

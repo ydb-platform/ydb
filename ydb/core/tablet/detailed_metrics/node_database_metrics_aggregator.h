@@ -4,6 +4,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -52,33 +53,28 @@ struct TDetailedMetricsTableInfo {
 };
 
 /**
- * The per-node, per-database, per-role builder of the detailed metrics counter tree.
+ * The per-node, per-database, per-role aggregator of the detailed metrics: Pack() reports
+ * the public metric values of every TABLE bucket (the leaders of a table level table collapsed)
+ * and every PARTITION leaf (one tablet of either role).
  *
- * The instance fills the counter group it is handed, which the caller has already
- * scoped to the role of its Tablet Counters Aggregator actor:
+ * The TABLE buckets also fill the target counter group with a debug view of their low level
+ * counters, refreshed by RecalculateAllCounters():
  *
  *     ydb_detailed_raw                        (private, created by the caller)
  *       |
  *       +-- the target group of BOTH instances
  *           database=<database path>
  *             table=<table path relative to the database>
- *               Table level:     the collapsed counters of the table (leaders only)
- *               Partition level: detailed_metrics=per_partition
- *                                  tablet_id=<id>
- *                                    follower_id=<n>
+ *               type=<tablet type>/category=executor|app
  *
- * Every group, which holds counters above, holds them as a
- * type=<tablet type>/category=executor|app subtree of low level counter aggregates,
- * the very same layout as the node wide "tablets" group.
- *
+ * The groups live as long as the TABLE buckets under them, so a partition level table has none.
  */
-class TNodeDatabaseMetricsAggregator : public TThrRefBase {
+class TNodeDatabaseMetricsAggregator : public NSysView::IDbDetailedCounters {
 public:
     /**
      * @param[in] now Used to differentiate the cumulative counters into per second rates
      *
-     * @warning Every named counter of the two counter sets is published as its own
-     *          series in every bucket, so the caller decides the cardinality
+     * @note The public metrics of the tablet type define what every bucket reports
      */
     virtual void AddCounters(
         const TString& tablePath,
@@ -112,17 +108,11 @@ public:
     virtual void ForgetTablet(ui64 tabletId, ui32 followerId) = 0;
 
     virtual void RecalculateAllCounters() = 0;
-
-    // Append a snapshot: Simple/MAX absolute, Cumulative/HIST deltas since the
-    // previous Pack. Call once per new request; transport retries reuse that request.
-    // Retired buckets emit their final delta once, then disappear from later reports.
-    virtual void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
 };
 
 using TNodeDatabaseMetricsAggregatorPtr = TIntrusivePtr<TNodeDatabaseMetricsAggregator>;
 
 /**
- * @param[in] targetCounterGroup The group to fill, already scoped to the role
  * @param[in] isFollowerRole The role of the tablets this instance is fed
  */
 TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(

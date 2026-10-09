@@ -505,6 +505,11 @@ void TExecutor::Active(const TActorContext &ctx) {
     Database = loadedState->Database;
     LogicSnap = loadedState->Snap;
     GcLogic = loadedState->GcLogic;
+    for (const auto& channel : Owner->Info()->Channels) {
+        if (Owner->IsExecutorGCChannel(channel.Channel)) {
+            GcLogic->InitializeChannel(channel.Channel);
+        }
+    }
     LogicRedo = loadedState->Redo;
     LogicAlter = loadedState->Alter;
     BorrowLogic = loadedState->Loans;
@@ -3495,7 +3500,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
-        GcLogic->Confirm(ctx);
+        GcLogic->Confirm(ctx, Launcher);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step, OwnerCtx());
         if (!Owner) {
@@ -3549,7 +3554,8 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, OwnerCtx(), Launcher)) {
+    // Deferred hard GC uses this context as its sender, so replies must return to the executor.
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, SelfCtx())) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     // An idle tablet sends no more collections by itself; failures keep their own backoff.
@@ -4171,6 +4177,10 @@ void TExecutor::UpdateUsedTabletMemory() {
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
+    if (GcLogic) {
+        // Resume confirmed cuts paused by the live feature flag even on idle tablets.
+        GcLogic->RetryPendingHistoryCuts(SelfCtx());
+    }
     if (GcLogic && Counters) {
         if (const ui64 dropped = GcLogic->TakeSentinelDroppedMarks()) {
             Counters->Cumulative()[TExecutorCounters::GC_SENTINEL_DROPPED_MARKS].Increment(dropped);

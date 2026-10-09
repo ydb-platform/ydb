@@ -8679,6 +8679,46 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
+    Y_UNIT_TEST(OnlyDelegatedUnusedChannelsAreCollected) {
+        struct TDelegatingTablet : TTestFlatTablet {
+            using TTestFlatTablet::TTestFlatTablet;
+
+            bool IsExecutorGCChannel(ui32 channel) const override {
+                return channel == 2;
+            }
+        };
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) override {
+                auto* info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[2].History.emplace_back(1, 0);
+                info->Channels[3].History.emplace_back(1, 0);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        THashSet<ui32> collectCounters;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                const auto* gc = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                UNIT_ASSERT_C(gc->Channel != 3, "undelegated channel must not be collected");
+                if (gc->Channel == 2 && !gc->Hard) {
+                    // Forwarding through the mock NodeWarden can expose the
+                    // same request twice. Each group has a distinct counter.
+                    collectCounters.insert(gc->PerGenerationCounter);
+                }
+            }
+        });
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TDelegatingTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+        env.WaitForWakeUp();
+        env->WaitFor("GC of the delegated unused channel", [&] { return collectCounters.size() == 2; });
+    }
+
     struct TTxChangeRoom : public ITransaction {
         bool Execute(TTransactionContext &txc, const TActorContext &) override
         {
@@ -8745,6 +8785,71 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
         env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
 
+    }
+
+    Y_UNIT_TEST(IdleHistoryCutResumesAfterFeatureFlagIsEnabled) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto* info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[1].History.emplace_back(1, 0);
+                info->Channels[1].History.emplace_back(2, 1);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        auto& flags = env->GetAppData().FeatureFlags;
+        flags.SetEnableCutHistory(true);
+        TRowsModel data;
+        ui32 failedHardBarriers = 0;
+        ui32 cuts = 0;
+        bool failHardBarriers = true;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvCollectGarbage) {
+                const auto* gc = ev->Get<TEvBlobStorage::TEvCollectGarbage>();
+                if (gc->Channel == 1 && gc->Hard && failHardBarriers) {
+                    flags.SetEnableCutHistory(false);
+                    ++failedHardBarriers;
+                    env->Send(new IEventHandle(ev->Sender, env.Edge,
+                        new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::ERROR,
+                            gc->TabletId, gc->RecordGeneration, gc->PerGenerationCounter, gc->Channel),
+                        0, ev->Cookie), 0, true);
+                    ev.Reset();
+                }
+            } else if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                UNIT_ASSERT(flags.GetEnableCutHistory());
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvTablet::TEvCutTabletHistory>()->Record.GetChannel(), 1);
+                ++cuts;
+                ev.Reset();
+            }
+        });
+
+        auto fire = [&](NFake::TStarter* starter) {
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            }, 0, starter);
+            env.WaitForWakeUp();
+        };
+        fire(nullptr);
+        env.SendSync(data.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(data.MakeRows(3000));
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TTestStarter starter;
+        fire(&starter);
+        env->WaitFor("failed hard GC with history cutting disabled", [&] { return failedHardBarriers > 0; });
+        // Let the storage retry and periodic maintenance run with the flag off.
+        env->SimulateSleep(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 0);
+        failHardBarriers = false;
+
+        // Only periodic maintenance may resume the cut on this idle tablet.
+        TBlockEvents<TEvTablet::TEvCommitResult> blockedCommits(env.Env);
+        TBlockEvents<TEvTablet::TEvSnapshotConfirmed> blockedSnapshots(env.Env);
+        flags.SetEnableCutHistory(true);
+        env->SimulateSleep(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL_C(cuts, 2,
+            "an idle tablet must resume its confirmed cut after history cutting is enabled again");
     }
 
     Y_UNIT_TEST(TestDoNotCutHistoryEnabledAfterBoot) {

@@ -382,10 +382,7 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
     const auto systemTablet = env.ControllerReports.back().SystemTablet;
     UNIT_ASSERT(systemTablet);
     NMetrics::TResourceMetrics metrics(env.Tablet, 0, env.Edge, marker, systemTablet);
-    metrics.CPU.Set(0);
-    metrics.Memory.Set(0);
-    metrics.Network.Set(0);
-    metrics.StorageSystem.Set(0);
+    ui64 cpu = 0;
     TVector<NMemory::TConsumerReport> reports;
     const auto observer = env.Env.AddObserver<TEvLocal::TEvTabletMetrics>([&](auto& event) {
         if (event->Get()->Executor == marker) {
@@ -397,6 +394,10 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
     const auto update = [&](ui64 used, ui64 demand, ui64 reclaimable, bool expected) {
         env.Env.SimulateSleep(TDuration::Seconds(2));
         env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto*, const auto& ctx) {
+            metrics.CPU.Set(cpu, ctx.Now());
+            metrics.Memory.Set(0, ctx.Now());
+            metrics.Network.Set(0, ctx.Now());
+            metrics.StorageSystem.Set(0, ctx.Now());
             metrics.SetMemoryReport(used, demand, reclaimable);
             UNIT_ASSERT_VALUES_EQUAL(metrics.TryUpdate(ctx), expected);
             ctx.Send(env.Edge, new TEvents::TEvWakeup);
@@ -406,7 +407,7 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
     update(10_MB + 100_KB, 12_MB + 100_KB, 1_MB + 100_KB, true);
     update(10_MB + 100_KB + 1, 12_MB + 100_KB + 1, 1_MB + 100_KB + 1, false);
     // A legacy metric send carries the complete current snapshot even below its own threshold.
-    metrics.CPU.Set(200000);
+    cpu = 200000;
     update(10_MB + 100_KB + 2, 12_MB + 100_KB + 2, 1_MB + 100_KB + 2, true);
     UNIT_ASSERT_VALUES_EQUAL(reports.back().Used, 10_MB + 100_KB + 2);
     update(100_KB, 200_KB, 1, true);

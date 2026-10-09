@@ -37,18 +37,13 @@ public:
 
     void Bootstrap();
 
-    STATEFN(StateMain) {
-        switch (ev->GetTypeRewrite()) {
-
+    STRICT_STFUNC(StateMain,
             hFunc(TEvTableDescriptionSuccess, Handle);
             hFunc(TEvTableDescriptionFailed, Handle);
 
             hFunc(NInitializer::TEvInitializationFinished, Handle);
             hFunc(TEvStartRegistration, Handle);
-            default:
-                Y_ABORT_UNLESS(false);
-        }
-    }
+    );
 };
 
 }

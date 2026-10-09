@@ -69,8 +69,7 @@ class TService : public NActors::TActorBootstrapped<TService> {
 public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    STATEFN(StateMain) {
-        switch (ev->GetTypeRewrite()) {
+    STRICT_STFUNC(StateMain,
             hFunc(TEvTxUserProxy::TEvProposeTransaction, Handle);
             hFunc(TEvObjectsOperation, Handle);
             hFunc(TEvRefreshSubscriberData, Handle);
@@ -81,11 +80,7 @@ public:
             hFunc(TEvResetManagerRegistration, Handle);
             hFunc(TEvTrackOperationCompletion, Handle);
             hFunc(TEvTrackOperationFinished, Handle);
-
-            default:
-                Y_ABORT_UNLESS(false);
-        }
-    }
+    );
 
     TService(const TConfig& config)
         : Config(config) {

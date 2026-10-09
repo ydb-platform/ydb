@@ -29,6 +29,7 @@ def kikimr(request):
         stable_binary_path=inter_stable_binary_path,
         enable_discovery=param.get("enable_discovery", True),
         tenant_database="/Root/my_tenant",
+        is_compatibility_tests=param.get("is_compatibility_tests", False),
     )
     yield kikimr
     kikimr.stop()

@@ -103,6 +103,14 @@ TMaxTasksGraph::TNodeIdx TMaxTasksGraph::ResolveNodeIdx(TNodeId node) const {
     return nodeIt->second;
 }
 
+void TMaxTasksGraph::FixStageTasksCount(const TStageId& stageId) {
+    auto& group = Groups.at(Stages.at(StageIds.at(stageId)).Group);
+    group.Fixed = true;
+    for (const auto stage : group.Stages) {
+        Stages.at(stage).Type = FIXED;
+    }
+}
+
 void TMaxTasksGraph::AddTask(const TTask& task, std::optional<TNodeId> node) {
     const TStageIdx stageIdx = StageIds.at(task.StageId);
     auto& stage = Stages.at(stageIdx);

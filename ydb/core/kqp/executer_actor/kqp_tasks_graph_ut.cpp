@@ -188,6 +188,7 @@ struct TBuildConfig {
     // production the RM board delivers the snapshot in arbitrary order, so reversing it here is a legitimate
     // scenario - and the only way to make that difference observable.
     bool ReverseSnapshotNodeOrder = false;
+    THashMap<ui32, ui32> FixedTaskCountByStage;
 };
 
 namespace {
@@ -377,6 +378,11 @@ public:
             std::reverse(snapshot.begin(), snapshot.end());
         }
 
+        TTaskPlanningConstraints constraints;
+        for (const auto& [stageIdx, count] : Config.FixedTaskCountByStage) {
+            constraints.FixedTaskCountByStage.emplace(Graph->MakeStageId(0, stageIdx), count);
+        }
+        Graph->SetPlanningConstraints(std::move(constraints));
         Graph->BuildAllTasks({}, snapshot, nullptr);
 
         // Mirror the executer's placement phase. On revisions where BuildAllTasks() does not assign nodes itself,
@@ -894,6 +900,22 @@ inline void AssertShuffleEliminationHashMapping(const TTaskDistribution& dist, u
 // ============================================================================
 
 Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
+
+    Y_UNIT_TEST_F(RuntimeAggregationTaskCountOverridesHeuristic, TKqpTasksGraphBuildFixture<4>) {
+        Execute(R"(
+            CREATE TABLE `/Root/FixedAggregation` (Key Uint64 NOT NULL, Value Uint64, PRIMARY KEY (Key))
+            WITH (UNIFORM_PARTITIONS = 32, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 32);
+        )");
+        TBuildConfig config;
+        config.NodeCount = 16;
+        config.FixedTaskCountByStage[1] = 3;
+        const auto dist = BuildTasks(R"(
+            SELECT Value, COUNT(*) AS n FROM `/Root/FixedAggregation` GROUP BY Value;
+        )", config);
+        UNIT_ASSERT_VALUES_EQUAL(dist.Count(0, 1), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dist.UnplacedTasks, 0);
+        AssertNoCrossNodeCopyChannels(dist);
+    }
 
     Y_UNIT_TEST_F(SamplingBudgetAcrossNodes, TKqpTasksGraphBuildFixture<4>) {
         Execute(R"(

@@ -21,6 +21,7 @@ struct TStateLoadPlanResolverSettings {
     TMaybe<ui64> OutputStartTimeUs;
     bool UseSourceDisposition = false;
     bool Force = false;
+    bool AutomaticReplanning = false;
     TCheckpointProviderIntegrations ProviderIntegrations;
 };
 

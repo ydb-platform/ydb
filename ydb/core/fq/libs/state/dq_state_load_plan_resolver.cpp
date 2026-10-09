@@ -67,7 +67,7 @@ public:
         // Try to recalculate state if any of previous or new graph has hopping operators
 
         const TGraphStateInfo previous(Src, context);
-        if (NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute() && (previous.HasHopping() || next.HasHopping())) {
+        if (!Settings.AutomaticReplanning && NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryStateRecompute() && (previous.HasHopping() || next.HasHopping())) {
             std::vector<ui64> taskIds;
             taskIds.reserve(previous.GetStages().size());
             for (const auto& stage : previous.GetStages()) {
@@ -105,7 +105,7 @@ public:
         // Directly transfer state and offsets from old graph to new one
 
         TSourceRecoverySet sourcesToPrepare;
-        if (!MakeContinueFromStreamingOffsetsPlan(previous, next, Settings.Force, Plan, sourcesToPrepare, Issues)) {
+        if (!MakeContinueFromStreamingOffsetsPlan(previous, next, Settings.Force, Plan, sourcesToPrepare, Issues, Settings.AutomaticReplanning)) {
             Finish(/* success */ false);
             co_return;
         }

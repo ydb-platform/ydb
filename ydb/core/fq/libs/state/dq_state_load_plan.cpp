@@ -172,21 +172,27 @@ class TContinuationPlanBuilder {
 
     struct TTopicMappingInfo {
         TPartitionsMapping PartitionsMapping;
+        ui64 PartitionsCount = 0;
+        bool UsedPartitionPredicate = false;
         bool Used = false;
     };
 
     using TTopicsMapping = THashMap<TTopic, TTopicMappingInfo, TTopic::THash>;
 
 public:
-    TContinuationPlanBuilder(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, NYql::TIssues& issues)
+    TContinuationPlanBuilder(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, NYql::TIssues& issues, bool automaticReplanning)
         : Force(force)
         , Issues(issues)
     {
         const auto guard = src.BindAllocator();
         YQL_ENSURE(src.GetContext() == dst.GetContext(), "Recovery graphs must share a type environment");
 
+        AutomaticReplanning = automaticReplanning;
         BuildSourcesContinuation(src, dst);
         BuildStatefulOperatorsContinuation(src, dst);
+        if (automaticReplanning) {
+            BuildIdenticalProgramContinuation(src, dst);
+        }
     }
 
     bool IsValid() const {
@@ -298,25 +304,16 @@ private:
             for (const auto* callable : stage.StatefulOperators) {
                 const TStringBuf name = callable->GetType()->GetName();
                 if (name == "KqpStreamingAggregation"sv) {
-                    YQL_ENSURE(callable->GetInputsCount() >= 12, "Invalid streaming aggregation program in stage " << stage.StageId);
-                    if (const auto binding = callable->GetInput(8); binding.IsImmediate() && binding.GetStaticType()->IsTuple()) {
-                        const auto* tuple = AS_VALUE(NKikimr::NMiniKQL::TTupleLiteral, binding);
-                        YQL_ENSURE(tuple->GetValuesCount() == 2, "Invalid streaming aggregation output table binding");
-
-                        const auto path = tuple->GetValue(0);
-                        YQL_ENSURE(path.IsImmediate() && path.GetStaticType()->IsData(), "Invalid streaming aggregation output table path");
-
-                        const TString table(AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, path)->AsValue().AsStringRef());
-                        YQL_ENSURE(!table.empty(), "Empty streaming aggregation output table path");
+                    if (const auto table = GetStreamingAggregationIdentity(*callable); !table.empty()) {
                         YQL_ENSURE(result.emplace(table, TAggregation{
                             .Stage = &stage,
                             .KeyType = callable->GetInput(3).GetStaticType(),
                             .SavedStateType = callable->GetInput(9).GetStaticType(),
                         }).second, "Ambiguous streaming aggregation output table binding: " << table);
-                    } else if (previous) {
+                    } else if (previous && !AutomaticReplanning) {
                         StateLossError(TStringBuilder() << "Unsupported checkpointed streaming aggregation setup for offset recovery in stage " << stage.StageId << ", recovery allowed only for streaming aggregation with table binding");
                     }
-                } else if (previous) {
+                } else if (previous && !(AutomaticReplanning && name == "MultiHoppingCore")) {
                     StateLossError(TStringBuilder() << "Unsupported checkpointed operator for offset recovery: " << name << " in stage " << stage.StageId);
                 }
             }
@@ -425,6 +422,52 @@ private:
         }
     }
 
+    void BuildIdenticalProgramContinuation(const TGraphStateInfo& src, const TGraphStateInfo& dst) {
+        const auto supportsIdenticalTransfer = [](const NKikimr::NMiniKQL::TCallable* op) {
+            const auto name = op->GetType()->GetName();
+            return name == "MultiHoppingCore"
+                || (name == "KqpStreamingAggregation" && GetStreamingAggregationIdentity(*op).empty());
+        };
+        const auto rawProgram = [](const TGraphStateInfo& graph, const TStageStateInfo& stage) -> const TString& {
+            const auto& raw = stage.Tasks.front()->GetProgram().GetRaw();
+            return raw.empty() ? graph.GetGraph()->GetStageProgram().at(stage.StageId) : raw;
+        };
+        for (const auto& old : src.GetStages()) {
+            if (!std::any_of(old.StatefulOperators.begin(), old.StatefulOperators.end(), supportsIdenticalTransfer)) {
+                continue;
+            }
+            const auto target = std::find_if(dst.GetStages().begin(), dst.GetStages().end(),
+                [&](const auto& stage) { return stage.StageId == old.StageId; });
+            if (old.StatefulOperators.size() != 1 || target == dst.GetStages().end()
+                || target->StatefulOperators.size() != 1
+                || target->StatefulOperators.front()->GetType()->GetName() != old.StatefulOperators.front()->GetType()->GetName()
+                || old.RuntimeVersion != target->RuntimeVersion
+                || rawProgram(src, old) != rawProgram(dst, *target)
+                || old.Tasks.size() != target->Tasks.size())
+            {
+                StateLossError(TStringBuilder() << "Cannot transfer changed or mixed compiled program in stage " << old.StageId);
+                continue;
+            }
+            try {
+                YQL_ENSURE(GetAggregationRouting(src, old).IsSame(GetAggregationRouting(dst, *target)),
+                    "Checkpointed operator shuffle routing changed");
+                for (size_t slot = 0; slot < target->Tasks.size(); ++slot) {
+                    const auto& task = *target->Tasks[slot];
+                    auto& taskPlan = Plan[task.GetId()];
+                    if (taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
+                        InitForeignPlan(task, taskPlan);
+                    }
+                    auto& program = *taskPlan.MutableProgram();
+                    YQL_ENSURE(!program.HasForeignTaskId(), "Ambiguous compiled program checkpoint");
+                    program.SetStateType(NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN);
+                    program.SetForeignTaskId(old.Tasks[slot]->GetId());
+                }
+            } catch (const std::exception& e) {
+                StateLossError(TStringBuilder() << "Cannot transfer compiled program state in stage " << old.StageId << ": " << e.what());
+            }
+        }
+    }
+
     //// Sources recovery
 
     static NYql::NDqProto::NDqStateLoadPlan::TSourcePlan& FindSourcePlan(NYql::NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan, const ui64 inputIndex) {
@@ -455,6 +498,18 @@ private:
 
                     ForEachTopicPartition(srcDesc, partitionsSets, [&, taskId = task.GetId()](const TTopic& topic, const ui64 partition) {
                         auto& topicInfo = srcMapping[topic];
+                        topicInfo.UsedPartitionPredicate |= srcDesc.GetUsedPartitionPredicate();
+                        ui64 count = 0;
+                        for (const auto& set : partitionsSets) {
+                            count = Max(count, set.TopicPartitionsCount);
+                        }
+                        for (const auto& cluster : srcDesc.GetFederatedClusters()) {
+                            if (cluster.GetName() == topic.Cluster && cluster.GetPartitionsCount()) {
+                                count = cluster.GetPartitionsCount();
+                                break;
+                            }
+                        }
+                        topicInfo.PartitionsCount = Max(topicInfo.PartitionsCount, count);
                         topicInfo.PartitionsMapping.emplace(partition, TTaskSource{taskId, inputIndex, consumer});
                     });
                 }
@@ -498,6 +553,21 @@ private:
 
                         auto [taskBegin, taskEnd] = mappingInfo.PartitionsMapping.equal_range(partition);
                         if (taskBegin == taskEnd) {
+                            // Newly created partitions have no old offsets. Automatic
+                            // replanning may initialize them, but must never discard
+                            // offsets of an existing (possibly pruned) partition.
+                            if (AutomaticReplanning && !mappingInfo.UsedPartitionPredicate
+                                && partition >= mappingInfo.PartitionsCount) {
+                                // Inherit the source start timestamp as well. A reader
+                                // containing only new partitions must not start at the
+                                // restart time and skip data written while stopped.
+                                const auto& inherited = mappingInfo.PartitionsMapping.begin()->second;
+                                tasksSet.insert(inherited);
+                                if (consumer != inherited.Consumer) {
+                                    ChangedConsumers.emplace(task.GetId(), inputIndex);
+                                }
+                                return;
+                            }
                             SourceError(TStringBuilder() << "Topic `" << srcDesc.GetTopicPath() << "` partition " << partition << " is not found in previous query", "Query will use fresh offsets for it");
                         } else {
                             if (std::distance(taskBegin, taskEnd) > 1) {
@@ -570,6 +640,7 @@ private:
         Valid &= Force;
     }
 
+    bool AutomaticReplanning = false;
     const bool Force = false;
     bool Valid = true;
     NYql::TIssues& Issues;
@@ -579,12 +650,13 @@ private:
 
 } // anonymous namespace
 
-bool MakeContinueFromStreamingOffsetsPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues) {
+bool MakeContinueFromStreamingOffsetsPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst, const bool force, TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues, bool automaticReplanning) {
     plan.clear();
     sourcesToPrepare.clear();
 
     try {
-        if (TContinuationPlanBuilder planBuilder(src, dst, force, issues); planBuilder.IsValid()) {
+        YQL_ENSURE(!automaticReplanning || !force, "Automatic replanning cannot discard checkpoint state");
+        if (TContinuationPlanBuilder planBuilder(src, dst, force, issues, automaticReplanning); planBuilder.IsValid()) {
             planBuilder.ExtractPlan(plan, sourcesToPrepare);
             return true;
         }

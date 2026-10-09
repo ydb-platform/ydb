@@ -333,6 +333,7 @@ void TCheckpointCoordinator::RestoreFromStateLoadPlan(TMaybe<TCheckpointMetadata
 
     TStateLoadPlanResolverSettings settings;
     settings.ProviderIntegrations = Settings.ProviderIntegrations;
+    settings.AutomaticReplanning = Settings.RequireCompatibleStateRecovery;
 
     if (checkpoint) {
         YDB_LOG_INFO("Will try to restore state from foreign checkpoint",
@@ -350,7 +351,7 @@ void TCheckpointCoordinator::RestoreFromStateLoadPlan(TMaybe<TCheckpointMetadata
         settings.Checkpoint.SetId(checkpoint->CheckpointId.SeqNo);
         settings.Checkpoint.SetGeneration(checkpoint->CheckpointId.CoordinatorGeneration);
         settings.CoordinatorGeneration = CoordinatorId.Generation;
-        settings.Force = StreamingDisposition.from_last_checkpoint().force();
+        settings.Force = !Settings.RequireCompatibleStateRecovery && StreamingDisposition.from_last_checkpoint().force();
     } else {
         Y_VALIDATE(Settings.OutputStartTime, "Cannot create state load plan without either output start time or previous checkpoint");
         CheckpointIdGenerator = std::make_unique<TCheckpointIdGenerator>(CoordinatorId);

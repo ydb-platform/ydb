@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_task_planning.h"
+
 #include "shard_key_ranges.h"
 
 #include <memory>
@@ -446,6 +448,13 @@ public:
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
     void RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
+    void SetPlanningConstraints(TTaskPlanningConstraints constraints) {
+        PlanningConstraints = std::move(constraints);
+    }
+    void SetPqSourcePlanningSnapshot(TPqSourcePlanningSnapshot snapshot) {
+        PqSourcePlanningSnapshot = std::move(snapshot);
+    }
+    void RestoreAfterReplan(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
 
     // TODO: public used by TKqpPlanner - why?
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
@@ -470,6 +479,7 @@ public:
 
 private:
     void FillStages();
+    const NKqpProto::TKqpExternalSource& GetExternalSource(const TStageInfo& stageInfo) const;
     void AllocateSamplingShardBudget();
 
     // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
@@ -555,6 +565,8 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
     const bool UseKqpTasksGraphV2;
+    TTaskPlanningConstraints PlanningConstraints;
+    TPqSourcePlanningSnapshot PqSourcePlanningSnapshot;
 };
 
 

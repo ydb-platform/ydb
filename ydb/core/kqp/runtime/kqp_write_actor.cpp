@@ -1009,8 +1009,10 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
-        // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
-        AFL_ENSURE(ev->Cookie != 0);
+        const bool isCommitResponse = Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId;
+        // Write replies echo the message cookie, but a distributed commit reply
+        // from an older DataShard may have no cookie. It is matched by TxId.
+        AFL_ENSURE(isCommitResponse || ev->Cookie != 0);
 
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
             // TODO: in future don't ignore non-retryable errors and fail immediately
@@ -1034,7 +1036,7 @@ public:
         }
 
         AFL_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
-        if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
+        if (!isCommitResponse
                 && IsSupersededWriteResult(ev->Cookie, metadata)
                 && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
             YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",

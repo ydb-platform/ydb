@@ -16,6 +16,57 @@ using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpReattach) {
 
+    Y_UNIT_TEST_TWIN(DistributedCommitWithoutCookie, Volatile) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(Volatile);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        THashSet<ui64> preparedTxIds;
+        size_t repliesWithoutCookie = 0;
+        {
+            auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    const auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+                        preparedTxIds.insert(record.GetTxId());
+                    } else if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                            && preparedTxIds.contains(record.GetTxId()) && ev->Cookie != 0) {
+                        // Older DataShards may send distributed commit replies without
+                        // echoing the cookie of the prepare request.
+                        ev = new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
+                            ev->Release<NEvents::TDataEvents::TEvWriteResult>().Release(),
+                            ev->Flags, 0, nullptr, std::move(ev->TraceId));
+                        ++repliesWithoutCookie;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+            Y_DEFER { runtime.SetObserverFunc(observer); };
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteQuery(Q1_(R"(
+                    UPSERT INTO `/Root/TwoShard` (Key, Value1)
+                    VALUES (1u, 'value'), (4000000001u, 'value');
+                )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(repliesWithoutCookie >= 2, "Expected commit replies from both shards");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(Q1_(R"(
+                SELECT Value1 FROM `/Root/TwoShard`
+                WHERE Key IN (1u, 4000000001u) ORDER BY Key;
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[["value"]];[["value"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(ReattachDeliveryProblem) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false).SetEnableDataShardVolatileTransactions(false);

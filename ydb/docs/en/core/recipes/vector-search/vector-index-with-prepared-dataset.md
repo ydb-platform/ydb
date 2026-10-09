@@ -45,19 +45,48 @@ CREATE TABLE wikipedia (
 
 ## Step 2. Downloading the dataset {#step2}
 
-Download the [dataset](https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings) from [Hugging Face](https://huggingface.co). It contains English Wikipedia texts split into paragraphs, with an embedding vector for each paragraph.
+Download the [dataset](https://huggingface.co/datasets/timescale/wikipedia-22-12-simple-embeddings) from [Hugging Face](https://huggingface.co). This is a fork of the Cohere `wikipedia-22-12-simple-embeddings` dataset, distributed under the [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0) license. It contains English Wikipedia texts split into paragraphs, with an embedding vector for each paragraph.
+
+{% note info %}
+
+In the fork, the column schema differs from the table in [Step 1](#step1): the script below maps the data to that schema.
+
+{% endnote %}
 
 In your working directory, create a file `import_dataset.py` with this Python script:
 
 ```python
 #!/usr/bin/env python
+import json
 from datasets import load_dataset
 
 # Load the dataset
-dataset = load_dataset("Cohere/wikipedia-22-12-simple-embeddings")
+dataset = load_dataset(
+    "timescale/wikipedia-22-12-simple-embeddings",
+    split="train",
+)
 
-# Save it as CSV or another format locally
-dataset['train'].to_csv('wikipedia_embeddings_train.csv', index=False)
+# Flatten Timescale schema to match the wikipedia table
+def flatten(row):
+    meta = row["meta"]
+    if isinstance(meta, str):
+        meta = json.loads(meta)
+    return {
+        "id": row["id"],
+        "title": meta.get("title"),
+        "text": row["contents"],
+        "url": meta.get("url"),
+        "wiki_id": meta.get("wiki_id"),
+        "views": meta.get("views"),
+        "paragraph_id": meta.get("paragraph_id"),
+        "langs": meta.get("langs"),
+        # Space-separate floats for the YQL conversion in step 3
+        "emb": row["embedding"].replace(",", " "),
+    }
+
+# Save it as CSV
+flattened = dataset.map(flatten, remove_columns=dataset.column_names)
+flattened.to_csv("wikipedia_embeddings_train.csv", index=False)
 ```
 
 Install the `datasets` package and run the script:

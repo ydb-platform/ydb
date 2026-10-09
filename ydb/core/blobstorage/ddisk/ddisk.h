@@ -141,6 +141,11 @@ namespace NKikimr::NDDisk {
             EvUnregisterPersistentBufferResult,
             EvGetPersistentBufferRegistrationToken,
             EvGetPersistentBufferRegistrationTokenResult,
+            EvTabletStatsBatch,
+            EvCollectTabletStats,
+            EvGetTabletStats,
+            EvTabletStats,
+            EvTabletStatsChanged,
         };
     };
 
@@ -1003,8 +1008,11 @@ struct TPersistentBufferFormat {
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
         ui64 PerTabletStorageLimit;
+        ui64 TabletsTotal = 0;
+        ui64 TabletsOffset = 0;
         std::vector<TTabletInfo> TabletInfos;
-        // Keyed by (TabletId, DirectBlockGroupIndex), matching TPersistentBufferBarriersManager::GetBarriers().
+        // Keyed by (TabletId, DirectBlockGroupIndex). Unbounded, unfiltered requests return all
+        // barriers from GetBarriers(); limited or filtered requests include only returned namespaces.
         std::map<std::pair<ui64, ui8>, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
         std::vector<TOpStats> OpStats;
@@ -1013,6 +1021,10 @@ struct TPersistentBufferFormat {
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
         bool DescribeFreeSpace = false;
         bool DescribeTablets = false;
+        ui64 TabletsOffset = 0;
+        // Zero returns all matching namespaces and ignores TabletsOffset.
+        ui32 TabletsLimit = 0;
+        std::optional<ui64> TabletIdFilter;
         TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
             : DescribeFreeSpace(describeFreeSpace)
             , DescribeTablets(describeTablets)

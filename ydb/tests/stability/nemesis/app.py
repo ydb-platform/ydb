@@ -29,6 +29,7 @@ from flask import Flask, current_app, jsonify
 import atexit
 import logging
 import sys
+import threading
 from functools import lru_cache
 
 # --- Nemesis logging (must run before other ydb.tests.stability.nemesis imports) ---------------
@@ -73,11 +74,22 @@ def get_settings():
     return settings
 
 
+# before_request overlaps on startup; without the lock each request builds its own checker.
+_initialize_lock = threading.Lock()
+
+
 def initialize_app():
-    """Initialize application components (called on first request)."""
+    """Initialize application components once, even if the first requests overlap."""
     if current_app.config.get("NEMESIS_INITIALIZED"):
         return
+    with _initialize_lock:
+        if current_app.config.get("NEMESIS_INITIALIZED"):
+            return
+        _initialize_app_body()
+        current_app.config["NEMESIS_INITIALIZED"] = True
 
+
+def _initialize_app_body():
     settings = get_settings()
 
     agent_router.warden_checker = AgentWardenChecker(
@@ -171,8 +183,6 @@ def initialize_app():
             ),
             recovery_probe=probe,
         )
-
-    current_app.config["NEMESIS_INITIALIZED"] = True
 
 
 def cleanup_app(exception=None):

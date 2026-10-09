@@ -75,7 +75,7 @@ public:
 
 private:
     const TSuspendableActionQueueOptions Options_;
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
     const IInvokerPtr Invoker_;
     const TMpscSuspendableSingleQueueSchedulerThreadPtr Thread_;

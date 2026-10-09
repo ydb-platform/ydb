@@ -120,7 +120,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::AdvanceMo
             Dereference(blobId, db, false);
 
             item.LogoBlobId = newBlobId;
-            ++RefCounts[newBlobId];
+            ++GetOrCreateRefCount(newBlobId);
 
             MoveDataBlobMovingIsInProgress = false;
             UpdateKeyValue(*MoveDataKey, record, db);
@@ -244,7 +244,7 @@ std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TKeyValueState::BlobCopie
     }
 
     item.LogoBlobId = newBlobId;
-    RefCounts[newBlobId] = 1;
+    GetOrCreateRefCount(newBlobId) = 1;
 
     MoveDataBlobMovingIsInProgress = false;
     UpdateKeyValue(*MoveDataKey, record, db);

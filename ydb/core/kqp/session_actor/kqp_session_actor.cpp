@@ -484,6 +484,10 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        if (AdministrativeTerminationReason) {
+            ReplyProcessError(ev, Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
+            return;
+        }
         if (CurrentStateFunc() != &TThis::ReadyState) {
             ReplyBusy(ev);
             return;
@@ -733,7 +737,9 @@ public:
         QueryState->ContinueTime = TInstant::Now();
         EndQueryTraceSpan(QueryState->AdmissionSpan, ev->Get()->Status);
 
-        if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
+        using EAdmissionResult = NWorkloadManager::TEvContinueRequest::EAdmissionResult;
+        const auto admissionResult = ev->Get()->GetAdmissionResult();
+        if (admissionResult == EAdmissionResult::ContinueWithoutPool) {
             YDB_LOG_TRACE("Failed to place request in resource pool, feature flag is disabled",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -744,7 +750,7 @@ public:
         }
 
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && !ev->Get()->IsDiskFull()) {
+        if (admissionResult == EAdmissionResult::Reject) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
             ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
@@ -2014,7 +2020,21 @@ public:
                     || QueryState->Commit && !QueryState->Commited;
 
         if (!haveWork) {
+            if (AdministrativeTerminationReason && QueryState->HasTxControl() && !QueryState->Commit
+                && QueryState->TxCtx && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED)
+            {
+                // Final cleanup will roll back this open transaction. Do not hide cancellation
+                // behind a successful statement followed by BAD_SESSION on the client's commit.
+                ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
+                return;
+            }
             ReplySuccess();
+            return;
+        }
+
+        // Cancellation may be deferred by a writing executer. Do not start more work afterwards.
+        if (AdministrativeTerminationReason) {
+            ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
             return;
         }
 
@@ -2319,7 +2339,7 @@ public:
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
-            KqpTempTablesAgentActor, QueryState->KqpSessionSpan.GetTraceId());
+            KqpTempTablesAgentActor, QueryState->KqpSessionSpan.GetTraceId(), QueryState->QueryDeadlines.TimeoutAt);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
 
@@ -2381,7 +2401,7 @@ public:
             txCtx->TxManager->AddTopicsToShards();
 
             auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
-                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
 
             const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
             const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();
@@ -3173,6 +3193,7 @@ public:
             stats->Compilation->FromCache = (QueryState->CompileStats.FromCache);
             stats->Compilation->DurationUs = (QueryState->CompileStats.DurationUs);
             stats->Compilation->CpuTimeUs = (QueryState->CompileStats.CpuTimeUs);
+            stats->Compilation->UsedNewRbo = QueryState->CompileResult->UsedNewRbo;
         }
 
         if (IsExecuteAction(QueryState->GetAction())) {
@@ -3227,7 +3248,7 @@ public:
 
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
-        if (ShutdownState) {
+        if (ShutdownState || AdministrativeTerminationReason) {
             YDB_LOG_DEBUG("Session is closing, set trailing metadata to request session shutdown",
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
@@ -3262,6 +3283,17 @@ public:
                 response->SetEffectivePoolId(NResourcePool::DEFAULT_POOL_ID);
             } else {
                 response->SetEffectivePoolId(QueryState->UserRequestContext->PoolId);
+            }
+        }
+        if (!QueryState->RequestEv) {
+            return;
+        }
+        if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+            const auto state = updater->GetState();
+            response->SetWmState(NWorkloadManager::WmStateToProto(state));
+            const auto classifiedBy = updater->GetClassifiedBy();
+            if (!classifiedBy.empty()) {
+                response->SetWmClassifiedBy(classifiedBy);
             }
         }
     }
@@ -3441,6 +3473,15 @@ public:
     }
 
     void ProcessNextStatement() {
+        if (AdministrativeTerminationReason) {
+            if (!QueryState->ProcessingLastStatementPart() || !QueryState->ProcessingLastStatement()) {
+                ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
+            } else {
+                // Keep the result of a completed operation, including a committed write.
+                Cleanup();
+            }
+            return;
+        }
         if (ExecuteNextStatementPart()) {
             return;
         }
@@ -3702,7 +3743,15 @@ public:
         }
     }
 
-    void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr&) {
+    void RememberAdministrativeTermination(const TEvKqp::TEvCloseSessionRequest& event) {
+        const auto& request = event.Record.GetRequest();
+        if (request.GetAdministrative() && !AdministrativeTerminationReason) {
+            AdministrativeTerminationReason = request.GetTerminationReason();
+        }
+    }
+
+    void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+        RememberAdministrativeTermination(*ev->Get());
         YDB_LOG_INFO("Session closed due to explicit close event",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -3711,16 +3760,29 @@ public:
         CleanupAndPassAway();
     }
 
-    void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr&) {
+    void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
+        RememberAdministrativeTermination(*ev->Get());
         QueryState->KeepSession = false;
+        if (AdministrativeTerminationReason) {
+            if (ExecuterId) {
+                // Use the existing cancellation protocol: an irreversible write may finish first.
+                Send(ExecuterId, new TEvKqp::TEvAbortExecution(
+                    NYql::NDqProto::StatusIds::CANCELLED, AdministrativeTerminationReason),
+                    IEventHandle::FlagTrackDelivery);
+            } else {
+                ReplyQueryError(Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
+            }
+            return;
+        }
         {
             auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Query execution is cancelled because session was requested to be closed.");
             Send(SelfId(), abort.Release());
         }
     }
 
-    void HandleCleanup(TEvKqp::TEvCloseSessionRequest::TPtr&) {
+    void HandleCleanup(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+        RememberAdministrativeTermination(*ev->Get());
         YQL_ENSURE(CleanupCtx);
         if (!CleanupCtx->Final) {
             YQL_ENSURE(QueryState);
@@ -4082,7 +4144,15 @@ public:
     }
 
     void HandleFinalCleanup(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        ReplyProcessError(ev, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
+        if (AdministrativeTerminationReason) {
+            ReplyProcessError(ev, Ydb::StatusIds::CANCELLED, AdministrativeTerminationReason);
+        } else {
+            ReplyProcessError(ev, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
+        }
+    }
+
+    void HandleFinalCleanup(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+        RememberAdministrativeTermination(*ev->Get());
     }
 
     STFUNC(ReadyState) {
@@ -4231,6 +4301,7 @@ public:
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(NWorkloadManager::TEvContinueRequest, HandleNoop);
                 hFunc(TEvKqp::TEvQueryRequest, HandleFinalCleanup);
+                hFunc(TEvKqp::TEvCloseSessionRequest, HandleFinalCleanup);
             }
         } catch (const yexception& ex) {
             InternalError(ex.what());
@@ -4420,6 +4491,7 @@ private:
     TTransactionsCache Transactions;
     std::unique_ptr<TEvKqp::TEvQueryResponse> QueryResponse;
     std::optional<TSessionShutdownState> ShutdownState;
+    TString AdministrativeTerminationReason;
     TULIDGenerator UlidGen;
     NTxProxy::TRequestControls RequestControls;
 

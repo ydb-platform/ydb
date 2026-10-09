@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
     Y_UNIT_TEST_QUAD(Lookup, MultiMatches, Fullscan) {
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
-        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
         NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
         auto loggerConfig = NYql::NProto::TLoggingConfig();
         loggerConfig.set_allcomponentslevel(::NYql::NProto::TLoggingConfig_ELevel::TLoggingConfig_ELevel_TRACE);
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
     }
 
     Y_UNIT_TEST(LookupWithErrors) {
-        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
         NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
 
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
     }
 
     Y_UNIT_TEST_TWIN(LookupWithFatalAuthErrors, ListSplitsOrReadError) {
-        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
         NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
 
@@ -769,7 +769,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
     }
 
     Y_UNIT_TEST(LookupWithAuthErrors) {
-        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
         NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
 

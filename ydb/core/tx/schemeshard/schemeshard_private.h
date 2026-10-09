@@ -58,6 +58,7 @@ namespace TEvPrivate {
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
         EvPeriodicTableStatsParsed,
+        EvRevisitSplitMerge,
         EvEnd
     };
 
@@ -269,6 +270,12 @@ namespace TEvPrivate {
 
     struct TEvPersistTableStats: public TEventLocal<TEvPersistTableStats, EvPersistTableStats> {
         TEvPersistTableStats() = default;
+    };
+
+    // Self-event: a split/merge slot may have freed -- re-evaluate deferred candidates fairly
+    // (round-robin across tables). At most one is in flight (coalesced via SplitMergeRevisitScheduled).
+    struct TEvRevisitSplitMerge: public TEventLocal<TEvRevisitSplitMerge, EvRevisitSplitMerge> {
+        TEvRevisitSplitMerge() = default;
     };
 
     struct TEvPersistTopicStats: public TEventLocal<TEvPersistTopicStats, EvPersistTopicStats> {

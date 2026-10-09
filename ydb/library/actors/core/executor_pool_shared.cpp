@@ -1,7 +1,6 @@
 #include "executor_pool_jail.h"
 #include "executor_pool_shared.h"
 #include "executor_pool_basic.h"
-#include "executor_pool_shared_sanitizer.h"
 #include "actor.h"
 #include "config.h"
 #include "executor_thread_ctx.h"
@@ -462,14 +461,6 @@ namespace NActors {
         }
     }
 
-    void TSharedExecutorPool::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
-        for (i16 i = 0; i < PoolThreads; ++i) {
-            if (Threads[i].Thread) {
-                Threads[i].Thread->CollectAsyncFrameCacheStats(stats);
-            }
-        }
-    }
-
     void TSharedExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         poolState.CurrentLimit = GetThreadCount();
         poolState.MaxLimit = GetMaxThreadCount();
@@ -502,13 +493,13 @@ namespace NActors {
                     PoolName,
                     SoftProcessingDurationTs
                     ));
+            Threads[i].Thread->Prepare();
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
         *scheduleReaders = ScheduleReaders.Get();
         *scheduleSz = PoolThreads;
 
-        //Sanitizer = std::make_unique<TSharedExecutorPoolSanitizer>(this);
         EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "end");
     }
 
@@ -521,9 +512,6 @@ namespace NActors {
             Y_ABORT_UNLESS(Threads[i].Thread != nullptr, "Thread is nullptr i %" PRIu16, i);
             Threads[i].Thread->Start();
         }
-        if (Sanitizer) {
-            Sanitizer->Start();
-        }
     }
 
     void TSharedExecutorPool::PrepareStop() {
@@ -533,18 +521,12 @@ namespace NActors {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
             Threads[i].Interrupt();
         }
-        if (Sanitizer) {
-            Sanitizer->Stop();
-        }
     }
 
     void TSharedExecutorPool::Shutdown() {
         EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "shutdown");
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread->Join();
-        }
-        if (Sanitizer) {
-            Sanitizer->Join();
         }
     }
 

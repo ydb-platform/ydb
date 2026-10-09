@@ -11,8 +11,8 @@
 
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NRpc {
 
@@ -207,7 +207,7 @@ protected:
     void SetRequestAttachmentsTransfer(NYT::NBus::IDirectPlacementTransferPtr transfer);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ResponseLock_);
     TSharedRefArray ResponseMessage_; // cached
     mutable TPromise<TSharedRefArray> AsyncResponseMessage_; // created on-demand
 
@@ -342,7 +342,7 @@ protected:
 
     std::atomic<bool> Started_ = false;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ServicesLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, ServicesLock_);
     TServerConfigPtr StaticConfig_;
     TServerDynamicConfigPtr DynamicConfig_ = New<TServerDynamicConfig>();
     TServerConfigPtr AppliedConfig_;

@@ -1,9 +1,8 @@
 #include "dsproxy_mock.h"
 #include "model.h"
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <util/random/fast.h>
+#include <ydb/core/blobstorage/base/dsproxy_events.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY
 
@@ -119,10 +118,6 @@ namespace NKikimr {
                 PassAway();
             }
 
-            void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr&/* ev*/) {
-                //  do nothing, Model has neither monitoring counters nor Topology
-            }
-
             STATEFN(StateFunc) {
                 switch (const ui32 type = ev->GetTypeRewrite()) {
                     hFunc(TEvBlobStorage::TEvPut, Handle);
@@ -137,7 +132,9 @@ namespace NKikimr {
                     hFunc(TEvBlobStorage::TEvCheckIntegrity, Handle);
 
                     hFunc(TEvents::TEvPoisonPill, HandlePoison);
-                    hFunc(TEvBlobStorage::TEvConfigureProxy, Handle);
+                    case TEvBlobStorage::EvConfigureProxy:
+                        // The model has neither monitoring counters nor topology.
+                        break;
 
                     default:
                         Y_ABORT("unexpected event 0x%08" PRIx32, type);

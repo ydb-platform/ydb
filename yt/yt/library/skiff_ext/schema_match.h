@@ -26,6 +26,11 @@ DEFINE_ENUM(ERowRangeIndexMode,
     (IncrementalWithError)
 );
 
+DEFINE_ENUM(EOptionalKind,
+    (None)
+    (Variant8)
+);
+
 class TFieldDescription
 {
 public:
@@ -34,12 +39,6 @@ public:
 
 public:
     TFieldDescription(std::string name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
-
-    bool IsRequired() const;
-    bool IsNullable() const;
-
-    NSkiff::EWireType ValidatedGetDeoptionalizeType(bool simplify) const;
-    std::optional<NSkiff::EWireType> GetDeoptionalizeType(bool simplify) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +87,16 @@ std::vector<std::shared_ptr<NSkiff::TSkiffSchema>> ParseSkiffSchemas(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::pair<std::shared_ptr<NSkiff::TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<NSkiff::TSkiffSchema> skiffSchema);
+struct TStripOptionalResult
+{
+    NSkiff::TSkiffSchemaPtr StrippedSchema;
+    EOptionalKind OptionalKind;
+};
+
+TStripOptionalResult StripOptional(NSkiff::TSkiffSchemaPtr skiffSchema);
+
+bool MatchesOptionalSingular(NSkiff::TSkiffSchemaPtr skiffSchema);
+void ValidateDoesNotMatchOptionalSingular(NSkiff::TSkiffSchemaPtr skiffSchema);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -30,6 +31,26 @@ public:
         NYql::NDqProto::TTaskOutputSink Sink;
         TCleanupGraphSinkArguments Args;
     };
+
+    struct TPrepareSource {
+        struct TTask {
+            ui64 TaskId = 0;
+            google::protobuf::Any Meta;
+            TVector<TString> ReadRanges;
+            NYql::NDq::TSourceState State;
+        };
+
+        NYql::NDqProto::TSourceInput Source;
+        TVector<TTask> Tasks;
+        THashMap<TString, TString> SecureParams;
+        THashMap<TString, TString> RequestContext;
+    };
+
+    virtual TStringBuf GetSourceName() const = 0;
+
+    // Each entry describes one stage input and the states its tasks will load.
+    // Prepare external consumer positions before restoring a foreign checkpoint.
+    virtual NThreading::TFuture<NYql::TIssues> PrepareSourceRecovery(TVector<TPrepareSource>&& sources) = 0;
 
     // Matches TTaskOutputSink::Type.
     virtual TStringBuf GetSinkName() const = 0;

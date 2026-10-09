@@ -1,10 +1,12 @@
 #pragma once
 
-#include "storage_transport.h"
+#include "chaos_injector_control.h"
 
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 
 #include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
+#include <util/system/mutex.h>
 
 #include <memory>
 
@@ -28,6 +30,15 @@ public:
 
     // Returns true when nodeId is disabled.
     [[nodiscard]] bool IsNodeDisabled(ui32 nodeId) const override;
+
+    // Arms a fault rule; armed rules are listed by GetFaultRules.
+    void ArmFaultRule(TFaultRule rule) override;
+
+    // Drops every armed fault rule.
+    void ClearFaultRules() override;
+
+    // Snapshot of armed rules, including exhausted ones.
+    [[nodiscard]] TVector<TFaultRule> GetFaultRules() const override;
 
     // Connects through the underlying transport if the node is enabled.
     TConnectResultFutures Connect(const THostConnection& connection) override;
@@ -56,6 +67,7 @@ public:
         ui64 lsn,
         NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     // Sends the request unless the coordinator is disabled. Replies from
@@ -68,6 +80,7 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         std::shared_ptr<NWilson::TSpan> span,
         TWriteToManyPBuffersCallback callback) override;
 
@@ -77,6 +90,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         NKikimr::NDDisk::TWriteInstruction instruction,
         const TGuardedSgList& data,
+        const TBlockChecksums& checksums,
         NWilson::TSpan* span) override;
 
     // Synchronizes a PBuffer with a DDisk or returns undelivery when either
@@ -114,9 +128,19 @@ private:
         THashSet<ui32> NodeIds;
     };
 
+    struct TFaultRules: public TAtomicRefCount<TFaultRules>
+    {
+        TVector<TFaultRule> Items;
+    };
+
     const TStorageTransportPtr UnderlyingTransport;
 
     THotSwap<TDisabledNodes> DisabledNodes{MakeIntrusive<TDisabledNodes>()};
+
+    // Serializes writers of FaultRules. THotSwap replaces the pointer
+    // without compare-and-swap, so concurrent stores lose updates.
+    TMutex FaultRulesLock;
+    THotSwap<TFaultRules> FaultRules{MakeIntrusive<TFaultRules>()};
 };
 
 ////////////////////////////////////////////////////////////////////////////////

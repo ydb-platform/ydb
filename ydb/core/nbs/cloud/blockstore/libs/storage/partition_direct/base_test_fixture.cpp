@@ -120,11 +120,13 @@ void TBaseFixture::Init()
          TPBufferKey pBufferKey,
          TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
         Y_UNUSED(pBufferKey);
+        Y_UNUSED(checksums);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -155,9 +157,11 @@ void TBaseFixture::Init()
          THostIndex hostIndex,
          TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
+        Y_UNUSED(checksums);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);

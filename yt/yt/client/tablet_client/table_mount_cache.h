@@ -222,6 +222,9 @@ struct ITableMountCache
     //! May throw if another client requested this entry first and the result is not ready yet.
     virtual TFuture<TTableMountInfoPtr> GetTableInfo(const NYPath::TYPath& path) = 0;
 
+    //! Invalidates a cached table entry, even if it has no tablets.
+    virtual void InvalidateTable(const TTableMountInfoPtr& tableInfo) = 0;
+
     //! Invalidates cached table info for all table infos owning this tablet.
     virtual void InvalidateTablet(TTabletId tabletId) = 0;
 

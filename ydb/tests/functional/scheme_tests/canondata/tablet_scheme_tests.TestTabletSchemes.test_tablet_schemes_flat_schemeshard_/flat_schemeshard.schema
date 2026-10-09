@@ -1586,6 +1586,11 @@
                 "ColumnId": 34,
                 "ColumnName": "TablesMetricsLevel",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "StorageSpaceExhausted",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1625,7 +1630,8 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2973,11 +2979,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 17,
-                "ColumnName": "NeedSyncHive",
-                "ColumnType": "Bool"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "TxId",
                 "ColumnType": "Uint64"
@@ -3056,13 +3057,22 @@
                 "ColumnId": 16,
                 "ColumnName": "NeedUpdateObject",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "NeedSyncHive",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "LoadSplitLineage",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    17,
                     1,
                     2,
                     3,
@@ -3078,7 +3088,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9583,6 +9595,11 @@
                 "ColumnId": 4,
                 "ColumnName": "Properties",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "OperationOwnerActorId",
+                "ColumnType": "ActorID"
             }
         ],
         "ColumnsDropped": [],
@@ -9592,7 +9609,8 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5
                 ],
                 "RoomID": 0,
                 "Codec": 0,

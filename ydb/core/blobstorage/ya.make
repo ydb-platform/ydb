@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     defs.h
@@ -42,6 +42,7 @@ RECURSE(
     other
     pdisk
     storagepoolmon
+    subsystem
     testing
     vdisk
 )

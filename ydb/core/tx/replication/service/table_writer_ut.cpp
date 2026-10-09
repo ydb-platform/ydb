@@ -58,15 +58,17 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         auto schemaChange = env.Send<TEvWorker::TEvSchemaChange>(writer, new TEvWorker::TEvData(0, "TestSource", {
-            TRecord(1, R"({"tableChanges":[{"table":{"schemaVersion":2,"columns":{"key":{"type":"Uint32"},"value":{"type":"Utf8"}},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"),
+            TRecord(1, R"({"tableChanges":[{"table":{"schemaVersion":2,"indexes":{},"columns":{"key":{"type":"Uint32"},"value":{"type":"Utf8"}},"primaryKeyColumnNames":["key"]}}],"ts":[1,1]})"),
         }));
 
         auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schemaChange->Get()->Schema);
+        release->Record.MutableSchema()->ClearIndexes();
         env.Send<TEvWorker::TEvSchemaChangeApplied>(writer, release.Release());
 
         auto duplicate = MakeHolder<TEvService::TEvSchemaChangeResult>();
         duplicate->Record.MutableSchema()->CopyFrom(schemaChange->Get()->Schema);
+        duplicate->Record.MutableSchema()->ClearIndexes();
         env.GetRuntime().Send(writer, env.GetSender(), duplicate.Release());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
@@ -215,6 +217,94 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         }
 
         return ev;
+    }
+
+    void CreateIndexBuildTable(TEnv<>& env) {
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            .ReplicationConfig = TTestTableDescription::TReplicationConfig{
+                .Mode = TTestTableDescription::TReplicationConfig::MODE_READ_ONLY,
+                .ConsistencyLevel = TTestTableDescription::TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL,
+            },
+        }));
+    }
+
+    TActorId StartIndexBuildWriter(TEnv<>& env, const NKikimrReplication::TLocalTableWriterSettings& settings) {
+        const auto writer = env.GetRuntime().Register(CreateLocalTableWriter(
+            "/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent, &settings));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+        return writer;
+    }
+
+    Y_UNIT_TEST(IndexBuildSwitchCheckpointAndReplay) {
+        TEnv env;
+        CreateIndexBuildTable(env);
+
+        NKikimrReplication::TLocalTableWriterSettings settings;
+        settings.SetIndexBuild(true);
+        auto writer = StartIndexBuildWriter(env, settings);
+        const TVector<TTopicMessage> records = {
+            TRecord(1, R"({"key":[1],"update":{"value":"direct"},"ts":[205,9]})"),
+            TRecord(2, R"({"resolved":[200,0]})"),
+            TRecord(3, R"({"key":[2],"update":{"value":"local"},"ts":[206,0]})"),
+        };
+
+        const auto checkpoint = env.Send<TEvService::TEvIndexBuildProgress>(writer,
+            new TEvWorker::TEvData(0, "TestSource", records));
+        const auto& progress = checkpoint->Get()->Record.GetProgress();
+        UNIT_ASSERT_VALUES_EQUAL(progress.GetOffset(), 3);
+        auto direct = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(direct), "key = 1, value = direct");
+        UNIT_ASSERT_VALUES_EQUAL(progress.GetSwitchOffset(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(progress.GetMaxVersion()), TRowVersion(205, 9));
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(progress.GetHeartbeat()), TRowVersion(200, 0));
+        // Restart before the topic offset is acknowledged. Already applied
+        // prefix is skipped, and the suffix uses a transaction immediately.
+        env.SendAsync(writer, new TEvents::TEvPoison());
+        settings.MutableIndexBuildProgress()->CopyFrom(progress);
+        writer = StartIndexBuildWriter(env, settings);
+        const auto request = env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", records));
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.VersionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TRowVersion::FromProto(request->Get()->Record.GetVersions(0)), TRowVersion(206, 0));
+        auto committed = env.Send<TEvService::TEvIndexBuildProgress>(writer,
+            MakeTxIdResult({{TRowVersion(210, 0), 123}}));
+        UNIT_ASSERT_VALUES_EQUAL(committed->Get()->Record.GetProgress().GetMaxVersion().GetStep(), 205);
+        UNIT_ASSERT_VALUES_EQUAL(committed->Get()->Record.GetProgress().GetOffset(), 4);
+        auto beforeCommit = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(beforeCommit), "key = 1, value = direct");
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 123);
+        auto afterCommit = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(afterCommit), "key = 1, value = direct\nkey = 2, value = local");
+    }
+
+    Y_UNIT_TEST(IndexBuildSeparatesLocalAndGlobalAssignmentsInFlight) {
+        TEnv env;
+        CreateIndexBuildTable(env);
+
+        NKikimrReplication::TLocalTableWriterSettings settings;
+        settings.SetIndexBuild(true);
+        settings.MutableIndexBuildProgress()->SetSwitchOffset(0);
+        auto writer = StartIndexBuildWriter(env, settings);
+        env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"key":[1],"update":{"value":"local"},"ts":[209,9]})"),
+            TRecord(2, R"({"key":[2],"update":{"value":"global"},"ts":[210,0]})"),
+        }));
+        // A global answer may arrive before the local one; its lower bound
+        // must prevent it from consuming the pending local record.
+        auto global = MakeTxIdResult({{TRowVersion(220, 0), 124}});
+        TRowVersion(210, 0).ToProto(global->Record.MutableVersionTxIds(0)->MutableBegin());
+        env.SendAsync(writer, std::move(global));
+        const auto checkpoint = env.Send<TEvService::TEvIndexBuildProgress>(writer,
+            MakeTxIdResult({{TRowVersion(210, 0), 123}}));
+        UNIT_ASSERT_VALUES_EQUAL(checkpoint->Get()->Record.GetProgress().GetOffset(), 3);
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 123);
+        auto local = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(local), "key = 1, value = local");
+        CommitWrites(env.GetRuntime(), {"/Root/Table"}, 124);
+        auto shared = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(shared), "key = 1, value = local\nkey = 2, value = global");
     }
 
     Y_UNIT_TEST(ConsistentWrite) {

@@ -12,7 +12,7 @@ YQL_UDF_CONTRIB(json2_udf)
     
     PEERDIR(
         yql/essentials/core/sql_types
-        yql/essentials/types/binary_json
+        yql/essentials/types/binary_json/dom
         yql/essentials/minikql/dom
         yql/essentials/minikql/jsonpath
     )

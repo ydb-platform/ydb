@@ -225,7 +225,7 @@ namespace NKikimr::NDDisk {
                 [this, chunkIdx](const TChunkForData& data) {
                     const auto tabletId = data.TabletId;
                     const auto vChunkIndex = data.VChunkIndex;
-                    Y_ABORT_UNLESS(ChunkRefs.contains(tabletId) && ChunkRefs[tabletId].contains(vChunkIndex));
+                    Y_ABORT_UNLESS(Tablets.contains(tabletId) && Tablets[tabletId].ChunkRefs.contains(vChunkIndex));
 
                     const bool inserted = DataChunkAllocationsInFlight.try_emplace(
                         std::make_pair(tabletId, vChunkIndex), TDataChunkAllocationInFlight{.ChunkIdx = chunkIdx}).second;
@@ -235,8 +235,8 @@ namespace NKikimr::NDDisk {
                         IntegrityManager->OnDataChunkAllocated({tabletId, vChunkIndex}, chunkIdx);
                         DrainIntegrityManager(/*kickReserve=*/ false);
                     } else {
-                        TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
-                        chunkRef.ChunkIdx = chunkIdx;
+                        TChunkRef& chunkRef = Tablets[tabletId].ChunkRefs[vChunkIndex];
+                        SetDataChunkMapping(tabletId, &chunkRef, chunkIdx);
                         IssueDataChunkIncrement(tabletId, vChunkIndex);
                         if (!chunkRef.PendingEventsForChunk.empty()) {
                             Send(SelfId(), new TEvPrivate::TEvHandleEventForChunk(tabletId, vChunkIndex));
@@ -421,9 +421,9 @@ namespace NKikimr::NDDisk {
         for (const auto& key : placedKeys) {
             const auto it = DataChunkAllocationsInFlight.find({key.TabletId, key.VChunkIndex});
             Y_ABORT_UNLESS(it != DataChunkAllocationsInFlight.end());
-            TChunkRef& chunkRef = ChunkRefs[key.TabletId][key.VChunkIndex];
+            TChunkRef& chunkRef = Tablets[key.TabletId].ChunkRefs[key.VChunkIndex];
             if (!chunkRef.ChunkIdx) {
-                chunkRef.ChunkIdx = it->second.ChunkIdx;
+                SetDataChunkMapping(key.TabletId, &chunkRef, it->second.ChunkIdx);
             }
             Y_ABORT_UNLESS(chunkRef.ChunkIdx == it->second.ChunkIdx);
             if (!chunkRef.PendingEventsForChunk.empty()) {
@@ -563,7 +563,7 @@ namespace NKikimr::NDDisk {
         auto allocation = std::move(it->second);
         DataChunkAllocationsInFlight.erase(it);
 
-        TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
+        TChunkRef& chunkRef = Tablets[tabletId].ChunkRefs[vChunkIndex];
         Y_ABORT_UNLESS(chunkRef.ChunkIdx == allocation.ChunkIdx);
 
         const size_t numErased = ChunkMapIncrementsInFlight.erase({tabletId, vChunkIndex, allocation.ChunkIdx});
@@ -614,7 +614,7 @@ namespace NKikimr::NDDisk {
         }
 
         auto& msg = *ev->Get();
-        TChunkRef& chunkRef = ChunkRefs[msg.TabletId][msg.VChunkIndex];
+        TChunkRef& chunkRef = Tablets[msg.TabletId].ChunkRefs[msg.VChunkIndex];
 
         // temporarily remove queue to unblock execution of queries for this chunk
         std::queue<TPendingEvent> queue;
@@ -648,7 +648,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ScheduleSerializedWrite(ui64 tabletId, ui64 vChunkIndex) {
-        TChunkRef& chunkRef = ChunkRefs.at(tabletId).at(vChunkIndex);
+        TChunkRef& chunkRef = Tablets.at(tabletId).ChunkRefs.at(vChunkIndex);
         if (Stopping || Y_UNLIKELY(IsBroken()) || chunkRef.IntegrityExtentWriteInFlight
                 || chunkRef.SerializedWriteResumeScheduled
                 || chunkRef.PendingSerializedWrites.empty()) {
@@ -659,7 +659,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ReleaseIntegrityExtentWrite(ui64 tabletId, ui64 vChunkIndex) {
-        TChunkRef& chunkRef = ChunkRefs.at(tabletId).at(vChunkIndex);
+        TChunkRef& chunkRef = Tablets.at(tabletId).ChunkRefs.at(vChunkIndex);
         Y_ABORT_UNLESS(chunkRef.IntegrityExtentWriteInFlight);
         chunkRef.IntegrityExtentWriteInFlight = false;
         ScheduleSerializedWrite(tabletId, vChunkIndex);
@@ -673,7 +673,7 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        TChunkRef& chunkRef = ChunkRefs.at(msg.TabletId).at(msg.VChunkIndex);
+        TChunkRef& chunkRef = Tablets.at(msg.TabletId).ChunkRefs.at(msg.VChunkIndex);
         Y_ABORT_UNLESS(chunkRef.SerializedWriteResumeScheduled);
         chunkRef.SerializedWriteResumeScheduled = false;
 
@@ -750,7 +750,11 @@ namespace NKikimr::NDDisk {
             extentRef->SetVChunkGeneration(ref->VChunkGeneration);
         };
 
-        for (const auto& [tabletId, chunks] : ChunkRefs) {
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& chunks = tablet.ChunkRefs;
+            if (chunks.empty()) {
+                continue;
+            }
             auto *tabletRecord = snapshot->AddTabletRecords();
             tabletRecord->SetTabletId(tabletId);
 
@@ -876,9 +880,9 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        const auto tabletIt = ChunkRefs.find(tabletId);
+        const auto tabletIt = Tablets.find(tabletId);
 
-        if (tabletIt == ChunkRefs.end()) {
+        if (tabletIt == Tablets.end()) {
             // tablet has no chunks
             SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
             return;
@@ -886,7 +890,7 @@ namespace NKikimr::NDDisk {
 
         // Reject if any VChunk has a pending event queue (allocation queued but not yet in log)
         // or client data I/O that still targets its physical chunk.
-        for (const auto& [vChunkIndex, chunkRef] : tabletIt->second) {
+        for (const auto& [vChunkIndex, chunkRef] : tabletIt->second.ChunkRefs) {
             if (!chunkRef.PendingEventsForChunk.empty()
                     || !chunkRef.PendingSerializedWrites.empty()
                     || chunkRef.IntegrityExtentWriteInFlight) {
@@ -905,14 +909,15 @@ namespace NKikimr::NDDisk {
 
         // Collect physical data chunk IDs.
         TVector<TChunkIdx> chunksToDelete;
-        for (const auto& [vChunkIndex, chunkRef] : tabletIt->second) {
+        for (const auto& [vChunkIndex, chunkRef] : tabletIt->second.ChunkRefs) {
             if (chunkRef.ChunkIdx) {
                 chunksToDelete.push_back(chunkRef.ChunkIdx);
             }
         }
 
         if (chunksToDelete.empty()) {
-            ChunkRefs.erase(tabletIt);
+            tabletIt->second.ChunkRefs.clear();
+            CountTabletChunks(tabletId, 0);
             SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
             return;
         }
@@ -925,7 +930,8 @@ namespace NKikimr::NDDisk {
         if (Config.EnableChecksums) {
             IntegrityManager->PrepareTabletChunksDeletion(tabletId);
         }
-        ChunkRefs.erase(tabletIt);
+        CountTabletChunks(tabletId, -static_cast<i64>(chunksToDelete.size()));
+        tabletIt->second.ChunkRefs.clear();
 
         *Counters.Chunks.ChunksOwned -= chunksToDelete.size();
 

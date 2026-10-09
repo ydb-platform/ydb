@@ -50,15 +50,14 @@ namespace NYql::NUdf {
 class IFunctionTypeInfoBuilder;
 
 struct TStaticSymbols {
-    void* (*UdfAllocateFunc)(ui64 size);
-    void (*UdfFreeFunc)(const void* mem);
+    // Keep the remaining function offsets compatible with already compiled UDFs.
+    void* (*Reserved1)(ui64 size) = nullptr;
+    void (*Reserved2)(const void* mem) = nullptr;
     void (*UdfTerminate)(const char* message);
     void (*UdfRegisterObject)(TBoxedValue* object);
     void (*UdfUnregisterObject)(TBoxedValue* object);
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
     void* (*UdfAllocateWithSizeFunc)(ui64 size);
     void (*UdfFreeWithSizeFunc)(const void* mem, ui64 size);
-#endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
     void* (*UdfArrowAllocateFunc)(ui64 size);
     void* (*UdfArrowReallocateFunc)(const void* mem, ui64 prevSize, ui64 size);
@@ -68,10 +67,8 @@ struct TStaticSymbols {
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
 UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 80);
-#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 56);
 #else
-UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 40);
+UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 56);
 #endif
 
 inline TStaticSymbols GetStaticSymbols();
@@ -226,26 +223,20 @@ namespace NYql::NUdf {
 
 #ifndef BUILD_UDF
 
-Y_PRAGMA_DIAGNOSTIC_PUSH
-Y_PRAGMA_NO_DEPRECATED
-
 inline TStaticSymbols GetStaticSymbols() {
-    return {.UdfAllocateFunc = &UdfAllocate, .UdfFreeFunc = &UdfFree, .UdfTerminate = &UdfTerminate, .UdfRegisterObject = &UdfRegisterObject, .UdfUnregisterObject = &UdfUnregisterObject
-    #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-            ,
-            .UdfAllocateWithSizeFunc = &UdfAllocateWithSize,
-            .UdfFreeWithSizeFunc = &UdfFreeWithSize
-    #endif
+    return {
+        .UdfTerminate = &UdfTerminate,
+        .UdfRegisterObject = &UdfRegisterObject,
+        .UdfUnregisterObject = &UdfUnregisterObject,
+        .UdfAllocateWithSizeFunc = &UdfAllocateWithSize,
+        .UdfFreeWithSizeFunc = &UdfFreeWithSize,
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
-            ,
-            .UdfArrowAllocateFunc = &UdfArrowAllocate,
-            .UdfArrowReallocateFunc = &UdfArrowReallocate,
-            .UdfArrowFreeFunc = &UdfArrowFree
+        .UdfArrowAllocateFunc = &UdfArrowAllocate,
+        .UdfArrowReallocateFunc = &UdfArrowReallocate,
+        .UdfArrowFreeFunc = &UdfArrowFree,
     #endif
     };
 }
-
-Y_PRAGMA_DIAGNOSTIC_POP
 
 #endif
 

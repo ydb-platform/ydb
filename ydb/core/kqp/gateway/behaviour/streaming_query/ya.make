@@ -36,6 +36,7 @@ PEERDIR(
     ydb/services/metadata/abstract
     ydb/services/metadata/manager
     ydb/services/metadata/optimization
+    ydb/services/metadata/scheme_transaction
     yql/essentials/core
     yql/essentials/core/sql_types
     yql/essentials/providers/common/provider
@@ -47,4 +48,8 @@ END()
 
 RECURSE(
     common
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

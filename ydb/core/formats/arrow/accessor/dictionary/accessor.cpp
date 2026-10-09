@@ -1,18 +1,21 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -138,6 +141,9 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     return *result;
 }
 
+TJsonValueView TDictionaryArray::GetJsonValueView(const ui32 index, const NSubColumns::EValueType valueType) const {
+    return NSubColumns::ArrayElementToJsonValueView(*ArrayDictionary, GetIndexImpl(index), valueType);
+}
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
     return TMinMax::Compute(ArrayDictionary);

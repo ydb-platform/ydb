@@ -129,16 +129,20 @@ bool CheckStreamingQueryFeatures(const TCoNameValueTupleList& features, TExprCon
             value = literal.Cast();
         }
 
-        if (topLevel && feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom) {
-            if (value.Maybe<TCoAtom>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>()) {
+        if (topLevel && (feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom || feature.Name() == TStreamingQueryConfig::TProperties::OutputFrom)) {
+            const bool readFrom = feature.Name() == TStreamingQueryConfig::TProperties::ReadFrom;
+            const TString message = readFrom
+                ? "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"
+                : "OUTPUT_FROM must be an expression of type Timestamp";
+            if (readFrom && (value.Maybe<TCoAtom>() || value.Maybe<TCoString>() || value.Maybe<TCoUtf8>())) {
                 const auto literal = value.Maybe<TCoAtom>() ? value.Cast<TCoAtom>() : value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>();
                 const auto mode = to_lower(TString(literal.Value()));
                 if (mode != "earliest" && mode != "latest") {
-                    ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"));
+                    ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), message));
                     return false;
                 }
             } else if (!EnsureSpecificDataType(value.Cast().Ref(), EDataSlot::Timestamp, ctx)) {
-                ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp"));
+                ctx.AddError(TIssue(ctx.GetPosition(value.Cast().Pos()), message));
                 return false;
             }
         } else if (topLevel && feature.Name() == TStreamingQueryConfig::TProperties::StreamingDisposition

@@ -21,14 +21,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         NScripting::TScriptingClient client(kikimr->GetDriver());
         const auto result = client.ExplainYqlScript(R"sql(
             CREATE EXTERNAL TABLE validated_table (data String NOT NULL) WITH (
-                DATA_SOURCE="not_created_yet", LOCATION="missing/", FORMAT="raw", VALIDATE_LOCATION="true"
+                DATA_SOURCE="not_created_yet", LOCATION="missing/", FORMAT="raw", VALIDATE_EXTERNAL="true"
             );
         )sql", NScripting::TExplainYqlRequestSettings().Mode(NScripting::ExplainYqlRequestMode::Plan)).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT(!kikimr->GetSchemeClient().DescribePath("/Root/validated_table").GetValueSync().IsSuccess());
     }
 
-    Y_UNIT_TEST_TWIN(ValidateExternalTableLocation, UseQueryService) {
+    Y_UNIT_TEST_TWIN(ValidateExternalTable, UseQueryService) {
         const TString bucket = UseQueryService ? "validate-location-query" : "validate-location-scheme";
         CreateBucketWithObject(bucket, "data/file.json", TEST_CONTENT);
         UploadObject(bucket, "empty/", "");
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                     DATA_SOURCE="source", LOCATION="{location}", FORMAT="raw"{validation}
                 );
             )sql", "name"_a = name, "location"_a = location,
-                "validation"_a = validation.empty() ? TString{} : TStringBuilder() << ", VALIDATE_LOCATION=\"" << validation << "\""));
+                "validation"_a = validation.empty() ? TString{} : TStringBuilder() << ", VALIDATE_EXTERNAL=\"" << validation << "\""));
             UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), success, result.GetIssues().ToString());
             if (!success) {
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
@@ -77,14 +77,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         }
         create("new-output/", "", true);
         create("new-output/", "false", true);
-        create("/", "yes", false, "VALIDATE_LOCATION must be 'true' or 'false'");
+        create("/", "yes", false, "VALIDATE_EXTERNAL must be 'true' or 'false'");
         create("", "true", false, "Cannot read from empty path");
         create("data/{", "true", false, "Invalid LOCATION");
+        // Disabling remote checks must still reject invalid local definitions.
+        create("data/{", "false", false, "invalid wildcard");
 
         if constexpr (UseQueryService) {
             result = execute(R"sql(
                 CREATE EXTERNAL TABLE IF NOT EXISTS table_0 (data String NOT NULL) WITH (
-                    DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_LOCATION="true"
+                    DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_EXTERNAL="true"
                 );
             )sql");
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -97,7 +99,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="NONE"
             );
             CREATE EXTERNAL TABLE empty_bucket_table (data String NOT NULL) WITH (
-                DATA_SOURCE="empty_source", LOCATION="/", FORMAT="raw", VALIDATE_LOCATION="true"
+                DATA_SOURCE="empty_source", LOCATION="/", FORMAT="raw", VALIDATE_EXTERNAL="true"
             );
         )sql", GetBucketLocation(emptyBucket)));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -124,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
 
         result = execute(R"sql(
             CREATE EXTERNAL TABLE validated_table (data String NOT NULL) WITH (
-                DATA_SOURCE="source", LOCATION="/", FORMAT="raw", VALIDATE_LOCATION="true"
+                DATA_SOURCE="source", LOCATION="/", FORMAT="raw", VALIDATE_EXTERNAL="true"
             );
         )sql");
         UNIT_ASSERT(!result.IsSuccess());
@@ -138,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 DATA_SOURCE="source", LOCATION="/", FORMAT="raw"
             );
             CREATE EXTERNAL TABLE unchecked_table (data String NOT NULL) WITH (
-                DATA_SOURCE="source", LOCATION="/", FORMAT="raw", VALIDATE_LOCATION="false"
+                DATA_SOURCE="source", LOCATION="/", FORMAT="raw", VALIDATE_EXTERNAL="false"
             );
         )sql");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -166,7 +168,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 AWS_SECRET_ACCESS_KEY_SECRET_PATH="secret_key", AWS_REGION="us-east-1"
             );
             CREATE EXTERNAL TABLE validated_table (data String NOT NULL) WITH (
-                DATA_SOURCE="source", LOCATION="data.json", FORMAT="raw", VALIDATE_LOCATION="true"
+                DATA_SOURCE="source", LOCATION="data.json", FORMAT="raw", VALIDATE_EXTERNAL="true"
             );
         )sql", GetBucketLocation(bucket)));
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -175,18 +177,26 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         result = execute(R"sql(
             CREATE EXTERNAL TABLE missing_secret_table (data String NOT NULL) WITH (
-                DATA_SOURCE="source", LOCATION="data.json", FORMAT="raw", VALIDATE_LOCATION="true"
+                DATA_SOURCE="source", LOCATION="data.json", FORMAT="raw", VALIDATE_EXTERNAL="true"
             );
         )sql");
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "secret_key");
         UNIT_ASSERT(!kikimr->GetSchemeClient().DescribePath("/Root/missing_secret_table").GetValueSync().IsSuccess());
 
+        // Opting out skips credential resolution as well as S3 location checks.
+        result = execute(R"sql(
+            CREATE EXTERNAL TABLE unchecked_table (data String NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_EXTERNAL="false"
+            );
+        )sql");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
         if constexpr (UseQueryService) {
             // An existing table must not require another remote check or available secrets.
             result = execute(R"sql(
                 CREATE EXTERNAL TABLE IF NOT EXISTS validated_table (data String NOT NULL) WITH (
-                    DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_LOCATION="true"
+                    DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_EXTERNAL="true"
                 );
             )sql");
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -206,7 +216,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
                 SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="NONE"
             );
             CREATE EXTERNAL TABLE validated_table (key Utf8 NOT NULL, value Utf8 NOT NULL) WITH (
-                DATA_SOURCE="source", LOCATION="original.json", FORMAT="json_each_row", VALIDATE_LOCATION="true"
+                DATA_SOURCE="source", LOCATION="original.json", FORMAT="json_each_row", VALIDATE_EXTERNAL="true"
             );
         )sql", GetBucketLocation(bucket)), TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -214,7 +224,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
         auto replace = [&](const TString& location) {
             return client.ExecuteQuery(fmt::format(R"sql(
                 CREATE OR REPLACE EXTERNAL TABLE validated_table (key Utf8 NOT NULL, value Utf8 NOT NULL) WITH (
-                    DATA_SOURCE="source", LOCATION="{}", FORMAT="json_each_row", VALIDATE_LOCATION="true"
+                    DATA_SOURCE="source", LOCATION="{}", FORMAT="json_each_row", VALIDATE_EXTERNAL="true"
                 );
             )sql", location), TTxControl::NoTx()).GetValueSync();
         };

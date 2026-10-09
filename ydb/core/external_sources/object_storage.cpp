@@ -488,7 +488,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return EnableInfer;
     }
 
-    NThreading::TFuture<void> ValidateExternalTableLocation(const TMetadata& meta) override try {
+    NThreading::TFuture<void> ValidateExternalTable(const TMetadata& meta) override try {
         ValidateHostname(HostnamePatterns, meta.DataSourceLocation);
         if (const auto error = NYql::NS3::ValidateWildcards(meta.TableLocation)) {
             throw TExternalSourceException() << "Invalid LOCATION '" << meta.TableLocation << "': " << error;

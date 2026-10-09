@@ -70,7 +70,7 @@ NThreading::TFuture<void> Validate(const TString& location, const std::shared_pt
     metadata.DataSourceLocation = "https://storage.example/bucket/";
     metadata.TableLocation = location;
     metadata.Auth = std::move(auth);
-    return source->ValidateExternalTableLocation(metadata);
+    return source->ValidateExternalTable(metadata);
 }
 
 } // namespace

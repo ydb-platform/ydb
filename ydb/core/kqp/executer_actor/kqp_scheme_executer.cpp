@@ -87,7 +87,7 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
             EvMakeTempDirResult,
             EvMakeSessionDirResult,
             EvMakeCTASDirResult,
-            EvLocationValidated,
+            EvExternalTableValidated,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
@@ -106,7 +106,7 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
             IKqpGateway::TGenericResult Result;
         };
 
-        struct TEvLocationValidated : public TEventLocal<TEvLocationValidated, EEv::EvLocationValidated> {
+        struct TEvExternalTableValidated : public TEventLocal<TEvExternalTableValidated, EEv::EvExternalTableValidated> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -466,23 +466,23 @@ public:
                 auto* table = modifyScheme.MutableCreateExternalTable();
                 NKikimrExternalSources::TGeneral general;
                 if (table->GetSourceType() == "General" && general.ParseFromString(table->GetContent())) {
-                    bool validateLocation = false;
+                    bool validateExternal = false;
                     auto& attributes = *general.mutable_attributes();
                     for (auto it = attributes.begin(); it != attributes.end();) {
-                        if (to_lower(it->first) != "validate_location") {
+                        if (to_lower(it->first) != "validate_external") {
                             ++it;
                             continue;
                         }
                         const auto value = to_lower(it->second);
                         if (value != "true" && value != "false") {
-                            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "VALIDATE_LOCATION must be 'true' or 'false'");
+                            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "VALIDATE_EXTERNAL must be 'true' or 'false'");
                         }
-                        validateLocation = value == "true";
+                        validateExternal = value == "true";
                         it = attributes.erase(it);
                     }
                     table->SetContent(general.SerializeAsString());
-                    if (validateLocation && !LocationValidated) {
-                        return ValidateExternalTableLocation(modifyScheme);
+                    if (validateExternal && !ExternalTableValidated) {
+                        return ValidateExternalTable(modifyScheme);
                     }
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
@@ -812,9 +812,9 @@ public:
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
-    void ValidateExternalTableLocation(const NKikimrSchemeOp::TModifyScheme& scheme) try {
+    void ValidateExternalTable(const NKikimrSchemeOp::TModifyScheme& scheme) try {
         if (!FederatedQuerySetup) {
-            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "Location validation requires federated query support");
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "External table validation requires federated query support");
         }
         auto* actorSystem = TActivationContext::ActorSystem();
         const auto& patterns = QueryServiceConfig.GetHostnamePatterns();
@@ -832,7 +832,7 @@ public:
         auto loader = std::make_shared<TKqpTableMetadataLoader>(TString{DefaultKikimrPublicClusterName},
             actorSystem, nullptr, false, nullptr, FederatedQuerySetup, NWilson::TTraceId(TraceId));
         const auto& table = scheme.GetCreateExternalTable();
-        auto validation = NYql::ValidateExternalTableLocation(
+        auto validation = NYql::ValidateExternalTable(
             JoinPath({scheme.GetWorkingDir(), table.GetName()}), table.GetDataSourcePath(), table.GetLocation(),
             !scheme.GetFailedOnAlreadyExists() && !scheme.GetReplaceIfExists(), factory,
             [loader, database = Database, userToken = UserToken](const TString& path, bool auth) {
@@ -841,7 +841,7 @@ public:
                     database, userToken);
             });
         validation.Subscribe([actorSystem, selfId = SelfId()](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvLocationValidated>();
+            auto ev = MakeHolder<TEvPrivate::TEvExternalTableValidated>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
@@ -850,12 +850,12 @@ public:
         ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, e.what());
     }
 
-    void Handle(TEvPrivate::TEvLocationValidated::TPtr& ev) {
+    void Handle(TEvPrivate::TEvExternalTableValidated::TPtr& ev) {
         const auto& result = ev->Get()->Result;
         if (!result.Success()) {
             return ReplyErrorAndDie(GetYdbStatus(result), result.Issues());
         }
-        LocationValidated = true;
+        ExternalTableValidated = true;
         MakeSchemeOperationRequest();
     }
 
@@ -1032,7 +1032,7 @@ public:
                 hFunc(TEvPrivate::TEvMakeTempDirResult, Handle);
                 hFunc(TEvPrivate::TEvMakeSessionDirResult, Handle);
                 hFunc(TEvPrivate::TEvMakeCTASDirResult, Handle);
-                hFunc(TEvPrivate::TEvLocationValidated, Handle);
+                hFunc(TEvPrivate::TEvExternalTableValidated, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -1659,7 +1659,7 @@ private:
     const TInstant Deadline;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    bool LocationValidated = false;
+    bool ExternalTableValidated = false;
     TString KillSessionId;
     TActorId AnalyzeActorId;
 };

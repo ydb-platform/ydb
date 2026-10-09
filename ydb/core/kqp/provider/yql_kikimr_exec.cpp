@@ -3,7 +3,7 @@
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
-#include "external_table_validation.h"
+#include <ydb/core/kqp/provider/external_table_validation.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -4537,25 +4537,25 @@ private:
         if (SessionCtx->Query().PrepareOnly) {
             return Gateway->CreateExternalTable(cluster, settings, true, existingOk, replaceIfExists);
         }
-        bool validateLocation = false;
+        bool validateExternal = false;
         for (auto it = settings.SourceTypeParameters.begin(); it != settings.SourceTypeParameters.end();) {
-            if (to_lower(it->first) != "validate_location") {
+            if (to_lower(it->first) != "validate_external") {
                 ++it;
                 continue;
             }
             const auto value = to_lower(it->second);
             if (value != "true" && value != "false") {
                 return MakeFuture(ResultFromIssues<IKikimrGateway::TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST,
-                    "VALIDATE_LOCATION must be 'true' or 'false'", {}));
+                    "VALIDATE_EXTERNAL must be 'true' or 'false'", {}));
             }
-            validateLocation = value == "true";
+            validateExternal = value == "true";
             it = settings.SourceTypeParameters.erase(it);
         }
-        if (!validateLocation) {
+        if (!validateExternal) {
             return Gateway->CreateExternalTable(cluster, settings, true, existingOk, replaceIfExists);
         }
 
-        return ValidateExternalTableLocation(settings.ExternalTable, settings.DataSourcePath, settings.Location,
+        return ValidateExternalTable(settings.ExternalTable, settings.DataSourcePath, settings.Location,
             existingOk && !replaceIfExists, ExternalSourceFactory,
             [gateway = Gateway, cluster](const TString& path, bool auth) {
                 return gateway->LoadTableMetadata(cluster, path,

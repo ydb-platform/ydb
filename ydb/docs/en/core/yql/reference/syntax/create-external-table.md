@@ -24,11 +24,13 @@ Where:
 * `format_name` — one of the [supported storage formats](../../../concepts/query_execution/federated_query/s3/formats.md).
 * `compression_name` — one of the [supported compression algorithms](../../../concepts/query_execution/federated_query/s3/formats.md#compression).
 
-Add `VALIDATE_LOCATION="true"` to `WITH` to check that the S3 location exists before creating the table. The check uses the external data source's credentials and requires permission to list the bucket. A missing bucket, a missing file or directory prefix, a pattern without matching files, or an access error prevents table creation. Errors include the location and bucket address.
+`VALIDATE_EXTERNAL` controls all additional checks against the external system when creating or replacing an external table. Set it to `"true"` in `WITH` to run the checks supported by the data source, or to `"false"` to skip them. The default is `"false"`, so automation can create tables before external resources or data become available. Required local checks, including the table schema and option syntax, still apply. Subsequent queries perform their usual checks.
+
+For S3, `VALIDATE_EXTERNAL="true"` currently checks that `LOCATION` exists using the external data source's credentials. This requires permission to list the bucket. A missing bucket, a missing file or directory prefix, a pattern without matching files, or an access error prevents table creation or replacement. Errors include the location and bucket address.
 
 An empty bucket is valid when `LOCATION="/"`. An empty directory is valid if S3 contains a directory marker object (a key ending in `/`); a prefix with no objects or directory markers does not exist in S3. The check validates `LOCATION`, independently of `FILE_PATTERN`, partition projection, and file contents.
 
-Validation is disabled by default. Omit `VALIDATE_LOCATION` or set it to `"false"` when creating a table before its data arrives, for example to write into a new prefix. This is a creation-time check; it does not guarantee that the location will remain available.
+This is a creation-time check; it does not guarantee that the location will remain available.
 
 Only a limited subset of data types is allowed:
 

@@ -2,7 +2,7 @@
 
 namespace NYql {
 
-NThreading::TFuture<IKikimrGateway::TGenericResult> ValidateExternalTableLocation(
+NThreading::TFuture<IKikimrGateway::TGenericResult> ValidateExternalTable(
     const TString& table, const TString& dataSource, const TString& location, bool existingOk,
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& factory,
     const TLoadExternalTableMetadata& loadMetadata)
@@ -37,12 +37,12 @@ NThreading::TFuture<IKikimrGateway::TGenericResult> ValidateExternalTableLocatio
             const auto& sourceMetadata = result.Metadata->ExternalDataSource();
             const auto& type = sourceMetadata.GetDatabaseType();
             if (!factory || !type) {
-                throw yexception() << "Location validation is not available for this external source";
+                throw yexception() << "External table validation is not available for this external source";
             }
             auto source = factory->GetOrCreate(*type);
             auto metadata = sourceMetadata.MakeExternalSourceMetadata();
             metadata.TableLocation = location;
-            return source->ValidateExternalTableLocation(metadata).Apply([source](const TFuture<void>& validation) {
+            return source->ValidateExternalTable(metadata).Apply([source](const TFuture<void>& validation) {
                 validation.GetValue();
                 TResult result;
                 result.SetSuccess();

@@ -342,7 +342,6 @@ public:
 
     void Bootstrap() {
         Become(&TAuthorizeServiceAccountUseActor::StateFunc);
-        EnableAccessServiceV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
         SendRequest();
     }
 
@@ -351,27 +350,16 @@ public:
                 {"serviceAccountId", ServiceAccountId},
                 {"permission", Permission});
 
-        const auto setupRequest = [&](auto& request) {
-            request->Request.set_permission(Permission);
-            auto& resourcePath = *request->Request.add_resource_path();
-            resourcePath.set_type("iam.serviceAccount");
-            resourcePath.set_id(ServiceAccountId);
-            *request->Request.mutable_iam_token() = Token;
-        };
-
-        if (EnableAccessServiceV2Interface) {
-            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequestV2>();
-            setupRequest(request);
-            Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
-        } else {
-            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequest>();
-            setupRequest(request);
-            Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
-        }
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeRequest>();
+        request->Request.set_permission(Permission);
+        auto& resourcePath = *request->Request.add_resource_path();
+        resourcePath.set_type("iam.serviceAccount");
+        resourcePath.set_id(ServiceAccountId);
+        *request->Request.mutable_iam_token() = Token;
+        Send(MakeKqpAccessServiceId(), std::move(request), NActors::IEventHandle::FlagTrackDelivery);
     }
 
-    template <typename TEvResponse>
-    void HandleAuthorizeResultImpl(typename TEvResponse::TPtr& ev) {
+    void HandleAuthorizeResult(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
         if (ev->Get()->Status.Ok()) {
             YDB_LOG_DEBUG("Authorize success",
                     {"response", ev->Get()->Response.DebugString()});
@@ -387,14 +375,6 @@ public:
         }
         Promise.SetValue(std::move(ev->Get()->Status));
         PassAway();
-    }
-
-    void HandleAuthorizeResult(NCloud::TEvAccessService::TEvAuthorizeResponse::TPtr& ev) {
-        HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponse>(ev);
-    }
-
-    void HandleAuthorizeResult(NCloud::TEvAccessService::TEvAuthorizeResponseV2::TPtr& ev) {
-        HandleAuthorizeResultImpl<NCloud::TEvAccessService::TEvAuthorizeResponseV2>(ev);
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
@@ -413,7 +393,6 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, HandleAuthorizeResult)
-        hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, HandleAuthorizeResult)
         sFunc(NActors::TEvents::TEvWakeup, SendRequest)
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
     )
@@ -421,7 +400,6 @@ public:
     NThreading::TPromise<NYdbGrpc::TGrpcStatus> Promise;
     const TString ServiceAccountId;
     const TString Token;
-    bool EnableAccessServiceV2Interface;
     TBackoff Backoff = TBackoff(/*maxRetries=*/10, /*initialDelay=*/TDuration::MilliSeconds(100), /*maxDelay=*/TDuration::Seconds(10));
     static inline const TString Permission = "iam.serviceAccounts.use";
 };
@@ -440,7 +418,6 @@ NThreading::TFuture<NYdbGrpc::TGrpcStatus> AuthorizeServiceAccountUse(
 
 NActors::IActor* CreateAccessServiceActor() {
     // XXX duplicated: ticket_parser, http_proxy
-    auto enableV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
     auto& authConfig = AppData()->AuthConfig;
 
     NCloud::TAccessServiceSettings asSettings(authConfig.GetAccessServiceEndpoint(), "ydb-kqp");
@@ -452,7 +429,7 @@ NActors::IActor* CreateAccessServiceActor() {
         TString certificate = TFileInput(authConfig.GetPathToRootCA()).ReadAll();
         asSettings.CertificateRootCA = certificate;
     }
-    return NCloud::CreateAccessServiceWithCache(asSettings, enableV2Interface);
+    return NCloud::CreateAccessServiceWithCache(asSettings);
 }
 
 }  // namespace NKikimr::NKqp

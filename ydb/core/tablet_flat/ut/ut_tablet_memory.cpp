@@ -395,9 +395,9 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
         env.Env.SimulateSleep(TDuration::Seconds(2));
         env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto*, const auto& ctx) {
             metrics.CPU.Set(cpu, ctx.Now());
-            metrics.Memory.Set(0, ctx.Now());
+            metrics.Memory.Set(0);
             metrics.Network.Set(0, ctx.Now());
-            metrics.StorageSystem.Set(0, ctx.Now());
+            metrics.StorageSystem.Set(0);
             metrics.SetMemoryReport(used, demand, reclaimable);
             UNIT_ASSERT_VALUES_EQUAL(metrics.TryUpdate(ctx), expected);
             ctx.Send(env.Edge, new TEvents::TEvWakeup);
@@ -415,7 +415,13 @@ Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
     update(100_KB, 200_KB, 0, true);
     update(100_KB, 200_KB, 1, true);
     update(0, 0, 0, true);
-    UNIT_ASSERT_VALUES_EQUAL(reports.size(), 6u);
+    // Becoming eligible for, or withdrawing, an elastic allocation is meaningful below 1 MiB.
+    update(100_KB, 101_KB, 0, true);
+    update(100_KB, 100_KB, 0, true);
+    update(100_KB, 100_KB + 1, 0, true);
+    update(100_KB, 100_KB + 2, 0, false);
+    update(100_KB, 100_KB, 0, true);
+    UNIT_ASSERT_VALUES_EQUAL(reports.size(), 10u);
 }
 
 Y_UNIT_TEST(HostFlagDoesNotChangeHivePlacementMemory)

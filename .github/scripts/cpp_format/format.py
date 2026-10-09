@@ -74,11 +74,12 @@ def discover(root):
     return {folder: style for folder, style in configs.items() if style is not None}
 
 
-def skip_style(file):
+def skip_style(root, file):
     # Match library.python.testing.style.rules.get_skip_reason, which is bundled
     # with Ya and used by tools/cpp_style_checker/wrapper.py. Keep these rules in
     # sync with that helper; the module is not available to system Python.
-    path = file.as_posix()
+    # Ignore checkout ancestors; keep a leading slash to match top-level folders.
+    path = '/' + file.relative_to(root).as_posix()
     if '/generated/' in path or '/vendor/' in path:
         return True
 
@@ -115,7 +116,7 @@ def selected_files(root, configs):
             if file.is_symlink() or not file.is_file():
                 break
             file.resolve().relative_to(root.resolve())
-            if not skip_style(file):
+            if not skip_style(root, file):
                 groups[folder].append(path)
             break
 

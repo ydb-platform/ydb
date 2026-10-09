@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -50,6 +51,11 @@ ENDIF()
 
     def git(self, *args):
         return subprocess.check_output(['git', '-C', str(self.root), *args], stderr=subprocess.PIPE)
+
+    def copy_checkout(self, parent):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        return shutil.copytree(src=self.root, dst=Path(temp.name) / parent / 'ydb')
 
     def test_discovery_uses_declared_or_local_config_and_ignores_disabled_roots(self):
         self.assertEqual(
@@ -107,20 +113,29 @@ ENDIF()
         ):
             self.write(path, content)
         self.git('add', '.')
-        selected = cpp_format.selected_files(self.root, cpp_format.discover(self.root))
-        self.assertEqual(
-            selected['shared'],
-            [
-                'shared/contrib/.yandex_meta/adapter.h',
-                'shared/regular.cpp',
-            ],
-        )
+        for parent in ('checkout', 'vendor', 'generated', 'contrib', '.yandex_meta', 'devtools/contrib'):
+            with self.subTest(parent=parent):
+                root = self.copy_checkout(parent=parent)
+                selected = cpp_format.selected_files(root, cpp_format.discover(root))
+                self.assertEqual(
+                    selected['shared'],
+                    [
+                        'shared/contrib/.yandex_meta/adapter.h',
+                        'shared/regular.cpp',
+                    ],
+                )
+
+    def test_native_top_level_directory_skips(self):
+        for folder in ('vendor', 'generated', 'contrib'):
+            with self.subTest(folder=folder):
+                file = self.write(path=f'{folder}/example.cpp', content='int  x;\n')
+                self.assertTrue(cpp_format.skip_style(self.root, file))
 
     def test_native_devtools_contrib_exception(self):
         file = self.write('devtools/contrib/example.cpp', 'int  x;\n')
-        self.assertFalse(cpp_format.skip_style(file))
+        self.assertFalse(cpp_format.skip_style(self.root, file))
         nested = self.write('devtools/contrib/project/contrib/example.cpp', 'int  x;\n')
-        self.assertTrue(cpp_format.skip_style(nested))
+        self.assertTrue(cpp_format.skip_style(self.root, nested))
 
     def test_unknown_root_is_an_error(self):
         with mock.patch.object(cpp_format, 'ROOT', self.root), contextlib.redirect_stderr(io.StringIO()):
@@ -169,6 +184,7 @@ ENDIF()
 
     @unittest.skipUnless(os.environ.get('YDB_CLANG_FORMAT'), 'set YDB_CLANG_FORMAT for real formatter coverage')
     def test_real_formatter_checks_fixes_and_preserves_per_root_styles(self):
+        self.root = self.copy_checkout(parent='vendor/contrib/generated')
         original = 'int  main(){return 0;}\n'
         shared = self.write('shared/a.cpp', original)
         local = self.write('local/a.cpp', original)

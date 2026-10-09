@@ -42,7 +42,7 @@ using TEvDescribeTableRequest = NGRpcService::TGrpcRequestOperationCall<
 TColumnShardLogWriter::TColumnShardLogWriter(
     TDatabaseSettings settings,
     TVector<std::shared_ptr<TEventLogColumn>> columns)
-    : TBaseEventLogWriter(std::move(columns), settings.FlushTimeout)
+    : TBaseEventLogWriter(std::move(columns), settings.MaxBatchSize, settings.FlushTimeout)
     , Settings(std::move(settings))
 {
 }
@@ -52,7 +52,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
         return false;
     }
 
-    if (Settings.MaxBatchSize.has_value() && CurrentBatchSize >= Settings.MaxBatchSize.value()) {
+    if (Settings.FlushBatchSize.has_value() && CurrentBatchSize >= Settings.FlushBatchSize.value()) {
         Flush();
     }
     return true;
@@ -284,20 +284,9 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
             pThis->CreateSession();
         } else {
             YDB_LOG_NOTICE("TColumnShardLogWriter: Try to update table columns");
-            /* TVector<TString> columnNames;
-            columnNames.reserve(tableDescription->columns_size());
-            for (const auto& column : tableDescription->columns()) {
-                columnNames.push_back(column.name());
-            }
 
-            Cerr << "DEBUG: table exists, fields:";
-            for (const auto& columnName : *columnNames) {
-                Cerr << " " << columnName;
-            }
-            Cerr << Endl;
-
-            return true; */
             pThis->State.store(TStateKind::Working);
+            pThis->Flush();
         }
     });
 }

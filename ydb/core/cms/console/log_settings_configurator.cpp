@@ -344,11 +344,13 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
     Y_UNUSED(config);
 
     auto *logSettings = static_cast<NLog::TSettings*>(ctx.LoggerSettings());
-    auto oldSinks = logSettings->Sinks;
-    if (oldSinks == nullptr) {
-        oldSinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
+
+    NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
+
+    auto oldSinksPtr = logSettings->Sinks;
+    if (oldSinksPtr == nullptr) {
+        oldSinks = *oldSinksPtr;
     }
-    auto newSinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
 
     Cerr << "Start dump sinks" << Endl;
 
@@ -369,18 +371,18 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
 
         Cerr << "       sink " << sinkConfig << Endl;
 
-        auto it = oldSinks->find(sinkConfig);
-        if (it != end(*oldSinks)) {
+        auto it = oldSinks.find(sinkConfig);
+        if (it != end(oldSinks)) {
             YDB_LOG_INFO("LogSinksConfig: Don't reconfigure sink");
 
-            (*newSinks)[sinkConfig] = it->second;
-            oldSinks->erase(it);
+            newSinks[sinkConfig] = it->second;
+            oldSinks.erase(it);
         } else {
             auto sinkPtr = CreateLogSink(sink);
             if (sinkPtr != nullptr) {
                 YDB_LOG_INFO("LogSinksConfig: Create sink");
 
-                (*newSinks)[sinkConfig] = sinkPtr;
+                newSinks[sinkConfig] = sinkPtr;
             } else {
                 YDB_LOG_ERROR("LogSinksConfig: Can't create sink");
             }
@@ -388,7 +390,7 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
     }
 
     // (*newSinks)["1"] = std::make_shared<TKqpEventLogWriter>(GetSettings("kqp_requests"));
-    logSettings->Sinks = newSinks;
+    logSettings->Sinks = std::make_shared<NLog::TSettings::TLogSinkMap>(newSinks);
 
     Cerr << "Done dump sinks" << Endl;
 }

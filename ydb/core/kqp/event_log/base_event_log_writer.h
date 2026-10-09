@@ -19,6 +19,7 @@ class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink,
     public std::enable_shared_from_this<TBaseEventLogWriter>   {
 public:
     TBaseEventLogWriter(TVector<std::shared_ptr<TEventLogColumn>> columns,
+        ui32 maxBatchSize,
         const TDuration& flushInterval);
 
     const TVector<std::shared_ptr<TEventLogColumn>>& GetColumns() const {
@@ -51,6 +52,7 @@ protected:
     std::shared_ptr<arrow::RecordBatch> CreateCurrentBatch();
 
     const TVector<std::shared_ptr<TEventLogColumn>> Columns;
+    const ui32 MaxBatchSize;
     const TDuration FlushInterval;
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
@@ -71,6 +73,7 @@ protected:
     };
     std::atomic<TState> State {TState(TStateKind::Started)};
     unsigned CurrentBatchSize {0};
+    bool CheckFlushActorCreate {true};
 };
 
 class TBaseEventLogAutoFlushActor : public NActors::TActorBootstrapped<TBaseEventLogAutoFlushActor> {

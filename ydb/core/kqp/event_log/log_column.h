@@ -112,6 +112,7 @@ public:
         TWriteResult(TWriteResultKind kind, const TString& value): Kind(kind), Value(value) {}
     };
     virtual TWriteResult Write(const NActors::NStructuredLog::TLogMessage&) = 0;
+    virtual bool WriteDummyValue() = 0;
     virtual std::shared_ptr<arrow::Array> MakeArray() = 0;
 };
 
@@ -143,6 +144,10 @@ public:
 
     bool AppendNull() {
         return TArrowTypeMapper<TValueType>::AppendNull(*Builder);
+    }
+
+    bool WriteDummyValue() override {
+        return Settings.IsNotNull ? AppendValue(T{}) : AppendNull();
     }
 
     std::shared_ptr<arrow::Array> MakeArray() override {
@@ -337,7 +342,7 @@ public:
                 if (TEventLogColumn::Settings.IsNotNull) {
                     TStringValueExtractor stringExtractor;
                     auto strValue = stringExtractor.ExtractValue(message.StructuredMessage, KeyName).value_or("");
-                    return TBase::AppendValue(T{})  // @todo Generate dummy value
+                    return TBase::AppendValue(T{})
                         ? TThisWriteResult(TThisWriteResultKind::DummyValueInsteadOfNull, strValue)
                         : TThisWriteResult(TThisWriteResultKind::ArrowError);
                 } else {

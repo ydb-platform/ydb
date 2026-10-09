@@ -20,11 +20,12 @@ public:
         TString Path;
         TString StoreName;
         TString TableName;
-        TString OptionalStorageId = "__MEMORY";
         ui32 StoreShardsCount = 5;
         ui32 TableShardsCount = 5;
         TDuration FlushTimeout;
-        std::optional<ui32> MaxBatchSize;
+        std::optional<ui32> FlushBatchSize;
+
+        ui32 MaxBatchSize = 1000000;
         ui8 MaxWriteAttempts = 10;
         ui8 MaxActiveWrites = 10;
 

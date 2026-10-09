@@ -14,23 +14,23 @@ template <typename T> struct TArrowTypeMapper {};
 
 // Support type Bool
 template <> struct TArrowTypeMapper<bool> {
-    using TArrowBuilderType = arrow::BooleanBuilder;
-    using TArrowArrayType = arrow::BooleanArray;
+    using TArrowBuilderType = arrow::UInt8Builder;
+    using TArrowArrayType = arrow::UInt8Array;
     static constexpr const char* TypeName = "Bool";
 
     static std::shared_ptr<arrow::DataType> GetArrowDataType() {
-        return arrow::boolean();
+        return arrow::uint8();
     }
 
     static std::shared_ptr<TArrowBuilderType> CreateBuilder() {
         return std::make_shared<TArrowBuilderType>();
     }
 
-    static bool AppendValue(arrow::BooleanBuilder& builder, bool value) {
-        return builder.Append(value).ok();
+    static bool AppendValue(arrow::UInt8Builder& builder, bool value) {
+        return builder.Append(value?1:0).ok();
     }
 
-    static bool AppendNull(arrow::BooleanBuilder& builder) {
+    static bool AppendNull(arrow::UInt8Builder& builder) {
         return builder.AppendNull().ok();
     }
 };

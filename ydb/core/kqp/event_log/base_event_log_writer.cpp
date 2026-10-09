@@ -1,15 +1,19 @@
 #include "base_event_log_writer.h"
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/text_writer.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT KQP_SLOW_LOG
+
 namespace NKikimr::NKqp::NEventLog {
 
 TBaseEventLogWriter::TBaseEventLogWriter(
-    TVector<std::shared_ptr<TEventLogColumn>> columns, const TDuration& flushInterval)
+    TVector<std::shared_ptr<TEventLogColumn>> columns, ui32 maxBatchSize, const TDuration& flushInterval)
     : Columns(std::move(columns)),
+    MaxBatchSize(maxBatchSize),
     FlushInterval(flushInterval)
 {
     for (std::size_t i = 0; i < Columns.size(); ++i) {
@@ -29,6 +33,18 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
 
     if (!Filter(message)) {
         return false;
+    }
+
+    if (CurrentBatchSize >= MaxBatchSize) {
+        return false;
+    }
+
+    if (CheckFlushActorCreate) {
+        if (FlushInterval) {
+            NActors::TActivationContext::Register(
+                new TBaseEventLogAutoFlushActor(shared_from_this(), FlushInterval));
+        }
+        CheckFlushActorCreate = false;
     }
 
     TStringBuilder columnWriteErrors;
@@ -56,6 +72,15 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
                           << TTextWriter::EscapeFieldValue(result.Value);
                 break;
             case TEventLogColumn::TWriteResultKind::ArrowError:
+                if (!column->WriteDummyValue()) {
+                    YDB_LOG_ERROR("Arrow data write error occurs. Error writing dummy value too");
+                }
+                if (column->Settings.IsNotNull) {
+                    errorText << "Dummy \"" << column->Name << "\" due to internal write error";
+                } else {
+                    errorText << "Null \"" << column->Name << "\" due to internal write error";
+                }
+                break;
             case TEventLogColumn::TWriteResultKind::UnknownError:
                 break;
         }
@@ -91,10 +116,6 @@ void TBaseEventLogWriter::Flush() {
     oldState.Kind = TStateKind::Started;
     newState.Kind = TStateKind::StorageCreating;
     if (State.compare_exchange_strong(oldState, TState(TStateKind::StorageCreating))) {
-        if (FlushInterval) {
-            NActors::TActivationContext::Register(
-                new TBaseEventLogAutoFlushActor(shared_from_this(), FlushInterval));
-        }
         CreateOrUpdateStorage();
         return ;
     }

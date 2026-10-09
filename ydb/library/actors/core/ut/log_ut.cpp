@@ -112,8 +112,8 @@ namespace {
         {
             Runtime.Initialize();
             LogBackend.reset(new TMockBackend{ThrowAlways});
-            settings->Sinks = std::make_shared<NLog::TSettings::TLogSinkMap>();
-            (*(settings->Sinks))[""] = sink; //settings->LogSinkProvider = [sink]() { TSettings::TLogSinkVector result; result.push_back(sink); return result; };
+            NLog::TSettings::TLogSinkMap sinks{{"", sink}};
+            settings->Sinks = std::make_shared<NLog::TSettings::TLogSinkMap>(sinks);
             auto logger = new TLoggerActor{settings, LogBackend, Counters};
             LoggerActor = Runtime.Register(logger);
             Runtime.SetScheduledEventFilter([] (auto&&, auto&&, auto&&, auto) {
@@ -873,6 +873,8 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
 
         UNIT_ASSERT_VALUES_EQUAL(calls[0].TextMessage, "Test message");
         UNIT_ASSERT_VALUES_EQUAL(calls[1].TextMessage, "Test message with value");
+    }
+}
 
 namespace {
     void CheckRuntimeMessage(TFixture& env, EPriority priority, EComponent component,

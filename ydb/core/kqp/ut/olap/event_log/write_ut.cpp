@@ -139,12 +139,13 @@ public:
     unsigned WrittenCount{0};
 
     TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TEventLogColumn>> columns,
-            std::optional<ui32> maxBatchSize = {})
+            std::optional<ui32> flushBatchSize = {}, TDuration flushTimeout = {})
         : TColumnShardLogWriter(TColumnShardLogWriter::TDatabaseSettings {
             .Path = "/Root",
             .StoreName = "olapStore",
             .TableName = "olapTable",
-            .MaxBatchSize = maxBatchSize
+            .FlushTimeout = flushTimeout,
+            .FlushBatchSize = flushBatchSize
         }, columns),
         Runner(runner),
         Component(component)
@@ -244,13 +245,15 @@ struct TEnvironment {
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
     std::vector<NStructuredLog::ILogSinkSPtr> AddSinks;
 
-    TEnvironment(const TVector<std::shared_ptr<TEventLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0)
+    TEnvironment(const TVector<std::shared_ptr<TEventLogColumn>>& columns,
+        std::optional<ui32> flushBatchSize = 0,
+        TDuration flushTimeout = {})
         : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
-        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
+        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, flushBatchSize, flushTimeout);
     }
 
-    void RecreateWriter(const TVector<std::shared_ptr<TEventLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0) {
-        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
+    void RecreateWriter(const TVector<std::shared_ptr<TEventLogColumn>>& columns) {
+        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, 0);
     }
 
     void UpdateSinks() {
@@ -311,10 +314,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:304")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:306")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:308")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:309")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:307")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:309")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:311")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:312")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -575,52 +578,33 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"5u", "5u"}});
     }
 
-    /* Y_UNIT_TEST(AutoFlush) {
+    Y_UNIT_TEST(AutoFlushByTime) {
 
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
             std::make_shared<TDBLogMessageNodeIdColumn>()
-        }, 2);
+        }, {} /* disable flush by batch size */, TDuration::Seconds(1));
 
         // Write data
-        NActors::NStructuredLog::TLogMessage message;
-        message.Component = TEnvironment::Component;
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
 
-        // Trigger first auto flush
-        message.NodeId = 1;
-        env.Writer->Write(message);
-        message.NodeId = 2;
-        env.Writer->Write(message);         // auto flush here
-        message.NodeId = 3;
-        env.Writer->Write(message);
+            // First chunk
+            message.NodeId = 1;
+            env.Writer->Write(message);
+            message.NodeId = 2;
+            env.Writer->Write(message);
+            message.NodeId = 3;
+            env.Writer->Write(message);
+        });
 
-        // Check
-        env.Writer->CheckWrittenLogContent({
-            {"1u", "1u"},
-            {"2u", "2u"}});
-
-        // Trigger second auto flush
-        message.NodeId = 4;
-        env.Writer->Write(message);         // auto flush here
-        message.NodeId = 5;
-        env.Writer->Write(message);
-
-        // Check
+        // Data flushed by time
         env.Writer->CheckWrittenLogContent({
             {"1u", "1u"},
             {"2u", "2u"},
-            {"3u", "3u"},
-            {"4u", "4u"}});
-
-        // Manual flush and check
-        env.Writer->Flush();
-        env.Writer->CheckWrittenLogContent({
-            {"1u", "1u"},
-            {"2u", "2u"},
-            {"3u", "3u"},
-            {"4u", "4u"},
-            {"5u", "5u"}});
-    } */
+            {"3u", "3u"}});
+    }
 
     Y_UNIT_TEST(KqpRequestLog) {
         TEnvironment env({
@@ -633,21 +617,24 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
                 .Path = "/Root",
                 .StoreName = "kqp_requests",
                 .TableName = "kqp_requests",
-                .MaxBatchSize = 0}));
+                .FlushBatchSize = 0}));
 
         // Query with error - must be in log
         TString query = "SELECT A B C D E";
         env.ExecuteQuery(query);
-
-        // Wait
-        Sleep(TDuration::Seconds(5));
 
         // Select from system table
         Cerr << "DEBUG: Dump" << Endl;
         TStringBuilder selectQuery;
         selectQuery << "SELECT database, request, action, status FROM `/Root/kqp_requests/kqp_requests` WHERE request='" << query << "'";
 
-        auto result = ExecuteQueryAndFetchData(env.Kikimr, selectQuery);
+        // Wait
+        std::optional<TQueryResult> result;
+        WaitCondition( [&]()->bool {
+            result = ExecuteQueryAndFetchData(env.Kikimr, selectQuery);
+            return result.has_value() && result.value().size() > 0;
+        });
+
         Cerr << "KQP_RESULT:" << Endl;
         Dump(result.value());
 
@@ -702,14 +689,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogSchema) {
             {"12u", R"("Test message 12")"},
             {"13u", R"("Test message 13")"}
         }, 3);
-    }
-
-    Y_UNIT_TEST(AddColumn) {
-        // @todo
-    }
-
-    Y_UNIT_TEST(RemoveColumn) {
-        // @todo
     }
 }
 
@@ -798,9 +777,9 @@ void TestType(const TValueType& value, const std::optional<TInvalidValueType>& i
 
 Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
 
-    /* Y_UNIT_TEST(Bool) {
+    Y_UNIT_TEST(Bool) {
         TestType<bool, TString>(true, TString("s"));
-    } */
+    }
 
     Y_UNIT_TEST(Int8) {
         TestType<i8, TString>(i8(-8), TString("s"));

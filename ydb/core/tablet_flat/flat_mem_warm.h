@@ -205,7 +205,8 @@ namespace NMem {
         {}
 
         void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<const TMemGlob> pages, TRowVersion rowVersion,
-                    NTable::ITransactionMapSimplePtr committed, ui32 savepointSeqNum = 0)
+                    NTable::ITransactionMapSimplePtr committed, const NTable::TRemovedTxOpsMap* removedTxOps = nullptr,
+                    ui32 savepointSeqNum = 0)
         {
             Y_DEBUG_ABORT_UNLESS(
                 rop == ERowOp::Upsert || rop == ERowOp::Erase || rop == ERowOp::Reset,
@@ -253,6 +254,16 @@ namespace NMem {
 
             // When writing a committed row we need to create a fully merged row state
             if (rowVersion.Step != Max<ui64>()) {
+                // Removed operations of committed transactions are skipped like uncommitted updates
+                const auto findCommitted = [&](const NMem::TUpdate* update) -> const TRowVersion* {
+                    if (removedTxOps && update->SavepointSeqNum &&
+                        removedTxOps->Contains(update->RowVersion.TxId, update->SavepointSeqNum))
+                    {
+                        return nullptr;
+                    }
+                    return committed.Find(update->RowVersion.TxId);
+                };
+
                 // Search for the first committed row version we would need to merge from
                 while (next) {
                     TRowVersion nextVersion = next->RowVersion;
@@ -262,7 +273,7 @@ namespace NMem {
                             next = next->Next;
                             continue;
                         }
-                        auto* commitVersion = committed.Find(nextVersion.TxId);
+                        auto* commitVersion = findCommitted(next);
                         if (!commitVersion) {
                             // Skip uncommitted updates
                             next = next->Next;
@@ -288,7 +299,7 @@ namespace NMem {
                             next = next->Next;
                             continue;
                         }
-                        auto* commitVersion = committed.Find(nextVersion.TxId);
+                        auto* commitVersion = findCommitted(next);
                         if (!commitVersion) {
                             // Skip uncommitted updates
                             next = next->Next;
@@ -310,7 +321,7 @@ namespace NMem {
                             mergeFrom = mergeFrom->Next;
                             continue;
                         }
-                        if (!committed.Find(mergeFrom->RowVersion.TxId)) {
+                        if (!findCommitted(mergeFrom)) {
                             // Skip uncommitted updates
                             mergeFrom = mergeFrom->Next;
                             continue;

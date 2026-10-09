@@ -1052,7 +1052,7 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemG
         }
     }
 
-    MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
+    MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions, &RemovedTxOps);
     if (TableObserver) {
         TableObserver->OnUpdate(rop, key, ops, rowVersion);
     }
@@ -1187,7 +1187,7 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
 
     // Use a special row version that marks this update as uncommitted
     TRowVersion rowVersion(Max<ui64>(), txId);
-    MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions, savepointSeqNum);
+    MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions, &RemovedTxOps, savepointSeqNum);
 
     if (!hadTxDataRef) {
         Y_DEBUG_ABORT_UNLESS(memTable.GetTxIdStats().contains(txId));

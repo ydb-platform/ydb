@@ -1293,7 +1293,8 @@ Y_UNIT_TEST_SUITE(DBase) {
                 .Seek({ }, ESeek::Lower).IsN(1_u64, 21_u64, 12_u64)
                 .Next().IsN(3_u64, 24_u64, 10005_u64)
                 .Next().Is(EReady::Gone);
-            me.To(step + 2).Select(table1)
+            // Read tx sticks until the auto tx commits, read as another reader explicitly
+            me.To(step + 2).ReadTx(0).Select(table1)
                 .HasN(1_u64, 11_u64, 12_u64)
                 .NoKeyN(2_u64)
                 .NoKeyN(3_u64);
@@ -1399,7 +1400,7 @@ Y_UNIT_TEST_SUITE(DBase) {
                 .NoKeyN(2_u64)
                 .NoKeyN(3_u64);
             // The bound doesn't make changes visible to other readers
-            me.To(step + 4).Select(table1)
+            me.To(step + 4).ReadTx(0).Select(table1)
                 .NoKeyN(1_u64)
                 .NoKeyN(2_u64)
                 .NoKeyN(3_u64);
@@ -1483,9 +1484,12 @@ Y_UNIT_TEST_SUITE(DBase) {
             return observer->Skips;
         };
 
+        // Direct reads need an active tx to have a page env
+        me.To(40).Begin();
         UNIT_ASSERT_VALUES_EQUAL(skips(1), TVector<ui64>{ });
         UNIT_ASSERT_VALUES_EQUAL(skips(2), TVector<ui64>{ 234 });
         UNIT_ASSERT_VALUES_EQUAL(skips(3), TVector<ui64>{ });
+        me.To(41).Commit();
     }
 
     Y_UNIT_TEST(RemoveTxOpsKeepRowLocks) {
@@ -1526,6 +1530,56 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(50).Compact(table1);
         UNIT_ASSERT(!me->HasTxData(table1, 123));
         check(51);
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsCommittedWriteMerge) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).WriteVer({1, 10}).PutN(table1, 1_u64, 11_u64, 12_u64);
+        me.To(13).WriteVer({1, 10}).PutN(table1, 2_u64, 13_u64, 14_u64);
+        me.To(14).Commit();
+
+        // Removed operations of tx 123: an upsert of key 1 and an erase of key 2
+        me.To(20).Begin();
+        me.To(21).WriteTx(123, 2).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
+        me.To(22).WriteTx(123, 2).EraseN(table1, 2_u64);
+        me.To(23).RemoveTxOps(table1, 123, 2, 2);
+        me.To(24).WriteVer({2, 20}).CommitTx(table1, 123);
+        me.To(25).Commit();
+
+        // Committed writes over the removed deltas of a committed transaction
+        // must not merge their changes into the new row state
+        me.To(30).Begin();
+        me.To(31).WriteVer({3, 30}).PutN(table1, 1_u64, ECellOp::Empty, 31_u64);
+        me.To(32).WriteVer({3, 30}).PutN(table1, 2_u64, ECellOp::Empty, 32_u64);
+        me.To(33).Commit();
+
+        const auto check = [&](ui32 step) {
+            me.To(step).Select(table1)
+                .HasN(1_u64, 11_u64, 31_u64)
+                .HasN(2_u64, 13_u64, 32_u64);
+            me.To(step + 1).ReadVer({2, 20}).Select(table1)
+                .HasN(1_u64, 11_u64, 12_u64)
+                .HasN(2_u64, 13_u64, 14_u64);
+        };
+
+        check(40);
+        me.To(50).Replay(EPlay::Boot);
+        check(51);
+        me.To(55).Replay(EPlay::Redo);
+        check(56);
+
+        me.To(60).Snap(table1).Compact(table1);
+        check(61);
     }
 
     Y_UNIT_TEST(ReplayNewTable) {

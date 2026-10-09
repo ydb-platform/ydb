@@ -220,8 +220,8 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             }
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request to schemeshard",
-                {"operationId", OperationId}
-                {"tabledId", tabletId},
+                {"operationId", OperationId},
+                {"tabletId", tabletId},
                 {"schemeshardId", ssId},
                 {"message", event->Record.ShortDebugString()},
             );

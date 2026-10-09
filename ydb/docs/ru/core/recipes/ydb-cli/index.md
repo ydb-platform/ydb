@@ -4,6 +4,7 @@
 
 Содержание:
 
+* [{#T}](auth-oidc.md)
 * [{#T}](convert-table-type.md)
 * [{#T}](benchmarks.md)
 * [{#T}](ttl.md)

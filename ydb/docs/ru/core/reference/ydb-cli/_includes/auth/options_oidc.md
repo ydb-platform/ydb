@@ -1,0 +1,2 @@
+- `--oidc-config <path>`: аутентификация OIDC с настройками из отдельного файла YAML или JSON. Формат описан в разделе [конфигурации OIDC](../../oidc.md#config-file).
+- `--oidc-issuer <url>`: аутентификация OIDC с прямыми параметрами `--oidc-flow`, `--oidc-client-id`, `--oidc-client-secret-file`, `--oidc-access-token-file`, `--oidc-scope` и `--oidc-cache-path`. Назначение, обязательность и значения по умолчанию приведены в [справочнике параметров OIDC](../../oidc.md#options). Явные прямые параметры нельзя совмещать с `--oidc-config`.

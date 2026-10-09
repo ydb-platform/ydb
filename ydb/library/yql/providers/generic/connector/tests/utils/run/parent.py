@@ -5,7 +5,6 @@ from typing import Final
 from ydb.library.yql.providers.generic.connector.tests.utils.settings import Settings, GenericSettings
 from ydb.library.yql.providers.generic.connector.tests.utils.run.result import Result
 
-
 # 10 mins, because database startup is very slow on Github CI
 DefaultTimeout: Final = 600
 

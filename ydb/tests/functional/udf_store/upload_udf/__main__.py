@@ -77,26 +77,34 @@ def _read_file(path: str) -> bytes:
 def _split_blob(data: bytes, chunk_size: int = WASM_BLOB_CHUNK_SIZE) -> list:
     if not data:
         return []
-    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+    return [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
 def _upload_to_kv(endpoint: str, database: str, udf_file: str, key: str) -> None:
     full_volume_path = "{}/{}".format(database, UDF_KV_BINARIES_PATH)
     cmd = [
-        _kv_tool(), "upload",
-        "-e", endpoint,
-        "-d", database,
-        "-p", full_volume_path,
+        _kv_tool(),
+        "upload",
+        "-e",
+        endpoint,
+        "-d",
+        database,
+        "-p",
+        full_volume_path,
         "-v",
-        "--partition-id", "0",
-        "--key", key,
-        "--file", udf_file,
+        "--partition-id",
+        "0",
+        "--key",
+        key,
+        "--file",
+        udf_file,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     if result.returncode != 0:
         raise RuntimeError(
             "kv_volume_tool upload failed (rc={}): stdout={!r}, stderr={!r}".format(
-                result.returncode, result.stdout, result.stderr)
+                result.returncode, result.stdout, result.stderr
+            )
         )
 
 
@@ -179,11 +187,9 @@ def _upsert_module_row(
         decls += "DECLARE $manifest AS Json; "
         columns += ", manifest"
         values += ", $manifest"
-    query = (
-        "{decls}"
-        "UPSERT INTO `{table}` ({columns}) "
-        "VALUES ({values});"
-    ).format(decls=decls, table=full_table, columns=columns, values=values)
+    query = ("{decls}" "UPSERT INTO `{table}` ({columns}) " "VALUES ({values});").format(
+        decls=decls, table=full_table, columns=columns, values=values
+    )
     pool.execute_with_retries(query, params)
 
 
@@ -222,10 +228,7 @@ def _upsert_wasm_or_library(
 
 def _delete_by_key(pool, database: str, table: str, column: str, value: str) -> None:
     full_table = "{}/{}".format(database, table)
-    query = (
-        "DECLARE $key AS Utf8; "
-        "DELETE FROM `{}` WHERE {} = $key;"
-    ).format(full_table, column)
+    query = ("DECLARE $key AS Utf8; " "DELETE FROM `{}` WHERE {} = $key;").format(full_table, column)
     pool.execute_with_retries(query, {"$key": value})
 
 
@@ -255,11 +258,9 @@ def _delete_artifacts(driver, pool, database: str, artifact_id: str, kind: str) 
             (table_rel, " AND kind = $kind"),
         ):
             full_table = "{}/{}".format(database, rel)
-            query = (
-                "DECLARE $id AS Utf8; "
-                "DECLARE $kind AS Utf8; "
-                "DELETE FROM `{}` WHERE id = $id{};"
-            ).format(full_table, extra)
+            query = ("DECLARE $id AS Utf8; " "DECLARE $kind AS Utf8; " "DELETE FROM `{}` WHERE id = $id{};").format(
+                full_table, extra
+            )
             try:
                 pool.execute_with_retries(query, {"$id": artifact_id, "$kind": kind})
             except Exception as exc:
@@ -273,10 +274,9 @@ def _select_module_row(pool, database: str, *, uid: str = "", name: str = "", mo
     """Return {uid, md5, name, type} for a modules row, or {} if missing."""
     full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
     if uid:
-        query = (
-            "DECLARE $uid AS Utf8; "
-            "SELECT uid, md5, name, type FROM `{}` WHERE uid = $uid LIMIT 1;"
-        ).format(full_table)
+        query = ("DECLARE $uid AS Utf8; " "SELECT uid, md5, name, type FROM `{}` WHERE uid = $uid LIMIT 1;").format(
+            full_table
+        )
         result = pool.execute_with_retries(query, {"$uid": uid})
     elif name:
         decls = "DECLARE $name AS Utf8; "
@@ -286,9 +286,7 @@ def _select_module_row(pool, database: str, *, uid: str = "", name: str = "", mo
             decls += "DECLARE $type AS Utf8; "
             where += " AND type = $type"
             params["$type"] = module_type
-        query = (
-            decls + "SELECT uid, md5, name, type FROM `{}` WHERE {} LIMIT 1;"
-        ).format(full_table, where)
+        query = (decls + "SELECT uid, md5, name, type FROM `{}` WHERE {} LIMIT 1;").format(full_table, where)
         result = pool.execute_with_retries(query, params)
     else:
         return {}
@@ -306,16 +304,12 @@ def _select_module_row(pool, database: str, *, uid: str = "", name: str = "", mo
 def _delete_module_by_uid(driver, pool, database: str, uid: str, udf_type: str = "") -> str:
     row = _select_module_row(pool, database, uid=uid)
     if not row:
-        raise RuntimeError(
-            "no modules row with uid={} (already deleted or wrong --database)".format(uid)
-        )
+        raise RuntimeError("no modules row with uid={} (already deleted or wrong --database)".format(uid))
     module_type = row["type"] or udf_type
     md5 = row["md5"] or ""
     name = row["name"] or ""
     print(
-        "[upload_udf] deleting module: uid={} md5={} name={} type={}".format(
-            uid, md5, name, module_type
-        ),
+        "[upload_udf] deleting module: uid={} md5={} name={} type={}".format(uid, md5, name, module_type),
         file=sys.stderr,
     )
     _delete_chunks(pool, database, uid)
@@ -338,9 +332,7 @@ def _delete_udf(driver, pool, database: str, name: str) -> None:
     if not row:
         raise RuntimeError(
             "no modules row with name={} (already deleted or wrong --database). "
-            "List rows: SELECT uid, name, type FROM `{}/{}`".format(
-                name, database, UDF_TABLE_MODULES_PATH
-            )
+            "List rows: SELECT uid, name, type FROM `{}/{}`".format(name, database, UDF_TABLE_MODULES_PATH)
         )
     _delete_module_by_uid(driver, pool, database, row["uid"], row["type"])
 
@@ -348,9 +340,7 @@ def _delete_udf(driver, pool, database: str, name: str) -> None:
 def _delete_library(driver, pool, database: str, name: str) -> None:
     uid = _find_uid(pool, database, name=name, module_type="LIBRARY")
     if not uid:
-        raise RuntimeError(
-            "no LIBRARY modules row with name={} (already deleted or wrong --database)".format(name)
-        )
+        raise RuntimeError("no LIBRARY modules row with name={} (already deleted or wrong --database)".format(name))
     _delete_module_by_uid(driver, pool, database, uid, "LIBRARY")
 
 
@@ -385,8 +375,12 @@ def _do_upload(args) -> str:
 
     md5, size = _compute_md5(args.udf_file)
     body = _read_file(args.udf_file)
-    print("[upload_udf] file={} size={} md5={} type={} kind={} chunks={}".format(
-        args.udf_file, size, md5, args.type, args.kind, len(_split_blob(body))), file=sys.stderr)
+    print(
+        "[upload_udf] file={} size={} md5={} type={} kind={} chunks={}".format(
+            args.udf_file, size, md5, args.type, args.kind, len(_split_blob(body))
+        ),
+        file=sys.stderr,
+    )
 
     with ydb.Driver(ydb.DriverConfig(endpoint=args.endpoint, database=args.database)) as driver:
         driver.wait(timeout=30, fail_fast=True)
@@ -402,8 +396,9 @@ def _do_upload(args) -> str:
                     body=body,
                     manifest=manifest_text,
                 )
-                print("[upload_udf] library uploaded: name={} uid={} md5={}".format(
-                    udf_name, uid, md5), file=sys.stderr)
+                print(
+                    "[upload_udf] library uploaded: name={} uid={} md5={}".format(udf_name, uid, md5), file=sys.stderr
+                )
                 return udf_name
             if args.type == "WASM":
                 uid = _upsert_wasm_or_library(
@@ -416,8 +411,10 @@ def _do_upload(args) -> str:
                     body=body,
                     manifest=manifest_text,
                 )
-                print("[upload_udf] WASM module uploaded: name={} uid={} md5={}".format(
-                    udf_name, uid, md5), file=sys.stderr)
+                print(
+                    "[upload_udf] WASM module uploaded: name={} uid={} md5={}".format(udf_name, uid, md5),
+                    file=sys.stderr,
+                )
                 return udf_name
 
             uid = str(uuid.uuid4())
@@ -433,8 +430,10 @@ def _do_upload(args) -> str:
                 chunk_count=0,
                 version=args.version,
             )
-            print("[upload_udf] native binary uploaded to KV: name={} uid={} md5={}".format(
-                udf_name, uid, md5), file=sys.stderr)
+            print(
+                "[upload_udf] native binary uploaded to KV: name={} uid={} md5={}".format(udf_name, uid, md5),
+                file=sys.stderr,
+            )
             return udf_name
 
 

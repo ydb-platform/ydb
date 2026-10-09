@@ -4,8 +4,10 @@
 IF (OS_EMSCRIPTEN)
     RECURSE(
         bridge_dict
+        echo
         log_parsing
         md5
+        profile
         sdk
         text
         trie

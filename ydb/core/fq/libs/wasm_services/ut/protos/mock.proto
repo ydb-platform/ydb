@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package NFq.NWasmServices.NTest;
+
+import "google/protobuf/wrappers.proto";
+import "ydb/udfs/wasm/profile/proto/schema/profile.proto";
+
+service MockService {
+    rpc Call(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+    rpc Lookup(ProfileRequest) returns (ProfileReply);
+    rpc LookupBatch(ProfileBatchRequest) returns (ProfileBatchReply);
+}

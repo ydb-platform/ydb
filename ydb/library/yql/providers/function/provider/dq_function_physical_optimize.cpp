@@ -31,10 +31,14 @@ public:
 
         auto apply = node.Cast<TCoApply>();
         auto callable = apply.Callable().Maybe<TDqSqlExternalFunction>();
-        if (!callable
-            || apply.Args().Count() != 2
-            || !apply.Arg(1).Maybe<TDqCnUnionAll>()) {
-
+        if (!callable || apply.Args().Count() != 2) {
+            return node;
+        }
+        if (!apply.Arg(1).Maybe<TDqCnUnionAll>()) {
+            const auto input = DqBuildPureExprStage(apply.Arg(1), ctx);
+            if (input.Ptr() != apply.Arg(1).Ptr()) {
+                return TExprBase(ctx.ChangeChild(apply.Ref(), 1, input.Ptr()));
+            }
             return node;
         }
         callable = callable.Cast();

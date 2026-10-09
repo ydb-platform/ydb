@@ -174,7 +174,12 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(IssuesLookLikeMissingTable("path does not exist"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Unable to find table"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Table `/x` does not exist"));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("table not exists: 123"));
         UNIT_ASSERT(!IssuesLookLikeMissingTable("column already exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("session not exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("IF NOT EXISTS"));
 
         UNIT_ASSERT(IssuesLookLikeMissingColumn("Member not found: fnx"));
         UNIT_ASSERT(IssuesLookLikeMissingColumn("column fnx not found"));
@@ -184,7 +189,9 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(!IssuesLookLikeMissingColumn("fnx is fine"));
 
         UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Versions`"));
+        UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
         UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
+        UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Versions`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Member not found: fnx"));

@@ -3006,17 +3006,11 @@ FROM `{table_name}`"""
             "output-column",
         ],
     )
-    @pytest.mark.parametrize(
-        argnames="table_change", argvalues=["alter", "recreate", "drop"]
-    )
-    def test_query_after_table_change(
-        self, kikimr, entity_name, table_store, table_role, table_change
-    ):
+    @pytest.mark.parametrize(argnames="table_change", argvalues=["alter", "recreate", "drop"])
+    def test_query_after_table_change(self, kikimr, entity_name, table_store, table_role, table_change):
         """Table changes must preserve progress or restart execution on a table error."""
         name = f"table_change_{table_store}_{table_role}_{table_change}"
-        inp, out, endpoint = self.get_io_names(
-            kikimr, name=name, local_topics=True, entity_name=entity_name
-        )
+        inp, out, endpoint = self.get_io_names(kikimr, name=name, local_topics=True, entity_name=entity_name)
         table_name = entity_name(name=f"{name}_table")
         query_name = entity_name(name=f"{name}_query")
         query_path = f"{kikimr.get_database_name()}/{query_name}"
@@ -3057,15 +3051,11 @@ FROM `{table_name}`"""
             return rows[0]["lease_generation"]
 
         def write_input(key, value):
-            self.write_stream(
-                data=[json.dumps(obj={"Key": key, "Value": value})], endpoint=endpoint
-            )
+            self.write_stream(data=[json.dumps(obj={"Key": key, "Value": value})], endpoint=endpoint)
 
         def check_output(key, value):
             if table_role != "output":
-                assert self.read_stream(
-                    messages_count=1, endpoint=endpoint, timeout=timeout
-                ) == [value]
+                assert self.read_stream(messages_count=1, endpoint=endpoint, timeout=timeout) == [value]
             else:
                 expected = {"Key": key}
                 if value is not None:
@@ -3077,9 +3067,7 @@ FROM `{table_name}`"""
                     """)[0].rows
                     return rows == [expected]
 
-                assert wait_for(
-                    predicate=has_row, timeout_seconds=timeout, step_seconds=1
-                ), query_state()
+                assert wait_for(predicate=has_row, timeout_seconds=timeout, step_seconds=1), query_state()
 
         create_table()
         try:
@@ -3126,11 +3114,7 @@ FROM `{table_name}`"""
                 assert before["Status"] == "RUNNING", before
                 assert before["Issues"] == "{}", before
                 if table_role != "output":
-                    lookup = (
-                        "KqpCnStreamLookup"
-                        if table_role == "native_join"
-                        else "DqCnStreamLookup"
-                    )
+                    lookup = "KqpCnStreamLookup" if table_role == "native_join" else "DqCnStreamLookup"
                     ast = kikimr.ydb_client.query(statement=f"""
                         SELECT Ast FROM `.sys/streaming_queries`
                         WHERE Path = "{query_path}";
@@ -3140,9 +3124,7 @@ FROM `{table_name}`"""
                 generation_before = execution_generation(before["LastExecutionId"])
                 if table_change == "alter":
                     # Remove a referenced column from the current schema.
-                    kikimr.ydb_client.query(
-                        statement=f"ALTER TABLE `{table_name}` DROP COLUMN Value;"
-                    )
+                    kikimr.ydb_client.query(statement=f"ALTER TABLE `{table_name}` DROP COLUMN Value;")
                 else:
                     kikimr.ydb_client.query(statement=f"DROP TABLE `{table_name}`;")
                     if table_change == "recreate":
@@ -3157,11 +3139,7 @@ FROM `{table_name}`"""
                 # Column sinks can keep writing with a known older schema version;
                 # only Key remains visible after dropping Value.
                 lookup_recreated = table_role == "join" and table_change == "recreate"
-                column_sink_altered = (
-                    table_role == "output"
-                    and table_store == "column"
-                    and table_change == "alter"
-                )
+                column_sink_altered = table_role == "output" and table_store == "column" and table_change == "alter"
                 if lookup_recreated or column_sink_altered:
                     check_output(key=2, value=None if column_sink_altered else "after")
                     self.wait_completed_checkpoints(kikimr, query_name)
@@ -3196,10 +3174,7 @@ FROM `{table_name}`"""
                         last_state["RetryCount"] > before["RetryCount"]
                         and "Previous query retries" in issues
                         and "will be restarted" in issues
-                        and any(
-                            description in issues.lower()
-                            for description in descriptions
-                        )
+                        and any(description in issues.lower() for description in descriptions)
                     )
 
                 # Shard-write retries followed by table-resolution retries can take
@@ -3211,16 +3186,13 @@ FROM `{table_name}`"""
                 ), f"No table error and whole-query retry after {table_change}: {last_state}"
 
                 assert wait_for(
-                    predicate=lambda: execution_generation(before["LastExecutionId"])
-                    > generation_before,
+                    predicate=lambda: execution_generation(before["LastExecutionId"]) > generation_before,
                     timeout_seconds=timeout,
                     step_seconds=1,
                 ), f"Retry was scheduled but execution did not restart: {query_state()}"
 
             finally:
-                kikimr.ydb_client.query(
-                    statement=f"DROP STREAMING QUERY `{query_name}`;"
-                )
+                kikimr.ydb_client.query(statement=f"DROP STREAMING QUERY `{query_name}`;")
         finally:
             kikimr.ydb_client.query(statement=f"DROP TABLE IF EXISTS `{table_name}`;")
 

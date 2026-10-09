@@ -62,8 +62,14 @@ private:
         Y_ABORT_UNLESS(!IsExecuting);
         Y_ABORT_UNLESS(!DataQuery);
 
+        const auto& settings = ev->Get()->ExecDataQuerySettings;
+        auto operationTimeout = settings.OperationTimeout_;
+        if (!operationTimeout && settings.ClientTimeout_ && settings.ClientTimeout_ != TDuration::Max()
+            && settings.UseClientTimeoutForOperation_) {
+            operationTimeout = settings.ClientTimeout_;
+        }
         DataQuery = TDataQuery{ev->Get()->Sql, ev->Get()->Params, ev->Get()->TxControl, ev->Get()->Promise,
-            ev->Get()->ExecDataQuerySettings.OperationTimeout_};
+            operationTimeout};
         ProcessQueries();
     }
 

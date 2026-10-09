@@ -2,6 +2,7 @@
 
 * Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
+* Added support for relative database paths in CLI SQL and database dump commands when the server's `EnableRelativePaths` flag is enabled. Only paths starting with `/` are absolute.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.

@@ -87,7 +87,7 @@ std::shared_ptr<NAccessor::IChunkedArray> BuildSlicedDictionaryPredicate() {
     auto sliced = predicate->ISlice(0, 3);
     UNIT_ASSERT(sliced->GetType() == NAccessor::IChunkedArray::EType::Dictionary);
     sliced->VisitDistinctValues([](const std::shared_ptr<arrow::Array>& values) {
-        UNIT_ASSERT_VALUES_EQUAL(values->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values->length(), 2);
     });
     return sliced;
 }

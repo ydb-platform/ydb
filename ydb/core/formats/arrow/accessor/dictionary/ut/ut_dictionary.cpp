@@ -59,14 +59,14 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(5, 3));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,"ab",null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab"])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["ab",null])");
             AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,0,null])");
         }
         {
             auto slice = std::static_pointer_cast<TDictionaryArray>(dict->ISlice(7, 2));
             AFL_VERIFY(slice->GetType() == IChunkedArray::EType::Dictionary);
             AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([[null,null]])");
-            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([])");
+            AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"([null])");
             AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([null,null])");
         }
         {
@@ -103,6 +103,23 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(slice->GetChunkedArray()->ToString()) == R"([["B","C"]])");
         AFL_VERIFY(PrepareToCompare(slice->GetDictionary()->ToString()) == R"(["B","C"])");
         AFL_VERIFY(PrepareToCompare(slice->GetPositions()->ToString()) == R"([0,1])");
+    }
+
+    Y_UNIT_TEST(SlicePreservesNullDictionaryEntry) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "Alpha");
+        builder.AddRecord(2, "Alpha");
+        auto arr = builder.Finish(3);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dictionary = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        UNIT_ASSERT_VALUES_EQUAL(dictionary->GetDictionary()->null_count(), 1);
+
+        auto slice = std::static_pointer_cast<TDictionaryArray>(dictionary->ISlice(1, 2));
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->null_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetPositions()->null_count(), 1);
+        UNIT_ASSERT(slice->IsNull(0));
+        UNIT_ASSERT(!slice->IsNull(1));
     }
 
     Y_UNIT_TEST(Serialization) {
@@ -375,7 +392,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto sliced = dictionary->ISlice(0, 3);
         UNIT_ASSERT(sliced->GetType() == IChunkedArray::EType::Dictionary);
         sliced->VisitDistinctValues([](const std::shared_ptr<arrow::Array>& values) {
-            UNIT_ASSERT_VALUES_EQUAL(values->length(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values->length(), 2);
         });
         UNIT_ASSERT_VALUES_EQUAL(sliced->GetNullsCount(), 1);
 

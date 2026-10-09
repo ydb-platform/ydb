@@ -220,6 +220,9 @@ message TDeleteStoragePool {
 
 enum EPersistentBufferAllocationMode {
     BALANCED = 0;
+    // Select the lowest-ID eligible pool DDisk slot on each PDisk. The representative
+    // is stable while the eligible slots remain unchanged; existing PB claims are
+    // not migrated automatically when slots are removed or reconfigured.
     ONE_PER_PDISK = 1;
 }
 

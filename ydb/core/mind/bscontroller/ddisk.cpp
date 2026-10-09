@@ -83,6 +83,7 @@ namespace NKikimr::NBsController {
                 }
                 for (const auto& [_, ddiskId] : persistentBufferPerPDisk) {
                     const auto* vslot = self->FindVSlot(TVSlotId(ddiskId.GetKey()));
+                    Y_ABORT_UNLESS(vslot);
                     PersistentBuffersPerNode[ddiskId.NodeId].insert({vslot->PersistentBufferRefs, ddiskId});
                 }
             }
@@ -227,12 +228,15 @@ namespace NKikimr::NBsController {
                     Y_ABORT_UNLESS(jt != NodeMap.end());
                     const auto& [diskCommonId, diskDistinctId] = jt->second;
                     if (commonId.value_or(diskCommonId) == diskCommonId && !distinctIds.contains(diskDistinctId)) {
-                        auto candidatePbIt = it->second.begin();
+                        auto candidatePbIt = it->second.end();
                         for (auto pbIt = it->second.begin(); pbIt != it->second.end(); pbIt++) {
                             if (!ddisks.contains(std::get<1>(*pbIt))) {
                                 candidatePbIt = pbIt;
                                 break;
                             }
+                        }
+                        if (candidatePbIt == it->second.end()) {
+                            return std::nullopt;
                         }
                         auto nh = it->second.extract(candidatePbIt);
                         auto& [cnt, ddId] = nh.value();

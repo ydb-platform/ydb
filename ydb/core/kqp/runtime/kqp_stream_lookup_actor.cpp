@@ -191,16 +191,7 @@ public:
 
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
-            // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty()) {
-                NKqpProto::TKqpTaskExtraStats extraStats;
-                if (stats->HasExtra()) {
-                    stats->GetExtra().UnpackTo(&extraStats);
-                }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
-                stats->MutableExtra()->PackFrom(extraStats);
-            }
+            LockInfo.FillExtraStats(stats);
         }
     }
 
@@ -578,20 +569,7 @@ private:
 
     TMaybe<google::protobuf::Any> ExtraData() override {
         google::protobuf::Any result;
-        NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
-        for (auto& lock : Locks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-
-        for (auto& lock : BrokenLocks) {
-            resultInfo.AddLocks()->CopyFrom(lock);
-        }
-
-        if (DeferredVictimQuerySpanId) {
-            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
-        }
-
-        result.PackFrom(resultInfo);
+        result.PackFrom(LockInfo.GetExtraData());
         return result;
     }
 
@@ -697,20 +675,10 @@ private:
             {"locks", txLocks},
             {"brokenTxLocks", brokenTxLocks});
 
-        for (auto& lock : record.GetBrokenTxLocks()) {
-            BrokenLocks.push_back(lock);
-        }
-
-        for (auto& lock : record.GetTxLocks()) {
-            Locks.push_back(lock);
-        }
-
-        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
-            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
-        }
+        LockInfo.Add(record);
 
         if (UseFollowers) {
-            YQL_ENSURE(Locks.empty());
+            YQL_ENSURE(LockInfo.Locks.empty());
             if (!record.GetFinished() && !IsTableImmutable) {
                 RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return;
@@ -1161,7 +1129,7 @@ private:
         for (const auto& lock : record.GetLocks()) {
             AFL_ENSURE(lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken
                     && lock.GetCounter() != NKikimr::TSysTables::TLocksTable::TLock::ErrorBroken);
-            Locks.push_back(lock);
+            LockInfo.Locks.push_back(lock);
         }
 
         StreamLockWorker->AddLockResult(requestId, ev->Get());
@@ -1220,7 +1188,7 @@ private:
             YQL_ENSURE(AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
         }
 
-        if (LockTxId && BrokenLocks.empty()) {
+        if (LockTxId && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(*LockTxId);
             if (LockMode) {
                 record.SetLockMode(*LockMode);
@@ -1472,9 +1440,7 @@ private:
     TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
-    TVector<NKikimrDataEvents::TLock> Locks;
-    TVector<NKikimrDataEvents::TLock> BrokenLocks;
-    ui64 DeferredVictimQuerySpanId = 0;
+    TReadLockInfo LockInfo;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;

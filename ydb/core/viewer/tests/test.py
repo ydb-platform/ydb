@@ -665,6 +665,7 @@ class TestViewer(object):
                                     'SlotSize',
                                     'SlotCount',
                                     'EnforcedDynamicSlotSize',
+                                    'UserChunkPoolSize',
                                     'PDiskUsage',
                                     })
 
@@ -1117,6 +1118,25 @@ class TestViewer(object):
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result
+
+    @pytest.mark.parametrize('node_ids', ['1,1', '1,2,1', '0,1,.'])
+    # Node 2 is absent in this cluster; 0 and '.' refer to the HTTP server's node 1.
+    def test_viewer_sysinfo_duplicate_node_ids(self, node_ids):
+        url = 'http://localhost:%s/viewer/sysinfo' % self.cluster.nodes[1].mon_port
+
+        # Viewer returns HTTP 200 even on its timeout, so the client must time out first.
+        try:
+            response = self._make_request(requests.get, url, params={
+                'node_id': node_ids,
+                'timeout': 10000,  # Viewer timeout in milliseconds.
+            }, timeout=5)  # HTTP client timeout in seconds.
+        except requests.exceptions.Timeout:
+            pytest.fail('Viewer did not respond within 5 seconds for node_id=%s' % node_ids)
+
+        response.raise_for_status()
+        result = response.json()
+
+        assert sorted(node['NodeId'] for node in result['SystemStateInfo']) == [1], result
 
     @classmethod
     def test_viewer_vdiskinfo(cls):
@@ -2270,6 +2290,30 @@ class TestViewer(object):
             'force': '1',
         }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         return result
+
+    @classmethod
+    def test_storage_stats_tablet_type_response(cls):
+        # Use path=table1 to check grouping by tablet type for a single table.
+        for database in (cls.dedicated_db, cls.serverless_db):
+            params = {'database': database, 'path': 'table1', 'everything': 'true', 'debug': 'true'}
+
+            def get_table_with_storage_stats():
+                by_path = cls.get_viewer('/viewer/storage_stats', params)
+                table = by_path['Paths'][0]
+                assert table['StorageSize'] > 0 and table['Tablets'], table
+                return table
+
+            # Storage statistics become available asynchronously after the fixture writes data.
+            table = retry_assertions(get_table_with_storage_stats)
+
+            tablet_ids = {tablet['TabletId'] for tablet in table['Tablets']}
+            by_type = cls.get_viewer('/viewer/storage_stats', {**params, 'group_by': 'tablet_type'})
+            assert len(by_type['Tablets']) == 1, by_type
+            tablets = by_type['Tablets'][0]
+            assert tablets['Type'] == 'DataShard', tablets
+            assert set(tablets['TabletIds']) == tablet_ids, tablets
+            assert tablets['TabletCount'] == len(tablet_ids), tablets
+            assert tablets['StorageSize'] > 0, tablets
 
     @classmethod
     def test_storage_stats(cls):

@@ -427,7 +427,6 @@ private:
     std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
 
     ::NMonitoring::TDynamicCounterPtr DetailedGroup;
-    ::NMonitoring::TDynamicCounterPtr DetailedRawGroup;
     TProcessorDatabaseMetricsAggregatorPtr DetailedAggregator;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,

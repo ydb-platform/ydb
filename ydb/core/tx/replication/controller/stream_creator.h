@@ -6,12 +6,12 @@
 
 namespace NKikimr::NReplication::NController {
 
-IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx);
+IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TActorContext& ctx, bool describeOnly = false);
 IActor* CreateStreamCreator(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
     const TReplication::ITarget::IConfig::TPtr& config,
     const TString& streamName, const TString& consumerName, const TDuration& streamRetentionPeriod,
     const std::optional<TDuration>& resolvedTimestamps = std::nullopt,
     bool supportsTopicAutopartitioning = false, bool needCreate = true, bool schemaChanges = false,
-    bool skipInitialScan = false);
+    bool skipInitialScan = false, bool describeOnly = false);
 
 }

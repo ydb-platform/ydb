@@ -1,6 +1,8 @@
 #include "dq_pq_rd_read_actor.h"
 #include "probes.h"
 
+#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
+
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
@@ -15,6 +17,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
@@ -269,7 +272,7 @@ private:
         {}
         ui32 Index = 0;
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
-        ITopicClient::TPtr TopicClient;
+        std::shared_ptr<NFq::IMessageStreamClient> TopicClient;
         ui32 PartitionsCount;
         TDqPqRdReadActor* Child = nullptr;
         NActors::TActorId ChildId;
@@ -326,6 +329,7 @@ private:
     const i64 MaxBufferSize;
     i64 ReadyBufferSizeBytes = 0;
     // Set on Parent
+    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
     bool EnableStreamingQueriesCounters = false;
@@ -460,6 +464,7 @@ public:
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
+    void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
@@ -477,8 +482,8 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
-    void SchedulePartitionIdlenessCheck(TInstant) override;
-    void InitWatermarkTracker() override;
+    void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
+    void InitWatermarkTracker();
     void SendStartSession(TSession& sessionInfo);
     void Init();
     void InitChild();
@@ -493,7 +498,7 @@ public:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const;
     IFederatedTopicClient& GetFederatedTopicClient();
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
-    ITopicClient& GetTopicClient(TClusterState& clusterState);
+    NFq::IMessageStreamClient& GetTopicClient(TClusterState& clusterState);
     void SchedulePartitionCountTimer();
 };
 
@@ -504,11 +509,13 @@ IFederatedTopicClient& TDqPqRdReadActor::GetFederatedTopicClient() {
     return *FederatedTopicClient;
 }
 
-ITopicClient& TDqPqRdReadActor::GetTopicClient(TClusterState& clusterState) {
+NFq::IMessageStreamClient& TDqPqRdReadActor::GetTopicClient(TClusterState& clusterState) {
     if (!clusterState.TopicClient) {
         auto settings = GetTopicClientSettings();
         clusterState.Info.AdjustTopicClientSettings(settings);
-        clusterState.TopicClient = PqGateway->GetTopicClient(Driver, settings);
+        std::string topicPath = SourceParams.GetTopicPath();
+        clusterState.Info.AdjustTopicPath(topicPath);
+        clusterState.TopicClient = PqGateway->GetTopicClient(TString(topicPath), Driver, settings);
     }
     return *clusterState.TopicClient;
 }
@@ -604,7 +611,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0, DefaultDatumValidationMode);
 
-    InitWatermarkTracker(); // non-virtual!
+    InitWatermarkTracker();
     IngressStats.Level = statsLevel;
 }
 
@@ -855,8 +862,17 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
-void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
-    Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
+void TDqPqRdReadActor::LoadState(const TSourceState& state) {
+    InitWatermarkTracker();
+    TDqPqReadActorBase::LoadState(state);
+}
+
+void TDqPqRdReadActor::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
+    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
+    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
+        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+        Schedule(*nextIdleCheckAt, new TEvPrivate::TEvPartitionIdleness(*nextIdleCheckAt));
+    }
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
@@ -866,10 +882,17 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
         SourceParams.GetWatermarks().GetIdleTimeoutUs() :
         lateArrivalDelayUs;
-    TDqPqReadActorBase::InitWatermarkTracker(
-            TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs),
-            Metrics.Counters ? Metrics.Source : nullptr);
+    const auto& watermarks = SourceParams.GetWatermarks();
+    if (!watermarks.GetEnabled()) {
+        return;
+    }
+    WatermarkTracker.ConstructInPlace(
+        TDuration::MicroSeconds(watermarks.GetGranularityUs()),
+        watermarks.GetIdlePartitionsEnabled(),
+        TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
+        TDuration::MicroSeconds(idleTimeoutUs),
+        LogPrefix,
+        Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1579,23 +1602,21 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
     auto& clusterState = Clusters[ev->Get()->ClusterIndex];
     SRC_LOG_T("Checking partition count for topic \"" << SourceParams.GetTopicPath() << "\", cluster \"" << clusterState.Info.Name << "\"");
 
-    std::string clusterTopicPath = SourceParams.GetTopicPath();
-    clusterState.Info.AdjustTopicPath(clusterTopicPath);
-
     GetTopicClient(clusterState)
-        .DescribeTopic(TString(clusterTopicPath), {})
+        .DescribeStream()
         .Subscribe([
             index = clusterState.Index,
             actorSystem = TActivationContext::ActorSystem(),
             selfId = SelfId()](const auto& describeTopicFuture)
         {
             try {
-                auto& describeTopic = describeTopicFuture.GetValue();
+                const auto& describeTopic = describeTopicFuture.GetValue();
                 if (!describeTopic.IsSuccess()) {
-                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, describeTopic));
+                    actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,
+                        ToSdkStatus(describeTopic.Status, describeTopic.Issues)));
                     return;
                 }
-                auto partitionsCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
+                auto partitionsCount = static_cast<ui32>(describeTopic.Value.Partitions.size());
                 actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index, partitionsCount));
             } catch (const std::exception& ex) {
                 actorSystem->Send(selfId, new TEvPrivate::TEvCheckPartitionCountResult(index,

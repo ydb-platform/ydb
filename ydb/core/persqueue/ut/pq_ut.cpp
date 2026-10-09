@@ -1391,7 +1391,7 @@ void CancelTopicWriteTransaction(
     ProposeTopicWriteTransaction(tc, writeId, supportivePartition, txId);
     WaitProposeTransactionResult(tc, txId, NKikimrPQ::TEvProposeTransactionResult::PREPARED);
 
-    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(txId);
+    auto event = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(txId);
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries());
 }
 

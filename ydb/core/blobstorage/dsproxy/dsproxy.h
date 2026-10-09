@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/dsproxy_events.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
@@ -120,20 +121,6 @@ inline TStoragePoolCounters::EHandleClass HandleClassToHandleClass(NKikimrBlobSt
 NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusResult(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus status);
-
-#define DSPROXY_ENUM_EVENTS(XX) \
-    XX(TEvBlobStorage::TEvPut) \
-    XX(TEvBlobStorage::TEvGet) \
-    XX(TEvBlobStorage::TEvBlock) \
-    XX(TEvBlobStorage::TEvGetBlock) \
-    XX(TEvBlobStorage::TEvDiscover) \
-    XX(TEvBlobStorage::TEvRange) \
-    XX(TEvBlobStorage::TEvCollectGarbage) \
-    XX(TEvBlobStorage::TEvStatus) \
-    XX(TEvBlobStorage::TEvPatch) \
-    XX(TEvBlobStorage::TEvAssimilate) \
-    XX(TEvBlobStorage::TEvCheckIntegrity) \
-//
 
 #define DSPROXY_ENUM_DISK_EVENTS(XX) \
     XX(TEvBlobStorage::TEvVMovedPatch) \

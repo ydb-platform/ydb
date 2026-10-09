@@ -280,6 +280,7 @@ public:
     ui64 GetIntegrityChunkGeneration(TChunkIdx chunkIdx) const;
     // Includes chunks whose headers or extents are still being formatted.
     std::vector<TChunkIdx> GetIntegrityChunkIdxs() const;
+    ui64 GetIntegrityChunkCount() const { return IntegrityChunks.size(); }
     // True once all header replicas of the chunk were written (State == Ready). False for chunks
     // the manager does not know yet.
     bool IsIntegrityChunkFormatted(TChunkIdx chunkIdx) const;

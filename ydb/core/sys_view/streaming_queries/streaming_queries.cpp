@@ -586,40 +586,63 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
         TInstant SuspendedUntil;
         TString LastExecutionId;
         TString PreviousExecutionIds = "{}";
+        TString CreatedBy;
+        TString ModifiedBy;
+        TString StartedBy;
+        TString StoppedBy;
+        TInstant CreatedAt;
+        TInstant ModifiedAt;
+        TInstant SubmittedAt;
+        TInstant StartedAt;
+        TInstant FinishedAt;
 
         ui64 GetSize() const {
-            return sizeof(TQueryInfo) + Status.size() + Issues.size() + Plan.size() + Ast.size() + Text.size() + ResourcePool.size() + LastExecutionId.size() + PreviousExecutionIds.size();
+            return sizeof(TQueryInfo) + Status.size() + Issues.size() + Plan.size() + Ast.size() + Text.size() + ResourcePool.size() + LastExecutionId.size() + PreviousExecutionIds.size() + CreatedBy.size() + ModifiedBy.size() + StartedBy.size() + StoppedBy.size();
         }
     };
 
-    using TExtractorValue = std::pair<TString, TQueryInfo>;
+    using TQueriesBatch = std::unordered_map<TString, TQueryInfo>;
+    using TExtractorValue = TQueriesBatch::value_type;
 
     class TExtractorsMap : public THashMap<NTable::TTag, std::function<TCell(const TExtractorValue&)>> {
     public:
         TExtractorsMap() {
-            AddString<TSchema::Path>([](const TExtractorValue& p) { return p.first; });
-            AddString<TSchema::Status>([](const TExtractorValue& p) { return p.second.Status; });
-            AddString<TSchema::Issues>([](const TExtractorValue& p) { return p.second.Issues; });
-            AddString<TSchema::Plan>([](const TExtractorValue& p) { return p.second.Plan; });
-            AddString<TSchema::Ast>([](const TExtractorValue& p) { return p.second.Ast; });
-            AddString<TSchema::Text>([](const TExtractorValue& p) { return p.second.Text; });
+            AddString<TSchema::Path>([](const TExtractorValue& p) -> const TString& { return p.first; });
+            AddString<TSchema::Status>([](const TExtractorValue& p) -> const TString& { return p.second.Status; });
+            AddString<TSchema::Issues>([](const TExtractorValue& p) -> const TString& { return p.second.Issues; });
+            AddString<TSchema::Plan>([](const TExtractorValue& p) -> const TString& { return p.second.Plan; });
+            AddString<TSchema::Ast>([](const TExtractorValue& p) -> const TString& { return p.second.Ast; });
+            AddString<TSchema::Text>([](const TExtractorValue& p) -> const TString& { return p.second.Text; });
             Add<TSchema::Run, bool>([](const TExtractorValue& p) { return p.second.Run; });
-            AddString<TSchema::ResourcePool>([](const TExtractorValue& p) { return p.second.ResourcePool; });
+            AddString<TSchema::ResourcePool>([](const TExtractorValue& p) -> const TString& { return p.second.ResourcePool; });
             Add<TSchema::RetryCount, ui64>([](const TExtractorValue& p) { return p.second.RetryCount; });
             AddOpt<TSchema::LastFailAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.LastFailAt) {
-                    return p.second.LastFailAt.MicroSeconds();
-                }
-                return std::nullopt;
+                return p.second.LastFailAt ? std::optional<ui64>(p.second.LastFailAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::SuspendedUntil, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.SuspendedUntil) {
-                    return p.second.SuspendedUntil.MicroSeconds();
-                }
-                return std::nullopt;
+                return p.second.SuspendedUntil ? std::optional<ui64>(p.second.SuspendedUntil.MicroSeconds()) : std::nullopt;
             });
-            AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) { return p.second.LastExecutionId; });
-            AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) { return p.second.PreviousExecutionIds; });
+            AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) -> const TString& { return p.second.LastExecutionId; });
+            AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) -> const TString& { return p.second.PreviousExecutionIds; });
+            AddOptionalString<TSchema::CreatedBy>([](const TExtractorValue& p) { return p.second.CreatedBy; });
+            AddOptionalString<TSchema::ModifiedBy>([](const TExtractorValue& p) { return p.second.ModifiedBy; });
+            AddOptionalString<TSchema::StartedBy>([](const TExtractorValue& p) { return p.second.StartedBy; });
+            AddOptionalString<TSchema::StoppedBy>([](const TExtractorValue& p) { return p.second.StoppedBy; });
+            AddOpt<TSchema::CreatedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.CreatedAt ? std::optional<ui64>(p.second.CreatedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::ModifiedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.ModifiedAt ? std::optional<ui64>(p.second.ModifiedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::SubmittedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.SubmittedAt ? std::optional<ui64>(p.second.SubmittedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::StartedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.StartedAt ? std::optional<ui64>(p.second.StartedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::FinishedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.FinishedAt ? std::optional<ui64>(p.second.FinishedAt.MicroSeconds()) : std::nullopt;
+            });
         }
 
     private:
@@ -641,10 +664,18 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
         }
 
         template <typename TCol>
-        void AddString(std::function<TString(const TExtractorValue& p)> textExtractor) {
+        void AddString(std::function<const TString&(const TExtractorValue& p)> textExtractor) {
             insert({TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
                 const auto& value = textExtractor(p);
                 return TCell(value.data(), value.size());
+            }});
+        }
+
+        template <typename TCol>
+        void AddOptionalString(std::function<TString(const TExtractorValue& p)> textExtractor) {
+            insert({TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
+                const auto& value = textExtractor(p);
+                return value.empty() ? TCell() : TCell(value.data(), value.size());
             }});
         }
     };
@@ -664,7 +695,8 @@ public:
             if (ScriptExecutionInfoRequired = IsIn({
                 TSchema::Status::ColumnId, TSchema::Issues::ColumnId, TSchema::Plan::ColumnId,
                 TSchema::Ast::ColumnId, TSchema::RetryCount::ColumnId, TSchema::LastFailAt::ColumnId,
-                TSchema::SuspendedUntil::ColumnId
+                TSchema::SuspendedUntil::ColumnId, TSchema::SubmittedAt::ColumnId,
+                TSchema::StartedAt::ColumnId, TSchema::FinishedAt::ColumnId
             }, column.Tag)) {
                 break;
             }
@@ -827,6 +859,12 @@ public:
                 .ResourcePool = info.ResourcePool,
                 .LastExecutionId = query.State.GetCurrentExecutionId(),
                 .PreviousExecutionIds = NKqp::SequenceToJsonString(query.State.GetPreviousExecutionIds()),
+                .CreatedBy = info.CreatedBy,
+                .ModifiedBy = info.ModifiedBy,
+                .StartedBy = info.StartedBy,
+                .StoppedBy = info.StoppedBy,
+                .CreatedAt = info.CreatedAt,
+                .ModifiedAt = info.ModifiedAt,
             };
 
             if (ScriptExecutionInfoRequired) {
@@ -884,6 +922,11 @@ public:
             auto& info = it->second;
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
+            info.SubmittedAt = event.SubmittedAt;
+            info.StartedAt = event.SubmittedAt;
+            if (event.FinishedAt) {
+                info.FinishedAt = event.FinishedAt;
+            }
 
             if (!ready || operationStatus != Ydb::StatusIds::SUCCESS) {
                 info.LastFailAt = event.LastFailAt;
@@ -1175,7 +1218,7 @@ private:
     ui64 InflightScriptExecutionInfoResolve = 0;
     ui64 ResolvedQueriesCount = 0;
     ui64 UsedSpace = 0;
-    std::unordered_map<TString, TQueryInfo> QueriesBatch;
+    TQueriesBatch QueriesBatch;
 };
 
 } // anonymous namespace

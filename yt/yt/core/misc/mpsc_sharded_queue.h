@@ -1,8 +1,7 @@
 #pragma once
 
+#include <library/cpp/yt/system/spin_lock.h>
 #include <library/cpp/yt/system/tscp.h>
-
-#include <library/cpp/yt/threading/spin_lock.h>
 
 #include <vector>
 
@@ -21,7 +20,7 @@ public:
     int GetSize();
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, QueueLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, QueueLock_);
     std::vector<TItem> Queue_;
 
     std::vector<TItem> Dequeued_;

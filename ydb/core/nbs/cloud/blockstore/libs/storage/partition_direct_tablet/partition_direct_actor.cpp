@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat/classic_volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
@@ -17,6 +18,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
@@ -40,6 +42,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NActors;
+
+namespace {
+
+using TEvStatVolumeResponse =
+    NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse;
+
+}   // namespace
 
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
@@ -133,17 +142,12 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         LogTitle.GetWithTime().c_str(),
         SelfId().ToString().data());
 
-    if (!Executor()->GetStats().IsFollower()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Executing InitSchema transaction",
-            LogTitle.GetWithTime().c_str());
-        ExecuteTx(ctx, CreateTx<TInitSchema>());
-    }
-
-    // allow pipes to connect
-    SignalTabletActive(ctx);
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Executing InitSchema transaction",
+        LogTitle.GetWithTime().c_str());
+    ExecuteTx(ctx, CreateTx<TInitSchema>());
 }
 
 void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
@@ -240,15 +244,15 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
     Die(ctx);
 }
 
-void TPartitionActor::ReportTabletState(const TActorContext& ctx)
+void TPartitionActor::ReportDiskId(const TActorContext& ctx)
 {
     auto service =
         NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
 
     auto request = std::make_unique<
-        NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
-        TabletID(),
-        STATE_WORK);
+        NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>();
+    request->Record.SetTabletId(TabletID());
+    request->Record.SetNbsDiskId(VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }
@@ -450,7 +454,10 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
         query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
-    SendToBsc(ctx, THolder<IEventBase>(request.release()));
+    SendToBsc(
+        ctx,
+        EBscRequest::InitialAllocation,
+        THolder<IEventBase>(request.release()));
 }
 
 std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
@@ -709,14 +716,31 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.DebugString().data());
 
-    // The first allocation response sets up the group; any later one is the
-    // result of the single in-flight membership op (add xor remove).
-    if (RemoveHostInFlight.has_value()) {
-        HandleRemoveHostAllocationResult(ev, ctx);
-    } else if (DDiskBlockGroupAllocated) {
-        HandleAddHostAllocationResult(ev, ctx);
-    } else {
-        HandleInitialAllocationResult(ev, ctx);
+    // The cookie identifies the operation that sent this request.
+    const auto request = BscRequestsInFlight.find(ev->Cookie);
+    if (request == BscRequestsInFlight.end()) {
+        LOG_WARN(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s BSC reply for unknown cookie %lu, dropped",
+            LogTitle.GetWithTime().c_str(),
+            ev->Cookie);
+        return;
+    }
+
+    const EBscRequest kind = request->second;
+    BscRequestsInFlight.erase(request);
+
+    switch (kind) {
+        case EBscRequest::InitialAllocation:
+            HandleInitialAllocationResult(ev, ctx);
+            break;
+        case EBscRequest::AddHost:
+            HandleAddHostAllocationResult(ev, ctx);
+            break;
+        case EBscRequest::RemoveHost:
+            HandleRemoveHostAllocationResult(ev, ctx);
+            break;
     }
 }
 
@@ -724,6 +748,16 @@ void TPartitionActor::HandleInitialAllocationResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
+    if (DDiskBlockGroupAllocated) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Ignore initial allocation result, the group is already "
+            "allocated",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
     const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
@@ -851,6 +885,36 @@ void TPartitionActor::HandleUpdateVolumeConfig(
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
+void TPartitionActor::HandleStatVolume(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    if (VolumeConfig.PartitionsSize() == 0) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Reject StatVolume: volume config is not loaded",
+            LogTitle.GetWithTime().c_str());
+
+        auto response = std::make_unique<TEvStatVolumeResponse>(
+            MakeError(E_REJECTED, "volume config is not loaded"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle StatVolume for %s",
+        LogTitle.GetWithTime().c_str(),
+        VolumeConfig.GetDiskId().c_str());
+
+    auto response = std::make_unique<TEvStatVolumeResponse>();
+    *response->Record.MutableVolume() = MakeClassicVolume(VolumeConfig);
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 void TPartitionActor::HandleMountSession(
     const TEvPartitionSession::TEvMount::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -958,8 +1022,8 @@ void TPartitionActor::HandleSetVChunkTouched(
 
 void TPartitionActor::SendToBsc(
     const TActorContext& ctx,
-    THolder<IEventBase> request,
-    ui64 cookie)
+    EBscRequest kind,
+    THolder<IEventBase> request)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
         LOG_INFO(
@@ -970,6 +1034,9 @@ void TPartitionActor::SendToBsc(
         return;
     }
 
+    const ui64 cookie = NextBscCookie++;
+    BscRequestsInFlight[cookie] = kind;
+
     if (!BscProxy) {
         BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
     }
@@ -978,6 +1045,7 @@ void TPartitionActor::SendToBsc(
 
 void TPartitionActor::StopBscProxy(const TActorContext& ctx)
 {
+    BscRequestsInFlight.clear();
     if (!BscProxy) {
         return;
     }
@@ -1032,6 +1100,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfig);
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolume);
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);

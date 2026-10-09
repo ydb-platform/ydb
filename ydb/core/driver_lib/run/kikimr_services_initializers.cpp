@@ -1,3 +1,7 @@
+#include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
+#include <library/cpp/monlib/service/pages/resource_mon_page.h>
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
@@ -297,6 +301,8 @@
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NKikimrServicesInitializers {
 
@@ -631,8 +637,29 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
         .MemoryBytes = 8ull << 20,
         .MaxLines = 4096,
-        .AllowedMetricPrefixes = {"ddisk.", "harmonizer."},
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer.", "actor_system.", "inmemory_metrics."},
     }));
+
+    if (auto* mon = appData->Mon) {
+        auto monitoring = NActorSystemMonitoring::MakeConfig(
+            systemConfig, appData->BatchPoolId, useAutoConfig);
+        monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NActorSystemMonitoring::MakeActorSystemMonitoring(std::move(monitoring)));
+
+        NMetricChart::RegisterResources(mon);
+        mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
+            "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        NInMemoryMetricsMonitoring::TConfig metricsViewer;
+        metricsViewer.ExecutorPool = appData->BatchPoolId;
+        metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "metrics", "In-memory metrics", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NInMemoryMetricsMonitoring::MakeInMemoryMetricsMonitoring(std::move(metricsViewer)));
+    }
 
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
@@ -2728,8 +2755,11 @@ TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializ
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse portions metadata cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse portions metadata cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2752,8 +2782,11 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse column data cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse column data cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2888,8 +2921,9 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         }
         auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
         if (overlaid.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
-                "error", overlaid.GetErrorMessage())("action", "keeping synthesized composite conveyor defaults");
+            YDB_LOG_ERROR("Cannot overlay composite conveyor config",
+                {"error", overlaid.GetErrorMessage()},
+                {"action", "keeping synthesized composite conveyor defaults"});
             return result;
         }
         return overlaid.DetachResult();
@@ -2897,8 +2931,11 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
 
     auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse composite conveyor config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse composite conveyor config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());

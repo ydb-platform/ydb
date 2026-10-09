@@ -225,6 +225,37 @@ def in_window(t: float, start: float, end: float) -> bool:
     return start <= t <= end
 
 
+def select_victim_query(
+    items: List[Tuple[str, str]], victim_span_id: Optional[str]
+) -> Tuple[str, Optional[str]]:
+    """Pick the victim statement and the span to highlight in VictimTx.
+
+    Prefer the row whose query span is the lock span when that row is real SQL.
+    Deferred-lock logs put a synthetic COMMIT on the lock span and the statement
+    that conflicted on a different span. In that case use the earliest collected
+    statement. Callers pass items in timestamp order so a merged log follows
+    emission time rather than file order.
+    """
+    matched = ""
+    matched_id: Optional[str] = None
+    first_sql = ""
+    first_sql_id: Optional[str] = None
+    for query_id, query_text in items:
+        if not query_text:
+            continue
+        if victim_span_id and query_id == victim_span_id and not matched:
+            matched = query_text
+            matched_id = query_id
+        if query_text != "COMMIT" and not first_sql:
+            first_sql = query_text
+            first_sql_id = query_id
+    if matched and matched != "COMMIT":
+        return matched, matched_id
+    if first_sql:
+        return first_sql, first_sql_id
+    return matched, matched_id
+
+
 def print_tx_block(title: str, items: List[Tuple[str, str]], highlight_id: Optional[str], use_color: bool):
     """Print transaction block with optional highlighting."""
     print_section_header(title, use_color)
@@ -261,8 +292,6 @@ def main():
     tp = FastTimeParser()
 
     # Collected data
-    victim_query_text = ""
-    anchor_t: Optional[float] = None
     breaker_log_ds: Optional[str] = None     # DataShard "broke other locks" line
     breaker_id: Optional[str] = None
     breaker_sa_with_text_by_id: Dict[str, str] = {}
@@ -287,19 +316,20 @@ def main():
                 if t is None:
                     continue
 
-                # Find anchor: first line containing victim_id
-                if anchor_t is None and (victim_id in line):
-                    anchor_t = t
-
                 relevant_lines.append((t, line))
     except (FileNotFoundError, PermissionError, OSError) as e:
         err_msg = f"Failed to open log file '{path}': {e}"
         print(style(err_msg, color=ANSI_RED, bold=True, enable=use_color), file=sys.stderr)
         sys.exit(1)
 
-    if anchor_t is None:
+    anchor_times = [t for t, line in relevant_lines if victim_id in line]
+    if not anchor_times:
         print(f"Error: VictimQuerySpanId {victim_id} not found in log file.", file=sys.stderr)
         sys.exit(1)
+
+    # Merged logs are concatenated per node, so file order is not time order.
+    anchor_t = min(anchor_times)
+    relevant_lines.sort(key=lambda item: item[0])
 
     w_start = anchor_t - W
     w_end = anchor_t + W
@@ -307,6 +337,7 @@ def main():
     # Process all relevant lines within the time window
 
     victim_tx_items: List[Tuple[str, str]] = []
+    victim_tx_span_id: Optional[str] = None
     breaker_tx_items: List[Tuple[str, str]] = []
     breaker_query_text = None
 
@@ -323,9 +354,9 @@ def main():
             line_query_text = unescape_and_format_query_text(extract_field(line, "queryText"))
 
             if line_query_id and line_query_text:
-                victim_tx_span_id = extract_field(line, "victimTxSpanId")
-                if victim_tx_span_id == line_query_id:
-                    victim_query_text = line_query_text
+                line_victim_tx_span_id = extract_field(line, "victimTxSpanId")
+                if line_victim_tx_span_id and victim_tx_span_id is None:
+                    victim_tx_span_id = line_victim_tx_span_id
                 victim_tx_items.append((line_query_id, line_query_text))
 
         # Breaker DataShard line: "broke other locks" + Component: DataShard
@@ -335,6 +366,8 @@ def main():
                check_victim_query_id_in_line(line, victim_id):
                 breaker_log_ds = line
                 breaker_id = extract_breaker_id(line)
+
+    victim_query_text, victim_highlight_id = select_victim_query(victim_tx_items, victim_tx_span_id)
 
     for t, line in relevant_lines:
         if not in_window(t, w_start, w_end):
@@ -375,7 +408,7 @@ def main():
     print_kv_header("BreakerQueryText", use_color)
     print(breaker_query_text if breaker_query_text else "(not found)")
 
-    print_tx_block("VictimTx", victim_tx_items, victim_id, use_color)
+    print_tx_block("VictimTx", victim_tx_items, victim_highlight_id, use_color)
 
     print_tx_block("BreakerTx", breaker_tx_items, breaker_id, use_color)
 

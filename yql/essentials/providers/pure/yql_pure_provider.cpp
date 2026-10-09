@@ -117,7 +117,7 @@ public:
             NCommon::WriteResOrPullType(writer, lambda.Ref().GetTypeAnn(), TColumnOrder(columns));
         }
 
-        TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(), State_->FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);
         TProgramBuilder pgmBuilder(env, *State_->FunctionRegistry, /*voidWithEffects=*/false, State_->Types->LangVer);
         NCommon::TMkqlCommonCallableCompiler compiler;

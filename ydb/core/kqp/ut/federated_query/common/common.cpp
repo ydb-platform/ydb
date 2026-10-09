@@ -115,6 +115,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
     appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
     auto settings = TKikimrSettings(*appConfig);
+    settings.SetAuthToken(options.AuthToken);
 
     NYql::IHTTPGateway::TPtr httpGateway;
     const auto& queryServiceConfig = appConfig->GetQueryServiceConfig();
@@ -163,6 +164,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         .SetWithSampleTables(false)
         .SetDomainRoot(options.DomainRoot)
         .SetNodeCount(options.NodeCount)
+        .SetUseRealThreads(options.UseRealThreads)
         .SetDynamicNodeCount(options.DynamicNodeCount)
         .SetEnableStorageProxy(true)
         .SetStoragePoolTypes(options.StoragePoolTypes)

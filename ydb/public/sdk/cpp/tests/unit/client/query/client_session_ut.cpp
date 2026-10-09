@@ -9,6 +9,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
 
+#include <exception>
+#include <stdexcept>
+
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
@@ -64,6 +67,12 @@ public:
     {
         MarkActive();
     }
+
+    std::shared_ptr<ISessionClient> GetSessionClient() const override {
+        return Client;
+    }
+
+    std::shared_ptr<ISessionClient> Client;
 };
 
 Ydb::Query::SessionState MakeSessionShutdownState() {
@@ -175,3 +184,31 @@ Y_UNIT_TEST(CloseReasonCommandsAreCompleteAndDeduplicated) {
 }
 
 }
+
+Y_UNIT_TEST_SUITE(QuerySessionStatusInterception) {
+
+    Y_UNIT_TEST(ExceptionForwardedAndSessionReleasedBeforeCompletion) {
+        auto session = std::make_shared<TTestKqpSession>("", "");
+        auto client = std::make_shared<TMockSessionClient>();
+        session->Client = client;
+        std::weak_ptr<TTestKqpSession> weakSession = session;
+        auto sourcePromise = NThreading::NewPromise<TStatus>();
+        auto result = NSessionPool::InjectSessionStatusInterception<TStatus>(
+            session, sourcePromise.GetFuture(), true, TDuration::Seconds(1));
+        bool releasedBeforeCompletion = false;
+        result.Subscribe([&](const NThreading::TFuture<TStatus>&) {
+            releasedBeforeCompletion = session.use_count() == 1;
+        });
+        sourcePromise.SetException(std::make_exception_ptr(std::runtime_error("interception error")));
+
+        UNIT_ASSERT(releasedBeforeCompletion);
+        UNIT_ASSERT(session->GetState() == TKqpSessionCommon::S_BROKEN);
+        UNIT_ASSERT(session->NeedUpdateActiveCounter());
+        UNIT_ASSERT_VALUES_EQUAL(client->CloseMetrics, 1);
+        UNIT_ASSERT_VALUES_EQUAL(client->LastReason, "transport_error");
+        session.reset();
+        UNIT_ASSERT(weakSession.expired());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(result.GetValueSync(), std::runtime_error, "interception error");
+    }
+
+} // Y_UNIT_TEST_SUITE(QuerySessionStatusInterception)

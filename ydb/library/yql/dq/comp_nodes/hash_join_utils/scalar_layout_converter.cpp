@@ -36,6 +36,9 @@ struct IColumnDataExtractor {
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
+    virtual bool IsFloatingPoint() {
+        return false;
+    }
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
 };
@@ -145,6 +148,10 @@ public:
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
         return NPackedTuple::EColumnSizeType::Fixed;
+    }
+
+    bool IsFloatingPoint() override {
+        return std::is_floating_point_v<TLayout>;
     }
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
@@ -546,6 +553,10 @@ public:
         return Inner_->GetElementSizeType();
     }
 
+    bool IsFloatingPoint() override {
+        return Inner_->IsFloatingPoint();
+    }
+
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
@@ -687,6 +698,7 @@ public:
             auto* packer = InnerExtractors_[i];
             descr.DataSize = packer->GetElementSize();
             descr.SizeType = packer->GetElementSizeType();
+            descr.FloatingPoint = packer->IsFloatingPoint();
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);

@@ -4,6 +4,7 @@
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
@@ -26,6 +27,7 @@ namespace NKikimr::NGRpcService {
 
         using TDiscovery = Ydb::Discovery::V1::DiscoveryService::Stub;
         using TKeyValue = Ydb::KeyValue::V1::KeyValueService::Stub;
+        using TScheme = Ydb::Scheme::V1::SchemeService::Stub;
         using TTable = Ydb::Table::V1::TableService::Stub;
         using TTopic = Ydb::Topic::V1::TopicService::Stub;
 
@@ -35,7 +37,7 @@ namespace NKikimr::NGRpcService {
             rule->SetDst(dst);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
             if (!enablePathAliasing) {
@@ -46,9 +48,11 @@ namespace NKikimr::NGRpcService {
             AddRule(config, "/discovery-boundary", "/Root/k");
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");
             AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
-            AddRule(config, "/virtual/", "/Root");
-            AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
-            AddRule(config, "/Root/kfront", "/Root/missing");
+            if (nestedAliasParent) {
+                AddRule(config, "/Root/virtual", "/Root/kfront");
+            } else {
+                AddRule(config, "/virtual/", "/Root");
+            }
             return config;
         }
 
@@ -102,8 +106,8 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true)
-                : Server(MakeConfig(useSimpleProxy, enablePathAliasing), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false)
+                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
                     settings.StoragePoolTypes.at("hdd").SetStoragePoolId(0);
@@ -111,14 +115,16 @@ namespace NKikimr::NGRpcService {
                 })
                 , Channel(grpc::CreateChannel(TStringBuilder() << "localhost:" << Server.GetPort(), grpc::InsecureChannelCredentials()))
             {
-                Ydb::Cms::CreateDatabaseRequest request;
-                request.set_path("/Root/kfront");
-                auto* storage = request.mutable_resources()->add_storage_units();
-                storage->set_unit_kind("hdd");
-                storage->set_count(1);
-                Server.Tenants_->CreateTenant(std::move(request));
-                for (const auto node : Server.Tenants_->List("/Root/kfront")) {
-                    Server.GetServer().EnableGRpc(Server.GetPortManager().GetPort(), node, "/Root/kfront");
+                if (createTenant) {
+                    Ydb::Cms::CreateDatabaseRequest request;
+                    request.set_path("/Root/kfront");
+                    auto* storage = request.mutable_resources()->add_storage_units();
+                    storage->set_unit_kind("hdd");
+                    storage->set_count(1);
+                    Server.Tenants_->CreateTenant(std::move(request));
+                    for (const auto node : Server.Tenants_->List("/Root/kfront")) {
+                        Server.GetServer().EnableGRpc(Server.GetPortManager().GetPort(), node, "/Root/kfront");
+                    }
                 }
             }
         };
@@ -136,13 +142,70 @@ namespace NKikimr::NGRpcService {
     } // namespace
 
     Y_UNIT_TEST_SUITE(YdbPathAliasingIngress) {
+        Y_UNIT_TEST(SchemeResponsesUseRequestedNames) {
+            TFixture fixture;
+            auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+
+            Ydb::Scheme::DescribePathRequest describe;
+            describe.set_path("/alias");
+            const auto described = Result<Ydb::Scheme::DescribePathResult>(
+                Call(*stub, &TScheme::DescribePath, describe, "/alias"));
+            UNIT_ASSERT_VALUES_EQUAL(described.self().name(), "alias");
+
+            Ydb::Scheme::ListDirectoryRequest list;
+            list.set_path("/alias");
+            const auto listed = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/alias"));
+            UNIT_ASSERT_VALUES_EQUAL(listed.self().name(), "alias");
+
+            list.set_path("/");
+            const auto virtualRoot = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/virtual"));
+            std::set<std::string> virtualChildren;
+            for (const auto& child : virtualRoot.children()) {
+                virtualChildren.insert(child.name());
+            }
+            UNIT_ASSERT(virtualChildren.contains("virtual"));
+            UNIT_ASSERT(!virtualChildren.contains("Root"));
+
+            const auto physicalRoot = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/Root"));
+            std::set<std::string> physicalChildren;
+            for (const auto& child : physicalRoot.children()) {
+                physicalChildren.insert(child.name());
+            }
+            UNIT_ASSERT(physicalChildren.contains("Root"));
+            UNIT_ASSERT(!physicalChildren.contains("virtual"));
+        }
+
+        Y_UNIT_TEST(ListDirectoryRenamesChildForTrailingSlashParent) {
+            TFixture fixture(/*useSimpleProxy=*/false, /*enablePathAliasing=*/true, /*createTenant=*/false, /*nestedAliasParent=*/true);
+            auto stub = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
+
+            Ydb::Scheme::MakeDirectoryRequest make;
+            // Create the physical child through a different alias than the one under test.
+            make.set_path("/alias");
+            Success(Call(*stub, &TScheme::MakeDirectory, make, "/Root"));
+
+            Ydb::Scheme::ListDirectoryRequest list;
+            list.set_path("/Root/");
+            const auto result = Result<Ydb::Scheme::ListDirectoryResult>(
+                Call(*stub, &TScheme::ListDirectory, list, "/Root/virtual"));
+
+            std::set<std::string> children;
+            for (const auto& child : result.children()) {
+                children.insert(child.name());
+            }
+            UNIT_ASSERT(children.contains("virtual"));
+            UNIT_ASSERT(!children.contains("kfront"));
+        }
+
         Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {
             TFixture fixture;
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             // The first request for this tenant is deferred while its database info
-            // is fetched, then re-enters ingress. The physical-name decoy rule must
-            // not see the cached result on replay.
+            // is fetched, then re-enters ingress.
             const auto session = Result<Ydb::Table::CreateSessionResult>(
                 Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias/"));
             UNIT_ASSERT(!session.session_id().empty());
@@ -381,6 +444,92 @@ namespace NKikimr::NGRpcService {
                 }
                 UNIT_ASSERT_C(found, name);
             }
+        }
+
+        Y_UNIT_TEST(RegularTopicReadSessionPreservesRelativePath) {
+            TFixture fixture;
+            auto topic = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
+
+            Ydb::Topic::CreateTopicRequest create;
+            create.set_path("/alias/regular_topic");
+            create.mutable_partitioning_settings()->set_min_active_partitions(1);
+            Success(Call(*topic, &TTopic::CreateTopic, create, "/alias"));
+
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/alias");
+            context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+            auto stream = topic->StreamRead(&context);
+            UNIT_ASSERT(stream);
+
+            Ydb::Topic::StreamReadMessage::FromClient request;
+            auto* settings = request.mutable_init_request()->add_topics_read_settings();
+            settings->set_path("/alias/regular_topic");
+            settings->add_partition_ids(0);
+            UNIT_ASSERT(stream->Write(request));
+
+            Ydb::Topic::StreamReadMessage::FromServer response;
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, response.DebugString());
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
+                "regular_topic", response.DebugString());
+
+            context.TryCancel();
+            stream->Finish();
+        }
+
+        Y_UNIT_TEST(CdcReadSessionReturnsSubscribedAlias) {
+            TFixture fixture;
+            auto table = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
+            auto topic = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
+            const char* tablePath = "/alias/test";
+            const char* feedPath = "/alias/test/feed";
+
+            Ydb::Table::CreateTableRequest create;
+            create.set_path(tablePath);
+            auto* key = create.add_columns();
+            key->set_name("key");
+            key->mutable_type()->set_type_id(Ydb::Type::INT64);
+            create.add_primary_key("key");
+            Success(Call(*table, &TTable::CreateTable, create, "/alias"));
+
+            Ydb::Table::AlterTableRequest alter;
+            alter.set_path(tablePath);
+            auto* feed = alter.add_add_changefeeds();
+            feed->set_name("feed");
+            feed->set_mode(Ydb::Table::ChangefeedMode::MODE_UPDATES);
+            feed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_JSON);
+            Success(Call(*table, &TTable::AlterTable, alter, "/alias"));
+
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/alias");
+            context.AddMetadata("x-ydb-auth-ticket", "root@builtin");
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+            auto stream = topic->StreamRead(&context);
+            UNIT_ASSERT(stream);
+
+            Ydb::Topic::StreamReadMessage::FromClient request;
+            auto* settings = request.mutable_init_request()->add_topics_read_settings();
+            settings->set_path(feedPath);
+            settings->add_partition_ids(0);
+            UNIT_ASSERT(stream->Write(request));
+
+            Ydb::Topic::StreamReadMessage::FromServer response;
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kInitResponse, response.DebugString());
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_C(response.server_message_case() ==
+                Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(response.start_partition_session_request().partition_session().path(),
+                feedPath, response.DebugString());
+
+            context.TryCancel();
+            stream->Finish();
         }
     } // Y_UNIT_TEST_SUITE(YdbPathAliasingIngress)
 

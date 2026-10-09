@@ -9,8 +9,10 @@ from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes.common import find_free_ports
 
 import grpc
-from ydb.library.yql.providers.common.token_accessor.grpc.token_accessor_pb_pb2_grpc import \
-    TokenAccessorServiceServicer, add_TokenAccessorServiceServicer_to_server
+from ydb.library.yql.providers.common.token_accessor.grpc.token_accessor_pb_pb2_grpc import (
+    TokenAccessorServiceServicer,
+    add_TokenAccessorServiceServicer_to_server,
+)
 from ydb.library.yql.providers.common.token_accessor.grpc.token_accessor_pb_pb2 import GetTokenRequest, GetTokenResponse
 
 logger = logging.getLogger('token_accessor_mock.recipe')
@@ -27,9 +29,7 @@ class TokenAccessor(TokenAccessorServiceServicer):
 
 def serve(port: int) -> None:
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    add_TokenAccessorServiceServicer_to_server(
-        TokenAccessor(), server
-    )
+    add_TokenAccessorServiceServicer_to_server(TokenAccessor(), server)
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     logger.info(f'token_accessor_mock server started at {port}')
@@ -59,7 +59,7 @@ def start(argv):
 def _update_environment(port: int):
     variables = {
         'TOKEN_ACCESSOR_MOCK_ENDPOINT': f'localhost:{port}',
-        'TOKEN_ACCESSOR_HMAC_SECRET_FILE': os.path.abspath(TOKEN_ACCESSOR_HMAC_SECRET_FILE)
+        'TOKEN_ACCESSOR_HMAC_SECRET_FILE': os.path.abspath(TOKEN_ACCESSOR_HMAC_SECRET_FILE),
     }
 
     for k, v in variables.items():

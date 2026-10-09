@@ -21,7 +21,7 @@
 
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <util/random/shuffle.h>
 
@@ -216,7 +216,7 @@ private:
 
     const TPromise<void> PeersSetPromise_ = NewPromise<void>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     bool Terminated_ = false;
     TDiscoverySessionPtr CurrentDiscoverySession_;
     TDelayedExecutorCookie RediscoveryCookie_;
@@ -278,7 +278,7 @@ private:
         std::atomic<bool> Finished_ = false;
         std::atomic<bool> Success_ = false;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
         THashSet<std::string> RequestedAddresses_;
         THashSet<std::string> RequestingAddresses_;
 

@@ -5,6 +5,10 @@
 
 #include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
+#include <library/cpp/yt/system/spin_lock.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,6 +33,13 @@ protected:
 
     virtual void ApplyStatistics(const NProto::TRowsetStatistics& statistics);
 
+    //! Time the caller has spent waiting for the ready event.
+    TDuration GetWaitTime() const;
+    //! Time spent synchronously in #Read.
+    TDuration GetReadTime() const;
+    //! Time spent decoding blocks in the background.
+    TDuration GetDecodeTime() const;
+
 private:
     const NConcurrency::IAsyncZeroCopyInputStreamPtr Underlying_;
     const NTableClient::TNameTablePtr NameTable_ = New<NTableClient::TNameTable>();
@@ -44,7 +55,13 @@ private:
 
     const bool IsStreamWithStatistics_;
 
+    YT_DECLARE_SPIN_LOCK(mutable TSpinLock, WaitTimerLock_);
+    mutable NProfiling::TWallTimer WaitTimer_{/*start*/ false};
+    NProfiling::TConcurrentTimer<NProfiling::TWallTimer> ReadTimer_{/*start*/ false};
+    NProfiling::TConcurrentTimer<NProfiling::TWallTimer> DecodeTimer_{/*start*/ false};
+
     TFuture<TSharedRange<NTableClient::TUnversionedRow>> GetRows();
+    void StopWaitTimerOnReady(const TPromise<void>& readyEvent);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

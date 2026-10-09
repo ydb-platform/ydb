@@ -3,7 +3,6 @@
 import sys
 import json
 
-
 SDK_LIBS = [
     "contrib/restricted/emscripten/system/lib/c/libsystem-lib-c.a",
     "contrib/restricted/emscripten/system/lib/dlmalloc/libsystem-lib-dlmalloc.a",

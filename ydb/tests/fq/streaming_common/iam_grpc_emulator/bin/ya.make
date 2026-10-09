@@ -1,5 +1,7 @@
 PY3_PROGRAM(iam_grpc_emulator)
 
+STYLE_PYTHON()
+
 PY_SRCS(
     MAIN main.py
 )

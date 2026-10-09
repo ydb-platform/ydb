@@ -5,9 +5,12 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/retry/retry_policy.h>
 
@@ -38,13 +41,13 @@ class TDqPqControlPlaneActor final : public TActor<TDqPqControlPlaneActor>, publ
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
         struct TEvDescribeFinished : TEventLocal<TEvDescribeFinished, EvDescribeFinished> {
-            TEvDescribeFinished(TString key, NYdb::NTopic::TAsyncDescribeConsumerResult result)
+            TEvDescribeFinished(TString key, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> result)
                 : Key(std::move(key))
                 , Result(std::move(result))
             {}
 
             const TString Key;
-            const NYdb::NTopic::TAsyncDescribeConsumerResult Result;
+            const NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> Result;
         };
 
         struct TEvRetryError : TEventLocal<TEvRetryError, EvRetryError> {
@@ -62,7 +65,7 @@ class TDqPqControlPlaneActor final : public TActor<TDqPqControlPlaneActor>, publ
     };
 
     struct TDescription {
-        ITopicClient::TPtr Client;
+        std::shared_ptr<NFq::IMessageStreamClient> Client;
         std::optional<TDescribeResult> Result;
         THashMap<ui64, ui32> PartitionIndexes;
         std::vector<TPqControlPlaneEvents::TEvDescribeConsumer::TPtr> Waiters;
@@ -203,11 +206,10 @@ private:
             {"topic", connection.GetTopicPath()},
             {"consumer", connection.GetConsumerName()});
 
-        description.Client = PqGateway->GetTopicClient(Driver, settings);
+        description.Client = PqGateway->GetTopicClient(connection.GetTopicPath(), Driver, settings);
         description.Client->DescribeConsumer(
-            connection.GetTopicPath(),
             connection.GetConsumerName(),
-            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
+            {.IncludeStats = true}
         ).Subscribe([key, selfId = SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& future) {
             actorSystem->Send(selfId, new TEvPrivate::TEvDescribeFinished(key, future));
         });
@@ -215,24 +217,21 @@ private:
 
     void Handle(TEvPrivate::TEvDescribeFinished::TPtr& ev) {
         const auto& result = ev->Get()->Result.GetValue();
-        const auto status = static_cast<int>(result.GetStatus());
 
         auto& description = Descriptions.at(ev->Get()->Key);
         auto& response = description.Result.emplace();
-        response.SetStatus(Ydb::StatusIds::StatusCode_IsValid(status)
-            ? static_cast<Ydb::StatusIds::StatusCode>(status)
-            : Ydb::StatusIds::EXTERNAL_ERROR);
-        NYdb::NIssue::IssuesToMessage(result.GetIssues(), response.MutableIssues());
+        response.SetStatus(NYql::ToYdbStatus(result.Status).value_or(Ydb::StatusIds::EXTERNAL_ERROR));
+        NYql::IssuesToMessage(result.Issues, response.MutableIssues());
 
         if (result.IsSuccess()) {
-            for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
+            for (const auto& partition : result.Value.Partitions) {
                 auto* offsets = response.AddPartitions();
-                offsets->SetPartitionId(partition.GetPartitionId());
-                if (const auto& stats = partition.GetPartitionStats()) {
-                    offsets->SetStartOffset(stats->GetStartOffset());
+                offsets->SetPartitionId(partition.PartitionId.Value);
+                if (partition.StartOffset) {
+                    offsets->SetStartOffset(*partition.StartOffset);
                 }
-                if (const auto& stats = partition.GetPartitionConsumerStats()) {
-                    offsets->SetCommittedOffset(stats->GetCommittedOffset());
+                if (partition.CommittedOffset) {
+                    offsets->SetCommittedOffset(*partition.CommittedOffset);
                 }
             }
         }
@@ -244,7 +243,7 @@ private:
         YDB_LOG_DEBUG("[PqControlPlane] Consumer description finished",
             {"actorId", SelfId()},
             {"status", Ydb::StatusIds::StatusCode_Name(response.GetStatus())},
-            {"issues", result.GetIssues().ToOneLineString()},
+            {"issues", result.Issues.ToOneLineString()},
             {"partitionCount", response.PartitionsSize()},
             {"waiterCount", description.Waiters.size()});
 
@@ -253,7 +252,7 @@ private:
         }
 
         description.Waiters.clear();
-        description.Client.Reset();
+        description.Client.reset();
     }
 
     void UnsubscribeFromSessions() {

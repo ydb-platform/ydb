@@ -70,6 +70,7 @@ class _PhaseResult:
     pool_waiting         -- schedulerPool[<pool>]/Waiting (Max): Amount of tasks waiting to Start (raw, count * 1e6).
     pool_demand          -- schedulerPool[<pool>]/Demand (Max): Tasks wanting CPU on the pool (running + waiting, raw * 1e6).
     """
+
     user_pool_cpu_us: float
     pool_usage_us: float
     pool_throttle_us: float
@@ -119,12 +120,16 @@ class _PoolCounterMaxPoller:
             self.max_demand = max(self.max_demand, demand)
 
     def _read(self) -> tuple[float, float, float, float]:
-        metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics={
-            'usage':    {'schedulerPool': self._pool_name, 'sensor': 'Usage'},
-            'throttle': {'schedulerPool': self._pool_name, 'sensor': 'Throttle'},
-            'waiting':  {'schedulerPool': self._pool_name, 'sensor': 'Waiting'},
-            'demand':   {'schedulerPool': self._pool_name, 'sensor': 'Demand'},
-        })
+        metrics = YdbCluster.get_metrics(
+            db_only=True,
+            counters='kqp',
+            metrics={
+                'usage': {'schedulerPool': self._pool_name, 'sensor': 'Usage'},
+                'throttle': {'schedulerPool': self._pool_name, 'sensor': 'Throttle'},
+                'waiting': {'schedulerPool': self._pool_name, 'sensor': 'Waiting'},
+                'demand': {'schedulerPool': self._pool_name, 'sensor': 'Demand'},
+            },
+        )
         usage = 0.0
         throttle = 0.0
         waiting = 0.0
@@ -353,9 +358,13 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
         """Sum actor-system pool CpuMicrosec across nodes.
         See ydb/library/actors/helpers/collector_counters.cpp:138 under
         counters=utils / execpool=<name>."""
-        metrics = YdbCluster.get_metrics(db_only=True, counters='utils', metrics={
-            'cpu': {'execpool': execpool, 'sensor': 'CpuMicrosec'},
-        })
+        metrics = YdbCluster.get_metrics(
+            db_only=True,
+            counters='utils',
+            metrics={
+                'cpu': {'execpool': execpool, 'sensor': 'CpuMicrosec'},
+            },
+        )
         total = 0.0
         for _slot, values in metrics.items():
             total += values.get('cpu', 0.0)

@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                     None {
                     }
                 }
-            )", {{NKikimrScheme::StatusSchemeError, "External source with type DataStream was not found"}});
+            )", {{NKikimrScheme::StatusSchemeError, "Unknown source type: DataStream"}});
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA",R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"
@@ -631,6 +631,11 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
                 KeyColumnNames: ["key"]
             )");
         env.TestWaitNotification(runtime, txId);
+
+        // Keep the dropped path among the parent's children
+        auto observer = runtime.AddObserver<TEvPrivate::TEvCleanDroppedPaths>([](auto& ev) {
+            ev.Reset();
+        });
 
         TestDropTable(runtime, ++txId, "/MyRoot", "UniqueName");
         env.TestWaitNotification(runtime, txId);

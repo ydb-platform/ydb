@@ -348,6 +348,8 @@ private:
             default:
                 YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
         }
+
+        EnableNewRBO = Config->GetEnableNewRBO();
     }
 
     void Continue(const TActorContext &ctx) {
@@ -373,7 +375,7 @@ private:
                 QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
                 CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId());
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
@@ -505,6 +507,7 @@ private:
         } else {
             KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst), meta);
         }
+        KqpCompileResult->UsedNewRbo = EnableNewRBO;
 
         Reply();
     }

@@ -25,7 +25,8 @@ namespace NKikimr::NDDisk {
 
         size_t dataChunkCount = 0;
         size_t uncoveredDataChunkCount = 0;
-        for (const auto& [tabletId, chunks] : ChunkRefs) {
+        for (const auto& [tabletId, tablet] : Tablets) {
+            const auto& chunks = tablet.ChunkRefs;
             for (const auto& [vChunkIndex, chunkRef] : chunks) {
                 if (!chunkRef.ChunkIdx) {
                     continue;
@@ -59,7 +60,8 @@ namespace NKikimr::NDDisk {
             {"PDiskActorId", BaseInfo.PDiskActorID});
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
-            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/, Config.IdleSpinUs));
+            0 /*groupSizeInUnits*/, !Config.ForcePDiskFallback /*getUringRouterClient*/,
+            Config.IdleSpinUs, Config.DevNullMode));
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
@@ -80,6 +82,11 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         if (!Config.ForcePDiskFallback) {
             UringRouter = std::move(msg.UringRouter);
+        }
+        if ((Config.DevNullMode && !UringRouter)
+                || (UringRouter && UringRouter->GetConfig().DevNullMode != Config.DevNullMode)) {
+            BeginStopping("DDisk requires a shared io_uring router with matching DevNullMode");
+            return;
         }
         if (!UringRouter) {
             YDB_LOG_INFO("TDDiskActor::Handle(TEvYardInitResult) "
@@ -118,9 +125,12 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(chunkMap.HasSnapshot());
             const auto& snapshot = chunkMap.GetSnapshot();
             for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
-                auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
+                if (tabletRecord.GetChunkRefs().empty()) {
+                    continue;
+                }
+                auto& tabletChunkMap = Tablets[tabletRecord.GetTabletId()].ChunkRefs;
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
-                    tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
+                    SetDataChunkMapping(tabletRecord.GetTabletId(), &tabletChunkMap[chunkRef.GetVChunkIndex()], chunkRef.GetChunkIdx());
                     ++*Counters.Chunks.ChunksOwned;
                     if (chunkRef.HasExtentRef()) {
                         const auto& ref = chunkRef.GetExtentRef();
@@ -189,8 +199,8 @@ namespace NKikimr::NDDisk {
                                     ++*Counters.Chunks.ChunksOwned;
                                 }
                                 const auto& data = increment.GetDataChunk();
-                                ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()].ChunkIdx =
-                                    data.GetChunkIdx();
+                                SetDataChunkMapping(data.GetTabletId(), &Tablets[data.GetTabletId()].ChunkRefs[data.GetVChunkIndex()],
+                                    data.GetChunkIdx());
                                 ++*Counters.Chunks.ChunksOwned;
                                 if (data.HasExtentRef()) {
                                     const auto& ref = data.GetExtentRef();
@@ -234,7 +244,8 @@ namespace NKikimr::NDDisk {
         // changes it. Failed recovery cannot establish which owned chunks are orphans.
         if (!IsBroken()) {
             absl::flat_hash_set<TChunkIdx> live(PersistentBufferChunks.begin(), PersistentBufferChunks.end());
-            for (const auto& [tabletId, chunks] : ChunkRefs) {
+            for (const auto& [tabletId, tablet] : Tablets) {
+                const auto& chunks = tablet.ChunkRefs;
                 Y_UNUSED(tabletId);
                 for (const auto& [vChunkIndex, ref] : chunks) {
                     Y_UNUSED(vChunkIndex);

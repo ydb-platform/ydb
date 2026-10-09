@@ -1,8 +1,14 @@
+#include <ydb/core/subsystems/actor_system_monitoring/subsystem.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/subsystem.h>
+#include <ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart/resources.h>
+#include <library/cpp/monlib/service/pages/resource_mon_page.h>
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
+
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 
 #include <ydb/core/actorlib_impl/destruct_actor.h>
 
@@ -217,7 +223,7 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
@@ -239,6 +245,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -294,6 +301,8 @@
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NKikimrServicesInitializers {
 
@@ -625,9 +634,37 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const ui32 systemPoolId = appData->SystemPoolId;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
+    setup->RegisterSubSystem(NActors::MakeInMemoryMetricsRegistry({
+        .MemoryBytes = 8ull << 20,
+        .MaxLines = 4096,
+        .AllowedMetricPrefixes = {"ddisk.", "harmonizer.", "actor_system.", "inmemory_metrics."},
+    }));
+
+    if (auto* mon = appData->Mon) {
+        auto monitoring = NActorSystemMonitoring::MakeConfig(
+            systemConfig, appData->BatchPoolId, useAutoConfig);
+        monitoring.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "system", "Actor system", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NActorSystemMonitoring::MakeActorSystemMonitoring(std::move(monitoring)));
+
+        NMetricChart::RegisterResources(mon);
+        mon->Register(new NMonitoring::TResourceMonPage("static/inmemory-metrics/overview.js",
+            "inmemory-metrics/overview.js", NMonitoring::TResourceMonPage::JAVASCRIPT));
+        NInMemoryMetricsMonitoring::TConfig metricsViewer;
+        metricsViewer.ExecutorPool = appData->BatchPoolId;
+        metricsViewer.RegisterPage = [mon](NActors::TActorSystem& system, const NActors::TActorId& actor) {
+            auto* actors = mon->RegisterIndexPage("actors", "Actors");
+            mon->RegisterActorPage(actors, "metrics", "In-memory metrics", false, &system, actor, /*useAuth=*/true);
+        };
+        setup->RegisterSubSystem(NInMemoryMetricsMonitoring::MakeInMemoryMetricsMonitoring(std::move(metricsViewer)));
+    }
+
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
+    setup->RegisterSubSystem(std::make_unique<NActors::TAsyncFrameCache>(systemConfig.GetAsyncFrameCacheSizeBytes()));
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
@@ -1277,6 +1314,12 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
                 storageConfig.GetIntegrityChecksumCacheBytes());
         }
+        if (storageConfig.HasDevNullMode()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetDevNullMode(storageConfig.GetDevNullMode());
+        }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
         }
@@ -1472,14 +1515,9 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
-    std::optional<ui64> maxCacheSize;
-    if (Config.HasBlobCacheConfig()) {
-        if (Config.GetBlobCacheConfig().HasMaxSizeBytes()) {
-            maxCacheSize = Config.GetBlobCacheConfig().GetMaxSizeBytes();
-        }
-    }
+    const NBlobCache::TBlobCacheSettings settings = NBlobCache::TBlobCacheSettings::FromProto(Config.GetBlobCacheConfig());
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
-        TActorSetupCmd(NBlobCache::CreateBlobCache(maxCacheSize, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(NBlobCache::CreateBlobCache(settings, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
 // TLoggerInitializer
@@ -2606,7 +2644,8 @@ void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
     if (Config.GetScanGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableScanGroupedMemoryLimiterConfig()->SetCountBuckets(10);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()),
+        "invalid ScanGroupedMemoryLimiterConfig: %s", Config.GetScanGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2629,7 +2668,8 @@ void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
     if (Config.GetCompGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableCompGroupedMemoryLimiterConfig()->SetCountBuckets(1);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()),
+        "invalid CompGroupedMemoryLimiterConfig: %s", Config.GetCompGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2652,7 +2692,8 @@ void TDeduplicationGroupedMemoryLimiterInitializer::InitializeServices(NActors::
     if (Config.GetDeduplicationGroupedMemoryLimiterConfig().GetCountBuckets() == 0) {
         Config.MutableDeduplicationGroupedMemoryLimiterConfig()->SetCountBuckets(1);
     }
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetDeduplicationGroupedMemoryLimiterConfig()),
+        "invalid DeduplicationGroupedMemoryLimiterConfig: %s", Config.GetDeduplicationGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
@@ -2714,8 +2755,11 @@ TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializ
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse portions metadata cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse portions metadata cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2738,8 +2782,11 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse column data cache config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse column data cache config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());
@@ -2874,8 +2921,9 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         }
         auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
         if (overlaid.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
-                "error", overlaid.GetErrorMessage())("action", "keeping synthesized composite conveyor defaults");
+            YDB_LOG_ERROR("Cannot overlay composite conveyor config",
+                {"error", overlaid.GetErrorMessage()},
+                {"action", "keeping synthesized composite conveyor defaults"});
             return result;
         }
         return overlaid.DetachResult();
@@ -2883,8 +2931,11 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
 
     auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
     if (serviceConfig.IsFail()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse composite conveyor config")("action", "default_usage")(
-            "error", serviceConfig.GetErrorMessage())("default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString());
+        YDB_LOG_ERROR("",
+            {"error", "cannot parse composite conveyor config"},
+            {"action", "default_usage"},
+            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
     AFL_VERIFY(!serviceConfig.IsFail());

@@ -1,0 +1,17 @@
+PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+$x = (
+    SELECT
+        *
+    FROM (
+        VALUES
+            (NULL),
+            (1)
+    ) AS x (
+        a
+    )
+);
+
+SELECT
+    (2 IN $x)
+; -- NULL: Optional<Bool>

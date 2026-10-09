@@ -821,6 +821,29 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         return false;
     }
 
+    // Version 1 is published in the same handler that starts CREATE TABLE Balancer.
+    static void WaitUntilBalancerTableCreated(TPQCDServer& server) {
+        for (size_t i = 0; i < 40; ++i) {
+            if (server.PQClient().TryRunYqlDataQuery("SELECT name, clusters FROM `/Root/PQ/Config/V2/Balancer`;").Defined()) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Balancer table was not created");
+    }
+
+    // In-flight list can take ~4s to report the drop; recreation starts only after that.
+    static void WaitUntilDroppedTableRecreated(TPQCDServer& server, const TString& selectQuery, const char* failureMessage) {
+        for (size_t i = 0; i < 200; ++i) {
+            if (server.PQClient().TryRunYqlDataQuery(selectQuery).Defined()) {
+                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL(failureMessage);
+    }
+
     Y_UNIT_TEST(TestTrackerCreatesMissingClusterTable) {
         TPQCDServer server;
         server.SetNetDataViaFile("::1/128\tdc1");
@@ -1135,6 +1158,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
+        WaitUntilBalancerTableCreated(server);
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "myt", 1);
         wrapper.WaitForExactClustersDataVersion(2);
@@ -1171,17 +1195,10 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.WaitUntilHealthy();
 
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Cluster`;");
-
-        for (size_t i = 0; i < 40; ++i) {
-            auto clusterTable = server.PQClient().TryRunYqlDataQuery(
-                "SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;");
-            if (clusterTable.Defined()) {
-                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
-                return;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_FAIL("Cluster table was not recreated after DROP TABLE");
+        WaitUntilDroppedTableRecreated(
+            server,
+            "SELECT name, balancer, local, enabled, weight FROM `/Root/PQ/Config/V2/Cluster`;",
+            "Cluster table was not recreated after DROP TABLE");
     }
 
     Y_UNIT_TEST(TestDroppedVersionsTableIsRecreated) {
@@ -1194,17 +1211,10 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
         server.WaitUntilHealthy();
 
         server.PQClient().RunYqlSchemeQuery("DROP TABLE `/Root/PQ/Config/V2/Versions`;");
-
-        for (size_t i = 0; i < 40; ++i) {
-            auto versionsTable = server.PQClient().TryRunYqlDataQuery(
-                "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;");
-            if (versionsTable.Defined()) {
-                UNIT_ASSERT(WaitForGetClustersListFailure(server.ActorSystem()));
-                return;
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        UNIT_FAIL("Versions table was not recreated after DROP TABLE");
+        WaitUntilDroppedTableRecreated(
+            server,
+            "SELECT name, version FROM `/Root/PQ/Config/V2/Versions`;",
+            "Versions table was not recreated after DROP TABLE");
     }
 
     Y_UNIT_TEST(TestAllFnxClustersHiddenWithoutBalancer) {
@@ -1218,6 +1228,7 @@ Y_UNIT_TEST_SUITE(TPQCDTest) {
 
         TFancyGRpcWrapper wrapper(server.GrpcPort());
         wrapper.WaitForExactClustersDataVersion(1);
+        WaitUntilBalancerTableCreated(server);
 
         server.PQClient().UpsertBalancer("logbroker-fnx.yandex.net", "dc1,dc2", 1);
         wrapper.WaitForExactClustersDataVersion(2);

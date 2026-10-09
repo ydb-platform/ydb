@@ -40,6 +40,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     };
 
     ui32 DcCount = 1;
+    bool UseRealInterconnect = false;
     std::map<TString, TStorageMeta::TTenant> Tenants;
     TDuration HealthCheckTimeout = TDuration::Seconds(10);
     EHealthCheck HealthCheckLevel = EHealthCheck::NodesCount;

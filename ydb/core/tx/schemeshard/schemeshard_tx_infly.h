@@ -103,6 +103,10 @@ struct TTxState {
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;
     bool ReadyForNotifications = false;
     std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SplitDescription;
+    // Split/merge ops only: whether this op deepens the by-load split lineage
+    // (propagates LoadSplitLineageDepth at op completion). Set once at Propose from
+    // the request; persisted in TxInFlightV2 so it survives schemeshard restarts.
+    bool LoadSplitLineage = false;
     bool TxShardsListFinalized = false;
     TTxId BuildIndexId;
     std::shared_ptr<NKikimrSchemeOp::TBuildIndexOutcome> BuildIndexOutcome;

@@ -1,3 +1,19 @@
+* Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
+
+* Fixed table and query sessions being reused after commit or rollback errors that require closing the session.
+
+* Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
+
+* Fixed a thread leak in topic and PersQueue write sessions: asynchronous compression no longer keeps the client thread pool alive until process exit.
+
+## v3.24.0
+
+* Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.
+
+* Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
+
+* Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.
+
 * Added an optional S3 object key prefix to TTL eviction settings for column tables.
 
 * Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.

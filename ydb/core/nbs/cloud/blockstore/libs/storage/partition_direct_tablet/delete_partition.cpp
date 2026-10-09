@@ -240,6 +240,23 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
         NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
 }
 
+void TPartitionActor::HandleStatVolumeDuringDelete(
+    const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::TPtr&
+        ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Reject StatVolume: partition is being deleted",
+        LogTitle.GetWithTime().c_str());
+
+    auto response = std::make_unique<
+        NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse>(
+        MakeError(E_REJECTED, "partition is being deleted"));
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
 // Ignore update vchunk config during delete
 void TPartitionActor::HandleUpdateVChunkConfigDuringDelete(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
@@ -384,6 +401,9 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfigDuringDelete);
+        HFunc(
+            NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest,
+            HandleStatVolumeDuringDelete);
         // Ignore update vchunk config during delete
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,

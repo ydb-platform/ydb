@@ -61,7 +61,7 @@
 
 #include <util/generic/object_counter.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -157,7 +157,8 @@ bool TColumnShard::WaitPlanStep(ui64 step) {
         if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
             MediatorTimeCastWaitingSteps.insert(step);
             SendWaitPlanStep(step);
-            LOG_S_DEBUG("Waiting for PlanStep# " << step << " from mediator time cast");
+            YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
+                {"planStep", step});
             return true;
         }
     }
@@ -303,6 +304,12 @@ void TColumnShard::RunSchemaTx(
             RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            NIceDb::TNiceDb db(txc.DB);
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(body.GetTruncateTable());
+            TablesManager.TruncateTableProgress(db, version, schemeShardLocalPathId);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -334,14 +341,17 @@ void TColumnShard::RunEnsureTable(
 
     if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
         internalPathId && TablesManager.HasTable(*internalPathId, true)) {
-        LOG_S_DEBUG(
-            "EnsureTable for existed pathId: " << TUnifiedOptionalPathId(internalPathId, schemeShardLocalPathId) << " at tablet " << TabletID());
+        YDB_LOG_DEBUG("EnsureTable for existed path at tablet",
+            {"pathId", TUnifiedOptionalPathId(internalPathId, schemeShardLocalPathId)},
+            {"tabletID", TabletID()});
         return;
     }
     const auto internalPathId = TablesManager.GetOrCreateInternalPathId(schemeShardLocalPathId);
 
-    LOG_S_INFO("EnsureTable for pathId: " << TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)
-                                          << " ttl settings: " << tableProto.GetTtlSettings() << " at tablet " << TabletID());
+    YDB_LOG_INFO("EnsureTable for path with ttl at tablet",
+        {"pathId", TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)},
+        {"ttlSettings", tableProto.GetTtlSettings()},
+        {"tabletID", TabletID()});
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     internalPathId.ToProto(tableVerProto);
@@ -399,8 +409,11 @@ void TColumnShard::RunAlterTable(
     const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
     Y_ABORT_UNLESS(TablesManager.HasTable(internalPathId), "AlterTable on a dropped or non-existent table");
     const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
-    LOG_S_DEBUG("AlterTable for pathId: " << pathId << " schema: " << alterProto.GetSchema() << " ttl settings: " << alterProto.GetTtlSettings()
-                                          << " at tablet " << TabletID());
+    YDB_LOG_DEBUG("AlterTable at tablet",
+        {"pathId", pathId},
+        {"schema", alterProto.GetSchema()},
+        {"ttlSettings", alterProto.GetTtlSettings()},
+        {"tabletID", TabletID()});
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
@@ -435,17 +448,23 @@ void TColumnShard::RunDropTable(
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
 
     if (!internalPathId) {
-        LOG_S_DEBUG("DropTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
+        YDB_LOG_DEBUG("DropTable for unknown or deleted scheme shard at tablet",
+            {"pathId", schemeShardLocalPathId},
+            {"tabletID", TabletID()});
         return;
     }
 
     const auto& pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
     if (!TablesManager.HasTable(*internalPathId)) {
-        LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
+        YDB_LOG_DEBUG("DropTable for unknown or deleted at tablet",
+            {"pathId", pathId},
+            {"tabletID", TabletID()});
         return;
     }
 
-    LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
+    YDB_LOG_DEBUG("DropTable for path at tablet",
+        {"pathId", pathId},
+        {"tabletID", TabletID()});
     TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
 }
 
@@ -497,7 +516,8 @@ void TColumnShard::RunAlterStore(
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()});
     YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump event, periodic",
         {"event", "EnqueueBackgroundActivities"},
         {"periodic", periodic});
@@ -627,8 +647,9 @@ private:
     }
 
     virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
-        NActors::TLogContextGuard g(
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parentId", ParentActorId});
         if (NeedBlobs) {
             AFL_VERIFY(context.GetResourceGuards().size() == 3);
         } else {
@@ -772,7 +793,8 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
 
     if (indexChangesList.empty()) {
-        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        YDB_LOG_DEBUG("Compaction not started: cannot prepare compaction at tablet",
+            {"tabletID", TabletID()});
         return;
     }
 
@@ -882,15 +904,18 @@ void TColumnShard::SetupMetadata() {
         return;
     }
     std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
-    for (auto&& i : requests) {
-        const ui64 accessorsMemory =
-            i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(),
-                                        TTLTaskSubscription, std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
-                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+    for (const auto& request : requests) {
+        SubmitMetadataRequest(request);
     }
+}
+
+void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
+    const ui64 memory = request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
+    auto task = std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
+        std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
+        std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified(),
+        nullptr);
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, task);
 }
 
 bool TColumnShard::SetupTtl() {
@@ -990,8 +1015,14 @@ void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHol
     for (const auto& [dropSnapshot, pathIds] : TablesManager.GetPathsToDrop()) {
         for (const TInternalPathId pathId : pathIds) {
             if (snapshotHolders.CouldUseTable(pathId, dropSnapshot)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)
-                ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
+                YDB_LOG_DEBUG("",
+                    {"event", "CleanupTableMetadataDeferredByActiveScan"},
+                    {"pathId", pathId},
+                    {"dropSnapshot", dropSnapshot.DebugString()});
+                continue;
+            }
+            if (OperationsManager->HasWriteOperations(pathId)) {
+                YDB_LOG_DEBUG("", {"event", "CleanupTableMetadataDeferredByWriteOperations"}, {"path_id", pathId});
                 continue;
             }
             pathIdsToCleanup.insert(pathId);
@@ -1167,15 +1198,19 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
 
     // Forced compaction is only supported for standalone column tables, not for column stores.
     if (TablesManager.IsStoreTablet()) {
-        LOG_S_WARN("Forced compaction is not supported for column store: tablet# " << TabletID() << ", pathId# " << pathId
-                                                                                   << ", requested from# " << ev->Sender);
+        YDB_LOG_WARN("Forced compaction is not supported for column store",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
     if (!TablesManager.HasPrimaryIndex()) {
-        LOG_S_WARN("Forced compaction failed, no primary index: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# "
-                                                                          << ev->Sender);
+        YDB_LOG_WARN("Forced compaction failed, no primary index",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
@@ -1184,7 +1219,10 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
     if (!granule) {
-        LOG_S_WARN("Forced compaction of unknown path: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+        YDB_LOG_WARN("Forced compaction of unknown path",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
@@ -1192,21 +1230,30 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
     if (noIntersections.IsFail()) {
         // The optimizer does not support forced compaction (i.e. it is not tiling++).
-        LOG_S_WARN("Forced compaction is not supported: tablet# " << TabletID() << ", pathId# " << pathId << ", reason# "
-                                                                  << noIntersections.GetErrorMessage() << ", requested from# " << ev->Sender);
+        YDB_LOG_WARN("Forced compaction is not supported",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"reason", noIntersections.GetErrorMessage()},
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
     if (*noIntersections) {
-        LOG_S_DEBUG("Forced compaction already done: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+        YDB_LOG_DEBUG("Forced compaction already done",
+            {"tablet", TabletID()},
+            {"pathId", pathId},
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
         return;
     }
 
     // Portions still intersect: hold the request and reply once the table settles. Background
     // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
-    LOG_S_DEBUG("Forced compaction registered: tablet# " << TabletID() << ", pathId# " << pathId << ", requested from# " << ev->Sender);
+    YDB_LOG_DEBUG("Forced compaction registered",
+        {"tablet", TabletID()},
+        {"pathId", pathId},
+        {"requestedFrom", ev->Sender});
     ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
     SetupCompaction({ *internalPathId });
 }
@@ -1238,8 +1285,11 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             continue;
         }
         for (const auto& waiter : waiters) {
-            LOG_S_DEBUG("Forced compaction finished: tablet# " << TabletID() << ", pathId# " << waiter.SchemePathId << ", status# "
-                                                               << (int)*status << ", reply to# " << waiter.Sender);
+            YDB_LOG_DEBUG("Forced compaction finished",
+                {"tablet", TabletID()},
+                {"pathId", waiter.SchemePathId},
+                {"status", (int)*status},
+                {"replyTo", waiter.Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
             ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
         }
@@ -1630,7 +1680,9 @@ public:
         for (auto&& i : PortionsByPath) {
             const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
-                NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
+                YDB_LOG_CREATE_CONTEXT(
+                    {"consumer", c.first},
+                    {"pathId", i.first});
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "Dump size",
                     {"size", c.second.GetPortionsCount()});
                 for (auto&& portion : c.second.GetPortions(granule)) {
@@ -1818,6 +1870,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiato
 };
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModification::TPtr& ev, const TActorContext& ctx) {
+    SharingSessionsManager->OnSharingAdmission();
     YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         {"process", "BlobsSharing"},
         {"event", "TEvApplyLinksModification"},
@@ -1912,8 +1965,10 @@ void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<
 }
 
 STFUNC(TColumnShard::StateWork) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-        "self_id", SelfId())("ev", ev->GetTypeName());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()},
+        {"ev", ev->GetTypeName()});
     TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTxProcessing::TEvReadSet, Handle);
@@ -1931,8 +1986,11 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvColumnShard::TEvInternalScan, Handle);
         HFunc(TEvTxProcessing::TEvPlanStep, Handle);
         HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+        HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
+        HFunc(TEvPrivate::TEvContinueFindEmptyHistoryIntervals, Handle);
+        HFunc(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
@@ -1982,16 +2040,21 @@ STFUNC(TColumnShard::StateWork) {
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_S_WARN("TColumnShard.StateWork at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
-                                                        << " event: " << ev->ToString());
+                YDB_LOG_WARN("TColumnShard.StateWork at unhandled event",
+                    {"tabletID", TabletID()},
+                    {"type", ev->GetTypeName()},
+                    {"event", ev->ToString()});
             }
             break;
     }
 }
 
 void TColumnShard::Enqueue(STFUNC_SIG) {
-    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-        "self_id", SelfId())("process", "Enqueue")("ev", ev->GetTypeName());
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()},
+        {"process", "Enqueue"},
+        {"ev", ev->GetTypeName()});
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, HandleInit);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);

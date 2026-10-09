@@ -155,15 +155,13 @@ def test_full_queue_scenario(yt: YtClient) -> None:
 
     # Verify pulled rows are a subset of written rows
     pulled_data_values = sorted([row["data"] for row in pulled_rows if "data" in row])
-    assert len(pulled_data_values) <= expected_row_count, (
-        f"Pulled {len(pulled_data_values)} rows, expected at most {expected_row_count}"
-    )
+    assert (
+        len(pulled_data_values) <= expected_row_count
+    ), f"Pulled {len(pulled_data_values)} rows, expected at most {expected_row_count}"
     expected_counter = Counter(expected_data_values)
     pulled_counter = Counter(pulled_data_values)
     for data_value, count in pulled_counter.items():
-        assert data_value in expected_counter, (
-            f"Unexpected data value '{data_value}' in pulled rows"
-        )
+        assert data_value in expected_counter, f"Unexpected data value '{data_value}' in pulled rows"
         assert count <= expected_counter[data_value], (
             f"Data value '{data_value}' appears {count} times in pulled rows, "
             f"but expected at most {expected_counter[data_value]}"
@@ -234,8 +232,7 @@ def test_full_queue_scenario(yt: YtClient) -> None:
     )
     pulled_data = {row["data"] for row in pulled_rows if "data" in row}
     assert expected_producer_rows_batch1.issubset(pulled_data), (
-        f"Expected producer rows {expected_producer_rows_batch1}, "
-        f"but got {pulled_data}"
+        f"Expected producer rows {expected_producer_rows_batch1}, " f"but got {pulled_data}"
     )
 
     # --- 19. Write one more row batch with row duplicates ---
@@ -266,14 +263,12 @@ def test_full_queue_scenario(yt: YtClient) -> None:
     )
     pulled_data = {row["data"] for row in pulled_rows if "data" in row}
     assert expected_producer_rows_after_dedup.issubset(pulled_data), (
-        f"Expected producer rows after dedup {expected_producer_rows_after_dedup}, "
-        f"but got {pulled_data}"
+        f"Expected producer rows after dedup {expected_producer_rows_after_dedup}, " f"but got {pulled_data}"
     )
     # Verify "value2" appears only once (deduplication check)
     value2_count = sum(1 for row in pulled_rows if row.get("data") == "value2")
     assert value2_count <= 1, (
-        f"Expected 'value2' to appear at most once (deduplication), "
-        f"but found {value2_count} occurrences"
+        f"Expected 'value2' to appear at most once (deduplication), " f"but found {value2_count} occurrences"
     )
 
     # --- Cleanup ---

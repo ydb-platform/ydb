@@ -77,6 +77,7 @@ public:
     ui32 DynamicNodeCount = 0;
     bool WithSampleTables = true;
     bool UseRealThreads = true;
+    bool UseRealInterconnect = false;
     bool EnableForceFollowers = false;
     bool EnableScriptExecutionBackgroundChecks = true;
     bool NeedsStatsCollectors = false;
@@ -127,6 +128,7 @@ public:
     TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NSecret::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
     TKikimrSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
+    TKikimrSettings& SetUseRealInterconnect(bool value) { UseRealInterconnect = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetNeedsStatsCollectors(bool value) { NeedsStatsCollectors = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };

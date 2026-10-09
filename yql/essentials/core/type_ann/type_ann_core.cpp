@@ -7396,6 +7396,11 @@ IGraphTransformer::TStatus SqlInWrapper(const TExprNode::TPtr& input, TExprNode:
     }
 
     const auto lookupType = lookup->GetTypeAnn();
+    if (lookupType->HasUniversal()) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     const bool isAnsi = HasSetting(*options, "ansi");
 
     auto collectionType = collection->GetTypeAnn();
@@ -16478,7 +16483,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["FormatTypeDiff"] = &FormatTypeDiffWrapper;
     Functions["CastStruct"] = &CastStructWrapper;
     ExtFunctions["AggregationTraits"] = &AggregationTraitsWrapper;
-    Functions["MultiAggregate"] = &MultiAggregateWrapper;
+    ExtFunctions["MultiAggregate"] = &MultiAggregateWrapper;
     Functions["AggOverState"] = &AggOverStateWrapper;
     Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
     Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;
@@ -16892,11 +16897,11 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["AggregateMergeFinalize"] = &AggregateWrapper;
     ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
-    ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+    ColumnOrderFunctions["PgSetItem"] = &OrderForSqlSetItem;
     ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
     ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
 
-    ColumnOrderFunctions["YqlSetItem"] = &OrderForPgSetItem;
+    ColumnOrderFunctions["YqlSetItem"] = &OrderForSqlSetItem;
     ColumnOrderFunctions["YqlIterate"] = &OrderFromFirst;
     ColumnOrderFunctions["YqlIterateAll"] = &OrderFromFirst;
 

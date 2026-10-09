@@ -318,6 +318,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         proto.mutable_storage_settings()->set_external_data_channels_count(*count);
     }
 
+    if (const auto level = metadata->TableSettings.MetricsLevel) {
+        proto.mutable_metrics_settings()->set_metrics_level(*level);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -965,8 +969,8 @@ public:
             return result;
         }
 
-        if (settings.SchemeLimits) {
-            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+        if (settings.SchemeLimits || settings.TablesMetricsLevel) {
+            NSchemeHelpers::FillAlterDatabaseSettings(modifyScheme, basename, settings);
 
             TGenericResult result;
             result.SetSuccess();
@@ -999,7 +1003,7 @@ public:
                 if (settings.Owner) {
                     *schemeOp.MutableModifyPermissions() = modifyScheme;
                 }
-                if (settings.SchemeLimits) {
+                if (settings.SchemeLimits || settings.TablesMetricsLevel) {
                     *schemeOp.MutableAlterDatabase() = modifyScheme;
                 }
 
@@ -2366,6 +2370,27 @@ public:
         } else {
             return Gateway->DropObject(cluster, settings);
         }
+    }
+
+    TFuture<TGenericResult> KillSession(const TString& cluster, const TString& sessionId, bool isParameter) override {
+        CHECK_PREPARED_DDL(KillSession);
+        if (!IsPrepare()) {
+            // Closing a session is a runtime effect, never a compilation side effect.
+            return Gateway->KillSession(cluster, sessionId, isParameter);
+        }
+        if (!Gateway->HasCluster(cluster)) {
+            return InvalidCluster<TGenericResult>(cluster);
+        }
+
+        auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        auto* operation = phyTx.MutableSchemeOperation()->MutableKillSession();
+        if (isParameter) {
+            operation->SetSessionIdParameter(sessionId);
+        } else {
+            operation->SetSessionId(sessionId);
+        }
+        return PrepareSuccess<TGenericResult>();
     }
 
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) override {

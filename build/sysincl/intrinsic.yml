@@ -63,6 +63,7 @@
   - rdseedintrin.h
   - rtmintrin.h
   - s390intrin.h
+  - stdcountof.h
   - stdfix.h
   - smmintrin.h
   - tbmintrin.h

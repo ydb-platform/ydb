@@ -30,10 +30,10 @@ public:
         if (tablet != nullptr) {
             NIceDb::TNiceDb db(txc.DB);
             if (msg->Status == NKikimrProto::OK
-                    || msg->Status == NKikimrProto::ALREADY
                     || msg->Status == NKikimrProto::RACE
                     || msg->Status == NKikimrProto::BLOCKED
-                    || msg->Status == NKikimrProto::NO_GROUP) {
+                    || msg->Status == NKikimrProto::NO_GROUP
+                    || (msg->Status == NKikimrProto::ALREADY && tablet->IsDeleting())) {
                 if (tablet->IsDeleting()) {
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute unexpected status for deleting tablet",
@@ -68,7 +68,12 @@ public:
                         Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
-            } else if (msg->Status == NKikimrProto::ERROR && tablet->IsReadyToBlockStorage() && msg->ActualGeneration >= tablet->KnownGeneration) {
+            } else if ((msg->Status == NKikimrProto::ERROR || msg->Status == NKikimrProto::ALREADY)
+                    && tablet->IsReadyToBlockStorage()
+                    && msg->ActualGeneration >= tablet->GetBlockStorageGeneration()) {
+                // The group is already blocked at our generation or above, so a tablet might have run with the old storage info.
+                // Our own partially applied block also reports our generation, so a quorum failure may get here too,
+                // which is safe, since unconfirmed storage info has not been published yet.
                 Y_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
                 ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
 
@@ -132,7 +137,7 @@ public:
                 }
 
                 Y_ABORT_UNLESS(msg->ActualGeneration < Max<ui32>());
-                tablet->KnownGeneration = msg->ActualGeneration + 1;
+                tablet->KnownGeneration = Max(tablet->KnownGeneration, msg->ActualGeneration + 1);
                 tablet->ChannelProfileReassignReason =
                     NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
                 tablet->State = ETabletState::GroupAssignment;
@@ -146,6 +151,7 @@ public:
                 YDB_LOG_WARN("THive::TTxBlockStorageResult::Execute rolling back unconfirmed storage",
                     {"logPrefix", GetLogPrefix()},
                     {"tabletId", TabletId},
+                    {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)},
                     {"storageVersion", tablet->TabletStorageInfo->Version},
                     {"confirmedStorageVersion", confirmedVersion},
                     {"actualGeneration", msg->ActualGeneration},

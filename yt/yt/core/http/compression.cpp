@@ -417,11 +417,15 @@ public:
         TContentEncoding contentEncoding,
         IInvokerPtr compressionInvoker)
         : Underlying_(std::move(underlying))
+        , Headers_(Underlying_->GetHeaders()->Duplicate())
         , Decoder_(CreateZeroCopyAdapter(CreateDecompressingAdapter(
             Underlying_,
             std::move(contentEncoding),
             std::move(compressionInvoker))))
-    { }
+    {
+        Headers_->Remove(ContentEncodingHeaderName);
+        Headers_->Remove(ContentLengthHeaderName);
+    }
 
     TFuture<TSharedRef> Read() override
     {
@@ -445,7 +449,7 @@ public:
 
     const THeadersPtr& GetHeaders() override
     {
-        return Underlying_->GetHeaders();
+        return Headers_;
     }
 
     const NNet::TNetworkAddress& GetRemoteAddress() const override
@@ -485,6 +489,7 @@ public:
 
 private:
     const IRequestPtr Underlying_;
+    const THeadersPtr Headers_;
     const IAsyncZeroCopyInputStreamPtr Decoder_;
 };
 

@@ -424,6 +424,10 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        // The initial state comes without follower update notifications
+        SyncSchemeOnFollowerNeeded = true;
+        // Do not rely on a sync queued before the reactivation, an extra one is a no-op
+        SyncSchemeOnFollowerPending = false;
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -4175,6 +4179,20 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateChangeExchangeLag(ctx.Now());
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
+
+    // Followers run periodic tasks only with EnableFollowerStats on. The sync
+    // usually completes right away and is reported below, while a sync that
+    // has to wait is reported on the next tick
+    if (IsFollower() &&
+        AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics() &&
+        SyncSchemeOnFollowerNeeded &&
+        !SyncSchemeOnFollowerPending)
+    {
+        SyncSchemeOnFollowerNeeded = false;
+        SyncSchemeOnFollowerPending = true;
+        Execute(CreateTxSyncSchemeOnFollower(), ctx);
+    }
+
     SendTableInfoToCountersAggregator(ctx);
     CollectCpuUsage(ctx);
 

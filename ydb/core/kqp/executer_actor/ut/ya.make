@@ -6,6 +6,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(8)
 
 SRCS(
+    kqp_compute_actor_creation_ut.cpp
     kqp_executer_stats_ut.cpp
     kqp_executer_ut.cpp
     kqp_tasks_graph_ut.cpp

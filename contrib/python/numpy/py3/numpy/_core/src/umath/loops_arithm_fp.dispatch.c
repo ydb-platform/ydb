@@ -8,13 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline
- ** sse2 (avx2 fma3)
- ** neon asimd
- ** vsx2 vsx3
- ** vx vxe
- **/
 #define _UMATHMODULE
 #define _MULTIARRAYMODULE
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
@@ -41,8 +34,8 @@
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 43
-#line 52
+#line 36
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -202,7 +195,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_add_indexed)
 }
 
 
-#line 52
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -362,7 +355,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_subtract_indexed)
 }
 
 
-#line 52
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -522,7 +515,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_multiply_indexed)
 }
 
 
-#line 52
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_divide)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -683,8 +676,8 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(FLOAT_divide_indexed)
 
 
 
-#line 43
-#line 52
+#line 36
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -844,7 +837,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_add_indexed)
 }
 
 
-#line 52
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1004,7 +997,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_subtract_indexed)
 }
 
 
-#line 52
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1164,7 +1157,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(DOUBLE_multiply_indexed)
 }
 
 
-#line 52
+#line 45
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_divide)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1415,8 +1408,8 @@ simd_csquare_f64(npyv_f64 x)
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 311
-#line 319
+#line 304
+#line 312
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1665,7 +1658,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(CFLOAT_add_indexed)
     return 0;
 }
 
-#line 319
+#line 312
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1914,7 +1907,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(CFLOAT_subtract_indexed)
     return 0;
 }
 
-#line 319
+#line 312
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2164,7 +2157,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(CFLOAT_multiply_indexed)
 }
 
 
-#line 572
+#line 565
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2252,7 +2245,7 @@ loop_scalar:
     }
 }
 
-#line 572
+#line 565
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_square)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2341,8 +2334,8 @@ loop_scalar:
 }
 
 
-#line 311
-#line 319
+#line 304
+#line 312
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_add)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2591,7 +2584,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(CDOUBLE_add_indexed)
     return 0;
 }
 
-#line 319
+#line 312
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_subtract)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2840,7 +2833,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(CDOUBLE_subtract_indexed)
     return 0;
 }
 
-#line 319
+#line 312
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_multiply)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3090,7 +3083,7 @@ NPY_NO_EXPORT int NPY_CPU_DISPATCH_CURFX(CDOUBLE_multiply_indexed)
 }
 
 
-#line 572
+#line 565
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_conjugate)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3178,7 +3171,7 @@ loop_scalar:
     }
 }
 
-#line 572
+#line 565
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_square)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

@@ -382,6 +382,7 @@ private:
         serverSettings
             .SetNodeCount(Settings_.NodeCount)
             .SetDataCenterCount(Settings_.DcCount)
+            .SetUseRealInterconnect(Settings_.UseRealInterconnect)
             .SetPqGateway(Settings_.PqGateway)
             .SetDataShardExportFactory(Settings_.DataShardExportFactory);
 

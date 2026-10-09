@@ -13,9 +13,7 @@ def get_solomon_ydb_config():
         extra_feature_flags=["enable_external_data_sources"],
         query_service_config={
             "available_external_data_sources": ["Solomon"],
-            "solomon": {
-                "default_settings": [{"name": "_EnableReading", "value": "true"}]
-            }
+            "solomon": {"default_settings": [{"name": "_EnableReading", "value": "true"}]},
         },
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=True,

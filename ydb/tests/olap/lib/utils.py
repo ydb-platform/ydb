@@ -2,6 +2,7 @@ import json
 import yatest.common
 import os
 import library.python.svn_version as vcs
+from typing import Optional
 
 
 def get_external_param(name: str, default):
@@ -13,6 +14,15 @@ def get_external_param(name: str, default):
 
 def external_param_is_true(name: str) -> bool:
     return get_external_param(name, '').lower() in ['t', 'true', 'yes', '1', 'da']
+
+
+def get_allure_report_url() -> Optional[str]:
+    report_url = os.getenv('ALLURE_RESOURCE_URL', None)
+    if report_url is None:
+        sandbox_task_id = get_external_param('SANDBOX_TASK_ID', None)
+        if sandbox_task_id is not None:
+            report_url = f'https://sandbox.yandex-team.ru/task/{sandbox_task_id}/allure_report'
+    return report_url
 
 
 def get_ci_version() -> str:

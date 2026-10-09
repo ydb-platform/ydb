@@ -172,7 +172,7 @@ std::optional<std::string> ParseThumbprint(
     }
 
     try {
-        auto decoded = Base64StrictDecodeUneven(thumbprint.value());
+        auto decoded = NKikimr::NSecurity::Base64StrictDecodeUneven(thumbprint.value());
         if (decoded.size() != expectedLength) {
             return std::nullopt;
         }

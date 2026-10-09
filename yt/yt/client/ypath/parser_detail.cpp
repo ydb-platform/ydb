@@ -106,12 +106,14 @@ bool IsRootDesignator(char c)
 
 bool StartsWithRootDesignator(TStringBuf str)
 {
-    size_t nonSpaceIndex = str.find_first_not_of(' ');
-    if (nonSpaceIndex != TStringBuf::npos && !IsRootDesignator(str[nonSpaceIndex])) {
-        return false;
+    size_t index = str.find_first_not_of(' ');
+    if (index == TStringBuf::npos) {
+        return true;
     }
 
-    return true;
+    auto stripped = str.substr(index);
+    // "&#<id>" suppresses redirection to the object's native cell.
+    return stripped.starts_with("&#") || IsRootDesignator(stripped[0]);
 }
 
 TStringBuf ParseCluster(TStringBuf str, const IAttributeDictionaryPtr& attributes)

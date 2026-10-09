@@ -5,6 +5,11 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
 
+#include <yql/essentials/types/uuid/uuid.h>
+#include <util/stream/str.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
+
 namespace NYql {
 
     using namespace NNodes;
@@ -250,6 +255,22 @@ namespace NYql {
             return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
         }
 
+        bool SerializeUuid(const TCoUuid& uuid, TExpression* proto, TSerializationContext& ctx, ui64 /*depth*/) {
+            const auto literal = uuid.Literal().StringValue();
+            if (literal.size() != 16) {
+                ctx.Err << "Uuid: expected 16-byte literal, got size " << literal.size();
+                return false;
+            }
+            auto* value = proto->mutable_typed_value();
+            value->mutable_type()->set_type_id(Ydb::Type::UUID);
+            const ui64 low = LittleToHost(ReadUnaligned<ui64>(literal.data()));
+            const ui64 high = LittleToHost(ReadUnaligned<ui64>(literal.data() + sizeof(ui64)));
+            auto* v = value->mutable_value();
+            v->set_low_128(low);
+            v->set_high_128(high);
+            return true;
+        }
+
         bool SerializeDecimal(const TCoDecimal& coDecimal, TExpression* proto, TSerializationContext& /*ctx*/, ui64 /*depth*/) {
             auto* protoTypedValue = proto->mutable_typed_value();
             auto* protoDecimalType = protoTypedValue->mutable_type()->mutable_decimal_type();
@@ -349,6 +370,9 @@ namespace NYql {
             }
             if (auto decimal = expression.Maybe<TCoDecimal>()) {
                 return SerializeDecimal(decimal.Cast(), proto, ctx, depth);
+            }
+            if (auto uuid = expression.Maybe<TCoUuid>()) {
+                return SerializeUuid(uuid.Cast(), proto, ctx, depth);
             }
             if (auto compare = expression.Maybe<TCoCompare>()) {
                 return SerializeCompare(compare.Cast(), proto->mutable_predicate(), ctx, depth);
@@ -715,6 +739,8 @@ namespace NYql {
 
     TString FormatPrimitiveType(const Ydb::Type::PrimitiveTypeId& typeId) {
         switch (typeId) {
+            case Ydb::Type::UUID:
+                return "Uuid";
             case Ydb::Type::BOOL:
                 return "Bool";
             case Ydb::Type::INT8:
@@ -771,6 +797,15 @@ namespace NYql {
         case Ydb::Type::kTypeId: {
             const auto& typeId = type.type_id();
             switch (typeId) {
+            case Ydb::Type::UUID: {
+                const auto& value = typedValue.value();
+                if (value.value_case() == Ydb::Value::kLow128) {
+                    TStringStream uuid;
+                    NKikimr::NUuid::UuidHalfsToString(value.low_128(), value.high_128(), uuid);
+                    return TStringBuilder() << "Uuid(\"" << uuid.Str() << "\")";
+                }
+                break;
+            }
             case Ydb::Type::INTERVAL: {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {

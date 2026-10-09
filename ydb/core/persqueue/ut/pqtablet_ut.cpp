@@ -1419,7 +1419,7 @@ void TPQTabletFixture::WaitForPQWriteState()
 
 void TPQTabletFixture::SendCancelTransactionProposal(const TCancelTransactionProposalParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvCancelTransactionProposal>(params.TxId);
+    auto event = MakeHolder<TEvDataShard::TEvCancelTransactionProposal>(params.TxId);
 
     SendToPipe(Ctx->Edge,
                event.Release());
@@ -3956,6 +3956,102 @@ Y_UNIT_TEST_F(PlanStep_After_MaxStep_Is_Acked_Without_Planning, TPQTabletFixture
     WaitPlanStepAccepted({.Step=100});
 }
 
+Y_UNIT_TEST_F(PlanStep_Changed_While_WriteTx_Inflight_Is_Persisted, TPQTabletFixture)
+{
+    // Пока цикл WRITE_TX уже снят и лежит в полёте, медиатор присылает план-шаг, транзакция
+    // доходит до выполнения и таблетка подтверждает шаг. Граница PlanStep/ExecStep должна
+    // попасть в _txinfo: после рестарта она читается только оттуда, а медиатор шаг не повторит.
+    //
+    // Второй пропоуз — обычная параллельная транзакция, из-за неё и стартует цикл записи.
+    // ReadSetAck второй таблетки не шлём: в проде он приходит позже, и до него удаления нет.
+    const ui64 txId = 67890;
+    const ui64 nextTxId = txId + 1;
+    const ui64 mockTabletId = 22222;
+    const ui64 step = 100;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    TVector<TAutoPtr<IEventHandle>> heldRequests;
+    bool holdWriteTx = true;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (holdWriteTx) {
+            if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
+                    heldRequests.push_back(event);
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    SendProposeTransactionRequest({.TxId=nextTxId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(heldRequests.size(), 1u);
+
+    // До план-шага в снимке граница подготовки таблетки, а не шаг этой транзакции.
+    const NKikimrPQ::TTabletTxInfo snapshot = ParseTxWritesFromWriteTxRequest(
+        heldRequests.front()->Get<TEvKeyValue::TEvRequest>()->Record);
+    UNIT_ASSERT(snapshot.GetPlanStep() < step);
+    UNIT_ASSERT(snapshot.GetExecStep() < step);
+
+    SendPlanStep({.Step=step, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=step, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=step, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=step, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=step});
+
+    // Подтверждение ушло, пока снимок ещё в полёте. Второго цикла записи быть не должно:
+    // удаление начнётся только после ReadSetAck.
+    UNIT_ASSERT_VALUES_EQUAL(heldRequests.size(), 1u);
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitProposeTransactionResponse({.TxId=nextTxId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    {
+        TDispatchOptions options;
+        Ctx->Runtime->DispatchEvents(options, TDuration::MilliSeconds(500));
+    }
+
+    const NKikimrPQ::TTabletTxInfo info = GetTxWritesFromKV();
+    UNIT_ASSERT_VALUES_EQUAL(info.GetPlanStep(), step);
+    UNIT_ASSERT_VALUES_EQUAL(info.GetPlanTxId(), txId);
+    UNIT_ASSERT_VALUES_EQUAL(info.GetExecStep(), step);
+    UNIT_ASSERT_VALUES_EQUAL(info.GetExecTxId(), txId);
+}
+
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     NKafka::TProducerInstanceId producerInstanceId = {1, 0};
@@ -4417,6 +4513,76 @@ Y_UNIT_TEST_F(Kafka_StreamsEos_EndTxnWhileNextProduceQueued_ShouldNotLoseRecords
             << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(endTxnStatus));
     UNIT_ASSERT_VALUES_EQUAL(messages[0], batch1);
     UNIT_ASSERT_VALUES_EQUAL(messages[1], batch2);
+}
+
+// KQP can abort the transaction which contains KafkaApiOperations after PQ has
+// already prepared the transaction. A Kafka client retries EndTxn, which creates
+// a new internal PQ TxId but keeps the same producerId+epoch WriteId. The abort
+// must not discard the staged payload before that retry commits it.
+Y_UNIT_TEST_F(Kafka_StreamsEos_RetryEndTxnAfterKqpAbort_ShouldKeepStagedPayload, TPQTabletFixture) {
+    const NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 abortedTxId = 67890;
+    const ui64 retryTxId = 67900;
+    const ui64 mockTabletId = 22222;
+    const TString payload = "kafka-payload";
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+
+    const TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie, 0, 0, payload);
+    WaitForExactTxWritesCount(1);
+
+    // Model KQP rollback after AddKafkaOperations has prepared the PQ participant.
+    SendProposeTransactionRequest({
+        .TxId=abortedTxId,
+        .Senders={mockTabletId},
+        .Receivers={mockTabletId},
+        .TxOps={{.Partition=0, .Path="/topic", .KafkaTransaction=true}},
+        .WriteId=TWriteId(producerInstanceId),
+    });
+    WaitProposeTransactionResponse({
+        .TxId=abortedTxId,
+        .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED,
+    });
+
+    SendPlanStep({.Step=100, .TxIds={abortedTxId}});
+    WaitReadSet(*tablet, {
+        .Step=100,
+        .TxId=abortedTxId,
+        .Source=Ctx->TabletId,
+        .Target=mockTabletId,
+        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT,
+        .Producer=Ctx->TabletId,
+    });
+    tablet->SendReadSet(*Ctx->Runtime, {
+        .Step=100,
+        .TxId=abortedTxId,
+        .Target=Ctx->TabletId,
+        .Decision=NKikimrTx::TReadSetData::DECISION_ABORT,
+    });
+    WaitProposeTransactionResponse({
+        .TxId=abortedTxId,
+        .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+    });
+    tablet->SendReadSetAck(*Ctx->Runtime, {
+        .Step=100,
+        .TxId=abortedTxId,
+        .Source=Ctx->TabletId,
+    });
+    WaitForTheTransactionToBeDeleted(abortedTxId);
+    WaitPlanStepAck({.Step=100, .TxIds={abortedTxId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    // Kafka retries EndTxn with a new KQP/PQ transaction but the original WriteId.
+    CommitKafkaTransaction(producerInstanceId, retryTxId, {0}, /*planStep=*/200);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        messages.size(),
+        0u,
+        "KQP abort discarded the staged Kafka payload before EndTxn retry");
 }
 
 // Unknown WriteId with nothing in KafkaNextTransactionRequests is a true empty
@@ -5515,7 +5681,7 @@ Y_UNIT_TEST_F(Multiple_Transactions_Different_Ranges, TFixture)
     AddReadRange();
     AddPairFromPQ(101, {1});
     AddPairFromPartition(101, 1);
-    
+
     AddReadRange();
     AddPairFromPQ(102, {1, 2});
     AddPairFromPartition(102, 1);
@@ -5530,7 +5696,7 @@ Y_UNIT_TEST_F(Transaction_Adjacent_ReadRanges, TFixture)
 {
     AddReadRange();
     AddPairFromPQ(101, {1, 2});
-    
+
     AddReadRange();
     AddPairFromPartition(101, 1);
     AddPairFromPartition(101, 2);
@@ -5544,10 +5710,10 @@ Y_UNIT_TEST_F(Transaction_Multiple_ReadRanges, TFixture)
 {
     AddReadRange();
     AddPairFromPQ(101, {1, 2, 3});
-    
+
     AddReadRange();
     AddPairFromPartition(101, 1);
-    
+
     AddReadRange();
     AddPairFromPartition(101, 2);
     AddPairFromPartition(101, 3);
@@ -5560,7 +5726,7 @@ Y_UNIT_TEST_F(Transaction_Multiple_ReadRanges, TFixture)
 Y_UNIT_TEST_F(Empty_ReadRange_In_Vector, TFixture)
 {
     AddReadRange();
-    
+
     AddReadRange();
     AddPairFromPQ(101, {1});
 
@@ -5573,29 +5739,29 @@ Y_UNIT_TEST_F(Comprehensive_Test_Set_For_Complete_CollectTransactions_Testing, T
 {
     // Пустой readRange (краевой случай)
     AddReadRange();
-    
+
     // Транзакция без субтранзакций
     AddReadRange();
     AddPairFromPQ(101, {1});             // tx 101: 1 партиция, не записала -> PREPARED
-    
+
     // Транзакция tx 102 полная в одном readRange
     AddReadRange();
     AddPairFromPQ(102, {1, 2, 3});       // tx 102: 3 партиции
     AddPairFromPartition(102, 1);        // tx 102: партиция 1 записала
     AddPairFromPartition(102, 2);        // tx 102: партиция 2 записала
     AddPairFromPartition(102, 3);        // tx 102: партиция 3 записала -> все 3/3 -> EXECUTED
-    
+
     // Основная транзакция tx 103
     AddReadRange();
     AddPairFromPQ(103, {1, 2});          // tx 103: 2 партиции в другом readRange
-    
+
     // Субтранзакции tx 103 + транзакция tx 104 (частичная)
     AddReadRange();
     AddPairFromPartition(103, 1);        // tx 103: партиция 1 записала -> 1/2 -> PLANNED
     AddPairFromPQ(104, {1, 2, 3, 4, 5}); // tx 104: много партиций
     AddPairFromPartition(104, 1);        // tx 104: партиция 1 записала
     AddPairFromPartition(104, 5);        // tx 104: партиция 5 записала (крайняя)
-    
+
     // Транзакции tx 105 (полная) и tx 106 (частичная)
     AddReadRange();
     AddPairFromPQ(105, {1, 2});          // tx 105: 2 партиции

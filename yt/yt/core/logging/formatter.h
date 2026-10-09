@@ -70,6 +70,7 @@ struct TStructuredLogFormatterOptions
     bool EnableSourceLocation = false;
     bool EnableSystemFields = true;
     bool EnableHostField = false;
+    bool EnableSpanIdField = false;
     bool EnableNativeTags = false;
     NJson::TJsonFormatConfigPtr JsonFormat;
     NYson::EYsonFormat YsonFormat = NYson::EYsonFormat::Text;

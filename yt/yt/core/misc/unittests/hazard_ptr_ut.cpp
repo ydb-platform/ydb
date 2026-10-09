@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/concurrency/delayed_executor.h>
 
-#include <library/cpp/yt/threading/event_count.h>
+#include <library/cpp/yt/system/event_count.h>
 
 #include <library/cpp/yt/memory/new.h>
 
@@ -310,8 +310,8 @@ TEST_F(THazardPtrTest, DelayedDeallocationPolymorphic)
     EXPECT_STREQ("AC!DF", output.Str().c_str());
 }
 
-NThreading::TEvent Started;
-NThreading::TEvent Finish;
+TEvent Started;
+TEvent Finish;
 
 #ifndef _win_
 TEST_F(THazardPtrTest, SupportFork)

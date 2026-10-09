@@ -54,12 +54,15 @@ def test(suite, case, cfg, tmpdir, kqp_run):
 
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     providers = get_supported_providers(config)
-    assert not ("pq" in providers and "pq-shared" in providers), \
-        f"providers pq and pq-shared are mutually exclusive, on file: {program_sql}"
+    assert not (
+        "pq" in providers and "pq-shared" in providers
+    ), f"providers pq and pq-shared are mutually exclusive, on file: {program_sql}"
     shared_reading = str("pq-shared" in providers).upper()
-    kqp_run.replace_scheme(lambda scheme: scheme
-                           .replace("${PQ_SHARED_READING}", shared_reading)
-                           .replace("${KQPRUN_ENDPOINT}", f"localhost:{kqp_run.grpc_port}"))
+    kqp_run.replace_scheme(
+        lambda scheme: scheme.replace("${PQ_SHARED_READING}", shared_reading).replace(
+            "${KQPRUN_ENDPOINT}", f"localhost:{kqp_run.grpc_port}"
+        )
+    )
 
     kqp_run.add_query(sql_query)
     result = kqp_run.yql_exec(
@@ -68,11 +71,13 @@ def test(suite, case, cfg, tmpdir, kqp_run):
         var_templates=["SOLOMON_HTTP_ENDPOINT", "SOLOMON_GRPC_ENDPOINT"],
     )
 
-    assert result.execution_result.exit_code != 0, \
-        f"execute finished without error, on file: {program_sql}, query:\n{sql_query}"
+    assert (
+        result.execution_result.exit_code != 0
+    ), f"execute finished without error, on file: {program_sql}, query:\n{sql_query}"
     sql_stderr = result.std_err.strip()
-    assert sql_stderr, \
-        f"exit code is {result.execution_result.exit_code}, but error is empty, on file: {program_sql}, query:\n{sql_query}"
+    assert (
+        sql_stderr
+    ), f"exit code is {result.execution_result.exit_code}, but error is empty, on file: {program_sql}, query:\n{sql_query}"
 
     err_file_path = os.path.join(out_dir, "err_file.out")
     with open(err_file_path, "wb") as err_file:

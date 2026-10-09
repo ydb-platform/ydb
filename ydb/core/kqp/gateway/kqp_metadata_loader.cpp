@@ -16,9 +16,11 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <yql/essentials/utils/signals/utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 
@@ -549,6 +551,42 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
     return result;
 }
 
+enum class EYdbDataSourceRouting {
+    Unknown,
+    Connector,
+    Ydb,
+};
+
+EYdbDataSourceRouting GetYdbDataSourceRouting(const NYql::TExternalDataSource& externalSource,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+{
+    if (!federatedQuerySetup) {
+        return EYdbDataSourceRouting::Unknown;
+    }
+
+    const TString databaseName = externalSource.GetDatabaseName();
+    if (databaseName.empty()) {
+        return EYdbDataSourceRouting::Unknown;
+    }
+
+    bool hasDatabaseNames = false;
+    const auto checkConnector = [&](const auto& connector) {
+        const auto& names = connector.GetDatabaseNames();
+        hasDatabaseNames |= !names.empty();
+        return std::find(names.begin(), names.end(), databaseName) != names.end();
+    };
+    const auto& gatewayConfig = federatedQuerySetup->GenericGatewayConfig;
+    if (gatewayConfig.HasConnector() && checkConnector(gatewayConfig.GetConnector())) {
+        return EYdbDataSourceRouting::Connector;
+    }
+    for (const auto& connector : gatewayConfig.GetConnectors()) {
+        if (checkConnector(connector)) {
+            return EYdbDataSourceRouting::Connector;
+        }
+    }
+    return hasDatabaseNames ? EYdbDataSourceRouting::Ydb : EYdbDataSourceRouting::Unknown;
+}
+
 TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& cluster,
     const TString& database, const TString& topicName, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
@@ -1055,7 +1093,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr, federatedQuerySetup = locked->FederatedQuerySetup, resolveEntityInsideDataSource](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             const auto& objectDescription = result.GetValue();
                             if (objectDescription.Status != Ydb::StatusIds::SUCCESS) {
@@ -1078,11 +1116,18 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             auto loadDynamicMetadata = [promise, settings, table, database, externalPath] (const TTableMetadataResult& externalDataSourceMetadata) mutable {
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
+                                    const auto& databaseType = externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType();
+                                    if (!databaseType) {
+                                        TTableMetadataResult wrapper;
+                                        wrapper.SetException(yexception() << "couldn't get external source with type <unknown>, unknown source type");
+                                        promise.SetValue(wrapper);
+                                        return;
+                                    }
                                     try {
-                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalDataSource().GetType());
+                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(*databaseType);
                                     } catch (const std::exception& exception) {
                                         TTableMetadataResult wrapper;
-                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalDataSource().GetType() << ", " <<  exception.what());
+                                        wrapper.SetException(yexception() << "couldn't get external source with type " << ToString(*databaseType) << ", " <<  exception.what());
                                         promise.SetValue(wrapper);
                                         return;
                                     }
@@ -1121,7 +1166,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     wrapper.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                     wrapper.AddIssue(NYql::TIssue(TStringBuilder()
                                         << "Schema inference (with_infer) is not enabled for external source '"
-                                        << externalDataSourceMetadata.Metadata->ExternalDataSource().GetType()
+                                        << ToStringDatabaseType(externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType(), "<unknown>")
                                         << "'. Please contact your system administrator to enable the "
                                         << "EnableExternalSourceSchemaInference feature flag."));
                                     promise.SetValue(wrapper);
@@ -1130,8 +1175,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 }
                             };
 
-                            if (externalDataSourceMetadata.Metadata->ExternalDataSource().IsYdb() && externalPath &&
-                                settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+                            const auto& dataSource = externalDataSourceMetadata.Metadata->ExternalDataSource();
+                            const auto routing = resolveEntityInsideDataSource && dataSource.IsYdb()
+                                ? GetYdbDataSourceRouting(dataSource, federatedQuerySetup)
+                                : EYdbDataSourceRouting::Unknown;
+                            const bool needToDescribe = routing != EYdbDataSourceRouting::Connector &&
+                                dataSource.IsYdb() && externalPath && !dataSource.GetDatabaseName().empty();
+                            if (needToDescribe) {
                                 const auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
                                 auto structuredTokenJson = source.ComposeStructuredTokenJson();
                                 auto databaseName = source.GetDatabaseName();
@@ -1145,13 +1195,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 }
 
                                 GetSchemeEntryType(
-                                    locked->FederatedQuerySetup,
+                                    federatedQuerySetup,
                                     source.GetLocation(),
                                     databaseName,
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                    .Subscribe([externalDataSourceMetadata, routing, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult value = result.GetValue();
                                         if (!value.EntryType) {
                                             NYql::TIssue rootIssue("Couldn't determine external YDB entity type");
@@ -1167,10 +1217,71 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalDataSource().SetYdbTopicType();
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::MessageStream);
+                                        } else if (routing == EYdbDataSourceRouting::Ydb) {
+                                            TTableMetadataResult result;
+                                            result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                            result.AddIssue(NYql::TIssue("External YDB entity is not a topic, and its database is not configured for connector table access"));
+                                            promise.SetValue(result);
+                                            return;
+                                        } else {
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().InitObjectKind(NYql::TExternalDataSource::EKind::Table);
                                         }
                                         f(externalDataSourceMetadata);
                                     });
+                            } else if (externalDataSourceMetadata.Metadata->ExternalDataSource().GetDatabaseType() == NYql::EDatabaseType::YT && externalPath) {
+                                auto locked = ptr.lock();
+                                if (!locked) {
+                                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_COMPILE_ERROR, "Table metadata loader destroyed during external source metadata loading")));
+                                    return;
+                                }
+                                const bool enableQyt = locked->Config && locked->Config->FeatureFlags.GetEnableQYT();
+                                if (!enableQyt) {
+                                    loadDynamicMetadata(externalDataSourceMetadata);
+                                } else if (settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
+                                    auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
+                                    GetYtEntityType(
+                                        locked->FederatedQuerySetup,
+                                        source.GetLocation(),
+                                        source.ComposeStructuredTokenJson(),
+                                        *externalPath)
+                                        .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise,
+                                            enableQyt] (const NThreading::TFuture<TYtEntityTypeResult>& result) mutable {
+                                            TYtEntityTypeResult value = result.GetValue();
+                                            if (!value.Issues.Empty()) {
+                                                NYql::TIssue rootIssue("Could not determine YT object type");
+                                                for (const auto& issue : value.Issues) {
+                                                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
+                                                }
+                                                TTableMetadataResult res;
+                                                res.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                                res.AddIssues({rootIssue});
+                                                promise.SetValue(res);
+                                                return;
+                                            }
+
+                                            if (value.IsQueue && !enableQyt) {
+                                                TTableMetadataResult res;
+                                                res.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                                res.AddIssues({NYql::TIssue("YT message stream reads require EnableQYT")});
+                                                promise.SetValue(res);
+                                                return;
+                                            }
+
+                                            // Resolve the object kind without changing the YT connection type.
+                                            auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
+                                            source.InitObjectKind(value.IsQueue ? NYql::TExternalDataSource::EKind::MessageStream
+                                                : NYql::TExternalDataSource::EKind::Table);
+                                            f(externalDataSourceMetadata);
+                                        });
+                                } else {
+                                    TTableMetadataResult result;
+                                    result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                    result.AddIssues({NYql::TIssue({},
+                                        "YT MessageStream provider is not available")});
+                                    promise.SetValue(result);
+                                    return;
+                                }
                             } else {
                                 loadDynamicMetadata(externalDataSourceMetadata);
                             }

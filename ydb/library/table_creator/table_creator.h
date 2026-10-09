@@ -11,6 +11,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/generic/ptr.h>
+
 namespace NKikimr {
 
 struct TEvTableCreator {
@@ -62,7 +64,7 @@ protected:
     NActors::TActorId Owner;
 
 private:
-    std::vector<NActors::IActor*> TableCreators;
+    std::vector<THolder<NActors::IActor>> TableCreators;
     size_t TablesCreating = 0;
     bool Success = true;
     NYql::TIssues Issues;

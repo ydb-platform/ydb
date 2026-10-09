@@ -22,6 +22,10 @@
         "description": "Disable DQ by default for robots",
         "min_langver": "2026.03"
     },
+    "YtSymlinks": {
+        "description": "CREATE/DROP SYMLINK",
+        "min_langver": "2026.03"
+    },
     "IfWithoutEvaluate": {
         "description": "IF without EVALUATE",
         "min_langver": "max",

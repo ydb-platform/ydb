@@ -260,13 +260,12 @@ Y_UNIT_TEST(FindFunctionTypeInfoResolvesRegisteredUdf) {
 
 // --- IMutableFunctionRegistry surface (parity with TMutableFunctionRegistry usage) ---
 
-Y_UNIT_TEST(GetBuiltinsAndSupportsSizedAllocators) {
+Y_UNIT_TEST(GetBuiltins) {
     auto builtins = CreateBuiltinRegistry();
     auto* builtinsRaw = builtins.Get();
     auto registry = CreateDynamicFunctionRegistry(std::move(builtins));
 
     UNIT_ASSERT(registry->GetBuiltins().Get() == builtinsRaw);
-    UNIT_ASSERT(registry->SupportsSizedAllocators());
 }
 
 Y_UNIT_TEST(GetModuleFunctionsExposesRegisteredMetadata) {

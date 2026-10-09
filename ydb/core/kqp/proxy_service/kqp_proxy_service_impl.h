@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/services/workload_manager/query_classifier.h>
@@ -101,7 +102,33 @@ public:
             ExitTimeUs.store(ts, std::memory_order_release);
         }
 
-        State.store(state, std::memory_order_release);
+        const auto previousState = State.exchange(state, std::memory_order_acq_rel);
+
+        if (state == EState::PENDING || state == EState::DELAYED || state == EState::EXITED ||
+            (state == EState::NONE && NWorkloadManager::IsWmStateQueued(previousState))) {
+            TActorId observer;
+            ui64 observerCookie;
+            TString poolId;
+            TString classifiedBy;
+            {
+                TGuard<TAdaptiveLock> guard(PoolIdLock);
+                observer = StateObserver;
+                observerCookie = StateObserverCookie;
+                poolId = PoolId;
+                classifiedBy = ClassifiedBy;
+            }
+            if (observer) {
+                NActors::TActivationContext::Send(new NActors::IEventHandle(observer, {},
+                    new NWorkloadManager::TEvWmStateChanged(state, std::move(poolId), std::move(classifiedBy)),
+                    0, observerCookie));
+            }
+        }
+    }
+
+    void SetStateObserver(TActorId observer, ui64 cookie) {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        StateObserver = observer;
+        StateObserverCookie = cookie;
     }
 
     void SetPoolContext(TString poolId, TString classifiedBy) override {
@@ -110,7 +137,7 @@ public:
         ClassifiedBy = std::move(classifiedBy);
     }
 
-    EState GetState() const {
+    EState GetState() const override {
         return State.load(std::memory_order_acquire);
     }
 
@@ -127,7 +154,7 @@ public:
         return PoolId;
     }
 
-    TString GetClassifiedBy() const {
+    TString GetClassifiedBy() const override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         return ClassifiedBy;
     }
@@ -139,6 +166,8 @@ public:
             TGuard<TAdaptiveLock> guard(PoolIdLock);
             PoolId.clear();
             ClassifiedBy.clear();
+            StateObserver = {};
+            StateObserverCookie = 0;
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -151,6 +180,8 @@ private:
     mutable TAdaptiveLock PoolIdLock;
     TString PoolId;
     TString ClassifiedBy;
+    TActorId StateObserver;
+    ui64 StateObserverCookie = 0;
 };
 
 template<typename TValue>
@@ -180,7 +211,11 @@ struct TKqpSessionInfo {
     TActorId AttachedRpcId;
     TString QueryText;
     TString TraceId;
+    ui64 QueryRequestId = 0;
+    std::optional<TCurrentQueryStats::TPublishedSnapshot> CurrentQueryStats;
+    ui64 CurrentQueryStatsSequenceNo = 0;
     TString ClientApplicationName;
+    // Set when the session is created; not the identity of a later query.
     TString ClientSID;
     TString ClientHost;
     TString UserAgent;
@@ -194,6 +229,7 @@ struct TKqpSessionInfo {
 
     ESessionState State = ESessionState::IDLE;
     bool Closing = false;
+    TString TerminationReason;
 
     struct TFieldsMap {
         ui64 bitmap = 0;
@@ -257,7 +293,10 @@ public:
         return actors.insert(sessionInfo).second;
     }
 
-    void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId) {
+    void BeginQuery(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId, ui64 requestId) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = requestId;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStatsSequenceNo = 0;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = queryText;
         const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = traceId;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryCount++;
@@ -265,17 +304,22 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = curNow;
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
+        // EndQuery detached the previous updater; reuse the fresh idle state.
     }
 
-    void DetachQueryText(const TKqpSessionInfo* sessionInfo) {
+    void EndQuery(const TKqpSessionInfo* sessionInfo) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->QueryRequestId = 0;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->CurrentQueryStats.reset();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::IDLE;
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
+        // Admission callbacks can outlive the proxy's timeout response. Never
+        // reuse their updater for another query, even if the session is IDLE.
+        sessionInfo->WmState->SetStateObserver({}, 0);
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState = std::make_shared<TWmSessionUpdater>();
     }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
@@ -338,8 +382,15 @@ public:
         info->Closing = true;
     }
 
+    void SetSessionTerminating(const TKqpSessionInfo* sessionInfo, const TString& reason) {
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+        info->Closing = true;
+        info->TerminationReason = reason;
+        StopIdleCheck(sessionInfo);
+    }
+
     void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {
-        if (!sessionInfo) {
+        if (!sessionInfo || !sessionInfo->TerminationReason.empty()) {
             return;
         }
 

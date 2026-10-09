@@ -1,4 +1,6 @@
 #include "service_actor.h"
+#include "nbs_dbg_like_load_registry.h"
+#include <library/cpp/svnversion/svnversion.h>
 
 #include "events.h"
 #include "nbs_dbg_like_load.h"
@@ -40,6 +42,10 @@ namespace NKikimr {
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
 
 namespace {
+
+// Upper bound on the automation startup budget. It bounds how long a run can
+// hold its target tablets before it either starts generating load or fails.
+constexpr ui32 kMaxNbsDbgLikeStartupTimeoutSeconds = 3600;
 
 bool IsJsonContentType(const TString& acceptFormat) {
     return acceptFormat == "application/json";
@@ -249,7 +255,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
     TActorId RecordInsertionActor;
 
     // key is a tag, value is an actor that sent the request to this node
-    THashMap<ui32, TActorId> RequestSender;
+    THashMap<ui64, TActorId> RequestSender;
 
     // currently running load actors
     TMap<ui64, TActorId> LoadActors;
@@ -478,6 +484,331 @@ public:
         Become(&TLoadActor::StateFunc);
     }
 
+    using TNbsDbgLikeLoadControl = NKikimrClient::TNbsDbgLikeLoadControl;
+    using TNbsDbgLikeLoadResult = NKikimrClient::TNbsDbgLikeLoadResult;
+    NNbsDbgLike::TRunRegistry NbsDbgLikeLoadRuns;
+    THashMap<ui64, TString> NbsDbgLikeLoadRunByTag;
+    struct TNbsDbgLikeLoadPending {
+        TNbsDbgLikeLoadControl Request;
+        TActorId Origin;
+        ui64 Cookie = 0;
+        bool Executing = false;
+    };
+    THashMap<ui64, TNbsDbgLikeLoadPending> NbsDbgLikeLoadPending;
+    ui64 NextNbsDbgLikeLoadCookie = 1;
+
+    TString NbsDbgLikeLoadDatabase() const {
+        if (AppData()->TenantName) {
+            return AppData()->TenantName;
+        }
+        if (const auto* info = AppData()->DomainsInfo.Get(); info && info->Domain) {
+            return "/" + info->Domain->Name;
+        }
+        return {};
+    }
+
+    void NbsDbgLikeLoadReply(const TActorId& origin, ui64 cookie, const TNbsDbgLikeLoadControl& request,
+        NKikimrClient::TNbsDbgLikeLoadControlResponse response = {})
+    {
+        if (!response.HasStatus()) {
+            response.SetStatus(NMsgBusProxy::MSTATUS_OK);
+        }
+        response.SetProtocolVersion(1);
+        response.SetCoordinatorNodeId(SelfId().NodeId());
+        response.SetIncarnation(NbsDbgLikeLoadRuns.Incarnation);
+        response.SetDatabase(NbsDbgLikeLoadDatabase());
+        response.SetRequestId(request.GetRequestId());
+        if (response.HasRun()) {
+            if (auto it = NbsDbgLikeLoadRuns.Runs.find(request.GetRequestId()); it != NbsDbgLikeLoadRuns.Runs.end()) {
+                for (const auto& tablet : it->second.Placements) { *response.AddTablets() = tablet; }
+            }
+        }
+        auto event = std::make_unique<TEvLoad::TEvNbsDbgLikeLoadControlResponse>();
+        event->Record = std::move(response);
+        Send(origin, event.release(), 0, cookie);
+    }
+
+    void NbsDbgLikeLoadError(const TActorId& origin, ui64 cookie, const TNbsDbgLikeLoadControl& request, const TString& error) {
+        NKikimrClient::TNbsDbgLikeLoadControlResponse response;
+        response.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        response.SetError(error);
+        NbsDbgLikeLoadReply(origin, cookie, request, std::move(response));
+    }
+
+    bool NbsDbgLikeLoadTabletBusy(ui64 tabletId) const {
+        for (const auto& [cookie, pending] : NbsDbgLikeLoadPending) {
+            if (pending.Request.GetOperation() == TNbsDbgLikeLoadControl::DELETE
+                && pending.Request.GetTabletId() == tabletId) {
+                return true;
+            }
+        }
+        for (const auto& [id, run] : NbsDbgLikeLoadRuns.Runs) {
+            if (!NNbsDbgLike::TRunRegistry::Active(run) && run.Result.GetTerminationConfirmed()) {
+                continue;
+            }
+            const auto& load = run.Input.GetLoad().GetNbsDbgLikeLoad();
+            if (load.GetNbsDbgLikeTabletId() == tabletId) {
+                return true;
+            }
+            for (const auto& target : load.GetTargets()) {
+                if (target.GetTabletId() == tabletId) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // Every startup stage shares the run's single deadline, so the sum of the
+    // stages cannot exceed the budget the client is waiting on.
+    static TDuration NbsDbgLikeLoadRemaining(const NNbsDbgLike::TRunRegistry::TRun& run) {
+        const TInstant now = TAppData::TimeProvider->Now();
+        return run.StartupDeadline > now ? run.StartupDeadline - now : TDuration::Zero();
+    }
+
+    void NbsDbgLikeLoadFailRun(NNbsDbgLike::TRunRegistry::TRun& run, const TString& error) {
+        run.Result.SetState(TNbsDbgLikeLoadResult::FAILED);
+        run.Result.SetTerminationConfirmed(true);
+        run.Result.SetExecutionError(error);
+        run.Result.SetFinishedAtMs(TAppData::TimeProvider->Now().MilliSeconds());
+    }
+
+    void Handle(TEvLoad::TEvNbsDbgLikeLoadControl::TPtr& ev) {
+        const auto& request = ev->Get()->Record;
+        const auto op = request.GetOperation();
+        auto fail = [&](const TString& error) { NbsDbgLikeLoadError(ev->Sender, ev->Cookie, request, error); };
+        NbsDbgLikeLoadRuns.Prune(TAppData::TimeProvider->Now());
+        if (!request.HasOperation()) { return fail("explicit operation is required"); }
+        if (request.GetDatabase().empty() || request.GetDatabase() != NbsDbgLikeLoadDatabase()) {
+            return fail("explicit database does not match coordinator database context");
+        }
+        if (op == TNbsDbgLikeLoadControl::CAPABILITIES) {
+            NKikimrClient::TNbsDbgLikeLoadControlResponse response;
+            for (auto operation : {TNbsDbgLikeLoadControl::CAPABILITIES, TNbsDbgLikeLoadControl::CREATE, TNbsDbgLikeLoadControl::LIST,
+                TNbsDbgLikeLoadControl::DESCRIBE, TNbsDbgLikeLoadControl::DELETE, TNbsDbgLikeLoadControl::START, TNbsDbgLikeLoadControl::GET, TNbsDbgLikeLoadControl::STOP}) {
+                response.AddOperations(operation);
+            }
+            return NbsDbgLikeLoadReply(ev->Sender, ev->Cookie, request, std::move(response));
+        }
+        if (request.GetIncarnation() != NbsDbgLikeLoadRuns.Incarnation) {
+            return fail("coordinator incarnation lost; remote workers may still be running");
+        }
+        if (op == TNbsDbgLikeLoadControl::GET || op == TNbsDbgLikeLoadControl::STOP) {
+            auto it = NbsDbgLikeLoadRuns.Runs.find(request.GetRequestId());
+            if (it == NbsDbgLikeLoadRuns.Runs.end()) {
+                return fail("unknown or expired run; never automatically submit replacement work");
+            }
+            auto& run = it->second;
+            if (op == TNbsDbgLikeLoadControl::STOP && NNbsDbgLike::TRunRegistry::Active(run)) {
+                run.Result.SetState(TNbsDbgLikeLoadResult::STOPPING);
+                if (auto actor = LoadActors.find(run.Tag); run.Tag && actor != LoadActors.end()) {
+                    Send(actor->second, new TEvents::TEvPoisonPill);
+                }
+            }
+            NKikimrClient::TNbsDbgLikeLoadControlResponse response;
+            *response.MutableRun() = run.Result;
+            return NbsDbgLikeLoadReply(ev->Sender, ev->Cookie, request, std::move(response));
+        }
+        TDuration listTimeout = NNbsDbgLike::NbsDbgLikeListControlTimeout;
+        if (op == TNbsDbgLikeLoadControl::START) {
+            const auto& load = request.GetLoad();
+            const auto& cmd = load.GetNbsDbgLikeLoad();
+            const auto& wc = cmd.GetWorkloadConfig();
+            if (request.GetRequestId().empty() || request.GetRequestId().size() > 128
+                || !load.HasNbsDbgLikeLoad() || load.HasTag() || load.HasUuid() || load.HasCookie() || load.HasTimestamp()
+                || cmd.HasTag() || wc.HasTag() || cmd.HasRequireReady() || cmd.HasStartupTimeoutSeconds()
+                || wc.GetTabletConfig().HasConfigurationId()
+                || !wc.GetDurationSeconds() || !wc.GetMaxInFlight() || !request.GetStartupTimeoutSeconds()
+                || request.GetStartupTimeoutSeconds() > kMaxNbsDbgLikeStartupTimeoutSeconds) {
+                return fail(TStringBuilder()
+                    << "invalid automation request: positive duration, inflight limit, request ID and startup budget"
+                       " of at most " << kMaxNbsDbgLikeStartupTimeoutSeconds
+                    << " seconds required; service bookkeeping forbidden");
+            }
+            if (auto it = NbsDbgLikeLoadRuns.Runs.find(request.GetRequestId()); it != NbsDbgLikeLoadRuns.Runs.end()) {
+                if (!NNbsDbgLike::TRunRegistry::SameInput(it->second.Input, request)) {
+                    return fail("request ID conflicts with original logical inputs");
+                }
+                NKikimrClient::TNbsDbgLikeLoadControlResponse response;
+                *response.MutableRun() = it->second.Result;
+                return NbsDbgLikeLoadReply(ev->Sender, ev->Cookie, request, std::move(response));
+            }
+            THashSet<ui64> targets;
+            if (cmd.GetNbsDbgLikeTabletId()) {
+                targets.insert(cmd.GetNbsDbgLikeTabletId());
+            }
+            if (cmd.TargetsSize() && !targets.empty()) {
+                return fail("specify either single tablet ID or Targets");
+            }
+            for (const auto& target : cmd.GetTargets()) {
+                if (!target.GetTabletId() || !targets.insert(target.GetTabletId()).second) {
+                    return fail("target IDs must be nonzero and unique");
+                }
+            }
+            if (targets.empty()) {
+                return fail("no target tablets");
+            }
+            for (ui64 id : targets) {
+                if (NbsDbgLikeLoadTabletBusy(id)) { return fail("target tablet has an active run on this coordinator"); }
+            }
+            TString error;
+            auto* run = NbsDbgLikeLoadRuns.Admit(request, TAppData::TimeProvider->Now(), error);
+            if (!run) { return fail(error); }
+            run->Result.SetBuild(GetProgramSvnVersion());
+            listTimeout = Min(listTimeout, NbsDbgLikeLoadRemaining(*run));
+            NKikimrClient::TNbsDbgLikeLoadControlResponse response;
+            *response.MutableRun() = run->Result;
+            NbsDbgLikeLoadReply(ev->Sender, ev->Cookie, request, std::move(response));
+        } else if (op != TNbsDbgLikeLoadControl::CREATE && op != TNbsDbgLikeLoadControl::LIST
+            && op != TNbsDbgLikeLoadControl::DESCRIBE && op != TNbsDbgLikeLoadControl::DELETE) {
+            return fail("unsupported control operation");
+        }
+        const ui64 cookie = NextNbsDbgLikeLoadCookie++;
+        NbsDbgLikeLoadPending.emplace(cookie, TNbsDbgLikeLoadPending{request, ev->Sender, ev->Cookie});
+        if (op == TNbsDbgLikeLoadControl::CREATE) {
+            if (!request.HasOwnerIndex()) {
+                NbsDbgLikeLoadPending.erase(cookie);
+                return fail("explicit owner index required for lifecycle operations");
+            }
+            NbsDbgLikeLoadPending[cookie].Executing = true;
+            Register(NNbsDbgLike::CreateNbsDbgLikeLoadTabletControl(request, SelfId(), cookie));
+        } else {
+            Register(NNbsDbgLike::CreateNbsDbgLikeLoadTabletListControl(request, SelfId(), cookie, listTimeout));
+        }
+    }
+
+    void StartNbsDbgLikeLoadRun(NNbsDbgLike::TRunRegistry::TRun& run) {
+        const auto& request = run.Input;
+        const TDuration remaining = NbsDbgLikeLoadRemaining(run);
+        if (!remaining) {
+            return NbsDbgLikeLoadFailRun(run, "startup budget exhausted before the workload could start");
+        }
+        auto load = run.Result.GetEffectiveConfig();
+        // The load actor gets what is left of the budget, while EffectiveConfig
+        // keeps the requested value for reporting.
+        load.MutableNbsDbgLikeLoad()->SetStartupTimeoutSeconds(
+            static_cast<ui32>((remaining.MicroSeconds() + 999999) / 1000000));
+        while (TakenTags.contains(NextTag) || LoadActors.contains(NextTag)) { ++NextTag; }
+        run.Tag = NextTag++;
+        load.SetTag(run.Tag);
+        load.SetUuid(request.GetRequestId());
+        NbsDbgLikeLoadRunByTag.emplace(run.Tag, request.GetRequestId());
+        try {
+            ProcessCmd(load);
+        } catch (const std::exception& error) {
+            NbsDbgLikeLoadRunByTag.erase(run.Tag);
+            NbsDbgLikeLoadFailRun(run, error.what());
+        }
+    }
+
+    void Handle(TEvLoad::TEvNbsDbgLikeLoadControlResponse::TPtr& ev) {
+        auto it = NbsDbgLikeLoadPending.find(ev->Cookie);
+        if (it == NbsDbgLikeLoadPending.end()) { return; }
+        auto pending = it->second;
+        NbsDbgLikeLoadPending.erase(it);
+        auto response = ev->Get()->Record;
+        const auto& request = pending.Request;
+        if (request.GetOperation() == TNbsDbgLikeLoadControl::START) {
+            auto runIt = NbsDbgLikeLoadRuns.Runs.find(request.GetRequestId());
+            if (runIt == NbsDbgLikeLoadRuns.Runs.end()) {
+                LOG_N("NbsDbgLike startup reply for expired run uuid# " << request.GetRequestId());
+                return;
+            }
+            auto& run = runIt->second;
+            if (run.Result.HasFinishedAtMs()) { return; }
+            if (run.Result.GetState() == TNbsDbgLikeLoadResult::STOPPING) {
+                run.Result.SetState(TNbsDbgLikeLoadResult::CANCELLED);
+                run.Result.SetTerminationConfirmed(true);
+                run.Result.SetFinishedAtMs(TAppData::TimeProvider->Now().MilliSeconds());
+                return;
+            }
+            if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+                return NbsDbgLikeLoadFailRun(run, response.GetError());
+            }
+            if (pending.Executing) {
+                if (response.GetProtocolVersion() != 1 || response.GetDatabase() != request.GetDatabase()) {
+                    return NbsDbgLikeLoadFailRun(run, "remote service protocol or database mismatch");
+                }
+                if (--run.PendingCapabilities == 0) { StartNbsDbgLikeLoadRun(run); }
+                return;
+            }
+            auto* cmd = run.Result.MutableEffectiveConfig()->MutableNbsDbgLikeLoad();
+            if (cmd->GetNbsDbgLikeTabletId()) {
+                cmd->AddTargets()->SetTabletId(cmd->GetNbsDbgLikeTabletId());
+                cmd->ClearNbsDbgLikeTabletId();
+            }
+            for (auto& target : *cmd->MutableTargets()) {
+                bool found = false;
+                for (const auto& tablet : response.GetTablets()) {
+                    if (target.GetTabletId() != tablet.GetTabletId()) { continue; }
+                    found = true;
+                    run.Placements.push_back(tablet);
+                    if (tablet.GetSummary().GetAutomationProtocolVersion() < 1) {
+                        return NbsDbgLikeLoadFailRun(run, "tablet unavailable or required protocol unsupported");
+                    }
+                    if (!target.HasNodeId()) {
+                        if (!tablet.GetNodeId()) { return NbsDbgLikeLoadFailRun(run, "tablet placement unavailable"); }
+                        target.SetNodeId(tablet.GetNodeId());
+                    } else if (!target.GetNodeId()) {
+                        target.SetNodeId(SelfId().NodeId());
+                    }
+                    break;
+                }
+                if (!found) { return NbsDbgLikeLoadFailRun(run, "target is not a dedicated load tablet in this database"); }
+            }
+            cmd->SetRequireReady(true);
+            cmd->SetStartupTimeoutSeconds(request.GetStartupTimeoutSeconds());
+            const TDuration remaining = NbsDbgLikeLoadRemaining(run);
+            if (!remaining) {
+                return NbsDbgLikeLoadFailRun(run, "startup budget exhausted before capability checks");
+            }
+            THashSet<ui32> nodes;
+            for (const auto& target : cmd->GetTargets()) { nodes.insert(target.GetNodeId()); }
+            run.PendingCapabilities = nodes.size();
+            for (ui32 node : nodes) {
+                TNbsDbgLikeLoadControl probe;
+                probe.SetOperation(TNbsDbgLikeLoadControl::CAPABILITIES);
+                probe.SetDatabase(request.GetDatabase());
+                probe.SetCoordinatorNodeId(node);
+                const ui64 cookie = NextNbsDbgLikeLoadCookie++;
+                auto check = pending;
+                check.Executing = true;
+                NbsDbgLikeLoadPending.emplace(cookie, std::move(check));
+                Register(NNbsDbgLike::CreateNbsDbgLikeLoadServiceProbe(probe, SelfId(), cookie, remaining));
+            }
+            return;
+        }
+        if (pending.Executing || response.GetStatus() != NMsgBusProxy::MSTATUS_OK
+            || request.GetOperation() == TNbsDbgLikeLoadControl::LIST) {
+            return NbsDbgLikeLoadReply(pending.Origin, pending.Cookie, request, std::move(response));
+        }
+        const NKikimrClient::TNbsDbgLikeLoadTablet* found = nullptr;
+        for (const auto& tablet : response.GetTablets()) {
+            if ((request.HasTabletId() && tablet.GetTabletId() == request.GetTabletId())
+                || (request.HasOwnerIndex() && tablet.GetOwnerIndex() == request.GetOwnerIndex())) {
+                found = &tablet;
+                break;
+            }
+        }
+        if (request.GetOperation() == TNbsDbgLikeLoadControl::DESCRIBE) {
+            if (!found) { return NbsDbgLikeLoadError(pending.Origin, pending.Cookie, request, "tablet not found in database"); }
+            auto tablet = *found;
+            response.ClearTablets();
+            *response.AddTablets() = std::move(tablet);
+            return NbsDbgLikeLoadReply(pending.Origin, pending.Cookie, request, std::move(response));
+        }
+        if (request.GetOperation() == TNbsDbgLikeLoadControl::DELETE && found && NbsDbgLikeLoadTabletBusy(found->GetTabletId())) {
+            return NbsDbgLikeLoadError(pending.Origin, pending.Cookie, request, "tablet has an active run on this coordinator");
+        }
+        if (!request.HasOwnerIndex()) {
+            return NbsDbgLikeLoadError(pending.Origin, pending.Cookie, request, "explicit owner index required for lifecycle operations");
+        }
+        if (found) { pending.Request.SetTabletId(found->GetTabletId()); }
+        pending.Executing = true;
+        NbsDbgLikeLoadPending.emplace(ev->Cookie, pending);
+        Register(NNbsDbgLike::CreateNbsDbgLikeLoadTabletControl(request, SelfId(), ev->Cookie));
+    }
+
     void Handle(TEvLoad::TEvLoadTestRequest::TPtr& ev) {
         const auto& record = GetFixedRequest(ev);
         LOG_N("Load test request arrived from " << ev->Sender.ToString() <<
@@ -485,16 +816,26 @@ public:
             ", uuid# " << record.GetUuid());
         ui32 status = NMsgBusProxy::MSTATUS_OK;
         TString error;
+        bool registered = false;
         try {
-            Y_ENSURE(!RequestSender.contains(record.GetTag()),
-                "node is currently handling another request with tag# " << record.GetTag());
-            RequestSender[record.GetTag()] = ev->Sender;
-            UuidByTag[record.GetTag()] = record.GetUuid();
+            if (!record.HasStop()) {
+                if (RequestSender.contains(record.GetTag())) {
+                    ythrow TLoadActorException() << "node is currently handling another request with tag# " << record.GetTag();
+                }
+                registered = true;
+                RequestSender[record.GetTag()] = ev->Sender;
+                UuidByTag[record.GetTag()] = record.GetUuid();
+            }
             ProcessCmd(record);
         } catch (const TLoadActorException& ex) {
             LOG_E("Exception while creating load actor, what# " << ex.what());
             status = NMsgBusProxy::MSTATUS_ERROR;
             error = ex.what();
+        }
+        if (registered && status != NMsgBusProxy::MSTATUS_OK) {
+            RequestSender.erase(record.GetTag());
+            UuidByTag.erase(record.GetTag());
+            TakenTags.erase(record.GetTag());
         }
         auto response = std::make_unique<TEvLoad::TEvLoadTestResponse>();
         response->Record.SetStatus(status);
@@ -747,6 +1088,48 @@ public:
         LoadActors.erase(iter);
         const TInstant finishTime = TAppData::TimeProvider->Now();
 
+        if (auto it = NbsDbgLikeLoadRunByTag.find(msg->Tag); it != NbsDbgLikeLoadRunByTag.end()) {
+            auto runIt = NbsDbgLikeLoadRuns.Runs.find(it->second);
+            if (runIt == NbsDbgLikeLoadRuns.Runs.end()) {
+                LOG_N("NbsDbgLike run finished for expired uuid# " << it->second << " tag# " << msg->Tag);
+                NbsDbgLikeLoadRunByTag.erase(it);
+                return;
+            }
+            auto& run = runIt->second;
+            const bool stopping = run.Result.GetState() == TNbsDbgLikeLoadResult::STOPPING;
+            run.Result.SetState(stopping && msg->TerminationConfirmed ? TNbsDbgLikeLoadResult::CANCELLED
+                : (msg->ErrorReason.empty() ? TNbsDbgLikeLoadResult::SUCCEEDED : TNbsDbgLikeLoadResult::FAILED));
+            run.Result.SetTerminationConfirmed(msg->TerminationConfirmed);
+            run.Result.SetExecutionError(msg->ErrorReason);
+            run.Result.SetFinishedAtMs(finishTime.MilliSeconds());
+            if (const auto* stats = GetNbsDbgLikeFinishStats(*msg)) {
+                FillNbsDbgLikeLoadStats(*stats, *run.Result.MutableStats());
+                const double seconds = stats->MeasuredMs / 1000.0;
+                if (seconds > 0) {
+                    run.Result.SetWriteIOPS(stats->WritesOk / seconds);
+                    run.Result.SetReadIOPS((stats->ReadsPbOk + stats->ReadsDDiskOk) / seconds);
+                    run.Result.SetWriteBytesPerSecond(stats->WriteBytes / seconds);
+                    run.Result.SetReadBytesPerSecond((stats->ReadsPbBytes + stats->ReadsDDiskBytes) / seconds);
+                }
+            } else {
+                run.Result.SetState(TNbsDbgLikeLoadResult::FAILED);
+                run.Result.SetExecutionError("worker returned no typed execution statistics");
+            }
+            for (const auto& tablet : msg->NbsDbgLikeLoadTablets) {
+                *run.Result.AddTablets() = tablet;
+            }
+            if (!msg->TerminationConfirmed) {
+                // A watchdog or lost pipe cannot prove that remote requests drained.
+                run.Result.SetState(TNbsDbgLikeLoadResult::STOPPING);
+                run.Result.ClearFinishedAtMs();
+                if (run.Result.GetExecutionError().empty()) {
+                    run.Result.SetExecutionError("termination is unconfirmed; workers or requests may still be active");
+                }
+            }
+            NbsDbgLikeLoadRunByTag.erase(it);
+            return;
+        }
+
         Y_ENSURE(UuidByTag.contains(msg->Tag), "Not found uuid corresponding for tag# " << msg->Tag);
         {
             auto nodeFinishResponse = MakeHolder<TEvLoad::TEvNodeFinishResponse>();
@@ -755,6 +1138,7 @@ public:
             record.SetUuid(uuid);
             record.SetNodeId(SelfId().NodeId());
             record.SetSuccess(msg->Report != nullptr);
+            record.SetNbsTerminationConfirmed(msg->TerminationConfirmed);
             record.SetFinishTimestamp(finishTime.Seconds());
             record.SetErrorReason(msg->ErrorReason);
 
@@ -809,6 +1193,10 @@ public:
             LOG_N("Sending TEvNodeFinishResponse back to sender# " << requestSender.ToString());
             Send(requestSender, nodeFinishResponse.Release());
             RequestSender.erase(msg->Tag);
+            if (!RequestsInProcessing.contains(uuid)) {
+                UuidByTag.erase(msg->Tag);
+                TakenTags.erase(msg->Tag);
+            }
         }
 
         auto it = InfoRequests.begin();
@@ -942,7 +1330,12 @@ public:
             // send messages to subactors
             info.HttpInfoResPending = 0;
             for (const auto& [tag, actorId] : LoadActors) {
-                auto reqIt = RequestsInProcessing.find(UuidByTag.at(tag));
+                if (NbsDbgLikeLoadRunByTag.contains(tag)) {
+                    continue;
+                }
+                auto uuidIt = UuidByTag.find(tag);
+                auto reqIt = uuidIt == UuidByTag.end() ? RequestsInProcessing.end()
+                    : RequestsInProcessing.find(uuidIt->second);
                 if (info.ResultsUuid) {
                     if (reqIt == RequestsInProcessing.end() || reqIt->second.GetUuid() != info.ResultsUuid) {
                         continue;
@@ -1655,6 +2048,8 @@ public:
         hFunc(TEvLoad::TEvLoadTestRequest, Handle)
         hFunc(TEvLoad::TEvLoadTestResponse, Handle)
         hFunc(TEvLoad::TEvLoadTestFinished, Handle)
+        hFunc(TEvLoad::TEvNbsDbgLikeLoadControl, Handle)
+        hFunc(TEvLoad::TEvNbsDbgLikeLoadControlResponse, Handle)
         hFunc(TEvLoad::TEvNodeFinishResponse, Handle)
         hFunc(TEvLoad::TEvNbsTabletListPageReady, Handle)
         hFunc(NMon::TEvHttpInfo, Handle)

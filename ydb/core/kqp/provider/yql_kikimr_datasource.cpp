@@ -312,12 +312,12 @@ public:
 
         try {
             const auto& dataSource = metadata.GetResolvedExternalDataSource();
-            auto source = ExternalSourceFactory->GetOrCreate(dataSource.GetType());
-            auto it = Types.DataSourceMap.find(source->GetName());
+            const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
+            auto it = Types.DataSourceMap.find(providerName);
             if (it == Types.DataSourceMap.end()) {
                 ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                     << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
-                    << " data source " << source->GetName() << " doesn't exist, please contact internal support"));
+                    << " data source " << providerName << " doesn't exist, please contact internal support"));
                 return false;
             }
 
@@ -559,7 +559,8 @@ public:
         , ExternalSourceFactory(externalSourceFactory)
         , GUCSettings(gucSettings)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
-        , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
+        , IntentDeterminationTransformer(CreateSqlPathAliasesTransformer(sessionCtx,
+            new TKiSourceIntentDeterminationTransformer(sessionCtx)))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
@@ -786,6 +787,17 @@ public:
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             YQL_ENSURE(tableDesc.Metadata);
+            if (tableDesc.Metadata->Kind != EKikimrTableKind::Datashard &&
+                read->ChildrenSize() > TKiReadTable::idx_Settings)
+            {
+                const auto& settings = *read->Child(TKiReadTable::idx_Settings);
+                if (HasSetting(settings, "samplingrate") || HasSetting(settings, "samplingseed") ||
+                    HasSetting(settings, "samplingmemtablestride"))
+                {
+                    ctx.AddError(TIssue(node->Pos(ctx), "Sampling is supported only for row tables"));
+                    return nullptr;
+                }
+            }
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
                 // SHOW CREATE EXTERNAL DATA SOURCE / EXTERNAL TABLE reads never touch
                 // the external source itself — they are rewritten downstream into
@@ -803,7 +815,8 @@ public:
                 }
                 if (tableDesc.Metadata->IsExternalDataSource()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
+                    const auto& dataSource = tableDesc.Metadata->ExternalDataSource();
+                    const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)
@@ -811,11 +824,16 @@ public:
                             .Repeat(TExprStep::RewriteIO);
                     auto readArgs = read->ChildrenList();
                     readArgs[1] = Build<TCoDataSource>(ctx, node->Pos())
-                                    .Category(ctx.NewAtom(node->Pos(), source->GetName()))
+                                    .Category(ctx.NewAtom(node->Pos(), providerName))
                                     .FreeArgs()
                                         .Add(readArgs[1]->ChildrenList()[1])
                                     .Build()
                                     .Done().Ptr();
+                    if (dataSource.IsMessageStream() && dataSource.GetDatabaseType() == EDatabaseType::YT) {
+                        auto sourceArgs = readArgs[1]->ChildrenList();
+                        sourceArgs.push_back(ctx.NewAtom(node->Pos(), "message_stream"));
+                        readArgs[1] = ctx.ChangeChildren(*readArgs[1], std::move(sourceArgs));
+                    }
                     readArgs[2] = ctx.NewCallable(node->Pos(), "MrTableConcat", { readArgs[2] });
                     auto newRead = ctx.ChangeChildren(*read, std::move(readArgs));
                     auto retChildren = node->ChildrenList();
@@ -823,7 +841,13 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->IsExternalTable()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
+                    const auto& databaseType = tableDesc.Metadata->GetExternalSourceDatabaseType();
+                    if (!databaseType) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder()
+                            << "Unknown source type for external table \"" << tablePath << "\""));
+                        return nullptr;
+                    }
+                    const auto& source = ExternalSourceFactory->GetOrCreate(*databaseType);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)

@@ -418,7 +418,7 @@ TConnectionId TConnection::GetId() const
     return Id_;
 }
 
-void TConnection::Open(TGuard<NThreading::TSpinLock>& guard)
+void TConnection::Open(TGuard<TSpinLock>& guard)
 {
     State_ = EState::Open;
 

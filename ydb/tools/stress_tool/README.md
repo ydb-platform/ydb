@@ -144,6 +144,19 @@ For client/server DDisk tests, pass this option to the server process.
 Pass `--force-ddisk-pdisk-fallback` to route DDisk direct I/O through the PDisk
 actor instead of io_uring.
 
+Pass `--ddisk-devnull` to make router data writes complete without
+persistence and reads return zero-filled buffers. It requires the native io_uring
+router and cannot be combined with `--force-ddisk-pdisk-fallback`. In client/server
+tests, pass it to the server process; the client rejects it, and all DDisk slots
+attaching to the same PDisk router must request the same mode.
+
+The tool does not enable DDisk read verification, so the zero-filled reads are
+not checked against stored checksums. With checksums enabled, the integrity
+metadata of the working set must stay resident, because loading it back from
+zero-filled storage fails; size `--ddisk-checksums-cache-size` accordingly. This
+option therefore does not model cold physical I/O. See
+[PDisk I/O DevNull mode](../../library/pdisk_io/README.md).
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.

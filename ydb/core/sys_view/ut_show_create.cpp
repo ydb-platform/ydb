@@ -279,6 +279,7 @@ private:
         FillPartitioningSettings(scheme, tableDesc);
         FillKeyBloomFilter(scheme, tableDesc);
         FillReadReplicasSettings(scheme, tableDesc);
+        FillMetricsSettings(scheme, tableDesc);
 
         TString error;
         Ydb::StatusIds::StatusCode status;
@@ -1132,6 +1133,210 @@ Y_UNIT_TEST(TableReadReplicas) {
                 PRIMARY KEY (`Key`)
             )
             WITH (READ_REPLICAS_SETTINGS = 'ANY_AZ:3');
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevel) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "TABLE"
+            );
+        )", "test_show_create"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'PARTITION');
+        )"
+    );
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "DATABASE"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'DATABASE');
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevelAfterAlter) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+    TShowCreateChecker checker(env);
+
+    // RESET leaves no METRICS_LEVEL, and with nothing else set, no WITH at all.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "TABLE"
+            );
+            ALTER TABLE test_show_create RESET (METRICS_LEVEL);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                PRIMARY KEY (`Key`)
+            );
+        )"
+    );
+
+    const std::string createWithOtherSettings = R"(
+        CREATE TABLE test_show_create (
+            Key Uint64 NOT NULL,
+            Value String NOT NULL,
+            Ts Timestamp,
+            PRIMARY KEY (Key)
+        )
+        WITH (
+            AUTO_PARTITIONING_BY_SIZE = ENABLED,
+            AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            READ_REPLICAS_SETTINGS = "PER_AZ:1",
+            METRICS_LEVEL = "PARTITION",
+            KEY_BLOOM_FILTER = ENABLED,
+            TTL = Interval("P1D") ON Ts
+        );
+    )";
+
+    checker.CheckShowCreateTable(createWithOtherSettings, "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                METRICS_LEVEL = 'PARTITION',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+
+    // RESET drops only METRICS_LEVEL, the other settings stay.
+    checker.CheckShowCreateTable(createWithOtherSettings + R"(
+            ALTER TABLE test_show_create RESET (METRICS_LEVEL);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+
+    // SET together with another setting in one ALTER.
+    checker.CheckShowCreateTable(createWithOtherSettings + R"(
+            ALTER TABLE test_show_create SET (METRICS_LEVEL = "TABLE", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                `Ts` Timestamp,
+                PRIMARY KEY (`Key`)
+            )
+            WITH (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3,
+                READ_REPLICAS_SETTINGS = 'PER_AZ:1',
+                METRICS_LEVEL = 'TABLE',
+                KEY_BLOOM_FILTER = ENABLED,
+                TTL = INTERVAL('P1D') DELETE ON Ts
+            );
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableMetricsLevelIndexedCreate) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableDetailedMetrics = true});
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String NOT NULL,
+                INDEX idx GLOBAL ON (Value),
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                METRICS_LEVEL = "PARTITION"
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key` Uint64 NOT NULL,
+                `Value` String NOT NULL,
+                INDEX `idx` GLOBAL SYNC ON (`Value`),
+                PRIMARY KEY (`Key`)
+            )
+            WITH (METRICS_LEVEL = 'PARTITION');
         )"
     );
 }
@@ -2242,6 +2447,79 @@ Y_UNIT_TEST(TableColumnUpsertOptions) {
             );
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`, `INSERT_OPTIONS.BUILD_INDEXES_MIN_BLOB_BYTES` = `1048576`, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `DEDUPLICATION_ENABLED` = `false`, `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableColumnCacheBlobsAfterWrite) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Utf8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE`=`true`);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Col1` Uint64 NOT NULL,
+                `Col2` Utf8,
+                PRIMARY KEY (`Col1`)
+            )
+            PARTITION BY HASH (`Col1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
+
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `CACHE_BLOBS_AFTER_WRITE` = `true`);
+        )"
+    );
+}
+
+Y_UNIT_TEST(TableColumnCacheBlobsAfterWriteDefault) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Utf8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Col1` Uint64 NOT NULL,
+                `Col2` Utf8,
+                PRIMARY KEY (`Col1`)
+            )
+            PARTITION BY HASH (`Col1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            );
         )"
     );
 }

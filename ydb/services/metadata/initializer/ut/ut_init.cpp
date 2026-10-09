@@ -179,13 +179,9 @@ public:
         : ClassBehavior(std::move(cb))
     {}
 
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
+    STRICT_STFUNC(StateWork,
             hFunc(NMetadata::NProvider::TEvManagerPrepared, Handle);
-            default:
-                Y_ABORT_UNLESS(false);
-        }
-    }
+    );
 
     void Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr& /*ev*/) {
         InitializedFlag = true;

@@ -10,6 +10,73 @@ message TDatabaseIdentity {
     optional string DatabaseId = 3;
 }
 
+message TSecretIdentity {
+    optional string DatabaseIncarnation = 1;
+    optional uint64 PathOwnerId = 2;
+    optional uint64 PathLocalId = 3;
+}
+
+enum EReferencePolicy {
+    REFERENCE_POLICY_UNSPECIFIED = 0;
+    WITHOUT_REFERENCES = 1;
+    WITH_REFERENCES = 2;
+}
+
+message TIamBinding {
+    optional string ServiceAccountId = 1;
+    optional string CloudId = 2;
+    optional string ResourceType = 3;
+    optional string ReferrerId = 4;
+    optional string ReferrerType = 5;
+    optional string ServiceId = 6;
+    optional string MicroserviceId = 7;
+    optional EReferencePolicy ReferencePolicy = 8;
+}
+
+enum ESetupState {
+    SETUP_STATE_UNSPECIFIED = 0;
+    SETUP_NOT_STARTED = 1;
+    SETUP_STARTED = 2;
+    SETUP_UNKNOWN = 3;
+    SETUP_SUCCEEDED = 4;
+    SETUP_FAILED = 5;
+}
+
+enum EDelegationState {
+    DELEGATION_STATE_UNSPECIFIED = 0;
+    PENDING = 1;
+    CANCELLED = 7;
+}
+
+message TDelegation {
+    optional string OperationId = 1;
+    optional string DatabaseIncarnation = 2;
+    optional string SecretPath = 3;
+    optional uint64 CreateTxId = 4;
+    optional TSecretIdentity Secret = 5;
+    optional TIamBinding Binding = 6;
+    optional uint64 Revision = 7;
+    optional ESetupState SetupState = 8;
+    optional EDelegationState State = 9;
+    optional string SetupOperationId = 10;
+}
+
+enum ESecretState {
+    SECRET_STATE_UNSPECIFIED = 0;
+    SECRET_LIVE = 1;
+}
+
+message TSecretRecord {
+    optional TSecretIdentity Identity = 1;
+    optional string SecretPath = 2;
+    optional uint64 CreateTxId = 3;
+    optional uint64 Revision = 4;
+    optional string CurrentOperationId = 5;
+    optional string PendingOperationId = 6;
+    optional ESecretState State = 7;
+    optional string CreateOperationId = 8;
+}
+
 message TDatabaseRecord {
     optional TDatabaseIdentity Identity = 1;
     optional uint64 InventoryRevision = 2;
@@ -19,9 +86,59 @@ message TRegisterDatabaseRequest {
     optional TDatabaseIdentity Identity = 1;
 }
 
+enum EStageMode {
+    STAGE_MODE_UNSPECIFIED = 0;
+    CREATE = 1;
+}
+
+message TStageRequest {
+    optional EStageMode Mode = 1;
+    // Globally unique idempotency key; retained permanently in this first slice.
+    optional string OperationId = 2;
+    optional string DatabaseIncarnation = 3;
+    optional string SecretPath = 4;
+    optional uint64 CreateTxId = 5;
+    optional TSecretIdentity Secret = 6;
+    optional uint64 ExpectedSecretRevision = 7;
+    optional TIamBinding Binding = 8;
+}
+
+message TBindSecretRequest {
+    optional string OperationId = 1;
+    optional uint64 ExpectedRevision = 2;
+    optional TSecretIdentity Secret = 3;
+}
+
+message TStartSetupRequest {
+    optional string OperationId = 1;
+    optional uint64 ExpectedRevision = 2;
+}
+
+message TSetSetupResultRequest {
+    optional string OperationId = 1;
+    optional uint64 ExpectedRevision = 2;
+    // Only UNKNOWN, SUCCEEDED and FAILED are accepted as outcomes.
+    optional ESetupState Outcome = 3;
+    optional string SetupOperationId = 4;
+}
+
+message TGetSecretRequest {
+    optional TSecretIdentity Secret = 1;
+}
+
+message TGetDelegationRequest {
+    optional string OperationId = 1;
+}
+
 message TRequest {
     oneof Command {
         TRegisterDatabaseRequest RegisterDatabase = 1;
+        TStageRequest Stage = 2;
+        TBindSecretRequest BindSecret = 3;
+        TStartSetupRequest StartSetup = 4;
+        TSetSetupResultRequest SetSetupResult = 5;
+        TGetSecretRequest GetSecret = 8;
+        TGetDelegationRequest GetDelegation = 9;
     }
 }
 
@@ -38,4 +155,7 @@ message TResponse {
     optional EStatus Status = 1;
     optional string Error = 2;
     optional TDatabaseRecord Database = 3;
+    optional TSecretRecord Secret = 4;
+    optional TDelegation Delegation = 5;
+    repeated TDelegation Delegations = 6;
 }

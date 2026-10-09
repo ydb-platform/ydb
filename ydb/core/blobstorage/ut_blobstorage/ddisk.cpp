@@ -693,7 +693,10 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto collect = [&](ui64 firstGroupId) {
             for (ui64 i = 0; i < 64; ++i) {
                 auto group = f.DefineDirectBlockGroup(firstGroupId + i, 3, 1, 3);
-                for (const auto& pb : group.GetPersistentBufferDDiskId()) {
+                for (int k = 0; k < group.PersistentBufferDDiskIdSize(); ++k) {
+                    const auto& pb = group.GetPersistentBufferDDiskId(k);
+                    UNIT_ASSERT_C(TDDiskId(pb) != TDDiskId(group.GetDDiskId(k)),
+                        "PB allocated on the excluded data DDisk");
                     slotsPerPDisk[{pb.GetNodeId(), pb.GetPDiskId()}].insert(pb.GetDDiskSlotId());
                 }
             }
@@ -710,7 +713,16 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 UNIT_ASSERT_VALUES_EQUAL(slots.size(), 1);
             }
         } else {
-            UNIT_ASSERT(std::ranges::any_of(slotsPerPDisk, [](const auto& item) { return item.second.size() > 1; }));
+            std::map<ui32, ui32> slotsPerNode;
+            std::map<ui32, ui32> pdisksPerNode;
+            for (const auto& [pdisk, slots] : slotsPerPDisk) {
+                slotsPerNode[pdisk.first] += slots.size();
+                ++pdisksPerNode[pdisk.first];
+            }
+            UNIT_ASSERT_VALUES_EQUAL(slotsPerNode.size(), f.Env.Settings.NodeCount);
+            for (const auto& [node, slots] : slotsPerNode) {
+                UNIT_ASSERT_C(slots > pdisksPerNode.at(node), "PBs did not spread across DDisk slots on node " << node);
+            }
         }
         if (drivesPerNode > 1) {
             std::map<ui32, std::set<ui32>> pdisksPerNode;
@@ -747,6 +759,21 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
     Y_UNIT_TEST(PersistentBufferAllocationMultiplePDisks) {
         CheckPersistentBufferAllocationMode(NKikimrBlobStorage::ONE_PER_PDISK, 2);
+    }
+
+    Y_UNIT_TEST(PersistentBufferAllocationInvalidMode) {
+        TDDiskTestContext f;
+        auto& cmd = *f.PoolRequest.MutableCommand(0)->MutableDefineDDiskPool();
+        cmd.SetName("invalid_mode_pool");
+        cmd.SetPersistentBufferAllocationMode(static_cast<NKikimrBlobStorage::EPersistentBufferAllocationMode>(42));
+        auto result = f.Env.Invoke(f.PoolRequest);
+        UNIT_ASSERT(!result.GetSuccess());
+        UNIT_ASSERT_C(result.GetErrorDescription().Contains("invalid PersistentBufferAllocationMode"),
+            result.GetErrorDescription());
+
+        cmd.SetPersistentBufferAllocationMode(NKikimrBlobStorage::ONE_PER_PDISK);
+        result = f.Env.Invoke(f.PoolRequest);
+        UNIT_ASSERT_C(result.GetSuccess(), result.GetErrorDescription());
     }
 
     Y_UNIT_TEST(SystemViewMarksDDiskSlots) {

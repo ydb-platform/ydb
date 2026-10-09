@@ -106,7 +106,8 @@ TConclusionStatus IDataSource::DoApplyPendingFetcher(const NArrow::NSSA::TProces
     if (!fetcher) {
         return TConclusionStatus::Success();
     }
-    TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), *this);
+    auto source = context.GetDataSourceVerifiedAs<IDataSource>();
+    TFetchingResultContext fetchContext(context.MutableResources(), *GetStageData().GetIndexes(), source);
     fetcher->OnDataCollected(fetchContext);
     return TConclusionStatus::Success();
 }

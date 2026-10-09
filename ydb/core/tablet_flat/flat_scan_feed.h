@@ -353,7 +353,9 @@ namespace NTable {
 
             Y_ENSURE(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
-            Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
+            // Removed operations are skipped by the iterator, so compaction drops them
+            Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion,
+                TRemovedTxOpsTransactionMap::Create(Subset.CommittedTransactions, Subset.RemovedTxOps));
 
             CurrentEnv = MakeEnv();
 

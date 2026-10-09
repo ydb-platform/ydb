@@ -1,5 +1,7 @@
 #pragma once
 
+#include "flat_table_committed.h"
+
 #include <util/generic/utility.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -137,6 +139,132 @@ namespace NTable {
      * Removed operations (savepoint seq num ranges) by TxId, see TDatabase::RemoveTxOps
      */
     using TRemovedTxOps = absl::flat_hash_map<ui64, TSavepointSeqNumRanges>;
+
+    /**
+     * A simple copy-on-write wrapper for TRemovedTxOps, so iterators and
+     * subsets may keep a consistent snapshot while the table changes
+     */
+    class TRemovedTxOpsMap {
+    private:
+        struct TState final : public TThrRefBase {
+            TRemovedTxOps Ops;
+        };
+
+    public:
+        using const_iterator = TRemovedTxOps::const_iterator;
+
+    public:
+        TRemovedTxOpsMap() = default;
+
+        explicit operator bool() const {
+            return State_ && !State_->Ops.empty();
+        }
+
+        const TSavepointSeqNumRanges* Find(ui64 txId) const {
+            if (State_) {
+                auto it = State_->Ops.find(txId);
+                if (it != State_->Ops.end()) {
+                    return &it->second;
+                }
+            }
+            return nullptr;
+        }
+
+        /**
+         * Returns true when the operation of txId with savepointSeqNum is removed
+         */
+        bool Contains(ui64 txId, ui32 savepointSeqNum) const {
+            const auto* ranges = Find(txId);
+            return ranges && ranges->Contains(savepointSeqNum);
+        }
+
+        /**
+         * Returns ranges of txId for modification, adds empty ranges when missing
+         */
+        TSavepointSeqNumRanges& Mutable(ui64 txId) {
+            return Unshare().Ops[txId];
+        }
+
+        bool Erase(ui64 txId) {
+            if (State_ && State_->Ops.contains(txId)) {
+                Unshare().Ops.erase(txId);
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        size_t Size() const {
+            return State_ ? State_->Ops.size() : 0;
+        }
+
+    public:
+        const_iterator begin() const {
+            if (State_) {
+                const TState& state = *State_;
+                return state.Ops.begin();
+            } else {
+                return { };
+            }
+        }
+
+        const_iterator end() const {
+            if (State_) {
+                const TState& state = *State_;
+                return state.Ops.end();
+            } else {
+                return { };
+            }
+        }
+
+    private:
+        TState& Unshare() {
+            if (!State_) {
+                State_ = MakeIntrusive<TState>();
+            } else if (State_->RefCount() > 1) {
+                State_ = MakeIntrusive<TState>(*State_);
+            }
+            return *State_;
+        }
+
+    private:
+        TIntrusivePtr<TState> State_;
+    };
+
+    /**
+     * A transaction map that additionally skips removed operations
+     */
+    class TRemovedTxOpsTransactionMap final : public ITransactionMap {
+    private:
+        TRemovedTxOpsTransactionMap(ITransactionMapPtr base, TRemovedTxOpsMap removed)
+            : Base(std::move(base))
+            , Removed(std::move(removed))
+        { }
+
+    public:
+        const TRowVersion* Find(ui64 txId) const override {
+            return Base.Find(txId);
+        }
+
+        bool IsSkippedSavepointSeqNum(ui64 txId, ui32 savepointSeqNum) const override {
+            return Removed.Contains(txId, savepointSeqNum)
+                || Base.IsSkippedSavepointSeqNum(txId, savepointSeqNum);
+        }
+
+        /**
+         * Returns base unchanged when there are no removed operations
+         */
+        static ITransactionMapPtr Create(ITransactionMapPtr base, const TRemovedTxOpsMap& removed) {
+            if (!removed) {
+                return base;
+            }
+            return new TRemovedTxOpsTransactionMap(std::move(base), removed);
+        }
+
+    private:
+        const ITransactionMapPtr Base;
+        const TRemovedTxOpsMap Removed;
+    };
 
 }
 }

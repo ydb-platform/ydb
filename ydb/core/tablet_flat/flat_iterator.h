@@ -461,6 +461,8 @@ private:
     TRowVersion DeltaVersion;
     bool Delta = false;
     bool Uncommitted = false;
+    // Uncommitted position is a skipped delta, only its lock is visible
+    bool DeltaSkipped = false;
 
     EReady Start();
     EReady Turn();
@@ -936,8 +938,8 @@ inline EReady TTableIterBase<TIteratorOps>::DoSkipUncommitted()
             }
             case EType::Run: {
                 auto& it = *RunIters[ai.Index];
-                Y_DEBUG_ABORT_UNLESS(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
-                if (!it.IsDeltaLockOnly()) {
+                Y_DEBUG_ABORT_UNLESS(it.IsDelta() && (DeltaSkipped || !CommittedTransactions.Find(it.GetDeltaTxId())));
+                if (!it.IsDeltaLockOnly() && !DeltaSkipped) {
                     TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
                 }
                 auto ready = it.SkipDelta();
@@ -975,6 +977,8 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
     // We must have at least one active iterator
     Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
+    DeltaSkipped = false;
+
     bool found = false;
     bool committed = false;
     for (auto i = TReverseIter(Inactive), e = TReverseIter(Active); i != e; ++i) {
@@ -987,6 +991,18 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                     Delta = it.IsDelta();
                     if (Delta) {
                         DeltaTxId = it.GetDeltaTxId();
+                        if (!it.IsDeltaLockOnly() &&
+                            CommittedTransactions.IsSkippedSavepointSeqNum(DeltaTxId, it.GetDeltaSavepointSeqNum()))
+                        {
+                            // Skipped deltas are ignored as if they don't exist,
+                            // mem table deltas with data never carry locks
+                            if (it.SkipDelta()) {
+                                goto retryMemDelta;
+                            }
+                            // We need to skip this memtable
+                            --Inactive;
+                            continue;
+                        }
                         const TRowVersion* rowVersion = CommittedTransactions.Find(DeltaTxId);
                         if (!rowVersion) {
                             DeltaSavepointSeqNum = it.GetDeltaSavepointSeqNum();
@@ -1022,6 +1038,30 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                     Delta = it.IsDelta();
                     if (Delta) {
                         DeltaTxId = it.GetDeltaTxId();
+                        if (!it.IsDeltaLockOnly() &&
+                            CommittedTransactions.IsSkippedSavepointSeqNum(DeltaTxId, it.GetDeltaSavepointSeqNum()))
+                        {
+                            if (std::get<0>(it.GetLockInfo()) != ELockMode::None) {
+                                // Parts attach the key lock to the first delta, keep it
+                                // by showing the skipped delta as an uncommitted lock-only delta
+                                DeltaSavepointSeqNum = 0;
+                                DeltaSkipped = true;
+                                Uncommitted = true;
+                                found = true;
+                                break;
+                            }
+                            // Skipped deltas are ignored as if they don't exist
+                            auto ready = it.SkipDelta();
+                            if (ready == EReady::Data) {
+                                goto retryRunDelta;
+                            }
+                            if (ready == EReady::Page) {
+                                return ready;
+                            }
+                            // We need to skip this run
+                            --Inactive;
+                            continue;
+                        }
                         const TRowVersion* rowVersion = CommittedTransactions.Find(DeltaTxId);
                         if (!rowVersion) {
                             DeltaSavepointSeqNum = it.GetDeltaSavepointSeqNum();

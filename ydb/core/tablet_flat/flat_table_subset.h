@@ -5,6 +5,7 @@
 #include "flat_table_part.h"
 #include "flat_part_laid.h"
 #include "flat_table_committed.h"
+#include "flat_table_savepoints.h"
 
 #include <util/generic/vector.h>
 
@@ -118,6 +119,8 @@ namespace NTable {
         TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
         TTransactionMap CommittedTransactions;
         TTransactionSet RemovedTransactions;
+        // Removed operations (savepoint seq nums), invisible to scans and dropped by compaction
+        TRemovedTxOpsMap RemovedTxOps;
         TTransactionSet GarbageTransactions;
         // Transactions with removed operations and no data left
         TTransactionSet GarbageRemovedTxOps;

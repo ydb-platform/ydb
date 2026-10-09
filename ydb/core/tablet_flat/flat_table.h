@@ -369,6 +369,9 @@ private:
     void RemoveRemovedTxOpsRef(ui64 txId);
     TTransactionSet GetGarbageRemovedTxOps() const;
 
+    // Committed transactions visible to a reader, skipping removed operations
+    ITransactionMapPtr GetReadTransactions(const ITransactionMapPtr& visible) const;
+
 private:
     TEpoch Epoch; /* Monotonic table change number, with holes */
     ui64 Annexed = 0; /* Monotonic serial of attached external blobs */
@@ -416,7 +419,7 @@ private:
     absl::flat_hash_map<ui64, size_t> RemovedTxOpsRefs;
 
     // A union of removed operations (savepoint seq nums) of all entities by TxId
-    TRemovedTxOps RemovedTxOps;
+    TRemovedTxOpsMap RemovedTxOps;
 
     ui64 RemovedCommittedTxs = 0;
 

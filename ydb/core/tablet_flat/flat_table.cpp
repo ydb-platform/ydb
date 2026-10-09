@@ -106,13 +106,12 @@ void TTable::RollbackChanges()
             }
 
             void operator()(const TRollbackEraseRemovedTxOps& op) const {
-                Self->RemovedTxOps.erase(op.TxId);
+                Self->RemovedTxOps.Erase(op.TxId);
             }
 
             void operator()(const TRollbackAddRemovedTxOps& op) const {
-                auto it = Self->RemovedTxOps.find(op.TxId);
-                Y_ENSURE(it != Self->RemovedTxOps.end());
-                it->second.Undo(op.Undo);
+                Y_ENSURE(Self->RemovedTxOps.Find(op.TxId));
+                Self->RemovedTxOps.Mutable(op.TxId).Undo(op.Undo);
             }
         };
 
@@ -279,6 +278,7 @@ TAutoPtr<TSubset> TTable::CompactionSubset(TEpoch head, TArrayRef<const TLogoBlo
 
     subset->CommittedTransactions = CommittedTransactions;
     subset->RemovedTransactions = RemovedTransactions;
+    subset->RemovedTxOps = RemovedTxOps;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
         subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
@@ -324,6 +324,7 @@ TAutoPtr<TSubset> TTable::PartSwitchSubset(TEpoch head, TArrayRef<const TLogoBlo
 
     subset->CommittedTransactions = CommittedTransactions;
     subset->RemovedTransactions = RemovedTransactions;
+    subset->RemovedTxOps = RemovedTxOps;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
         subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
@@ -364,6 +365,7 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const
     // However it can still theoretically be used for iteration or compaction
     subset->CommittedTransactions = CommittedTransactions;
     subset->RemovedTransactions = RemovedTransactions;
+    subset->RemovedTxOps = RemovedTxOps;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
         subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
@@ -423,6 +425,7 @@ TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot)
     }
 
     subset->CommittedTransactions = CommittedTransactions;
+    subset->RemovedTxOps = RemovedTxOps;
 
     return subset;
 }
@@ -674,7 +677,7 @@ void TTable::Replace(
         }
         EnumerateRemovedTxOps(txStatus->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
             AddRemovedTxOpsRef(txId);
-            RemovedTxOps[txId].Add(ranges);
+            RemovedTxOps.Mutable(txId).Add(ranges);
         });
     }
 
@@ -715,7 +718,7 @@ void TTable::Replace(
         if (it->second == 0) {
             // No entity has removed operations of this transaction anymore
             RemovedTxOpsRefs.erase(it);
-            RemovedTxOps.erase(txId);
+            RemovedTxOps.Erase(txId);
         }
     }
 
@@ -829,7 +832,7 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus)
     }
     EnumerateRemovedTxOps(txStatus->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
         AddRemovedTxOpsRef(txId);
-        RemovedTxOps[txId].Add(ranges);
+        RemovedTxOps.Mutable(txId).Add(ranges);
     });
 
     if (Mutable && txStatus->Epoch >= Mutable->Epoch) {
@@ -1150,7 +1153,7 @@ void TTable::RemoveRemovedTxOpsRef(ui64 txId)
     if (0 == --it->second) {
         // This was the last reference
         RemovedTxOpsRefs.erase(it);
-        RemovedTxOps.erase(txId);
+        RemovedTxOps.Erase(txId);
     }
 }
 
@@ -1286,23 +1289,23 @@ void TTable::RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSe
         AddRemovedTxOpsRef(txId);
     }
 
-    auto it = RemovedTxOps.find(txId);
-    if (it == RemovedTxOps.end()) {
+    if (!RemovedTxOps.Find(txId)) {
         if (RollbackState) {
             RollbackOps.emplace_back(TRollbackEraseRemovedTxOps{ txId });
         }
-        RemovedTxOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
+        RemovedTxOps.Mutable(txId).Add(fromSavepointSeqNum, toSavepointSeqNum);
     } else if (RollbackState) {
         // Keep only what this Add changed, not a copy of all ranges
         TSavepointSeqNumRanges::TAddUndo undo;
-        if (it->second.Add(fromSavepointSeqNum, toSavepointSeqNum, &undo)) {
+        if (RemovedTxOps.Mutable(txId).Add(fromSavepointSeqNum, toSavepointSeqNum, &undo)) {
             RollbackOps.emplace_back(TRollbackAddRemovedTxOps{ txId, std::move(undo) });
         }
     } else {
-        it->second.Add(fromSavepointSeqNum, toSavepointSeqNum);
+        RemovedTxOps.Mutable(txId).Add(fromSavepointSeqNum, toSavepointSeqNum);
     }
 
-    // Note: removed operations don't affect reads yet, no need to invalidate erase cache
+    // Note: removed operations only hide deltas, and erase cache never caches
+    // keys with uncompacted deltas, no need to invalidate
 }
 
 bool TTable::HasOpenTx(ui64 txId) const
@@ -1357,13 +1360,19 @@ size_t TTable::GetRemovedTxCount() const
 
 const TSavepointSeqNumRanges* TTable::FindRemovedTxOps(ui64 txId) const
 {
-    auto it = RemovedTxOps.find(txId);
-    return it != RemovedTxOps.end() ? &it->second : nullptr;
+    return RemovedTxOps.Find(txId);
 }
 
 size_t TTable::GetRemovedTxOpsCount() const
 {
-    return RemovedTxOps.size();
+    return RemovedTxOps.Size();
+}
+
+ITransactionMapPtr TTable::GetReadTransactions(const ITransactionMapPtr& visible) const
+{
+    return TRemovedTxOpsTransactionMap::Create(
+        TMergedTransactionMap::Create(visible, CommittedTransactions),
+        RemovedTxOps);
 }
 
 TTableRuntimeStats TTable::RuntimeStats() const noexcept
@@ -1414,7 +1423,7 @@ TAutoPtr<TTableIter> TTable::Iterate(const TCelled& key, TTagsRef tags, IPages* 
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
     TAutoPtr<TTableIter> dbIter(new TTableIter(Scheme.Get(), tags, limit, snapshot,
-            TMergedTransactionMap::Create(visible, CommittedTransactions),
+            GetReadTransactions(visible),
             observer));
 
     if (Mutable) {
@@ -1468,7 +1477,7 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
     TAutoPtr<TTableReverseIter> dbIter(new TTableReverseIter(Scheme.Get(), tags, limit, snapshot,
-            TMergedTransactionMap::Create(visible, CommittedTransactions),
+            GetReadTransactions(visible),
             observer));
 
     if (Mutable) {
@@ -1535,7 +1544,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     TEpoch lastEpoch = TEpoch::Max();
 
     bool snapshotFound = (snapshot == TRowVersion::Max());
-    auto committed = TMergedTransactionMap::Create(visible, CommittedTransactions);
+    auto committed = GetReadTransactions(visible);
 
     const auto prevInvisibleRowSkips = stats.InvisibleRowSkips;
 
@@ -1666,7 +1675,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
 
     TEpoch lastEpoch = TEpoch::Max();
 
-    auto committed = TMergedTransactionMap::Create(visible, CommittedTransactions);
+    auto committed = GetReadTransactions(visible);
 
     ELockMode lockMode = ELockMode::None;
     ui64 lockTxId = 0;

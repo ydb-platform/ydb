@@ -5451,17 +5451,131 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         restartTablet();
         checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = none");
 
-        // Removed operations don't affect visibility yet
+        // Removed operations stay invisible after commit
         env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
 
         {
             TString data;
             env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
-                "Key 1 = Upsert value = Set aaa value2 = Empty NULL\n"
-                "Key 2 = Upsert value = Set bbb value2 = Empty NULL\n"
-                "Key 3 = Upsert value = Set ccc value2 = Empty NULL\n");
+                "Key 1 = Upsert value = Set aaa value2 = Empty NULL\n");
         }
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsReadsCompactionAndRestart) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        auto restartTablet = [&]() {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        auto checkReadTx = [&](const TString& expected) {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsReadTx(data, 123) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, expected);
+        };
+
+        auto checkUncommitted = [&](const TString& expected) {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, expected);
+        };
+
+        auto hasTxData = [&](ui64 txId) {
+            bool result = false;
+            env.SendSync(new NFake::TEvExecute{ new TTxHasTxData(txId, result) });
+            return result;
+        };
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "aaa", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "bbb", 123, 2) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "ccc", 123, 2) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "ddd", 123, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(4, "eee", 234, 1) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 2, 2) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(234, 1, 1) });
+
+        const TString readTx =
+            "Key 1 = Upsert value = Set aaa value2 = Empty NULL\n"
+            "Key 3 = Upsert value = Set ddd value2 = Empty NULL\n";
+        const TString uncommitted =
+            "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
+            "Key 3 = Upsert value = Set ddd value2 = Empty NULL txId 123 savepointSeqNum 3\n";
+
+        checkReadTx(readTx);
+        checkUncommitted(uncommitted);
+
+        // Removed operations are written to tx status, removed deltas are dropped
+        Cerr << "...compacting mem table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        checkReadTx(readTx);
+        checkUncommitted(uncommitted);
+        UNIT_ASSERT(hasTxData(123));
+        UNIT_ASSERT(!hasTxData(234));
+
+        restartTablet();
+        checkReadTx(readTx);
+        checkUncommitted(uncommitted);
+
+        // Operations removed while their deltas are already in a part, and a late
+        // write with a removed seq num in the mem table
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 3, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(2, "fff", 123, 2) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "ggg", 123, 4) });
+
+        const TString readTx2 =
+            "Key 1 = Upsert value = Set aaa value2 = Set ggg\n";
+
+        checkReadTx(readTx2);
+        restartTablet();
+        checkReadTx(readTx2);
+
+        // Removed operations stay invisible after commit, before and after compaction
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        const TString committed =
+            "Key 1 = Upsert value = Set aaa value2 = Set ggg\n";
+
+        auto checkCommitted = [&]() {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, committed);
+        };
+
+        checkCommitted();
+        restartTablet();
+        checkCommitted();
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        checkCommitted();
+
+        Cerr << "...compacting table again to drop garbage" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        checkCommitted();
+        UNIT_ASSERT(!hasTxData(123));
+
+        restartTablet();
+        checkCommitted();
     }
 
     Y_UNIT_TEST(RemoveTxOpsBorrow) {

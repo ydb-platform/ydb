@@ -710,6 +710,7 @@ namespace NActors {
             static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
             )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
+<<<<<<< HEAD
 #define ACTORS_LOG_STREAM(mPriority, mComponent) \
     if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
         else NActors::TRecordWriter(\
@@ -775,6 +776,8 @@ namespace NActors {
 >>>>>>> 97fe4cefe07 ([YDBV_LOG] Remove ACFL macroses (#53895))
 =======
 >>>>>>> 7bdb93e849a ([YDB_LOG] Remove AFL_ macroses (#53904))
+=======
+>>>>>>> 21d0f87ada4 ([YDB_LOG] Remove ALS_ macroses (#54030))
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \

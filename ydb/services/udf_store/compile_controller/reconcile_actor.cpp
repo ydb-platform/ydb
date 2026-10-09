@@ -12,6 +12,8 @@
 #include <ydb/services/metadata/request/common.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 namespace {
@@ -64,8 +66,8 @@ private:
     void HandleTimeout() {
         // Reported as a plain failure: the controller then keeps the platform's
         // gaps unresolved and is free to start a fresh reconcile for it.
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TReconcileActor: timed out reading " << ArtifactTablePath_;
+        YDB_LOG_WARN("TReconcileActor: timed out reading",
+            {"artifactTablePath", ArtifactTablePath_});
         Reply(false, {});
     }
 
@@ -90,8 +92,8 @@ private:
         // The artifact table of a platform appears lazily, when the first node
         // of that platform initializes it. Until then the read fails and the
         // controller simply keeps the platform's gaps unresolved.
-        ALS_DEBUG(NKikimrServices::METADATA_PROVIDER)
-            << "TReconcileActor: failed to read " << ArtifactTablePath_;
+        YDB_LOG_DEBUG("TReconcileActor: failed to read",
+            {"artifactTablePath", ArtifactTablePath_});
         Reply(false, {});
     }
 

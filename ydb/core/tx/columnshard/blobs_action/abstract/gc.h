@@ -61,6 +61,10 @@ public:
         return !AbortedFlag && !FinishedFlag;
     }
 
+    bool IsCleanupFinished() const {
+        return FinishedFlag;
+    }
+
     IBlobsGCAction(
         const TString& storageId, TBlobsCategories&& blobsToRemove, const std::shared_ptr<NBlobOperations::TRemoveGCCounters>& counters)
         : TBase(storageId)

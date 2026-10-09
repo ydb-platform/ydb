@@ -7,8 +7,6 @@
 
 #include <ydb/library/accessor/accessor.h>
 
-#include <util/generic/algorithm.h>
-
 namespace NKikimr::NOlap::NDataSharing {
 
 class TStorageSharedBlobsManager {
@@ -50,13 +48,23 @@ public:
     {
     }
 
-    bool HasBlobsInRange(const ui32 channel, const ui32 from, const ui32 to) const {
-        const auto matches = [&](const auto& blob) {
-            const auto& id = blob.first.GetLogoBlobId();
-            return id.TabletID() == static_cast<ui64>(SelfTabletId) && id.Channel() == channel && id.Generation() >= from &&
-                   id.Generation() < to;
+    // Visit blobs whose IDs belong to this tablet; false stops the traversal.
+    template <class TVisitor>
+    void VisitOwnBlobs(TVisitor&& visitor) const {
+        const auto visit = [&](const TUnifiedBlobId& blob) {
+            const auto& id = blob.GetLogoBlobId();
+            return id.TabletID() != static_cast<ui64>(SelfTabletId) || visitor(id);
         };
-        return AnyOf(BorrowedBlobIds, matches) || AnyOf(SharedBlobIds, matches);
+        for (const auto& [blob, _] : BorrowedBlobIds) {
+            if (!visit(blob)) {
+                return;
+            }
+        }
+        for (const auto& [blob, _] : SharedBlobIds) {
+            if (!visit(blob)) {
+                return;
+            }
+        }
     }
 
     bool IsTrivialLinks() const {

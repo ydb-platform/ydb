@@ -196,12 +196,8 @@ bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
 
         NScheme::TTypeInfo typeInfo;
         if (const auto& typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType()); typeName.StartsWith("pg")) {
-            const auto typeDesc = NPg::TypeDescFromPgTypeName(typeName);
-            if (!(typeDesc && TOlapColumnAdd::IsAllowedPgType(NPg::PgTypeIdFromTypeDesc(typeDesc)))) {
-                errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported");
-                return false;
-            }
-            typeInfo = NScheme::TTypeInfo(typeDesc);
+            errors.AddError("Type '" + colProto.GetType() + "' specified for column '" + colName + "' is not supported for column tables");
+            return false;
         } else if (const auto decimalType = NScheme::TDecimalType::ParseTypeName(typeName)) {
             typeInfo = NScheme::TTypeInfo(*decimalType);
         } else {

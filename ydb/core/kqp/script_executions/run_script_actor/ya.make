@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    kqp_run_script_actor_impl.cpp
     kqp_run_script_actor.cpp
+    kqp_run_script_actor_impl.cpp
     kqp_script_lease_watcher_actor.cpp
     kqp_script_result_handler.cpp
 )
@@ -14,7 +14,8 @@ PEERDIR(
     ydb/core/fq/libs/common
     ydb/core/kqp/common/events
     ydb/core/kqp/executer_actor
-    ydb/core/kqp/proxy_service/proto
+    ydb/core/kqp/script_executions/common
+    ydb/core/kqp/script_executions/proto
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/actors/wilson

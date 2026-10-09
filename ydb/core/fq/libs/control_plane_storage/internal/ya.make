@@ -25,7 +25,7 @@ PEERDIR(
     ydb/core/fq/libs/rate_limiter/events
     ydb/core/fq/libs/ydb
     ydb/core/kqp/opt
-    ydb/core/kqp/proxy_service/script_executions_utils
+    ydb/core/kqp/script_executions/common
     ydb/core/metering
     ydb/core/mon
     ydb/library/actors/core

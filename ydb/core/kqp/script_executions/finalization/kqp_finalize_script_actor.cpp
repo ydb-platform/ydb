@@ -1,13 +1,13 @@
 #include "kqp_finalize_script_actor.h"
 
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-#include <ydb/core/tx/datashard/const.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/datashard/const.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 

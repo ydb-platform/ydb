@@ -11,7 +11,6 @@
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -19,6 +18,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/common/error_codes.h>
@@ -26,7 +26,6 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>

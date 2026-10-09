@@ -1,6 +1,6 @@
 #include "kqp_streaming_aggregation.h"
 
-#include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/runtime/common/kqp_compute_context.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/helpers/future_callback.h>

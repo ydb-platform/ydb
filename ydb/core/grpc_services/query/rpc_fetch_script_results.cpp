@@ -5,9 +5,9 @@
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>

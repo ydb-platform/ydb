@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/string.h>
-
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <util/generic/string.h>
 
 namespace NBlockCodecs {
     struct ICodec;

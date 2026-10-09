@@ -5,11 +5,11 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <google/protobuf/message.h>
-#include <google/protobuf/duration.pb.h>
-#include <google/protobuf/timestamp.pb.h>
-
 #include <library/cpp/json/writer/json_value.h>
+
+#include <google/protobuf/duration.pb.h>
+#include <google/protobuf/message.h>
+#include <google/protobuf/timestamp.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>

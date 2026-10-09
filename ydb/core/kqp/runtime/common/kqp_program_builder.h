@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
-
 #include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
 
 namespace NKikimr {

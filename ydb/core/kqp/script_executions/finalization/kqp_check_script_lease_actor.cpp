@@ -1,6 +1,6 @@
 #include "kqp_finalize_script_actor.h"
 
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>

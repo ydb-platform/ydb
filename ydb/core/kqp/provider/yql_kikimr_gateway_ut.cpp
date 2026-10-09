@@ -1,7 +1,6 @@
+#include "yql_kikimr_gateway_ut_helpers.h"
+
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
-#include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
-#include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 
@@ -12,11 +11,10 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NMiniKQL;
+using namespace NGatewayTest;
 using namespace NYdb::NTable;
 
 namespace {
-
-constexpr const char* TestCluster = "kikimr";
 
 void CreateSampleTables(TKikimrRunner& runner) {
     auto schemeClient = runner.GetSchemeClient();
@@ -65,16 +63,6 @@ void CreateSampleTables(TKikimrRunner& runner) {
             ("Paul", "1", "Value3"),
             ("Tony", "2", "Value4");
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
-}
-
-TIntrusivePtr<IKqpGateway> GetIcGateway(Tests::TServer& server) {
-    auto counters = MakeIntrusive<TKqpRequestCounters>();
-    counters->Counters = new TKqpCounters(server.GetRuntime()->GetAppData(0).Counters);
-    counters->TxProxyMon = new NTxProxy::TTxProxyMon(server.GetRuntime()->GetAppData(0).Counters);
-
-    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TestCluster, server.GetRuntime()->GetAnyNodeActorSystem(),TIntrusivePtr<NYql::TKikimrConfiguration>(nullptr), false);
-    return CreateKikimrIcGateway(TestCluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, "/Root", "/Root", std::move(loader), server.GetRuntime()->GetAnyNodeActorSystem(),
-        server.GetRuntime()->GetNodeId(0), counters, server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
 void TestListPathCommon(TIntrusivePtr<IKikimrGateway> gateway) {
@@ -131,43 +119,6 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     auto loadResponse = loadFuture.GetValue();
     UNIT_ASSERT(loadResponse.Success());
     UNIT_ASSERT(!loadResponse.Metadata->DoesExist);
-}
-
-THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> DoGatewayOperation(TTestActorRuntime& runtime, const TString& path, std::function<NThreading::TFuture<IKikimrGateway::TGenericResult>()> gatewayOperation, bool fail = false) {
-    const auto& responseFuture = gatewayOperation();
-    responseFuture.Wait();
-    const auto& response = responseFuture.GetValue();
-    response.Issues().PrintTo(Cerr);
-
-    if (fail) {
-        UNIT_ASSERT_C(!response.Success(), response.Issues().ToString());
-        return nullptr;
-    }
-
-    UNIT_ASSERT_C(response.Success(), response.Issues().ToString());
-    return Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
-}
-
-NSchemeCache::TSchemeCacheNavigate::TEntry TestCreateObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TCreateObjectSettings& settings, const TString& path) {
-    return DoGatewayOperation(runtime, path, [gateway, settings]() {
-        return gateway->CreateObject(TestCluster, settings);
-    })->ResultSet.at(0);
-}
-
-NSchemeCache::TSchemeCacheNavigate::TEntry TestAlterObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TAlterObjectSettings& settings, const TString& path) {
-    return DoGatewayOperation(runtime, path, [gateway, settings]() {
-        return gateway->AlterObject(TestCluster, settings);
-    })->ResultSet.at(0);
-}
-
-void TestDropObjectCommon(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TDropObjectSettings& settings, const TString& path) {
-    const auto objectDescription = DoGatewayOperation(runtime, path, [gateway, settings]() {
-        return gateway->DropObject(TestCluster, settings);
-    });
-    const auto& object = objectDescription->ResultSet.at(0);
-
-    UNIT_ASSERT_VALUES_EQUAL(objectDescription->ErrorCount, 1);
-    UNIT_ASSERT_VALUES_EQUAL(object.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
 }
 
 void TestCreateExternalDataSource(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& path) {
@@ -265,59 +216,12 @@ void TestDropResourcePool(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGatew
     TestDropObjectCommon(runtime, gateway, settings, TStringBuilder() << "/Root/.metadata/workload_manager/pools/" << poolId);
 }
 
-void TestCreateStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
-    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
-        {"run", "false"},
-        {"__query_text", "SELECT 42"},
-    });
-    const auto& streamingQuery = TestCreateObjectCommon(runtime, gateway, settings, queryName);
-
-    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
-    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
-    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
-    UNIT_ASSERT_GE(properties.size(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 42");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "");
-}
-
-void TestAlterStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
-    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
-        {"force", "true"},
-        {"__query_text", "SELECT 84"},
-        {"resource_pool", "my_pool"},
-    });
-    const auto& streamingQuery = TestAlterObjectCommon(runtime, gateway, settings, queryName);
-
-    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
-    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
-    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
-    UNIT_ASSERT_GE(properties.size(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 84");
-    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "my_pool");
-}
-
-void TestDropStreamingQuery(TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
-    TDropObjectSettings settings("STREAMING_QUERY", queryName, {});
-    TestDropObjectCommon(runtime, gateway, settings, queryName);
-}
-
 TKikimrRunner GetKikimrRunnerWithResourcePools() {
     NKikimrConfig::TAppConfig config;
     config.MutableFeatureFlags()->SetEnableResourcePools(true);
 
     return TKikimrRunner(NKqp::TKikimrSettings(config)
         .SetEnableResourcePools(true)
-        .SetWithSampleTables(false));
-}
-
-TKikimrRunner GetKikimrRunnerWithStreamingQuerys() {
-    NKikimrConfig::TAppConfig config;
-    config.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-
-    return TKikimrRunner(NKqp::TKikimrSettings(config)
-        .SetEnableStreamingQueries(true)
         .SetWithSampleTables(false));
 }
 
@@ -800,23 +704,6 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TKikimrRunner kikimr = GetKikimrRunnerWithResourcePools();
         TestCreateResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
         TestDropResourcePool(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "MyResourcePool");
-    }
-
-    Y_UNIT_TEST(TestCreateStreamingQuery) {
-        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
-        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
-    }
-
-    Y_UNIT_TEST(TestAlterStreamingQuery) {
-        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
-        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
-        TestAlterStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
-    }
-
-    Y_UNIT_TEST(TestDropStreamingQuery) {
-        TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQuerys();
-        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
-        TestDropStreamingQuery(*kikimr.GetTestServer().GetRuntime(), GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
     }
 }
 

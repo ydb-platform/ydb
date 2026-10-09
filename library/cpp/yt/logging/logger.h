@@ -137,12 +137,12 @@ ILogManager* GetDefaultLogManager();
 
 struct TLoggingContext
 {
-    TCpuInstant Instant;
-    TThreadId ThreadId;
+    TCpuInstant Instant = 0;
+    TThreadId ThreadId = 0;
     TThreadName ThreadName;
-    TFiberId FiberId;
+    TFiberId FiberId = 0;
     TTraceId TraceId;
-    TSpanId SpanId;
+    TSpanId SpanId = 0;
     TRequestId RequestId;
     TLoggingTagListPayloadView TraceLoggingTags;
 };

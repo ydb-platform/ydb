@@ -18,6 +18,25 @@
 namespace NKikimr {
 namespace NTable {
 
+namespace {
+
+    // Calls callback once per TxId with all removed operation ranges of that TxId in the page.
+    // Relies on items being sorted by TxId, which TTxStatusPage validates on load.
+    template<class TCallback>
+    void EnumerateRemovedTxOps(TArrayRef<const NPage::TTxStatusPage::TRemovedOpsItem> items, TCallback&& callback)
+    {
+        for (size_t index = 0; index < items.size();) {
+            const ui64 txId = items[index].GetTxId();
+            TSavepointSeqNumRanges ranges;
+            for (; index < items.size() && items[index].GetTxId() == txId; ++index) {
+                ranges.Add(items[index].GetFrom(), items[index].GetTo());
+            }
+            callback(txId, ranges);
+        }
+    }
+
+}
+
 TTable::TTable(TEpoch epoch, const TIntrusivePtr<TKeyRangeCacheNeedGCList>& gcList)
     : Epoch(epoch)
     , EraseCacheGCList(gcList)
@@ -80,6 +99,20 @@ void TTable::RollbackChanges()
 
             void operator()(const TRollbackRemoveRemovedTx& op) const {
                 Self->RemovedTransactions.Remove(op.TxId);
+            }
+
+            void operator()(const TRollbackRemoveRemovedTxOpsRef& op) const {
+                Self->RemoveRemovedTxOpsRef(op.TxId);
+            }
+
+            void operator()(const TRollbackEraseRemovedTxOps& op) const {
+                Self->RemovedTxOps.erase(op.TxId);
+            }
+
+            void operator()(const TRollbackAddRemovedTxOps& op) const {
+                auto it = Self->RemovedTxOps.find(op.TxId);
+                Y_ENSURE(it != Self->RemovedTxOps.end());
+                it->second.Undo(op.Undo);
             }
         };
 
@@ -248,6 +281,7 @@ TAutoPtr<TSubset> TTable::CompactionSubset(TEpoch head, TArrayRef<const TLogoBlo
     subset->RemovedTransactions = RemovedTransactions;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
+        subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
     }
 
     return subset;
@@ -292,6 +326,7 @@ TAutoPtr<TSubset> TTable::PartSwitchSubset(TEpoch head, TArrayRef<const TLogoBlo
     subset->RemovedTransactions = RemovedTransactions;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
+        subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
     }
 
     return subset;
@@ -331,6 +366,7 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const
     subset->RemovedTransactions = RemovedTransactions;
     if (!ColdParts) {
         subset->GarbageTransactions = GarbageTransactions;
+        subset->GarbageRemovedTxOps = GetGarbageRemovedTxOps();
     }
 
     return subset;
@@ -461,6 +497,7 @@ void TTable::Replace(
     // Refcount cannot become zero more than once so vectors are unique
     std::vector<ui64> checkTxDataRefs;
     std::vector<ui64> checkTxStatusRefs;
+    std::vector<ui64> checkRemovedTxOpsRefs;
 
     for (auto& memTable : subset.Frozen) {
         removingOld = true;
@@ -496,6 +533,15 @@ void TTable::Replace(
             Y_ENSURE(count > 0);
             if (0 == --count) {
                 checkTxStatusRefs.push_back(txId);
+            }
+        }
+
+        for (const auto& pr : memTable.MemTable->GetRemovedTxOps()) {
+            const ui64 txId = pr.first;
+            auto& count = RemovedTxOpsRefs.at(txId);
+            Y_ENSURE(count > 0);
+            if (0 == --count) {
+                checkRemovedTxOpsRefs.push_back(txId);
             }
         }
     }
@@ -580,6 +626,13 @@ void TTable::Replace(
                 checkTxStatusRefs.push_back(txId);
             }
         }
+        EnumerateRemovedTxOps(part->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges&) {
+            auto& count = RemovedTxOpsRefs.at(txId);
+            Y_ENSURE(count > 0);
+            if (0 == --count) {
+                checkRemovedTxOpsRefs.push_back(txId);
+            }
+        });
     }
 
     for (const auto &partView : newParts) {
@@ -619,6 +672,10 @@ void TTable::Replace(
             const ui64 txId = item.GetTxId();
             AddTxStatusRef(txId);
         }
+        EnumerateRemovedTxOps(txStatus->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
+            AddRemovedTxOpsRef(txId);
+            RemovedTxOps[txId].Add(ranges);
+        });
     }
 
     for (ui64 txId : checkTxDataRefs) {
@@ -649,6 +706,16 @@ void TTable::Replace(
                 DecidedTransactions.Remove(txId);
                 OpenTxs.insert(txId);
             }
+        }
+    }
+
+    for (ui64 txId : checkRemovedTxOpsRefs) {
+        auto it = RemovedTxOpsRefs.find(txId);
+        Y_ENSURE(it != RemovedTxOpsRefs.end());
+        if (it->second == 0) {
+            // No entity has removed operations of this transaction anymore
+            RemovedTxOpsRefs.erase(it);
+            RemovedTxOps.erase(txId);
         }
     }
 
@@ -760,6 +827,10 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus)
             RemovedCommittedTxs++;
         }
     }
+    EnumerateRemovedTxOps(txStatus->TxStatusPage->GetRemovedOpsItems(), [&](ui64 txId, const TSavepointSeqNumRanges& ranges) {
+        AddRemovedTxOpsRef(txId);
+        RemovedTxOps[txId].Add(ranges);
+    });
 
     if (Mutable && txStatus->Epoch >= Mutable->Epoch) {
         Y_TABLET_ERROR("Merge " << NFmt::Do(*txStatus) << " after mutable epoch " << Mutable->Epoch);
@@ -1063,6 +1134,41 @@ void TTable::RemoveTxStatusRef(ui64 txId)
     }
 }
 
+void TTable::AddRemovedTxOpsRef(ui64 txId)
+{
+    ++RemovedTxOpsRefs[txId];
+    if (RollbackState) {
+        RollbackOps.emplace_back(TRollbackRemoveRemovedTxOpsRef{ txId });
+    }
+}
+
+void TTable::RemoveRemovedTxOpsRef(ui64 txId)
+{
+    auto it = RemovedTxOpsRefs.find(txId);
+    Y_ENSURE(it != RemovedTxOpsRefs.end());
+    Y_ENSURE(it->second > 0);
+    if (0 == --it->second) {
+        // This was the last reference
+        RemovedTxOpsRefs.erase(it);
+        RemovedTxOps.erase(txId);
+    }
+}
+
+TTransactionSet TTable::GetGarbageRemovedTxOps() const
+{
+    TTransactionSet garbage;
+    for (const auto& pr : RemovedTxOpsRefs) {
+        if (GarbageTransactions.Contains(pr.first)) {
+            // Removed operations are only needed while the transaction has rows,
+            // but an open transaction may still write rows in removed ranges
+            // (e.g. a late write), so they are dropped together with the status
+            // of a committed or removed transaction
+            garbage.Add(pr.first);
+        }
+    }
+    return garbage;
+}
+
 void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, ui64 txId, ui32 savepointSeqNum)
 {
     auto& memTable = MemTable();
@@ -1174,6 +1280,31 @@ void TTable::RemoveTx(ui64 txId)
     }
 }
 
+void TTable::RemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
+{
+    if (MemTable().RemoveTxOps(txId, fromSavepointSeqNum, toSavepointSeqNum)) {
+        AddRemovedTxOpsRef(txId);
+    }
+
+    auto it = RemovedTxOps.find(txId);
+    if (it == RemovedTxOps.end()) {
+        if (RollbackState) {
+            RollbackOps.emplace_back(TRollbackEraseRemovedTxOps{ txId });
+        }
+        RemovedTxOps[txId].Add(fromSavepointSeqNum, toSavepointSeqNum);
+    } else if (RollbackState) {
+        // Keep only what this Add changed, not a copy of all ranges
+        TSavepointSeqNumRanges::TAddUndo undo;
+        if (it->second.Add(fromSavepointSeqNum, toSavepointSeqNum, &undo)) {
+            RollbackOps.emplace_back(TRollbackAddRemovedTxOps{ txId, std::move(undo) });
+        }
+    } else {
+        it->second.Add(fromSavepointSeqNum, toSavepointSeqNum);
+    }
+
+    // Note: removed operations don't affect reads yet, no need to invalidate erase cache
+}
+
 bool TTable::HasOpenTx(ui64 txId) const
 {
     return OpenTxs.contains(txId);
@@ -1222,6 +1353,17 @@ size_t TTable::GetCommittedTxCount() const
 size_t TTable::GetRemovedTxCount() const
 {
     return RemovedTransactions.Size();
+}
+
+const TSavepointSeqNumRanges* TTable::FindRemovedTxOps(ui64 txId) const
+{
+    auto it = RemovedTxOps.find(txId);
+    return it != RemovedTxOps.end() ? &it->second : nullptr;
+}
+
+size_t TTable::GetRemovedTxOpsCount() const
+{
+    return RemovedTxOps.size();
 }
 
 TTableRuntimeStats TTable::RuntimeStats() const noexcept

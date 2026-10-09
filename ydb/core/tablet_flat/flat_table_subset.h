@@ -119,6 +119,8 @@ namespace NTable {
         TTransactionMap CommittedTransactions;
         TTransactionSet RemovedTransactions;
         TTransactionSet GarbageTransactions;
+        // Transactions with removed operations and no data left
+        TTransactionSet GarbageRemovedTxOps;
         TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     };
 

@@ -59,6 +59,9 @@ namespace NTabletFlatExecutor {
         TVector<ui32> YellowStopChannels;
     };
 
+    // Deltas of one transaction with different savepoint seq nums are never merged
+    using TCompactDeltaKey = std::pair<ui64 /* txId */, ui32 /* savepointSeqNum */>;
+
     class TFulltextCompact {
         using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
@@ -118,9 +121,9 @@ namespace NTabletFlatExecutor {
             ui64 LockTxId = 0;
 
             // Deltas
-            struct TDelta { ui64 TxId; TSavedRow Row; };
+            struct TDelta { TCompactDeltaKey Key; TSavedRow Row; };
+            // Deltas in the order they must be written
             TVector<TDelta> SavedDeltas;
-            TVector<ui64> SavedDeltaOrder;
 
             // Committed versions (descending order)
             struct TVersion {
@@ -233,18 +236,17 @@ namespace NTabletFlatExecutor {
             FtCurKey.LockTxId = txId;
         }
 
-        void SaveDeltas(THashMap<ui64, TRow>& Deltas, TSmallVec<ui64>& DeltasOrder)
+        void SaveDeltas(THashMap<TCompactDeltaKey, TRow>& Deltas, TSmallVec<TCompactDeltaKey>& DeltasOrder)
         {
             if (!Deltas.empty()) {
                 // FIXME: Maybe save as is
-                for (ui64 txId : DeltasOrder) {
-                    auto it = Deltas.find(txId);
+                for (const auto& key : DeltasOrder) {
+                    auto it = Deltas.find(key);
                     Y_ENSURE(it != Deltas.end());
                     auto& d = FtCurKey.SavedDeltas.emplace_back();
-                    d.TxId = txId;
+                    d.Key = key;
                     d.Row.Save(it->second);
                 }
-                FtCurKey.SavedDeltaOrder = TVector<ui64>(DeltasOrder.begin(), DeltasOrder.end());
                 Deltas.clear();
                 DeltasOrder.clear();
             }
@@ -336,15 +338,10 @@ namespace NTabletFlatExecutor {
                 Writer->AddKeyLock(key.LockMode, key.LockTxId);
             }
 
-            for (ui64 txId : key.SavedDeltaOrder) {
-                for (const auto& d : key.SavedDeltas) {
-                    if (d.TxId == txId) {
-                        NTable::TRowState rs;
-                        d.Row.Restore(rs);
-                        Writer->AddKeyDelta(rs, txId);
-                        break;
-                    }
-                }
+            for (const auto& d : key.SavedDeltas) {
+                NTable::TRowState rs;
+                d.Row.Restore(rs);
+                Writer->AddKeyDelta(rs, d.Key.first, d.Key.second);
             }
 
             for (const auto& v : key.Versions) {
@@ -628,7 +625,7 @@ namespace NTabletFlatExecutor {
             return Flush(false /* intermediate, sleep or feed */);
         }
 
-        EScan Feed(const TRow &row, ui64 txId) override
+        EScan Feed(const TRow &row, ui64 txId, ui32 savepointSeqNum) override
         {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " feed row { ";
@@ -639,13 +636,14 @@ namespace NTabletFlatExecutor {
                     logl << NFmt::TCells(*row, *Scheme->RowCellDefaults, Registry);
                 }
 
-                logl << " txId " << txId << " }";
+                logl << " txId " << txId << " savepointSeqNum " << savepointSeqNum << " }";
             }
 
             // Note: we assume the number of uncommitted transactions is limited
-            auto res = Deltas.try_emplace(txId, row);
+            const TCompactDeltaKey key(txId, savepointSeqNum);
+            auto res = Deltas.try_emplace(key, row);
             if (res.second) {
-                DeltasOrder.emplace_back(txId);
+                DeltasOrder.emplace_back(key);
             } else if (!res.first->second.IsFinalized()) {
                 res.first->second.Merge(row);
             }
@@ -690,10 +688,11 @@ namespace NTabletFlatExecutor {
                     logl << NFmt::Do(*this) << " flushing " << Deltas.size() << " deltas";
                 }
 
-                for (ui64 txId : DeltasOrder) {
-                    auto it = Deltas.find(txId);
-                    Y_ENSURE(it != Deltas.end(), "Unexpected failure to find txId " << txId);
-                    Writer->AddKeyDelta(it->second, txId);
+                for (const auto& key : DeltasOrder) {
+                    auto it = Deltas.find(key);
+                    Y_ENSURE(it != Deltas.end(), "Unexpected failure to find txId " << key.first
+                        << " savepointSeqNum " << key.second);
+                    Writer->AddKeyDelta(it->second, key.first, key.second);
                 }
 
                 Deltas.clear();
@@ -798,7 +797,29 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            if (status.empty()) {
+            NTable::TRemovedTxOps removedOps;
+            auto mergeRemovedOps = [&](ui64 txId, ui32 from, ui32 to) {
+                if (Conf->GarbageRemovedTxOps.Contains(txId)) {
+                    // We don't write removed operations of transactions without data
+                    return;
+                }
+                removedOps[txId].Add(from, to);
+            };
+
+            for (const auto& memTable : Conf->Frozen) {
+                for (const auto& pr : memTable->GetRemovedTxOps()) {
+                    for (const auto& range : pr.second.GetRanges()) {
+                        mergeRemovedOps(pr.first, range.From, range.To);
+                    }
+                }
+            }
+            for (const auto& txStatus : Conf->TxStatus) {
+                for (const auto& item : txStatus->TxStatusPage->GetRemovedOpsItems()) {
+                    mergeRemovedOps(item.GetTxId(), item.GetFrom(), item.GetTo());
+                }
+            }
+
+            if (status.empty() && removedOps.empty()) {
                 // Nothing to write
                 return;
             }
@@ -810,6 +831,9 @@ namespace NTabletFlatExecutor {
                 } else {
                     builder.AddRemoved(pr.first);
                 }
+            }
+            for (const auto& pr : removedOps) {
+                builder.AddRemovedOps(pr.first, pr.second);
             }
 
             auto data = builder.Finish();
@@ -1132,8 +1156,8 @@ namespace NTabletFlatExecutor {
         TVector<ui32> YellowStopChannels;
         TDeque<NPageCollection::TGlob> WriteQueue;
 
-        THashMap<ui64, TRow> Deltas;
-        TSmallVec<ui64> DeltasOrder;
+        THashMap<TCompactDeltaKey, TRow> Deltas;
+        TSmallVec<TCompactDeltaKey> DeltasOrder;
         bool IsLocked = false;
 
         std::unique_ptr<TFulltextCompact> FtState;

@@ -3077,6 +3077,7 @@ void TExecutor::MakeLogSnapshot() {
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;
+    bool haveRemovedTxOps = false;
 
     for (const auto& kvTable : Scheme().Tables) {
         const ui32 tableId = kvTable.first;
@@ -3120,6 +3121,9 @@ void TExecutor::MakeLogSnapshot() {
             TLargeGlobIdProto::Put(*x->MutableDataId(), txStatus->GetDataId());
             x->SetEpoch(txStatus->Epoch.ToProto());
             haveTxStatus = true;
+            if (!txStatus->TxStatusPage->GetRemovedOpsItems().empty()) {
+                haveRemovedTxOps = true;
+            }
         };
 
         Database->EnumerateTableTxStatusParts(tableId, std::move(dumpTxStatus));
@@ -3128,6 +3132,12 @@ void TExecutor::MakeLogSnapshot() {
     if (haveTxStatus) {
         // Make sure older versions won't try loading an incomplete snapshot
         ui32 tail = Max(ui32(28), snap.GetVersion().GetTail());
+        snap.MutableVersion()->SetTail(tail);
+    }
+
+    if (haveRemovedTxOps) {
+        // Older versions can't read tx status with removed operations, fail on the snapshot ABI
+        ui32 tail = Max(NTable::SavepointSeqNumEvolution, snap.GetVersion().GetTail());
         snap.MutableVersion()->SetTail(tail);
     }
 
@@ -5392,7 +5402,10 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     bool compactTxStatus = false;
     for (const auto& memTableSnapshot : snapshot->Subset->Frozen) {
-        if (!memTableSnapshot->GetCommittedTransactions().empty() || !memTableSnapshot->GetRemovedTransactions().empty()) {
+        if (!memTableSnapshot->GetCommittedTransactions().empty() ||
+            !memTableSnapshot->GetRemovedTransactions().empty() ||
+            !memTableSnapshot->GetRemovedTxOps().empty())
+        {
             // We must compact tx status when mem table has changes
             compactTxStatus = true;
             break;
@@ -5405,7 +5418,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             break;
         }
     }
-    if (snapshot->Subset->TxStatus && snapshot->Subset->GarbageTransactions) {
+    if (snapshot->Subset->TxStatus && (snapshot->Subset->GarbageTransactions || snapshot->Subset->GarbageRemovedTxOps)) {
         // We want to remove garbage transactions
         compactTxStatus = true;
     }
@@ -5417,6 +5430,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
         comp->TxStatus = snapshot->Subset->TxStatus;
         comp->GarbageTransactions = snapshot->Subset->GarbageTransactions;
+        comp->GarbageRemovedTxOps = snapshot->Subset->GarbageRemovedTxOps;
     } else {
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();

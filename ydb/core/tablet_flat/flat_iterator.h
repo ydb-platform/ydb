@@ -350,6 +350,7 @@ public:
 
     bool IsUncommitted() const;
     ui64 GetUncommittedTxId() const;
+    ui32 GetUncommittedSavepointSeqNum() const;
     ui64 GetDeltaTxId() const;
     EReady SkipUncommitted();
     std::tuple<ELockMode, ui64> GetLockInfo() const;
@@ -456,6 +457,7 @@ private:
     TForwardIter Active;
     TForwardIter Inactive;
     ui64 DeltaTxId = 0;
+    ui32 DeltaSavepointSeqNum = 0;
     TRowVersion DeltaVersion;
     bool Delta = false;
     bool Uncommitted = false;
@@ -729,6 +731,21 @@ inline ui64 TTableIterBase<TIteratorOps>::GetUncommittedTxId() const
 }
 
 template<class TIteratorOps>
+inline ui32 TTableIterBase<TIteratorOps>::GetUncommittedSavepointSeqNum() const
+{
+    // Must only be called after a fully successful Apply()
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
+
+    // There must be at least one active iterator
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
+
+    // Must only be called for uncommitted positions
+    Y_DEBUG_ABORT_UNLESS(Delta && Uncommitted);
+
+    return DeltaSavepointSeqNum;
+}
+
+template<class TIteratorOps>
 inline ui64 TTableIterBase<TIteratorOps>::GetDeltaTxId() const
 {
     // Must only be called after a fully successful Apply()
@@ -972,6 +989,7 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         DeltaTxId = it.GetDeltaTxId();
                         const TRowVersion* rowVersion = CommittedTransactions.Find(DeltaTxId);
                         if (!rowVersion) {
+                            DeltaSavepointSeqNum = it.GetDeltaSavepointSeqNum();
                             it.ApplyDelta(State);
                             Uncommitted = true;
                             found = true;
@@ -989,6 +1007,8 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         DeltaVersion = *rowVersion;
                     }
                     Uncommitted = false;
+                    // Savepoint seq num is only meaningful for uncommitted positions
+                    DeltaSavepointSeqNum = 0;
                     committed = true;
                     found = true;
                 }
@@ -1004,6 +1024,7 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         DeltaTxId = it.GetDeltaTxId();
                         const TRowVersion* rowVersion = CommittedTransactions.Find(DeltaTxId);
                         if (!rowVersion) {
+                            DeltaSavepointSeqNum = it.GetDeltaSavepointSeqNum();
                             it.ApplyDelta(State);
                             Uncommitted = true;
                             found = true;
@@ -1025,6 +1046,8 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         DeltaVersion = *rowVersion;
                     }
                     Uncommitted = false;
+                    // Savepoint seq num is only meaningful for uncommitted positions
+                    DeltaSavepointSeqNum = 0;
                     committed = true;
                     found = true;
                 }

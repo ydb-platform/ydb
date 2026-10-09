@@ -9,15 +9,15 @@ The adapter validates the complete echo/correlation before returning typed rows.
 It supports HTTP only and fails unsupported protocols with a numeric error.
 
 ```bash
-./ya make --build release --target-platform=clang20-emscripten-wasm64 --add-result=.json ydb/udfs/wasm/echo
+./ya make --build release --target-platform=clang20-emscripten-wasm64 ydb/udfs/wasm/echo
 cp -L ydb/udfs/wasm/echo/libwasm-echo.so ydb/udfs/wasm/echo/ut/data/echo.wasm
 chmod 644 ydb/udfs/wasm/echo/ut/data/echo.wasm
 ```
 
-Edit `service.json`; the `contract` target generates `contract/manifest.json`
-and `contract/service_methods.h` together. Method IDs are internal generated
-constants and never appear in the manifest. The guest uses these constants.
+Edit `manifest.json`; the `contract` target validates it and generates only
+`contract/service_methods.h`. Method IDs are internal generated constants and
+never appear in the manifest. The guest uses these constants.
 
-Register the built artifact and generated `contract/manifest.json` in `WasmServices.Modules`, and
-point an operator-owned binding at the HTTP echo endpoint. No Profile knowledge
+Register the built artifact and unchanged `manifest.json` in
+`WasmServices.Modules`, and point an operator-owned binding at the HTTP echo endpoint. No Profile knowledge
 or module-specific changes are needed in FQ or the async runtime.

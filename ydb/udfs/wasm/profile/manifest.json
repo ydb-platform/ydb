@@ -3,6 +3,7 @@
   "module_kind": "wasm",
   "module_name": "WASM_PROFILE",
   "module_extension": "wasm",
+  "service_abi_version": 2,
   "service_methods": [{
     "name": "Profile",
     "batch": true,

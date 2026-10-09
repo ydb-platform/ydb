@@ -50,17 +50,18 @@ def fields(items):
     return maximum
 
 
-def generate(description):
-    require(description['module_type'] == 'module' and description['module_kind'] == 'wasm'
-            and description['module_extension'] == 'wasm', 'Expected a WASM service module')
-    module = name(description['module_name'])
-    require('service_abi_version' not in description, 'Service ABI version is generated')
-    methods = description['service_methods']
+def generate_header(manifest):
+    require(manifest['module_type'] == 'module' and manifest['module_kind'] == 'wasm'
+            and manifest['module_extension'] == 'wasm', 'Expected a WASM service module')
+    module = name(manifest['module_name'])
+    version = manifest.get('service_abi_version')
+    require(type(version) is int and version == SERVICE_VERSION, 'Unsupported service ABI version')
+    methods = manifest['service_methods']
     require(isinstance(methods, list) and 1 <= len(methods) <= 64, 'Invalid service method count')
     names, ids = set(), set()
     constants = []
     for method in methods:
-        require('id' not in method, 'Method IDs are generated; remove id from the description')
+        require('id' not in method, 'Method IDs are generated; remove id from the manifest')
         method_name = name(method['name'])
         require(method_name not in names, 'Duplicate service method name')
         names.add(method_name)
@@ -75,24 +76,20 @@ def generate(description):
         require(number(method['max_output_row_bytes'], MAX_BYTES - 16) >= output_size,
                 'Service output row reservation is too small')
         constants.append(f'inline constexpr uint32_t Method{method_name} = {identifier}u;')
-    manifest = dict(description, service_abi_version=SERVICE_VERSION)
-    header = '\n'.join([
-        '// Generated from service.json. Do not edit.', '#pragma once', '#include <cstdint>', '',
+    return '\n'.join([
+        '// Generated from manifest.json. Do not edit.', '#pragma once', '#include <cstdint>', '',
         f'namespace NYdb::NWasm::NServices::NGenerated::NModule{module} {{',
-        f'inline constexpr uint32_t ServiceAbiVersion = {SERVICE_VERSION};', *constants, '}', '',
+        f'inline constexpr uint32_t ServiceAbiVersion = {version};', *constants, '}', '',
     ])
-    return json.dumps(manifest, indent=2, ensure_ascii=True) + '\n', header
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('description')
     parser.add_argument('manifest')
     parser.add_argument('header')
     args = parser.parse_args()
-    with open(args.description) as source:
-        manifest, header = generate(json.load(source))
-    Path(args.manifest).write_text(manifest, encoding='ascii')
+    with open(args.manifest) as source:
+        header = generate_header(json.load(source))
     Path(args.header).write_text(header, encoding='ascii')
 
 

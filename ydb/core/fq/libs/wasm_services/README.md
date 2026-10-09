@@ -13,19 +13,20 @@ executing FQ nodes. The manifest extends the existing common WASM manifest
 fields with the experimental `service_methods` contract described in
 `ydb/udfs/wasm/sdk/services/README.md`. Module names and method IDs/types are
 discovered from these files, not a native Profile registry. Authors edit a
-module's `service.json`; its build generates the manifest and guest dispatch
-constants together. No method `id` appears in the description or manifest.
+module's deployable `manifest.json`, including the ABI version. The build
+validates it and generates only guest dispatch constants. FQ reads this same
+author-owned file directly; there is no generated manifest or method `id` field.
 
 ```protobuf
 WasmServices {
   Enabled: true
   Modules {
     ModulePath: "/absolute/path/profile.wasm"
-    ManifestPath: "/absolute/path/profile/contract/manifest.json"
+    ManifestPath: "/absolute/path/profile/manifest.json"
   }
   Modules {
     ModulePath: "/absolute/path/echo.wasm"
-    ManifestPath: "/absolute/path/echo/contract/manifest.json"
+    ManifestPath: "/absolute/path/echo/manifest.json"
   }
   MaxBatchRows: 2
   MaxBatchBytes: 32768

@@ -639,7 +639,7 @@ struct TQueryTransformEnv {
         : Module(MakeTempName()), Manifest(MakeTempName())
     {
         TFileOutput(Module.Name()).Write(NResource::Find("/fq_transport_coroutine.wasm"));
-        TFileOutput(Manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
+        TFileOutput(Manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         auto* module = config.AddModules();
@@ -781,8 +781,8 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     }
 
     Y_UNIT_TEST(ServiceManifestDescribesDifferentModules) {
-        const auto profile = ParseServiceManifest(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
-        const auto echo = ParseServiceManifest(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"));
+        const auto profile = ParseServiceManifest(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
+        const auto echo = ParseServiceManifest(NResource::Find("/ydb/udfs/wasm/echo/manifest.json"));
         UNIT_ASSERT_VALUES_EQUAL(profile.Name, "WASM_PROFILE");
         UNIT_ASSERT_VALUES_EQUAL(profile.Methods.at("Profile").Input[0].Name, "id");
         UNIT_ASSERT_VALUES_EQUAL(echo.Name, "Echo");
@@ -796,7 +796,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
 
     Y_UNIT_TEST(ServiceGeneratedDispatchIgnoresManifestOrder) {
         NJson::TJsonValue root;
-        UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"), &root, true));
+        UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/ydb/udfs/wasm/echo/manifest.json"), &root, true));
         for (const auto& method : root["service_methods"].GetArraySafe())
             UNIT_ASSERT(!method.Has("id"));
         auto& methods = root["service_methods"].GetArraySafe();
@@ -839,7 +839,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         };
         for (const auto& mutate : mutations) {
             NJson::TJsonValue root;
-            UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"), &root, true));
+            UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/ydb/udfs/wasm/echo/manifest.json"), &root, true));
             mutate(root);
             UNIT_ASSERT_EXCEPTION(ParseServiceManifest(NJson::WriteJson(root, false)), yexception);
         }
@@ -847,8 +847,8 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
 
     Y_UNIT_TEST(ServiceRegistrySelectsModuleAndMethod) {
         TTempFile profile(MakeTempName()), echo(MakeTempName());
-        TFileOutput(profile.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
-        TFileOutput(echo.Name()).Write(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"));
+        TFileOutput(profile.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
+        TFileOutput(echo.Name()).Write(NResource::Find("/ydb/udfs/wasm/echo/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         auto* binding = config.AddBindings();
@@ -917,7 +917,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     Y_UNIT_TEST(ServiceSingleModuleShorthandUsesAdjacentManifest) {
         TTempFile artifact(MakeTempName());
         TTempFile manifest(artifact.Name() + ".manifest.json");
-        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
+        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         config.SetModulePath(artifact.Name());
@@ -1131,7 +1131,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
 
     Y_UNIT_TEST(DqBatchRejectsInvalidConfig) {
         TTempFile manifest(MakeTempName());
-        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
+        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         auto* module = config.AddModules();

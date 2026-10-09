@@ -3,6 +3,7 @@
   "module_kind": "wasm",
   "module_name": "Echo",
   "module_extension": "wasm",
+  "service_abi_version": 2,
   "service_methods": [
     {
       "name": "Echo", "batch": true, "max_batch_rows": 64,

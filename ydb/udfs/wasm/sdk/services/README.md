@@ -8,9 +8,10 @@ indices into trusted HTTP/gRPC configuration.
 
 ## Module Manifest
 
-The author edits `service.json`: the usual `module_type: module`,
-`module_kind: wasm`, `module_name`, `module_extension: wasm` fields and a
-nonempty `service_methods` array. Each method declares:
+The author edits the deployable `manifest.json`: the usual
+`module_type: module`, `module_kind: wasm`, `module_name`,
+`module_extension: wasm` fields, `service_abi_version: 2` and a nonempty
+`service_methods` array. FQ reads this same file directly. Each method declares:
 
 - `name` (used by SQL and generated dispatch).
 - `batch`, `max_batch_rows` (1..64; non-batch methods must use 1).
@@ -23,16 +24,15 @@ non-null scalar types are Uint64, Uint32, Int64, Bool, String and Utf8. There
 are at most 32 fields per row and 64 methods per manifest. Row sizes must fit
 the hard 32768-byte request/result cap including headers. Optional/nested types
 and Arrow are explicitly unsupported rather than silently reinterpreted.
-See Profile and Echo's `service.json` descriptions for examples.
+See Profile and Echo's `manifest.json` files for examples.
 
 A small `contract` build target includes `common/service_contract.inc` and
-runs `generate.py` once to produce `manifest.json` and `service_methods.h`.
-The manifest gets `service_abi_version: 2`, but never a method `id` field.
-The header supplies `NGenerated::NModule<module_name>::Method<method_name>`
-constants consumed by guest handlers. Deploy the generated manifest together
-with its WASM artifact; do not maintain a hand-written manifest copy.
-Use `--add-result=.json` with the WASM build to expose the generated manifest
-in the workspace's `contract` directory, as in the module build commands.
+runs `generate.py` to validate that manifest and produce only
+`service_methods.h`. It does not generate, copy or modify JSON. The header
+supplies `NGenerated::NModule<module_name>::Method<method_name>` constants
+consumed by guest handlers. The declared ABI version is checked during build
+and loading. Deploy the author-owned manifest together with its WASM artifact;
+there is no intermediate or generated manifest and no method `id` field.
 
 Internal uint32 dispatch IDs use FNV-1a over the ASCII method name. The host
 derives the same IDs from names; manifest order and adding other methods do
@@ -75,8 +75,8 @@ The prototype uses the registry's minimal runtime, not the full C/C++ SDK.
 Link any additional guest libc functions into the adapter itself, as Echo does
 for Emscripten's `memcmp`; do not introduce module-specific host intrinsics.
 
-Place new adapters under `ydb/udfs/wasm/<module>`, add `service.json` and a
+Place new adapters under `ydb/udfs/wasm/<module>`, add `manifest.json` and a
 `contract` target, and make the guest depend on that target and include its
 generated `service_methods.h`. Build with the existing WASM toolchain and
-register the artifact/generated manifest in `WasmServices.Modules`.
+register the artifact/author-owned manifest in `WasmServices.Modules`.
 No native per-module registry, serializer or decoder should be added to FQ.

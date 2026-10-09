@@ -8,8 +8,8 @@ PEERDIR(
 )
 
 DATA(
-    arcadia/ydb/udfs/wasm/profile/service.json
-    arcadia/ydb/udfs/wasm/echo/service.json
+    arcadia/ydb/udfs/wasm/profile/manifest.json
+    arcadia/ydb/udfs/wasm/echo/manifest.json
 )
 
 END()

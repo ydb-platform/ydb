@@ -2,6 +2,7 @@
 #include "blobstorage_skeletonfront.h"
 #include "blobstorage_skeletonerr.h"
 #include "blobstorage_skeleton.h"
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/html.h>
@@ -751,6 +752,7 @@ namespace NKikimr {
         NMonGroup::TCounterGroup CounterGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
+        bool OnlyPhantomsRemain = false; // as reported by Skeleton along with the VDisk status
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
@@ -1220,7 +1222,10 @@ namespace NKikimr {
             NKikimrWhiteboard::TVDiskDetailedReplicationStatus::E replicationStatus =
                     NKikimrWhiteboard::TVDiskDetailedReplicationStatus::Replicated;
             if (!replicated) {
-                if (!ReplMonGroup.ReplIsHoldingToken()) {
+                if (OnlyPhantomsRemain) {
+                    // the last replication pass has finished with only phantom-like blobs unreplicated
+                    replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
+                } else if (!ReplMonGroup.ReplIsHoldingToken()) {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::WaitingForToken;
                 } else if (!unreplicatedNonPhantoms && unreplicatedPhantoms) {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::PhantomsOnly;
@@ -1228,9 +1233,14 @@ namespace NKikimr {
                     replicationStatus = NKikimrWhiteboard::TVDiskDetailedReplicationStatus::InProgress;
                 }
             }
+            // the VDisk may be shown as replicated one when only phantom-like blobs remain, but NodeWarden is always
+            // told the truth
+            const bool reportReplicated = replicated ||
+                (OnlyPhantomsRemain && AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady());
             // send a message to Whiteboard
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(state, outOfSpaceFlags,
-                replicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light, HasUnreadableBlobs);
+                reportReplicated, unreplicatedPhantoms, unreplicatedNonPhantoms, replicationStatus, unsyncedVDisks, light,
+                HasUnreadableBlobs);
             if (ReplMonGroup.ReplUnreplicatedVDisks()) {
                 const i64 a = ReplMonGroup.ReplWorkUnitsDone();
                 const i64 b = ReplMonGroup.ReplWorkUnitsRemaining();
@@ -2034,6 +2044,11 @@ namespace NKikimr {
             UpdateWhiteboard(ctx);
         }
 
+        void Handle(TEvStatusUpdate::TPtr ev, const TActorContext& ctx) {
+            OnlyPhantomsRemain = ev->Get()->OnlyPhantomsRemain;
+            UpdateWhiteboard(ctx);
+        }
+
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate::TPtr ev, const TActorContext& ctx) {
             auto& record = ev->Get()->Record;
             VDiskIDFromVDiskID(SelfVDiskId, record.MutableVDiskId());
@@ -2133,6 +2148,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
         )
@@ -2178,6 +2194,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             IgnoreFunc(TEvVDiskRequestCompleted)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
@@ -2357,6 +2374,7 @@ namespace NKikimr {
             fFunc(TEvBlobStorage::EvCaptureVDiskLayout, ForwardToSkeleton)
             fFunc(TEvBlobStorage::EvCompactVDisk, ForwardToSkeleton)
             HFunc(TEvReportScrubStatus, Handle)
+            HFunc(TEvStatusUpdate, Handle)
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle)
             fFunc(TEvBlobStorage::EvForwardToSkeleton, HandleForwardToSkeleton)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)

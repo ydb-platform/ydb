@@ -499,11 +499,13 @@ namespace NKikimr {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
                     Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
-                    if (!UnrecoveredNonphantomBlobs) {
-                        // semi-finished replication -- we have only phantom-like unreplicated blobs
-                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
-                            SelfId(), nullptr, 1));
-                    }
+                    // report outcome of every pass as the remaining blobs may become phantom-like or not depending on
+                    // the state of other disks of the group
+                    const EReplDone outcome = UnrecoveredNonphantomBlobs
+                        ? EReplDone::NonPhantomsRemain
+                        : EReplDone::OnlyPhantomsRemain; // semi-finished replication
+                    TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                        SelfId(), nullptr, static_cast<ui64>(outcome)));
                 } else {
                     // no more blobs to replicate; replication will not resume
                     State = Finished;
@@ -516,7 +518,7 @@ namespace NKikimr {
                     ReplCtx->MonGroup.ReplItemsDone() = 0;
                     ReplCtx->MonGroup.ReplIsHoldingToken() = false;
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
-                        SelfId(), nullptr, 0));
+                        SelfId(), nullptr, static_cast<ui64>(EReplDone::Finished)));
                 }
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),

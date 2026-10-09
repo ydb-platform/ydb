@@ -185,7 +185,10 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
             ((memory == 0) != (LastTabletMemoryReport->Used == 0)) ||
             ((demand == 0) != (LastTabletMemoryReport->Demand == 0)) ||
             ((reclaimable == 0) != (LastTabletMemoryReport->Reclaimable == 0));
-        if (zeroTransition || levelMemory != LevelTabletMemoryUsed || levelDemand != LevelMemoryDemand ||
+        const bool elasticTransition = LastTabletMemoryReport &&
+            ((reclaimable != 0 || demand > memory) !=
+             (LastTabletMemoryReport->Reclaimable != 0 || LastTabletMemoryReport->Demand > LastTabletMemoryReport->Used));
+        if (zeroTransition || elasticTransition || levelMemory != LevelTabletMemoryUsed || levelDemand != LevelMemoryDemand ||
             levelReclaimable != LevelMemoryReclaimable || force)
         {
             // Partial updates can violate Reclaimable <= Used <= Demand at the receiver.

@@ -469,13 +469,13 @@ public:
                     bool validateExternal = false;
                     auto& attributes = *general.mutable_attributes();
                     for (auto it = attributes.begin(); it != attributes.end();) {
-                        if (to_lower(it->first) != "validate_external") {
+                        if (to_lower(it->first) != "validate") {
                             ++it;
                             continue;
                         }
                         const auto value = to_lower(it->second);
                         if (value != "true" && value != "false") {
-                            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "VALIDATE_EXTERNAL must be 'true' or 'false'");
+                            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "VALIDATE must be 'true' or 'false'");
                         }
                         validateExternal = value == "true";
                         it = attributes.erase(it);

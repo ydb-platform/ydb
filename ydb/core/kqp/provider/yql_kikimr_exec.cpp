@@ -4539,14 +4539,14 @@ private:
         }
         bool validateExternal = false;
         for (auto it = settings.SourceTypeParameters.begin(); it != settings.SourceTypeParameters.end();) {
-            if (to_lower(it->first) != "validate_external") {
+            if (to_lower(it->first) != "validate") {
                 ++it;
                 continue;
             }
             const auto value = to_lower(it->second);
             if (value != "true" && value != "false") {
                 return MakeFuture(ResultFromIssues<IKikimrGateway::TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST,
-                    "VALIDATE_EXTERNAL must be 'true' or 'false'", {}));
+                    "VALIDATE must be 'true' or 'false'", {}));
             }
             validateExternal = value == "true";
             it = settings.SourceTypeParameters.erase(it);

@@ -2666,8 +2666,17 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
             setting.Reset(id);
         } else {
             TNodePtr node;
-            if (!StoreString(*value, node, Ctx_)) {
-                Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            const bool isValidate = to_lower(id.Name) == "validate";
+            if (isValidate && value->Alt_case() == TRule_table_setting_value::kAltTableSettingValue6) {
+                const auto parsed = ParseBool(Ctx_, value->GetAlt_table_setting_value6().GetRule_bool_value1());
+                if (!parsed) {
+                    return false;
+                }
+                node = BuildLiteralRawString(Ctx_.Pos(), *parsed ? "true" : "false");
+            } else if (!StoreString(*value, node, Ctx_)) {
+                Ctx_.Error() << to_upper(id.Name) << (isValidate
+                    ? " value should be a boolean or a string literal"
+                    : " value should be a string literal");
                 return false;
             }
             setting.Set(std::pair<TIdentifier, TNodePtr>{id, std::move(node)});

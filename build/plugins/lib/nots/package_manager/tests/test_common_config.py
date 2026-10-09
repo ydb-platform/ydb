@@ -26,7 +26,7 @@ def fixture(tmp_path, content="catalogs:\n  project/common:\n    colors: 1.4.0\n
 
 def test_load(tmp_path):
     pj, _ = fixture(tmp_path)
-    filename, catalogs = load_common_config(pj, str(tmp_path), True)
+    filename, catalogs = load_common_config(pj, str(tmp_path))
     assert filename == "project/common.yaml"
     assert catalogs == {"project/common": {"colors": "1.4.0"}}
     assert pj.data["dependencies"]["colors"] == "catalog:project/common"
@@ -48,36 +48,27 @@ def test_load(tmp_path):
 def test_invalid(tmp_path, content):
     pj, _ = fixture(tmp_path, content)
     with pytest.raises(ValueError):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 def test_unknown_key(tmp_path, caplog):
     pj, _ = fixture(tmp_path, "overrides: {}\ncatalogs: {project/common: {colors: 1.4.0}}")
-    assert load_common_config(pj, str(tmp_path), True)[1]
+    assert load_common_config(pj, str(tmp_path))[1]
     assert "ignoring unknown" in caplog.text
-
-
-def test_legacy_ignores_missing_config(tmp_path, caplog):
-    pj, config = fixture(tmp_path)
-    config.unlink()
-    assert load_common_config(pj, str(tmp_path), False) == (None, {})
-    assert "requires injected peers" in caplog.text
-    with pytest.raises(ValueError, match="cannot read"):
-        load_common_config(pj, str(tmp_path), True)
 
 
 def test_own_config_required(tmp_path):
     pj, _ = fixture(tmp_path)
     del pj.data["nots"]
     with pytest.raises(ValueError, match="unresolved"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 def test_path_escape(tmp_path):
     pj, _ = fixture(tmp_path)
     pj.data["nots"]["commonConfigPath"] = "../../../outside.yaml"
     with pytest.raises(ValueError, match="escapes Arcadia"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 @pytest.mark.parametrize(
@@ -97,7 +88,7 @@ def test_invalid_ranges(value):
 def test_duplicate_yaml_keys(tmp_path):
     pj, _ = fixture(tmp_path, "catalogs: {project/common: {colors: 1.4.0}, project/common: {colors: 2.0.0}}")
     with pytest.raises(ValueError, match="Duplicate YAML key"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 @pytest.mark.parametrize(
@@ -109,7 +100,7 @@ def test_current_and_parent_directories(tmp_path, config_path):
     pj.data["nots"]["commonConfigPath"] = config_path
     config = Path(pj.path).parent / config_path
     config.write_text("catalogs: {}")
-    filename, catalogs = load_common_config(pj, str(tmp_path), True)
+    filename, catalogs = load_common_config(pj, str(tmp_path))
     assert filename == str(config.resolve().relative_to(tmp_path))
     assert catalogs == {}
 
@@ -119,14 +110,14 @@ def test_child_and_sibling_directories(tmp_path, config_path):
     pj, _ = fixture(tmp_path)
     pj.data["nots"]["commonConfigPath"] = config_path
     with pytest.raises(ValueError, match="module directory or a parent directory"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 def test_absolute_config_path(tmp_path):
     pj, config = fixture(tmp_path)
     pj.data["nots"]["commonConfigPath"] = str(config)
     with pytest.raises(ValueError, match="relative path"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 @pytest.mark.parametrize("destination", ["project/pkg/.configs", "project/sibling", "outside"])
@@ -139,7 +130,7 @@ def test_symlink_config_directory(tmp_path, destination):
     link.symlink_to(target)
     pj.data["nots"]["commonConfigPath"] = "link.yaml"
     with pytest.raises(ValueError, match="must not contain symlinks"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 def test_symlink_to_parent_config(tmp_path):
@@ -147,7 +138,7 @@ def test_symlink_to_parent_config(tmp_path):
     (tmp_path / "project/pkg/link.yaml").symlink_to(config)
     pj.data["nots"]["commonConfigPath"] = "link.yaml"
     with pytest.raises(ValueError, match="must not contain symlinks"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 def test_symlink_escape_arcadia(tmp_path):
@@ -159,7 +150,7 @@ def test_symlink_escape_arcadia(tmp_path):
     (source_root / "project/pkg/link.yaml").symlink_to(outside)
     pj.data["nots"]["commonConfigPath"] = "link.yaml"
     with pytest.raises(ValueError, match="must not contain symlinks"):
-        load_common_config(pj, str(source_root), True)
+        load_common_config(pj, str(source_root))
 
 
 @pytest.mark.parametrize("broken", [False, True])
@@ -169,7 +160,7 @@ def test_symlink_in_config_directory(tmp_path, broken):
     (tmp_path / "project").rename(real)
     (tmp_path / "project").symlink_to(tmp_path / "missing" if broken else real, target_is_directory=True)
     with pytest.raises(ValueError, match="must not contain symlinks"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 def test_broken_config_symlink(tmp_path):
@@ -177,7 +168,7 @@ def test_broken_config_symlink(tmp_path):
     (tmp_path / "project/pkg/link.yaml").symlink_to(tmp_path / "missing.yaml")
     pj.data["nots"]["commonConfigPath"] = "link.yaml"
     with pytest.raises(ValueError, match="must not contain symlinks"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 @pytest.mark.parametrize("config_path", [".configs/link.yaml", "../sibling/link.yaml"])
@@ -193,7 +184,7 @@ def test_directory_rule_precedes_symlink_check(tmp_path, monkeypatch, config_pat
 
     monkeypatch.setattr("os.path.islink", unexpected_symlink_check)
     with pytest.raises(ValueError, match="module directory or a parent directory"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))
 
 
 @pytest.mark.parametrize("config_path", ["../..", "../../.", "../../project/.."])
@@ -206,4 +197,4 @@ def test_config_path_must_not_be_arcadia_root(tmp_path, monkeypatch, config_path
 
     monkeypatch.setattr("builtins.open", unexpected_read)
     with pytest.raises(ValueError, match="module directory or a parent directory"):
-        load_common_config(pj, str(tmp_path), True)
+        load_common_config(pj, str(tmp_path))

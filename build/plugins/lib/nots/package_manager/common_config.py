@@ -64,17 +64,13 @@ if yaml.__name__ != "ymakeyaml":
     _ConfigLoader = _UniqueKeyLoader
 
 
-def load_common_config(pj, sources_root, inject_peers):
+def load_common_config(pj, sources_root):
     """Return (Arcadia-relative config path, catalogs); never rewrite the manifest."""
     settings = pj.data.get("nots", {})
     if not isinstance(settings, dict):
         raise ValueError("{}: nots must be a mapping".format(pj.path))
     has_config = "commonConfigPath" in settings
     config_path = settings.get("commonConfigPath")
-    if not inject_peers:
-        if has_config:
-            logger.warning("%s: commonConfigPath requires injected peers; ignoring config", pj.path)
-        return None, {}
 
     catalogs = {}
     relative_path = None

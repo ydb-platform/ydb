@@ -820,6 +820,10 @@ namespace NKikimr::NDDisk {
                 CollectMemoryMetrics();
                 break;
             }
+            case EWakeupTag::WakeupCollectMonRates: {
+                CollectMonRates();
+                break;
+            }
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
                 break;

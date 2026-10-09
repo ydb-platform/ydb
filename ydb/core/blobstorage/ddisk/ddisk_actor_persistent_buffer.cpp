@@ -169,6 +169,8 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(NPDisk::TEvCheckSpaceResult::TPtr ev) {
         if (ev->Get()->Status == NKikimrProto::EReplyStatus::OK) {
             NormalizedOccupancy = ev->Get()->NormalizedOccupancy;
+            LastPDiskSpace = TDDiskSpaceMonInfo{TActivationContext::Now(),
+                ev->Get()->TotalChunks, ev->Get()->UsedChunks, ev->Get()->FreeChunks};
         }
         // A failed check must not replace a still-fresh successful sample.
         if (ev->Get()->Status == NKikimrProto::OK
@@ -247,6 +249,7 @@ namespace NKikimr::NDDisk {
             YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::StartRestorePersistentBuffer ready",
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
+            RestorePersistentBufferMonIndex();
             PersistentBufferReady = true;
             UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
@@ -823,6 +826,7 @@ namespace NKikimr::NDDisk {
             YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::StartRestorePersistentBuffer ready",
                 {"marker", "BSPB"},
                 {"PBufferId", SelfId()});
+            RestorePersistentBufferMonIndex();
             PersistentBufferReady = true;
             UpdateFreeSpaceInfo();
             *Counters.PersistentBuffer.AllocatedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
@@ -963,6 +967,7 @@ namespace NKikimr::NDDisk {
                 pbh.insert({record.TabletId, record.Generation, record.Lsn, record.DirectBlockGroupIndex});
 
                 buffer.Size += pr.Size;
+                UpdatePersistentBufferMonData({record.TabletId, record.DirectBlockGroupIndex}, 1, pr.Size);
                 pr.Data = std::move(record.DataParts.begin()->second);
                 PersistentBufferInMemoryCacheSize += pr.Size;
                 *Counters.PersistentBuffer.InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
@@ -1072,6 +1077,7 @@ namespace NKikimr::NDDisk {
                 replyEv = std::make_unique<TEvErasePersistentBufferResult>(
                     inflight.Status, inflight.ErrorMessage, GetPersistentBufferFreeSpace(), NormalizedOccupancy);
             }
+            UpdatePersistentBufferMonRegistration(key);
             if (replyEv) {
                 auto h = std::make_unique<IEventHandle>(inflightRecord.Sender, SelfId(), replyEv.release(), 0, inflightRecord.Cookie);
                 if (inflightRecord.Session) {
@@ -2059,6 +2065,7 @@ namespace NKikimr::NDDisk {
             return;
         }
         PersistentBufferRegistrations.insert(key);
+        UpdatePersistentBufferMonRegistration(key);
         auto barrierCreds = creds;
         barrierCreds.Generation = 0;
         BarrierErasePersistentBuffer(*ev, barrierCreds, {}, 0, TPersistentBufferDiskOperationInFlight::EBarrierOperation::Register);
@@ -2119,6 +2126,7 @@ namespace NKikimr::NDDisk {
                     NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason()));
             }
             PersistentBufferRemovals.erase(it);
+            UpdatePersistentBufferMonRegistration(key);
             return;
         }
         if (removal.Stage == EStage::Close || removal.Stage == EStage::Remove) {
@@ -2193,6 +2201,7 @@ namespace NKikimr::NDDisk {
             : PersistentBufferBarriersManager.MoveBarrier(creds.TabletId, creds.Generation, lsn, sectors[0], static_cast<ui8>(creds.DirectBlockGroupIndex));
 
         UpdateRegisteredTabletsCounter();
+        UpdatePersistentBufferMonRegistration({creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)});
 
         if (oldChunkIdx != Max<ui32>()) {
             inflightRecord->second.Records[0].Sectors.push_back({.ChunkIdx = oldChunkIdx, .SectorIdx = oldSectorIdx});
@@ -2409,6 +2418,7 @@ namespace NKikimr::NDDisk {
             ProcessDeallocatePersistentBufferChunk();
 
             buffer.Size -= pr.Size;
+            UpdatePersistentBufferMonData({inflightRecord.TabletId, inflightRecord.DirectBlockGroupIndex}, -1, -i64(pr.Size));
             for (auto readCookie : pr.ReadInflight) {
                 auto it = PersistentBufferDiskOperationInflight.find(readCookie);
                 if (it != PersistentBufferDiskOperationInflight.end()) {
@@ -2578,6 +2588,75 @@ namespace NKikimr::NDDisk {
         BarrierErasePersistentBuffer(*ev, creds, erases, lsn);
     }
 
+    void TDDiskActor::UpdatePersistentBufferMonRegistration(TPersistentBufferTabletKey key) {
+        const bool registered = PersistentBufferBarriersManager.HasBarrier(key.TabletId, key.DirectBlockGroupIndex)
+            || PersistentBufferRegistrations.contains(key) || PersistentBufferRemovals.contains(key);
+        auto tablet = PersistentBufferMonTablets.find(key.TabletId);
+        if (tablet == PersistentBufferMonTablets.end()) {
+            if (!registered) {
+                return;
+            }
+            tablet = PersistentBufferMonTablets.try_emplace(key.TabletId).first;
+            tablet->second.Info.TabletId = key.TabletId;
+        }
+        auto& row = tablet->second;
+        if (registered) {
+            if (row.Namespaces.try_emplace(key.DirectBlockGroupIndex).second) {
+                ++row.Info.Registrations;
+                ++PersistentBufferMonRegistrations;
+            }
+        } else {
+            const auto ns = row.Namespaces.find(key.DirectBlockGroupIndex);
+            if (ns != row.Namespaces.end() && !ns->second.Records) {
+                row.Namespaces.erase(ns);
+                --row.Info.Registrations;
+                --PersistentBufferMonRegistrations;
+            }
+            if (row.Namespaces.empty()) {
+                PersistentBufferMonTablets.erase(tablet);
+            }
+        }
+    }
+
+    void TDDiskActor::UpdatePersistentBufferMonData(TPersistentBufferTabletKey key, i64 records, i64 bytes) {
+        auto& tablet = PersistentBufferMonTablets[key.TabletId];
+        tablet.Info.TabletId = key.TabletId;
+        auto [it, inserted] = tablet.Namespaces.try_emplace(key.DirectBlockGroupIndex);
+        if (inserted) {
+            ++tablet.Info.Registrations;
+            ++PersistentBufferMonRegistrations;
+        }
+        auto& ns = it->second;
+        Y_ABORT_UNLESS(records >= 0 || ns.Records >= ui64(-records));
+        Y_ABORT_UNLESS(bytes >= 0 || ns.LiveBytes >= ui64(-bytes));
+        ns.Records += records;
+        ns.LiveBytes += bytes;
+        tablet.Info.Records += records;
+        tablet.Info.LiveBytes += bytes;
+        PersistentBufferMonLiveBytes += bytes;
+        if (!ns.Records) {
+            UpdatePersistentBufferMonRegistration(key);
+        }
+    }
+
+    void TDDiskActor::RestorePersistentBufferMonIndex() {
+        PersistentBufferMonTablets.clear();
+        PersistentBufferMonLiveBytes = 0;
+        PersistentBufferMonRegistrations = 0;
+        for (const auto& [key, buffer] : PersistentBuffers) {
+            UpdatePersistentBufferMonData({key.TabletId, key.DirectBlockGroupIndex}, buffer.Records.size(), buffer.Size);
+        }
+        for (const auto& key : PersistentBufferRegistrations) {
+            UpdatePersistentBufferMonRegistration(key);
+        }
+        for (const auto& [key, _] : PersistentBufferRemovals) {
+            UpdatePersistentBufferMonRegistration(key);
+        }
+        for (const auto& [key, _] : PersistentBufferBarriersManager.PersistentBufferBarriersLocation) {
+            UpdatePersistentBufferMonRegistration(key);
+        }
+    }
+
     void TDDiskActor::Handle(TEvGetPersistentBufferInfo::TPtr ev) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::Handle(TEvGetPersistentBufferInfo)",
             {"marker", "BSPB"},
@@ -2596,6 +2675,91 @@ namespace NKikimr::NDDisk {
         reply->DiskOperationsInflight = PersistentBufferDiskOperationInflight.size();
         reply->PendingEvents = PendingPersistentBufferEvents.size();
         reply->PerTabletStorageLimit = PersistentBufferFormat.PerTabletStorageLimit;
+
+        if (const auto& query = ev->Get()->MonQuery) {
+            auto& mon = reply->MonInfo.emplace();
+            mon.CollectedAt = TActivationContext::Now();
+            mon.StartedAt = StartedAt;
+            mon.State = IsBroken() ? "Broken" : Stopping ? "Stopping" : !PersistentBufferReady ? "Recovering" : "Ready";
+            if (IsBroken()) {
+                mon.BrokenReason = GetBrokenReason();
+            }
+            mon.AllocatedChunks = PersistentBufferAllocatedChunks.size();
+            mon.ChunkSize = DiskFormat->ChunkSize;
+            mon.MaxChunks = PersistentBufferFormat.MaxChunks;
+            mon.FreeSectors = PersistentBufferSpaceAllocator.GetFreeSpace();
+            mon.SectorSize = SectorSize;
+            mon.LiveBytes = PersistentBufferMonLiveBytes;
+            mon.RegistrationCount = PersistentBufferMonRegistrations;
+            if (!MemoryMetric) {
+                mon.Memory.Error = "Memory history is unavailable";
+            }
+            mon.Memory.LineId = MemoryMetric.GetLineId();
+            mon.Memory.Limit = PersistentBufferFormat.MaxInMemoryCache;
+            mon.CacheBytes = PersistentBufferInMemoryCacheSize;
+            mon.CacheLimit = PersistentBufferFormat.MaxInMemoryCache;
+            mon.PendingEvents = PendingPersistentBufferEvents.size();
+            mon.DiskOperations = PersistentBufferDiskOperationInflight.size();
+            mon.RouterInFlight = GetDirectIoInflight();
+            mon.RestoringChunks = PersistentBufferRestoringChunks.size();
+            mon.RestoreReadsInFlight = PersistentBufferRestoreChunksInflight;
+            mon.IoStalled = IoStalled;
+            mon.OwnDrainComplete = OwnDrainComplete;
+            if (NormalizedOccupancy >= 0) {
+                mon.NormalizedOccupancy = NormalizedOccupancy;
+            }
+            if (LastPDiskSpace && mon.CollectedAt >= LastPDiskSpace->CollectedAt
+                    && mon.CollectedAt - LastPDiskSpace->CollectedAt
+                        <= TDuration::MilliSeconds(ui64(PersistentBufferFormat.UpdateFreeSpaceInfoMilliseconds) * 3)) {
+                mon.PDiskSpace = LastPDiskSpace;
+            }
+
+            if (query->SummaryOnly && !query->TabletId) {
+                Send(ev->Sender, reply.release(), 0, ev->Cookie);
+                return;
+            }
+
+            if (query->TabletId) {
+                const auto tablet = PersistentBufferMonTablets.find(*query->TabletId);
+                if (tablet != PersistentBufferMonTablets.end()) {
+                    mon.Tablets.push_back(tablet->second.Info);
+                    for (const auto& [index, ns] : tablet->second.Namespaces) {
+                        TPersistentBufferMonInfo::TRegistration item;
+                        item.DirectBlockGroupIndex = index;
+                        item.Records = ns.Records;
+                        item.LiveBytes = ns.LiveBytes;
+                        item.Registered = PersistentBufferBarriersManager.HasBarrier(*query->TabletId, index);
+                        if (item.Registered) {
+                            const auto barrier = PersistentBufferBarriersManager.GetBarrier(*query->TabletId, index);
+                            item.BarrierGeneration = barrier.Generation;
+                            item.BarrierLsn = barrier.Lsn;
+                        }
+                        const TPersistentBufferTabletKey key{*query->TabletId, index};
+                        if (PersistentBufferRegistrations.contains(key)) {
+                            item.RemovalStage = "Registering";
+                        }
+                        if (const auto removal = PersistentBufferRemovals.find(key); removal != PersistentBufferRemovals.end()) {
+                            using EStage = TPersistentBufferRemoval::EStage;
+                            switch (removal->second.Stage) {
+                                case EStage::Drain: item.RemovalStage = "Drain"; break;
+                                case EStage::Close: item.RemovalStage = "Close"; break;
+                                case EStage::Wait: item.RemovalStage = "Wait"; break;
+                                case EStage::Remove: item.RemovalStage = "Remove"; break;
+                            }
+                            item.RemovalDeadline = removal->second.Deadline;
+                        }
+                        mon.Registrations.push_back(std::move(item));
+                    }
+                }
+            } else {
+                auto it = query->AfterTabletId ? PersistentBufferMonTablets.upper_bound(*query->AfterTabletId)
+                    : PersistentBufferMonTablets.begin();
+                for (; it != PersistentBufferMonTablets.end() && mon.Tablets.size() < TPersistentBufferSnapshotQuery::MaxRows; ++it) {
+                    mon.Tablets.push_back(it->second.Info);
+                }
+                mon.MoreTablets = it != PersistentBufferMonTablets.end();
+            }
+        }
 
         auto fillOpStats = [&](const TString& name, const auto& opCounters) {
             TEvPersistentBufferInfo::TOpStats stats;

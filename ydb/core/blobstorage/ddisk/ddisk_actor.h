@@ -4,6 +4,7 @@
 
 #include "ddisk.h"
 #include "tablet_stats_actor.h"
+#include "monitoring_snapshot.h"
 #include "space_metrics.h"
 #include "integrity_manager.h"
 #include "persistent_buffer.h"
@@ -516,7 +517,8 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
-            WakeupCollectMemoryMetrics = 6,
+            WakeupCollectMonRates = 6,
+            WakeupCollectMemoryMetrics = 7,
         };
 
         struct TPbOpSnapshot {
@@ -532,11 +534,16 @@ namespace NKikimr::NDDisk {
         static constexpr TDuration PbStatsSnapshotPeriod = TDuration::Seconds(1);
 
         void CollectPbStatsSnapshot();
-
+        static constexpr TDuration MonRatePeriod = TDuration::Seconds(1);
+        TMonotonic MonRateSampledAt;
+        TDuration MonRateWindow;
+        std::array<std::array<ui64, 2>, 5> MonRateCounters = {};
+        std::array<std::optional<TDDiskMonRate>, 5> MonRates;
+        TLine<TOperationMetricsFrontend> OperationMetric;
+        void CollectMonRates();
+        void RecordOperationMetrics(TMonotonic sampledAt);
         TLine<TMemoryMetricsFrontend> MemoryMetric;
         TLine<TSpaceMetricsFrontend> SpaceMetric;
-        TLine<TOperationMetricsFrontend> OperationMetric;
-        void RecordOperationMetrics(TMonotonic sampledAt);
         void InitMemoryMetrics();
         void CollectMemoryMetrics();
 
@@ -1157,6 +1164,21 @@ namespace NKikimr::NDDisk {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         std::map<TPersistentBufferId, TPersistentBuffer> PersistentBuffers;
+        struct TPersistentBufferMonTablet {
+            TPersistentBufferMonInfo::TTablet Info;
+            struct TNamespace {
+                ui64 Records = 0;
+                ui64 LiveBytes = 0;
+            };
+            std::map<ui8, TNamespace> Namespaces;
+        };
+        std::map<ui64, TPersistentBufferMonTablet> PersistentBufferMonTablets;
+        ui64 PersistentBufferMonLiveBytes = 0;
+        ui64 PersistentBufferMonRegistrations = 0;
+        void UpdatePersistentBufferMonRegistration(TPersistentBufferTabletKey key);
+        void UpdatePersistentBufferMonData(TPersistentBufferTabletKey key, i64 records, i64 bytes);
+        void RestorePersistentBufferMonIndex();
+
         std::map<TInstant, absl::flat_hash_set<TPersistentBufferRecordId>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
@@ -1174,6 +1196,7 @@ namespace NKikimr::NDDisk {
         TPersistentBufferFormat PersistentBufferFormat;
 
         double NormalizedOccupancy = -1;
+        std::optional<TDDiskSpaceMonInfo> LastPDiskSpace;
 
         bool IssuePersistentBufferChunkAllocationInflight = false;
 

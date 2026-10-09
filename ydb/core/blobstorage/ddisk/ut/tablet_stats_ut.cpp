@@ -1,8 +1,12 @@
+#include "mon_component_test.h"
+#include <ydb/core/blobstorage/ddisk/ddisk_mon.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/core/blobstorage/ddisk/tablet_stats.h>
 #include <ydb/core/blobstorage/ddisk/tablet_stats_actor.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <set>
+
 
 namespace NKikimr::NDDisk {
 namespace {
@@ -14,6 +18,38 @@ struct TTestTabletState {
 }
 
 Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
+    Y_UNIT_TEST(TopTenUsesIndependentRankingsAndPreservesCookie) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        const auto owner = runtime.AllocateEdgeActor(1);
+        const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
+        auto batch = std::make_unique<TEvTabletStatsBatch>();
+        for (ui64 id = 1; id <= 20; ++id) {
+            TTabletStatsSample sample;
+            sample.TabletId = id;
+            sample.Chunks = 21 - id;
+            sample.Current[0] = {id, id == 7 ? 10000u : id};
+            sample.Elapsed = TDuration::Seconds(1);
+            batch->Samples.push_back(sample);
+        }
+        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+        runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+        for (const auto& [sort, first] : std::initializer_list<std::pair<TString, ui64>>{
+                {"iops", 20}, {"throughput", 7}, {"chunks", 1}}) {
+            auto request = std::make_unique<TEvGetTabletStats>();
+            request->RankBy = sort;
+            request->Limit = 100;
+            runtime.Send(new IEventHandle(actor, owner, request.release(), 0, 71), 1);
+            const auto reply = runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 71);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.size(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Tablets.front().TabletId, first);
+            UNIT_ASSERT(!reply->Get()->NextTabletId);
+        }
+        runtime.Stop();
+    }
+
     Y_UNIT_TEST(BoundedCollectionAndCooldown) {
         THashMap<ui64, TTestTabletState> tablets;
         TTabletStatsTracker stats(&tablets);
@@ -253,5 +289,310 @@ Y_UNIT_TEST_SUITE(TDDiskTabletStats) {
         runtime.Stop();
     }
 
+    Y_UNIT_TEST(ActorSharesPaginationSearchAndOther) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        const auto owner = runtime.AllocateEdgeActor(1);
+        const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
+        for (ui64 first = 1; first <= 201; first += 100) {
+            auto batch = std::make_unique<TEvTabletStatsBatch>();
+            for (ui64 id = first; id < first + 100; ++id) {
+                TTabletStatsSample sample;
+                sample.TabletId = id;
+                sample.Chunks = 301 - id;
+                sample.Current[0] = {id >= 121 && id <= 150 ? 1000 + id : id, id * 4096};
+                sample.Elapsed = TDuration::Seconds(2);
+                batch->Samples.push_back(sample);
+            }
+            runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+            runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+            runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+            runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+            runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        }
+        const auto pageSender = runtime.AllocateEdgeActor(1);
+        const auto page = [&](TDDiskMonQuery query) {
+            auto request = std::make_unique<TEvGetTabletStatsSnapshot>();
+            request->Query.SearchTabletId = query.SearchTabletId;
+            request->Query.StatsSelectedTabletId = query.StatsSelectedTabletId;
+            request->Query.AfterTabletId = query.AfterTabletId;
+            request->Query.StatsOther = query.StatsOther;
+            runtime.Send(new IEventHandle(actor, pageSender, request.release(), 0, 71), 1);
+            auto reply = runtime.WaitForEdgeActorEvent<TEvTabletStatsSnapshot>(pageSender, false);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 71);
+            TDDiskMonInfo info;
+            static_cast<TTabletStatsSnapshot&>(info) = std::move(reply->Get()->Info);
+            info.StatsColorSlots = info.ParticipantSlots;
+            info.ChunkSize = 1ull << 20;
+            TPersistentBufferMonInfo pb;
+            pb.ChunkSize = info.ChunkSize;
+            pb.PDiskSpace.emplace();
+            pb.PDiskSpace->TotalChunks = pb.PDiskSpace->FreeChunks = 100000;
+            query.Tab = "tablets";
+            return RenderDDiskMonPage(info, &pb, query, {});
+        };
+        const auto count = [](const TString& html, TStringBuf needle) {
+            size_t result = 0;
+            for (size_t pos = 0; (pos = html.find(needle, pos)) != TString::npos; pos += needle.size()) {
+                ++result;
+            }
+            return result;
+        };
+        const auto row = [](ui64 id) { return "data-tablet-row=\"" + ToString(id) + "\""; };
+        const auto first = page({});
+        UNIT_ASSERT_VALUES_EQUAL(TabletBar(first, "iops")["segments"].GetArraySafe().size() - 1, 90);
+        UNIT_ASSERT_VALUES_EQUAL(TabletBar(first, "space")["segments"].GetArraySafe().size() - 5, 90);
+        UNIT_ASSERT_VALUES_EQUAL(count(first, "data-tablet-row="), 100);
+        const auto color = [](const TString& html, ui64 id, TStringBuf kind) {
+            const auto segment = TabletSegment(html, kind, id);
+            UNIT_ASSERT(!segment.IsNull());
+            return segment["color"].GetString();
+        };
+        std::set<TString> colors;
+        for (ui64 id : {1u, 30u, 271u, 300u}) {
+            UNIT_ASSERT_VALUES_EQUAL(color(first, id, "iops"), color(first, id, "space"));
+        }
+        for (ui64 id = 1; id <= 300; ++id) {
+            if (id <= 30 || (id >= 121 && id <= 150) || id >= 271) {
+                colors.insert(color(first, id, "iops"));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(colors.size(), 90);
+
+        // All 90 distinct chart leaders precede ordinary rows on the first page.
+        for (ui64 id = 271; id <= 300; ++id) {
+            UNIT_ASSERT(first.find(row(id)) < first.find(row(31)));
+        }
+        for (ui64 id = 1; id <= 30; ++id) {
+            UNIT_ASSERT(first.find(row(id)) < first.find(row(31)));
+        }
+        for (ui64 id = 121; id <= 150; ++id) {
+            UNIT_ASSERT(first.find(row(id)) < first.find(row(31)));
+        }
+        UNIT_ASSERT(first.Contains("afterTabletId=40"));
+        TDDiskMonQuery query;
+        query.AfterTabletId = 40;
+        const auto second = page(query);
+        UNIT_ASSERT_VALUES_EQUAL(count(second, "data-tablet-row="), 100);
+        UNIT_ASSERT(second.Contains(row(41)));
+        UNIT_ASSERT(second.Contains(row(170)));
+        UNIT_ASSERT(!second.Contains(row(300)));
+        // Global charts and denominators do not change with pagination.
+        const auto bars = [](const TString& html) {
+            const auto begin = html.find("<section class=\"ddisk-tablet-resources\"");
+            return html.substr(begin, html.find("<form", begin) - begin);
+        };
+        UNIT_ASSERT_VALUES_EQUAL(bars(first), bars(second));
+        query.AfterTabletId = 170;
+        const auto third = page(query);
+        UNIT_ASSERT_VALUES_EQUAL(count(third, "data-tablet-row="), 100);
+        UNIT_ASSERT(third.Contains(row(171)) && third.Contains(row(270)));
+        UNIT_ASSERT(!third.Contains("Next tablets"));
+        query.SearchTabletId = 200;
+        const auto found = page(query);
+        UNIT_ASSERT_VALUES_EQUAL(count(found, "data-tablet-row="), 1);
+        UNIT_ASSERT(found.Contains(row(200)));
+        UNIT_ASSERT_VALUES_EQUAL(TabletBar(found, "iops")["segments"].GetArraySafe().size() - 1, 88);
+        UNIT_ASSERT_VALUES_EQUAL(TabletBar(found, "space")["segments"].GetArraySafe().size() - 5, 88);
+        UNIT_ASSERT(!TabletSegment(found, "iops", 200).IsNull());
+        UNIT_ASSERT(found.Contains("highlightTabletId=200"));
+        UNIT_ASSERT_VALUES_EQUAL(color(first, 300, "iops"), color(found, 300, "iops"));
+        query.SearchTabletId = 9999999999999999ull;
+        const auto missing = page(query);
+        UNIT_ASSERT(missing.Contains("No data for this tablet on this DDisk"));
+        UNIT_ASSERT_VALUES_EQUAL(count(missing, "data-tablet-row="), 0);
+        query = {};
+        query.StatsOther = "throughput";
+        const auto other = page(query);
+        UNIT_ASSERT(!other.Contains(row(300)));
+        UNIT_ASSERT(!other.Contains(row(1)));
+        UNIT_ASSERT(other.Contains(row(31)) && other.Contains(row(160)));
+        UNIT_ASSERT(other.Contains("210 tablets / 100 per page"));
+        UNIT_ASSERT_VALUES_EQUAL(bars(first), bars(other));
+        query.StatsSelectedTabletId = 200;
+        const auto selectedOther = page(query);
+        UNIT_ASSERT(!selectedOther.Contains(row(200)));
+        UNIT_ASSERT(selectedOther.Contains("highlightTabletId=200"));
+        auto batch = std::make_unique<TEvTabletStatsBatch>();
+        TTabletStatsSample retired;
+        retired.TabletId = 300;
+        retired.Retired = true;
+        batch->Samples.push_back(retired);
+        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+        runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+        runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+        runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        query = {};
+        query.SearchTabletId = 300;
+        UNIT_ASSERT(page(query).Contains("No data for this tablet on this DDisk"));
+        runtime.Stop();
+    }
+
+    Y_UNIT_TEST(ShareSelectionExceedsHalfAndHandlesIdle) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        const auto owner = runtime.AllocateEdgeActor(1);
+        const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
+        const auto publish = [&](bool idle) {
+            auto batch = std::make_unique<TEvTabletStatsBatch>();
+            for (ui64 id = 0; id < 4; ++id) {
+                TTabletStatsSample sample;
+                sample.TabletId = id;
+                sample.Chunks = id ? 1 : 7;
+                sample.Current[0] = {id ? 10u : 30u, 0};
+                sample.Previous = idle ? sample.Current : std::array<TTabletIoCounters, 3>{};
+                sample.Elapsed = TDuration::Seconds(1);
+                batch->Samples.push_back(sample);
+            }
+            runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+            runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+            runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+            runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+            runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        };
+        const auto page = [&]() {
+            runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStatsSnapshot()), 1);
+            auto reply = runtime.WaitForEdgeActorEvent<TEvTabletStatsSnapshot>(owner, false);
+            TDDiskMonInfo info;
+            static_cast<TTabletStatsSnapshot&>(info) = std::move(reply->Get()->Info);
+            info.StatsColorSlots = info.ParticipantSlots;
+            info.ChunkSize = 1ull << 20;
+            TPersistentBufferMonInfo pb;
+            pb.ChunkSize = info.ChunkSize;
+            pb.PDiskSpace.emplace();
+            pb.PDiskSpace->TotalChunks = pb.PDiskSpace->FreeChunks = 100000;
+            TDDiskMonQuery query;
+            query.Tab = "tablets";
+            return RenderDDiskMonPage(info, &pb, query, {});
+        };
+        publish(false);
+        const auto html = page();
+        // Exactly 50% is not enough: the second largest is selected too.
+        UNIT_ASSERT(!TabletSegment(html, "iops", 0).IsNull());
+        UNIT_ASSERT(!TabletSegment(html, "iops", 3).IsNull());
+        UNIT_ASSERT(!!TabletSegment(html, "iops", 2).IsNull());
+        // Space selects one leader, but must also show the I/O leader separately.
+        UNIT_ASSERT(!TabletSegment(html, "space", 0).IsNull());
+        UNIT_ASSERT(!TabletSegment(html, "space", 3).IsNull());
+        publish(true);
+        const auto idle = page();
+        UNIT_ASSERT(idle.Contains("No I/O activity"));
+        UNIT_ASSERT(TabletBar(idle, "iops")["segments"].GetArraySafe().empty());
+        UNIT_ASSERT(!TabletBar(idle, "space")["segments"].GetArraySafe().empty());
+        runtime.Stop();
+    }
+
+    Y_UNIT_TEST(AnalyticsRendersScopeRatesAndTabletLink) {
+        TDDiskMonInfo info;
+        info.StatsAvailable = true;
+        info.ChunkSize = 1 << 20;
+        info.StatsTablets = 1;
+        info.StatsChunks = 2;
+        info.StatsIops = 10;
+        info.StatsBytesPerSecond = 40960;
+        info.CollectedAt = TInstant::Seconds(12);
+        TDDiskMonTabletStats row;
+        row.TabletId = 42;
+        row.Chunks = 2;
+        row.Rates[0] = {10, 40960};
+        row.SampledAt = TInstant::Seconds(11);
+        info.TabletStats.push_back(row);
+        TDDiskMonQuery query;
+        query.Tab = "analytics";
+        const auto html = RenderDDiskMonPage(info, nullptr, query, {});
+        UNIT_ASSERT(html.Contains("tabletId=42"));
+        UNIT_ASSERT(html.Contains("40.00 KiB/s"));
+        UNIT_ASSERT(html.Contains("2 (2.00 MiB)"));
+        UNIT_ASSERT(html.Contains("100.0%"));
+        UNIT_ASSERT(!html.Contains("PersistentBuffer unavailable"));
+    }
+    Y_UNIT_TEST(ResourceSnapshotIsBoundedAndSearchable) {
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        const auto owner = runtime.AllocateEdgeActor(1);
+        const auto reader = runtime.AllocateEdgeActor(1);
+        const auto actor = runtime.Register(CreateTabletStatsActor(owner), 1);
+        for (ui64 first = 1; first <= 201; first += 100) {
+            auto batch = std::make_unique<TEvTabletStatsBatch>();
+            for (ui64 id = first; id < first + 100; ++id) {
+                TTabletStatsSample sample;
+                sample.TabletId = id;
+                sample.Chunks = 301 - id;
+                sample.Current[0] = {id, id * 4096};
+                sample.Elapsed = TDuration::Seconds(1);
+                batch->Samples.push_back(sample);
+            }
+            runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+            runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+            runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+            runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+            runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        }
+        const auto snapshot = [&](std::optional<ui64> search, std::optional<ui64> after = {}) {
+            auto request = std::make_unique<TEvGetTabletStatsSnapshot>();
+            request->Query.SearchTabletId = search;
+            request->Query.AfterTabletId = after;
+            runtime.Send(new IEventHandle(actor, reader, request.release(), 0, 71), 1);
+            auto reply = runtime.WaitForEdgeActorEvent<TEvTabletStatsSnapshot>(reader, false);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 71);
+            return reply->Get()->Info;
+        };
+        const auto all = snapshot({});
+        UNIT_ASSERT_VALUES_EQUAL(all.StatsTablets, 300);
+        UNIT_ASSERT_VALUES_EQUAL(all.StatsChunks, 45150);
+        UNIT_ASSERT_VALUES_EQUAL(all.TabletStats.size(), 100);
+        UNIT_ASSERT(all.StatsShares.size() <= 90);
+        UNIT_ASSERT_VALUES_EQUAL(all.ParticipantSlots.size(), all.StatsShares.size());
+        UNIT_ASSERT(all.StatsNextTabletId);
+        std::set<ui64> visited;
+        auto page = all;
+        do {
+            for (const auto& row : page.TabletStats) {
+                UNIT_ASSERT(visited.insert(row.TabletId).second);
+            }
+            if (!page.StatsNextTabletId) {
+                break;
+            }
+            page = snapshot({}, page.StatsNextTabletId);
+        } while (true);
+        UNIT_ASSERT_VALUES_EQUAL(visited.size(), 300);
+        for (ui64 id = 1; id <= 300; ++id) {
+            UNIT_ASSERT(visited.contains(id));
+        }
+        const auto found = snapshot(200);
+        UNIT_ASSERT_VALUES_EQUAL(found.TabletStats.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(found.TabletStats.front().TabletId, 200);
+        UNIT_ASSERT_VALUES_EQUAL(found.StatsChunks, all.StatsChunks);
+        UNIT_ASSERT_VALUES_EQUAL(found.StatsIops, all.StatsIops);
+        const auto missing = snapshot(999);
+        UNIT_ASSERT(missing.TabletStats.empty());
+        auto batch = std::make_unique<TEvTabletStatsBatch>();
+        TTabletStatsSample updated;
+        updated.TabletId = 1;
+        updated.Chunks = 1000;
+        updated.Current[0] = {10000, 10000 * 4096};
+        updated.Elapsed = TDuration::Seconds(1);
+        batch->Samples.push_back(updated);
+        TTabletStatsSample retired;
+        retired.TabletId = 300;
+        retired.Retired = true;
+        batch->Samples.push_back(retired);
+        runtime.Send(new IEventHandle(actor, owner, new TEvTabletStatsChanged()), 1);
+        runtime.WaitForEdgeActorEvent<TEvCollectTabletStats>(owner, false);
+        runtime.Send(new IEventHandle(actor, owner, batch.release()), 1);
+        runtime.Send(new IEventHandle(actor, owner, new TEvGetTabletStats()), 1);
+        runtime.WaitForEdgeActorEvent<TEvTabletStats>(owner, false);
+        const auto changed = snapshot({});
+        UNIT_ASSERT_VALUES_EQUAL(changed.StatsTablets, 299);
+        UNIT_ASSERT_VALUES_EQUAL(changed.StatsChunks, 45150 - 300 + 1000 - 1);
+        UNIT_ASSERT_DOUBLES_EQUAL(changed.StatsIops, 45150 - 1 + 10000 - 300, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(changed.StatsBytesPerSecond, changed.StatsIops * 4096, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(changed.TabletStats.front().TabletId, 1);
+        UNIT_ASSERT(snapshot(300).TabletStats.empty());
+        runtime.Stop();
+    }
+
 }
+
 } // namespace NKikimr::NDDisk

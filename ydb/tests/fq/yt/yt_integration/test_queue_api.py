@@ -58,7 +58,7 @@ def test_full_queue_scenario(yt: YtClient) -> None:
     # Doc: yt --proxy pythia create table //tmp/$USER-test-queue \
     #   --attributes '{dynamic=true;schema=[{name=data;type=string}; \
     #     {name="$timestamp";type=uint64};{name="$cumulative_data_weight";type=int64}]}'
-    yt.create_queue(queue_path, data_column="data")
+    yt.create_queue(queue_path, schema_columns=["{name=data;type=string}"])
     assert yt.exists(queue_path)
 
     # --- 2. Create queue_consumer ---

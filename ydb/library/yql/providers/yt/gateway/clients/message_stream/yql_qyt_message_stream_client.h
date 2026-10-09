@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 
 #include <yt/yt/client/api/public.h>
+#include <yt/yt/client/table_client/schema.h>
 
 #include <util/generic/string.h>
 
@@ -21,8 +22,7 @@ struct TQytMessageStreamClientSettings {
     // Optional path prefix (YT directory) that is prepended to relative topic paths.
     TString PathPrefix;
 
-    // Name of the column that carries the message payload inside a queue row.
-    TString DataColumn = "data";
+    NYT::NTableClient::TTableSchema Schema;
 
     // Batch limits for a single pull_queue_consumer request.
     i64 MaxRowCount = 1000;

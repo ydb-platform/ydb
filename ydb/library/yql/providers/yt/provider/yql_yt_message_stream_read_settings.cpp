@@ -12,8 +12,10 @@ TYtMessageStreamReadSettings ParseYtMessageStreamReadSettings(const TExprNode& r
     TString path;
     if (key->IsCallable("MrObject")) {
         Y_ENSURE(key->ChildrenSize() >= 3 && key->Head().IsAtom(), "Expected a literal YT queue path");
-        Y_ENSURE(key->Child(1)->IsAtom("raw") && key->Child(2)->Content().empty(),
-            "YT MessageStream supports uncompressed FORMAT=raw");
+        Y_ENSURE(key->Child(1)->IsAtom() && key->Child(2)->Content().empty(),
+            "YT MessageStream supports only uncompressed reads");
+        const auto format = key->Child(1)->Content();
+        Y_ENSURE(format.empty(), "FORMAT is not supported for QYT reads");
         path = key->Head().Content();
     } else {
         Y_ENSURE(key->IsCallable("Key") && key->ChildrenSize() == 1, "Expected one YT queue path");
@@ -30,7 +32,7 @@ TYtMessageStreamReadSettings ParseYtMessageStreamReadSettings(const TExprNode& r
             Y_ENSURE(consumer.empty() && setting->ChildrenSize() == 2 && setting->Child(1)->IsAtom(), "Expected one CONSUMER");
             consumer = setting->Child(1)->Content();
         } else if (name == "format") {
-            Y_ENSURE(setting->ChildrenSize() == 2 && setting->Child(1)->IsAtom("raw"), "YT MessageStream supports FORMAT=raw");
+            ythrow yexception() << "FORMAT is not supported for QYT reads";
         } else {
             ythrow yexception() << "Unsupported YT MessageStream read setting: " << name;
         }

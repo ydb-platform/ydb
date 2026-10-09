@@ -8,7 +8,7 @@ namespace {
 class TYtMessageStreamIntegration final : public IYtMessageStreamIntegration {
 public:
     explicit TYtMessageStreamIntegration(std::shared_ptr<TYtMessageStreamState> state)
-        : State_(std::move(state)), Annotation_(CreateYtMessageStreamTypeAnnotation())
+        : State_(std::move(state)), Annotation_(CreateYtMessageStreamTypeAnnotation(State_))
         , Integration_(CreateYtMessageStreamDqIntegration(State_)), LoadMetadata_(CreateYtMessageStreamLoadMetadata(State_)) {}
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (!TYtMessageStreamDataSource::Match(&node) || !State_->Names.contains(node.Child(1)->Content())) {

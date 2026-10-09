@@ -8,6 +8,8 @@
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/tx/tx_processing.h>
 
+#include "kafka_batch.h"
+
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
@@ -29,22 +31,9 @@ const static TString TOPIC_NAME = "/Root/LbCommunal/account/topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
-void SetEnableTopicMessagesBatching(TTestContext& tc) {
-    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
-        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicMessagesBatching(true);
-        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
-    }
-}
-
 void SetEnableTopicCompactificationByKey(TTestContext& tc) {
     for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
         tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicCompactificationByKey(true);
-    }
-}
-
-void SetEnableTopicRetentionDeleteLastBlob(TTestContext& tc) {
-    for (ui32 nodeIdx = 0; nodeIdx < tc.Runtime->GetNodeCount(); ++nodeIdx) {
-        tc.Runtime->GetAppData(nodeIdx).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
     }
 }
 
@@ -76,120 +65,6 @@ void TestPartitionMetaOffsetsSurviveRestart(TTestContext& tc, bool enableRetenti
 
     PQTabletRestart(tc);
     PQGetPartInfo(100, 202, tc);
-}
-
-TString MakeKafkaBatchPayload(
-    const TVector<TString>& values,
-    ui64 baseSequence = 1,
-    NKafka::ECompressionType compression = NKafka::ECompressionType::NONE,
-    const TVector<TString>& keys = {})
-{
-    UNIT_ASSERT(keys.empty() || keys.size() == values.size());
-
-    NKafka::TKafkaRecordBatch batch;
-    batch.BaseOffset = 0;
-    batch.Magic = 2;
-    batch.Attributes = static_cast<NKafka::TKafkaRecordBatch::AttributesMeta::Type>(compression);
-    batch.LastOffsetDelta = values.size() - 1;
-    batch.BaseTimestamp = 1000;
-    batch.MaxTimestamp = 1000 + values.size() - 1;
-    batch.ProducerId = 42;
-    batch.ProducerEpoch = 0;
-    batch.BaseSequence = baseSequence;
-
-    batch.Records.reserve(values.size());
-    for (size_t i = 0; i < values.size(); ++i) {
-        NKafka::TKafkaRecord record;
-        record.TimestampDelta = i;
-        record.OffsetDelta = i;
-        if (!keys.empty()) {
-            record.SetKey(TString{keys[i]});
-        }
-        record.SetValue(TString{values[i]});
-        record.Length = record.Size(2)
-            - NKafka::NPrivate::SizeOfVarint<NKafka::TKafkaRecord::LengthMeta::Type>(0);
-        batch.Records.push_back(std::move(record));
-    }
-    batch.BatchLength = batch.Size(2) - sizeof(NKafka::TKafkaRecordBatch::BaseOffsetMeta::Type) - sizeof(NKafka::TKafkaRecordBatch::BatchLengthMeta::Type);
-    return NKafka::WriteKafkaRecordBatch(batch);
-}
-
-
-void CmdWriteKafkaBatch(
-    const ui32 partition,
-    const TString& sourceId,
-    ui64 seqNo,
-    const TVector<TString>& values,
-    TTestContext& tc,
-    i64 offset = -1,
-    NKafka::ECompressionType batchCompression = NKafka::ECompressionType::NONE,
-    const TVector<TString>& keys = {})
-{
-    TAutoPtr<IEventHandle> handle;
-    TEvPersQueue::TEvResponse* result = nullptr;
-    ui32& msgSeqNo = tc.MsgSeqNoMap[partition];
-    TString& cookie = tc.OwnerCookieMap[partition];
-
-    for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
-        try {
-            THolder<TEvPersQueue::TEvRequest> request(new TEvPersQueue::TEvRequest);
-            tc.Runtime->ResetScheduledCount();
-            auto* req = request->Record.MutablePartitionRequest();
-            req->SetPartition(partition);
-            req->SetOwnerCookie(cookie);
-            req->SetMessageNo(msgSeqNo);
-            if (offset >= 0) {
-                req->SetCmdWriteOffset(offset);
-            }
-
-            auto* write = req->AddCmdWrite();
-            write->SetSourceId(sourceId);
-            write->SetSeqNo(seqNo);
-            const TString kafkaBatchPayload = MakeKafkaBatchPayload(values, seqNo, batchCompression, keys);
-            NKikimrPQClient::TDataChunk dataChunk;
-            dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
-            dataChunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
-            dataChunk.SetData(kafkaBatchPayload);
-            TString serializedDataChunk;
-            Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
-            write->SetData(std::move(serializedDataChunk));
-            write->SetLogicalMessageCount(values.size());
-            write->SetIsBatch(true);
-            write->SetMaxSeqNo(seqNo + values.size() - 1);
-
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle,
-                [](const TEvPersQueue::TEvResponse& ev) {
-                    return ev.Record.HasPartitionResponse()
-                        && ev.Record.GetPartitionResponse().CmdWriteResultSize() > 0
-                        || ev.Record.GetErrorCode() != NPersQueue::NErrorCode::OK;
-                });
-
-            UNIT_ASSERT(result);
-            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-                tc.Runtime->DispatchEvents();
-                retriesLeft = 3;
-                continue;
-            }
-            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
-                cookie = CmdSetOwner(tc.Runtime.Get(), tc.TabletId, tc.Edge, partition).first;
-                msgSeqNo = 0;
-                retriesLeft = 3;
-                continue;
-            }
-
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                static_cast<ui32>(result->Record.GetErrorCode()),
-                static_cast<ui32>(NPersQueue::NErrorCode::OK),
-                result->Record.DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1u);
-            retriesLeft = 0;
-        } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
-            retriesLeft = 3;
-        }
-    }
-    ++msgSeqNo;
 }
 
 void CmdWriteBatchedPart(
@@ -304,58 +179,6 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     return Nothing();
 }
 
-// TSchedulingLimitReachedException means the scheduled-event budget was exhausted,
-// not that dispatch failed. PQ UT relies on partial progress here (see pq_ut_common.cpp).
-void DispatchUntilWakeup(TTestContext& tc, i32 retriesLeft = 2) {
-    TDispatchOptions options;
-    options.FinalEvents.emplace_back([](IEventHandle& ev) {
-        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
-    });
-
-    while (retriesLeft-- > 0) {
-        tc.Runtime->ResetScheduledCount();
-        try {
-            if (tc.Runtime->DispatchEvents(options)) {
-                return;
-            }
-        } catch (const NActors::TSchedulingLimitReachedException&) {
-        }
-    }
-
-    UNIT_FAIL("DispatchEvents did not observe TEvWakeup within retry budget");
-}
-
-bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestContext& tc) {
-    TAutoPtr<IEventHandle> handle;
-    TEvPersQueue::TEvOffsetsResponse* result = nullptr;
-    THolder<TEvPersQueue::TEvOffsets> request;
-
-    for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
-        try {
-            tc.Runtime->ResetScheduledCount();
-            request.Reset(new TEvPersQueue::TEvOffsets);
-
-            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(handle);
-            if (!result) {
-                return false;
-            }
-
-            if (result->Record.PartResultSize() == 0 ||
-                result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
-                return false;
-            }
-
-            const ui64 startOffset = result->Record.GetPartResult(0).GetStartOffset();
-            const ui64 endOffset = result->Record.GetPartResult(0).GetEndOffset();
-            return startOffset == expectedStartOffset && endOffset == expectedEndOffset;
-        } catch (const NActors::TSchedulingLimitReachedException&) {
-        }
-    }
-
-    return false;
-}
-
 ui64 GetLastWriteTimestamp(i32 partitionId, TTestContext& tc) {
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
 
@@ -371,30 +194,6 @@ ui64 GetLastWriteTimestamp(i32 partitionId, TTestContext& tc) {
 
     UNIT_FAIL("Partition " << partitionId << " is missing in status response");
     return 0;
-}
-
-void WaitRetentionCleanup(TTestContext& tc,
-                          ui64 expectedStartOffset,
-                          ui64 expectedEndOffset,
-                          ui32 retentionSeconds = 5,
-                          ui32 wakeTimeoutSeconds = 5,
-                          ui32 maxAttempts = 10) {
-    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(retentionSeconds + 1));
-
-    for (ui32 attempt = 0; attempt < maxAttempts; ++attempt) {
-        DispatchUntilWakeup(tc);
-        if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
-            return;
-        }
-
-        tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(wakeTimeoutSeconds));
-        DispatchUntilWakeup(tc);
-        if (TryPQGetPartInfo(expectedStartOffset, expectedEndOffset, tc)) {
-            return;
-        }
-    }
-
-    PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 }
 
 Y_UNIT_TEST(TestCompaction) {

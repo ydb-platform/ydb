@@ -19,6 +19,8 @@ items:
     href: auth-env.md
   - name: С помощью логина и пароля
     href: auth-static.md
+  - name: С помощью OIDC
+    href: auth-oidc.md
 - name: Балансировка
   items:
   - name: Обзор

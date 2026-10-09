@@ -1,4 +1,6 @@
 items:
+- name: Аутентификация OIDC
+  href: auth-oidc.md
 - name: Конвертация типов таблиц
   href: convert-table-type.md
 - name: Нагрузочное тестирование

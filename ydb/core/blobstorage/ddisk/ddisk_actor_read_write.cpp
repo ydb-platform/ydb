@@ -369,7 +369,6 @@ namespace NKikimr::NDDisk {
         // after the destination operations of the current piece retire.
         size_t inputIndex = 0;
         ui32 offset = 0;
-        ui32 pieces = 0;
         while (!sync || inputIndex < sync->Requests.size()) {
             TSyncReadRequest* input = sync ? &sync->Requests[inputIndex] : nullptr;
             if (input && (input->Status != TStatus::OK || offset >= input->Selector.Size

@@ -8,6 +8,7 @@
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <util/charset/utf8.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/system/env.h>
@@ -533,14 +534,20 @@ namespace NUnifiedAgent::NPrivate {
             if (NegotiatedProtocol.Defined() && *NegotiatedProtocol > 0 &&
                 ActiveGrpcCall &&
                 !CloseStarted &&
-                Counters->InflightMessages.Val() > 0 &&
+                (!WriteQueue.empty() || EventsBatchSize > 0) &&
                 (Now() - TInstant::MicroSeconds(LastGrpcCallActivityUsec.load())) >= timeout)
             {
-                YLOG_ERROR_T(
-                    "grpc call inactivity timeout reached [{}], cancelling active call for reconnect",
-                    timeout.ToString());
-                ++Counters->GrpcCallsClosedByInactivity;
-                ActiveGrpcCall->BeginClose(true);
+                if (EventsBatchSize > 0 ||
+                    AnyOf(WriteQueue, [](const auto& message) {
+                        return !message.Skipped;
+                    }))
+                {
+                    YLOG_ERROR_T(
+                        "grpc call inactivity timeout reached [{}], cancelling active call for reconnect",
+                        timeout.ToString());
+                    ++Counters->GrpcCallsClosedByInactivity;
+                    ActiveGrpcCall->BeginClose(true);
+                }
                 TouchGrpcCallActivity();
             }
             ScheduleGrpcCallWatchdog();

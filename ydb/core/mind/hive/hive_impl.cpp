@@ -11,6 +11,7 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
+#include <util/generic/strbuf.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
@@ -1026,7 +1027,7 @@ void THive::Handle(TEvHive::TEvTabletMetrics::TPtr& ev) {
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId},
             {"updateTabletMetricsInProgress", UpdateTabletMetricsInProgress});
-        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck);
+        Send(ev->Sender, new TEvLocal::TEvTabletMetricsAck, 0, ev->Cookie);
     }
 }
 
@@ -3243,7 +3244,7 @@ void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NK
 }
 
 template <ui64 TMetrics::* field>
-static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, const TString& name) {
+static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, TStringBuf name) {
     i64 oldValue = aggregate.*field;
     i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
@@ -3251,7 +3252,7 @@ static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMe
         YDB_LOG_ERROR("AggregateMetricsDiff: aggregated metric value became negative",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", tabletId},
-            {"metricName", name},
+            {"metricName", TString(name)},
             {"oldValue", oldValue},
             {"delta", delta},
             {"newValue", newValue});

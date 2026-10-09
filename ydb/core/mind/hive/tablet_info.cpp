@@ -5,10 +5,46 @@
 #include "leader_tablet_info.h"
 #include "follower_tablet_info.h"
 
+#include <algorithm>
+#include <google/protobuf/unknown_field_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
 namespace NHive {
+
+namespace {
+
+bool SameThroughputRecord(const NKikimrTabletBase::TThroughputRecord& lhs,
+                          const NKikimrTabletBase::TThroughputRecord& rhs) {
+    if (lhs.GetThroughput() != rhs.GetThroughput()
+            || lhs.GetGroupID() != rhs.GetGroupID()
+            || lhs.GetChannel() != rhs.GetChannel()
+            || lhs.HasThroughput() != rhs.HasThroughput()
+            || lhs.HasGroupID() != rhs.HasGroupID()
+            || lhs.HasChannel() != rhs.HasChannel()) {
+        return false;
+    }
+    static const auto* reflection = lhs.GetReflection();
+    if (reflection->GetUnknownFields(lhs).field_count() == 0
+            && reflection->GetUnknownFields(rhs).field_count() == 0) {
+        return true;
+    }
+    return lhs.SerializeAsString() == rhs.SerializeAsString();
+}
+
+template <class TRecords>
+bool SameThroughputRecords(const TVector<NKikimrTabletBase::TThroughputRecord>& stored,
+                           const TRecords& incoming) {
+    return stored.size() == size_t(incoming.size())
+        && std::equal(stored.begin(), stored.end(), incoming.begin(), SameThroughputRecord);
+}
+
+} // anonymous namespace
+
+void TTabletInfo::MarkProtoMetricsDirty() {
+    ProtoMetricsRevision = Hive.AllocateProtoMetricsRevision();
+}
 
 TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     : VolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN)
@@ -25,7 +61,9 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , Weight(0)
     , BalancerPolicy(EBalancerPolicy::POLICY_BALANCE)
     , NodeFilter(hive)
-{}
+{
+    MarkProtoMetricsDirty();
+}
 
 const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
     if (IsLeader()) {
@@ -399,8 +437,24 @@ bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
-    auto before = ResourceValues;
+    // Resource accounting only needs scalars, so keep group vectors empty.
+    const TMetrics before = {
+        .CPU = ResourceValues.CPU,
+        .Memory = ResourceValues.Memory,
+        .Network = ResourceValues.Network,
+        .Counter = ResourceValues.Counter,
+        .Storage = ResourceValues.Storage,
+        .GroupReadThroughput = {},
+        .GroupWriteThroughput = {},
+        .ReadThroughput = ResourceValues.ReadThroughput,
+        .WriteThroughput = ResourceValues.WriteThroughput,
+        .GroupReadIops = {},
+        .GroupWriteIops = {},
+        .ReadIops = ResourceValues.ReadIops,
+        .WriteIops = ResourceValues.WriteIops,
+    };
     auto maximum = GetResourceMaximumValues();
+    bool groupsChanged = false;
     if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
@@ -460,16 +514,29 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     }
     if (metrics.GroupReadThroughputSize() > 0) {
         const auto& records = metrics.GetGroupReadThroughput();
-        ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
+        if (IsProtoMetricsDirty() || !SameThroughputRecords(ResourceValues.GroupReadThroughput, records)) {
+            ResourceValues.GroupReadThroughput.assign(records.begin(), records.end());
+            groupsChanged = true;
+        }
     }
     if (metrics.GroupWriteThroughputSize() > 0) {
         const auto& records = metrics.GetGroupWriteThroughput();
-        ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
+        if (IsProtoMetricsDirty() || !SameThroughputRecords(ResourceValues.GroupWriteThroughput, records)) {
+            ResourceValues.GroupWriteThroughput.assign(records.begin(), records.end());
+            groupsChanged = true;
+        }
     }
     i64 counterBefore = ResourceValues.Counter;
     ActualizeCounter();
     i64 counterAfter = ResourceValues.Counter;
     const auto& after = ResourceValues;
+    if (groupsChanged || before.CPU != after.CPU || before.Memory != after.Memory
+            || before.Network != after.Network || before.Storage != after.Storage
+            || before.ReadThroughput != after.ReadThroughput
+            || before.WriteThroughput != after.WriteThroughput
+            || before.ReadIops != after.ReadIops || before.WriteIops != after.WriteIops) {
+        MarkProtoMetricsDirty();
+    }
     if (Node != nullptr) {
         if (IsResourceDrainingState(VolatileState)) {
             Node->UpdateResourceValues(this, before, after);
@@ -550,7 +617,11 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
 }
 
 void TTabletInfo::ActualizeCounter() {
-    ResourceValues.Counter = GetCounterValue();
+    const ui64 counter = GetCounterValue();
+    if (ResourceValues.Counter != counter) {
+        ResourceValues.Counter = counter;
+        MarkProtoMetricsDirty();
+    }
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {

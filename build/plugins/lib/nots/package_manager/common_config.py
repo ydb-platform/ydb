@@ -81,12 +81,26 @@ def load_common_config(pj, sources_root, inject_peers):
     if has_config:
         if not isinstance(config_path, str) or not config_path or os.path.isabs(config_path):
             raise ValueError("{}: commonConfigPath must be a nonempty relative path".format(pj.path))
-        absolute_path = os.path.normpath(os.path.join(os.path.dirname(pj.path), config_path))
+        module_directory = os.path.abspath(os.path.dirname(pj.path))
+        absolute_path = os.path.normpath(os.path.join(module_directory, config_path))
         source_root = os.path.abspath(sources_root)
-        if os.path.commonpath([source_root, absolute_path]) != source_root or os.path.commonpath(
-            [os.path.realpath(source_root), os.path.realpath(absolute_path)]
-        ) != os.path.realpath(source_root):
+        if os.path.commonpath([source_root, absolute_path]) != source_root:
             raise ValueError("{}: commonConfigPath escapes Arcadia: {}".format(pj.path, config_path))
+        config_directory = os.path.dirname(absolute_path)
+        if (
+            os.path.commonpath([source_root, config_directory]) != source_root
+            or os.path.commonpath([module_directory, config_directory]) != config_directory
+        ):
+            raise ValueError(
+                "{}: commonConfigPath must be in the module directory or a parent directory: {}".format(
+                    pj.path, config_path
+                )
+            )
+        current = source_root
+        for component in os.path.relpath(absolute_path, source_root).split(os.sep):
+            current = os.path.join(current, component)
+            if os.path.islink(current):
+                raise ValueError("{}: commonConfigPath must not contain symlinks: {}".format(pj.path, config_path))
         relative_path = os.path.relpath(absolute_path, source_root)
         try:
             with open(absolute_path) as stream:

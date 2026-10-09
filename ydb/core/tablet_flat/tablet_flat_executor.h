@@ -534,6 +534,8 @@ namespace NFlatExecutorSetup {
 
         // keep the reclaimable part at or below shareBytes: a tablet that reports Reclaimable > 0 promises to honor it
         virtual void OnMemoryLimit(ui64 /* shareBytes */) { /* default */ }
+        // A withdrawn elastic allocation is zeroed first, then its optional share is cleared.
+        virtual void OnMemoryLimitCleared() { /* default */ }
 
         virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
 

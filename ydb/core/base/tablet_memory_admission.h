@@ -2,7 +2,7 @@
 
 #include "memory_controller_iface.h"
 
-#include <util/generic/deque.h>
+#include <list>
 #include <util/generic/hash.h>
 
 namespace NKikimr::NMemory {
@@ -24,6 +24,12 @@ enum class EAdmitSource {
     FromQueue,
 };
 
+enum class EAdmitResult {
+    Started,
+    Queued,
+    Duplicate,
+};
+
 // Gates the start of memory-charged items by the node zone: FIFO, no growth in Yellow, one at a time in Red
 // One admission belongs to one tablet and runs only in that tablet's actor context, so it takes no locks by design
 template <class TItem, class TOwner>
@@ -35,13 +41,18 @@ public:
     }
 
     // Starts the item now or queues it behind the items already waiting
-    void Admit(ui64 uid, TItem&& item, ui64 charge) {
+    EAdmitResult Admit(ui64 uid, TItem&& item, ui64 charge) {
+        if (Charges.contains(uid) || Waiting.contains(uid)) {
+            return EAdmitResult::Duplicate;
+        }
         if (Queue.empty() && Admits(charge)) {
             Run(uid, std::move(item), charge, EAdmitSource::Immediate);
-            return;
+            return EAdmitResult::Started;
         }
         PostponedBytes += charge;
         Queue.push_back({uid, charge, std::move(item)});
+        Waiting.emplace(uid, std::prev(Queue.end()));
+        return EAdmitResult::Queued;
     }
 
     // Takes the charge of a completed item back and drains the queue
@@ -55,6 +66,21 @@ public:
         --RunningCount;
         Charges.erase(it);
         Drain();
+    }
+
+    // Withdraws a waiting item without scanning unrelated or running requests.
+    std::optional<TItem> CancelQueued(ui64 uid) {
+        const auto it = Waiting.find(uid);
+        if (it == Waiting.end()) {
+            return std::nullopt;
+        }
+        auto entry = it->second;
+        std::optional<TItem> item(std::move(entry->Item));
+        PostponedBytes -= entry->Charge;
+        Queue.erase(entry);
+        Waiting.erase(it);
+        Drain();
+        return item;
     }
 
     // Called by the tablet from ITablet::OnMemoryZone with the zone the executor delivered
@@ -89,7 +115,7 @@ private:
             case EMemoryZone::Green:
                 return true;
             case EMemoryZone::Yellow:
-                return RunningCount == 0 || RunningBytes + charge <= Watermark;
+                return RunningCount == 0 || (charge <= Watermark && RunningBytes <= Watermark - charge);
             case EMemoryZone::Red:
                 return RunningCount == 0;
         }
@@ -97,6 +123,10 @@ private:
     }
 
     void Run(ui64 uid, TItem&& item, ui64 charge, EAdmitSource source) {
+        // An idle progress request establishes a reusable ceiling for this Yellow interval.
+        if (Zone == EMemoryZone::Yellow && RunningCount == 0) {
+            Watermark = Max(Watermark, charge);
+        }
         RunningBytes += charge;
         ++RunningCount;
         Charges[uid] = charge;
@@ -111,6 +141,7 @@ private:
         while (!Queue.empty() && Admits(Queue.front().Charge)) {
             TEntry entry = std::move(Queue.front());
             Queue.pop_front();
+            Waiting.erase(entry.Uid);
             PostponedBytes -= entry.Charge;
             Run(entry.Uid, std::move(entry.Item), entry.Charge, EAdmitSource::FromQueue);
         }
@@ -126,7 +157,9 @@ private:
     ui64 RunningCount = 0;
     ui64 PostponedBytes = 0;
     THashMap<ui64, ui64> Charges;
-    TDeque<TEntry> Queue;
+    using TQueue = std::list<TEntry>;
+    TQueue Queue;
+    THashMap<ui64, typename TQueue::iterator> Waiting;
     bool Draining = false;
 };
 

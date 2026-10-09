@@ -240,8 +240,10 @@ message TMetrics {
     optional uint64 ReadIops = 12;
     optional uint64 WriteIops = 13;
     // Memory carries the tablet's honest Used; these two complete its memory report
+    // Owner-only report; Memory remains the legacy Hive placement estimate.
     optional uint64 MemoryDemand = 14;
     optional uint64 MemoryReclaimable = 15;
+    optional uint64 TabletMemoryUsed = 16;
 }
 
 message TEvTabletStop {

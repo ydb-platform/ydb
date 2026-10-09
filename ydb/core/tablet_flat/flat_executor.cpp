@@ -468,7 +468,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Y_ENSURE(!CompactionLogic);
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher);
+    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), FollowerId, Launcher, SelfId());
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
@@ -519,7 +519,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     VacuumLogic = MakeHolder<TVacuumLogic>(static_cast<NActors::IActorOps*>(this), this, Owner, Logger.Get(), GcLogic.Get());
     LogicRedo->InstallCounters(Counters.Get(), AppTxCounters);
 
-    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
+    ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher, SelfId());
 
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
@@ -4172,7 +4172,7 @@ void TExecutor::UpdateUsedTabletMemory() {
     // Clamp at the source, so no reader of the report has to guard against a wrap
     OwnerMemoryReport.Demand = Max(OwnerMemoryReport.Demand, OwnerMemoryReport.Used);
     OwnerMemoryReport.Reclaimable = Min(OwnerMemoryReport.Reclaimable, OwnerMemoryReport.Used);
-    UsedTabletMemory += TabletMemoryHostEnabled ? OwnerMemoryReport.Used : Owner->GetMemoryUsage();
+    UsedTabletMemory += Owner->GetMemoryUsage();
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
@@ -4298,19 +4298,9 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
                 ResourceMetrics->StorageSystem.Set(storageSize);
 
-                ui64 memorySize = 0;
-                if (TabletMemoryHostEnabled) {
-                    // The report travels to Local in the metrics it already forwards to Hive
-                    // Static transaction memory is managed by the executor, outside the owner's report.
-                    memorySize = UsedTabletMemory + memory.Static;
-                    ResourceMetrics->SetMemoryReport(memorySize,
-                        memorySize + (OwnerMemoryReport.Demand - OwnerMemoryReport.Used),
-                        OwnerMemoryReport.Reclaimable);
-                } else {
-                    auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
-                    memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
-                    ResourceMetrics->Memory.Set(memorySize);
-                }
+                const auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
+                const ui64 memorySize = UsedTabletMemory + (limit ? limit : memory.Static);
+                ResourceMetrics->Memory.Set(memorySize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize);
             }
@@ -4319,6 +4309,11 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         if (AppCounters) {
             externalTabletCounters = AppCounters->MakeDiffForAggr(*AppCountersBaseline);
             AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
+        }
+
+        // Publish owner attribution for leaders and followers independently of Hive accounting.
+        if (ResourceMetrics && TabletMemoryHostEnabled) {
+            ResourceMetrics->SetMemoryReport(OwnerMemoryReport.Used, OwnerMemoryReport.Demand, OwnerMemoryReport.Reclaimable);
         }
 
         // tablet id + tablet type
@@ -4598,10 +4593,16 @@ void TExecutor::Handle(NMemory::TEvMemTableCompact::TPtr &ev) {
 
 // One event means "something changed": the tablet gets the zone and, once it has one, its share
 void TExecutor::Handle(NMemory::TEvMemoryZone::TPtr &ev) {
+    if (!TabletMemoryHostEnabled) {
+        return;
+    }
     const auto *msg = ev->Get();
+    Y_ABORT_UNLESS(!msg->ClearShare || !msg->Share);
     const bool zoneChanged = MemoryZone != msg->Zone;
     MemoryZone = msg->Zone;
-    if (msg->Share) {
+    if (msg->ClearShare) {
+        MemoryShare.reset();
+    } else if (msg->Share) {
         MemoryShare = msg->Share;
     }
     if (!Owner) {
@@ -4610,7 +4611,10 @@ void TExecutor::Handle(NMemory::TEvMemoryZone::TPtr &ev) {
     if (zoneChanged) {
         Owner->OnMemoryZone(MemoryZone);
     }
-    if (msg->Share) {
+    if (msg->ClearShare) {
+        Owner->OnMemoryLimit(0);
+        Owner->OnMemoryLimitCleared();
+    } else if (msg->Share) {
         Owner->OnMemoryLimit(*msg->Share);
     }
 }

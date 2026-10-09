@@ -105,6 +105,100 @@ Y_UNIT_TEST(UntoldZoneBehavesAsGreen) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Started.size(), 3u);
 }
 
+    Y_UNIT_TEST(EveryYellowIntervalHasItsOwnWatermark) {
+        TFixture owner;
+        auto& admission = owner.Admission;
+        admission.Admit(1, 1, 100);
+        admission.OnZoneChanged(EMemoryZone::Yellow);
+        admission.Admit(2, 2, 40);
+        admission.Release(1);
+        admission.OnZoneChanged(EMemoryZone::Green);
+        admission.OnZoneChanged(EMemoryZone::Yellow);
+        admission.Admit(3, 3, 60);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().RunningBytes, 40u);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().PostponedBytes, 60u);
+    }
+
+    Y_UNIT_TEST(GreenDrainsQueuedItemsWithoutACompletion) {
+        TFixture owner;
+        auto& admission = owner.Admission;
+        admission.OnZoneChanged(EMemoryZone::Red);
+        admission.Admit(1, 1, 100);
+        admission.Admit(2, 2, 40);
+        admission.OnZoneChanged(EMemoryZone::Green);
+        UNIT_ASSERT_VALUES_EQUAL(owner.Started.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().PostponedCount, 0u);
+        // A delivered recovery before enqueue also takes effect immediately.
+        admission.Admit(3, 3, 60);
+        UNIT_ASSERT_VALUES_EQUAL(owner.Started.size(), 3u);
+    }
+
+    Y_UNIT_TEST(CancellingHeadAllowsTheNextFittingItemToStart) {
+        TFixture owner;
+        auto& admission = owner.Admission;
+        admission.Admit(1, 1, 100);
+        admission.OnZoneChanged(EMemoryZone::Yellow);
+        admission.Admit(2, 2, 40);
+        admission.Release(1);
+        admission.Admit(3, 3, 100);
+        admission.Admit(4, 4, 20);
+        auto cancelled = admission.CancelQueued(3);
+        UNIT_ASSERT(cancelled);
+        UNIT_ASSERT_VALUES_EQUAL(*cancelled, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().RunningBytes, 60u);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().RunningCount, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().PostponedBytes, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(owner.Started.back(), 4u);
+        UNIT_ASSERT(!admission.CancelQueued(3));
+        UNIT_ASSERT(!admission.CancelQueued(2));
+        admission.Release(2);
+        admission.Release(4);
+        UNIT_ASSERT_VALUES_EQUAL(admission.GetStats().HeldBytes(), 0u);
+    }
+Y_UNIT_TEST(DuplicateUidsCannotReplaceRunningOrQueuedCharges) {
+    TFixture fixture;
+    auto& gate = fixture.Admission;
+    gate.OnZoneChanged(EMemoryZone::Red);
+    UNIT_ASSERT(gate.Admit(1, 1, 100) == EAdmitResult::Started);
+    UNIT_ASSERT(gate.Admit(2, 2, 40) == EAdmitResult::Queued);
+    UNIT_ASSERT(gate.Admit(1, 3, 500) == EAdmitResult::Duplicate);
+    UNIT_ASSERT(gate.Admit(2, 4, 600) == EAdmitResult::Duplicate);
+    UNIT_ASSERT_VALUES_EQUAL(gate.GetStats().RunningBytes, 100u);
+    UNIT_ASSERT_VALUES_EQUAL(gate.GetStats().PostponedBytes, 40u);
+    UNIT_ASSERT_VALUES_EQUAL(gate.GetStats().PostponedCount, 1u);
+    gate.Release(1);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Started.back(), 2u);
+    gate.Release(2);
+    UNIT_ASSERT_VALUES_EQUAL(gate.GetStats().HeldBytes(), 0u);
+}
+
+Y_UNIT_TEST(IdleYellowReusesTheProgressRequestsFootprint) {
+    TFixture fixture;
+    fixture.SetZone(EMemoryZone::Yellow);
+    fixture.Admit(1, 100);
+    fixture.Admission.Release(1);
+    fixture.Admit(2, 40);
+    fixture.Admit(3, 60);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().RunningCount, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().RunningBytes, 100u);
+    fixture.Admit(4, 1);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().PostponedCount, 1u);
+}
+
+Y_UNIT_TEST(CancellationPreservesFifoAfterRemovingAMiddleItem) {
+    TFixture fixture;
+    fixture.SetZone(EMemoryZone::Red);
+    for (ui64 uid = 1; uid <= 1000; ++uid) fixture.Admit(uid, 1);
+    for (ui64 uid = 1001; uid <= 11000; ++uid) UNIT_ASSERT(!fixture.Admission.CancelQueued(uid));
+    UNIT_ASSERT(fixture.Admission.CancelQueued(500));
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().PostponedCount, 998u);
+    for (ui64 uid = 1; uid <= 1000; ++uid) fixture.Admission.Release(uid);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Started.size(), 999u);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Started[498], 499u);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Started[499], 501u);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Admission.GetStats().HeldBytes(), 0u);
+}
+
 }
 
 }

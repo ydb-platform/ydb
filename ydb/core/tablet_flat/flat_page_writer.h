@@ -83,12 +83,12 @@ namespace NPage {
             char *ptr = Blob.mutable_begin();
 
             if (V2Label) {
-                WriteUnaligned<NPage::TLabel>(ptr, TLabel::Encode(Type, Version | 0x8000, Blob.size()));
+                WriteUnaligned<NPage::TLabel>(ptr, TLabel::Encode(Type, PageVersion | 0x8000, Blob.size()));
                 ptr += sizeof(TLabel);
                 WriteUnaligned<NPage::TLabelExt>(ptr, TLabelExt::Encode(ECodec::Plain));
                 ptr += sizeof(TLabelExt);
             } else {
-                WriteUnaligned<NPage::TLabel>(ptr, TLabel::Encode(Type, Version, Blob.size()));
+                WriteUnaligned<NPage::TLabel>(ptr, TLabel::Encode(Type, PageVersion, Blob.size()));
                 ptr += sizeof(TLabel);
             }
 
@@ -110,6 +110,7 @@ namespace NPage {
         TSharedData Reset()
         {
             Tail = nullptr;
+            PageVersion = Version;
             Deltas.clear();
             if (Deltas.capacity() > 1024) {
                 TVector<ui64>().swap(Deltas);
@@ -152,6 +153,13 @@ namespace NPage {
         bool HasDeltas() const noexcept
         {
             return !Deltas.empty();
+        }
+
+        // The current page uses a newer format, applies until the page is closed
+        void RequireVersion(ui16 version)
+        {
+            Y_ENSURE((version & 0x8000) == 0, "Invalid version value");
+            PageVersion = Max(PageVersion, version);
         }
 
         void PushDelta(TPgSize recordSize)
@@ -278,6 +286,7 @@ namespace NPage {
         const bool V2Label = false;     /* Put new style NPage label    */
         const ui32 Extra = 0;           /* Size of extra data in prefix */
         const ui32 Prefix = 0;          /* Prefix size (label + heder)  */
+        ui16 PageVersion = Version;     /* Version of the current page  */
 
         TSharedData Blob;
         char* Tail = nullptr;
@@ -329,7 +338,7 @@ namespace NPage {
             return DataPageBuilder.BytesUsed();
         }
 
-        TSizeInfo CalcSize(TCellsRef key, const TRowState& row, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode = ELockMode::None, ui64 lockTxId = 0) const
+        TSizeInfo CalcSize(TCellsRef key, const TRowState& row, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode = ELockMode::None, ui64 lockTxId = 0, ui32 savepointSeqNum = 0) const
         {
             Y_ENSURE(key.size() == GroupInfo.KeyTypes.size());
 
@@ -346,6 +355,7 @@ namespace NPage {
             ret.DataPageSize += isVersioned ? sizeof(NPage::TDataPage::TVersion) : 0;
             ret.DataPageSize += GroupId.Index == 0 && isDelta ? sizeof(NPage::TDataPage::TDelta) : 0;
             ret.DataPageSize += GroupId.Index == 0 && lockMode != ELockMode::None ? sizeof(NPage::TDataPage::TLocked) : 0;
+            ret.DataPageSize += GroupId.Index == 0 && isDelta && savepointSeqNum ? sizeof(NPage::TDataPage::TDeltaSavepointSeqNum) : 0;
             Y_UNUSED(lockTxId);
 
             // Only the main group includes the key
@@ -376,7 +386,7 @@ namespace NPage {
             return ret;
         }
 
-        void Add(const TSizeInfo& more, TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode = ELockMode::None, ui64 lockTxId = 0)
+        void Add(const TSizeInfo& more, TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode = ELockMode::None, ui64 lockTxId = 0, ui32 savepointSeqNum = 0)
         {
             if (more.Overflow) {
                 LastRecord = nullptr;
@@ -388,7 +398,7 @@ namespace NPage {
                 DataPageBuilder.ExtraAs<TDataPage::TExtra>()->BaseRow = RowId;
             }
 
-            Put(key, row, saver, finalRow, minVersion, maxVersion, txId, lockMode, lockTxId, more.DataPageSize);
+            Put(key, row, saver, finalRow, minVersion, maxVersion, txId, lockMode, lockTxId, savepointSeqNum, more.DataPageSize);
 
             if (txId == 0) {
                 BlobRowId = ++RowId;
@@ -431,11 +441,12 @@ namespace NPage {
         }
 
     private:
-        void Put(TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode, ui64 lockTxId, TPgSize recordSize)
+        void Put(TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode, ui64 lockTxId, ui32 savepointSeqNum, TPgSize recordSize)
         {
             const bool isErased = !maxVersion.IsMax();
             const bool isVersioned = !minVersion.IsMin();
             const bool isDelta = txId != 0;
+            const bool hasSavepointSeqNum = isDelta && savepointSeqNum != 0;
 
             if (isDelta) {
                 Y_ENSURE(!isErased && !isVersioned);
@@ -452,7 +463,7 @@ namespace NPage {
             }
 
             if (GroupId.Index == 0) {
-                rec.SetFields(row.GetRowState(), isErased, isVersioned, isDelta, lockMode != ELockMode::None);
+                rec.SetFields(row.GetRowState(), isErased, isVersioned, isDelta, lockMode != ELockMode::None, hasSavepointSeqNum);
 
                 if (isErased) {
                     DataPageBuilder.Place<NPage::TDataPage::TVersion>().Set(maxVersion);
@@ -468,6 +479,12 @@ namespace NPage {
 
                 if (lockMode != ELockMode::None) {
                     DataPageBuilder.Place<NPage::TDataPage::TLocked>().Set(lockMode, lockTxId);
+                }
+
+                if (hasSavepointSeqNum) {
+                    // Must stay the last field of the record tail
+                    DataPageBuilder.Place<NPage::TDataPage::TDeltaSavepointSeqNum>().Set(savepointSeqNum);
+                    DataPageBuilder.RequireVersion(2);
                 }
             } else {
                 rec.SetZero(); // We don't store flags in alternative groups

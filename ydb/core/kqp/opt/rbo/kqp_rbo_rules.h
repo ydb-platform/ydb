@@ -335,6 +335,17 @@ class TPushFilterUnderMapRule : public ISimplifiedRule {
 };
 
 /**
+ * Push filter through aggregate.
+ */
+class TPushFilterThroughAggregateRule : public ISimplifiedRule {
+  public:
+    TPushFilterThroughAggregateRule() : ISimplifiedRule("Push filter through aggregate", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Extract common conjuncts from OR branches to expose top-level filters.
  */
 class TExtractCommonConjunctsRule : public ISimplifiedRule {

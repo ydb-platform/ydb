@@ -203,8 +203,10 @@ const NJson::TJsonValue* FindOperatorByStringField(const NJson::TJsonValue& plan
     return nullptr;
 }
 
-const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue) {
-    if (!planNode.IsMap()) {
+// The subtree of skipNode is not searched.
+const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonValue& planNode, const TString& fieldName, const TString& fieldValue,
+    const NJson::TJsonValue* skipNode = nullptr) {
+    if (!planNode.IsMap() || &planNode == skipNode) {
         return nullptr;
     }
 
@@ -221,8 +223,36 @@ const NJson::TJsonValue* FindOperatorByStringFieldContaining(const NJson::TJsonV
 
     if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
         for (const auto& child : plans->second.GetArraySafe()) {
-            if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue)) {
+            if (const auto* op = FindOperatorByStringFieldContaining(child, fieldName, fieldValue, skipNode)) {
                 return op;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+// Return the lowest plan node with an operator of the given name.
+const NJson::TJsonValue* FindLowestPlanNodeByOperatorName(const NJson::TJsonValue& planNode, const TString& name) {
+    if (!planNode.IsMap()) {
+        return nullptr;
+    }
+
+    const auto& planMap = planNode.GetMapSafe();
+    if (auto plans = planMap.find("Plans"); plans != planMap.end()) {
+        for (const auto& child : plans->second.GetArraySafe()) {
+            if (const auto* node = FindLowestPlanNodeByOperatorName(child, name)) {
+                return node;
+            }
+        }
+    }
+
+    if (auto operators = planMap.find("Operators"); operators != planMap.end()) {
+        for (const auto& opNode : operators->second.GetArraySafe()) {
+            const auto& op = opNode.GetMapSafe();
+            const auto field = op.find("Name");
+            if (field != op.end() && field->second.IsString() && field->second.GetStringSafe() == name) {
+                return &planNode;
             }
         }
     }
@@ -1149,6 +1179,150 @@ FROM (
 
         const auto simplifiedPlan = GetSimplifiedPlan(plan);
         UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Name", "TableFullScan"), plan);
+    }
+
+    Y_UNIT_TEST_TWIN(PushFilterThroughAggregateOnLeftJoinInput, ColumnStore) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(CreateExplainPlanTestAppConfig()).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto tableSession = db.CreateSession().GetValueSync().GetSession();
+        const TString store = ColumnStore ? "WITH (STORE = COLUMN)" : "";
+        auto schemeResult = tableSession.ExecuteSchemeQuery(TStringBuilder() << R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) )" << store << R"(;
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                PRIMARY KEY (a)
+            ) )" << store << R"(;
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t1Rows;
+        t1Rows.BeginList();
+        for (i64 a = 1; a <= 12; ++a) {
+            t1Rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").OptionalInt64(a % 4)
+                .AddMember("c").OptionalInt64(a * 100)
+                .EndStruct();
+        }
+        t1Rows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/t1", t1Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Rows;
+        t2Rows.BeginList();
+        for (i64 a = 1; a <= 3; ++a) {
+            t2Rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(a)
+                .AddMember("b").OptionalInt64(a)
+                .AddMember("c").OptionalInt64(a * 1000)
+                .EndStruct();
+        }
+        t2Rows.EndList();
+        upsertResult = db.BulkUpsert("/Root/t2", t2Rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto session = CreateQuerySession(kikimr);
+
+        struct TTestCase {
+            TString Query;
+            TString PushedPredicate;
+            TString RemainingPredicate;
+            TString Result;
+        };
+
+        const TVector<TTestCase> testCases = {
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, s.cnt, s.total, t2.c
+                FROM (
+                    SELECT b, COUNT(*) AS cnt, SUM(c) AS total
+                    FROM `/Root/t1`
+                    GROUP BY b
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.b = 2;
+            )", "b == 2", "", R"([[[2];3u;[1800];[2000]]])"},
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, s.total, t2.c
+                FROM (
+                    SELECT b, SUM(c) AS total
+                    FROM `/Root/t1`
+                    GROUP BY b
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.b = 2 AND s.total > 500;
+            )", "b == 2", "> 500", R"([[[2];[1800];[2000]]])"},
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, t2.c
+                FROM (
+                    SELECT DISTINCT b
+                    FROM `/Root/t1`
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.b = 2;
+            )", "b == 2", "", R"([[[2];[2000]]])"},
+            {R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT s.b, s.total, t2.c
+                FROM (
+                    SELECT b, SUM(c) AS total
+                    FROM `/Root/t1`
+                    GROUP BY b
+                ) AS s
+                LEFT JOIN `/Root/t2` AS t2 ON s.b = t2.a
+                WHERE s.total = 1800;
+            )", "", "== 1800", R"([[[2];[1800];[2000]]])"},
+        };
+
+        for (const auto& testCase : testCases) {
+            auto plan = ExecuteExplain(session, testCase.Query);
+            const auto simplifiedPlan = GetSimplifiedPlan(plan);
+            const auto* aggregate = FindLowestPlanNodeByOperatorName(simplifiedPlan, "Aggregate");
+            UNIT_ASSERT_C(aggregate, plan);
+            if (!testCase.PushedPredicate.empty()) {
+                UNIT_ASSERT_C(FindOperatorByStringFieldContaining(*aggregate, "Predicate", testCase.PushedPredicate),
+                    testCase.Query << plan);
+                UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(simplifiedPlan, "Predicate", testCase.PushedPredicate, aggregate),
+                    testCase.Query << plan);
+            }
+            if (!testCase.RemainingPredicate.empty()) {
+                UNIT_ASSERT_C(!FindOperatorByStringFieldContaining(*aggregate, "Predicate", testCase.RemainingPredicate),
+                    testCase.Query << plan);
+                UNIT_ASSERT_C(FindOperatorByStringFieldContaining(simplifiedPlan, "Predicate", testCase.RemainingPredicate, aggregate),
+                    testCase.Query << plan);
+            }
+
+            auto result = session.ExecuteQuery(testCase.Query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, testCase.Query << result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), testCase.Result, testCase.Query);
+        }
+
+        const TString scalarQuery = R"(
+            PRAGMA YqlSelect = 'force';
+            DECLARE $p AS Int64;
+            SELECT s.cnt
+            FROM (
+                SELECT COUNT(*) AS cnt
+                FROM `/Root/t1`
+            ) AS s
+            WHERE $p > 100;
+        )";
+        auto params = TParamsBuilder().AddParam("$p").Int64(0).Build().Build();
+        auto result = session.ExecuteQuery(scalarQuery, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([])");
     }
 
     Y_UNIT_TEST(ExplainOriginalRowsHintsOldRbo) {

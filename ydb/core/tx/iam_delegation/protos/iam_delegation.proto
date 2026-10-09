@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+package NKikimrIamDelegation;
+
+// Incarnation is an opaque, immutable, globally unique database incarnation ID.
+// The provisioning service must never reuse it, including after path reuse.
+message TDatabaseIdentity {
+    optional string Incarnation = 1;
+    optional string Path = 2;
+    optional string DatabaseId = 3;
+}
+
+message TDatabaseRecord {
+    optional TDatabaseIdentity Identity = 1;
+    optional uint64 InventoryRevision = 2;
+}
+
+message TRegisterDatabaseRequest {
+    optional TDatabaseIdentity Identity = 1;
+}
+
+message TRequest {
+    oneof Command {
+        TRegisterDatabaseRequest RegisterDatabase = 1;
+    }
+}
+
+enum EStatus {
+    STATUS_UNSPECIFIED = 0;
+    SUCCESS = 1;
+    INVALID_ARGUMENT = 2;
+    NOT_FOUND = 3;
+    CONFLICT = 4;
+    PRECONDITION_FAILED = 5;
+}
+
+message TResponse {
+    optional EStatus Status = 1;
+    optional string Error = 2;
+    optional TDatabaseRecord Database = 3;
+}

@@ -89,6 +89,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/iam_delegation/iam_delegation.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
@@ -1232,6 +1233,10 @@ namespace Tests {
         localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::IamDelegation] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NIamDelegation::CreateIamDelegationTablet, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 

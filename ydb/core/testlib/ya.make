@@ -81,6 +81,7 @@ PEERDIR(
     ydb/core/testlib/basics
     ydb/core/tx/columnshard
     ydb/core/tx/coordinator
+    ydb/core/tx/iam_delegation
     ydb/core/tx/long_tx_service
     ydb/core/tx/mediator
     ydb/core/tx/replication/controller

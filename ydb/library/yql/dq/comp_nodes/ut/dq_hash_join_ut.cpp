@@ -16,6 +16,8 @@
 
 #include <arrow/util/bit_util.h>
 
+#include <bit>
+#include <limits>
 #include <numeric>
 
 namespace NKikimr::NMiniKQL {
@@ -1065,6 +1067,71 @@ TJoinTestData InnerJoinNullKeysDoNotMatchByDefaultTestData() {
     td.LeftKeyColmns = {1};
     td.RightKeyColmns = {1};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// -0.0 matches +0.0 and any NaN matches any NaN, as EquateFloats does; -inf still differs from +inf.
+TJoinTestData InnerJoinDoubleKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    const double nanWithPayload = std::bit_cast<double>(ui64{0x7ff8000000000001ull});
+    const double negativeNan = std::bit_cast<double>(ui64{0xfff8000000001234ull});
+    const double inf = std::numeric_limits<double>::infinity();
+
+    TVector<ui64> leftIds = {1, 2, 3, 4, 5};
+    TVector<double> leftKeys = {-0.0, nanWithPayload, 1.5, -inf, 2.5};
+    TVector<ui64> rightIds = {10, 20, 30, 40, 50};
+    TVector<double> rightKeys = {0.0, negativeNan, 1.5, inf, -2.5};
+
+    TVector<ui64> expLeftIds = {1, 2, 3};
+    TVector<double> expLeftKeys = {-0.0, nanWithPayload, 1.5};
+    TVector<ui64> expRightIds = {10, 20, 30};
+    TVector<double> expRightKeys = {0.0, negativeNan, 1.5};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// Float key next to an integer key, so the key is compared by memcmp rather than as a single word
+TJoinTestData InnerJoinOptionalFloatAndIntKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const float negativeNan = std::bit_cast<float>(ui32{0xffc01234u});
+
+    TVector<ui64> leftIds = {1, 2, 3, 4};
+    TVector<std::optional<float>> leftFloatKeys = {-0.0f, nan, std::nullopt, 0.0f};
+    TVector<ui64> leftIntKeys = {7, 7, 7, 8};
+    TVector<ui64> rightIds = {1, 2, 3, 4};
+    TVector<std::optional<float>> rightFloatKeys = {0.0f, negativeNan, std::nullopt, -0.0f};
+    TVector<ui64> rightIntKeys = {7, 7, 7, 7};
+
+    TVector<ui64> expLeftIds = {1, 1, 2};
+    TVector<std::optional<float>> expLeftFloatKeys = {-0.0f, -0.0f, nan};
+    TVector<ui64> expLeftIntKeys = {7, 7, 7};
+    TVector<ui64> expRightIds = {1, 4, 2};
+    TVector<std::optional<float>> expRightFloatKeys = {0.0f, -0.0f, negativeNan};
+    TVector<ui64> expRightIntKeys = {7, 7, 7};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftFloatKeys, leftIntKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightFloatKeys, rightIntKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftFloatKeys, expLeftIntKeys,
+                                       expRightIds, expRightFloatKeys, expRightIntKeys);
+
+    td.LeftKeyColmns = {1, 2};
+    td.RightKeyColmns = {1, 2};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}, {2, EJoinSide::kRight}};
     td.Kind = EJoinKind::Inner;
     return td;
 }
@@ -2573,6 +2640,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
         Test(InnerJoinNullKeysDoNotMatchByDefaultTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinDoubleKeys, BlockJoin) {
+        Test(InnerJoinDoubleKeysTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinOptionalFloatAndIntKeys, BlockJoin) {
+        Test(InnerJoinOptionalFloatAndIntKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {

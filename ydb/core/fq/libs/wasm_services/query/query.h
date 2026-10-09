@@ -6,9 +6,7 @@
 
 namespace NFq::NWasmServices {
 
-inline constexpr TStringBuf ProfileTransformType = "WASM_PROFILE";
-
-NYql::TDqFunctionGatewayFactory::TPtr CreateProfileGatewayFactory(const NConfig::TWasmServicesConfig& config);
-void RegisterProfileTransform(NYql::NDq::TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config);
+NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactory(const NConfig::TWasmServicesConfig& config);
+void RegisterServiceTransforms(NYql::NDq::TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config);
 
 } // namespace NFq::NWasmServices

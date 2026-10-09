@@ -3,9 +3,10 @@ option cc_enable_arenas = true;
 
 package NFq.NConfig;
 
-// Experimental, operator-owned Profile adapter bindings. Disabled by default.
+// Experimental, operator-owned WASM service modules/bindings. Disabled by default.
 message TWasmServicesConfig {
     bool Enabled = 1;
+    // Single-module shorthand; requires adjacent <ModulePath>.manifest.json.
     string ModulePath = 2;
     repeated TBinding Bindings = 3;
     uint32 MaxBufferedRows = 4;
@@ -14,6 +15,14 @@ message TWasmServicesConfig {
     uint32 MaxBatchRows = 6;
     // Application request/response and guest result byte cap (default 32768).
     uint32 MaxBatchBytes = 7;
+    repeated TModule Modules = 8;
+    // Conservative serialized input/output reservation, default 64 MiB.
+    uint64 MaxBufferedBytes = 9;
+
+    message TModule {
+        string ModulePath = 1;
+        string ManifestPath = 2;
+    }
 
     message TBinding {
         string Alias = 1;

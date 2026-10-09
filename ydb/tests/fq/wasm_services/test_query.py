@@ -1,4 +1,5 @@
 import pytest
+import struct
 
 from ydb.public.api.protos.draft import fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -21,6 +22,78 @@ def start(client, sql):
 def batch_query(alias, ids):
     source = ' UNION ALL '.join(f'SELECT {id}ul AS id' for id in ids)
     return query(alias).replace('SELECT 42ul AS id', source)
+
+
+def echo_query(method='Echo', output='Struct<value:String,length:Uint64,empty:Bool,delta:Int64>'):
+    return f'''
+    $input = SELECT "hello" AS message UNION ALL SELECT "" AS message UNION ALL SELECT "hello" AS message;
+    $result = PROCESS $input USING EXTERNAL FUNCTION('Echo', '{method}')
+        WITH CONNECTION='echo_http', INPUT_TYPE=Struct<message:String>, OUTPUT_TYPE={output};
+    SELECT * FROM $result;
+    '''
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 1}, {'rows': 2}], indirect=True)
+def test_second_module_with_different_schema(client, services, yq_version, batch_config):
+    query_id = start(client, echo_query())
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    result = client.get_result_data(query_id).result.result_set
+    columns = {column.name: i for i, column in enumerate(result.columns)}
+    assert sorted((
+        row.items[columns['value']].bytes_value,
+        row.items[columns['length']].uint64_value,
+        row.items[columns['empty']].bool_value,
+        row.items[columns['delta']].int64_value,
+    ) for row in result.rows) == [(b'', 0, True, 0), (b'hello', 5, False, -5), (b'hello', 5, False, -5)]
+    assert len(services.requests) == (3 if batch_config['rows'] == 1 else 2)
+    assert all(kind == 'echo' and auth == 'Bearer host-secret' for kind, _, auth in services.requests)
+    assert sum(struct.unpack_from('<I', body)[0] for _, body, _ in services.requests) == 3
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 2}], indirect=True)
+def test_second_method_with_different_result_schema(client, services, yq_version, batch_config):
+    query_id = start(client, echo_query('Length', 'Struct<length:Uint32>'))
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    rows = client.get_result_data(query_id).result.result_set.rows
+    assert sorted(row.items[0].uint32_value for row in rows) == [0, 5, 5]
+    assert len(services.requests) == 2
+
+
+@yq_v1
+def test_unknown_module_method_has_no_network_access(client, services, yq_version):
+    query_id = start(client, echo_query('Missing'))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert 'Unknown WASM service method' in str(client.describe_query(query_id).result.query.issue)
+    assert not services.requests
+
+
+@yq_v1
+def test_second_module_wrong_schema_has_no_network_access(client, services, yq_version):
+    query_id = start(client, echo_query(output='Struct<length:Uint64>'))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert not services.requests
+
+
+@yq_v1
+def test_second_module_oversized_input_has_no_network_access(client, services, yq_version):
+    oversized = '"' + 'x' * 1025 + '"'
+    sql = echo_query().replace('"hello"', oversized).replace('""', oversized)
+    query_id = start(client, sql)
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert not services.requests
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 2, 'echo_small_result_limit': True}], indirect=True)
+def test_host_rejects_module_result_exceeding_manifest(client, services, yq_version, batch_config):
+    query_id = start(client, echo_query())
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    issues = str(client.describe_query(query_id).result.query.issue)
+    assert 'Invalid WASM service result framing' in issues
+    assert 'host-secret' not in issues
+    assert len(services.requests) == 1
 
 
 @yq_v1
@@ -47,7 +120,7 @@ def test_batch_bad_response(client, services, protocol, yq_version, batch_config
     client.wait_query_status(query_id, fq.QueryMeta.FAILED)
     assert len(services.requests) == 1
     issues = str(client.describe_query(query_id).result.query.issue)
-    assert 'WASM Profile service failed' in issues
+    assert 'WASM service failed' in issues
     assert 'host-secret' not in issues
 
 
@@ -122,7 +195,7 @@ def test_empty_input_has_no_network_access(client, services, yq_version):
 def test_unknown_alias_has_no_network_access(client, services, yq_version):
     query_id = start(client, query('missing'))
     client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-    assert 'Unknown WASM Profile connection alias' in str(client.describe_query(query_id).result.query.issue)
+    assert 'Unknown WASM service connection alias' in str(client.describe_query(query_id).result.query.issue)
     assert not services.requests
 
 
@@ -131,7 +204,7 @@ def test_malformed_response_fails_query(client, yq_version):
     query_id = start(client, query('profiles_http', 400))
     client.wait_query_status(query_id, fq.QueryMeta.FAILED)
     issues = str(client.describe_query(query_id).result.query.issue)
-    assert 'WASM Profile service failed' in issues
+    assert 'WASM service failed' in issues
     assert 'host-secret' not in issues
 
 

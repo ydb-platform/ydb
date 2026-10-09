@@ -5,13 +5,18 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 PEERDIR(
     contrib/python/grpcio
     library/python/testing/yatest_common
-    ydb/core/fq/libs/wasm_services/ut/protos
+    ydb/udfs/wasm/profile/proto/schema
 )
 
 TEST_SRCS(test_query.py)
 PY_SRCS(conftest.py)
 
-DATA(arcadia/ydb/core/fq/libs/wasm_services/ut/data/transport_coroutine.wasm)
+DATA(
+    arcadia/ydb/udfs/wasm/profile/ut/data/profile.wasm
+    arcadia/ydb/udfs/wasm/profile/manifest.json
+    arcadia/ydb/udfs/wasm/echo/ut/data/echo.wasm
+    arcadia/ydb/udfs/wasm/echo/manifest.json
+)
 
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

@@ -1,0 +1,20 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "WASM_PROFILE",
+  "module_extension": "wasm",
+  "service_abi_version": 1,
+  "service_methods": [{
+    "name": "Profile",
+    "id": 0,
+    "batch": true,
+    "max_batch_rows": 64,
+    "max_output_row_bytes": 288,
+    "input": [{"name": "id", "type": "Uint64"}],
+    "output": [
+      {"name": "id", "type": "Uint64"},
+      {"name": "name", "type": "Utf8", "max_bytes": 256},
+      {"name": "score", "type": "Uint32"}
+    ]
+  }]
+}

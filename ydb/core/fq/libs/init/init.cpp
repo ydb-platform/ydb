@@ -190,7 +190,7 @@ void Init(
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     if (protoConfig.GetWasmServices().GetEnabled()) {
-        NWasmServices::RegisterProfileTransform(*asyncIoFactory, protoConfig.GetWasmServices());
+        NWasmServices::RegisterServiceTransforms(*asyncIoFactory, protoConfig.GetWasmServices());
     }
 
     const auto httpGateway = NYql::IHTTPGateway::Make(

@@ -10,7 +10,7 @@ SRCS(main.cpp)
 
 PEERDIR(
     contrib/libs/rapidjson
-    ydb/core/fq/libs/wasm_services/fixture/proto
+    ydb/udfs/wasm/profile/proto
     ydb/services/udf_store/wasm/abi
 )
 

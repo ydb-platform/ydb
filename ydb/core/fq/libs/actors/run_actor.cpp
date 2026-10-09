@@ -2101,7 +2101,7 @@ private:
         TVector<TDataProviderInitializer> dataProvidersInit;
         if (Params.Config.GetWasmServices().GetEnabled() && Params.QueryType == FederatedQuery::QueryContent::ANALYTICS) {
             dataProvidersInit.push_back(GetDqFunctionDataProviderInitializer(nullptr,
-                NWasmServices::CreateProfileGatewayFactory(Params.Config.GetWasmServices())));
+                NWasmServices::CreateServiceGatewayFactory(Params.Config.GetWasmServices())));
         }
         const std::shared_ptr<IDatabaseAsyncResolver> dbResolver = std::make_shared<TDatabaseAsyncResolverImpl>(
             NActors::TActivationContext::ActorSystem(),

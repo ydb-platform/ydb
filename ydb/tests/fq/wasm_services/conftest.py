@@ -7,7 +7,7 @@ import grpc
 import pytest
 import yatest.common
 
-from ydb.core.fq.libs.wasm_services.ut.protos import profile_pb2
+from ydb.udfs.wasm.profile.proto.schema import profile_pb2
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.kikimr_utils import (
@@ -26,7 +26,16 @@ class MockServices:
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
-                request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                body = self.rfile.read(int(self.headers['Content-Length']))
+                if self.path == '/echo':
+                    with owner.lock:
+                        owner.requests.append(('echo', body, self.headers.get('Authorization')))
+                    self.send_response(200)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                request = json.loads(body)
                 batch = 'ids' in request
                 ids = request['ids'] if batch else [request['id']]
                 with owner.lock:
@@ -111,7 +120,12 @@ class WasmExtension(ExtensionPoint):
     def apply_to_kikimr(self, request, kikimr):
         config = {
             'enabled': True,
-            'module_path': yatest.common.source_path('ydb/core/fq/libs/wasm_services/ut/data/transport_coroutine.wasm'),
+            'modules': [
+                {'module_path': yatest.common.source_path('ydb/udfs/wasm/profile/ut/data/profile.wasm'),
+                 'manifest_path': yatest.common.source_path('ydb/udfs/wasm/profile/manifest.json')},
+                {'module_path': yatest.common.source_path('ydb/udfs/wasm/echo/ut/data/echo.wasm'),
+                 'manifest_path': yatest.common.source_path('ydb/udfs/wasm/echo/manifest.json')},
+            ],
             'call_timeout_ms': self.timeout_ms,
             'max_batch_rows': self.batch_config.get('rows', 1),
             'max_batch_bytes': self.batch_config.get('bytes', 32768),
@@ -121,11 +135,21 @@ class WasmExtension(ExtensionPoint):
                 {'alias': 'profiles_grpc', 'protocol': 'GRPC', 'endpoint': f'127.0.0.1:{self.services.grpc_port}',
                  'method': '/NFq.NWasmServices.NTest.MockService/Lookup', 'grpc_insecure': True,
                  'headers': {'authorization': 'Bearer host-secret'}},
+                {'alias': 'echo_http', 'endpoint': f'http://127.0.0.1:{self.services.http.server_port}/echo',
+                 'headers': {'Authorization': 'Bearer host-secret', 'Content-Type': 'application/octet-stream'}},
             ],
         }
         if self.batch_config.get('rows', 1) > 1:
             config['bindings'][0]['endpoint'] += '/batch'
             config['bindings'][1]['method'] += 'Batch'
+        if self.batch_config.get('echo_small_result_limit'):
+            with open(config['modules'][1]['manifest_path']) as source:
+                manifest = json.load(source)
+            manifest['service_methods'][0]['output'][0]['max_bytes'] = 1
+            path = yatest.common.output_path(request.node.name + '_echo_manifest.json')
+            with open(path, 'w') as output:
+                json.dump(manifest, output)
+            config['modules'][1]['manifest_path'] = path
         for tenant in kikimr.tenants.values():
             tenant.fq_config['wasm_services'] = config
 

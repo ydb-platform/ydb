@@ -26,6 +26,9 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
-RESOURCE(data/transport_coroutine.wasm /fq_transport_coroutine.wasm)
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/profile/ut/data/profile.wasm /fq_transport_coroutine.wasm)
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/echo/ut/data/echo.wasm /echo_service.wasm)
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/profile/manifest.json /profile_manifest.json)
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/echo/manifest.json /echo_manifest.json)
 
 END()

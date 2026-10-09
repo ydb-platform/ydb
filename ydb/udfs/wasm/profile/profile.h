@@ -1,8 +1,8 @@
 #pragma once
 
-#include "wire.h"
+#include <ydb/udfs/wasm/sdk/services/transport.h>
 
-namespace NFq::NWasmServices {
+namespace NYdb::NWasm::NServices::NProfile {
 
 // Domain types for the private P2 profile service, not a public YQL ABI.
 inline constexpr uint32_t ProfileVersion = 1;
@@ -54,4 +54,4 @@ static_assert(sizeof(TProfileBatchHeader) == 16 && std::is_trivially_copyable_v<
 static_assert(sizeof(TProfile) == 272 && sizeof(TProfileResult) == 288 && sizeof(TProfileResults) == 584);
 static_assert(std::is_trivially_copyable_v<TProfileResults>);
 
-} // namespace NFq::NWasmServices
+} // namespace NYdb::NWasm::NServices::NProfile

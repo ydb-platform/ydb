@@ -1,5 +1,7 @@
-#include <ydb/core/fq/libs/wasm_services/profile.h>
-#include <ydb/core/fq/libs/wasm_services/wire.h>
+#include "profile.h"
+#include <ydb/udfs/wasm/sdk/services/transport.h>
+#include <ydb/udfs/wasm/sdk/services/rows.h>
+#include <ydb/udfs/wasm/sdk/services/example_allocator.h>
 #include <ydb/services/udf_store/wasm/abi/async.h>
 
 #include "proto/profile.pb.h"
@@ -16,88 +18,8 @@
 #include <optional>
 
 using namespace NYdb::NWasm::NAsync;
-using namespace NFq::NWasmServices;
-
-namespace {
-
-// Reusable fixture-only storage: observable lifetime without libc++ string
-// imports.
-constexpr unsigned Slots = 32;
-alignas(16) unsigned char Arena[Slots][65536];
-bool Used[Slots];
-uint64_t LiveObjects = 0;
-
-} // namespace
-
-void* operator new(std::size_t size) {
-    if (size > sizeof(Arena[0])) {
-        __builtin_trap();
-    }
-    for (unsigned i = 0; i < Slots; ++i) {
-        if (!Used[i]) {
-            Used[i] = true;
-            ++LiveObjects;
-            return Arena[i];
-        }
-    }
-    __builtin_trap();
-}
-
-void* operator new(std::size_t size, std::align_val_t alignment) {
-    if (static_cast<size_t>(alignment) > 16) {
-        __builtin_trap();
-    }
-    return ::operator new(size);
-}
-
-void operator delete(void* pointer) noexcept {
-    if (!pointer) {
-        return;
-    }
-    const auto offset = reinterpret_cast<uintptr_t>(pointer) - reinterpret_cast<uintptr_t>(Arena);
-    const auto index = offset / sizeof(Arena[0]);
-    if (index >= Slots || offset % sizeof(Arena[0]) || !Used[index]) {
-        __builtin_trap();
-    }
-    Used[index] = false;
-    --LiveObjects;
-}
-
-void operator delete(void* pointer, std::size_t) noexcept {
-    ::operator delete(pointer);
-}
-
-void operator delete(void* pointer, std::align_val_t) noexcept {
-    ::operator delete(pointer);
-}
-
-void operator delete(void* pointer, std::size_t, std::align_val_t) noexcept {
-    ::operator delete(pointer);
-}
-
-void* operator new[](std::size_t size) {
-    return ::operator new(size);
-}
-
-void* operator new[](std::size_t size, std::align_val_t alignment) {
-    return ::operator new(size, alignment);
-}
-
-void operator delete[](void* pointer) noexcept {
-    ::operator delete(pointer);
-}
-
-void operator delete[](void* pointer, std::size_t) noexcept {
-    ::operator delete(pointer);
-}
-
-void operator delete[](void* pointer, std::align_val_t alignment) noexcept {
-    ::operator delete(pointer, alignment);
-}
-
-void operator delete[](void* pointer, std::size_t size, std::align_val_t alignment) noexcept {
-    ::operator delete(pointer, size, alignment);
-}
+using namespace NYdb::NWasm::NServices;
+using namespace NYdb::NWasm::NServices::NProfile;
 
 namespace {
 
@@ -671,11 +593,74 @@ TTask<TReply> Run(TCallContext& context, const TArgumentsHeader* args) {
     co_return Collect(std::move(first), std::move(second));
 }
 
+TReply ServiceFailure(EServiceError error, uint32_t detail = 0) {
+    return {EOperationStatus::Ready, Pack(TServiceResult{ServiceVersion, 0, static_cast<uint32_t>(error), detail}, {})};
+}
+
+TTask<TReply> RunService(TCallContext& context, const void* arguments, size_t size) {
+    TServiceRequest header;
+    std::string_view rows;
+    if (!ReadServiceRequest({static_cast<const char*>(arguments), size}, header, rows) || header.Method != 0)
+        co_return ServiceFailure(EServiceError::InvalidArguments);
+    uint64_t ids[MaxProfileBatchRows];
+    TRowReader reader(rows);
+    for (uint32_t i = 0; i < header.Count; ++i)
+        if (!reader.Get(ids[i]) || !ids[i])
+            co_return ServiceFailure(EServiceError::InvalidArguments);
+    if (!reader.Remaining().empty())
+        co_return ServiceFailure(EServiceError::InvalidArguments);
+    const auto mode = header.Batch ? (header.Protocol ? EProfileMode::GrpcBatch : EProfileMode::HttpBatch)
+                                   : (header.Protocol ? EProfileMode::Grpc : EProfileMode::Http);
+    auto payload = header.Batch ? Pack(TProfileBatchHeader{ProfileVersion, header.Count, header.MaxBytes},
+                                       {reinterpret_cast<const char*>(ids), header.Count * sizeof(uint64_t)})
+                                : Pack(ids[0], {});
+    auto argumentsBytes = Pack(TArgumentsHeader{static_cast<uint64_t>(mode), header.Binding, header.Binding, payload.Size}, payload.View());
+    const auto* privateArgs = reinterpret_cast<const TArgumentsHeader*>(argumentsBytes.Buffer.get());
+    auto reply = header.Batch ? co_await RunBatch(context, privateArgs) : co_await RunProfile(context, privateArgs);
+    TProfileResult items[MaxProfileBatchRows];
+    if (header.Batch) {
+        TProfileBatchHeader decoded;
+        std::string_view body;
+        if (!Decode(reply.Bytes.View(), decoded, body) || decoded.Count != header.Count ||
+            body.size() != header.Count * sizeof(TProfileResult))
+            co_return ServiceFailure(EServiceError::Decode);
+        std::memcpy(items, body.data(), body.size());
+    } else {
+        if (reply.Bytes.Size != sizeof(TProfileResults))
+            co_return ServiceFailure(EServiceError::Decode);
+        TProfileResults decoded;
+        std::memcpy(&decoded, reply.Bytes.Buffer.get(), sizeof(decoded));
+        if (decoded.Version != ProfileVersion || decoded.Count != 1)
+            co_return ServiceFailure(EServiceError::Decode);
+        items[0] = decoded.Items[0];
+    }
+    TBytes output(header.MaxBytes);
+    TRowWriter writer(output.Buffer.get(), output.Size);
+    writer.Put(TServiceResult{ServiceVersion, header.Count});
+    for (uint32_t i = 0; i < header.Count; ++i) {
+        const auto& item = items[i];
+        if (item.Error != EServiceError::None)
+            co_return ServiceFailure(item.Error, static_cast<uint32_t>(item.ClientError));
+        const auto& profile = item.Profile;
+        if (profile.Id != ids[i])
+            co_return ServiceFailure(EServiceError::InvalidProfile);
+        if (!writer.Put(profile.Id) || !writer.String({profile.Name, profile.NameBytes}) || !writer.Put(profile.Score))
+            co_return ServiceFailure(EServiceError::InvalidProfile);
+    }
+    output.Size = writer.Size();
+    co_return TReply{EOperationStatus::Ready, std::move(output)};
+}
+
 struct TCall {
     TCallContext Context;
     std::optional<TTask<TReply>> Task;
-    explicit TCall(const TArgumentsHeader* args) {
-        Task.emplace(Run(Context, args));
+    TCall(const void* args, size_t size) {
+        uint32_t magic;
+        std::memcpy(&magic, args, sizeof(magic));
+        if (magic == ServiceMagic)
+            Task.emplace(RunService(Context, args, size));
+        else
+            Task.emplace(Run(Context, static_cast<const TArgumentsHeader*>(args)));
         Context.Runnable = Task->Handle();
     }
 };
@@ -691,10 +676,13 @@ extern "C" uint64_t WasmAsyncCallStart(uint64_t arguments, uint64_t size) {
         __builtin_trap();
     }
     const auto* args = reinterpret_cast<const TArgumentsHeader*>(arguments);
-    if (args->PayloadBytes != size - sizeof(*args) || args->Mode > static_cast<uint64_t>(EProfileMode::GrpcBatch)) {
+    uint32_t magic;
+    std::memcpy(&magic, args, sizeof(magic));
+    if (magic != ServiceMagic &&
+        (args->PayloadBytes != size - sizeof(*args) || args->Mode > static_cast<uint64_t>(EProfileMode::GrpcBatch))) {
         __builtin_trap();
     }
-    return reinterpret_cast<uint64_t>(new TCall(args));
+    return reinterpret_cast<uint64_t>(new TCall(args, size));
 }
 
 extern "C" void WasmAsyncCallPoll(uint64_t frame) {
@@ -715,5 +703,5 @@ extern "C" void WasmAsyncCallDrop(uint64_t frame) {
 }
 
 extern "C" uint64_t WasmAsyncLiveObjects() {
-    return LiveObjects;
+    return NYdb::NWasm::NServices::NExampleAllocator::LiveObjects;
 }

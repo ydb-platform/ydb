@@ -1,8 +1,9 @@
 #include <ydb/core/fq/libs/wasm_services/transport.h>
-#include <ydb/core/fq/libs/wasm_services/profile.h>
+#include <ydb/udfs/wasm/profile/profile.h>
+#include <ydb/core/fq/libs/wasm_services/query/manifest.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/mock.grpc.pb.h>
-#include <ydb/core/fq/libs/wasm_services/ut/protos/profile.pb.h>
+#include <ydb/udfs/wasm/profile/proto/schema/profile.pb.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -19,6 +20,8 @@
 #include <ydb/library/wasm/api/function.h>
 
 #include <library/cpp/http/server/http_ex.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -37,7 +40,10 @@
 #include <mutex>
 
 using namespace NFq::NWasmServices;
+using namespace NYdb::NWasm::NServices::NProfile;
 using namespace NAsync;
+
+static constexpr TStringBuf ProfileTransformType = "WASM_PROFILE";
 using namespace NKikimr::NUdfStore::NWasm;
 using namespace NYdb::NWasm;
 
@@ -375,7 +381,7 @@ struct TEnv {
     std::unique_ptr<TRuntime> Runtime;
     TVector<THandle> Ready;
 
-    explicit TEnv(TVector<TBinding> bindings, TTransportLimits limits = {}) {
+    explicit TEnv(TVector<TBinding> bindings, TTransportLimits limits = {}, TStringBuf resource = "/fq_transport_coroutine.wasm") {
         Transport = std::make_shared<TTransport>(std::move(bindings), limits);
         EnsureUdfHostIntrinsicsRegistered();
         KeepAsyncHostIntrinsicsLinked();
@@ -383,7 +389,7 @@ struct TEnv {
         query->Generation = 43;
         query->BridgeNodes = std::make_unique<TWasmBridgeNodeTable>(query->Generation);
         query->Compartment = CreateRegistryCompartment({});
-        const auto bytes = NResource::Find("/fq_transport_coroutine.wasm");
+        const auto bytes = NResource::Find(resource);
         const auto object = CompileModuleObjectCode(bytes, EBytecodeFormat::Binary);
         AddPrecompiledModule(query->Compartment.get(), MakeModuleBytecode(bytes, object, EBytecodeFormat::Binary), "FqTransportFixture");
         query->Resident = std::make_unique<TCompartmentResidentCache>(query->Compartment.get());
@@ -621,22 +627,27 @@ class TProfileConsumer final : public NYql::NDq::IDqOutputConsumer {
 
 struct TQueryTransformEnv {
     TTempFile Module;
+    TTempFile Manifest;
     NYql::NDq::TDqAsyncIoFactory Factory;
     std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
     NYql::NDq::TFakeCASetup Setup;
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0,
-                       ui32 maxBufferedRows = 65536)
-        : Module(MakeTempName())
+                       ui32 maxBufferedRows = 65536, ui64 maxBufferedBytes = 0)
+        : Module(MakeTempName()), Manifest(MakeTempName())
     {
         TFileOutput(Module.Name()).Write(NResource::Find("/fq_transport_coroutine.wasm"));
+        TFileOutput(Manifest.Name()).Write(NResource::Find("/profile_manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
-        config.SetModulePath(Module.Name());
+        auto* module = config.AddModules();
+        module->SetModulePath(Module.Name());
+        module->SetManifestPath(Manifest.Name());
         config.SetCallTimeoutMs(timeoutMs);
         config.SetMaxBatchRows(batchRows);
         config.SetMaxBatchBytes(batchBytes);
         config.SetMaxBufferedRows(maxBufferedRows);
+        config.SetMaxBufferedBytes(maxBufferedBytes);
         auto* entry = config.AddBindings();
         entry->SetAlias("profiles");
         entry->SetEndpoint(binding.Endpoint);
@@ -649,12 +660,12 @@ struct TQueryTransformEnv {
             if (batchRows > 1)
                 entry->SetMethod(binding.Method + "Batch");
         }
-        auto gateway = CreateProfileGatewayFactory(config);
+        auto gateway = CreateServiceGatewayFactory(config);
         auto description =
             gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "profiles")->ResolveFunction({}, "Profile").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(description.InvokeUrl, "profiles");
+        UNIT_ASSERT_STRING_CONTAINS(description.InvokeUrl, "profiles");
         UNIT_ASSERT_EXCEPTION(gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "missing"), yexception);
-        RegisterProfileTransform(Factory, config);
+        RegisterServiceTransforms(Factory, config);
         Setup.Execute([&](NYql::NDq::TFakeActor& actor) {
             using namespace NKikimr::NMiniKQL;
             auto* input =
@@ -703,6 +714,212 @@ struct TQueryTransformEnv {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
+    Y_UNIT_TEST(EchoModuleLinksAndRejectsUnknownMethod) {
+        TEnv env({}, {}, "/echo_service.wasm");
+        const NYdb::NWasm::NServices::TServiceRequest request{
+            NYdb::NWasm::NServices::ServiceMagic, NYdb::NWasm::NServices::ServiceVersion, 999, 0, 0, 1, 32768, 0};
+        const auto call = env.Runtime->Start(TStringBuf(reinterpret_cast<const char*>(&request), sizeof(request)),
+                                             TInstant::Now() + TDuration::Seconds(30));
+        const auto result = env.AwaitTerminal(call);
+        UNIT_ASSERT(result.Status == ECallStatus::Completed);
+        NYdb::NWasm::NServices::TRowReader reader(View(result.Data));
+        NYdb::NWasm::NServices::TServiceResult reply;
+        UNIT_ASSERT(reader.Get(reply));
+        UNIT_ASSERT_VALUES_EQUAL(reply.Error, 1);
+        UNIT_ASSERT(reader.Remaining().empty());
+        env.Clean(call);
+    }
+
+    Y_UNIT_TEST(EchoModuleHttpBatchDecodesDifferentSchemas) {
+        using namespace NYdb::NWasm::NServices;
+        THttpMock http;
+        TGrpcMock grpc;
+        TEnv env(Bindings(http, grpc), {}, "/echo_service.wasm");
+        const std::string_view messages[] = {std::string_view("a\0b", 3), std::string_view()};
+        size_t exchange = 0;
+        for (const ui32 method : {7u, 9u}) {
+            char arguments[256];
+            TRowWriter writer(arguments, sizeof(arguments));
+            UNIT_ASSERT(writer.Put(TServiceRequest{ServiceMagic, ServiceVersion, method, 0, 0, 2, 32768, 1}));
+            for (const auto message : messages)
+                UNIT_ASSERT(writer.String(message));
+            const auto call = env.Runtime->Start(TStringBuf(arguments, writer.Size()), TInstant::Now() + TDuration::Seconds(30));
+            UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+            const auto request = http.State->Wait(exchange);
+            http.State->Reply(exchange++, request->Payload, 200);
+            const auto result = env.AwaitTerminal(call);
+            UNIT_ASSERT(result.Status == ECallStatus::Completed);
+            TRowReader reader(View(result.Data));
+            TServiceResult reply;
+            UNIT_ASSERT(reader.Get(reply));
+            UNIT_ASSERT_VALUES_EQUAL(reply.Version, ServiceVersion);
+            UNIT_ASSERT_VALUES_EQUAL(reply.Count, 2);
+            UNIT_ASSERT_VALUES_EQUAL(reply.Error, 0);
+            for (const auto expected : messages) {
+                if (method == 7) {
+                    std::string_view value;
+                    ui64 length;
+                    ui8 empty;
+                    i64 delta;
+                    UNIT_ASSERT(reader.String(value, 1024) && reader.Get(length) && reader.Get(empty) && reader.Get(delta));
+                    UNIT_ASSERT(value == expected);
+                    UNIT_ASSERT_VALUES_EQUAL(length, expected.size());
+                    UNIT_ASSERT_VALUES_EQUAL(empty, expected.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(delta, -static_cast<i64>(expected.size()));
+                } else {
+                    ui32 length;
+                    UNIT_ASSERT(reader.Get(length));
+                    UNIT_ASSERT_VALUES_EQUAL(length, expected.size());
+                }
+            }
+            UNIT_ASSERT(reader.Remaining().empty());
+            env.Clean(call);
+        }
+    }
+
+    Y_UNIT_TEST(ServiceManifestDescribesDifferentModules) {
+        const auto profile = ParseServiceManifest(NResource::Find("/profile_manifest.json"));
+        const auto echo = ParseServiceManifest(NResource::Find("/echo_manifest.json"));
+        UNIT_ASSERT_VALUES_EQUAL(profile.Name, "WASM_PROFILE");
+        UNIT_ASSERT_VALUES_EQUAL(profile.Methods.at("Profile").Input[0].Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(echo.Name, "Echo");
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Echo").Id, 7);
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Length").Id, 9);
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Echo").Output.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Length").Output.size(), 1);
+    }
+
+    Y_UNIT_TEST(ServiceManifestRejectsInvalidContracts) {
+        const TVector<std::function<void(NJson::TJsonValue&)>> mutations{
+            [](auto& root) { root["service_abi_version"] = 2; },
+            [](auto& root) { root["service_methods"][1]["id"] = 7; },
+            [](auto& root) { root["service_methods"][1]["name"] = "Echo"; },
+            [](auto& root) { root["service_methods"][0]["input"][0]["type"] = "Optional<String>"; },
+            [](auto& root) { root["service_methods"][0]["input"][0]["max_bytes"] = 0; },
+            [](auto& root) { root["service_methods"][0]["max_output_row_bytes"] = 1; },
+            [](auto& root) { root["service_methods"][0]["max_batch_rows"] = 65; },
+            [](auto& root) { root["service_methods"][0]["max_batch_rows"] = 0; },
+            [](auto& root) { root["service_methods"][0]["batch"] = false; },
+            [](auto& root) { root["service_methods"][0]["output"][1]["name"] = "value"; },
+        };
+        for (const auto& mutate : mutations) {
+            NJson::TJsonValue root;
+            UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/echo_manifest.json"), &root, true));
+            mutate(root);
+            UNIT_ASSERT_EXCEPTION(ParseServiceManifest(NJson::WriteJson(root, false)), yexception);
+        }
+    }
+
+    Y_UNIT_TEST(ServiceRegistrySelectsModuleAndMethod) {
+        TTempFile profile(MakeTempName()), echo(MakeTempName());
+        TFileOutput(profile.Name()).Write(NResource::Find("/profile_manifest.json"));
+        TFileOutput(echo.Name()).Write(NResource::Find("/echo_manifest.json"));
+        NFq::NConfig::TWasmServicesConfig config;
+        config.SetEnabled(true);
+        auto* binding = config.AddBindings();
+        binding->SetAlias("service");
+        binding->SetEndpoint("http://unused");
+        for (const auto& manifest : {profile.Name(), echo.Name()}) {
+            auto* module = config.AddModules();
+            module->SetModulePath("unused");
+            module->SetManifestPath(manifest);
+        }
+        const auto factory = CreateServiceGatewayFactory(config);
+        auto gateway = factory->CreateDqFunctionGateway("Echo", {}, "service");
+        const auto description = gateway->ResolveFunction({}, "Length").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(description.Type, "Echo");
+        UNIT_ASSERT_STRING_CONTAINS(description.InvokeUrl, "Length");
+        UNIT_ASSERT_EXCEPTION(gateway->ResolveFunction({}, "Profile"), yexception);
+        UNIT_ASSERT_EXCEPTION(factory->CreateDqFunctionGateway("Echo", {}, "missing"), yexception);
+        config.MutableModules(1)->SetManifestPath(profile.Name());
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
+        config.MutableModules(1)->SetManifestPath(echo.Name());
+        config.SetMaxBufferedBytes(1);
+        UNIT_ASSERT_EXCEPTION(
+            CreateServiceGatewayFactory(config)->CreateDqFunctionGateway("Echo", {}, "service")->ResolveFunction({}, "Echo"), yexception);
+        config.SetMaxBufferedBytes(0);
+        config.SetMaxBatchBytes(592);
+        const auto limited = CreateServiceGatewayFactory(config);
+        UNIT_ASSERT(limited->CreateDqFunctionGateway("WASM_PROFILE", {}, "service")->ResolveFunction({}, "Profile").GetValueSync().Type ==
+                    "WASM_PROFILE");
+        UNIT_ASSERT_EXCEPTION(limited->CreateDqFunctionGateway("Echo", {}, "service")->ResolveFunction({}, "Echo"), yexception);
+        config.SetMaxBatchBytes(0);
+        config.SetModulePath("ambiguous");
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
+    }
+
+    Y_UNIT_TEST(ServiceRowWireBounds) {
+        using namespace NYdb::NWasm::NServices;
+        char buffer[128];
+        TRowWriter writer(buffer, sizeof(buffer));
+        UNIT_ASSERT(writer.Put(ui64(Max<ui64>())));
+        UNIT_ASSERT(writer.Put(i64(-7)));
+        UNIT_ASSERT(writer.String(std::string_view("a\0b", 3)));
+        UNIT_ASSERT(writer.String({}));
+        TRowReader reader({buffer, writer.Size()});
+        ui64 unsignedValue;
+        i64 signedValue;
+        std::string_view text;
+        UNIT_ASSERT(reader.Get(unsignedValue) && unsignedValue == Max<ui64>());
+        UNIT_ASSERT(reader.Get(signedValue) && signedValue == -7);
+        UNIT_ASSERT(reader.String(text, 3) && text == std::string_view("a\0b", 3));
+        UNIT_ASSERT(reader.String(text, 3) && text.empty());
+        UNIT_ASSERT(reader.Remaining().empty());
+        UNIT_ASSERT(!reader.Get(unsignedValue));
+        TRowReader truncated({buffer, 1});
+        UNIT_ASSERT(!truncated.Get(unsignedValue));
+        TRowWriter shortWriter(buffer, 3);
+        UNIT_ASSERT(!shortWriter.String("x"));
+        TServiceRequest header;
+        header.Count = 1;
+        auto bytes = Encode(header, std::string_view(buffer, 8));
+        std::string_view rows;
+        UNIT_ASSERT(ReadServiceRequest(bytes, header, rows));
+        header.Count = MaxServiceBatchRows + 1;
+        UNIT_ASSERT(!ReadServiceRequest(Encode(header), header, rows));
+    }
+
+    Y_UNIT_TEST(ServiceSingleModuleShorthandUsesAdjacentManifest) {
+        TTempFile artifact(MakeTempName());
+        TTempFile manifest(artifact.Name() + ".manifest.json");
+        TFileOutput(manifest.Name()).Write(NResource::Find("/profile_manifest.json"));
+        NFq::NConfig::TWasmServicesConfig config;
+        config.SetEnabled(true);
+        config.SetModulePath(artifact.Name());
+        auto* binding = config.AddBindings();
+        binding->SetAlias("service");
+        binding->SetEndpoint("http://unused");
+        const auto factory = CreateServiceGatewayFactory(config);
+        UNIT_ASSERT_VALUES_EQUAL(
+            factory->CreateDqFunctionGateway("WASM_PROFILE", {}, "service")->ResolveFunction({}, "Profile").GetValueSync().Type,
+            "WASM_PROFILE");
+    }
+
+    Y_UNIT_TEST(DqBatchByteQuotaReservesOutputRows) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 2, 0, 10, 2 * sizeof(TProfileResult));
+        env.Output->BlockAfterRows = 1;
+        env.Setup.Execute(
+            [](NYql::NDq::TFakeActor& actor) { UNIT_ASSERT_VALUES_EQUAL(actor.DqAsyncOutput->GetFreeSpace(), 2 * sizeof(ui64)); });
+        env.Start({42, 43}, false);
+        http.State->Wait();
+        http.State->Reply(0, HttpBatchPayload({42, 43}), 200);
+        Eventually([&] { return env.Output->Blocked.load(); });
+        env.Setup.Execute(
+            [](NYql::NDq::TFakeActor& actor) { UNIT_ASSERT_VALUES_EQUAL(actor.DqAsyncOutput->GetFreeSpace(), sizeof(ui64)); });
+        env.Start({44});
+        env.Output->BlockAfterRows = 0;
+        env.Output->Blocked = false;
+        env.Setup.Execute([](NYql::NDq::TFakeActor& actor) { actor.DqAsyncOutput->OnOutputConsumerReady(); });
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(1)->Payload, "{\"ids\":[44]}");
+        http.State->Reply(1, HttpBatchPayload({44}), 200);
+        Eventually([&] { return env.Output->Finished.load(); });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 3);
+    }
+
     Y_UNIT_TEST(DqBatchQuotaCountsActiveAndUndeliveredRows) {
         THttpMock http;
         TGrpcMock grpc;
@@ -879,19 +1096,25 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     }
 
     Y_UNIT_TEST(DqBatchRejectsInvalidConfig) {
+        TTempFile manifest(MakeTempName());
+        TFileOutput(manifest.Name()).Write(NResource::Find("/profile_manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
-        config.SetModulePath("unused");
+        auto* module = config.AddModules();
+        module->SetModulePath("unused");
+        module->SetManifestPath(manifest.Name());
         auto* binding = config.AddBindings();
         binding->SetAlias("profiles");
         binding->SetEndpoint("http://unused");
         config.SetMaxBatchRows(MaxProfileBatchRows + 1);
-        UNIT_ASSERT_EXCEPTION(CreateProfileGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
         config.SetMaxBatchRows(2);
         config.SetMaxBatchBytes(sizeof(TProfileBatchHeader) + sizeof(TProfileResult) - 1);
-        UNIT_ASSERT_EXCEPTION(CreateProfileGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(
+            CreateServiceGatewayFactory(config)->CreateDqFunctionGateway("WASM_PROFILE", {}, "profiles")->ResolveFunction({}, "Profile"),
+            yexception);
         config.SetMaxBatchBytes(MaxProfileBatchBytes + 1);
-        UNIT_ASSERT_EXCEPTION(CreateProfileGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
     }
 
     Y_UNIT_TEST(DqProfileHttpBackpressureAndTypedRows) {

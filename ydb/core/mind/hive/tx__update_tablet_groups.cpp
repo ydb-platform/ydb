@@ -320,6 +320,9 @@ public:
         }
 
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
+        Self->RecordTabletEvent(*tablet, EHiveEventType::GroupsReassigned, EHiveEventReason::StorageReassign,
+            TStringBuilder() << "reassignReason=" << NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(tablet->ChannelProfileReassignReason)
+                << " changed=" << changed << " from=" << ETabletStateName(tablet->State) << " to=" << ETabletStateName(newTabletState));
         tablet->State = newTabletState;
         if (changed && newTabletState == ETabletState::ReadyToWork) {
             // initial group assignment is considered automatically confirmed
@@ -345,7 +348,7 @@ public:
                         {"tabletId", TabletId});
                 }
             } else if (tablet->IsReadyToWork()) {
-                if (!tablet->InitiateStop(SideEffects)) {
+                if (!tablet->InitiateStop(SideEffects, EHiveEventReason::GroupsChanged)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute failed to initiate tablet stop",
                         {"logPrefix", GetLogPrefix()},
                         {"tabletId", TabletId});

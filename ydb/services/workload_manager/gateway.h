@@ -14,6 +14,8 @@
 
 namespace NKikimr::NWorkloadManager {
 
+inline constexpr TStringBuf WORKLOAD_MANAGER_NOT_READY_MESSAGE = "Workload manager is not ready for the database, please retry";
+
 enum class EReadyState {
     Ready,     // DB info and classifiers are known: classify and admit the query
     Pending,   // state not known yet: wait via SubscribeOnReady
@@ -52,7 +54,9 @@ public:
     [[nodiscard]] virtual TReadyInfo EnsureReady(const TString& databaseId) = 0;
 
     /// Subscribe to event when workload manager is ready to classify queries for
-    /// this database. Delivered as TEvWorkloadManagerReady{cookie, status} to `subscriber`.
+    /// this database. Delivered as TEvWorkloadManagerReady{cookie, status} to `subscriber`,
+    /// or as TEvUndelivered with SourceType == TEvSubscribeOnWorkloadManagerReady::EventType
+    /// and Cookie == cookie if the state actor is gone.
     virtual void SubscribeOnReady(const TString& databaseId,
                                    NActors::TActorId subscriber, ui64 cookie) = 0;
 

@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
     }
 
     // State actor stopped while a subscriber waits. The state actor:
-    // - releases the subscriber with SUCCESS,
+    // - releases the subscriber with retryable UNAVAILABLE,
     // - clears the gateway, so EnsureReady returns Disabled.
     Y_UNIT_TEST(TestPassAwayReleasesSubscribers) {
         TFixture fx;
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         auto ready = fx.Runtime.GrabEdgeEvent<TEvWorkloadManagerReady>(subscriber, WAIT_TIMEOUT);
         UNIT_ASSERT(ready);
         UNIT_ASSERT_VALUES_EQUAL(ready->Get()->Cookie, 12u);
-        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_EQUAL(ready->Get()->Status, Ydb::StatusIds::UNAVAILABLE);
 
         auto info = fx.EnsureReady("/Root/db1");
         UNIT_ASSERT(info.State == EReadyState::Disabled);

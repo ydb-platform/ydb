@@ -67,7 +67,8 @@ public:
     bool HasPending() const;
 
     /// Takes subscribers whose DB is settled given the metadata state; metadata TimedOut replies retryable UNAVAILABLE.
-    std::vector<TSubscriberReply> TakeSettledSubscribers(EMetadataState metadata);
+    /// Serverless DBs with pools disabled on serverless are settled regardless of metadata.
+    std::vector<TSubscriberReply> TakeSettledSubscribers(EMetadataState metadata, bool enableResourcePoolsOnServerless);
 
     /// Takes all subscribers regardless of state (pools disabled, actor shutdown).
     std::vector<TPendingSubscriber> TakeAllSubscribers();
@@ -80,7 +81,8 @@ private:
     static void AppendReplies(TEntry& entry, Ydb::StatusIds::StatusCode status, const TString& message,
                               std::vector<TSubscriberReply>& replies);
     static bool IsRetryable(Ydb::StatusIds::StatusCode status);
-    static bool IsSettled(const TEntry& entry, EMetadataState metadata);
+    static bool IsWorkloadManagerDisabled(const TEntry& entry, bool enableResourcePoolsOnServerless);
+    static bool IsSettled(const TEntry& entry, EMetadataState metadata, bool enableResourcePoolsOnServerless);
 
 private:
     const TDuration RequestTimeout_;

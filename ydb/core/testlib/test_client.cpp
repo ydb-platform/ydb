@@ -134,6 +134,7 @@
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
@@ -1407,7 +1408,10 @@ namespace Tests {
             auto& appData = Runtime->GetAppData(nodeIdx);
             auto gateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
             appData.WorkloadManagerGateway = gateway;
-            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters), gateway);
+            TActorId stateActorId = Runtime->Register(NWorkloadManager::CreateWorkloadManagerStateActor(gateway), nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeWorkloadManagerStateActorId(Runtime->GetNodeId(nodeIdx)), stateActorId, nodeIdx);
+
+            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
             TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
         }

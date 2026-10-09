@@ -3,7 +3,6 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/workload_manager/service/service.h>
-#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/common/events.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
@@ -121,9 +120,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
         // Restart workload service
         ydb->StopWorkloadService();
         auto runtime = ydb->GetRuntime();
-        auto gateway = std::static_pointer_cast<NWorkloadManager::NPrivate::TWorkloadManagerGateway>(
-            runtime->GetAppData().WorkloadManagerGateway);
-        runtime->Register(CreateService(NWorkloadManager::GetWorkloadManagerCounters(runtime->GetAppData().Counters), gateway));
+        runtime->Register(CreateService(NWorkloadManager::GetWorkloadManagerCounters(runtime->GetAppData().Counters)));
 
         // Check that tables will be cleanuped
         ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 0});

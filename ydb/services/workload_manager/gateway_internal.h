@@ -15,8 +15,6 @@
 
 namespace NKikimr::NWorkloadManager::NPrivate {
 
-inline constexpr TStringBuf WORKLOAD_MANAGER_NOT_READY_MESSAGE = "Workload manager is not ready for the database, please retry";
-
 enum class EDatabaseState {
     Pending,
     Ready,

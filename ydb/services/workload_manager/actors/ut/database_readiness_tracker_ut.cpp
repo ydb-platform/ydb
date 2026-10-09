@@ -44,8 +44,8 @@ struct TDatabaseTrackerFixture : public NUnitTest::TBaseFixture {
         return Databases().contains(databaseId);
     }
 
-    std::vector<TSubscriberReply> TakeSettled(EMetadataState metadata = EMetadataState::Ready) {
-        return Tracker.TakeSettledSubscribers(metadata);
+    std::vector<TSubscriberReply> TakeSettled(EMetadataState metadata = EMetadataState::Ready, bool enableResourcePoolsOnServerless = true) {
+        return Tracker.TakeSettledSubscribers(metadata, enableResourcePoolsOnServerless);
     }
 };
 
@@ -85,6 +85,25 @@ Y_UNIT_TEST_SUITE(DatabaseReadinessTracker) {
         const auto replies = TakeSettled(EMetadataState::TimedOut);
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(replies[0].Status, Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    // Serverless database with resource pools disabled on serverless. Subscribers:
+    // - are released with SUCCESS without waiting for metadata,
+    // - get SUCCESS even if metadata timed out.
+    Y_UNIT_TEST_F(TestServerlessDisabledSkipsMetadata, TDatabaseTrackerFixture) {
+        Subscribe(1);
+        FetchSucceeded(DATABASE, DATABASE, true);
+
+        UNIT_ASSERT(TakeSettled(EMetadataState::Pending, true).empty());
+
+        auto replies = TakeSettled(EMetadataState::Pending, false);
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Status, Ydb::StatusIds::SUCCESS);
+
+        Subscribe(2);
+        replies = TakeSettled(EMetadataState::TimedOut, false);
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(replies[0].Status, Ydb::StatusIds::SUCCESS);
     }
 
     // Database info fetch fails. The tracker:

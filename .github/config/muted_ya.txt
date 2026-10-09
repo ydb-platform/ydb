@@ -10,7 +10,6 @@ ydb/core/kqp/executer_actor/ut KqpExecuter.ResultChannelFlowControlPauseResume-C
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.RowDispatcherMemoryLimitOnParserCreation
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading+FromCheckpoint
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryConsumerCheckpointWithoutOffsets-SharedReading-FromCheckpoint
-ydb/core/kqp/ut/federated_query/datastreams StreamingHistoryReplay.DeduplicatingPqSinkRequiresForce-CompressedGraph
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry

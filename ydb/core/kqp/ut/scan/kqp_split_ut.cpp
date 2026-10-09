@@ -166,10 +166,12 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void SetupResultsCapture(i64 skip, i64 capture = std::numeric_limits<i64>::max()) {
-            ReverseSkip.store(skip);
-            ReverseCapture.store(capture);
-            for (auto& [_, pipe] : Pipes) {
-                pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+            with_lock(PipesLock) {
+                ReverseSkip.store(skip);
+                ReverseCapture.store(capture);
+                for (auto& [_, pipe] : Pipes) {
+                    pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                }
             }
         }
 
@@ -193,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 auto readtype = TEvDataShard::TEvRead::EventType;
                 auto acktype = TEvDataShard::TEvReadAck::EventType;
                 auto actual = forw->Get()->Get()->Ev->Type();
-                bool isRead = actual == readtype || acktype;
+                bool isRead = actual == readtype || actual == acktype;
                 if (isRead && ToSkip.fetch_sub(1) <= 0 && ToCapture.fetch_sub(1) > 0) {
                     Cerr << "captured evread -----------------------------------------------------------" << Endl;
                     with_lock(CaptureLock) {
@@ -209,12 +211,15 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void Forward(TAutoPtr<::NActors::IEventHandle> ev) {
-            TReplyPipeStub* pipe = Pipes[ev->Sender];
-            if (pipe == nullptr) {
-                pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
-                Register(pipe);
-                for (auto& [_, pipe] : Pipes) {
-                    pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+            TReplyPipeStub* pipe;
+            with_lock(PipesLock) {
+                pipe = Pipes[ev->Sender];
+                if (pipe == nullptr) {
+                    pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
+                    Register(pipe);
+                    for (auto& [_, p] : Pipes) {
+                        p->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                    }
                 }
             }
             auto id = pipe->SelfId();
@@ -226,23 +231,38 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             with_lock(CaptureLock) {
                 tosend.swap(Captured);
             }
-            for (auto& ev : tosend) {
-                TReplyPipeStub* pipe = Pipes[ev->Sender];
-                if (pipe == nullptr) {
-                    pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
-                    runtime->Register(pipe);
+            with_lock(PipesLock) {
+                for (auto& ev : tosend) {
+                    TReplyPipeStub* pipe = Pipes[ev->Sender];
+                    if (pipe == nullptr) {
+                        pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
+                        runtime->Register(pipe);
+                        for (auto& [_, p] : Pipes) {
+                            p->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                        }
+                    }
+                    auto id = pipe->SelfId();
+                    ev->Rewrite(ev->GetTypeRewrite(), id);
+                    runtime->Send(ev.Release());
+                }
+                if (sendResults) {
                     for (auto& [_, pipe] : Pipes) {
-                        pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                        pipe->SendCaptured(runtime);
                     }
                 }
-                auto id = pipe->SelfId();
-                ev->Rewrite(ev->GetTypeRewrite(), id);
-                runtime->Send(ev.Release());
             }
-            if (sendResults) {
-                for (auto& [_, pipe] : Pipes) {
-                    pipe->SendCaptured(runtime);
-                }
+        }
+
+        size_t CapturedSize() {
+            with_lock(CaptureLock) {
+                return Captured.size();
+            }
+        }
+
+        TActorId CapturedSender(size_t idx) {
+            with_lock(CaptureLock) {
+                AFL_ENSURE(idx < Captured.size());
+                return Captured[idx]->Sender;
             }
         }
 
@@ -256,6 +276,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
         TMutex CaptureLock;
         TVector<THolder<IEventHandle>> Captured;
+        TMutex PipesLock;
         THashMap<TActorId, TReplyPipeStub*> Pipes;
     };
 
@@ -1570,9 +1591,9 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
-        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
+        UNIT_ASSERT_EQUAL(shim->CapturedSize(), 1);
         // send delivery problem, read should be restarted (it will be second retry attempt for this read)
-        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+        s.Runtime->Send(shim->CapturedSender(0), s.Sender, undelivery.Release());
 
         Cerr << "resume evread -----------------------------------------------------------" << Endl;
         shim->AllowResults();
@@ -1627,9 +1648,9 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
-        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
+        UNIT_ASSERT_EQUAL(shim->CapturedSize(), 1);
         // send delivery problem, read should be restarted (it will be second retry attempt for this read)
-        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+        s.Runtime->Send(shim->CapturedSender(0), s.Sender, undelivery.Release());
 
         shim->SkipAll();
 
@@ -1680,8 +1701,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
-        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
-        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+        UNIT_ASSERT_EQUAL(shim->CapturedSize(), 1);
+        s.Runtime->Send(shim->CapturedSender(0), s.Sender, undelivery.Release());
 
         shim->SkipAll();
 
@@ -1726,8 +1747,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
-        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
-        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+        UNIT_ASSERT_EQUAL(shim->CapturedSize(), 1);
+        s.Runtime->Send(shim->CapturedSender(0), s.Sender, undelivery.Release());
 
         shim->SkipAll();
         shim->SendCaptured(s.Runtime);
@@ -1773,8 +1794,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
-        UNIT_ASSERT_EQUAL(shim->Captured.size(), 1);
-        s.Runtime->Send(shim->Captured[0]->Sender, s.Sender, undelivery.Release());
+        UNIT_ASSERT_EQUAL(shim->CapturedSize(), 1);
+        s.Runtime->Send(shim->CapturedSender(0), s.Sender, undelivery.Release());
 
         shim->SkipAll();
         shim->SendCaptured(s.Runtime);

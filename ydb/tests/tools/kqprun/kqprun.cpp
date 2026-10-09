@@ -946,6 +946,10 @@ protected:
                 return dcCount;
             });
 
+        options.AddLongOption("real-interconnect", "Connect nodes with real interconnect (TCP on localhost) instead of interconnect mock")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.YdbSettings.UseRealInterconnect);
+
         options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
             .RequiredArgument("uint")
             .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::FetchDatabase))

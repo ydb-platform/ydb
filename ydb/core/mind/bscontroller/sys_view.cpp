@@ -379,7 +379,9 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
         pb->SetAvailableSize(m.GetAvailableSize());
     }
     if (status) {
-        pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(*status));
+        // PhantomOnly is still reported, so the real state of the VDisk is visible anyway
+        const bool reportAsReady = phantomOnly && AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+        pb->SetStatusV2(NKikimrBlobStorage::EVDiskStatus_Name(reportAsReady ? NKikimrBlobStorage::READY : *status));
     }
     if (m.HasState()) {
         pb->SetState(NKikimrWhiteboard::EVDiskState_Name(m.GetState()));

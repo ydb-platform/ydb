@@ -469,4 +469,7 @@ message TFeatureFlags {
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
     optional bool EnableCoroutineCompactionSelector = 379 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
 }

@@ -97,7 +97,15 @@ ui64 GetTopicPartitionsCount(const NYql::NDqProto::TDqTask& task) {
     }
 
     const auto readTaskParams = NYql::NDq::ExtractReadTaskParams(taskParams, readRanges);
-    return NYql::NDq::GetPartitionsToRead(readTaskParams, federatedClusters).size();
+    const auto partitionsToRead = NYql::NDq::GetPartitionsToRead(readTaskParams, federatedClusters);
+
+    // A federated read actor reads the same partition ids from all clusters.
+    // Count logical topic partitions rather than (cluster, partition) pairs.
+    THashSet<ui64> partitionIds;
+    for (const auto& partition : partitionsToRead) {
+        partitionIds.insert(partition.PartitionId);
+    }
+    return partitionIds.size();
 }
 
 class TStreamingQueryNodesManager
@@ -236,6 +244,8 @@ private:
                 << "is less than expected (" << expectedNodesWithQuery << "). "
                 << "Total tenant nodes: " << totalNodes << ". "
                 << "Expected topic reader tasks: " << expectedTasks << ". "
+                << "Topic partitions count: " << TopicPartitionsCount << ". "
+                << "MaxTasksPerStage: " << MaxTasksPerStage << ". "
                 << "Query will be aborted.";
             LOG_W(reason);
             Abort(reason);

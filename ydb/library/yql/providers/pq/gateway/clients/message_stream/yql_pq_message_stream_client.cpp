@@ -30,8 +30,10 @@ NFq::EMessageStreamStatus ToStreamStatus(EStatus status) {
         case EStatus::PRECONDITION_FAILED:
             return NFq::EMessageStreamStatus::PreconditionFailed;
         case EStatus::UNAVAILABLE:
+        case EStatus::TRANSPORT_UNAVAILABLE:
             return NFq::EMessageStreamStatus::Unavailable;
         case EStatus::TIMEOUT:
+        case EStatus::CLIENT_DEADLINE_EXCEEDED:
             return NFq::EMessageStreamStatus::Timeout;
         case EStatus::OVERLOADED:
             return NFq::EMessageStreamStatus::Overloaded;

@@ -44,6 +44,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
+#include <util/system/env.h>
 
 #include <queue>
 #include <map>
@@ -237,10 +238,20 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         cluster.CreateSession = [settings, infoAggregator, txId, taskId, inputIndex, totalPartitions, name = cluster.Name,
             counters, enableStreamingQueriesCounters, control](const TActorContext& ctx, NFq::IMessageStreamClient& client,
                 const NFq::TMessageStreamReadSessionSettings& read) {
+            auto retryMaxTime = TDuration::Seconds(60);
+            ui64 maxTimeEnvMs = 60000;
+            if (TryFromString<ui64>(GetEnv("YDB_TEST_PQ_READ_ACTOR_RETRY_POLICY_MAX_TIME_MS"), maxTimeEnvMs)) {
+                retryMaxTime = TDuration::MilliSeconds(maxTimeEnvMs);
+            }
+            auto readSettings = read;
+            readSettings.Retry = NFq::TMessageStreamRetrySettings{
+                .MaxTime = retryMaxTime,
+                .RetryAuthenticationErrors = true,
+            };
             const auto skew = NProtoInterop::CastFromProto(settings.GetMaxPartitionReadSkew());
             if (!skew || settings.GetStopAtCurrentEndOffsets()) {
                 control->reset();
-                return NThreading::MakeFuture(client.CreateReadSession(read));
+                return NThreading::MakeFuture(client.CreateReadSession(readSettings));
             }
             YQL_ENSURE(infoAggregator, "Missing DQ info aggregator for distributed read session");
             auto taskCounters = counters ? counters->GetSubgroup("source", "PqRead") : MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -253,7 +264,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
             if (!name.empty()) { taskCounters = taskCounters->GetSubgroup("federated_pq_cluster", name); }
             auto [session, sessionControl] = CreateCompositeTopicReadSession(ctx, client, {
                 .TxId = txId, .TaskId = taskId, .Cluster = name, .AmountPartitionsCount = totalPartitions,
-                .InputIndex = inputIndex, .Counters = taskCounters, .BaseSettings = read,
+                .InputIndex = inputIndex, .Counters = taskCounters, .BaseSettings = readSettings,
                 .IdleTimeout = NProtoInterop::CastFromProto(settings.GetPartitionsBalancingIdleTimeout()),
                 .MaxPartitionReadSkew = skew, .AggregatorActor = infoAggregator});
             *control = std::move(sessionControl);

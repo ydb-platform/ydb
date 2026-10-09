@@ -611,7 +611,7 @@ TMessageStreamReadSessionSettings TTopicSession::GetReadSessionSettings(const TS
         .MinLongRetryDelay = TDuration::Seconds(5),
         .MaxDelay = TDuration::Seconds(20),
         .MaxRetries = 100,
-        .MaxTime = TDuration::Seconds(60),
+        .MaxTime = TDuration::Seconds(120),
         .ScaleFactor = 2.0,
         .RetryAuthenticationErrors = true,
     };

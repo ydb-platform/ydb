@@ -8,6 +8,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -57,6 +58,32 @@ google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeTopicSourceTasks
         partitioningParams->SetDqPartitionsCount(taskCount);
         task->AddReadRanges(readTaskParams.SerializeAsString());
     }
+    return tasks;
+}
+
+google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> MakeFederatedTopicSourceTasks(
+    ui64 topicPartitionsCount,
+    ui64 clusterCount)
+{
+    google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> tasks;
+    auto* task = tasks.Add();
+    task->SetId(0);
+    task->AddInputs()->MutableSource()->SetType(TString(NYql::NDq::PqSource));
+
+    NYql::NPq::NProto::TDqPqTopicSource topicSource;
+    for (ui64 clusterId = 0; clusterId < clusterCount; ++clusterId) {
+        auto* cluster = topicSource.AddFederatedClusters();
+        cluster->SetName(TStringBuilder() << "cluster" << clusterId);
+        cluster->SetPartitionsCount(topicPartitionsCount);
+    }
+    (*task->MutableTaskParams())["pq_topic_source"] = topicSource.SerializeAsString();
+
+    NYql::NPq::NProto::TDqReadTaskParams readTaskParams;
+    auto* partitioningParams = readTaskParams.AddPartitioningParams();
+    partitioningParams->SetTopicPartitionsCount(topicPartitionsCount);
+    partitioningParams->SetEachTopicPartitionGroupId(0);
+    partitioningParams->SetDqPartitionsCount(1);
+    task->AddReadRanges(readTaskParams.SerializeAsString());
     return tasks;
 }
 
@@ -186,6 +213,37 @@ Y_UNIT_TEST(NoAbortWhenMaxTasksPerStageLimitsTopicReaderTasks) {
     InjectReadyState(runtime, manager, {1});
     CompleteCheck(runtime, manager, {1, 2, 3, 4});
 
+    UNIT_ASSERT_VALUES_EQUAL(TakeAbortCount(runtime, edgeActor), 0);
+}
+
+Y_UNIT_TEST(NoAbortForFederatedTopicReadByOneActor) {
+    TTestActorRuntime runtime(1, false);
+    runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+    const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+    // One read actor reads four logical partitions from each of three clusters.
+    const TActorId manager = runtime.Register(CreateStreamingQueryNodesManager(
+        edgeActor,
+        "/Root/test",
+        "query",
+        MakeFederatedTopicSourceTasks(4, 3),
+        TDuration::Seconds(1),
+        TDuration::Zero(),
+        0));
+    runtime.EnableScheduleForActor(manager, true);
+
+    TDispatchOptions options;
+    options.OnlyMailboxes.emplace_back(manager);
+    options.FinalEvents.emplace_back([manager](IEventHandle& event) {
+        return event.GetRecipientRewrite() == manager
+            && event.GetTypeRewrite() == TEvents::TSystem::Bootstrap;
+    });
+    runtime.DispatchEvents(options);
+
+    InjectReadyState(runtime, manager, {1});
+    CompleteCheck(runtime, manager, {1, 2, 3, 4});
+
+    // The federated source has four logical partitions, so one query node is enough.
     UNIT_ASSERT_VALUES_EQUAL(TakeAbortCount(runtime, edgeActor), 0);
 }
 

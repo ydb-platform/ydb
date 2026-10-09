@@ -26,8 +26,9 @@ def parse_args(argv):
     )
 
     parser.add_argument("--auth", type=str, required=False, help="Allowed value for Authorization header")
-    parser.add_argument("--shard", type=str, required=False,
-                        help="Allowed shard id in form $project_name/$service_name/$cluster_name")
+    parser.add_argument(
+        "--shard", type=str, required=False, help="Allowed shard id in form $project_name/$service_name/$cluster_name"
+    )
     return parser.parse_args(argv)
 
 
@@ -39,13 +40,7 @@ def start(argv):
     grpc_port = pm.get_port()
     binary_path = ya_common.binary_path(f"ydb/library/yql/tools/{DAEMON_NAME}/bin/{DAEMON_NAME}")
     assert binary_path
-    cmd = [
-        binary_path,
-        "--http-port",
-        str(http_port),
-        "--grpc-port",
-        str(grpc_port)
-    ]
+    cmd = [binary_path, "--http-port", str(http_port), "--grpc-port", str(grpc_port)]
 
     if args.auth:
         cmd.extend(["--auth", args.auth])
@@ -58,7 +53,7 @@ def start(argv):
         environment=None,
         is_alive_check=is_daemon_ready,
         pid_file_name=PID_FILENAME,
-        daemon_name=DAEMON_NAME
+        daemon_name=DAEMON_NAME,
     )
 
     http_endpoint = f"localhost:{http_port}"

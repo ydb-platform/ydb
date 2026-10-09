@@ -7,6 +7,7 @@ from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config, set_tes
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.compatibility.fixtures import inter_stable_binary_path
 
+
 logger = logging.getLogger(__name__)
 
 

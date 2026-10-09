@@ -64,13 +64,13 @@ struct TFixture : public NUnitTest::TBaseFixture {
         Runtime.SimulateSleep(TDuration::MilliSeconds(1));
     }
 
-    void Start(ui32 items, ui64 consumers = 1) {
+    void Start(ui32 items, ui64 consumers = 1, bool useRuntimeListing = true) {
         NS3Details::TPathList paths;
         for (ui32 i = 0; i < items; ++i) {
             paths.emplace_back(TStringBuilder() << "object-" << i, 100, false, i);
         }
         QueueId = Runtime.Register(CreateS3FileQueueActor("test", std::move(paths),
-            1000, 1000, 1000, true, consumers, 1000, 1, nullptr, nullptr, "",
+            1000, 1000, 1000, useRuntimeListing, consumers, 1000, 1, nullptr, nullptr, "",
             TS3Credentials{}, "*", NS3Lister::ES3PatternVariant::FilePattern,
             NS3Lister::ES3PatternType::Wildcard, false));
         Pump();
@@ -359,5 +359,31 @@ Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
         UNIT_ASSERT_VALUES_EQUAL(Pop<TEvS3Provider::TEvObjectPathReadError>(1, 1)->Record.SerializeAsString(),
             error->Record.SerializeAsString());
         UNIT_ASSERT(Responses.empty());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3FileQueue) {
+    // The owning read actor stops its local queue with TEvPoison
+    // even after it has connected (the runtime-listing PoisonTimeout rule does not apply).
+    Y_UNIT_TEST_F(LocalQueueStopsOnOwnerPoison, TFixture) {
+        Consumer = Runtime.AllocateEdgeActor(0);
+        Start(3, 1, /* useRuntimeListing */ false);
+        Send(new TRequest(), 0);
+        UNIT_ASSERT(!Finished(*Pop(0, 0)));
+        Runtime.Send(new IEventHandle(QueueId, Consumer, new TEvents::TEvPoison()));
+        Pump();
+        AssertStopped();
+    }
+
+    // Runtime listing: the PoisonTimeout safety net is ignored while all consumers are connected.
+    Y_UNIT_TEST_F(SharedQueueIgnoresPoisonTimeoutWithConnectedConsumers, TFixture) {
+        Start(3);
+        Send(new TRequest(), 1);
+        Connect();
+        Pop(1, 1);
+        Runtime.Send(new IEventHandle(QueueId, QueueId, new TEvents::TEvPoison()));
+        Pump();
+        Send(new TRequest(), 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(Count(*Pop(2, 2)), 1);
     }
 }

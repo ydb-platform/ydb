@@ -44,6 +44,7 @@
 #include <library/cpp/retry/retry_policy.h>
 
 #include <util/generic/maybe.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/string/ascii.h>
 #include <util/string/join.h>
@@ -533,6 +534,7 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
 private:
     TCounters Counters;
     const ::NFq::TControlPlaneProxyConfig Config;
+    const THashSet<TString> AllowedStreamingFolderIds;
     const TYqSharedResources::TPtr YqSharedResources;
     const NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     const bool QuotaManagerEnabled;
@@ -555,6 +557,8 @@ public:
         bool quotaManagerEnabled)
         : Counters(counters)
         , Config(config, storageConfig, computeConfig, commonConfig, s3Config)
+        , AllowedStreamingFolderIds(config.GetStreamingQueryAccess().GetAllowedFolderIds().begin(),
+                                    config.GetStreamingQueryAccess().GetAllowedFolderIds().end())
         , YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
         , QuotaManagerEnabled(quotaManagerEnabled)
@@ -740,6 +744,22 @@ private:
                                     Config, token,
                                     probe, ev, cookie, AccessService, EnableAccessServiceV2Interface));
             return;
+        }
+
+        const auto& streamingAccess = Config.Proto.GetStreamingQueryAccess();
+        if (queryType == FederatedQuery::QueryContent::STREAMING && streamingAccess.GetEnabled()) {
+            const TString folderId = NYdb::NFq::TScope(scope).ParseFolder();
+            if (!AllowedStreamingFolderIds.contains(folderId)) {
+                NYql::TIssues accessIssues;
+                accessIssues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED,
+                    "Creating streaming queries is disabled for this folder"));
+                Send(ev->Sender, new TEvControlPlaneProxy::TEvCreateQueryResponse(accessIssues, subjectType), 0, ev->Cookie);
+                requestCounters.IncError();
+                const TDuration delta = TInstant::Now() - startTime;
+                requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
+                probe(delta, false, false);
+                return;
+            }
         }
 
         if (!ev->Get()->ComputeDatabase) {

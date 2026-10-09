@@ -5398,6 +5398,12 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         doWrite(credsDbg0, /*lsn=*/10, 'X');
         doWrite(credsDbg2, /*lsn=*/10, 'Y');
 
+        // Advance only DBG0's barrier, keeping its LSN 10 on the page.
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(credsDbg0, 5));
+        auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx), TReplyStatus::OK);
+
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, true));
         auto info = WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx);
 
@@ -5418,6 +5424,57 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
         UNIT_ASSERT(foundDbg0);
         UNIT_ASSERT(foundDbg2);
+
+        // Paginate namespaces independently, in the same stable order as the full response.
+        for (ui64 offset : {0ull, 1ull, 100ull}) {
+            auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>(false, true);
+            request->TabletsOffset = offset;
+            request->TabletsLimit = 1;
+            SendToDDisk(ctx, disk.PBServiceId, request.release());
+            auto page = WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx);
+            const ui64 expectedOffset = Min<ui64>(offset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsTotal, 2);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsOffset, expectedOffset);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.front().DirectBlockGroupIndex,
+                info->Get()->TabletInfos[expectedOffset].DirectBlockGroupIndex);
+            const auto& barriers = page->Get()->EraseBarriers;
+            UNIT_ASSERT_VALUES_EQUAL(barriers.size(), 1);
+            if (expectedOffset == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(barriers.at({tabletId, 0}), 5);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(barriers.at({tabletId, 2}), 0);
+            }
+        }
+        for (ui64 offset : std::array<ui64, 2>{1, Max<ui64>()}) {
+            auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>(false, true);
+            request->TabletsOffset = offset;
+            auto all = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, request.release());
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->TabletsOffset, 0);
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->TabletInfos.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->EraseBarriers.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(all->Get()->EraseBarriers.at({tabletId, 0}), 5);
+        }
+        auto otherCreds = Connect(ctx, disk.PBServiceId, 99, generation);
+        doWrite(otherCreds, 11, 'Z');
+        for (ui64 filter : std::array<ui64, 3>{tabletId, 99, 100}) {
+            auto request = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>(false, true);
+            request->TabletIdFilter = filter;
+            request->TabletsOffset = 100;
+            request->TabletsLimit = 1;
+            auto page = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId, request.release());
+            const ui64 total = filter == tabletId ? 2 : filter == 99 ? 1 : 0;
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsTotal, total);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletsOffset, total ? total - 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(page->Get()->TabletInfos.size(), total ? 1 : 0);
+            for (const auto& ti : page->Get()->TabletInfos) {
+                UNIT_ASSERT_VALUES_EQUAL(ti.TabletId, filter);
+                if (filter == tabletId) UNIT_ASSERT_VALUES_EQUAL(ti.DirectBlockGroupIndex, 2);
+            }
+        }
+        auto stats = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(
+            ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, false));
+        UNIT_ASSERT(stats->Get()->TabletInfos.empty());
     }
 
     Y_UNIT_TEST(PersistentBufferWithoutChecksumsStoresHeaderUniqueIdAndRestoresPayload) {

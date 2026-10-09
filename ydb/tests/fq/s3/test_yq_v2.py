@@ -138,7 +138,5 @@ Pear;15;33'''
             SELECT COUNT(*) FROM `.sys/top_queries_by_cpu_time_one_hour` WHERE QueryText = "SELECT COUNT(*) FROM `.sys/top_queries_by_cpu_time_one_hour` WHERE ...";
             """
 
-        query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)

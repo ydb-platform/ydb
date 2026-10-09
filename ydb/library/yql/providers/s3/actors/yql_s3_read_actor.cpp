@@ -190,6 +190,8 @@ struct TReadSpec {
 };
 
 struct TRetryStuff {
+    // After registration, the reader coroutine owns this state. Retries must execute in its
+    // mailbox too: AsyncDecoding gives the parent and the coroutine different mailboxes.
     using TPtr = std::shared_ptr<TRetryStuff>;
 
     TRetryStuff(
@@ -256,6 +258,10 @@ void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const T
 }
 
 void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, IHttpRequestContext::TPtr context = nullptr) {
+    if (retryStuff->IsCancelled()) {
+        // A retry scheduled before the coroutine was cancelled (LIMIT reached, poison): nobody would read or cancel it.
+        return;
+    }
     retryStuff->CancelHook = retryStuff->Gateway->Download(
         retryStuff->Url,
         retryStuff->Headers,
@@ -780,24 +786,38 @@ public:
 
             // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
+                // Footer sizes are signed, user-controlled metadata. Validate them even
+                // when an explicit reader count bypasses the heuristic.
+                ui64 compressedSize = 0;
+                for (int i = 0; i < fileMetadata->num_row_groups(); i++) {
+                    auto rowGroup = fileMetadata->RowGroup(i);
+                    for (const auto columnIndex : columnIndices) {
+                        const i64 chunkSize = rowGroup->ColumnChunk(columnIndex)->total_compressed_size();
+                        if (chunkSize < 0) {
+                            throw parquet::ParquetException("Invalid parquet metadata: negative total_compressed_size ", chunkSize,
+                                " of column ", columnIndex, " in row group ", i);
+                        }
+                        const ui64 unsignedChunkSize = static_cast<ui64>(chunkSize);
+                        if (unsignedChunkSize > Max<ui64>() - compressedSize) {
+                            throw parquet::ParquetException("Invalid parquet metadata: total_compressed_size sum overflow",
+                                " at column ", columnIndex, " in row group ", i);
+                        }
+                        compressedSize += unsignedChunkSize;
+                    }
+                }
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
                 } else {
                     // we want to read in parallel as much as 1/2 of fair share bytes
                     // (it's compressed size, after decoding it will grow)
-                    ui64 compressedSize = 0;
-                    for (int i = 0; i < fileMetadata->num_row_groups(); i++) {
-                        auto rowGroup = fileMetadata->RowGroup(i);
-                        for (const auto columIndex : columnIndices) {
-                            compressedSize += rowGroup->ColumnChunk(columIndex)->total_compressed_size();
-                        }
-                    }
                     // count = (fair_share / 2) / (compressed_size / num_group)
-                    auto desiredReaderCount = (SourceContext->FairShare() * numGroups) / (compressedSize * 2);
-                    // min is 1
+                    // min is 1, also for empty or implausibly large compressed sizes
                     // max is 5 (should be also tuned probably)
-                    if (desiredReaderCount) {
-                        readerCount = std::min(desiredReaderCount, 5ul);
+                    if (compressedSize && compressedSize <= Max<ui64>() / 2) {
+                        const auto desiredReaderCount = (static_cast<unsigned __int128>(SourceContext->FairShare()) * numGroups) / (compressedSize * 2);
+                        if (desiredReaderCount) {
+                            readerCount = static_cast<ui64>(std::min<unsigned __int128>(desiredReaderCount, 5));
+                        }
                     }
                 }
                 if (readerCount > numGroups) {
@@ -999,6 +1019,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
+        hFunc(TEvS3Provider::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvS3Provider::TEvDownloadStart, Handle);
         hFunc(TEvS3Provider::TEvDownloadData, Handle);
         hFunc(TEvS3Provider::TEvDownloadFinish, Handle);
@@ -1064,7 +1085,26 @@ public:
         return {};
     }
 
+    void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
+        // A gateway-wide failure may finish the new request without a start callback.
+        ResetDownloadAttempt();
+        retry->Get()->Functor();
+    }
+
+    void ResetDownloadAttempt() {
+        // A new attempt starts: the error state of the previous (retried) attempt must not leak into it.
+        // Its issues have already been reported as retriable.
+        HttpResponseCode = 0;
+        CurlResponseCode = CURLE_OK;
+        RetryStuff->NextRetryDelay = {};
+        ErrorText.clear();
+        ServerReturnedError = false;
+        Issues.Clear();
+        FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+    }
+
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
+        ResetDownloadAttempt();
         HttpResponseCode = ev->Get()->HttpResponseCode;
         CurlResponseCode = ev->Get()->CurlResponseCode;
         LOG_CORO_D("TEvDownloadStart, Http code: " << HttpResponseCode);
@@ -1141,7 +1181,7 @@ public:
                 // can't retry here: fail download
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
-                FinishDecompressor(/* force */ true);
+                FinishDecompressor();
                 LOG_CORO_W("ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
@@ -1152,7 +1192,9 @@ public:
             if (Work) {
                 retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetWorkScope());
             }
-            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
+            // Serialize installing the new cancel hook with cancellation in the reader's mailbox.
+            // Through the activation context, like TActorCoroImpl::Schedule: the coroutine runs on the actor thread.
+            TActivationContext::Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(SelfActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             if (!InputBuffer.empty()) {
                 RetryStuff->Offset -= InputBuffer.size();
                 RetryStuff->SizeLimit += InputBuffer.size();
@@ -1169,7 +1211,7 @@ public:
             LOG_CORO_D("TEvDownloadFinish, LastOffset: " << LastOffset << ", Error: " << ServerReturnedError);
             InputFinished = true;
             if (ServerReturnedError) {
-                FinishDecompressor(/* force */ true);
+                FinishDecompressor();
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
             if (DeferredDataParts.empty()) {
@@ -1194,13 +1236,13 @@ public:
     void Handle(TEvents::TEvPoison::TPtr&) {
         LOG_CORO_D("TEvPoison");
         RetryStuff->Cancel();
-        FinishDecompressor(/* force */ true);
+        FinishDecompressor();
         throw TS3ReadAbort();
     }
 
-    void FinishDecompressor(bool force = false) {
+    void FinishDecompressor() {
         if (AsyncDecompressing) {
-            Send(DecompressorActorId, new TEvents::TEvPoison(), 0, force);
+            Send(DecompressorActorId, new TEvents::TEvPoison());
         }
     }
 
@@ -1346,6 +1388,9 @@ private:
         } catch (const TS3ReadAbort&) {
             // Poison handler actually
             LOG_CORO_D("S3 read ABORT");
+            // The owner stops us (LIMIT reached or it passes away): issues of an attempt that was
+            // waiting for its retry were already reported as retriable and are not a failure.
+            Issues.Clear();
         } catch (const TDtorException&) {
             // Stop any activity instantly
             RetryStuff->Cancel();
@@ -1366,6 +1411,10 @@ private:
         }
 
         CpuTime += GetCpuTimeDelta();
+
+        // Every exit (parse error, LIMIT saturation, ...) stops the async decompressor:
+        // it would otherwise wait for more input forever. Harmless if it has already finished.
+        FinishDecompressor();
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues) {
@@ -1878,6 +1927,10 @@ private:
             }
             LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
             FileQueueEvents.Unsubscribe();
+            if (!UseRuntimeListing && FileQueueActor) {
+                // The local file queue is our child: it does not die with us on its own.
+                Send(FileQueueActor, new TEvents::TEvPoison());
+            }
 
             ClearMkqlData();
 
@@ -1891,7 +1944,6 @@ private:
     }
 
     STRICT_STFUNC_EXC(StateFunc,
-        hFunc(TEvS3Provider::TEvRetryEventFunc, HandleRetry);
         hFunc(TEvS3Provider::TEvNextBlock, HandleNextBlock);
         hFunc(TEvS3Provider::TEvNextRecordBatch, HandleNextRecordBatch);
         hFunc(TEvS3Provider::TEvFileFinished, HandleFileFinished);
@@ -1955,10 +2007,6 @@ private:
         LOG_W("TS3StreamReadActor", "Error while object listing, details: TEvObjectPathReadError: " << issues.ToOneLineString());
         issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while object listing", std::move(issues));
         OnFatalError(std::move(issues), result->Get()->Record.GetFatalCode());
-    }
-
-    void HandleRetry(TEvS3Provider::TEvRetryEventFunc::TPtr& retry) {
-        return retry->Get()->Functor();
     }
 
     void HandleNextBlock(TEvS3Provider::TEvNextBlock::TPtr& next) {

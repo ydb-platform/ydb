@@ -294,7 +294,8 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         if (lookup->IsJoin()) {
             settings.Strategy = lookup->JoinKind == "LeftSemi" ? EStreamLookupStrategyType::LookupSemiJoinRows : EStreamLookupStrategyType::LookupJoinRows;
             // For point prefix lookup we allow null keys with it size.
-            settings.AllowNullKeysPrefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
+            const size_t prefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
+            settings.AllowNullKeysPrefixSize = prefixSize + (lookup->AllowNullKeys ? lookup->LookupKeys.Items().size() : 0);
         } else {
             settings.Strategy = EStreamLookupStrategyType::LookupRows;
 

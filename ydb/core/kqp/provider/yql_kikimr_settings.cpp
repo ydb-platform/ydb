@@ -113,6 +113,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
     REGISTER_SETTING(*this, UseScalarHashJoinForMap);
+    REGISTER_SETTING(*this, EnableLookupJoinPointPrefixes);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -410,6 +411,10 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
 
 bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
+}
+
+bool TKikimrConfiguration::GetEnableLookupJoinPointPrefixes() const {
+    return EnableLookupJoinPointPrefixes.Get().GetOrElse(TTableServiceConfig::GetEnableLookupJoinPointPrefixes());
 }
 
 bool TKikimrConfiguration::GetEnableBlockHashJoinEqualNulls() const {

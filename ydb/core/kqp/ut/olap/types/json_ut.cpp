@@ -1752,6 +1752,47 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         UNIT_ASSERT_C(result.GetIssues().ToOneLineString().contains("unsupported dense encoding version"), result.GetIssues().ToOneLineString());
     }
 
+    // YDBBUGS-934: one TestInit row makes Kind = "TestInit" a one-value predicate, so OR skips the JSON_VALUE assembler
+    // after the shared filter fetch already stored the Stats fetcher. The projection must still return the full Stats value.
+    // SIMPLE and TRIVIAL both use IDataSource::DoApplyPendingFetcher; the plain column stays PLAIN so it does not reset the reader.
+    TString scriptDuplicateStatsFetch = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Id Uint64 NOT NULL,
+            Kind Utf8 NOT NULL,
+            Success Uint32 NOT NULL,
+            Stats JsonDocument,
+            PRIMARY KEY (Id)
+        )
+        PARTITION BY HASH(Id)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`$$SIMPLE|TRIVIAL$$`)
+        ------
+        SCHEMA:
+        $$ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`)|ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Stats, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`PLAIN`)$$
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES
+            (1u, "TestInit", 1u, JsonDocument('{"aggregation_level":"none","note":"init-a"}'))
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Id, Kind, Success, Stats) VALUES
+            (3u, "Stability", 0u, JsonDocument('{"aggregation_level":"aggregate","note":"stab-yes"}')),
+            (4u, "Stability", 1u, JsonDocument('{"aggregation_level":"aggregate","note":"stab-success"}')),
+            (5u, "Stability", 0u, JsonDocument('{"aggregation_level":"row","note":"stab-no"}'))
+        ------
+        READ: SELECT Id, Kind, Stats FROM `/Root/ColumnTable` WHERE Kind = "TestInit" OR (JSON_VALUE(Stats, "$.aggregation_level") = "aggregate" AND Success = 0) ORDER BY Id;
+        EXPECTED: [[1u;"TestInit";["{\"aggregation_level\":\"none\",\"note\":\"init-a\"}"]];[3u;"Stability";["{\"aggregation_level\":\"aggregate\",\"note\":\"stab-yes\"}"]]]
+
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(DuplicateStatsFetch, scriptDuplicateStatsFetch) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
 }
 
 namespace {

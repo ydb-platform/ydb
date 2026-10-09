@@ -287,7 +287,6 @@ protected:
                         const TString& service,
                         const TDeferredAtom& cluster);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
-    bool ParseTransferLambda(TString& lambdaText, const TRule_lambda_or_parameter& lambdaOrParameter);
     bool ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out);
     bool ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out);
     bool ParseTruncateTableSettings(const TRule_truncate_table_settings& in, THashMap<TString, TNodePtr>& out);

@@ -1226,7 +1226,7 @@ class StaticConfigGenerator(object):
         boot_config = self.__proto_configs["boot.txt"]
         tablet_name = tablet_type.name
         tablet_config = self._tablet_config(tablet_name, index)
-        if not tablet_config.get("enabled", True):
+        if not tablet_config.get("enabled", not tablet_type.is_optional):
             return
 
         tablet_id = tablet_type.tablet_id_for(index)
@@ -1282,6 +1282,7 @@ class StaticConfigGenerator(object):
                 (tablet_types.NODE_BROKER, 1),
                 (tablet_types.TENANT_SLOT_BROKER, 1),
                 (tablet_types.CONSOLE, 1),
+                (tablet_types.DBS_CONTROLLER, 1),
             ]
         return all_tablets
 

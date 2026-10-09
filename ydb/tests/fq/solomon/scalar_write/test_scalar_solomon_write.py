@@ -51,16 +51,14 @@ class SolomonTestBase:
         return os.environ["SOLOMON_HTTP_ENDPOINT"]
 
     def create_source(self, kikimr: Kikimr, source_name: str) -> str:
-        kikimr.ydb_client.query(
-            f"""
+        kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = "Solomon",
                 LOCATION = "{self.solomon_endpoint}",
                 AUTH_METHOD = "NONE",
                 USE_TLS = "false"
             );
-            """
-        )
+            """)
         return source_name
 
     def prepare(
@@ -121,21 +119,19 @@ class SolomonTestBase:
     ) -> list:
         metrics = self.wait_metrics(shard, len(expected_values))
         actual_values = self.sensor_values(metrics)
-        assert actual_values == sorted(expected_values), (
-            f"shard {shard.path}: expected values {sorted(expected_values)}, got {actual_values}"
-        )
+        assert actual_values == sorted(
+            expected_values
+        ), f"shard {shard.path}: expected values {sorted(expected_values)}, got {actual_values}"
         # The sensor name is always written into the reserved ``name`` label.
         assert self.label_values(metrics, "name"), f"shard {shard.path}: missing sensor name label: {metrics}"
         if label_key is not None and expected_labels is not None:
             actual_labels = self.label_values(metrics, label_key)
-            assert actual_labels == sorted(expected_labels), (
-                f"shard {shard.path}: expected {label_key} labels {sorted(expected_labels)}, got {actual_labels}"
-            )
+            assert actual_labels == sorted(
+                expected_labels
+            ), f"shard {shard.path}: expected {label_key} labels {sorted(expected_labels)}, got {actual_labels}"
         return metrics
 
-    def _expect_error(
-        self, kikimr: Kikimr, sql: str, substrings: Iterable[str] = (), client=None
-    ) -> str:
+    def _expect_error(self, kikimr: Kikimr, sql: str, substrings: Iterable[str] = (), client=None) -> str:
         """Run ``sql`` expecting it to fail and return the error string. A fresh session pool is used per
         call so a failing statement that drops its session does not cascade into the next negative case;
         ``max_retries=0`` keeps the negative case fast even if the underlying error is retriable."""
@@ -154,41 +150,30 @@ class SolomonTestBase:
 
 class TestScalarSolomonWriteInYdb(SolomonTestBase):
     @link_test_case("#39420")
-    def test_write_via_select_values_as_table(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_write_via_select_values_as_table(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_scalar")
         ref = shard.ref(source_name)
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
-                SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;"""
-        )
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
+                SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;""")
         self.assert_shard(shard, [42])
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref} (Ts, Label, Sensor) VALUES
+        kikimr.ydb_client.query(f"""INSERT INTO {ref} (Ts, Label, Sensor) VALUES
                     (Timestamp("2020-01-01T00:00:00Z"), "my_series", 43),
                     (Timestamp("2020-01-01T00:01:00Z"), "my_other_series", 44),
-                    (Timestamp("2020-01-01T00:02:00Z"), "my_series", 45);"""
-        )
+                    (Timestamp("2020-01-01T00:02:00Z"), "my_series", 45);""")
         self.assert_shard(shard, [42, 43, 44, 45])
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
                 SELECT * FROM AS_TABLE([
                     <|Ts: Timestamp("2020-01-01T00:10:00Z"), Label: "my_series", Sensor: 46|>,
                     <|Ts: Timestamp("2020-01-01T00:11:00Z"), Label: "my_other_series", Sensor: 47|>,
                     <|Ts: Timestamp("2020-01-01T00:12:00Z"), Label: "my_series", Sensor: 48|>,
-                ]);"""
-        )
+                ]);""")
         self.assert_shard(shard, [42, 43, 44, 45, 46, 47, 48])
 
-    def test_write_retries_after_non_terminal_error(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
-        """A transient (retriable) failure from the monitoring api must not break the write.
-        """
+    def test_write_retries_after_non_terminal_error(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+        """A transient (retriable) failure from the monitoring api must not break the write."""
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_retry")
         ref = shard.ref(source_name)
 
@@ -196,80 +181,58 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         # must retry it and the retry must succeed.
         fail_solomon_push(shard.project, shard.cluster, shard.service, count=1)
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
-                SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;"""
-        )
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
+                SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;""")
         self.assert_shard(shard, [42])
 
     @link_test_case("#39422")
-    def test_write_precompute_agg(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_write_precompute_agg(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_agg")
         ref = shard.ref(source_name)
 
         table = entity_name("my_row_table")
-        kikimr.ydb_client.query(
-            f"""CREATE TABLE `{table}` (id Int32, Value Int32, PRIMARY KEY (id));"""
-        )
+        kikimr.ydb_client.query(f"""CREATE TABLE `{table}` (id Int32, Value Int32, PRIMARY KEY (id));""")
         try:
-            kikimr.ydb_client.query(
-                f"""UPSERT INTO `{table}` (id, Value) VALUES (1, 10), (2, 44), (3, 23);"""
-            )
+            kikimr.ydb_client.query(f"""UPSERT INTO `{table}` (id, Value) VALUES (1, 10), (2, 44), (3, 23);""")
 
             # MAX returns Optional<Int32>; the sensor column must be non-optional.
-            kikimr.ydb_client.query(
-                f"""INSERT INTO {ref}
+            kikimr.ydb_client.query(f"""INSERT INTO {ref}
                     SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, Unwrap(MAX(Value)) AS Sensor
-                    FROM `{table}`;"""
-            )
+                    FROM `{table}`;""")
             self.assert_shard(shard, [44], label_key="Label", expected_labels=["my_data"])
         finally:
             kikimr.ydb_client.query(f"DROP TABLE `{table}`;")
 
     @link_test_case("#39424")
-    def test_write_same_data_multiple_solomons(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
-        source_name, (shard0, shard1) = self.prepare(
-            kikimr, entity_name, "write_multi", shards_count=2
-        )
+    def test_write_same_data_multiple_solomons(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
+        source_name, (shard0, shard1) = self.prepare(kikimr, entity_name, "write_multi", shards_count=2)
 
-        kikimr.ydb_client.query(
-            f"""$my_data = SELECT * FROM AS_TABLE([
+        kikimr.ydb_client.query(f"""$my_data = SELECT * FROM AS_TABLE([
                     <|Ts: CurrentUtcTimestamp(), Label: "my_series", Sensor: 42|>,
                     <|Ts: CurrentUtcTimestamp() + Interval("PT1M"), Label: "my_other_series", Sensor: 43|>,
                     <|Ts: CurrentUtcTimestamp() + Interval("PT2M"), Label: "my_series", Sensor: 44|>,
                 ]);
 
                 INSERT INTO {shard0.ref(source_name)} SELECT * FROM $my_data;
-                INSERT INTO {shard1.ref(source_name)} SELECT * FROM $my_data;"""
-        )
+                INSERT INTO {shard1.ref(source_name)} SELECT * FROM $my_data;""")
         self.assert_shard(shard0, [42, 43, 44])
         self.assert_shard(shard1, [42, 43, 44])
 
         # Second query: each shard receives a different filtered subset.
-        source_name2, (shard2, shard3) = self.prepare(
-            kikimr, entity_name, "write_multi_filtered", shards_count=2
-        )
-        kikimr.ydb_client.query(
-            f"""$my_data = SELECT * FROM AS_TABLE([
+        source_name2, (shard2, shard3) = self.prepare(kikimr, entity_name, "write_multi_filtered", shards_count=2)
+        kikimr.ydb_client.query(f"""$my_data = SELECT * FROM AS_TABLE([
                     <|Ts: CurrentUtcTimestamp(), Label: "my_series", Sensor: 42|>,
                     <|Ts: CurrentUtcTimestamp() + Interval("PT1M"), Label: "my_other_series", Sensor: 43|>,
                     <|Ts: CurrentUtcTimestamp() + Interval("PT2M"), Label: "my_series", Sensor: 44|>,
                 ]);
 
                 INSERT INTO {shard2.ref(source_name2)} SELECT * FROM $my_data WHERE Sensor >= 43;
-                INSERT INTO {shard3.ref(source_name2)} SELECT * FROM $my_data WHERE Sensor <= 43;"""
-        )
+                INSERT INTO {shard3.ref(source_name2)} SELECT * FROM $my_data WHERE Sensor <= 43;""")
         self.assert_shard(shard2, [43, 44])
         self.assert_shard(shard3, [42, 43])
 
     @link_test_case("#39426")
-    def test_write_multiple_times_same_solomon(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_write_multiple_times_same_solomon(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_repeat")
         ref = shard.ref(source_name)
 
@@ -277,16 +240,14 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         simple_source_name3 = self.create_source(kikimr, entity_name("write_repeat3"))
 
         # Several independent statements writing into the same shard.
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
                 SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;
 
                 INSERT INTO {shard.ref(simple_source_name2)}
                 SELECT CurrentUtcTimestamp() + Interval("PT1M") AS Ts, "other_data" AS Label, 43 AS Sensor;
 
                 INSERT INTO {shard.ref(simple_source_name3)}
-                SELECT CurrentUtcTimestamp() + Interval("PT2M") AS Ts, "my_data" AS Label, 44 AS Sensor;"""
-        )
+                SELECT CurrentUtcTimestamp() + Interval("PT2M") AS Ts, "my_data" AS Label, 44 AS Sensor;""")
         self.assert_shard(shard, [42, 43, 44])
 
         # A second shard receives a mix of VALUES / AS_TABLE / joined writes.
@@ -296,8 +257,7 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         mixed_source_name2 = self.create_source(kikimr, entity_name("write_repeat_mixed2"))
         mixed_source_name3 = self.create_source(kikimr, entity_name("write_repeat_mixed3"))
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref2} (Ts, Label, Sensor) VALUES
+        kikimr.ydb_client.query(f"""INSERT INTO {ref2} (Ts, Label, Sensor) VALUES
                     (Timestamp("2020-01-01T00:00:00Z"), "my_series", 42),
                     (Timestamp("2020-01-01T00:01:00Z"), "my_other_series", 43),
                     (Timestamp("2020-01-01T00:02:00Z"), "my_series", 44);
@@ -319,21 +279,17 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
                     <|Ts: Timestamp("2020-01-01T00:21:00Z"), Id: 2, Sensor: 63|>
                 ]) AS a
                 LEFT JOIN AS_TABLE([<|Id: 1, Delta: 0|>, <|Id: 2, Delta: 0|>]) AS b
-                ON a.Id = b.Id;"""
-        )
+                ON a.Id = b.Id;""")
         self.assert_shard(shard2, [42, 43, 44, 52, 53, 54, 62, 63])
 
     @link_test_case("#39431")
-    def test_write_and_read_single_query(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_write_and_read_single_query(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         pytest.skip("reading own writes within a single query is not supported: YQ-5388")
 
         source_name, (shard,) = self.prepare(kikimr, entity_name, "read_own_write")
         ref = shard.ref(source_name)
 
-        result_sets = kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
+        result_sets = kikimr.ydb_client.query(f"""INSERT INTO {ref}
                 SELECT CurrentUtcTimestamp() AS Ts, "my_data" AS Label, 42 AS Sensor;
 
                 INSERT INTO {ref}
@@ -351,19 +307,15 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
                     }}@@,
                     from = "2020-01-01T00:00:00Z",
                     to = "2035-01-01T00:00:00Z"
-                );"""
-        )
+                );""")
         assert len(result_sets) == 1
 
     @link_test_case("#39436")
-    def test_write_joined_data(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_write_joined_data(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_join")
         ref = shard.ref(source_name)
 
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {ref}
+        kikimr.ydb_client.query(f"""INSERT INTO {ref}
                 SELECT
                     a.Ts,
                     Unwrap(CAST(a.Id AS String)) AS Id,
@@ -373,15 +325,12 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
                     <|Ts: CurrentUtcTimestamp() + Interval("PT1M"), Id: 2, Sensor: 43|>
                 ]) AS a
                 LEFT JOIN AS_TABLE([<|Id: 1, Delta: -13|>, <|Id: 2, Delta: -2|>]) AS b
-                ON a.Id = b.Id;"""
-        )
+                ON a.Id = b.Id;""")
         # 42 + (-13) = 29, 43 + (-2) = 41; the Id column becomes a string label.
         self.assert_shard(shard, [29, 41], label_key="Id", expected_labels=["1", "2"])
 
     @link_test_case("#39441")
-    def test_data_types_validation(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_data_types_validation(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name = entity_name("write_types")
         self.create_source(kikimr, source_name)
 
@@ -401,10 +350,8 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
             'AddTimezone(Timestamp("2026-05-14T09:00:00.000000Z"), "UTC")',
         ]
         for i, ts_expr in enumerate(ts_exprs):
-            kikimr.ydb_client.query(
-                f"""INSERT INTO {ts_shard.ref(source_name)}
-                    SELECT {ts_expr} AS Ts, "my_series_{i}" AS Label, {i} AS Sensor;"""
-            )
+            kikimr.ydb_client.query(f"""INSERT INTO {ts_shard.ref(source_name)}
+                    SELECT {ts_expr} AS Ts, "my_series_{i}" AS Label, {i} AS Sensor;""")
         self.assert_shard(ts_shard, list(range(len(ts_exprs))))
 
         # --- Supported label types (String, Utf8, Yson, Json) ---
@@ -416,11 +363,9 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
             'Unwrap(CAST(@@{"a":1}@@ AS Json))',
         ]
         for i, label_expr in enumerate(label_exprs):
-            kikimr.ydb_client.query(
-                f"""INSERT INTO {label_shard.ref(source_name)}
+            kikimr.ydb_client.query(f"""INSERT INTO {label_shard.ref(source_name)}
                     SELECT Timestamp("2020-01-01T00:00:00Z") + Interval("PT{i}S") AS Ts,
-                        {label_expr} AS Label, {i} AS Sensor;"""
-            )
+                        {label_expr} AS Label, {i} AS Sensor;""")
         self.assert_shard(label_shard, list(range(len(label_exprs))))
 
         # --- Supported sensor types (all integers, Float, Double, including +-inf, +-nan) ---
@@ -435,15 +380,13 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
             'Double("-inf")',
             'Double("nan")',
             "7.0f",  # Float
-            "7.0",   # Double
+            "7.0",  # Double
         ]
         sensor_exprs += special_exprs
         for i, sensor_expr in enumerate(sensor_exprs):
-            kikimr.ydb_client.query(
-                f"""INSERT INTO {sensor_shard.ref(source_name)}
+            kikimr.ydb_client.query(f"""INSERT INTO {sensor_shard.ref(source_name)}
                     SELECT Timestamp("2020-01-01T00:00:00Z") + Interval("PT{i}S") AS Ts,
-                        "my_series" AS Label, {sensor_expr} AS Sensor;"""
-            )
+                        "my_series" AS Label, {sensor_expr} AS Sensor;""")
         metrics = self.wait_metrics(sensor_shard, len(sensor_exprs))
         # inf / nan may be serialized as strings by the emulator, so coerce every value to float.
         values = [float(m["value"]) for m in metrics]
@@ -456,10 +399,8 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
 
         # --- Writing without a label is allowed ---
         no_label_shard = fresh_shard("types_no_label")
-        kikimr.ydb_client.query(
-            f"""INSERT INTO {no_label_shard.ref(source_name)}
-                SELECT CurrentUtcTimestamp() AS Ts, 42 AS Sensor;"""
-        )
+        kikimr.ydb_client.query(f"""INSERT INTO {no_label_shard.ref(source_name)}
+                SELECT CurrentUtcTimestamp() AS Ts, 42 AS Sensor;""")
         self.assert_shard(no_label_shard, [42])
 
         bad_ref = fresh_shard("types_bad").ref(source_name)
@@ -555,9 +496,7 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         )
 
     @link_test_case("#39447")
-    def test_with_options_validation(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_with_options_validation(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         pytest.skip("unknown WITH options are not validated: YQ-5389")
 
         source_name, (shard,) = self.prepare(kikimr, entity_name, "write_options")
@@ -569,9 +508,7 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
         )
 
     @link_test_case("#39453")
-    def test_write_target_validation(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_write_target_validation(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name = entity_name("target_source")
         self.create_source(kikimr, source_name)
 
@@ -594,14 +531,12 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
 
         # Write into an unavailable external source (valid metadata, unreachable location).
         unavailable_source = entity_name("unavailable_source")
-        kikimr.ydb_client.query(
-            f"""CREATE EXTERNAL DATA SOURCE `{unavailable_source}` WITH (
+        kikimr.ydb_client.query(f"""CREATE EXTERNAL DATA SOURCE `{unavailable_source}` WITH (
                     SOURCE_TYPE = "Solomon",
                     LOCATION = "localhost:1",
                     AUTH_METHOD = "NONE",
                     USE_TLS = "false"
-                );"""
-        )
+                );""")
         self._expect_error(
             kikimr,
             f"""INSERT INTO `{unavailable_source}`.`project/cluster/service`
@@ -627,9 +562,7 @@ class TestScalarSolomonWriteInYdb(SolomonTestBase):
             test_client.stop()
 
     @link_test_case("#39633")
-    def test_mixed_valid_invalid_statements(
-        self, kikimr: Kikimr, entity_name: Callable[[str], str]
-    ) -> None:
+    def test_mixed_valid_invalid_statements(self, kikimr: Kikimr, entity_name: Callable[[str], str]) -> None:
         source_name, (shard,) = self.prepare(kikimr, entity_name, "mixed")
         ok = shard.ref(source_name)
         non_existent = entity_name("non_existent_source")

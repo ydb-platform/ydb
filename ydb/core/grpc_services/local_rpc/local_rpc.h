@@ -494,6 +494,11 @@ public:
     void Cancel() {
         FinishPromise.SetValue(EFinishStatus::CANCEL);
         Finished = true;
+        // with Finished stream queue is never populated and callback won't be called
+        NextReplyCallback = nullptr;
+        if (ResponseQueue.empty()) {
+            OnResponseCallback = nullptr;
+        }
     }
 
     bool IsFinished() const {
@@ -522,6 +527,9 @@ protected:
     }
 
     void SetNextReplyCallback(TOnNextReply&& callback) override {
+        if (Finished) {
+            return;
+        }
         NextReplyCallback = callback;
     }
 
@@ -594,6 +602,9 @@ private:
         if (OnResponseCallback) {
             OnResponseCallback(DoPopResponse());
             OnResponseCallback = nullptr;
+        }
+        if (Finished) {
+            NextReplyCallback = nullptr;
         }
     }
 

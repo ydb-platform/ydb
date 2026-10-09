@@ -416,6 +416,76 @@ class TestRescaling(StreamingTestBase):
         finally:
             self._cleanup_query(kikimr, query_name, [])
 
+    @pytest.mark.parametrize("kikimr", [{"enable_streaming_query_state_recompute": True}], indirect=True)
+    @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
+    def test_pq_source_continuation_scale_up_and_down(
+        self,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        """Continue from checkpoints through 1 -> 2 -> 4 -> 1 direct readers."""
+        partitions_count = 8
+        query_name = entity_name("pq_source_continuation_scale_up_and_down")
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            query_name,
+            local_topics,
+            entity_name,
+            partitions_count=partitions_count,
+        )
+        client = self.get_ydb_client(kikimr, local_topics)
+
+        def query_body(readers: int) -> str:
+            return f'''
+                PRAGMA ydb.MaxTasksPerStage = "{readers}";
+                INSERT INTO {out} SELECT Data FROM {inp};
+            '''
+
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                {query_body(1)}
+            END DO;
+        ''')
+        try:
+            for phase, readers in enumerate([1, 2, 4, 1]):
+                if phase:
+                    self._stop_query(kikimr, query_name)
+                else:
+                    self._wait_started(kikimr, query_name)
+
+                # Write while stopped on every continuation. A fresh start
+                # would lose this batch instead of restoring checkpoint offsets.
+                expected = []
+                for partition in range(partitions_count):
+                    messages = [f"phase_{phase}_partition_{partition}_message_{i}" for i in range(2)]
+                    client.topic_write(self.input_topic, messages, partition_id=partition)
+                    expected.extend(messages)
+
+                if phase:
+                    # Changing the query text builds a continuation plan from the
+                    # previous graph. Keep the data expression unchanged so old
+                    # messages cannot be hidden by a different predicate.
+                    kikimr.ydb_client.query(f'''
+                        ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE, FORCE = FALSE) AS DO BEGIN
+                            {query_body(readers)}
+                        END DO;
+                    ''')
+                self._wait_reader_count(kikimr, query_name, readers)
+                self._wait_started(kikimr, query_name)
+
+                actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
+                assert sorted(actual) == sorted(expected), (phase, readers, actual, expected)
+                self.wait_completed_checkpoints(kikimr, query_name)
+
+                # Check the entire output, including duplicates beyond the batch
+                # read above, before another graph loads this checkpoint.
+                output = client.driver.topic_client.describe_topic(self.output_topic, include_stats=True)
+                written = sum(partition.partition_stats.partition_end for partition in output.partitions)
+                assert written == (phase + 1) * len(expected), (phase, readers, written)
+        finally:
+            self._cleanup_query(kikimr, query_name, [])
+
     @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
     def test_pq_source_rescaling_partition_increase(
         self,

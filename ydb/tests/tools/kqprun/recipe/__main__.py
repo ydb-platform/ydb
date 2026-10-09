@@ -7,7 +7,6 @@ from library.recipes import common as recipes_common
 import library.python.port_manager
 import yatest
 
-
 PID_FILENAME = "kqprun_daemon.pid"
 KQPRUN_PATH = os.getenv("KQPRUN_EXECUTABLE") or "ydb/tests/tools/kqprun/kqprun"
 INITIALIZATION_IMEOUT_RATIO = 2
@@ -21,17 +20,23 @@ def is_kqprun_daemon_ready() -> bool:
 def build_start_comand(argv: list[str], grpc_port: int) -> tuple[int, list[str]]:
     parser = argparse.ArgumentParser()
     parser.add_argument("--query", action="append", type=str, default=[])
-    parser.add_argument("--config", action='store', type=str, default="ydb/tests/tools/kqprun/kqprun/configuration/app_config.conf")
+    parser.add_argument(
+        "--config", action='store', type=str, default="ydb/tests/tools/kqprun/kqprun/configuration/app_config.conf"
+    )
     parser.add_argument("--timeout-ms", action='store', type=int, default=30000)
     parsed, _ = parser.parse_known_args(argv)
 
     cmd = [
         yatest.common.binary_path(KQPRUN_PATH),
-        "--log-file", yatest.common.output_path("kqprun_daemon.ydb.log"),
-        "--app-config", yatest.common.source_path(parsed.config),
-        "--grpc", str(grpc_port),
-        "--timeout", str(parsed.timeout_ms),
-        "--hold"
+        "--log-file",
+        yatest.common.output_path("kqprun_daemon.ydb.log"),
+        "--app-config",
+        yatest.common.source_path(parsed.config),
+        "--grpc",
+        str(grpc_port),
+        "--timeout",
+        str(parsed.timeout_ms),
+        "--hold",
     ]
 
     if parsed.query:
@@ -58,7 +63,7 @@ def start(argv: list[str]):
         is_alive_check=is_kqprun_daemon_ready,
         pid_file_name=PID_FILENAME,
         timeout=INITIALIZATION_IMEOUT_RATIO * (timeout_ms // 1000),
-        daemon_name="kqprun_daemon"
+        daemon_name="kqprun_daemon",
     )
 
     set_env("KQPRUN_ENDPOINT", f"grpc://localhost:{grpc_port}")

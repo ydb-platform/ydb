@@ -18,6 +18,7 @@ SRCS(
     kqp_rbo_utils.cpp
     kqp_rbo.cpp
     kqp_rbo_cbo.cpp
+    kqp_rbo_lookup_join.cpp
     kqp_rewrite_select.cpp
     kqp_stage_graph.cpp
     analysis/logical_liveness.cpp

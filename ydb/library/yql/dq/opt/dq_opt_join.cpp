@@ -1471,9 +1471,7 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,
     EJoinAlgoType joinAlgo,
-    ui32 keyCount,
-    TExprContext& ctx,
-    bool enableEqualNulls)
+    TExprContext& ctx)
 {
     TVector<TCoNameValueTuple> joinSettings;
     if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
@@ -1483,18 +1481,43 @@ TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
                 .Value<TCoAtom>().Build("Left")
                 .Done());
     }
-    if (enableEqualNulls) {
-        for (ui32 keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
-            joinSettings.push_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                    .Name().Build("EqualNulls")
-                    .Value<TCoUint32>()
-                        .Literal().Build(ToString(keyIndex))
-                        .Build()
-                    .Done());
+    return joinSettings;
+}
+
+bool BlocksBlockHashJoin(const TTypeAnnotationNode* type) {
+    while (type && (type->GetKind() == ETypeAnnotationKind::Tagged || type->GetKind() == ETypeAnnotationKind::Optional)) {
+        if (type->GetKind() == ETypeAnnotationKind::Tagged) {
+            type = type->Cast<TTaggedExprType>()->GetBaseType();
+        } else {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
         }
     }
-    return joinSettings;
+    if (!type) {
+        return true;
+    }
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* element : type->Cast<TTupleExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(element)) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
 }
 
 TExprBase DqBuildHashJoin(
@@ -1506,8 +1529,7 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft,
-    bool enableBlockHashJoinEqualNulls
+    bool blockHashJoinBuildSideLeft
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1524,6 +1546,13 @@ TExprBase DqBuildHashJoin(
 
     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
+
+    for (const auto* item : leftStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+    }
+    for (const auto* item : rightStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+    }
 
     const auto& leftItems = leftStructType->GetItems();
     const auto& rightItems = rightStructType->GetItems();
@@ -1879,8 +1908,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                const auto joinSettings = BuildBlockHashJoinSettings(
-                    join.Pos(), joinAlgo, leftKeys.size(), ctx, enableBlockHashJoinEqualNulls);
+                const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)

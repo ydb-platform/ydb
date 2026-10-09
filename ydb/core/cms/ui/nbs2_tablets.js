@@ -299,8 +299,8 @@ const Nbs2Tablets = {
         // [node:localId:hint], which is the value accepted by the PB viewer.
         const localId = 0x5f42504en + (BigInt(pdiskId) << 32n);
         const pb = '[' + nodeId + ':' + localId.toString() + ':' + slotId + ']';
-        return '/node/' + encodeURIComponent(nodeId) + '/actors/persistent_buffer?formPresent=1&autoRefresh=1&describeFreeSpace=1&showTablets=1&refreshRate=1&pb=' +
-            pb;
+        return '/node/' + encodeURIComponent(nodeId) + '/actors/persistent_buffer?formPresent=1&autoRefresh=1&describeFreeSpace=1&refreshRate=1&pb=' +
+            encodeURIComponent(pb) + '&' + encodeURIComponent('tabletOpen.' + pb) + '=1';
     },
 
     escapeHtml: function(value) {

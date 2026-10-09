@@ -42,6 +42,11 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
     switch (Read.GetTableStorageType()) {
         case NYql::EStorageType::RowStorage: {
+            // A literal range is passed to the source as is, so it needs no materialization.
+            if (const auto literalRange = Read.GetLiteralRange()) {
+                ranges = literalRange;
+            }
+
             TKqpReadTableSettings settings;
             if (Read.SortDir != ESortDir::None) {
                 settings.SetSorting(Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC);

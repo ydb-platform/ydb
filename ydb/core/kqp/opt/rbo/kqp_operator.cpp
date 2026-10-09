@@ -477,6 +477,9 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
     if (const auto ranges = GetRanges()) {
         res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
     }
+    if (const auto literalRange = GetLiteralRange()) {
+        res << " Literal range: (" << PrintRBOExpression(literalRange, ctx) << ")";
+    }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
         res << ")";
@@ -1062,6 +1065,17 @@ TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle p
     Prefix = prefix;
     ResidualJoinKeys = std::move(residualKeys);
     Strategy = ELookupStrategy::LookupJoinRows;
+}
+
+TIntrusivePtr<IOperator> TOpTableLookup::GetLeftInput() {
+    if (!KeysFromInputLookup) {
+        return GetInput();
+    }
+
+    Y_ENSURE(GetInput()->Kind == EOperator::TableLookup, "A lookup by keys of the input lookup must be fed by a table lookup");
+    auto inputLookup = CastOperator<TOpTableLookup>(GetInput());
+    Y_ENSURE(inputLookup->IsJoin(), "A lookup by keys of the input lookup must be fed by a table lookup in join mode");
+    return inputLookup->GetLeftInput();
 }
 
 void TOpTableLookup::ComputeOutputIUs() {

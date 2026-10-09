@@ -68,6 +68,7 @@ ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgrad
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-1-True]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/workloads test_workload_manager.py.TestWorkloadManagerMixedCluster.test_workload_manager_mixed_cluster[mixed_prestable-26-4-1_and_stable-26-3-1]
+ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_hopping_closed_window[restart]
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_hopping_open_window[restart]
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_insert_select[restart]

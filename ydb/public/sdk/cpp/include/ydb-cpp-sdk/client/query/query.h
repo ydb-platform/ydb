@@ -130,6 +130,10 @@ public:
     //! Asynchronously reads the next response part. Read until the returned part reports EOS().
     TAsyncExecuteQueryPart ReadNext();
 
+    //! Requests cancellation of the shared stream, including a pending read.
+    //! Safe to call repeatedly or on an invalid iterator.
+    void Cancel();
+
 private:
     TExecuteQueryIterator(
         std::shared_ptr<TReaderImpl> impl,

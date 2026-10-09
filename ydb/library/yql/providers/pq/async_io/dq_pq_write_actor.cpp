@@ -1361,9 +1361,4 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
     );
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
-    RegisterDqPqWriteActorFactory(factory, std::move(driver), std::move(credentialsFactory), pqGateway, counters, enableStreamingQueriesCounters,
-        std::function<bool()>([enableStreamingQueriesPqSinkDeduplicationFeatureFlag] { return enableStreamingQueriesPqSinkDeduplicationFeatureFlag; }));
-}
-
 } // namespace NYql::NDq

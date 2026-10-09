@@ -43,17 +43,8 @@ void RegisterDqPqWriteActorFactory(
     NYdb::TDriver driver,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IPqStaticGateway::TPtr& pqGateway,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    bool enableStreamingQueriesCounters,
-    std::function<bool()> getEnableDeduplicationFeatureFlag);
-
-void RegisterDqPqWriteActorFactory(
-    TDqAsyncIoFactory& factory,
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const IPqStaticGateway::TPtr& pqGateway,
     const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
     bool enableStreamingQueriesCounters = true,
-    bool enableDeduplicationFeatureFlag = true);
+    std::function<bool()> getEnableDeduplicationFeatureFlag = [] { return true; });
 
 } // namespace NYql::NDq

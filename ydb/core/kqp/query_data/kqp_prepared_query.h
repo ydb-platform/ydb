@@ -112,6 +112,10 @@ public:
         return Proto->GetTables();
     }
 
+    bool HasUnsafeTruncate() const {
+        return Proto->HasUnsafeTruncate();
+    }
+
     const NKqpProto::TKqpUnsafeTruncateOperation& GetUnsafeTruncate() const {
         return Proto->GetUnsafeTruncate();
     }

@@ -674,7 +674,7 @@ public:
                     << query.Results().Size() << " results and " << query.Effects().Size() << " effects");
 
             TKqpPhyTxSettings txSettings;
-            txSettings.Type = EPhysicalTxType::UnsafeTruncate;
+            txSettings.Type = EPhysicalTxType::Generic;
             txSettings.UnsafeTruncatePath = *truncatePath;
 
             BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())

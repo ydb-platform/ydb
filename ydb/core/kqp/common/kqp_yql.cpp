@@ -80,8 +80,6 @@ static EPhysicalTxType GetPhysicalTxType(const TStringBuf& value) {
         return EPhysicalTxType::Scan;
     } else if (value == "generic") {
         return EPhysicalTxType::Generic;
-    } else if (value == "unsafe_truncate") {
-        return EPhysicalTxType::UnsafeTruncate;
     } else {
         YQL_ENSURE(false, "Unknown physical tx type: " << value);
     }
@@ -99,8 +97,6 @@ static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) {
             return "scan";
         case EPhysicalTxType::Generic:
             return "generic";
-        case EPhysicalTxType::UnsafeTruncate:
-            return "unsafe_truncate";
     }
 
     YQL_ENSURE(false, "Unexpected physical tx type: " << type);

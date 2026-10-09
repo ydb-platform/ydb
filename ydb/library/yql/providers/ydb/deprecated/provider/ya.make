@@ -42,8 +42,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/providers/result/expr_nodes
-    ydb/library/yql/providers/ydb/depricated/expr_nodes
-    ydb/library/yql/providers/ydb/depricated/proto
+    ydb/library/yql/providers/ydb/deprecated/expr_nodes
+    ydb/library/yql/providers/ydb/deprecated/proto
     ydb/public/lib/experimental
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/driver

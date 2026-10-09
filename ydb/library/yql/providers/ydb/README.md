@@ -12,7 +12,7 @@ Enable `Ydb` through `AllExternalDataSourcesAreAvailable` or
 serialized runtime source name all use `Ydb`. The Query SDK implementation owns
 `providers/ydb`, with protobuf messages in `NYql.NYdb`.
 
-The previous scan provider is archived in `providers/ydb/depricated`. It has no
+The previous scan provider is archived in `providers/ydb/deprecated`. It has no
 active includes, build dependencies, registrations or parent `RECURSE` entry.
 KQP uses `kikimr` for local tables; `ydb` now belongs to the remote Query SDK
 provider and is no longer rewritten to `kikimr`. Global `PRAGMA ydb.*` query

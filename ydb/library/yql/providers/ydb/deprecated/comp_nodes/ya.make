@@ -6,7 +6,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/protos
     yql/essentials/minikql/computation
     yql/essentials/providers/common/structured_token
-    ydb/library/yql/providers/ydb/depricated/proto
+    ydb/library/yql/providers/ydb/deprecated/proto
     ydb/public/lib/experimental
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/driver

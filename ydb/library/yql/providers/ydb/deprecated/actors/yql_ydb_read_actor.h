@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/providers/ydb/depricated/proto/source.pb.h>
+#include <ydb/library/yql/providers/ydb/deprecated/proto/source.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>

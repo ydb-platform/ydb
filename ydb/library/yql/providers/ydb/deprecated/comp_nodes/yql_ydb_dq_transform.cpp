@@ -3,7 +3,7 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/providers/ydb/depricated/proto/range.pb.h>
+#include <ydb/library/yql/providers/ydb/deprecated/proto/range.pb.h>
 
 namespace NYql {
 

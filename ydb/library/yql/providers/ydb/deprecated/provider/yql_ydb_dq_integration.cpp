@@ -5,9 +5,9 @@
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb/depricated/expr_nodes/yql_ydb_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb/depricated/proto/range.pb.h>
-#include <ydb/library/yql/providers/ydb/depricated/proto/source.pb.h>
+#include <ydb/library/yql/providers/ydb/deprecated/expr_nodes/yql_ydb_expr_nodes.h>
+#include <ydb/library/yql/providers/ydb/deprecated/proto/range.pb.h>
+#include <ydb/library/yql/providers/ydb/deprecated/proto/source.pb.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {

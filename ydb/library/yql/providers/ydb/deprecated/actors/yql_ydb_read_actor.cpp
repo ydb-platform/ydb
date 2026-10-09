@@ -2,7 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <ydb/library/yql/providers/ydb/depricated/proto/range.pb.h>
+#include <ydb/library/yql/providers/ydb/deprecated/proto/range.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

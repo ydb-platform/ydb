@@ -1,6 +1,6 @@
 #include "yql_ydb_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/ydb/depricated/expr_nodes/yql_ydb_expr_nodes.h>
+#include <ydb/library/yql/providers/ydb/deprecated/expr_nodes/yql_ydb_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>

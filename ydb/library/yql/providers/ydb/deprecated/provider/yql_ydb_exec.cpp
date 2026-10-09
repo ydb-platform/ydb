@@ -1,7 +1,7 @@
 #include "yql_ydb_provider_impl.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb/depricated/expr_nodes/yql_ydb_expr_nodes.h>
+#include <ydb/library/yql/providers/ydb/deprecated/expr_nodes/yql_ydb_expr_nodes.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>

@@ -15,7 +15,7 @@ PEERDIR(
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/driver
     ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/ydb/depricated/proto
+    ydb/library/yql/providers/ydb/deprecated/proto
 )
 
 END()

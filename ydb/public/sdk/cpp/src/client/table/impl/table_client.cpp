@@ -916,7 +916,8 @@ TAsyncCommitTransactionResult TTableClient::TImpl::CommitTransaction(const TSess
         rpcSettings
     );
 
-    return promise.GetFuture();
+    return NSessionPool::InjectSessionStatusInterception(
+        session.SessionImpl_, promise.GetFuture(), true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
 }
 
 TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, const std::string& txId,
@@ -937,11 +938,12 @@ TAsyncStatus TTableClient::TImpl::RollbackTransaction(const TSession& session, c
         rpcSettings
     );
 
-    return future.Apply([obs](TAsyncStatus fut) {
-        auto status = fut.GetValue();
-        obs->End(status.GetStatus(), status.GetEndpoint());
-        return status;
-    });
+    return NSessionPool::InjectSessionStatusInterception(
+        session.SessionImpl_, future.Apply([obs](TAsyncStatus fut) {
+            auto status = fut.GetValue();
+            obs->End(status.GetStatus(), status.GetEndpoint());
+            return status;
+        }), true, GetMinTimeToTouch(Settings_.SessionPoolSettings_));
 }
 
 TAsyncExplainDataQueryResult TTableClient::TImpl::ExplainDataQuery(const TSession& session, const std::string& query,

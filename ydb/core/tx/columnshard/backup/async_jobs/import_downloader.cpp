@@ -11,8 +11,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard::NBackup {
@@ -84,7 +82,7 @@ public:
     }
 
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
-        AFL_VERIFY(google::protobuf::util::MessageDifferencer::Equals(ev->Get()->Info.DownloadState, NKikimrBackup::TS3DownloadState()));
+        // Nothing is stored here: the downloader gets back what it asked to store.
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 

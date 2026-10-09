@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_job.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yt/yql/providers/yt/fmr/request_options
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

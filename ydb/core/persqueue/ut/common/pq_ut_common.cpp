@@ -45,12 +45,24 @@ void SendPQTabletConfig(
     runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
-    auto* prepared = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
+    // Ответ оборванной попытки может прийти уже после DropPendingPqConfigReplies.
+    // Статус здесь не фильтруем: неожиданный статус текущего TxId должен дойти до ассерта.
+    const auto grabResult = [&]() {
+        return runtime.GrabEdgeEventIf<TEvPersQueue::TEvProposeTransactionResult>(handle,
+            [txId](const TEvPersQueue::TEvProposeTransactionResult& ev) {
+                return ev.Record.GetTxId() == txId;
+            });
+    };
+    auto* prepared = grabResult();
     UNIT_ASSERT(prepared);
     UNIT_ASSERT(prepared->Record.HasStatus());
     UNIT_ASSERT_EQUAL(prepared->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     UNIT_ASSERT(prepared->Record.HasTxId() && prepared->Record.GetTxId() == txId);
     UNIT_ASSERT(prepared->Record.HasOrigin() && prepared->Record.GetOrigin() == tabletId);
+    // Счётчик теста не знает нижнюю границу, которую таблетка выставила в PREPARED.
+    // Шаг ниже MinStep она принимает, но координатор так планировать не должен.
+    UNIT_ASSERT(prepared->Record.HasMinStep());
+    planStep = Max(planStep, prepared->Record.GetMinStep());
 
     auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
     plan->Record.SetStep(planStep);
@@ -59,11 +71,27 @@ void SendPQTabletConfig(
     ActorIdToProto(edge, tx->MutableAckTo());
     runtime.SendToPipe(tabletId, edge, plan.Release(), 0, GetPipeConfigWithRetries());
 
-    auto* ack = runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(handle);
+    // Повтор может послать тот же шаг: MinStep не растёт, пока брошенный план не обработан.
+    // TxId в предикате, иначе заберём ACK старой попытки и упадём уже после этого.
+    auto* ack = runtime.GrabEdgeEventIf<TEvTxProcessing::TEvPlanStepAck>(handle,
+        [tabletId, planStep, txId](const TEvTxProcessing::TEvPlanStepAck& ev) {
+            if (ev.Record.GetTabletId() != tabletId || ev.Record.GetStep() != planStep) {
+                return false;
+            }
+            for (const ui64 id : ev.Record.GetTxId()) {
+                if (id == txId) {
+                    return true;
+                }
+            }
+            return false;
+        });
     UNIT_ASSERT(ack);
-    auto* accepted = runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(handle);
+    auto* accepted = runtime.GrabEdgeEventIf<TEvTxProcessing::TEvPlanStepAccepted>(handle,
+        [tabletId, planStep](const TEvTxProcessing::TEvPlanStepAccepted& ev) {
+            return ev.Record.GetTabletId() == tabletId && ev.Record.GetStep() == planStep;
+        });
     UNIT_ASSERT(accepted);
-    auto* complete = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
+    auto* complete = grabResult();
     UNIT_ASSERT(complete);
     UNIT_ASSERT(complete->Record.HasStatus());
     UNIT_ASSERT_EQUAL(complete->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
@@ -169,6 +197,31 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
     return tabletConfig;
 }
 
+// Ответы оборванного SendPQTabletConfig уже лежат в ящике edge. Снимаем их до
+// повтора. То, что таблетка пришлёт позже, отсекают фильтры в SendPQTabletConfig.
+void DropPendingPqConfigReplies(TTestActorRuntime& runtime, const TActorId& edge) {
+    auto events = runtime.CaptureMailboxEvents(edge.Hint(), edge.NodeId());
+    NActors::TEventsList keep;
+    while (!events.empty()) {
+        TAutoPtr<IEventHandle> ev = events.front();
+        events.pop_front();
+        if (!ev) {
+            continue;
+        }
+        const ui32 type = ev->GetTypeRewrite();
+        const bool drop =
+            type == TEvPersQueue::TEvProposeTransactionResult::EventType
+            || type == TEvTxProcessing::TEvPlanStepAck::EventType
+            || type == TEvTxProcessing::TEvPlanStepAccepted::EventType;
+        if (!drop) {
+            keep.push_back(ev);
+        }
+    }
+    if (!keep.empty()) {
+        runtime.PushMailboxEventsFront(edge.Hint(), edge.NodeId(), keep);
+    }
+}
+
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                     const TConstArrayRef<TConsumerPreparationParameters> users,
                      TTestActorRuntime& runtime,
@@ -184,11 +237,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
         ++version;
     }
 
-    // Повторять пару (planStep, txId) нельзя. Тот же TxId для новой конфигурации подхватит тело
-    // предыдущей транзакции, если она ещё не удалена: таблетка считает повторный пропоуз
-    // переотправкой. А тот же шаг таблетка уже запретила своим MinStep в ответе PREPARED
+    // Повторять TxId нельзя: тот же номер для новой конфигурации подхватит тело предыдущей
+    // транзакции, если она ещё не удалена. Шаг здесь только нижняя граница: SendPQTabletConfig
+    // поднимет его до MinStep из PREPARED. Повтор после TSchedulingLimitReachedException берёт
+    // TxId из отдельного диапазона: счётчик вызывающего кода уже сдвинут и пересечётся с txId + 1.
     static ui64 nextTxId = 12345;
     static ui64 nextPlanStep = 1;
+    static ui64 nextRetryTxId = 10'000'000;
     if (txId == 0) {
         txId = nextTxId++;
     }
@@ -198,20 +253,25 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 
     NKikimrPQ::TPQTabletConfig tabletConfig = MakePQTabletConfig(parameters, users, runtime, version);
 
+    // Ассерт в catch не ловит вторую неудачу: тело выполняется только при retriesLeft > 0.
+    bool configApplied = false;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             runtime.ResetScheduledCount();
             SendPQTabletConfig(runtime, tabletId, edge, tabletConfig, txId, planStep);
-            retriesLeft = 0;
+            configApplied = true;
+            break;
         } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT(retriesLeft >= 1);
+            DropPendingPqConfigReplies(runtime, edge);
+            txId = nextRetryTxId++;
         }
     }
+    UNIT_ASSERT(configApplied);
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
+    bool configRead = false;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-
             request.Reset(new TEvKeyValue::TEvRequest);
             auto read = request->Record.AddCmdRead();
             read->SetKey("_config");
@@ -222,11 +282,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
             UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-            retriesLeft = 0;
+            configRead = true;
+            break;
         } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT(retriesLeft >= 1);
+            // Повтор со свежим бюджетом. Обе неудачи ловит ассерт после цикла.
         }
     }
+    UNIT_ASSERT(configRead);
 }
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,

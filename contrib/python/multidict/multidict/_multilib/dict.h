@@ -25,6 +25,12 @@ typedef struct {
     bool is_ci;
 
     htkeys_t* keys;
+
+#ifdef Py_GIL_DISABLED
+    Py_ssize_t num_active_readers;
+
+    htkeys_t* retired;
+#endif
 } MultiDictObject;
 
 typedef struct {

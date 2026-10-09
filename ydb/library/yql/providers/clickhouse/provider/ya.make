@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_clickhouse_datasink.cpp
@@ -20,8 +20,6 @@ SRCS(
     yql_clickhouse_util.cpp
     yql_clickhouse_util.h
 )
-
-YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/json

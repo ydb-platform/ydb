@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/mkql_proto/protos
@@ -11,8 +11,6 @@ PEERDIR(
 SRCS(
     mkql_proto.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

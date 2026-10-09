@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     database_type.h
@@ -12,8 +12,6 @@ PEERDIR(
     yql/essentials/providers/common/proto
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(database_type.h)
 

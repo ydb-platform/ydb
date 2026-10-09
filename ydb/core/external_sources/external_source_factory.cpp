@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "external_source_factory.h"
 #include "object_storage.h"
 #include "external_data_source.h"
@@ -17,15 +18,10 @@ namespace {
 // Aliases for external data source types: alias -> canonical type.
 // Resolved before any lookup / availability check so that aliases behave as
 // true synonyms (cannot be enabled/disabled independently from the canonical type).
-const TMap<TString, TString>& GetExternalSourceTypeAliases() {
-    static const TMap<TString, TString> aliases = {
-        {ToString(NYql::EDatabaseType::MoniumMetrics), ToString(NYql::EDatabaseType::Solomon)},
+NYql::EDatabaseType ResolveExternalSourceTypeAlias(NYql::EDatabaseType type) {
+    static const TMap<NYql::EDatabaseType, NYql::EDatabaseType> aliases = {
+        {NYql::EDatabaseType::MoniumMetrics, NYql::EDatabaseType::Solomon},
     };
-    return aliases;
-}
-
-TString ResolveExternalSourceTypeAlias(const TString& type) {
-    const auto& aliases = GetExternalSourceTypeAliases();
     auto it = aliases.find(type);
     return it == aliases.end() ? type : it->second;
 }
@@ -34,21 +30,22 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
     TExternalSourceFactory(
         const TMap<TString, IExternalSource::TPtr>& sources,
         bool allExternalDataSourcesAreAvailable,
-        const std::set<TString>& availableExternalDataSources)
+        const std::set<NYql::EDatabaseType>& availableExternalDataSources)
         : Sources(sources)
         , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
         , AvailableExternalDataSources(NormalizeAvailableTypes(availableExternalDataSources))
     {
-        for (const auto& [type, source] : sources) {
-            if (AvailableExternalDataSources.contains(type)) {
+        for (const auto& [typeStr, source] : sources) {
+            const auto databaseType = NYql::DatabaseTypeFromString(typeStr);
+            if (databaseType && AvailableExternalDataSources.contains(*databaseType)) {
                 AvailableProviders.insert(source->GetName());
             }
         }
     }
 
 private:
-    static std::set<TString> NormalizeAvailableTypes(const std::set<TString>& types) {
-        std::set<TString> normalized;
+    static std::set<NYql::EDatabaseType> NormalizeAvailableTypes(const std::set<NYql::EDatabaseType>& types) {
+        std::set<NYql::EDatabaseType> normalized;
         for (const auto& type : types) {
             normalized.insert(ResolveExternalSourceTypeAlias(type));
         }
@@ -57,14 +54,16 @@ private:
 
 public:
 
-    IExternalSource::TPtr GetOrCreate(const TString& type) const override {
-        const TString canonicalType = ResolveExternalSourceTypeAlias(type);
-        auto it = Sources.find(canonicalType);
+    IExternalSource::TPtr GetOrCreate(const NYql::EDatabaseType& type) const override {
+        const TString typeStr = ToString(type);
+        const auto canonicalType = ResolveExternalSourceTypeAlias(type);
+        const TString canonicalTypeStr = ToString(canonicalType);
+        auto it = Sources.find(canonicalTypeStr);
         if (it == Sources.end()) {
-            throw TExternalSourceException() << "External source with type " << type << " was not found";
+            throw TExternalSourceException() << "External source with type " << typeStr << " was not found";
         }
         if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(canonicalType)) {
-            throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
+            throw TExternalSourceException() << "External source with type " << typeStr << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;
     }
@@ -79,7 +78,7 @@ public:
 private:
     const TMap<TString, IExternalSource::TPtr> Sources;
     bool AllExternalDataSourcesAreAvailable;
-    const std::set<TString> AvailableExternalDataSources;
+    const std::set<NYql::EDatabaseType> AvailableExternalDataSources;
     std::set<TString> AvailableProviders;
 };
 
@@ -136,7 +135,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
                                                          bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<TString>& availableExternalDataSources) {
+                                                         const std::set<NYql::EDatabaseType>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
@@ -158,6 +157,10 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Ydb),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::YdbExternal),
+            CreateExternalDataSource(TString{NYql::YdbExternalProviderName}, {"NONE", "TOKEN"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),
@@ -203,10 +206,6 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             ToString(NYql::EDatabaseType::OpenSearch),
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls"}, hostnamePatternsRegEx)
         },
-        {
-            ToString(NYql::EDatabaseType::YdbTopics),
-            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "BASIC", "TOKEN", "IAM"}, {"database_name", "use_tls", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
-        }
     },
     allExternalDataSourcesAreAvailable,
     availableExternalDataSources); 

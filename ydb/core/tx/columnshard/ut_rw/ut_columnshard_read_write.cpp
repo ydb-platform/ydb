@@ -22,6 +22,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/protos/unittests.pb.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
@@ -573,15 +574,6 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId, const TString& data,
-                     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& intWriteIds) {
-        bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &intWriteIds);
-        if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-        return ok;
-    };
-
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
         const auto result = ProposeCommit(runtime, sender, txId, writeIds);
         if (reboots) {
@@ -618,12 +610,13 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // write 1: ins:1, cmt:0, idx:0
 
     std::vector<ui64> intWriteIds;
-    UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[0], ydbSchema), ydbSchema, intWriteIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob(portion[0], ydbSchema), ydbSchema, true, &intWriteIds));
 
     // read
     TAutoPtr<IEventHandle> handle;
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 1);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 1});
 
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
@@ -640,7 +633,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 2 (committed, old snapshot)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 2});
 
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
@@ -651,7 +645,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 3 (committed)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 3});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
@@ -666,7 +661,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 4 (column by id)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 4);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 4});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds({ 1 });
         auto rb = reader.ReadAll();
@@ -681,7 +677,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 5 (2 columns by name)
 
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 5);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 5});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
@@ -701,7 +698,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         TString triggerData = MakeTestBlob(portion[1], ydbSchema);
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-        UNIT_ASSERT(write(runtime, sender, writeId, tableId, triggerData, ydbSchema, intWriteIds));
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &intWriteIds));
     }
 
     // commit 2 (init indexation): ins:0, cmt:0, idx:1
@@ -714,11 +711,12 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++writeId;
     intWriteIds.clear();
-    UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[2], ydbSchema), ydbSchema, intWriteIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob(portion[2], ydbSchema), ydbSchema, true, &intWriteIds));
 
     // read 6, planstep 0
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 6);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 6});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, preWriteSnapshot);
         reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
         auto rb = reader.ReadAll();
@@ -728,7 +726,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 7, first write snapshot
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 7);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 7});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(firstWritePlanStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
@@ -745,7 +744,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 8 (full index)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 8});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
@@ -770,11 +770,12 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     ++writeId;
     intWriteIds.clear();
-    UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[3], ydbSchema), ydbSchema, intWriteIds));
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob(portion[3], ydbSchema), ydbSchema, true, &intWriteIds));
 
     // read 9 (committed, indexed)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 9);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 9});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
@@ -798,7 +799,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 10
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 10);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 10});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         auto rb = reader.ReadAll();
@@ -843,7 +845,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 11 (range predicate: closed interval)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 11);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 11});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         reader.AddRange(MakeTestRange({ 10, 42 }, true, true, testYdbPk));
@@ -860,7 +863,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
 
     // read 12 (range predicate: open interval)
     {
-        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 11);
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"TESTSTEP", 11});
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumnIds(TTestSchema::ExtractIds(ydbSchema));
         reader.AddRange(MakeTestRange({ 10, 42 }, false, false, testYdbPk));
@@ -889,15 +893,6 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     TDispatchOptions options;
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
-
-    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId, const TString& data,
-                     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& writeIds) {
-        bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &writeIds);
-        if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-        return ok;
-    };
 
     auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
         auto result = ProposeCommit(runtime, sender, txId, writeIds);
@@ -949,10 +944,6 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &ids));
         }
 
-        if (reboots) {
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-        }
-
         planStep = proposeCommit(runtime, sender, txId, ids);
         planCommit(runtime, sender, planStep, txId);
     }
@@ -964,7 +955,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
 
     for (ui32 i = 0; i < numTxs; ++i, ++writeId, ++txId) {
         std::vector<ui64> writeIds;
-        UNIT_ASSERT(write(runtime, sender, writeId, tableId, triggerData, ydbSchema, writeIds));
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
         planStep = proposeCommit(runtime, sender, txId, writeIds);
         planCommit(runtime, sender, planStep, txId);
@@ -3385,6 +3376,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     TStringBuilder sb;
                     sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->GetPortionsToDrop()) {
+                        if (portion->IsAborted()) {
+                            continue;
+                        }
                         sb << " " << portion->GetPortionId();
                         deletedPortions.insert(portion->GetPortionId());
                     }
@@ -3432,25 +3426,33 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         ui64 txId = 1000;
 
+        // a restart between a write and its propose aborts the write; redo it under a new lock, as KQP does
+        const auto writeAndCommit = [&](const TString& data) {
+            while (true) {
+                const ui64 lockId = writeId + 1;
+                std::vector<ui64> writeIds;
+                UNIT_ASSERT(
+                    WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert, lockId));
+                if (const auto proposed = TryProposeCommit(runtime, sender, txId, writeIds, lockId)) {
+                    planStep = *proposed;
+                    PlanCommit(runtime, sender, planStep, txId);
+                    return;
+                }
+                ++writeId;
+            }
+        };
+
         // Overwrite the same data multiple times to produce multiple portions at different timestamps
         ui32 numWrites = 14;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
 
         // Do a small write that is not indexed so that we will get a committed blob in read request
         {
             TString smallData = MakeTestBlob({ 0, 2 }, ydbSchema);
             UNIT_ASSERT(smallData.size() < 100 * 1024);
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, smallData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(smallData);
             ++writeId;
             ++txId;
         }
@@ -3478,11 +3480,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Advance the time in order to trigger GC
         numWrites = 10;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
         {
             auto pingShanpshot = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
@@ -3520,11 +3518,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
         //        UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
         csDefaultControllerGuard->SetOverrideStalenessLivetimePing(TDuration::Zero());
@@ -3534,11 +3528,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
-            std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
-
-            planStep = ProposeCommit(runtime, sender, txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            writeAndCommit(triggerData);
         }
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
         AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);

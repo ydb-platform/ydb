@@ -223,6 +223,7 @@ public:
         TTabletInfo::SendStopTablet(sideEffects);
     }
 
+    ui32 GetBlockStorageGeneration() const;
     bool InitiateBlockStorage(TSideEffects& sideEffects);
     bool InitiateBlockStorage(TSideEffects& sideEffects, ui32 generation);
     bool InitiateDeleteStorage(TSideEffects& sideEffects);

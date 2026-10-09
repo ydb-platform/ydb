@@ -87,6 +87,7 @@ public:
     }
 
     void OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result);
+    void UpdateChannelApproximateFreeSpace(const TEvBlobStorage::TEvPutResult& result);
 
     std::optional<NOlap::TBlobWriteInfo> Next() {
         if (WriteTasks.empty()) {

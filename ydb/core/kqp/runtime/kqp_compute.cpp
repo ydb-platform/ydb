@@ -23,6 +23,14 @@ const std::function<void()>& TKqpComputeContextBase::GetWakeupCallback() const {
     return WakeupCallback;
 }
 
+void TKqpComputeContextBase::SetCheckpointContext(TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> checkpointContext) {
+    CheckpointContext = std::move(checkpointContext);
+}
+
+TIntrusiveConstPtr<NYql::NDq::TCheckpointContext> TKqpComputeContextBase::GetCheckpointContext() const {
+    return CheckpointContext;
+}
+
 void TKqpComputeContextBase::SetQueryContext(const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
     Database = database;
     UserToken = std::move(userToken);

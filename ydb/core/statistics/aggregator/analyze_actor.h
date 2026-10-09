@@ -154,6 +154,7 @@ private:
 
     bool SamplingRequested() const { return Config.SampleRate < 1.0; }
     ui64 EligibleUnits = 0;
+    ui64 SamplingSeed = 0;
 
     ui32 PartitionedScanCount() const {
         return ScanMode == EScanMode::PerRange
@@ -201,7 +202,7 @@ private:
     std::queue<TColumnStatEvalTask> PendingTasks;
 
     std::optional<TSelectBuilder> SelectBuilder;
-    std::optional<ui32> CountSeq;
+    ui32 CountSeq = 0;
     std::vector<TColumnStatEvalTask> InProgressTasks;
 
     struct TNodeState {
@@ -218,7 +219,8 @@ private:
     };
     THashMap<TActorId, TScanActorInfo> ScanActorsInFlight;
 
-    std::optional<ui64> RowCount;
+    ui64 RowCount = 0;
+    bool FirstScan = true;
 
     class TScanActor;
 

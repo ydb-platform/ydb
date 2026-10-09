@@ -33,6 +33,7 @@ import ydb.apps.dstool.lib.dstool_cmd_group_virtual_reconfigure as group_virtual
 import ydb.apps.dstool.lib.dstool_cmd_group_resize as group_resize
 import ydb.apps.dstool.lib.dstool_cmd_pool_create_virtual as pool_create_virtual
 import ydb.apps.dstool.lib.dstool_cmd_pool_list as pool_list
+import ydb.apps.dstool.lib.dstool_cmd_pool_set as pool_set
 
 import ydb.apps.dstool.lib.dstool_cmd_box_list as box_list
 
@@ -72,7 +73,7 @@ modules = [
     cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
-    pool_list, pool_create_virtual,
+    pool_list, pool_set, pool_create_virtual,
     group_check, group_decommit, group_show_blob_info, group_show_storage_efficiency, group_show_usage_by_tablets,
     group_state, group_take_snapshot, group_add, group_resize, group_list, group_virtual_create, group_virtual_cancel, group_virtual_reconfigure,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly, pdisk_move, pdisk_populate,
@@ -86,7 +87,7 @@ default_structure = [
     ('vdisk', ['evict', 'list', 'set-read-only', 'remove-donor', 'wipe', 'compact']),
     ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'storage-efficiency', 'usage-by-tablets']),
                'state', 'take-snapshot', 'resize', 'list', ('virtual', ['create', 'cancel', 'reconfigure'])]),
-    ('pool', ['list', ('create', ['virtual'])]),
+    ('pool', ['list', 'set', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
     ('cluster', ['balance', 'get', 'set', ('workload', ['run', 'nbs-dbg-like']), 'list']),

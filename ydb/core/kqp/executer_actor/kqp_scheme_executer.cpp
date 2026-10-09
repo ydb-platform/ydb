@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
@@ -112,7 +113,7 @@ public:
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
         bool expectsResult, TTxAllocatorState::TPtr txAlloc,
-        const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId)
+        const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId, TInstant deadline)
         : PhyTx(phyTx)
         , QueryType(queryType)
         , QueryData(queryData)
@@ -130,6 +131,7 @@ public:
         , TxAlloc(std::move(txAlloc))
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , TraceId(std::move(traceId))
+        , Deadline(deadline)
     {
         YQL_ENSURE(RequestContext);
         YQL_ENSURE(PhyTx);
@@ -825,9 +827,110 @@ public:
         Become(&TKqpSchemeExecuter::ObjectExecuteState);
     }
 
+    void StartKillSession() {
+        if (!AppData()->FeatureFlags.GetEnableKillSession()) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, "KILL SESSION is disabled");
+        }
+        const auto& operation = PhyTx->GetSchemeOperation().GetKillSession();
+        switch (operation.GetTargetCase()) {
+            case NKqpProto::TKqpKillSession::kSessionId:
+                KillSessionId = operation.GetSessionId();
+                break;
+            case NKqpProto::TKqpKillSession::kSessionIdParameter: {
+                const auto& name = operation.GetSessionIdParameter();
+                auto* parameter = QueryData ? QueryData->GetParameterUnboxedValuePtr(name) : nullptr;
+                if (!parameter || !parameter->first->IsData()
+                    || static_cast<NMiniKQL::TDataType*>(parameter->first)->GetSchemeType() != NUdf::TDataType<NUdf::TUtf8>::Id)
+                {
+                    return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "KILL SESSION requires a non-NULL Utf8 parameter: " << name);
+                }
+                KillSessionId = TString(parameter->second.AsStringRef());
+                break;
+            }
+            default:
+                return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "KILL SESSION requires a session ID");
+        }
+
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.Path = SplitPath(Database);
+        entry.SyncVersion = true;
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
+        Become(&TKqpSchemeExecuter::KillSessionState);
+        if (Deadline != TInstant::Max()) {
+            const auto now = TAppData::TimeProvider->Now();
+            if (Deadline <= now) {
+                return ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "KILL SESSION deadline exceeded");
+            }
+            Schedule(Deadline - now, new TEvents::TEvWakeup());
+        }
+    }
+
+    void HandleKillSession(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& entries = ev->Get()->Request->ResultSet;
+        if (ev->Get()->Request->ErrorCount || entries.size() != 1 || !entries.front().SecurityObject) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Cannot authorize KILL SESSION for this database");
+        }
+
+        const auto& security = *entries.front().SecurityObject;
+        const bool isAdmin = IsAdministrator(AppData(), UserToken.Get())
+            || (AppData()->FeatureFlags.GetEnableDatabaseAdmin()
+                && IsDatabaseAdministrator(UserToken.Get(), security.GetOwnerSID()));
+        if (!isAdmin && (!UserToken || !security.CheckAccess(NACLib::ConnectDatabase, *UserToken))) {
+            return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Access denied for KILL SESSION");
+        }
+        const bool canKillAnySession = isAdmin
+            || (UserToken && security.CheckAccess(NACLib::UpdateRow, *UserToken));
+
+        auto request = std::make_unique<TEvKqp::TEvKillSessionRequest>();
+        auto& record = request->Record;
+        record.SetSessionId(KillSessionId);
+        record.SetDatabase(Database);
+        if (UserToken) {
+            record.SetUserToken(UserToken->SerializeAsString());
+        }
+        record.SetCanKillAnySession(canKillAnySession);
+        record.SetSourceSessionId(RequestContext->SessionId);
+        record.SetDeadlineUs(Deadline.MicroSeconds());
+        record.SetTraceId(RequestContext->TraceId);
+        Send(MakeKqpProxyID(SelfId().NodeId()), request.release(), IEventHandle::FlagTrackDelivery);
+    }
+
+    void HandleKillSession(TEvKqp::TEvKillSessionResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
+    }
+
+    STATEFN(KillSessionState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleKillSession);
+                hFunc(TEvKqp::TEvKillSessionResponse, HandleKillSession);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                case TEvents::TEvWakeup::EventType:
+                    ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "Timed out waiting for session termination");
+                    break;
+                case TEvents::TEvUndelivered::EventType:
+                    ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver KILL SESSION request");
+                    break;
+                default:
+                    UnexpectedEvent("KillSessionState", ev->GetTypeRewrite());
+                    break;
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+    }
+
     void Bootstrap() {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-        if (schemeOp.GetObjectType()) {
+        if (schemeOp.HasKillSession()) {
+            StartKillSession();
+        } else if (schemeOp.GetObjectType()) {
             MakeObjectRequest();
         } else if (IsCreateTableAs && schemeOp.GetOperationCase() == NKqpProto::TKqpSchemeOperation::kAlterTable) {
             FindWorkingDirForCTAS();
@@ -1472,6 +1575,8 @@ private:
     TTxAllocatorState::TPtr TxAlloc;
     const TActorId KqpTempTablesAgentActor;
     const NWilson::TTraceId TraceId;
+    const TInstant Deadline;
+    TString KillSessionId;
     TActorId AnalyzeActorId;
 };
 
@@ -1483,12 +1588,13 @@ IActor* CreateKqpSchemeExecuter(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs,
     TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
-    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId)
+    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor,
+    NWilson::TTraceId traceId, TInstant deadline)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, queryData, target, requestType, database, userToken, clientAddress,
         temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx),
-        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor, std::move(traceId));
+        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor, std::move(traceId), deadline);
 }
 
 } // namespace NKikimr::NKqp

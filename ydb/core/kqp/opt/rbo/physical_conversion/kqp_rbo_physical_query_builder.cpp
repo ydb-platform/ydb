@@ -221,13 +221,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         TExprNode::TPtr stage;
         if (graph.IsSourceStageRowType(id)) {
             stage = Stages[rootIdx].at(id);
-            // Want to build materialize for ranges.
-            // TODO: Actually old optimizer has some machinery to compute ranges during compilation for some cases, for
-            // example when `LiteralRange` is defined, but currenlty we put any case in separate tx. Performance improvement is possible here.
+            // Computed ranges are materialized in a separate transaction. A literal range is taken by the source as is.
             auto rowSettingsPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadRangesSourceSettings>(node); });
             if (rowSettingsPtr) {
                 auto rowSettings = TExprBase(rowSettingsPtr).Cast<TKqpReadRangesSourceSettings>();
-                if (!rowSettings.RangesExpr().Maybe<TCoVoid>()) {
+                if (!rowSettings.RangesExpr().Maybe<TCoVoid>() && !rowSettings.RangesExpr().Maybe<TKqlKeyRange>()) {
                     const auto materializeResult = BuildMaterialize(rootIdx, rowSettings.RangesExpr().Ptr());
                     // clang-fomrat off
                     const auto newRowSettings = Build<TKqpReadRangesSourceSettings>(ctx, rowSettingsPtr->Pos())
@@ -444,27 +442,26 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(int rootIdx, const 
     // clang-format on
 }
 
-TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(int rootIdx, const TVector<TExprNode::TPtr>& physicalStages) {
+// Collects param bindings walking from root stage.
+TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(int rootIdx, const TExprNode::TPtr& rootStage) {
     auto& ctx = RBOCtx.ExprCtx;
     auto pos = Roots[rootIdx]->Pos;
 
     TVector<TKqpParamBinding> paramBindings;
     THashSet<TString> paramsCollected;
-    for (const auto& physicalStage : physicalStages) {
-        const auto params = FindNodes(physicalStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
-        for (const auto& param : params) {
-            const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
-            if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
-                // clang-format off
-                const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
-                    .Name<TCoAtom>()
-                        .Value(paramName)
-                    .Build()
-                .Done();
-                // clang-format on
-                paramBindings.push_back(paramBinding);
-                paramsCollected.insert(paramName);
-            }
+    const auto params = FindNodes(rootStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
+    for (const auto& param : params) {
+        const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
+        if (!paramsCollected.contains(paramName) && paramName.find(ParamBindingName) == TString::npos) {
+            // clang-format off
+            const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(paramName)
+                .Build()
+            .Done();
+            // clang-format on
+            paramBindings.push_back(paramBinding);
+            paramsCollected.insert(paramName);
         }
     }
 
@@ -489,7 +486,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     ui32 materializeIdx = 0;
 
     for (size_t i=0; i<Roots.size(); i++) {
-        auto paramBindingsCurr = CollectParamBindings(i, physicalStages[i]);
+        auto paramBindingsCurr = CollectParamBindings(i, physicalStages[i].back());
         paramBindingsAllRoots.insert(paramBindingsAllRoots.end(), paramBindingsCurr.begin(), paramBindingsCurr.end());
 
         materializeSize += Materialize[i].size();
@@ -516,7 +513,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
             paramBindingsAllRoots.emplace_back(paramBinding);
 
             auto materializeStage = materializeResult.Output().Stage();
-            const auto paramBindingsMaterialize = CollectParamBindings(i, {materializeStage.Ptr()});
+            const auto paramBindingsMaterialize = CollectParamBindings(i, materializeStage.Ptr());
             // Bindings params in materialize.
             paramBindingsForMaterialize.insert(paramBindingsForMaterialize.end(), paramBindingsMaterialize.begin(), paramBindingsMaterialize.end());
             // Stages for phy tx.
@@ -716,7 +713,7 @@ TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
 
     switch (kqpCtx.QueryCtx->Type) {
         case EKikimrQueryType::Dml: {
-            txSettings.Type = EPhysicalTxType::Compute;
+            txSettings.Type = withEffects ? EPhysicalTxType::Data : EPhysicalTxType::Compute;
             break;
         }
         case EKikimrQueryType::Query: {

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/scheme
@@ -17,7 +17,5 @@ SRCS(
     yql_ydb_factory.cpp
     yql_ydb_dq_transform.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

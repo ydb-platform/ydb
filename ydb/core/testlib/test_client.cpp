@@ -473,6 +473,11 @@ namespace Tests {
                                                     Settings->UseRealThreads);
         }
 
+        // read only while the runtime is initialized, so it has to be set here even for init = false
+        if (Settings->UseRealInterconnect) {
+            Runtime->SetUseRealInterconnect();
+        }
+
         if (init) {
             Initialize();
         }
@@ -549,8 +554,10 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
-            appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
-                Settings->AppConfig->GetResourcePathPrefixMapping());
+            const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
+            if (pathMapping.RulesSize()) {
+                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+            }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
@@ -1501,9 +1508,8 @@ namespace Tests {
                         });
             }
 
-            const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
             for (const auto& source : Settings->AppConfig->GetQueryServiceConfig().GetAvailableExternalDataSources()) {
-                if (!allExternalSourcesTypes.contains(source)) {
+                if (!NYql::IsValidAvailableExternalDataSourceType(source)) {
                     ythrow yexception() << "wrong AvailableExternalDataSources \"" << source << "\"";
                 }
             }
@@ -1663,7 +1669,8 @@ namespace Tests {
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
 
-        {
+        // the runtime has one: replacing it races with the interconnect sessions, a lookup may then find none
+        if (!Runtime->GetLocalServiceId(MakePollerActorId(), nodeIdx)) {
             IActor* actor = CreatePollerActor();
             TActorId actorId = Runtime->Register(actor, nodeIdx, Runtime->GetAppData(nodeIdx).SystemPoolId);
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);

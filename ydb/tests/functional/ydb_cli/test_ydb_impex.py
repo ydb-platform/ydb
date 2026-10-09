@@ -2,7 +2,11 @@
 from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase, ydb_bin
 
 import pytest
+import json
 import logging
+import os
+import pty
+import re
 import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
@@ -303,6 +307,70 @@ class TestImpex(BaseCliTestWithDatabase):
         self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_parquet(DATA_PARQUET)
         return self.run_export("csv")
+
+    @pytest.mark.parametrize("files", [
+        [("NONE", 64)],
+        [("snappy", 64)],
+        [("NONE", 0)],
+        [("NONE", 32), ("snappy", 64), ("NONE", 0)],
+    ], ids=["uncompressed", "compressed", "empty", "multiple"])
+    def test_parquet_import_progress(self, tmp_path, request, table_type, files):
+        self.init_test(tmp_path, table_type, request.node.name)
+        paths = []
+        total_rows = 0
+        for index, (compression, rows) in enumerate(files):
+            path = tmp_path / f"input{index}.parquet"
+            data = pa.Table.from_arrays([
+                pa.array(range(total_rows, total_rows + rows), type=pa.uint32()),
+                pa.array(range(total_rows, total_rows + rows), type=pa.uint64()),
+                pa.array(["x" * 65536] * rows, type=pa.string()),
+            ], names=ARRAY_NAMES)
+            pq.write_table(data, str(path), compression=compression, use_dictionary=False,
+                           row_group_size=16, version="2.0")
+            paths.append(path)
+            total_rows += rows
+
+        # A terminal stdin prevents the CLI from adding it as another input
+        # file. Keep stderr redirected to get deterministic text-mode progress.
+        master_fd, slave_fd = pty.openpty()
+        try:
+            with os.fdopen(slave_fd, "rb") as terminal:
+                result = self.execute_ydb_cli_command([
+                    "import", "file", "parquet", "--path", self.table_path,
+                    "--batch-bytes", "128KiB", "--threads", "2", "--max-in-flight", "2",
+                ] + [str(path) for path in paths], stdin=terminal)
+        finally:
+            os.close(master_fd)
+
+        # Non-interactive output always contains the first and final updates;
+        # no sleeps or assumptions about import speed are needed.
+        progress = [line for line in result.stderr.splitlines() if re.match(r"\s*\d+%", line)]
+        assert progress, result.stderr
+        assert progress[-1].startswith("100%"), result.stderr
+        if total_rows and len(paths) == 1:
+            # Each row group contains a substantial part of the file. Counting
+            # rows as bytes instead would round this initial read progress to 0%.
+            assert re.search(r"\(\+ [1-9]\d*% in progress\)", progress[0]), result.stderr
+
+        size_pattern = r"([0-9]+(?:\.[0-9]+)? (?:B|KiB|MiB|GiB))"
+        final_sizes = re.search(r"\| " + size_pattern + r" / " + size_pattern, progress[-1])
+        assert final_sizes, result.stderr
+        assert final_sizes[1] == final_sizes[2], result.stderr
+        summary_size = re.search(r"Total read size: " + size_pattern + r"\.", result.stderr)
+        assert summary_size, result.stderr
+        assert summary_size[1] == final_sizes[2], result.stderr
+        number, unit = summary_size[1].split()
+        displayed_bytes = float(number) * {"B": 1, "KiB": 1024, "MiB": 1024**2, "GiB": 1024**3}[unit]
+        # The CLI rounds human-readable sizes to three significant digits.
+        assert displayed_bytes == pytest.approx(sum(path.stat().st_size for path in paths), rel=0.005)
+
+        query = f"SELECT COUNT(*) AS rows, SUM(LENGTH(value)) AS bytes FROM `{self.table_path}`"
+        verification = self.execute_ydb_cli_command([
+            "table", "query", "execute", "-q", query, "-t", "scan", "--format", "json-unicode-array",
+        ])
+        data = json.loads(verification.stdout)[0]
+        assert int(data["rows"]) == total_rows
+        assert int(data["bytes"] or 0) == total_rows * 65536
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_import_file_with_bom(self, tmp_path, request, table_type, ftype, additional_args):

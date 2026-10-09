@@ -67,6 +67,14 @@ namespace {
             : Part(std::move(part))
             , Room(room)
         {
+            // Build byte-offset to pageId map
+            for (ui32 i = 0; i < Total(); i++) {
+                auto type = Part->Store->GetPageType(Room, i);
+                if (NTest::TStore::IsByteOffsetType(type)) {
+                    auto loc = Part->Store->GetPageLocation(Room, i);
+                    ByteOffsetToPageId[loc.Offset.AsByteOffset()] = i;
+                }
+            }
         }
 
         const TLogoBlobID& Label() const noexcept override
@@ -86,9 +94,22 @@ namespace {
             return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
-        NPageCollection::TBorder Bounds(ui32) const override
+        NPageCollection::TBorder Bounds(ui32 page) const override
         {
-            Y_TABLET_ERROR("Unexpected Bounds(...) call");
+            return { Page(page).Size, { page, 0 }, { page, ui32(Page(page).Size) } };
+        }
+
+        NPageCollection::TBorder Bounds(const TPageLocation& location) const override {
+            if (location.Offset.IsByteOffset()) {
+                auto it = ByteOffsetToPageId.find(location.Offset.AsByteOffset());
+                if (it == ByteOffsetToPageId.end()) {
+                    return { 0, { Max<ui32>(), 0 }, { Max<ui32>(), 0 } };
+                }
+                ui32 pageId = it->second;
+                ui32 pageSize = Part->Store->GetPageSize(Room, pageId);
+                return { pageSize, { pageId, 0 }, { pageId, pageSize } };
+            }
+            return Bounds(location.Offset.AsPageIndex());
         }
 
         NPageCollection::TGlobId Glob(ui32) const override
@@ -101,14 +122,24 @@ namespace {
             Y_TABLET_ERROR("Unexpected Verify(...) call");
         }
 
+        bool Verify(const TPageLocation& location, TArrayRef<const char> data) const override {
+            return data.size() == location.Size;
+        }
+
         size_t BackingSize() const noexcept override
         {
             return Part->Store->PageCollectionBytes(Room);
         }
 
+        NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
+        {
+            return Part->Store->GetPageLocation(Room, pageId);
+        }
+
     private:
         TIntrusiveConstPtr<NTest::TPartStore> Part;
         ui32 Room;
+        THashMap<ui64, ui32> ByteOffsetToPageId;
     };
 
     struct TCheckResult {
@@ -155,10 +186,10 @@ namespace {
                 UNIT_ASSERT_C(fetch.Pages, "TLoader wants a fetch, but there are no pages");
                 result.Pages += fetch.Pages.size();
 
-                for (auto pageId : fetch.Pages) {
-                    auto* page = part->Store->GetPage(0, pageId);
-                    UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
-                    env.Save({ pageId, NSharedCache::TSharedPageRef::MakePrivate(*page) });
+                for (auto& location : fetch.Pages) {
+                    auto* page = part->Store->GetPage(0, location.Offset);
+                    UNIT_ASSERT_C(page, "TLoader wants a missing page at offset " << location.Offset);
+                    env.Save({ location.Offset, location.Size, NSharedCache::TSharedPageRef::MakePrivate(*page) });
                 }
             } else {
                 UNIT_ASSERT_C(false, "TKeysLoader was stalled");

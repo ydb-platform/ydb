@@ -495,21 +495,21 @@ public:
     }
 
 public:
-    void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+    void ParseRecords(const std::vector<TMessageStreamRecord>& records) override {
         if (FatalErrorStatus) {
             return;
         }
 
         YDB_LOG_TRACE("Send messages to parser",
             {"logPrefix", LogPrefix},
-            {"messages", messages.size()});
+            {"messages", records.size()});
 
-        if (!messages.empty()) {
-            CurrentOffset = messages.back().GetOffset();
+        if (!records.empty()) {
+            CurrentOffset = records.back().Id.Offset;
         }
 
         if (Parser) {
-            Parser->ParseMessages(messages);
+            Parser->ParseRecords(records);
             ScheduleRefresh();
         } else if (!Clients.empty()) {
             FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, "Failed to parse messages, expected empty clients set without parser"));

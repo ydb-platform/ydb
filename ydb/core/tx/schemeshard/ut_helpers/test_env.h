@@ -52,6 +52,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnablePqBilling, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
         OPTION(std::optional<bool>, EnableBorrowedSplitCompaction, std::nullopt);
+        OPTION(std::optional<bool>, EnableSplitMergeDemandTracking, std::nullopt);
         OPTION(std::optional<bool>, DisableStatsBatching, std::nullopt);
         OPTION(THashSet<TString>, SystemBackupSIDs, {});
         OPTION(std::optional<bool>, EnableMoveIndex, std::nullopt);
@@ -130,6 +131,7 @@ namespace NSchemeShardUT_Private {
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory = {});
 
         TFakeHiveState::TPtr GetHiveState() const;
+        ui64 GetCoordinatorStep() const { return CoordinatorState->CurrentStep; }
         TAutoPtr<ITabletScheduledEventsGuard> EnableSchemeshardPipeRetries(TTestActorRuntime& runtime);
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvSchemeShard::TEvModifySchemeTransaction* evTx, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
         ui32 ReliablePropose(TTestActorRuntime& runtime, TEvSchemeShard::TEvCancelTx* evTx, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});

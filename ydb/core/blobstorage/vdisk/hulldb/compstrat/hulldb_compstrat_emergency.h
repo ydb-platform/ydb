@@ -28,11 +28,13 @@ namespace NKikimr {
                     TIntrusivePtr<THullCtx> hullCtx,
                     const TSelectorParams &params,
                     const TLevelIndexSnapshot &levelSnap,
-                    TTask *task)
+                    TTask *task,
+                    TCompactionYield* yield = nullptr)
                 : HullCtx(std::move(hullCtx))
                 , Params(params)
                 , LevelSnap(levelSnap)
                 , Task(task)
+                , Yield(yield)
                 , MaxSsts(ui32(HullCtx->VCfg->HullCompEmergencyMaxSsts))
                 , ChunkSize(HullCtx->ChunkSize)
             {}
@@ -136,6 +138,7 @@ namespace NKikimr {
             const TSelectorParams &Params;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
+            TCompactionYield* const Yield;
             const ui32 MaxSsts;
             const ui32 ChunkSize;
             TCandidate Best;
@@ -169,6 +172,7 @@ namespace NKikimr {
                     ui64 &hugeGarbage) const
             {
                 for (auto it = first; it != last; ++it) {
+                    CheckCompactionYield(Yield);
                     inputChunks += TUtils::SstInputChunks(**it);
                     stripeBlocks += TUtils::SstReleasedStripeBlocks(**it, Params.AppendBlockSize);
                     keepBytes += TUtils::SstKeepBytes(**it);
@@ -200,6 +204,7 @@ namespace NKikimr {
                     ui64 hugeGarbage = 0;
                     const ui32 maxW = Min(MaxSsts, n - i);
                     for (ui32 w = 1; w <= maxW; ++w) {
+                        CheckCompactionYield(Yield);
                         const auto sst = segs[i + w - 1];
                         inputChunks += TUtils::SstInputChunks(*sst);
                         stripeBlocks += TUtils::SstReleasedStripeBlocks(*sst, Params.AppendBlockSize);
@@ -250,6 +255,7 @@ namespace NKikimr {
 
                 const ui32 srcLevel = srcLevelIdx + 1;
                 for (auto srcIt = srcSegs.begin(); srcIt != srcSegs.end(); ++srcIt) {
+                    CheckCompactionYield(Yield);
                     auto [nextFirst, nextLast] = FindOverlap(nextSegs,
                         (*srcIt)->FirstKey(), (*srcIt)->LastKey());
                     const ui32 overlap = static_cast<ui32>(nextLast - nextFirst);
@@ -280,16 +286,16 @@ namespace NKikimr {
                 auto &compactSsts = Task->CompactSsts;
                 if (Best.Kind == TCandidate::EKind::CrossLevel) {
                     compactSsts.TargetLevel = Best.TargetLevel;
-                    compactSsts.PushSstFromLevelX(Best.SrcLevel, Best.SrcFirst, Best.SrcLast);
+                    compactSsts.PushSstFromLevelX(Best.SrcLevel, Best.SrcFirst, Best.SrcLast, Yield);
                     compactSsts.LastCompactedKey = (*Best.SrcFirst)->LastKey();
-                    compactSsts.PushSstFromLevelX(Best.SrcLevel + 1, Best.NextFirst, Best.NextLast);
+                    compactSsts.PushSstFromLevelX(Best.SrcLevel + 1, Best.NextFirst, Best.NextLast, Yield);
                 } else {
                     TUtils::CompactContiguousSsts(
                         LevelSnap.SliceSnap,
                         Best.SrcLevel,
                         Best.SrcFirst,
                         Best.SrcLast,
-                        compactSsts);
+                        compactSsts, Yield);
                 }
             }
 

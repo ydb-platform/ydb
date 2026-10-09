@@ -3,6 +3,8 @@ YQL_LIBRARY()
 SRCS(
     control.cpp
     dynamic_function_registry.cpp
+    kqp.cpp
+    kqp.h
     kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
@@ -12,19 +14,16 @@ SRCS(
     kqp_resolve.h
     kqp_row_builder.cpp
     kqp_ru_calc.cpp
-    kqp_script_executions.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
-    kqp_tx_manager.cpp
     kqp_tx.cpp
+    kqp_tx_manager.cpp
     kqp_types.cpp
     kqp_types.h
     kqp_user_request_context.cpp
     kqp_user_request_context.h
     kqp_yql.cpp
     kqp_yql.h
-    kqp.cpp
-    kqp.h
 )
 
 PEERDIR(
@@ -41,6 +40,7 @@ PEERDIR(
     ydb/core/kqp/common/simple
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/provider
+    ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/long_tx_service/public
@@ -69,7 +69,7 @@ END()
 RECURSE(
     compilation
     events
-    simple
     result_set_format
+    simple
     ut
 )

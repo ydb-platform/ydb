@@ -6,19 +6,19 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
-#include <ydb/core/kqp/run_script_actor/kqp_run_script_actor.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_retries.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/proto/result_set_meta.pb.h>
+#include <ydb/core/kqp/script_executions/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
@@ -36,8 +36,6 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <contrib/libs/fmt/include/fmt/format.h>
-
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/interop/cast.h>
@@ -45,7 +43,8 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/retry/retry_policy.h>
 
-#include <util/system/env.h>
+#include <contrib/libs/fmt/include/fmt/format.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/generic/maybe.h>
@@ -54,10 +53,11 @@
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/system/env.h>
 #include <util/system/types.h>
 
-#include <optional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY

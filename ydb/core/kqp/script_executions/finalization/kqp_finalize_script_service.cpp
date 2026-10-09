@@ -1,11 +1,10 @@
-#include "kqp_finalize_script_service.h"
-#include "kqp_finalize_script_actor.h"
 #include "kqp_check_script_lease_actor.h"
+#include "kqp_finalize_script_actor.h"
+#include "kqp_finalize_script_service.h"
 
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-
 #include <ydb/library/table_creator/table_creator.h>
 
 #include <queue>

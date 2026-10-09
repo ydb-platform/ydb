@@ -1,26 +1,24 @@
 #include "ydb_setup.h"
 
-#include <library/cpp/colorizer/colors.h>
-
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aws_init/aws.h>
-
 #include <ydb/services/keyvalue/grpc_service_v1.h>
 #include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/persqueue_v1/grpc_pq_schema.h>
 #include <ydb/services/persqueue_v1/services_initializer.h>
-
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/tls_backend.h>
+
+#include <library/cpp/colorizer/colors.h>
 
 using namespace NKikimrRun;
 

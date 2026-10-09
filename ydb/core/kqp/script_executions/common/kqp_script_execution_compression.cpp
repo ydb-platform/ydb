@@ -1,10 +1,10 @@
 #include "kqp_script_execution_compression.h"
 
-#include <util/generic/size_literals.h>
+#include <ydb/core/tx/datashard/const.h>
 
 #include <library/cpp/blockcodecs/codecs.h>
 
-#include <ydb/core/tx/datashard/const.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKqp {
 

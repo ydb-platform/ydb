@@ -2,9 +2,9 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <google/protobuf/timestamp.pb.h>
-
 #include <library/cpp/protobuf/interop/cast.h>
+
+#include <google/protobuf/timestamp.pb.h>
 
 #include <util/random/random.h>
 #include <util/string/builder.h>

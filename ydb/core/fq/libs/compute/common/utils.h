@@ -1,15 +1,15 @@
 #pragma once
 
-#include <memory>
+#include "config.h"
+#include "run_actor_params.h"
 
-#include <ydb/core/fq/libs/compute/common/config.h>
-#include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <memory>
 
 namespace NFq {
 

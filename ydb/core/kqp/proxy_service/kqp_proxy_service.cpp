@@ -1,7 +1,6 @@
 #include "kqp_proxy_service.h"
 #include "kqp_proxy_service_impl.h"
 #include "kqp_query_text_cache_service.h"
-#include "kqp_script_executions.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -18,7 +17,6 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
-#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/simple/session_id.h>
@@ -29,12 +27,13 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
-#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>

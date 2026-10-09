@@ -3,11 +3,11 @@
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
-#include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
-#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_retries.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/test_client.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/yql/providers/common/http_gateway/ut_helpers/http_gateway_holder.h>
@@ -15,9 +15,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <fmt/format.h>
-
 #include <library/cpp/protobuf/interop/cast.h>
+
+#include <fmt/format.h>
 
 namespace NKikimr::NKqp {
 

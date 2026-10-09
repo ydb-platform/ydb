@@ -1,10 +1,10 @@
 #include "kqp_run_script_actor_impl.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -15,8 +15,8 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <util/generic/string.h>
 #include <util/datetime/base.h>
+#include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
 

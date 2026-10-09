@@ -1,46 +1,6 @@
-#include "proxy.h"
 #include "nodes_manager.h"
+#include "proxy.h"
 
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <library/cpp/protobuf/interop/cast.h>
-
-#include <ydb/core/mon/mon.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <yql/essentials/ast/yql_expr.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
-#include <yql/essentials/core/facade/yql_facade.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
-#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
-#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
-#include <library/cpp/yson/node/node_io.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
-#include <yql/essentials/providers/common/codec/yql_codec.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/public/issue/protos/issue_message.pb.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-
-#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
@@ -55,10 +15,46 @@
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
-
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
+#include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/security/util.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/public/issue/protos/issue_message.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>

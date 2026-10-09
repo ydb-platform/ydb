@@ -4,10 +4,10 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
@@ -20,8 +20,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/string.h>
 #include <util/string/builder.h>

@@ -4,9 +4,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/object.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -27,6 +27,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+
 #include <util/string/cast.h>
 #include <util/system/env.h>
 

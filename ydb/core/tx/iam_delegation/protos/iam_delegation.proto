@@ -48,7 +48,16 @@ enum EDelegationState {
     ACTIVE = 2;
     WAITING_SETUP = 3;
     REVOCATION_PENDING = 4;
+    REVOKING = 5;
+    REVOKED = 6;
     CANCELLED = 7;
+}
+
+message TClaim {
+    optional uint64 Generation = 1;
+    optional uint64 Attempt = 2;
+    optional string WorkerId = 3;
+    optional uint64 DeadlineUs = 4;
 }
 
 message TDelegation {
@@ -62,7 +71,9 @@ message TDelegation {
     optional ESetupState SetupState = 8;
     optional EDelegationState State = 9;
     optional string SetupOperationId = 10;
+    optional string RevokeOperationId = 11;
     optional uint64 ActivatedRevision = 12;
+    optional TClaim Claim = 13;
     optional uint64 DueAtUs = 14;
 }
 
@@ -153,6 +164,26 @@ message TGetDelegationRequest {
     optional string OperationId = 1;
 }
 
+message TClaimRevocationsRequest {
+    optional string WorkerId = 1;
+    optional uint32 Limit = 2;
+    optional uint64 LeaseUs = 3;
+}
+
+enum ERevokeOutcome {
+    REVOKE_OUTCOME_UNSPECIFIED = 0;
+    REVOKE_SUCCEEDED = 1;
+    REVOKE_RETRY = 2;
+}
+
+message TFinishRevocationRequest {
+    optional string OperationId = 1;
+    optional TClaim Claim = 2;
+    optional ERevokeOutcome Outcome = 3;
+    optional string RevokeOperationId = 4;
+    optional uint64 RetryAfterUs = 5;
+}
+
 message TRequest {
     oneof Command {
         TRegisterDatabaseRequest RegisterDatabase = 1;
@@ -164,6 +195,8 @@ message TRequest {
         TDropSecretRequest DropSecret = 7;
         TGetSecretRequest GetSecret = 8;
         TGetDelegationRequest GetDelegation = 9;
+        TClaimRevocationsRequest ClaimRevocations = 11;
+        TFinishRevocationRequest FinishRevocation = 12;
     }
 }
 
@@ -174,6 +207,7 @@ enum EStatus {
     NOT_FOUND = 3;
     CONFLICT = 4;
     PRECONDITION_FAILED = 5;
+    STALE_CLAIM = 6;
 }
 
 message TResponse {

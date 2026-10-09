@@ -180,10 +180,8 @@ bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::
 
 bool CanCacheQuery(const NKqpProto::TKqpPhyQuery& query) {
     for (const auto& tx : query.GetTransactions()) {
-        // An unsafe truncate is not a template either: it carries the resolved OwnerId/TableId and
-        // schema version of every target, so a cached plan would outlive the tables it names.
         if (tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME
-            || tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE)
+            || tx.HasUnsafeTruncate())
         {
             return false;
         }

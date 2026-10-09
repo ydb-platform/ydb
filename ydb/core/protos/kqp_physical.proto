@@ -751,8 +751,6 @@ message TKqpPhyTx {
         TYPE_SCAN = 3;
         TYPE_GENERIC = 4;
         TYPE_SCHEME = 5;
-        // Data-plane truncate driven by KQP, see TKqpUnsafeTruncateOperation.
-        TYPE_UNSAFE_TRUNCATE = 6;
     };
 
     EType Type = 1;

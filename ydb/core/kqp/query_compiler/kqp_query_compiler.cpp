@@ -124,7 +124,6 @@ NKqpProto::TKqpPhyTx::EType GetPhyTxType(const EPhysicalTxType& type) {
         case EPhysicalTxType::Data: return NKqpProto::TKqpPhyTx::TYPE_DATA;
         case EPhysicalTxType::Scan: return NKqpProto::TKqpPhyTx::TYPE_SCAN;
         case EPhysicalTxType::Generic: return NKqpProto::TKqpPhyTx::TYPE_GENERIC;
-        case EPhysicalTxType::UnsafeTruncate: return NKqpProto::TKqpPhyTx::TYPE_UNSAFE_TRUNCATE;
 
         case EPhysicalTxType::Unspecified:
             break;
@@ -763,7 +762,7 @@ public:
         // effects cannot be deferred past it.
         bool hasUnsafeTruncate = false;
         for (const auto& tx : query.Transactions()) {
-            if (TKqpPhyTxSettings::Parse(tx).Type == EPhysicalTxType::UnsafeTruncate) {
+            if (!TKqpPhyTxSettings::Parse(tx).UnsafeTruncatePath.empty()) {
                 hasUnsafeTruncate = true;
                 break;
             }
@@ -1218,8 +1217,8 @@ private:
 
         // Nothing else to compile: the transaction is the table path, and the executer discovers
         // everything else from the live schema.
-        if (*txSettings.Type == EPhysicalTxType::UnsafeTruncate) {
-            YQL_ENSURE(!txSettings.UnsafeTruncatePath.empty());
+        if (!txSettings.UnsafeTruncatePath.empty()) {
+            YQL_ENSURE(*txSettings.Type == EPhysicalTxType::Generic);
             txProto.MutableUnsafeTruncate()->SetTablePath(txSettings.UnsafeTruncatePath);
             return;
         }

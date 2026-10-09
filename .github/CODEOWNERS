@@ -12,10 +12,12 @@
 /.github/ @ydb-platform/ci
 /.github/workflows/docs_* @ydb-platform/docs
 /.github/workflows/ydbdoc-* @ydb-platform/docs
+/.github/config/cpp_format/.clang-format @ydb-platform/cs @ydb-platform/fq
 /.github/config/muted_ya*
+/.github/docker @ydb-platform/appteam
+/.github/scripts/cpp_format/ @ydb-platform/cs @ydb-platform/fq
 /.github/CODEOWNERS
 /.github/TESTOWNERS
-/.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/synced-dirs
 /certs @ydb-platform/synced-dirs
@@ -28,6 +30,8 @@
 /vendor @ydb-platform/synced-dirs
 /yql @ydb-platform/synced-dirs
 /yt @ydb-platform/synced-dirs
+
+/build/internal/conf/autoincludes.json @ydb-platform/cs @ydb-platform/fq @ydb-platform/nbs_yandex
 
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
@@ -111,6 +115,7 @@
 /ydb/core/kqp/gateway/behaviour/external_data_source/ @ydb-platform/fq
 /ydb/core/kqp/gateway/behaviour/streaming_query/ @ydb-platform/fq
 /ydb/core/kqp/opt/peephole/kqp_opt_peephole_streaming.cpp @ydb-platform/fq
+/ydb/core/kqp/provider/yql_kikimr_gateway_ut_helpers.h @ydb-platform/fq
 /ydb/core/kqp/provider/yql_kikimr_provider_streaming_ut.cpp @ydb-platform/fq
 /ydb/core/kqp/proxy_service/kqp_script_executions.* @ydb-platform/fq
 /ydb/core/kqp/proxy_service/kqp_script_executions_impl.h @ydb-platform/fq

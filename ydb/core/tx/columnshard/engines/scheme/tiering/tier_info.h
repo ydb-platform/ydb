@@ -52,7 +52,7 @@ public:
         return schema->GetFieldByName(EvictColumnName);
     }
 
-    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const;
+    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar, NScheme::TTypeId columnType) const;
 
     static std::shared_ptr<TTierInfo> MakeTtl(const TDuration evictDuration, const TString& ttlColumn, ui32 unitsInSecond = 0) {
         return std::make_shared<TTierInfo>(std::nullopt, evictDuration, ttlColumn, unitsInSecond);
@@ -177,7 +177,7 @@ public:
         }
     };
 
-    TTieringContext GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction) const;
+    TTieringContext GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const;
 
     const TSet<TTierRef>& GetOrderedTiers() const {
         return OrderedTiers;

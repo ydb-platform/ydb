@@ -72,14 +72,17 @@ def grant_counts():
         'REFRESH_TOKEN': 'refresh_token',
     }
     counts = dict.fromkeys(event_types.values(), 0)
-    first = 0
+    limit = 100
     with requests.Session() as session:
         session.verify = os.environ['OIDC_CA_FILE']
         session.headers['Authorization'] = 'Bearer ' + os.environ['OIDC_ADMIN_TOKEN']
         while True:
-            response = session.get(os.environ['OIDC_ADMIN_EVENTS_URL'], params={'first': first, 'max': 100}, timeout=15)
+            response = session.get(os.environ['OIDC_ADMIN_EVENTS_URL'], params={'max': limit}, timeout=15)
             response.raise_for_status()
             events = response.json()
+            if len(events) == limit:
+                limit *= 2
+                continue
             for event in events:
                 name = event_types.get(event['type'])
                 if name is not None and event.get('clientId') in (
@@ -87,6 +90,4 @@ def grant_counts():
                     os.environ['OIDC_DEVICE_CLIENT_ID'],
                 ):
                     counts[name] += 1
-            if len(events) < 100:
-                return counts
-            first += len(events)
+            return counts

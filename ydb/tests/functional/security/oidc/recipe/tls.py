@@ -23,7 +23,7 @@ def _certificate(subject, issuer, public_key):
         .public_key(public_key)
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - datetime.timedelta(minutes=5))
-        .not_valid_after(now + datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=7))
     )
 
 

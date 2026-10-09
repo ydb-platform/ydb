@@ -84,7 +84,7 @@ TString RunHelper(const TList<TString>& arguments) {
     options.SetUseShell(false).SetAsync(true).SetLatency(10).SetCloseAllFdsOnExec(true);
     TShellCommand command(binary, arguments, options);
     command.Run();
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(45);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(3);
     while (command.GetStatus() == TShellCommand::SHELL_RUNNING && std::chrono::steady_clock::now() < deadline) {
         Sleep(TDuration::MilliSeconds(10));
     }

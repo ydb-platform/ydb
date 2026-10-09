@@ -1,6 +1,7 @@
 """Start HTTPS Keycloak and YDB requiring authenticated requests."""
 
 import json
+import logging
 import os
 import sys
 from string import Template
@@ -114,8 +115,12 @@ def start(args):
             try:
                 if cluster is not None:
                     cluster.stop(kill=True)
-            finally:
+            except Exception:
+                logging.exception('Failed to stop YDB after startup failure')
+            try:
                 keycloak.stop()
+            except Exception:
+                logging.exception('Failed to stop Keycloak after startup failure')
             raise
 
 

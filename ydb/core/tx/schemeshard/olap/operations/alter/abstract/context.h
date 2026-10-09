@@ -88,44 +88,48 @@ class TUpdateStartContext {
 private:
     const TPath* ObjectPath = nullptr;
     TOperationContext* SSOperationContext = nullptr;
-    NIceDb::TNiceDb* DB;
 public:
     const TPath* GetObjectPath() const {
         return ObjectPath;
-    }
-    NIceDb::TNiceDb* GetDB() const {
-        return DB;
     }
     const TOperationContext* GetSSOperationContext() const {
         return SSOperationContext;
     }
 
-    TUpdateStartContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db)
+    TUpdateStartContext(const TPath* objectPath, TOperationContext* ssOperationContext)
         : ObjectPath(objectPath)
         , SSOperationContext(ssOperationContext)
-        , DB(db)
     {
-        AFL_VERIFY(DB);
         AFL_VERIFY(ObjectPath);
         AFL_VERIFY(SSOperationContext);
     }
 };
 
-class TUpdateFinishContext: public TUpdateStartContext {
+class TUpdateFinishContext {
 private:
-    using TBase = TUpdateStartContext;
+    const TPath* ObjectPath = nullptr;
+    TOperationContext* SSOperationContext = nullptr;
     YDB_READONLY_DEF(std::optional<NKikimr::NOlap::TSnapshot>, Snapshot);
 public:
+    const TPath* GetObjectPath() const {
+        return ObjectPath;
+    }
+    const TOperationContext* GetSSOperationContext() const {
+        return SSOperationContext;
+    }
 
     const NKikimr::NOlap::TSnapshot& GetSnapshotVerified() const {
         AFL_VERIFY(Snapshot);
         return *Snapshot;
     }
 
-    TUpdateFinishContext(const TPath* objectPath, TOperationContext* ssOperationContext, NIceDb::TNiceDb* db, const std::optional<NKikimr::NOlap::TSnapshot>& ss)
-        : TBase(objectPath, ssOperationContext, db)
+    TUpdateFinishContext(const TPath* objectPath, TOperationContext* ssOperationContext, const std::optional<NKikimr::NOlap::TSnapshot>& ss)
+        : ObjectPath(objectPath)
+        , SSOperationContext(ssOperationContext)
         , Snapshot(ss)
     {
+        AFL_VERIFY(ObjectPath);
+        AFL_VERIFY(SSOperationContext);
     }
 };
 

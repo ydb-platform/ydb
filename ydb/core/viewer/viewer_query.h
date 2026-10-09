@@ -1602,11 +1602,7 @@ public:
                 required: false
               - name: include_wm_info
                 in: query
-                description: >
-                    Include wm_state, wm_classified_by and resource_pool in the response.
-                    For classic execute responses, preserve the envelope with result and WM fields.
-                    Without this flag, classic execute without stats keeps its legacy array format.
-                    Supported since /viewer/query capability version 13.
+                description: Include workload manager info in the response.
                 type: boolean
                 default: false
                 required: false

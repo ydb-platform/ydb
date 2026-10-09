@@ -16,6 +16,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+#include <initializer_list>
 #include <string_view>
 
 namespace NKikimr::NArrow::NSSA {
@@ -91,6 +92,47 @@ std::shared_ptr<NAccessor::IChunkedArray> BuildSlicedDictionaryPredicate() {
     return sliced;
 }
 
+class TStreamLogicTest {
+private:
+    TFailDataSource DataSource;
+    TProcessorContext Context;
+    TStreamLogicProcessor Processor;
+    TExecutionNodeContext NodeContext;
+    const ui32 OutputId;
+
+public:
+    TStreamLogicTest(const ui32 recordsCount, const std::initializer_list<ui32> inputIds, const ui32 outputId,
+                     const NKikimr::NKernels::EOperation operation)
+        : Context(DataSource, std::make_unique<NAccessor::TAccessorsCollection>(recordsCount), std::nullopt, false)
+        , Processor(TColumnChainInfo::BuildVector(inputIds), TColumnChainInfo(outputId), operation)
+        , OutputId(outputId)
+    {
+    }
+
+    void AddAccessor(const ui32 inputId, const std::shared_ptr<NAccessor::IChunkedArray>& accessor) {
+        Context.MutableResources().AddVerified(inputId, accessor, false);
+    }
+
+    void AddArray(const ui32 inputId, const std::shared_ptr<arrow::Array>& array) {
+        AddAccessor(inputId, std::make_shared<NAccessor::TTrivialArray>(array));
+    }
+
+    void AddScalar(const ui32 inputId, const std::shared_ptr<arrow::Scalar>& scalar) {
+        Context.MutableResources().AddConstantVerified(inputId, scalar);
+    }
+
+    bool ProcessInput(const ui32 inputId) {
+        const auto result = Processor.OnInputReady(inputId, Context, NodeContext);
+        UNIT_ASSERT(result.IsSuccess());
+        return *result;
+    }
+
+    void AssertResult(const std::vector<std::optional<ui8>>& expected) const {
+        const auto actual = arrow::Concatenate(Context.GetResources().GetAccessorVerified(OutputId)->GetChunkedArray()->chunks()).ValueOrDie();
+        UNIT_ASSERT(actual->Equals(*NKikimr::NKernels::UInt8VecToArray(expected)));
+    }
+};
+
 void AssertFilteredRows(const std::shared_ptr<NAccessor::IChunkedArray>& predicate, const std::vector<std::optional<ui8>>& expected) {
     TFailDataSource dataSource;
     auto resources = std::make_unique<NAccessor::TAccessorsCollection>(predicate->GetRecordsCount());
@@ -109,19 +151,14 @@ void AssertFilteredRows(const std::shared_ptr<NAccessor::IChunkedArray>& predica
 
 void AssertAndResult(const std::shared_ptr<NAccessor::IChunkedArray>& predicate,
                      const std::vector<std::optional<ui8>>& expected) {
-    TFailDataSource dataSource;
-    auto resources = std::make_unique<NAccessor::TAccessorsCollection>(predicate->GetRecordsCount());
-    resources->AddVerified(1, predicate, false);
+    TStreamLogicTest test(predicate->GetRecordsCount(), {1, 2}, 3, NKikimr::NKernels::EOperation::And);
+    test.AddAccessor(1, predicate);
     std::vector<std::optional<ui8>> allTrue(predicate->GetRecordsCount(), 1);
-    resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray(allTrue)), false);
-    TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
-    TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3), NKikimr::NKernels::EOperation::And);
-    TExecutionNodeContext nodeContext;
-    UNIT_ASSERT(processor.OnInputReady(1, context, nodeContext).IsSuccess());
-    UNIT_ASSERT(processor.OnInputReady(2, context, nodeContext).IsSuccess());
-    UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray(expected)));
+    test.AddArray(2, NKikimr::NKernels::UInt8VecToArray(allTrue));
+    UNIT_ASSERT(!test.ProcessInput(1));
+    UNIT_ASSERT(!test.ProcessInput(2));
+    test.AssertResult(expected);
 }
-
 }
 
 Y_UNIT_TEST_SUITE(JsonValue) {
@@ -212,37 +249,23 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
     }
 
     Y_UNIT_TEST(NullConstantAndTruePreservesNull) {
-        TFailDataSource dataSource;
-        auto resources = std::make_unique<NAccessor::TAccessorsCollection>(2);
-        resources->AddConstantVerified(1, arrow::MakeNullScalar(arrow::uint8()));
-        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({1, 1})), false);
-        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
-        TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3), NKikimr::NKernels::EOperation::And);
-        TExecutionNodeContext nodeContext;
-
-        auto firstResult = processor.OnInputReady(1, context, nodeContext);
-        UNIT_ASSERT(firstResult.IsSuccess());
-        UNIT_ASSERT(!*firstResult);
-        UNIT_ASSERT(processor.OnInputReady(2, context, nodeContext).IsSuccess());
-        UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({std::nullopt, std::nullopt})));
+        TStreamLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::And);
+        test.AddScalar(1, arrow::MakeNullScalar(arrow::uint8()));
+        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({1, 1}));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        test.AssertResult({std::nullopt, std::nullopt});
     }
 
     Y_UNIT_TEST(NullIntermediateAndResultDoesNotFinishStream) {
-        TFailDataSource dataSource;
-        auto resources = std::make_unique<NAccessor::TAccessorsCollection>(2);
-        resources->AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1})), false);
-        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({1, std::nullopt})), false);
-        resources->AddVerified(3, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, 0})), false);
-        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
-        TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2, 3}), TColumnChainInfo(4), NKikimr::NKernels::EOperation::And);
-        TExecutionNodeContext nodeContext;
-
-        UNIT_ASSERT(processor.OnInputReady(1, context, nodeContext).IsSuccess());
-        auto secondResult = processor.OnInputReady(2, context, nodeContext);
-        UNIT_ASSERT(secondResult.IsSuccess());
-        UNIT_ASSERT(!*secondResult);
-        UNIT_ASSERT(processor.OnInputReady(3, context, nodeContext).IsSuccess());
-        UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(4)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({0, 0})));
+        TStreamLogicTest test(2, {1, 2, 3}, 4, NKikimr::NKernels::EOperation::And);
+        test.AddArray(1, NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1}));
+        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({1, std::nullopt}));
+        test.AddArray(3, NKikimr::NKernels::UInt8VecToArray({0, 0}));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        UNIT_ASSERT(test.ProcessInput(3));
+        test.AssertResult({0, 0});
     }
 
     Y_UNIT_TEST(AllNullSparsePredicateAndTruePreservesNull) {
@@ -262,35 +285,21 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         UNIT_ASSERT(predicate->IsNull(0));
         UNIT_ASSERT_C(predicate->raw_values()[0] == 1, "NULL payload must be nonzero to exercise the Or finish check");
 
-        TFailDataSource dataSource;
-        auto resources = std::make_unique<NAccessor::TAccessorsCollection>(2);
-        resources->AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(predicate), false);
-        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, 0})), false);
-        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
-        TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3), NKikimr::NKernels::EOperation::Or);
-        TExecutionNodeContext nodeContext;
-
-        UNIT_ASSERT(processor.OnInputReady(1, context, nodeContext).IsSuccess());
-        const auto result = processor.OnInputReady(2, context, nodeContext);
-        UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT(!*result);
-        UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1})));
+        TStreamLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::Or);
+        test.AddArray(1, predicate);
+        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({0, 0}));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        test.AssertResult({std::nullopt, 1});
     }
 
     Y_UNIT_TEST(NullOrTrueFinishesStream) {
-        TFailDataSource dataSource;
-        auto resources = std::make_unique<NAccessor::TAccessorsCollection>(2);
-        resources->AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1})), false);
-        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({1, 1})), false);
-        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
-        TStreamLogicProcessor processor(TColumnChainInfo::BuildVector({1, 2}), TColumnChainInfo(3), NKikimr::NKernels::EOperation::Or);
-        TExecutionNodeContext nodeContext;
-
-        UNIT_ASSERT(processor.OnInputReady(1, context, nodeContext).IsSuccess());
-        const auto result = processor.OnInputReady(2, context, nodeContext);
-        UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT(*result);
-        UNIT_ASSERT(arrow::Concatenate(context.GetResources().GetAccessorVerified(3)->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({1, 1})));
+        TStreamLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::Or);
+        test.AddArray(1, NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1}));
+        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({1, 1}));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(test.ProcessInput(2));
+        test.AssertResult({1, 1});
     }
 };
 

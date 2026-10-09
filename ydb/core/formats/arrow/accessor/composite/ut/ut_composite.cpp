@@ -124,45 +124,45 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         UNIT_ASSERT(chunkedArray->type()->Equals(arrow::utf8()));
     }
 
-    Y_UNIT_TEST(DifferentScalarChunksAreNotOneValue) {
-        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
-        builder.AddChunk(std::make_shared<TTrivialArray>(std::make_shared<arrow::StringScalar>("Ada")));
-        builder.AddChunk(std::make_shared<TTrivialArray>(std::make_shared<arrow::StringScalar>("Bobby")));
+    static std::shared_ptr<IChunkedArray> BuildCompositeFromScalars(
+        const std::shared_ptr<arrow::Scalar>& first, const std::shared_ptr<arrow::Scalar>& second) {
+        TCompositeChunkedArray::TBuilder builder(first->type);
+        builder.AddChunk(std::make_shared<TTrivialArray>(first));
+        builder.AddChunk(std::make_shared<TTrivialArray>(second));
+        return builder.Finish();
+    }
 
+    Y_UNIT_TEST(DifferentScalarChunksAreNotOneValue) {
+        auto composite = BuildCompositeFromScalars(
+            std::make_shared<arrow::StringScalar>("Ada"), std::make_shared<arrow::StringScalar>("Bobby"));
         std::shared_ptr<arrow::Scalar> value;
-        const auto oneValue = builder.Finish()->CheckOneValueAccessor(value);
+        const auto oneValue = composite->CheckOneValueAccessor(value);
         UNIT_ASSERT(oneValue && !*oneValue);
     }
 
     Y_UNIT_TEST(EqualScalarChunksAreOneValue) {
-        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
-        builder.AddChunk(std::make_shared<TTrivialArray>(std::make_shared<arrow::StringScalar>("Ada")));
-        builder.AddChunk(std::make_shared<TTrivialArray>(std::make_shared<arrow::StringScalar>("Ada")));
-
+        auto composite = BuildCompositeFromScalars(
+            std::make_shared<arrow::StringScalar>("Ada"), std::make_shared<arrow::StringScalar>("Ada"));
         std::shared_ptr<arrow::Scalar> value;
-        const auto oneValue = builder.Finish()->CheckOneValueAccessor(value);
+        const auto oneValue = composite->CheckOneValueAccessor(value);
         UNIT_ASSERT(oneValue && *oneValue);
         UNIT_ASSERT(value->Equals(arrow::StringScalar("Ada")));
     }
 
     Y_UNIT_TEST(NullStringScalarChunksAreOneValue) {
-        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
-        builder.AddChunk(std::make_shared<TTrivialArray>(arrow::MakeNullScalar(arrow::utf8())));
-        builder.AddChunk(std::make_shared<TTrivialArray>(arrow::MakeNullScalar(arrow::utf8())));
-
+        auto composite = BuildCompositeFromScalars(
+            arrow::MakeNullScalar(arrow::utf8()), arrow::MakeNullScalar(arrow::utf8()));
         std::shared_ptr<arrow::Scalar> value;
-        const auto oneValue = builder.Finish()->CheckOneValueAccessor(value);
+        const auto oneValue = composite->CheckOneValueAccessor(value);
         UNIT_ASSERT(oneValue && *oneValue);
         UNIT_ASSERT(value && !value->is_valid);
     }
 
     Y_UNIT_TEST(NullAndZeroScalarChunksAreNotOneValue) {
-        TCompositeChunkedArray::TBuilder builder(arrow::uint8());
-        builder.AddChunk(std::make_shared<TTrivialArray>(arrow::MakeNullScalar(arrow::uint8())));
-        builder.AddChunk(std::make_shared<TTrivialArray>(std::make_shared<arrow::UInt8Scalar>(0)));
-
+        auto composite = BuildCompositeFromScalars(
+            arrow::MakeNullScalar(arrow::uint8()), std::make_shared<arrow::UInt8Scalar>(0));
         std::shared_ptr<arrow::Scalar> value;
-        const auto oneValue = builder.Finish()->CheckOneValueAccessor(value);
+        const auto oneValue = composite->CheckOneValueAccessor(value);
         UNIT_ASSERT(oneValue && !*oneValue);
     }
 };

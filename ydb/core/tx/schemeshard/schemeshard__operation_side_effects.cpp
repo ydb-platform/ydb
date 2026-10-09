@@ -1065,21 +1065,12 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
                 {"subscriberCount", operation->Subscribers.size()},
             );
 
-<<<<<<< HEAD
             for (const auto& pub : operation->Publications) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Publication details: "
-                        << " tx: " << txId
-                        << ", " << pub.first
-                        << ", " << pub.second);
-=======
-            for (const auto& [pathId, pathVersion] : operation->Publications | std::views::keys) {
                 YDB_LOG_DEBUG_CTX(ctx, "Publication details",
                     {"txId", txId},
-                    {"pathId", pathId},
-                    {"version", pathVersion},
+                    {"pathId", pub.first},
+                    {"version", pub.second},
                 );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
             }
 
             ss->Publications[txId] = {

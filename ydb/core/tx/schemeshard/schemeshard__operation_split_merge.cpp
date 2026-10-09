@@ -1083,24 +1083,14 @@ public:
 
         SetState(NextState());
 
-<<<<<<< HEAD
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TSplitMerge Propose accepted"
-            << ", tableStr: " << info.GetTablePath()
-            << ", tableId: " << pathId
-            << ", opId: " << OperationId
-            << ", at schemeshard: " << ssId
-            << ", op: " << op.SplitDescription->ShortDebugString()
-            << ", request: " << info.ShortDebugString());
-=======
-        YDB_LOG_NOTICE_CTX(context.Ctx, "Propose accepted",
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TSplitMerge Propose accepted",
             {"tablePath", info.GetTablePath()},
             {"tableId", pathId},
+            {"opId", OperationId},
+            {"schemeshardId", ssId},
             {"op", txState.SplitDescription->ShortDebugString()},
             {"request", info.ShortDebugString()},
         );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
-
         return result;
     }
 

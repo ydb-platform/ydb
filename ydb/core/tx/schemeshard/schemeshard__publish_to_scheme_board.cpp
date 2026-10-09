@@ -185,23 +185,13 @@ private:
         const TActorContext& ctx
     ) {
         auto it = paths.lower_bound({pathId, 0});
-<<<<<<< HEAD
         while (it != paths.end() && it->first == pathId && it->second <= version) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "AckPublish"
-                           << ", at schemeshard: " << Self->TabletID()
-                           << ", txId: " << txId
-                           << ", pathId: " << pathId
-                           << ", version: " << it->second);
-=======
-        while (it != paths.end() && it->first.first == pathId && it->first.second <= version) {
             YDB_LOG_INFO_CTX(ctx, "AckPublish",
                 {"txId", txId},
                 {"pathId", pathId},
                 {"version", it->first.second},
                 {"schemeshard", Self->TabletID()},
             );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
 
             Self->PersistRemovePublishingPath(db, txId, pathId, it->second);
 

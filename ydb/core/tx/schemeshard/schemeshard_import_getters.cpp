@@ -146,17 +146,11 @@ protected:
             return true;
         }
 
-<<<<<<< HEAD
-        LOG_E("Error at '" << marker << "'"
-            << ": self# " << this->SelfId()
-            << ", error# " << result);
-=======
         YDB_LOG_ERROR("Error at '" << marker << "'",
             {"self", this->SelfId()},
             {"key", CurrentRequestKey},
             {"error", result},
         );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
         MaybeRetry(result.GetError());
 
         return false;

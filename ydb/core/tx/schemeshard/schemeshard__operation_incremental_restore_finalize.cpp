@@ -335,15 +335,10 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             }
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
-<<<<<<< HEAD
-                            LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
-                                  << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
-=======
                             YDB_LOG_INFO_CTX(context.Ctx, "SyncIndexSchemaVersions: Index AlterVersion updated",
                                 {"oldVersion", oldVersion},
                                 {"newVersion", context.SS->Indexes.at(indexPathId)->AlterVersion},
                             );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
 
                             context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
 

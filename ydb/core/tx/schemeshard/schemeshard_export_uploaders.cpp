@@ -125,16 +125,10 @@ protected:
         const auto& result = ev->Get()->Result;
         TFileUpload& upload = Files.front();
 
-<<<<<<< HEAD
-        LOG_D("Put file response " << upload.Path
-            << ", self: " << this->SelfId()
-            << ", result: " << result
-=======
-        YDB_LOG_DEBUG("Put file response " << upload.Path,
+        YDB_LOG_DEBUG("Put file response ",
+            {"path", upload.Path},
             {"self", this->SelfId()},
-            {"key", GetObjectKey(upload.Path)},
             {"result", result},
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
         );
 
         if (!result.IsSuccess()) {

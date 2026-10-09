@@ -218,19 +218,13 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
             if (alterData->GetServerlessComputeResourcesMode()) {
                 event->Record.SetServerlessComputeResourcesMode(*alterData->GetServerlessComputeResourcesMode());
             }
-<<<<<<< HEAD
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Send configure request to schemeshard: " << tabletID <<
-                            " opId: " << OperationId <<
-                            " schemeshard: " << ssId <<
-                            " msg: " << event->Record.ShortDebugString());
-=======
-            event->Record.SetTablesMetricsLevel(alterData->GetTablesMetricsLevel());
+
             YDB_LOG_DEBUG_CTX(context.Ctx, "Send configure request to schemeshard",
-                {"tabletId", tabletID},
+                {"operationId", OperationId}
+                {"tabledId", tabletId},
+                {"schemeshardId", ssId},
                 {"message", event->Record.ShortDebugString()},
             );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
 
             shard.Operation = TTxState::ConfigureParts;
             context.OnComplete.BindMsgToPipe(OperationId, tabletID, idx, event);

@@ -854,16 +854,12 @@ namespace {
         UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), *victimQuerySpanId) != occurrences.end(),
             "VictimQuerySpanId should match between issue and victim SessionActor log");
 
-<<<<<<< HEAD
-        AssertTliRecordCounts(logs, patterns, expectedBreakerCount, expectedVictimCount);
-=======
         AssertTliRecordCounts(logs, patterns,
             sessionActorBreakerCount,
             sessionActorVictimCount,
             dataShardBreakerCount,
             dataShardVictimCount);
         return logs;
->>>>>>> 5bf83aed6d9 ([YDB_LOG] Migrate TLI, DATAINTEGRITY, etc... logs (#49195))
     }
 
     void VerifyCommitLogRecord(TTliLogs& ss)
@@ -1624,11 +1620,7 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             // Destroy runner to flush async logger before reading `ss`.
         }
 
-<<<<<<< HEAD
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
-=======
         const TString logs = VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText, 1, 2, 1, 1);
->>>>>>> 5bf83aed6d9 ([YDB_LOG] Migrate TLI, DATAINTEGRITY, etc... logs (#49195))
 
         // When Wilson tracing is active, SessionActor TLI logs must include TraceId
         const TString logs = ss.Snapshot();

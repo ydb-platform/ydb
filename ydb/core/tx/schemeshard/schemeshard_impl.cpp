@@ -474,16 +474,6 @@ void TSchemeShard::InitializeTabletMigrations() {
         TMigrationInfo migration{workingDir, dbName, createSVP, createSA, createBCT};
         migrations.push(std::move(migration));
 
-<<<<<<< HEAD
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TabletMigrator - creating tablets"
-            << ", working dir: " << workingDir
-            << ", db name: " << dbName
-            << ", create SVP: " << createSVP
-            << ", create SA: " << createSA
-            << ", create BCT: " << createBCT
-            << ", at schemeshard: " << TabletID());
-=======
         YDB_LOG_INFO("TabletMigrator - creating tablets",
             {"workingDir", workingDir},
             {"dbName", dbName},
@@ -493,7 +483,6 @@ void TSchemeShard::InitializeTabletMigrations() {
             {"createWCC", createWCC},
             {"schemeshard", TabletID()},
         );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
     }
 
     if (migrations.empty()) {
@@ -831,16 +820,12 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
     auto it = PathsById.find(pathId);
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId " << pathId << " " << debug);
     if (it != PathsById.end()) {
-<<<<<<< HEAD
         // FIXME: not all references are accounted right now
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
-=======
         YDB_LOG_DEBUG("DecrementPathDbRefCount",
             {"pathId", pathId},
             {"prevRefCount", it->second->DbRefCount},
             {"reason", debug},
         );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
         Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
             size_t newRefCount = --it->second->DbRefCount;
@@ -6247,25 +6232,17 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
     TTxState& txState = TxInFlight[opId];
     txState = TTxState(txType, targetPath, sourcePath);
     TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Add(1);
-<<<<<<< HEAD
+
     IncrementPathDbRefCount(targetPath, "transaction target path");
     if (sourcePath) {
         IncrementPathDbRefCount(sourcePath, "transaction source path");
     }
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CreateTx for txid " << opId
-                    << " type: " << TTxState::TypeName(txType)
-                    << " target path: " << targetPath
-                    << " source path: " << sourcePath);
-=======
-    txState.AcquirePathRefs(this);
     YDB_LOG_DEBUG("CreateTx for txid",
         {"txId", opId},
         {"type", TTxState::TypeName(txType)},
         {"targetPath", targetPath},
         {"sourcePath", sourcePath},
     );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
     return txState;
 }
 
@@ -6289,14 +6266,10 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
         return;
     }
 
-<<<<<<< HEAD
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
-    auto pathId = txState->TargetPathId;
-=======
     YDB_LOG_DEBUG_CTX(ctx, "RemoveTx for txid",
         {"txId", opId},
     );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
+    auto pathId = txState->TargetPathId;
 
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
@@ -9647,17 +9620,10 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     }
 
     if (!count) {
-<<<<<<< HEAD
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
-            "SendBaseStatsToSA() No tables to send"
-            << ", at schemeshard: " << TabletID());
-        return TDuration::Seconds(30);
-=======
         YDB_LOG_DEBUG_COMP(NKikimrServices::STATISTICS, "SendBaseStatsToSA(): no tables to send",
             {"schemeshard", TabletID()},
         );
-        return TDuration::Seconds(Max<ui32>(1, AppData()->StatisticsConfig.GetBaseStatsSendInitialDelaySeconds()));
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
+        return TDuration::Seconds(30);
     }
 
     record.SetAreAllStatsFull(incompleteCount == 0);

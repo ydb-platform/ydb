@@ -964,23 +964,10 @@ public:
             alter->SetServerlessComputeResourcesMode(inputSettings.GetServerlessComputeResourcesMode());
         }
 
-<<<<<<< HEAD
-        LOG_D("TAlterExtSubDomain Propose"
-            << ", opId: " << OperationId
-            << ", subdomain ver " << subdomainInfo->GetVersion()
-            << ", alter ver " << alter->GetVersion()
-=======
-        // alter is copy-constructed from the current subdomain info, so the
-        // current level is already carried over; only an explicit request
-        // changes it (already validated in VerifyParams).
-        if (inputSettings.HasTablesMetricsLevel()) {
-            alter->SetTablesMetricsLevel(inputSettings.GetTablesMetricsLevel());
-        }
-
-        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+        YDB_LOG_DEBUG_CTX(context.Ctx, "TAlterExtSubDomain Propose",
+            {"opId", OperationId},
             {"subdomainVersion", subdomainInfo->GetVersion()},
             {"alterVersion", alter->GetVersion()},
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
         );
 
         auto guard = context.DbGuard();

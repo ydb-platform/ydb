@@ -212,85 +212,6 @@ private:
     }
 };
 
-<<<<<<< HEAD
-=======
-class TGetStatisticsHelper: public TActorBootstrapped<TGetStatisticsHelper> {
-    using TThis = TGetStatisticsHelper;
-    using TBase = TActorBootstrapped<TThis>;
-
-    const TActorId ResponseActorId;
-    const TIndexBuildId BuildId;
-    const TPathId PathId;
-    THolder<NStat::TEvStatistics::TEvGetStatistics> Request;
-    NActors::NStructuredLog::TStructuredMessage LogContext;
-
-public:
-    TGetStatisticsHelper(const TActorId& responseActorId,
-        TIndexBuildId buildId, THolder<NStat::TEvStatistics::TEvGetStatistics> request)
-        : ResponseActorId(responseActorId)
-        , BuildId(buildId)
-        , PathId(request->StatRequests.at(0).PathId)
-        , Request(request.Release())
-        , LogContext(YDB_LOG_CREATE_MESSAGE(
-            {"buildId", buildId},
-            {"responseActorId", responseActorId},
-        ))
-    {}
-
-    void Bootstrap() {
-        auto statServiceId = NStat::MakeStatServiceID(SelfId().NodeId());
-        this->Send(statServiceId, this->Request.Release(), IEventHandle::FlagTrackDelivery);
-        this->Become(&TThis::StateWork);
-    }
-
-    void HandleResponse(NStat::TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
-        auto *inRes = ev->Get();
-        auto response = MakeHolder<TEvIndexBuilder::TEvGetIndexStatsResponse>();
-        response->BuildId = ui64(BuildId);
-        response->PathId = PathId;
-        for (auto& stat: inRes->StatResponses) {
-            // Take the most detailed eq_height histogram
-            if (stat.Success &&
-                stat.Req.ColumnTags.AsMulti() &&
-                stat.Req.ColumnTags.AsMulti()->size() > response->FieldCount &&
-                stat.EqHeightHistogram.Data) {
-                response->FieldCount = stat.Req.ColumnTags.AsMulti()->size();
-                response->Histogram = stat.EqHeightHistogram.Data;
-            }
-        }
-        this->Send(ResponseActorId, response.Release());
-        this->PassAway();
-    }
-
-    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        YDB_LOG_ERROR("TGetStatisticsHelper undelivered",
-            LogContext,
-            {"eventType", ev->GetTypeRewrite()},
-            {"event", ev->ToString()},
-        );
-        auto response = MakeHolder<TEvIndexBuilder::TEvGetIndexStatsResponse>();
-        response->BuildId = ui64(BuildId);
-        response->PathId = PathId;
-        this->Send(ResponseActorId, response.Release());
-        this->PassAway();
-    }
-
-private:
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NStat::TEvStatistics::TEvGetStatisticsResult, HandleResponse);
-            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
-            default:
-                YDB_LOG_ERROR("TGetStatisticsHelper unexpected event type",
-                    LogContext,
-                    {"eventType", ev->GetTypeRewrite()},
-                    {"event", ev->ToString()},
-                );
-        }
-    }
-};
-
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
 // Fulltext rowid auto-provisioning: build a child TIndexBuildInfo that the parent fulltext build runs,
 // sequentially and before acquiring its own lock, to provision the rowid infrastructure. Each child is
 // a fully normal build (it takes and releases its own lock + snapshot via the standard pipeline) and
@@ -403,127 +324,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     return propose;
 }
 
-<<<<<<< HEAD
-=======
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
-{
-    Y_ENSURE(buildInfo.IsBuildVectorIndex());
-    Y_ENSURE(buildInfo.IsRebuild);
-
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
-    // This propose contains only drop operations, so FailOnExist (relevant only for create) is irrelevant here.
-    propose->Record.SetFailOnExist(false);
-
-    auto indexPath = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
-    const TString indexPathStr = indexPath.PathString();
-
-    auto addDropTable = [&](const TString& tableName) {
-        auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).Dive(tableName);
-        if (!path.IsResolved() || path.IsDeleted()) {
-            return;
-        }
-        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-        modifyScheme.SetInternal(true);
-        modifyScheme.SetWorkingDir(indexPathStr);
-        if (path.IsLocked()) {
-            modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
-        }
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-        modifyScheme.MutableDrop()->SetName(tableName);
-    };
-
-    using namespace NTableIndex::NKMeans;
-    addDropTable(LevelTable);
-    addDropTable(PostingTable);
-    // Always attempt to drop the prefix table: it must be removed both when the rebuild
-    // target is prefixed (it will be recreated) and when rebuilding a previously prefixed
-    // index down to non-prefixed (it must not be left orphaned). addDropTable is a no-op
-    // when the table doesn't exist, so plain non-prefixed rebuilds are unaffected.
-    addDropTable(PrefixTable);
-
-    YDB_LOG_NOTICE("DropRebuildImplPropose",
-        {"buildId", buildInfo.Id},
-        {"state", buildInfo.State},
-        {"propose", propose->Record.ShortDebugString()},
-    );
-
-    return propose;
-}
-
-// Index impl tables inherit their base table's detailed metrics level. Gated on the feature
-// flag: the base table's setting may have been persisted while the flag was on, and an
-// unguarded copy would make the impl table's TCreateTable reject the whole build.
-static void InheritDetailedMetricsSettings(
-    const TTableInfo::TPtr& tableInfo, NKikimrSchemeOp::TTableDescription& implTableDesc)
-{
-    if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && tableInfo->HasDetailedMetricsSettings()) {
-        *implTableDesc.MutableDetailedMetricsSettings()->MutableConfigured() = tableInfo->GetDetailedMetricsSettings();
-    }
-}
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
-{
-    Y_ENSURE(buildInfo.IsBuildVectorIndex());
-    Y_ENSURE(buildInfo.IsRebuild);
-
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
-    propose->Record.SetFailOnExist(true);
-
-    const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
-    const TString indexPathStr = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).PathString();
-
-    NKikimrSchemeOp::TModifyScheme indexBuildProto;
-    buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
-    const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
-    const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-
-    auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
-        InheritDetailedMetricsSettings(tableInfo, implTableDesc);
-
-        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
-        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
-
-        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-        modifyScheme.SetInternal(true);
-        modifyScheme.SetWorkingDir(indexPathStr);
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
-        *modifyScheme.MutableCreateTable() = std::move(implTableDesc);
-    };
-
-    using namespace NTableIndex::NKMeans;
-    addCreateTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), {}));
-    addCreateTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}));
-    if (buildInfo.IsBuildPrefixedVectorIndex()) {
-        const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
-        auto indexKeys = NTableIndex::ExtractInfo(indexDesc);
-        auto implTableColumns = CalcTableImplDescription(buildInfo.IndexType, baseTableColumns, indexKeys);
-        const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
-
-        // Create prefix table first (localSequences extracted from DefaultFromSequence by ConstructParts),
-        // then the sequence under it
-        addCreateTable(CalcVectorKmeansTreePrefixImplTableDesc(
-            prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}));
-        {
-            NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-            modifyScheme.SetInternal(true);
-            modifyScheme.SetWorkingDir(indexPathStr + "/" + TString(PrefixTable));
-            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSequence);
-            modifyScheme.MutableSequence()->SetName(TString(IdColumnSequence));
-        }
-    }
-
-    YDB_LOG_NOTICE("CreateRebuildImplPropose",
-        {"buildId", buildInfo.Id},
-        {"state", buildInfo.State},
-        {"propose", propose->Record.ShortDebugString()},
-    );
-
-    return propose;
-}
-
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -584,19 +384,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
 
-<<<<<<< HEAD
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-            "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
-        InheritDetailedMetricsSettings(tableInfo, op);
-
         YDB_LOG_NOTICE("CreateBuildPropose",
             {"buildId", buildInfo.Id},
             {"state", buildInfo.State},
             {"propose", propose->Record.ShortDebugString()},
         );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
-
         return propose;
     }
 
@@ -621,17 +413,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
                 op.AddSplitBoundary()->SetSerializedKeyPrefix(x->EndOfRange);
             }
         }
-<<<<<<< HEAD
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-            "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
-        InheritDetailedMetricsSettings(tableInfo, op);
         YDB_LOG_NOTICE("CreateBuildPropose",
             {"buildId", buildInfo.Id},
             {"state", buildInfo.State},
             {"propose", propose->Record.ShortDebugString()},
         );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
         return propose;
     }
 
@@ -664,19 +450,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMaxPartitionsCount(0);
     }
 
-<<<<<<< HEAD
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
-    InheritDetailedMetricsSettings(tableInfo, op);
-
     YDB_LOG_NOTICE("CreateBuildPropose",
         {"buildId", buildInfo.Id},
         {"state", buildInfo.State},
         {"propose", propose->Record.ShortDebugString()},
     );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
-
     return propose;
 }
 
@@ -807,19 +585,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
-<<<<<<< HEAD
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
-    InheritDetailedMetricsSettings(tableInfo, op);
-
     YDB_LOG_NOTICE("CreateBuildPropose",
         {"buildId", buildInfo.Id},
         {"state", buildInfo.State},
         {"propose", propose->Record.ShortDebugString()},
     );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
-
     return propose;
 }
 
@@ -865,19 +635,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
 
-<<<<<<< HEAD
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
-    InheritDetailedMetricsSettings(tableInfo, op);
-
     YDB_LOG_NOTICE("CreateBuildFulltextRowIdSrcPropose",
         {"buildId", buildInfo.Id},
         {"state", buildInfo.State},
         {"propose", propose->Record.ShortDebugString()},
     );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
-
     return propose;
 }
 
@@ -1091,19 +853,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
     columnBuild->SetBuildIndexId(ui64(buildInfo.Id));
     buildInfo.SerializeToProto(ss, columnBuild->MutableSettings());
 
-<<<<<<< HEAD
     AddDropSequencePropose(ss, buildInfo, *propose);
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
     YDB_LOG_NOTICE("DropColumnsPropose",
         {"buildId", buildInfo.Id},
         {"state", buildInfo.State},
         {"propose", propose->Record.ShortDebugString()},
     );
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
-
     return propose;
 }
 
@@ -1677,57 +1433,6 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
-<<<<<<< HEAD
-=======
-    bool GetColumnStats(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-            YDB_LOG_DEBUG(LogPrefix << "GetColumnStats",
-                {"buildInfo", buildInfo.DebugString()},
-            );
-            buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
-            SendGetColumnStatsRequest(buildInfo);
-            Progress(BuildId);
-        } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-            YDB_LOG_DEBUG(LogPrefix << "GetColumnStats Done",
-                {"buildInfo", buildInfo.DebugString()},
-            );
-            NIceDb::TNiceDb db{txc.DB};
-            buildInfo.SubState = TIndexBuildInfo::ESubState::None;
-            ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
-            Self->PersistBuildIndexState(db, buildInfo);
-            Progress(BuildId);
-            return true;
-        }
-        // Wait for the response
-        return false;
-    }
-
-    void SendGetColumnStatsRequest(TIndexBuildInfo& buildInfo) {
-        Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryIndex ||
-            buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex,
-            "Unknown operation kind in SendGetColumnStats");
-
-        auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
-        event->StatType = NKikimr::NStat::EStatType::EQ_HEIGHT_HISTOGRAM;
-        // event->Database is not filled because in a serverless DB statistics belongs
-        // to the shared DB and statistics service resolves the DB itself
-
-        // Request all variants of statistics starting from just the 1st index column
-        // to all index columns + all table key columns
-        auto tags = buildInfo.GetSecondaryIndexKeyTags(Self);
-        for (size_t i = 1; i <= tags.size(); i++) {
-            event->StatRequests.emplace_back(buildInfo.TablePathId, std::vector<ui32>(tags.begin(), tags.begin() + i));
-        }
-
-        auto actor = new TGetStatisticsHelper(Self->SelfId(), buildInfo.Id, std::move(event));
-        TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
-
-        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: SendGetColumnStatsRequest",
-            {"buildInfo", buildInfo},
-        );
-    }
-
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
     void SendValidateUniqueIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvValidateUniqueIndexRequest>();
         auto& record = ev->Record;
@@ -5154,50 +4859,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-=======
-struct TSchemeShard::TIndexBuilder::TTxReplyStatistics: public TSchemeShard::TIndexBuilder::TTxReply {
-private:
-    TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr StatsResult;
-public:
-    explicit TTxReplyStatistics(TSelf* self, TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& statsResult)
-        : TTxReply(self, TIndexBuildId(statsResult->Get()->BuildId))
-        , StatsResult(statsResult)
-    {}
-
-    bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
-        auto *res = StatsResult->Get();
-        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
-        if (!buildInfoPtr) {
-            YDB_LOG_INFO(LogPrefix << "TTxReply : TEvGetStatisticsResult superfluous message: build not found",
-                {"buildId", BuildId},
-            );
-            return true;
-        }
-
-        // Do not persist statistics in the local schemeshard database
-        // (similar to the TUploadSampleK response)
-
-        auto& buildInfo = *buildInfoPtr->get();
-        if (buildInfo.TablePathId != res->PathId) {
-            YDB_LOG_INFO(LogPrefix << "TTxReply : TEvGetStatisticsResult result for a different table",
-                {"pathId", res->PathId},
-                {"buildId", BuildId},
-            );
-            buildInfo.IndexHistogramFields = 0;
-            buildInfo.IndexHistogram.reset();
-        } else {
-            buildInfo.IndexHistogramFields = res->FieldCount;
-            buildInfo.IndexHistogram = res->Histogram;
-        }
-        buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Done;
-        Progress(BuildId);
-
-        return true;
-    }
-};
-
->>>>>>> b0ce773c3d8 (schemeshard: migrate loging to structured YDB_LOG_* macros (#53042))
 ITransaction* TSchemeShard::CreateTxReply(TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult) {
     return new TIndexBuilder::TTxReplyAllocate(this, allocateResult);
 }

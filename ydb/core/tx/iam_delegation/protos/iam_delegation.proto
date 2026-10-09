@@ -164,6 +164,14 @@ message TGetDelegationRequest {
     optional string OperationId = 1;
 }
 
+message TListInventoryRequest {
+    optional string DatabaseIncarnation = 1;
+    optional uint32 PageSize = 2;
+    optional string AfterOperationId = 3;
+    // Required on continuation; a changed revision returns SNAPSHOT_EXPIRED.
+    optional uint64 InventoryRevision = 4;
+}
+
 message TClaimRevocationsRequest {
     optional string WorkerId = 1;
     optional uint32 Limit = 2;
@@ -195,6 +203,7 @@ message TRequest {
         TDropSecretRequest DropSecret = 7;
         TGetSecretRequest GetSecret = 8;
         TGetDelegationRequest GetDelegation = 9;
+        TListInventoryRequest ListInventory = 10;
         TClaimRevocationsRequest ClaimRevocations = 11;
         TFinishRevocationRequest FinishRevocation = 12;
     }
@@ -208,6 +217,7 @@ enum EStatus {
     CONFLICT = 4;
     PRECONDITION_FAILED = 5;
     STALE_CLAIM = 6;
+    SNAPSHOT_EXPIRED = 7;
 }
 
 message TResponse {
@@ -217,4 +227,5 @@ message TResponse {
     optional TSecretRecord Secret = 4;
     optional TDelegation Delegation = 5;
     repeated TDelegation Delegations = 6;
+    optional string NextAfterOperationId = 7;
 }

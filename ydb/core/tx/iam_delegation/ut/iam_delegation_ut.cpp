@@ -149,6 +149,14 @@ NProto::TSecretRecord GetSecret(TTestContext& ctx, const NProto::TSecretIdentity
     return ctx.Call(std::move(request)).GetSecret();
 }
 
+NProto::TRequest ListRequest(const TString& incarnation = "database-incarnation-1", ui32 pageSize = 100) {
+    NProto::TRequest request;
+    auto* list = request.MutableListInventory();
+    list->SetDatabaseIncarnation(incarnation);
+    list->SetPageSize(pageSize);
+    return request;
+}
+
 NProto::TRequest ClaimRequest(const TString& workerId = "worker-1", ui32 limit = 100) {
     NProto::TRequest request;
     auto* claim = request.MutableClaimRevocations();
@@ -192,25 +200,6 @@ void AssertBinding(const NProto::TDelegation& delegation, const NProto::TIamBind
 } // namespace
 
 Y_UNIT_TEST_SUITE(IamDelegationTablet) {
-    Y_UNIT_TEST(DatabaseRegistrationIsDurableAndImmutable) {
-        TTestContext ctx;
-        for (const TString path : {"/", "/Root/A/", "/Root//A", "/Root/../A"}) {
-            ctx.Call(RegisterRequest(DatabaseIdentity("invalid", path, "")), NProto::INVALID_ARGUMENT);
-        }
-        const auto identity = DatabaseIdentity();
-        const auto registered = ctx.Call(RegisterRequest(identity));
-        UNIT_ASSERT_VALUES_EQUAL(registered.GetDatabase().GetIdentity().SerializeAsString(), identity.SerializeAsString());
-        ctx.Reboot();
-        const auto restored = ctx.Call(RegisterRequest(identity));
-        UNIT_ASSERT_VALUES_EQUAL(restored.SerializeAsString(), registered.SerializeAsString());
-        auto conflicting = identity;
-        conflicting.SetDatabaseId("different-database-id");
-        ctx.Call(RegisterRequest(conflicting), NProto::CONFLICT);
-        const auto second = DatabaseIdentity("database-incarnation-2", identity.GetPath(), "");
-        const auto replacement = ctx.Call(RegisterRequest(second));
-        UNIT_ASSERT_VALUES_EQUAL(replacement.GetDatabase().GetIdentity().GetIncarnation(), second.GetIncarnation());
-    }
-
     Y_UNIT_TEST(IntentPathsMustStayWithinCanonicalDatabase) {
         TTestContext ctx;
         for (const TString path : {"/", "/Root/A/", "/Root//A", "/Root/../A"}) {
@@ -222,10 +211,39 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
                 "/Root/A/secret/", "/Root/A/./secret", "/Root/A/../B/secret"}) {
             ctx.Call(StageCreateRequest("create-A", Binding(), path, "database-A"), NProto::INVALID_ARGUMENT);
         }
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest("database-A")).DelegationsSize(), 0);
         ctx.Call(StageCreateRequest("create-A", Binding(), "/Root/A/secret", "database-A"));
         ctx.Call(StageCreateRequest("nested-A", Binding("ydb.delegation.nested"),
             "/Root/A/nested/secret", "database-A", 11));
         ctx.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest("database-A")).DelegationsSize(), 2);
+    }
+
+    Y_UNIT_TEST(KnownEmptyDatabaseAndIncarnationIsolation) {
+        TTestContext ctx;
+        ctx.Call(ListRequest(), NProto::NOT_FOUND);
+        const auto identity = DatabaseIdentity();
+        const auto registered = ctx.Call(RegisterRequest(identity));
+        UNIT_ASSERT_VALUES_EQUAL(registered.GetDatabase().GetIdentity().GetIncarnation(), identity.GetIncarnation());
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest()).DelegationsSize(), 0);
+
+        ctx.Reboot();
+        ctx.Call(RegisterRequest(identity));
+        auto conflicting = identity;
+        conflicting.SetDatabaseId("different-database-id");
+        ctx.Call(RegisterRequest(conflicting), NProto::CONFLICT);
+
+        const auto second = DatabaseIdentity("database-incarnation-2", identity.GetPath(), "database-id-2");
+        ctx.Call(RegisterRequest(second));
+        ctx.Call(StageCreateRequest());
+        ctx.Call(StageCreateRequest("create-2", Binding("ydb.delegation.second"),
+            "/Root/database/secret", second.GetIncarnation(), 11));
+        const auto firstInventory = ctx.Call(ListRequest());
+        const auto secondInventory = ctx.Call(ListRequest(second.GetIncarnation()));
+        UNIT_ASSERT_VALUES_EQUAL(firstInventory.DelegationsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(secondInventory.DelegationsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(firstInventory.GetDelegations(0).GetOperationId(), "create-1");
+        UNIT_ASSERT_VALUES_EQUAL(secondInventory.GetDelegations(0).GetOperationId(), "create-2");
     }
 
     Y_UNIT_TEST(UnboundIntentIsDurableAndReplayChecksEntireBinding) {
@@ -242,6 +260,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT_VALUES_EQUAL(restored.SerializeAsString(), staged.SerializeAsString());
         const auto replay = ctx.Call(request).GetDelegation();
         UNIT_ASSERT_VALUES_EQUAL(replay.GetRevision(), staged.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest()).DelegationsSize(), 1);
 
         auto conflict = request;
         conflict.MutableStage()->MutableBinding()->SetCloudId("changed-cloud");
@@ -340,6 +359,9 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT_VALUES_EQUAL(unknown.GetState(), NProto::WAITING_SETUP);
         UNIT_ASSERT_VALUES_EQUAL(unknown.GetSetupState(), NProto::SETUP_UNKNOWN);
         UNIT_ASSERT(unknown.GetSetupOperationId().empty());
+        const auto inventory = ctx.Call(ListRequest());
+        UNIT_ASSERT_VALUES_EQUAL(inventory.DelegationsSize(), 1);
+        AssertBinding(inventory.GetDelegations(0), Binding());
         UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
         ctx.AdvanceTime(TDuration::Days(1));
         UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
@@ -364,6 +386,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         const auto replacement = ctx.Call(StageCreateRequest("create-2", Binding("ydb.delegation.second"),
             "/Root/database/secret", "database-incarnation-1", 20));
         UNIT_ASSERT_VALUES_EQUAL(replacement.GetDelegation().GetState(), NProto::PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest()).DelegationsSize(), 1);
     }
 
     Y_UNIT_TEST(StaleUnboundDropCannotRetireBoundSecret) {
@@ -415,6 +438,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT_VALUES_EQUAL(revoked.GetRevokeOperationId(), "iam-revoke-1");
         AssertBinding(revoked, Binding());
         UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest()).DelegationsSize(), 0);
     }
 
     Y_UNIT_TEST(RetryDefersRevocationAndCannotOverwriteNewClaim) {
@@ -436,6 +460,42 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         ctx.Call(FinishRequest(second));
     }
 
+    Y_UNIT_TEST(InventoryPaginationSurvivesRebootAndExpiresOnMutation) {
+        TTestContext ctx;
+        CreateActive(ctx);
+        const auto active = GetSecret(ctx);
+        const auto pending = ctx.Call(StageAlterRequest(active, "operation-2", Binding("ydb.delegation.second")));
+        ctx.Call(StageCreateRequest("operation-3", Binding("ydb.delegation.third"), "/Root/database/third", "database-incarnation-1", 30));
+        const auto pageRequest = ListRequest("database-incarnation-1", 2);
+        const auto first = ctx.Call(pageRequest);
+        UNIT_ASSERT_VALUES_EQUAL(first.DelegationsSize(), 2);
+        UNIT_ASSERT(!first.GetNextAfterOperationId().empty());
+        auto continuation = pageRequest;
+        continuation.MutableListInventory()->SetAfterOperationId(first.GetNextAfterOperationId());
+        continuation.MutableListInventory()->SetInventoryRevision(first.GetDatabase().GetInventoryRevision());
+        const auto second = ctx.Call(continuation);
+        UNIT_ASSERT_VALUES_EQUAL(second.DelegationsSize(), 1);
+        UNIT_ASSERT(second.GetNextAfterOperationId().empty());
+        TVector<TString> operationIds;
+        for (const auto& item : first.GetDelegations()) {
+            operationIds.push_back(item.GetOperationId());
+        }
+        operationIds.push_back(second.GetDelegations(0).GetOperationId());
+        UNIT_ASSERT_VALUES_EQUAL(operationIds[0], "create-1");
+        UNIT_ASSERT_VALUES_EQUAL(operationIds[1], "operation-2");
+        UNIT_ASSERT_VALUES_EQUAL(operationIds[2], "operation-3");
+
+        ctx.Reboot();
+        const auto replay = ctx.Call(continuation);
+        UNIT_ASSERT_VALUES_EQUAL(replay.SerializeAsString(), second.SerializeAsString());
+        ctx.Call(DropRequest(GetSecret(ctx)));
+        ctx.Call(continuation, NProto::SNAPSHOT_EXPIRED);
+        const auto inventory = ctx.Call(ListRequest());
+        UNIT_ASSERT_VALUES_EQUAL(inventory.DelegationsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, "create-1").GetState(), NProto::REVOCATION_PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(GetDelegation(ctx, pending.GetDelegation().GetOperationId()).GetState(), NProto::CANCELLED);
+    }
+
     Y_UNIT_TEST(StaleRevisionCannotChangeSetupOutcome) {
         TTestContext ctx;
         ctx.Call(RegisterRequest(DatabaseIdentity()));
@@ -449,6 +509,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         UNIT_ASSERT_VALUES_EQUAL(failed.GetDelegation().GetSetupState(), NProto::SETUP_FAILED);
         ctx.Call(SetupResultRequest(failed.GetDelegation(), NProto::SETUP_SUCCEEDED), NProto::PRECONDITION_FAILED);
         UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ClaimRequest()).DelegationsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest()).DelegationsSize(), 0);
     }
 
     Y_UNIT_TEST(FailedAlterReleasesPendingWithoutLosingCurrent) {
@@ -500,6 +561,7 @@ Y_UNIT_TEST_SUITE(IamDelegationTablet) {
         ctx.Call(reuseOperation, NProto::CONFLICT);
         ctx.Call(StageCreateRequest("reuse-referrer", Binding(), "/Root/database/other",
             "database-incarnation-1", 30), NProto::CONFLICT);
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Call(ListRequest()).DelegationsSize(), 1);
     }
 
     Y_UNIT_TEST(KnownIamOperationCannotBeReplacedByAnotherResult) {

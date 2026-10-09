@@ -9,6 +9,7 @@ PEERDIR(
 )
 
 SRCS(
+    durability_ut.cpp
     iam_delegation_ut.cpp
 )
 

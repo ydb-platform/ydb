@@ -10,10 +10,18 @@ namespace NYdb::NWasm::NServices {
 
 // Experimental row ABI, independent of any service's network protocol.
 inline constexpr uint32_t ServiceMagic = 0x31565357;
-inline constexpr uint32_t ServiceVersion = 1;
+inline constexpr uint32_t ServiceVersion = 2;
 inline constexpr uint32_t MaxServiceBatchRows = 64;
 inline constexpr uint32_t MaxServiceBatchBytes = 32768;
 static_assert(std::endian::native == std::endian::little);
+
+// FNV-1a over the ASCII method name; kept in sync with generate.py.
+constexpr uint32_t ServiceMethodId(std::string_view name) {
+    uint32_t value = 2166136261u;
+    for (const auto byte : name)
+        value = (value ^ static_cast<unsigned char>(byte)) * 16777619u;
+    return value;
+}
 
 enum class EValueType : uint32_t { Uint64, Uint32, Int64, Bool, String, Utf8 };
 

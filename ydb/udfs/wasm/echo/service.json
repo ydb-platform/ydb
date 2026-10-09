@@ -3,10 +3,9 @@
   "module_kind": "wasm",
   "module_name": "Echo",
   "module_extension": "wasm",
-  "service_abi_version": 1,
   "service_methods": [
     {
-      "name": "Echo", "id": 7, "batch": true, "max_batch_rows": 64,
+      "name": "Echo", "batch": true, "max_batch_rows": 64,
       "max_output_row_bytes": 1045,
       "input": [{"name": "message", "type": "String", "max_bytes": 1024}],
       "output": [
@@ -17,7 +16,7 @@
       ]
     },
     {
-      "name": "Length", "id": 9, "batch": true, "max_batch_rows": 64,
+      "name": "Length", "batch": true, "max_batch_rows": 64,
       "max_output_row_bytes": 4,
       "input": [{"name": "message", "type": "String", "max_bytes": 1024}],
       "output": [{"name": "length", "type": "Uint32"}]

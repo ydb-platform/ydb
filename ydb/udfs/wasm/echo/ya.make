@@ -9,6 +9,9 @@ SRCS(
     contrib/restricted/emscripten/system/lib/libc/musl/src/string/memcmp.c
 )
 
-PEERDIR(ydb/services/udf_store/wasm/abi)
+PEERDIR(
+    ydb/services/udf_store/wasm/abi
+    ydb/udfs/wasm/echo/contract
+)
 
 END()

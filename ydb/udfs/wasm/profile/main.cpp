@@ -1,4 +1,5 @@
 #include "profile.h"
+#include <ydb/udfs/wasm/profile/contract/service_methods.h>
 #include <ydb/udfs/wasm/sdk/services/transport.h>
 #include <ydb/udfs/wasm/sdk/services/rows.h>
 #include <ydb/udfs/wasm/sdk/services/example_allocator.h>
@@ -600,7 +601,8 @@ TReply ServiceFailure(EServiceError error, uint32_t detail = 0) {
 TTask<TReply> RunService(TCallContext& context, const void* arguments, size_t size) {
     TServiceRequest header;
     std::string_view rows;
-    if (!ReadServiceRequest({static_cast<const char*>(arguments), size}, header, rows) || header.Method != 0)
+    if (!ReadServiceRequest({static_cast<const char*>(arguments), size}, header, rows) ||
+        header.Method != NYdb::NWasm::NServices::NGenerated::NModuleWASM_PROFILE::MethodProfile)
         co_return ServiceFailure(EServiceError::InvalidArguments);
     uint64_t ids[MaxProfileBatchRows];
     TRowReader reader(rows);

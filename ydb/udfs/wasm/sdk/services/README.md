@@ -8,11 +8,11 @@ indices into trusted HTTP/gRPC configuration.
 
 ## Module Manifest
 
-Keep the usual `module_type: module`, `module_kind: wasm`, `module_name` and
-`module_extension: wasm` fields. Add `service_abi_version: 1` and a nonempty
-`service_methods` array. Each method declares:
+The author edits `service.json`: the usual `module_type: module`,
+`module_kind: wasm`, `module_name`, `module_extension: wasm` fields and a
+nonempty `service_methods` array. Each method declares:
 
-- `name` and unique uint32 `id` (the guest dispatch ID).
+- `name` (used by SQL and generated dispatch).
 - `batch`, `max_batch_rows` (1..64; non-batch methods must use 1).
 - Ordered `input` and `output` field lists with unique `name` and `type`.
 - `max_bytes` for String/Utf8 fields, a positive hard byte bound.
@@ -23,7 +23,24 @@ non-null scalar types are Uint64, Uint32, Int64, Bool, String and Utf8. There
 are at most 32 fields per row and 64 methods per manifest. Row sizes must fit
 the hard 32768-byte request/result cap including headers. Optional/nested types
 and Arrow are explicitly unsupported rather than silently reinterpreted.
-See the Profile and Echo manifests for examples.
+See Profile and Echo's `service.json` descriptions for examples.
+
+A small `contract` build target includes `common/service_contract.inc` and
+runs `generate.py` once to produce `manifest.json` and `service_methods.h`.
+The manifest gets `service_abi_version: 2`, but never a method `id` field.
+The header supplies `NGenerated::NModule<module_name>::Method<method_name>`
+constants consumed by guest handlers. Deploy the generated manifest together
+with its WASM artifact; do not maintain a hand-written manifest copy.
+Use `--add-result=.json` with the WASM build to expose the generated manifest
+in the workspace's `contract` directory, as in the module build commands.
+
+Internal uint32 dispatch IDs use FNV-1a over the ASCII method name. The host
+derives the same IDs from names; manifest order and adding other methods do
+not change existing IDs. Both generator and host reject collisions and manual
+`id` fields. Generation/runtime tests check the algorithms against each other.
+The row contract's version 2 rejects version 1 manifests and requests that
+used manual IDs; old guest artifacts must be rebuilt. This version is distinct
+from P1's unchanged async ABI version. IDs are not artifact identity hashes.
 
 ## Row and Call Layout
 
@@ -58,6 +75,8 @@ The prototype uses the registry's minimal runtime, not the full C/C++ SDK.
 Link any additional guest libc functions into the adapter itself, as Echo does
 for Emscripten's `memcmp`; do not introduce module-specific host intrinsics.
 
-Place new adapters under `ydb/udfs/wasm/<module>`, build with the existing WASM
-toolchain, and register the artifact/manifest in `WasmServices.Modules`.
+Place new adapters under `ydb/udfs/wasm/<module>`, add `service.json` and a
+`contract` target, and make the guest depend on that target and include its
+generated `service_methods.h`. Build with the existing WASM toolchain and
+register the artifact/generated manifest in `WasmServices.Modules`.
 No native per-module registry, serializer or decoder should be added to FQ.

@@ -1,8 +1,10 @@
 #include <ydb/udfs/wasm/sdk/services/module.h>
 #include <ydb/udfs/wasm/sdk/services/example_allocator.h>
+#include <ydb/udfs/wasm/echo/contract/service_methods.h>
 
 using namespace NYdb::NWasm::NAsync;
 using namespace NYdb::NWasm::NServices;
+using namespace NYdb::NWasm::NServices::NGenerated::NModuleEcho;
 
 namespace {
 
@@ -14,7 +16,7 @@ TTask<TModuleReply> Run(TCallContext& context, const void* arguments, size_t siz
     TServiceRequest header;
     std::string_view rows;
     if (!ReadServiceRequest({static_cast<const char*>(arguments), size}, header, rows) || header.Protocol ||
-        (header.Method != 7 && header.Method != 9))
+        (header.Method != MethodEcho && header.Method != MethodLength))
         co_return Failure(1);
     std::string_view messages[MaxServiceBatchRows];
     TRowReader input(rows);
@@ -50,7 +52,7 @@ TTask<TModuleReply> Run(TCallContext& context, const void* arguments, size_t siz
         std::string_view message;
         if (!reply.String(message, 1024) || message != messages[i])
             co_return Failure(3);
-        if (header.Method == 7) {
+        if (header.Method == MethodEcho) {
             if (!writer.String(message) || !writer.Put(uint64_t(message.size())) || !writer.Put(uint8_t(message.empty())) ||
                 !writer.Put(-static_cast<int64_t>(message.size())))
                 co_return Failure(4);

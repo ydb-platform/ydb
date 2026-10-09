@@ -83,8 +83,9 @@ TServiceManifest ParseServiceManifest(TStringBuf json) {
         TServiceMethod method;
         method.Name = item["name"].GetStringSafe();
         Y_ENSURE(ValidName(method.Name), "Invalid WASM service method name");
-        method.Id = Number(item["id"], UINT32_MAX);
-        Y_ENSURE(ids.insert(method.Id).second, "Duplicate WASM service method id");
+        Y_ENSURE(!item.Has("id"), "WASM service method IDs must not appear in manifests");
+        method.Id = ServiceMethodId({method.Name.data(), method.Name.size()});
+        Y_ENSURE(ids.insert(method.Id).second, "WASM service method ID collision");
         method.Batch = item["batch"].GetBooleanSafe();
         method.MaxBatchRows = Number(item["max_batch_rows"], MaxServiceBatchRows);
         Y_ENSURE(method.MaxBatchRows && (method.Batch || method.MaxBatchRows == 1), "Invalid WASM service batch capability");

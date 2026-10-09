@@ -12,18 +12,20 @@ Install operator-owned modules and matching manifests on all compiling and
 executing FQ nodes. The manifest extends the existing common WASM manifest
 fields with the experimental `service_methods` contract described in
 `ydb/udfs/wasm/sdk/services/README.md`. Module names and method IDs/types are
-discovered from these files, not a native Profile registry.
+discovered from these files, not a native Profile registry. Authors edit a
+module's `service.json`; its build generates the manifest and guest dispatch
+constants together. No method `id` appears in the description or manifest.
 
 ```protobuf
 WasmServices {
   Enabled: true
   Modules {
     ModulePath: "/absolute/path/profile.wasm"
-    ManifestPath: "/absolute/path/profile/manifest.json"
+    ManifestPath: "/absolute/path/profile/contract/manifest.json"
   }
   Modules {
     ModulePath: "/absolute/path/echo.wasm"
-    ManifestPath: "/absolute/path/echo/manifest.json"
+    ManifestPath: "/absolute/path/echo/contract/manifest.json"
   }
   MaxBatchRows: 2
   MaxBatchBytes: 32768
@@ -49,8 +51,9 @@ WasmServices {
 
 `ModulePath` is retained as a single-module configuration shorthand: it requires
 an adjacent `<ModulePath>.manifest.json`. Do not combine it with `Modules`.
-Rebuild the old Profile fixture: its former private arguments are not the new
-query row ABI. Profile's existing SQL spelling is preserved by its manifest.
+Rebuild old modules: service row ABI version 2 derives dispatch IDs from method
+names instead of manual manifest IDs. Version 1 manifests/requests are rejected.
+The underlying async ABI is unchanged. Profile's SQL spelling is preserved.
 
 ```sql
 $input = SELECT 42ul AS id UNION ALL SELECT 43ul AS id;

@@ -11,6 +11,7 @@ SRCS(main.cpp)
 PEERDIR(
     contrib/libs/rapidjson
     ydb/udfs/wasm/profile/proto
+    ydb/udfs/wasm/profile/contract
     ydb/services/udf_store/wasm/abi
 )
 

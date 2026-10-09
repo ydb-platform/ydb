@@ -8,6 +8,7 @@ import pytest
 import yatest.common
 
 from ydb.udfs.wasm.profile.proto.schema import profile_pb2
+from library.python import resource
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 from ydb.tests.tools.fq_runner.kikimr_utils import (
@@ -118,13 +119,19 @@ class WasmExtension(ExtensionPoint):
         pass
 
     def apply_to_kikimr(self, request, kikimr):
+        manifests = {}
+        for module in ('profile', 'echo'):
+            path = yatest.common.output_path(request.node.name + '_' + module + '_manifest.json')
+            with open(path, 'wb') as output:
+                output.write(resource.find('/ydb/udfs/wasm/' + module + '/contract/manifest.json'))
+            manifests[module] = path
         config = {
             'enabled': True,
             'modules': [
                 {'module_path': yatest.common.source_path('ydb/udfs/wasm/profile/ut/data/profile.wasm'),
-                 'manifest_path': yatest.common.source_path('ydb/udfs/wasm/profile/manifest.json')},
+                 'manifest_path': manifests['profile']},
                 {'module_path': yatest.common.source_path('ydb/udfs/wasm/echo/ut/data/echo.wasm'),
-                 'manifest_path': yatest.common.source_path('ydb/udfs/wasm/echo/manifest.json')},
+                 'manifest_path': manifests['echo']},
             ],
             'call_timeout_ms': self.timeout_ms,
             'max_batch_rows': self.batch_config.get('rows', 1),

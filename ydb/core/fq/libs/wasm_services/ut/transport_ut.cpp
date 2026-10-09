@@ -1,5 +1,7 @@
 #include <ydb/core/fq/libs/wasm_services/transport.h>
 #include <ydb/udfs/wasm/profile/profile.h>
+#include <ydb/udfs/wasm/profile/contract/service_methods.h>
+#include <ydb/udfs/wasm/echo/contract/service_methods.h>
 #include <ydb/core/fq/libs/wasm_services/query/manifest.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/mock.grpc.pb.h>
@@ -637,7 +639,7 @@ struct TQueryTransformEnv {
         : Module(MakeTempName()), Manifest(MakeTempName())
     {
         TFileOutput(Module.Name()).Write(NResource::Find("/fq_transport_coroutine.wasm"));
-        TFileOutput(Manifest.Name()).Write(NResource::Find("/profile_manifest.json"));
+        TFileOutput(Manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         auto* module = config.AddModules();
@@ -737,7 +739,8 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         TEnv env(Bindings(http, grpc), {}, "/echo_service.wasm");
         const std::string_view messages[] = {std::string_view("a\0b", 3), std::string_view()};
         size_t exchange = 0;
-        for (const ui32 method : {7u, 9u}) {
+        using namespace NYdb::NWasm::NServices::NGenerated::NModuleEcho;
+        for (const ui32 method : {MethodEcho, MethodLength}) {
             char arguments[256];
             TRowWriter writer(arguments, sizeof(arguments));
             UNIT_ASSERT(writer.Put(TServiceRequest{ServiceMagic, ServiceVersion, method, 0, 0, 2, 32768, 1}));
@@ -756,7 +759,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
             UNIT_ASSERT_VALUES_EQUAL(reply.Count, 2);
             UNIT_ASSERT_VALUES_EQUAL(reply.Error, 0);
             for (const auto expected : messages) {
-                if (method == 7) {
+                if (method == MethodEcho) {
                     std::string_view value;
                     ui64 length;
                     ui8 empty;
@@ -778,21 +781,48 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     }
 
     Y_UNIT_TEST(ServiceManifestDescribesDifferentModules) {
-        const auto profile = ParseServiceManifest(NResource::Find("/profile_manifest.json"));
-        const auto echo = ParseServiceManifest(NResource::Find("/echo_manifest.json"));
+        const auto profile = ParseServiceManifest(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
+        const auto echo = ParseServiceManifest(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"));
         UNIT_ASSERT_VALUES_EQUAL(profile.Name, "WASM_PROFILE");
         UNIT_ASSERT_VALUES_EQUAL(profile.Methods.at("Profile").Input[0].Name, "id");
         UNIT_ASSERT_VALUES_EQUAL(echo.Name, "Echo");
         UNIT_ASSERT_VALUES_EQUAL(echo.Methods.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Echo").Id, 7);
-        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Length").Id, 9);
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Echo").Id, NYdb::NWasm::NServices::NGenerated::NModuleEcho::MethodEcho);
+        UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Length").Id, NYdb::NWasm::NServices::NGenerated::NModuleEcho::MethodLength);
+        UNIT_ASSERT_VALUES_EQUAL(profile.Methods.at("Profile").Id, NYdb::NWasm::NServices::NGenerated::NModuleWASM_PROFILE::MethodProfile);
         UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Echo").Output.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(echo.Methods.at("Length").Output.size(), 1);
     }
 
+    Y_UNIT_TEST(ServiceGeneratedDispatchIgnoresManifestOrder) {
+        NJson::TJsonValue root;
+        UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"), &root, true));
+        for (const auto& method : root["service_methods"].GetArraySafe())
+            UNIT_ASSERT(!method.Has("id"));
+        auto& methods = root["service_methods"].GetArraySafe();
+        std::swap(methods[0], methods[1]);
+        auto additional = methods[0];
+        additional["name"] = "Additional";
+        methods.push_back(std::move(additional));
+        const auto changed = ParseServiceManifest(NJson::WriteJson(root, false));
+        UNIT_ASSERT_VALUES_EQUAL(changed.Methods.at("Echo").Id, NYdb::NWasm::NServices::NGenerated::NModuleEcho::MethodEcho);
+        UNIT_ASSERT_VALUES_EQUAL(changed.Methods.at("Length").Id, NYdb::NWasm::NServices::NGenerated::NModuleEcho::MethodLength);
+    }
+
+    Y_UNIT_TEST(ServiceRowContractRejectsOldDispatchVersion) {
+        using namespace NYdb::NWasm::NServices;
+        TServiceRequest request;
+        request.Count = 1;
+        request.Version = 1;
+        const auto bytes = Encode(request, {});
+        TServiceRequest decoded;
+        std::string_view rows;
+        UNIT_ASSERT(!ReadServiceRequest({bytes.data(), bytes.size()}, decoded, rows));
+    }
+
     Y_UNIT_TEST(ServiceManifestRejectsInvalidContracts) {
         const TVector<std::function<void(NJson::TJsonValue&)>> mutations{
-            [](auto& root) { root["service_abi_version"] = 2; },
+            [](auto& root) { root["service_abi_version"] = 1; },
             [](auto& root) { root["service_methods"][1]["id"] = 7; },
             [](auto& root) { root["service_methods"][1]["name"] = "Echo"; },
             [](auto& root) { root["service_methods"][0]["input"][0]["type"] = "Optional<String>"; },
@@ -802,10 +832,14 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
             [](auto& root) { root["service_methods"][0]["max_batch_rows"] = 0; },
             [](auto& root) { root["service_methods"][0]["batch"] = false; },
             [](auto& root) { root["service_methods"][0]["output"][1]["name"] = "value"; },
+            [](auto& root) {
+                root["service_methods"][0]["name"] = "M15119";
+                root["service_methods"][1]["name"] = "M203802";
+            },
         };
         for (const auto& mutate : mutations) {
             NJson::TJsonValue root;
-            UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/echo_manifest.json"), &root, true));
+            UNIT_ASSERT(NJson::ReadJsonTree(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"), &root, true));
             mutate(root);
             UNIT_ASSERT_EXCEPTION(ParseServiceManifest(NJson::WriteJson(root, false)), yexception);
         }
@@ -813,8 +847,8 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
 
     Y_UNIT_TEST(ServiceRegistrySelectsModuleAndMethod) {
         TTempFile profile(MakeTempName()), echo(MakeTempName());
-        TFileOutput(profile.Name()).Write(NResource::Find("/profile_manifest.json"));
-        TFileOutput(echo.Name()).Write(NResource::Find("/echo_manifest.json"));
+        TFileOutput(profile.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
+        TFileOutput(echo.Name()).Write(NResource::Find("/ydb/udfs/wasm/echo/contract/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         auto* binding = config.AddBindings();
@@ -883,7 +917,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     Y_UNIT_TEST(ServiceSingleModuleShorthandUsesAdjacentManifest) {
         TTempFile artifact(MakeTempName());
         TTempFile manifest(artifact.Name() + ".manifest.json");
-        TFileOutput(manifest.Name()).Write(NResource::Find("/profile_manifest.json"));
+        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         config.SetModulePath(artifact.Name());
@@ -1097,7 +1131,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
 
     Y_UNIT_TEST(DqBatchRejectsInvalidConfig) {
         TTempFile manifest(MakeTempName());
-        TFileOutput(manifest.Name()).Write(NResource::Find("/profile_manifest.json"));
+        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/contract/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         auto* module = config.AddModules();

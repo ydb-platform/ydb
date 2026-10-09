@@ -2549,7 +2549,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime& runtime = *server.GetRuntime();
 
         const ui64 bscId = MakeBSControllerID();
-        TActorId healthCheckActor;
+        std::unordered_set<TActorId> bscClients; // We can't exactly pinpoint HC actor, so we'll settle for this
         bool bscTimeoutFired = false;
         bool wasResult = false;
 
@@ -2562,14 +2562,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         });
         // hold the pipe connection result to inject failure after bsc timeout
         auto pipeObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](auto&& ev) {
-            if (ev->Get()->TabletId == bscId && !healthCheckActor) {
-                healthCheckActor = ev->Recipient;
+            if (ev->Get()->TabletId == bscId) {
+                bscClients.insert(ev->Recipient);
                 ev.Reset();
             }
         });
         // first wakeup of the request actor is the bsc timeout (50% of the timeout)
         auto wakeupObserver = runtime.AddObserver<TEvents::TEvWakeup>([&](auto&& ev) {
-            if (healthCheckActor && ev->Recipient == healthCheckActor) {
+            if (bscClients.contains(ev->Recipient)) {
                 bscTimeoutFired = true;
             }
         });
@@ -2593,8 +2593,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(!wasResult);
 
         // pipe to bsc fails after bsc requests were already timed out
-        runtime.Send(new IEventHandle(healthCheckActor, healthCheckActor,
-            new TEvTabletPipe::TEvClientConnected(bscId, NKikimrProto::ERROR, TActorId(), TActorId(), false, false, 0)));
+        for (const auto& actor : bscClients) {
+            runtime.Send(new IEventHandle(actor, actor,
+                new TEvTabletPipe::TEvClientConnected(bscId, NKikimrProto::ERROR, TActorId(), TActorId(), false, false, 0)));
+        }
         runtime.SimulateSleep(TDuration::Seconds(1));
         // bsc requests must not be accounted twice, so we still wait for hive
         UNIT_ASSERT(!wasResult);

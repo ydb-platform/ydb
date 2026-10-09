@@ -10,14 +10,14 @@ namespace NMetrics {
 namespace {
 
 void AssertMemoryReport(const NKikimrTabletBase::TMetrics& metrics, ui64 used, ui64 demand, ui64 reclaimable) {
-    UNIT_ASSERT(metrics.HasMemory());
+    UNIT_ASSERT(metrics.HasTabletMemoryUsed());
     UNIT_ASSERT(metrics.HasMemoryDemand());
     UNIT_ASSERT(metrics.HasMemoryReclaimable());
-    UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemory(), used);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetTabletMemoryUsed(), used);
     UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemoryDemand(), demand);
     UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemoryReclaimable(), reclaimable);
-    UNIT_ASSERT_LE(metrics.GetMemoryReclaimable(), metrics.GetMemory());
-    UNIT_ASSERT_LE(metrics.GetMemory(), metrics.GetMemoryDemand());
+    UNIT_ASSERT_LE(metrics.GetMemoryReclaimable(), metrics.GetTabletMemoryUsed());
+    UNIT_ASSERT_LE(metrics.GetTabletMemoryUsed(), metrics.GetMemoryDemand());
 }
 
 }
@@ -127,7 +127,10 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
 
         metrics.Memory.Set(30_MB);
         message.Clear();
-        UNIT_ASSERT(!metrics.FillChanged(message));
+        UNIT_ASSERT(metrics.FillChanged(message));
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 30_MB);
+        UNIT_ASSERT(!message.HasTabletMemoryUsed());
+        message.Clear();
         UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
         AssertMemoryReport(message, 10_MB, 12_MB, 0);
 

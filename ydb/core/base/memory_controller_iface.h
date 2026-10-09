@@ -98,10 +98,12 @@ struct TEvMemoryZone : public TEventLocal<TEvMemoryZone, EvMemoryZone> {
     const EMemoryZone Zone;
     // Set when the tablet reported a reclaimable part: how much of it it may keep
     const std::optional<ui64> Share;
+    const bool ClearShare;
 
-    TEvMemoryZone(EMemoryZone zone, std::optional<ui64> share = std::nullopt)
+    TEvMemoryZone(EMemoryZone zone, std::optional<ui64> share = std::nullopt, bool clearShare = false)
         : Zone(zone)
         , Share(share)
+        , ClearShare(clearShare)
     {}
 };
 

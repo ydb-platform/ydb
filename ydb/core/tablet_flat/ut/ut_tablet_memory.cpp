@@ -134,6 +134,10 @@ private:
         State->LastShare = shareBytes;
     }
 
+    void OnMemoryLimitCleared() override {
+        State->LastShare.reset();
+    }
+
 private:
     const TActorId Owner;
     const TIntrusivePtr<TMemoryProbeState> State;
@@ -161,6 +165,9 @@ struct TMemoryProbeEnv : public TMyEnvBase {
 
         Observer = Env.AddObserver<TEvLocal::TEvTabletMetrics>([this](TEvLocal::TEvTabletMetrics::TPtr& ev) {
             Reported.emplace_back(ev->Sender, ev->Get()->ResourceValues);
+            if (ev->Get()->TabletMemoryReport) {
+                ControllerReports.push_back({ev->Sender, ev->Get()->Executor, *ev->Get()->TabletMemoryReport, ev->Get()->FollowerId});
+            }
         });
 
         FireDummyTablet();
@@ -204,7 +211,7 @@ struct TMemoryProbeEnv : public TMyEnvBase {
     {
         for (auto it = Reported.rbegin(); it != Reported.rend(); ++it) {
             const auto& metrics = it->second;
-            if (metrics.HasMemory() && metrics.HasMemoryDemand() && metrics.HasMemoryReclaimable()) {
+            if (metrics.HasTabletMemoryUsed() && metrics.HasMemoryDemand() && metrics.HasMemoryReclaimable()) {
                 return &metrics;
             }
         }
@@ -215,6 +222,13 @@ struct TMemoryProbeEnv : public TMyEnvBase {
     TIntrusivePtr<TMemoryProbeState> Probe = MakeIntrusive<TMemoryProbeState>();
     TActorId TabletActor;
     TVector<std::pair<TActorId, NKikimrTabletBase::TMetrics>> Reported;
+    struct TControllerReport {
+        TActorId Sender;
+        TActorId Executor;
+        NMemory::TConsumerReport Report;
+        ui32 FollowerId;
+    };
+    TVector<TControllerReport> ControllerReports;
     TTestActorRuntime::TEventObserverHolder Observer;
 };
 
@@ -229,10 +243,9 @@ Y_UNIT_TEST(ReportReachesTabletMetrics)
     const auto *metrics = env.LastWholeReport();
     UNIT_ASSERT_C(metrics, "no memory report in the metrics the tablet sent");
 
-    // The honest report, not the 50 KB estimate the executor used to add
-    UNIT_ASSERT_GE(metrics->GetMemory(), 40_MB);
-    UNIT_ASSERT_LT(metrics->GetMemory(), 45_MB);
-    UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryDemand(), metrics->GetMemory() + 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(metrics->GetTabletMemoryUsed(), 40_MB);
+    UNIT_ASSERT_LT(metrics->GetMemory(), 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryDemand(), 60_MB);
     UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryReclaimable(), 10_MB);
 }
 
@@ -262,7 +275,7 @@ Y_UNIT_TEST(ReportClearsReclaimableMemory)
     const auto* metrics = env.LastWholeReport();
     UNIT_ASSERT_C(metrics, "no report clearing reclaimable memory");
     UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryReclaimable(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryDemand(), metrics->GetMemory() + 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryDemand(), 60_MB);
 }
 
 Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
@@ -285,7 +298,7 @@ Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
         UNIT_ASSERT_VALUES_EQUAL(held->GetMemory(), initialMemory + 50_MB);
         if (hostEnabled) {
             UNIT_ASSERT(held->HasMemoryDemand());
-            UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryDemand(), held->GetMemory() + 20_MB);
+            UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryDemand(), 60_MB);
             UNIT_ASSERT(held->HasMemoryReclaimable());
             UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryReclaimable(), 0);
         } else {
@@ -304,9 +317,106 @@ Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
         UNIT_ASSERT(released);
         UNIT_ASSERT_VALUES_EQUAL(released->GetMemory(), initialMemory);
         if (hostEnabled) {
-            UNIT_ASSERT_VALUES_EQUAL(released->GetMemoryDemand(), initialMemory + 20_MB);
+            UNIT_ASSERT_VALUES_EQUAL(released->GetMemoryDemand(), 60_MB);
         }
     }
+}
+
+Y_UNIT_TEST(ControllerReportExcludesExecutorMemory)
+{
+    TMemoryProbeEnv env(true, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB}, true);
+    UNIT_ASSERT(!env.ControllerReports.empty());
+    const auto& initial = env.ControllerReports.back();
+    UNIT_ASSERT_VALUES_EQUAL(initial.Report.Used, 40_MB);
+    UNIT_ASSERT_VALUES_EQUAL(initial.Report.Demand, 60_MB);
+    UNIT_ASSERT_VALUES_EQUAL(initial.Report.Reclaimable, 10_MB);
+    UNIT_ASSERT(env.LastWithMemory()->GetMemory() < initial.Report.Used);
+
+    env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto* executor, const auto& ctx) {
+        executor->Execute(new TTxHoldStaticMemory(env.Probe, env.Edge), ctx);
+    }));
+    env.WaitForWakeUp();
+    env.Env.SimulateSleep(TDuration::Seconds(30));
+    UNIT_ASSERT(env.LastWithMemory()->GetMemory() >= 50_MB);
+    // Static executor reservations change the Hive metric, but not the owner attribution.
+    UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Report.Used, 40_MB);
+}
+
+Y_UNIT_TEST(TabletSenderKeepsStableExecutorIdentity)
+{
+    TMemoryProbeEnv env(true, {.Used = 40_MB, .Demand = 60_MB});
+    const TActorId executorId = env.ExecutorActor();
+    env.ControllerReports.clear();
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto* executor, const auto& ctx) {
+        auto* metrics = executor->GetResourceMetrics();
+        metrics->TabletMemoryReport = NMemory::TConsumerReport{.Used = 41_MB, .Demand = 61_MB};
+        // The total Hive report need not change for a change of MC attribution to be sent.
+        UNIT_ASSERT(metrics->TryUpdate(ctx));
+        ctx.Send(env.Edge, new TEvents::TEvWakeup);
+    }));
+    env.WaitForWakeUp();
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.size(), 1u);
+    const auto& report = env.ControllerReports.back();
+    UNIT_ASSERT_VALUES_EQUAL(report.Sender, env.TabletActor);
+    UNIT_ASSERT_VALUES_EQUAL(report.Executor, executorId);
+    UNIT_ASSERT_VALUES_EQUAL(report.Report.Used, 41_MB);
+    UNIT_ASSERT_VALUES_EQUAL(report.Report.Demand, 61_MB);
+
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto* executor, const auto& ctx) {
+        executor->GetResourceMetrics()->TabletMemoryReport = NMemory::TConsumerReport{};
+        UNIT_ASSERT(executor->GetResourceMetrics()->TryUpdate(ctx));
+        ctx.Send(env.Edge, new TEvents::TEvWakeup);
+    }));
+    env.WaitForWakeUp();
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Report.Used, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Executor, executorId);
+}
+
+Y_UNIT_TEST(HostFlagDoesNotChangeHivePlacementMemory)
+{
+    TMemoryProbeEnv enabled(true, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB});
+    TMemoryProbeEnv disabled(false, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB});
+    UNIT_ASSERT_VALUES_EQUAL(enabled.LastWithMemory()->GetMemory(), disabled.LastWithMemory()->GetMemory());
+}
+
+Y_UNIT_TEST(FollowerPublishesItsOwnMemoryReport)
+{
+    TMemoryProbeEnv env(true, {.Used = 40_MB, .Demand = 60_MB});
+    env.FireDummyFollower(1);
+    env.Env.SimulateSleep(TDuration::Seconds(30));
+    bool reported = false;
+    for (const auto& report : env.ControllerReports) {
+        if (report.FollowerId == 1) {
+            UNIT_ASSERT(report.Executor);
+            UNIT_ASSERT_VALUES_EQUAL(report.Report.Used, 50_KB);
+            reported = true;
+        }
+    }
+    UNIT_ASSERT(reported);
+}
+
+Y_UNIT_TEST(ElasticShareCanBeWithdrawn)
+{
+    TMemoryProbeEnv env(true, {.Used = 40_MB, .Demand = 60_MB});
+    env.SendEv(env.ExecutorActor(), new NMemory::TEvMemoryZone(NMemory::EMemoryZone::Green, 10_MB));
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT(env.Probe->LastShare);
+    env.SendEv(env.ExecutorActor(), new NMemory::TEvMemoryZone(NMemory::EMemoryZone::Green, std::nullopt, true));
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT(!env.Probe->LastShare);
+}
+
+Y_UNIT_TEST(ZoneAndShareAreIgnoredWithoutTheFlag)
+{
+    TMemoryProbeEnv env(false, {.Used = 40_MB, .Demand = 60_MB});
+    env.SendEv(env.ExecutorActor(), new NMemory::TEvMemoryZone(NMemory::EMemoryZone::Red, 0));
+    env.Env.SimulateSleep(TDuration::Seconds(1));
+    UNIT_ASSERT(!env.Probe->LastZone);
+    UNIT_ASSERT(!env.Probe->LastShare);
 }
 
 Y_UNIT_TEST(ZoneAndShareReachTheTablet)

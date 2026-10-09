@@ -24,6 +24,10 @@ private:
         return GetPortionAccessor().GetPortionInfo().GetEntityStorageId(entityId, Schema->GetIndexInfo());
     }
 
+    virtual TString GetIndexStorageId(const ui32 indexId) const override {
+        return GetPortionAccessor().GetPortionInfo().GetIndexStorageId(indexId, Schema->GetIndexInfo());
+    }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& /*columnsIds*/) const override {
         return 0;
     }
@@ -44,8 +48,7 @@ private:
         return Schema;
     }
 
-    virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) override;
+    virtual NReader::NCommon::TExecutionResult DoStartFetchingAccessor(const NReader::NCommon::TFetchingScriptCursor& step) override;
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
 
@@ -66,7 +69,7 @@ private:
 
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
-    virtual TConclusion<bool> DoStartFetchImpl(
+    virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(

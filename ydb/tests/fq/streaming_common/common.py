@@ -31,18 +31,6 @@ from ydb.tests.library.harness.util import LogLevels
 logger = logging.getLogger(__name__)
 
 
-_FEATURE_FLAGS_FOR_CMS = (
-    "enable_streaming_aggregation",
-    "enable_streaming_aggregation_advanced",
-    "enable_streaming_query_scheme_operations",
-    "enable_streaming_query_state_recompute",
-    "enable_shared_reading_structured_json_parsing",
-    "enable_updating_partitions_on_streaming_query_restart",
-    "enable_dq_source_stream_lookup_join_local_lookups",
-    "enable_pq_source_rescaling"
-)
-
-
 def max_json_depth(value):
     if isinstance(value, dict):
         return 1 + max((max_json_depth(v) for v in value.values()), default=0)
@@ -100,7 +88,16 @@ def get_ydb_config(request, enable_fq_connector=None):
     if param.get("enable_exactly_once_topics_writing", False):
         extra_feature_flags.update({"enable_exactly_once_topics_writing", "enable_topic_deferred_publish"})
 
-    for flag in _FEATURE_FLAGS_FOR_CMS:
+    for flag in (
+        "enable_streaming_aggregation",
+        "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_scheme_operations",
+        "enable_streaming_query_state_recompute",
+        "enable_shared_reading_structured_json_parsing",
+        "enable_updating_partitions_on_streaming_query_restart",
+        "enable_dq_source_stream_lookup_join_local_lookups",
+        "enable_pq_source_rescaling",
+    ):
         if flag in param:
             if param[flag]:
                 extra_feature_flags.add(flag)
@@ -435,11 +432,7 @@ def _replace_config_via_cms(cluster, full_yaml_config):
 
 def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30) -> None:
     expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
-    expected_feature_flags = {
-        flag: full_yaml_config["feature_flags"][flag]
-        for flag in _FEATURE_FLAGS_FOR_CMS
-        if flag in full_yaml_config["feature_flags"]
-    }
+    expected_feature_flags = full_yaml_config.get("feature_flags", {})
     deadline = time.monotonic() + timeout
     attempt = 0
 
@@ -643,6 +636,7 @@ class Kikimr:
         timeout_seconds: int = 240,
         enable_discovery: bool = True,
         tenant_database: str = "/Root/my_tenant",
+        is_compatibility_tests: bool = False,
     ):
         if main_binary_path is None:
             main_binary_path = config.get_binary_path(0)
@@ -658,12 +652,10 @@ class Kikimr:
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
 
-        # These flags may be unknown to the stable binary used by compatibility
-        # tests. Deliver them through CMS after all nodes have started, while
-        # keeping the remaining feature flags available during bootstrap.
-        bootstrap_feature_flags = config.yaml_config.get("feature_flags", {})
-        for flag in _FEATURE_FLAGS_FOR_CMS:
-            bootstrap_feature_flags.pop(flag, None)
+        # Stable binaries may not recognize current feature flags at startup.
+        # Compatibility tests receive all feature flags through CMS instead.
+        if is_compatibility_tests:
+            config.yaml_config.pop("feature_flags", None)
 
         # Tenant slots start before the full config reaches CMS. Keep this setting
         # in the bootstrap config so KQP honors it for the first test queries.

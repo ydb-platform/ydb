@@ -2658,10 +2658,10 @@ FROM `{table_name}`"""
     @pytest.mark.parametrize(
         argnames="table_change", argvalues=["alter", "recreate", "drop"]
     )
-    def test_retry_query_after_table_change(
+    def test_query_after_table_change(
         self, kikimr, entity_name, table_store, table_role, table_change
     ):
-        """Table errors must escape local retries and restart the streaming execution."""
+        """Table changes must preserve progress or restart execution on a table error."""
         name = f"table_change_{table_store}_{table_role}_{table_change}"
         inp, out, endpoint = self.get_io_names(
             kikimr, name=name, local_topics=True, entity_name=entity_name
@@ -2716,12 +2716,15 @@ FROM `{table_name}`"""
                     messages_count=1, endpoint=endpoint, timeout=timeout
                 ) == [value]
             else:
+                expected = {"Key": key}
+                if value is not None:
+                    expected["Value"] = value.encode()
 
                 def has_row():
                     rows = kikimr.ydb_client.query(statement=f"""
-                        SELECT Value FROM `{table_name}` WHERE Key = {key};
+                        SELECT * FROM `{table_name}` WHERE Key = {key};
                     """)[0].rows
-                    return len(rows) == 1 and rows[0]["Value"] == value.encode()
+                    return rows == [expected]
 
                 assert wait_for(
                     predicate=has_row, timeout_seconds=timeout, step_seconds=1
@@ -2785,7 +2788,7 @@ FROM `{table_name}`"""
 
                 generation_before = execution_generation(before["LastExecutionId"])
                 if table_change == "alter":
-                    # Remove a referenced column so the compiled query is invalid.
+                    # Remove a referenced column from the current schema.
                     kikimr.ydb_client.query(
                         statement=f"ALTER TABLE `{table_name}` DROP COLUMN Value;"
                     )
@@ -2798,6 +2801,24 @@ FROM `{table_name}`"""
 
                 # A new key forces a fresh lookup/write after the DDL has completed.
                 write_input(key=2, value="after")
+
+                # The lookup source queries by path and can read a recreated table.
+                # Column sinks can keep writing with a known older schema version;
+                # only Key remains visible after dropping Value.
+                lookup_recreated = table_role == "join" and table_change == "recreate"
+                column_sink_altered = (
+                    table_role == "output"
+                    and table_store == "column"
+                    and table_change == "alter"
+                )
+                if lookup_recreated or column_sink_altered:
+                    check_output(key=2, value=None if column_sink_altered else "after")
+                    self.wait_completed_checkpoints(kikimr, query_name)
+                    after = query_state()
+                    assert after == before, (before, after)
+                    assert execution_generation(before["LastExecutionId"]) == generation_before
+                    return
+
                 last_state = before
 
                 def has_table_error_and_retry():

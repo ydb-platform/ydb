@@ -1256,10 +1256,13 @@ FROM `{table_name}`"""
         topic_client = self.get_ydb_client(kikimr, local_topics).driver.topic_client
         topic_client.commit_offset(self.input_topic, self.consumer_name, partition_id=0, offset=1)
 
-        result_sets = kikimr.ydb_client.query(f'''
+        result_sets = kikimr.ydb_client.query(
+            f'''
             PRAGMA pq.Consumer = "{self.consumer_name}";
             SELECT Data FROM {inp} WITH (STREAMING = "FALSE");
-        ''', timeout=60)
+        ''',
+            timeout=60,
+        )
         assert len(result_sets) == 1
         assert not result_sets[0].rows
 

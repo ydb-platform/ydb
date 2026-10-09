@@ -1,5 +1,8 @@
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NSchemeShard;
@@ -171,21 +174,72 @@ Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
         CheckGeneratedDescriptor(runtime);
     }
 
-    Y_UNIT_TEST(CreatePersistsAndUnrelatedAlterKeepsLogicalIds) {
+    Y_UNIT_TEST_TWIN(CreateAndAlterKeepVirtualColumnsOutOfColumnShard, DropVirtual) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
         ui64 txId = 100;
+        bool hasVirtualColumn = true;
+        ui32 addedPhysicalId = 0;
+
+        const auto checkSchemas = [&] {
+            const auto describe = DescribePrivatePath(runtime, "/MyRoot/GeneratedTable");
+            const auto& table = describe.GetPathDescription().GetColumnTableDescription();
+            const auto& logical = table.GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(logical.ColumnsSize(), 2 + hasVirtualColumn + bool(addedPhysicalId));
+            UNIT_ASSERT_VALUES_EQUAL(FindColumn(logical, "key").GetId(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(FindColumn(logical, "source").GetId(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(logical.GetNextColumnId(), addedPhysicalId ? 5u : 4u);
+            if (hasVirtualColumn) {
+                CheckGeneratedDescriptor(runtime);
+            }
+            if (addedPhysicalId) {
+                UNIT_ASSERT_VALUES_EQUAL(FindColumn(logical, "physical_after_virtual").GetId(), addedPhysicalId);
+            }
+
+            runtime.WaitFor("ColumnShard initialization", [&] {
+                return csController->GetShardActualsCount() == 1;
+            }, TDuration::Seconds(30));
+            const auto* shard = csController->GetTheOnlyShard();
+            UNIT_ASSERT_VALUES_EQUAL(table.GetSharding().ColumnShardsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(shard->TabletID(), table.GetSharding().GetColumnShards(0));
+            UNIT_ASSERT(shard->HasIndex());
+
+            // Inspect the applied ColumnShard index, including the schema loaded after a restart.
+            const auto& physical = shard->GetTablesManager().GetIndexInfo(NOlap::TSnapshot::Max());
+            UNIT_ASSERT_VALUES_EQUAL(physical.GetVersion(), logical.GetVersion());
+            UNIT_ASSERT_VALUES_EQUAL(physical.GetColumnIds(false).size(), addedPhysicalId ? 3u : 2u);
+            UNIT_ASSERT_VALUES_EQUAL(physical.GetColumnIdVerified("key"), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(physical.GetColumnIdVerified("source"), 2u);
+            UNIT_ASSERT(!physical.GetColumnIdOptional("derived"));
+            if (addedPhysicalId) {
+                UNIT_ASSERT_VALUES_EQUAL(physical.GetColumnIdVerified("physical_after_virtual"), addedPhysicalId);
+            }
+        };
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", ValidGeneratedTable);
         env.TestWaitNotification(runtime, txId);
-        CheckGeneratedDescriptor(runtime);
-
-        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        CheckGeneratedDescriptor(runtime);
+        checkSchemas();
+        const ui64 columnShardId = csController->GetTheOnlyShard()->TabletID();
 
         // Loading and altering an existing table must not depend on the creation flag.
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(false);
+        if (DropVirtual) {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "GeneratedTable"
+                AlterSchema { DropColumns { Name: "derived" } }
+            )");
+            env.TestWaitNotification(runtime, txId);
+            hasVirtualColumn = false;
+            checkSchemas();
+        }
+
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        checkSchemas();
+        GracefulRestartTablet(runtime, columnShardId, runtime.AllocateEdgeActor());
+        checkSchemas();
+
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "GeneratedTable"
             AlterSchema {
@@ -193,7 +247,11 @@ Y_UNIT_TEST_SUITE(OlapGeneratedVirtualColumns) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
-        CheckGeneratedDescriptor(runtime, 4);
+        addedPhysicalId = 4;
+        checkSchemas();
+
+        GracefulRestartTablet(runtime, columnShardId, runtime.AllocateEdgeActor());
+        checkSchemas();
     }
 
     Y_UNIT_TEST(RejectsInvalidGeneratedDefinitions) {

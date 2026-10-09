@@ -220,7 +220,7 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 Получение и обновление JWT-токена выполняются на стороне клиента и IdP. Сервер {{ ydb-short-name }} не перенаправляет пользователя на страницу входа IdP и не обменивает `authorization code` на токены. Клиент передаёт уже полученный JWT-токен как Bearer-токен при каждом запросе.
 
-Настройка клиента, получение и обновление токенов описаны в статьях об OIDC для [CLI](../reference/ydb-cli/oidc.md) и [C++ SDK](../reference/ydb-sdk/auth.md#oidc).
+Настройка клиента, получение и обновление токенов описаны в документации по OIDC для [CLI](../reference/ydb-cli/oidc.md) и [C++ SDK](../reference/ydb-sdk/auth.md#oidc).
 
 {% note info %}
 

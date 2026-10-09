@@ -617,8 +617,8 @@ public:
     // under QueueMutex: marked where data is queued or the channel finishes, before the consumer is notified
     TDqInputReadyHook ReadyHook;
     // Orders the updates of this channel: they go from the consumer thread and from the session thread (on a
-    // discovery), and a flip of MemoryPressure overtaken by the previous state would stick on the sender.
-    // Taken under TNodeState::Mutex by HandleDiscovery, takes nothing itself
+    // discovery or an idle ping), and a flip of MemoryPressure overtaken by the previous state would stick on the
+    // sender. Taken under TNodeState::Mutex by ResendUpdates, takes only TNodeState::SubscribeMutex itself
     std::mutex UpdateMutex;
 
     bool IsMemoryPressureReported() const {
@@ -821,10 +821,15 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    // FlagTrackDelivery on the interconnect channel given (DqIcChannelData or DqIcChannelControl), plus
-    // FlagSubscribeOnSession for the 1st event since the session was (re)connected
+    // the innermost lock: orders a subscribing update off the session thread before the unsubscribe of HandlePoison
+    std::mutex SubscribeMutex;
+    // FlagTrackDelivery on the interconnect channel given (DqIcChannelData or DqIcChannelControl)
+    static ui32 TrackFlags(ui32 icChannel) {
+        return NActors::IEventHandle::MakeFlags(icChannel, NActors::IEventHandle::FlagTrackDelivery);
+    }
+    // TrackFlags, plus FlagSubscribeOnSession for the 1st event since the session was (re)connected
     ui32 SendFlags(ui32 icChannel) {
-        ui32 flags = NActors::IEventHandle::MakeFlags(icChannel, NActors::IEventHandle::FlagTrackDelivery);
+        ui32 flags = TrackFlags(icChannel);
         // a load first: a locked exchange on every event would bounce the line between the sending threads
         if (!Subscribed.load() && !Subscribed.exchange(true)) {
             flags |= NActors::IEventHandle::FlagSubscribeOnSession;

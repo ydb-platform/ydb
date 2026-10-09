@@ -208,6 +208,9 @@ QueryServiceConfig {
             port: {{settings.connector.grpc_port}}
         }
         UseSsl: false
+        {% for cluster in generic_settings.ydb_clusters %}
+        DatabaseNames: "{{cluster.database}}"
+        {% endfor %}
     }
 
     DefaultSettings {

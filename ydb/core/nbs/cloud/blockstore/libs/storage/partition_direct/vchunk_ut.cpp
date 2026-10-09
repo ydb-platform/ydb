@@ -1123,12 +1123,14 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
              THostIndex hostIndex,
              TBlockRange16 range,
              const TGuardedSgList& guardedSglist,
+             const TBlockChecksums& checksums,
              const NWilson::TTraceId& traceId)
         {
             Y_UNUSED(vChunkIndex);
 
             Y_UNUSED(range);
             Y_UNUSED(guardedSglist);
+            Y_UNUSED(checksums);
             Y_UNUSED(traceId);
 
             // Should write to fresh host.

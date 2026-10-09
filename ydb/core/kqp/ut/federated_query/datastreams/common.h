@@ -31,6 +31,8 @@
 
 namespace NKikimr::NKqp {
 
+TString MakeExternalName(TStringBuf prefix);
+
 struct TScriptQuerySettings {
     bool SaveState = false;
     NKikimrKqp::TScriptExecutionRetryState::TMapping RetryMapping;
@@ -301,7 +303,7 @@ public:
 
 class TStreamingSysViewTestFixture : public TStreamingTestFixture {
 public:
-    inline static constexpr ui64 SYS_VIEW_COLUMNS_COUNT = 13;
+    inline static constexpr ui64 SYS_VIEW_COLUMNS_COUNT = 22;
     inline static constexpr char INPUT_TOPIC_NAME[] = "sysViewInput";
     inline static constexpr char OUTPUT_TOPIC_NAME[] = "sysViewOutput";
     inline static constexpr char PQ_SOURCE[] = "sysViewSourceName";
@@ -324,6 +326,10 @@ public:
         std::optional<TInstant> LastFailAt;
         std::optional<TInstant> SuspendedUntil;
         bool CheckPlan = false;
+        std::string CreatedBy;
+        std::string ModifiedBy;
+        std::string StartedBy;
+        std::string StoppedBy;
     };
 
     struct TSysViewResult {

@@ -601,7 +601,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpWindow> window, TRBOContext& ctx) {
             } else {
                 resultType = argType;
             }
-            if (!resultType->IsOptionalOrNull()) {
+            if (!window->GetFrame().IsNeverEmpty() && !resultType->IsOptionalOrNull()) {
                 resultType = ctx.ExprCtx.MakeType<TOptionalExprType>(resultType);
             }
         }
@@ -663,7 +663,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx, TPl
         }
     }
 
-    const auto* leftItemType = lookup->GetInput()->Type->Cast<TListExprType>()->GetItemType();
+    const auto* leftItemType = lookup->GetLeftInput()->Type->Cast<TListExprType>()->GetItemType();
     if (!EnsureStructType(lookup->Pos, *leftItemType, ctx.ExprCtx)) {
         return TStatus::Error;
     }

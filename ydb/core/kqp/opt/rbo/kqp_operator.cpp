@@ -133,6 +133,27 @@ TOpReplicate::TOpReplicate(TIntrusivePtr<TReplicate> input, ui32 index)
     }
 }
 
+std::optional<ui32> GetReplicateOutputIndex(const IOperator& op) {
+    const auto* input = &op;
+    while (input->Kind != EOperator::Replicate) {
+        if (!input->Props.StageId || input->GetChildCount() != 1) {
+            return std::nullopt;
+        }
+        const auto* child = input->GetChild(0).Get();
+        if (child->Props.StageId != input->Props.StageId) {
+            return std::nullopt;
+        }
+        input = child;
+    }
+
+    const auto& port = CastOperator<TOpReplicate>(*input);
+    const auto& outputs = port.GetReplicate().GetOutputs();
+    Y_ENSURE(std::find(outputs.begin(), outputs.end(), &port) != outputs.end(), "Expected a reachable Replicate port");
+    return std::count_if(outputs.begin(), outputs.end(), [&](const auto* output) {
+        return output->GetIndex() < port.GetIndex();
+    });
+}
+
 bool TOpReplicate::TryCollapse(TIntrusivePtr<IOperator>& slot, TExprContext& ctx, TPlanProps& props) {
     if (slot->Kind != EOperator::Replicate) {
         return false;
@@ -455,6 +476,9 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
     }
     if (const auto ranges = GetRanges()) {
         res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";
+    }
+    if (const auto literalRange = GetLiteralRange()) {
+        res << " Literal range: (" << PrintRBOExpression(literalRange, ctx) << ")";
     }
     if (SortDir != ESortDir::None) {
         res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
@@ -1041,6 +1065,17 @@ TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle p
     Prefix = prefix;
     ResidualJoinKeys = std::move(residualKeys);
     Strategy = ELookupStrategy::LookupJoinRows;
+}
+
+TIntrusivePtr<IOperator> TOpTableLookup::GetLeftInput() {
+    if (!KeysFromInputLookup) {
+        return GetInput();
+    }
+
+    Y_ENSURE(GetInput()->Kind == EOperator::TableLookup, "A lookup by keys of the input lookup must be fed by a table lookup");
+    auto inputLookup = CastOperator<TOpTableLookup>(GetInput());
+    Y_ENSURE(inputLookup->IsJoin(), "A lookup by keys of the input lookup must be fed by a table lookup in join mode");
+    return inputLookup->GetLeftInput();
 }
 
 void TOpTableLookup::ComputeOutputIUs() {

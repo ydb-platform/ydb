@@ -29,6 +29,12 @@ namespace NKikimr {
             TSyncLogKeeperState KeepState;
             // Sublog with circle buffer
             TSublog<TCircleBufStringStream<4096>> Sublog;
+            // SyncLog actor: TEvSyncLogPut comes from PDisk log callbacks through its mailbox. The committer
+            // reports through the same mailbox, so TEvSyncLogCommitDone for an entry point reaches the keeper
+            // only after every TEvSyncLogPut logged before that entry point. Otherwise the keeper could rely
+            // on an entry point LSN (and the confirmed LSN taken for it) while a record below it is still on
+            // its way, and let the recovery log be cut past a record SyncLog has never stored.
+            const TActorId SyncLogId;
             // committer actor id, or empty if we don't have commit activity at this moment
             TActorId CommitterId = {};
             // FirstLsnToKeep reported to LogCutter last time
@@ -102,7 +108,7 @@ namespace NKikimr {
 
                     YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s", commitData.ToString().data()));
 
-                    CommitterId = ctx.Register(CreateSyncLogCommitter(SlCtx, ctx.SelfID, std::move(commitData)));
+                    CommitterId = ctx.Register(CreateSyncLogCommitter(SlCtx, SyncLogId, std::move(commitData)));
                 }
             }
 
@@ -338,18 +344,21 @@ namespace NKikimr {
 
             TSyncLogKeeperActor(
                     TIntrusivePtr<TSyncLogCtx> slCtx,
-                    std::unique_ptr<TSyncLogRepaired> repaired)
+                    std::unique_ptr<TSyncLogRepaired> repaired,
+                    const TActorId &syncLogId)
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
                 , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
                     SlCtx->SyncLogMaxEntryPointSize)
+                , SyncLogId(syncLogId)
             {}
         };
 
         IActor* CreateSyncLogKeeperActor(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
-                std::unique_ptr<TSyncLogRepaired> repaired) {
-            return new TSyncLogKeeperActor(std::move(slCtx), std::move(repaired));
+                std::unique_ptr<TSyncLogRepaired> repaired,
+                const TActorId &syncLogId) {
+            return new TSyncLogKeeperActor(std::move(slCtx), std::move(repaired), syncLogId);
         }
 
     } // NSyncLog

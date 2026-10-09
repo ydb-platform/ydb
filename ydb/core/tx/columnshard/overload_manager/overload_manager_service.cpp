@@ -16,8 +16,17 @@ std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{ 0 };
 
 using NFlowControl::TFlowControlManagerServiceOperator;
 
+// TActivationContext::ActorSystem() dereferences TlsActivationContext. Mailbox cleanup during
+// TActorSystem::Stop runs on the stop thread, which has no activation context (YDBCORES-20).
+NActors::TActorSystem* ActorSystemIfActivated() {
+    if (!NActors::TlsActivationContext) {
+        return nullptr;
+    }
+    return NActors::TActivationContext::ActorSystem();
+}
+
 void SendToOverloadManager(NActors::IEventBase* event) {
-    auto* actorSystem = NActors::TActivationContext::ActorSystem();
+    auto* actorSystem = ActorSystemIfActivated();
     if (!actorSystem) {
         delete event;
         return;
@@ -26,7 +35,7 @@ void SendToOverloadManager(NActors::IEventBase* event) {
 }
 
 bool TrySendToOverloadManager(NActors::IEventBase* event) {
-    auto* actorSystem = NActors::TActivationContext::ActorSystem();
+    auto* actorSystem = ActorSystemIfActivated();
     if (!actorSystem) {
         delete event;
         return false;

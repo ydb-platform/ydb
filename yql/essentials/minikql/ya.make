@@ -74,6 +74,7 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/core/issue
     yql/essentials/minikql/dom
+    yql/essentials/minikql/datetime
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue

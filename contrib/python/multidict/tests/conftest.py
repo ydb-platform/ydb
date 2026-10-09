@@ -20,6 +20,26 @@ from multidict import (
 
 C_EXT_MARK = pytest.mark.c_extension
 
+try:
+    from hypothesis import HealthCheck, settings
+except ImportError:
+    # Not installed (e.g. PyPy, where a pinned hypothesis release may have
+    # no wheel and can't be built from source): the hypothesis-marked tests
+    # each skip themselves via `pytest.importorskip("hypothesis")`, so
+    # there's nothing to configure here.
+    pass
+else:
+    # The C-extension and pure-Python legs run the same properties at very
+    # different speeds, and the threaded fuzz tests spawn real OS threads,
+    # so a fixed per-example deadline is more likely to flake than to catch
+    # anything.
+    settings.register_profile(
+        "multidict",
+        deadline=None,
+        suppress_health_check=[HealthCheck.too_slow],
+    )
+    settings.load_profile("multidict")
+
 
 @dataclass(frozen=True)
 class MultidictImplementation:

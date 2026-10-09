@@ -240,7 +240,7 @@ TConclusion<std::shared_ptr<TConstProcessor>> TProgramBuilder::MakeConstant(
         case TId::kBytes: {
             TString str = constant.GetBytes();
             return std::make_shared<TConstProcessor>(
-                std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)str.data(), str.size()), arrow::binary()),
+                std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(str.data(), str.size())) /* owning: str is a local copy */, arrow::binary()),
                 name.GetColumnId());
         }
         case TId::kText: {

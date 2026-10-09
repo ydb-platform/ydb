@@ -3,6 +3,8 @@
 #include "worker.h"
 #include "service.h"
 
+#include <ydb/core/tx/replication/common/schema_change.h>
+
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
@@ -13,8 +15,91 @@
 
 namespace NKikimr::NReplication::NService {
 
+Y_UNIT_TEST_SUITE(ServiceSchemaProtocol) {
+    using namespace NTestHelpers;
+
+    Y_UNIT_TEST(ReportsMatchControllerIndexMetadataSupport) {
+        for (const bool supportsIndexes : {false, true}) {
+            TEnv env;
+            auto& runtime = env.GetRuntime();
+            const auto edge = env.GetSender();
+            auto topic = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+                new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic",
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .BeginAddConsumer().ConsumerName("consumer").EndAddConsumer()));
+            UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+            env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+                .Name = "Table",
+                .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+            }));
+
+            const auto service = runtime.Register(CreateReplicationService());
+            auto handshake = MakeHolder<TEvService::TEvHandshake>(42, 1);
+            handshake->Record.SetSupportsIndexMetadata(supportsIndexes);
+            runtime.Send(new IEventHandle(service, edge, handshake.Release()));
+            runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge);
+            auto run = MakeHolder<TEvService::TEvRunWorker>();
+            run->Record.MutableController()->SetTabletId(42);
+            run->Record.MutableController()->SetGeneration(1);
+            run->Record.MutableWorker()->SetReplicationId(1);
+            run->Record.MutableWorker()->SetTargetId(1);
+            run->Record.MutableWorker()->SetWorkerId(0);
+            auto* command = run->Record.MutableCommand();
+            command->SetDatabase("/Root");
+            auto* reader = command->MutableRemoteTopicReader();
+            auto* connection = reader->MutableConnectionParams();
+            connection->SetEndpoint(env.GetEndpoint());
+            connection->SetDatabase(env.GetDatabase());
+            connection->MutableOAuthToken()->SetToken("root@builtin");
+            reader->SetTopicPath("/Root/topic");
+            reader->SetConsumerName("consumer");
+            reader->SetTopicPartitionId(0);
+            env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
+            runtime.Send(new IEventHandle(service, edge, run.Release()));
+            runtime.GrabEdgeEvent<TEvService::TEvWorkerStatus>(edge);
+            UNIT_ASSERT(WriteTopic(env, "/Root/topic", R"json({
+                "tableChanges": [{"table": {
+                    "schemaVersion": 2,
+                    "indexes": {},
+                    "columns": {"key": {"type": "Uint32"}, "value": {"type": "Utf8"}},
+                    "primaryKeyColumnNames": ["key"]
+                }}],
+                "ts": [1, 1]
+            })json"));
+            const auto first = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(first->Get()->Record.GetSchema().HasIndexes(), supportsIndexes);
+            auto next = MakeHolder<TEvService::TEvHandshake>(42, 2);
+            next->Record.SetSupportsIndexMetadata(!supportsIndexes);
+            runtime.Send(new IEventHandle(service, edge, next.Release()));
+            runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge);
+            const auto replay = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeReport>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(replay->Get()->Record.GetSchema().HasIndexes(), !supportsIndexes);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(Worker) {
     using namespace NTestHelpers;
+
+    Y_UNIT_TEST(SchemaEqualityAcceptsMissingIndexMetadata) {
+        NKikimrReplication::TSchemaChange legacy;
+        legacy.SetSourceSchemaVersion(1);
+        auto empty = legacy;
+        empty.MutableIndexes();
+        auto indexed = empty;
+        indexed.MutableIndexes()->AddItems()->SetName("by_value");
+        UNIT_ASSERT(IsSameSchemaChange(legacy, empty));
+        UNIT_ASSERT(IsSameSchemaChange(empty, legacy));
+        UNIT_ASSERT(IsSameSchemaChange(legacy, indexed));
+        UNIT_ASSERT(!IsSameSchemaChange(empty, indexed));
+        auto conflicting = indexed;
+        conflicting.MutableIndexes()->MutableItems(0)->SetName("other");
+        UNIT_ASSERT(!IsSameSchemaChange(indexed, conflicting));
+        conflicting.ClearIndexes();
+        conflicting.SetSourceSchemaVersion(2);
+        UNIT_ASSERT(!IsSameSchemaChange(indexed, conflicting));
+    }
 
     Y_UNIT_TEST(ReaderRestartBeforeSchemaCheckpointSkipsBufferedReplay) {
         class TWriter final : public TActor<TWriter> {
@@ -842,6 +927,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         schema.MutableVersion()->SetStep(1);
         schema.MutableVersion()->SetTxId(1);
         schema.SetSourceSchemaVersion(1);
+        schema.MutableIndexes();
 
         ui32 writerGeneration = 0;
         TActorId latestReader;
@@ -871,6 +957,7 @@ Y_UNIT_TEST_SUITE(Worker) {
 
         auto release = MakeHolder<TEvService::TEvSchemaChangeResult>();
         release->Record.MutableSchema()->CopyFrom(schema);
+        release->Record.MutableSchema()->ClearIndexes();
         release->Record.SetOffset(42);
         runtime.Send(new IEventHandle(worker, edge, release.Release()));
         runtime.Send(new IEventHandle(worker, edge,

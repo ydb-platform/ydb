@@ -84,6 +84,7 @@ ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_1]
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_30]
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_restart_preserves_max_tasks_per_stage[max_tasks_5]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[default-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_tasks_are_rebalanced_to_new_slots[max_tasks_per_stage_2-True]

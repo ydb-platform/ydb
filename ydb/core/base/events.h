@@ -206,6 +206,8 @@ struct TKikimrEvents : TEvents {
         ES_SERVICE_CONTROL_SERVICE = 4283,
         ES_OPERATION_SERVICE = 4284,
         ES_WASM_COMPILE_CTL = 4285,
+        // 4286 is reserved for IAM delegation node services.
+        ES_IAM_DELEGATION_TABLET = 4287,
     };
 };
 

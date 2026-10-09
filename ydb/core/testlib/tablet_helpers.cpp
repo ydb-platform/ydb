@@ -16,6 +16,7 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/scheme/tablet_scheme.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/iam_delegation/iam_delegation.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
@@ -1366,6 +1367,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &NGraph::CreateGraphShard, DataGroupErasure);
                 } else if (type == TTabletTypes::WasmCompileController) {
                     bootstrapperActorId = Boot(ctx, type, &NUdfStore::CreateWasmCompileController, DataGroupErasure);
+                } else if (type == TTabletTypes::IamDelegation) {
+                    bootstrapperActorId = Boot(ctx, type, &NIamDelegation::CreateIamDelegationTablet, DataGroupErasure);
                 } else {
                     status = NKikimrProto::ERROR;
                 }

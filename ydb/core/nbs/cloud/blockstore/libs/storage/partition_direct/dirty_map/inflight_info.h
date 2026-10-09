@@ -99,6 +99,28 @@ struct TReadSource
 class TInflightInfo: public TDisableCopy
 {
 public:
+    /*
+     * PBufferPendingWrite -- OnWriteWithoutQuorum --> PBufferDiscarded -----+
+     *                                                      erase or barrier |
+     * PBufferPendingWrite -- RestorePBuffer --> PBufferIncompleteWrite      |
+     *                        below quorum         |                         |
+     *                                             | RestorePBuffer          |
+     *                                             | confirms the third copy |
+     *                                             v                         |
+     * PBufferPendingWrite -- OnWritten --> PBufferWritten                   |
+     *                                             |                         |
+     *                                             | RequestFlush            |
+     *                                             v                         |
+     *                                      PBufferFlushing                  |
+     *                                             |                         |
+     *                                             | MaybeAdvanceToFlushed   |
+     *                                             v                         |
+     *                                      PBufferFlushed                   |
+     *                                             |                         |
+     *                                             | erase or barrier        |
+     *                                             v                         |
+     *                                       PBufferErased <-----------------+
+     */
     enum class EState: ui8
     {
         // The lsn is generated but the write has not been acknowledged yet.
@@ -106,9 +128,8 @@ public:
         // concurrent read sees the pre-write data on DDisk, as before).
         PBufferPendingWrite,
 
-        // During the recovery, an item without quorum was detected. It must be
-        // copied to other PBuffers.
-        // Reading will be possible only after receiving a quorum.
+        // Below quorum while the restore list is still being applied. A read
+        // waits. FinishPBufferRestore discards whatever is still below quorum.
         PBufferIncompleteWrite,
 
         // Data written to PBuffers with quorum.
@@ -123,11 +144,14 @@ public:
         // Read from DDisk.
         PBufferFlushed,
 
-        // The data is now being erasing from the PBuffers.
+        // The write got no quorum: the client got an error and this record
+        // will never be flushed to DDisk. The copies that did land still
+        // have to be erased, the same way as after a flush.
         // Read from DDisk.
-        PBufferErasing,
+        PBufferDiscarded,
 
         // Erased from the PBuffers or covered by the restore barrier.
+        // Reached from PBufferFlushed and from PBufferDiscarded.
         // Read from DDisk.
         PBufferErased,
     };
@@ -147,9 +171,30 @@ public:
     // Instance of PBuffer record found on host during recovery.
     void RestorePBuffer(THostIndex host);
 
-    // Transitions a pending write (see the byteCount-only constructor) to the
-    // written state once a quorum of PBuffers confirmed it.
-    void OnWritten(THostMask writeRequested, THostMask writeConfirmed);
+    // The restore list is finished and this record is still below quorum.
+    // Copies that were found are erased by address. Every other host stays
+    // unconfirmed, so the restore barrier finishes the record.
+    void DiscardBelowQuorum(THostMask allHosts);
+
+    // Transitions a pending write to the written state once a quorum of
+    // PBuffers confirmed it. `writeAnswered` are the hosts with no write
+    // request left in flight.
+    void OnWritten(
+        THostMask writeRequested,
+        THostMask writeConfirmed,
+        THostMask writeAnswered);
+
+    // The quorum was not reached and the client got an error. Confirmed
+    // copies still have to be erased. A host that did not confirm is
+    // finished by the restore barrier.
+    void OnWriteWithoutQuorum(
+        THostMask writeRequested,
+        THostMask writeConfirmed,
+        THostMask writeAnswered);
+
+    // Answers that came after the client had been replied to. A belated
+    // success confirms the host, and only then is it erased.
+    void OnBelatedWrite(THostMask completed, THostMask failed);
 
     [[nodiscard]] EState GetState() const;
 
@@ -171,8 +216,7 @@ public:
     void RequestErase(THostIndex host);
     void ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
-    // Enabled hosts where a write was requested but erase is not yet
-    // requested/confirmed.
+    // Enabled hosts that confirmed the write and are not yet erased.
     [[nodiscard]] THostMask GetEraseNeeded() const;
     [[nodiscard]] bool IsDataOnlyInPBuffers() const;
     [[nodiscard]] bool CanBeCoveredByRestoreBarrier() const;
@@ -211,7 +255,13 @@ private:
     void MaybeAdvanceToFlushed();
     void MaybeAdvanceToErased();
     void MaybeQueryErase();
+    [[nodiscard]] bool CanErase() const;
+    // Every requested host confirmed the erase. An unconfirmed host never
+    // does, so the restore barrier is what finishes that record.
     [[nodiscard]] bool AllPBuffersErased() const;
+    // Hosts that were asked to write and have not confirmed it. An error or a
+    // missing answer does not prove that the copy will not land.
+    [[nodiscard]] THostMask HostsWithUnconfirmedWrite() const;
 
     [[nodiscard]] TPBufferKey GetPBufferKey() const;
 
@@ -233,6 +283,7 @@ private:
     THostMask Disabled;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
+    THostMask WriteAnswered;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

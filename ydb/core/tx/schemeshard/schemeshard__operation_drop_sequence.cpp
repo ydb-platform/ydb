@@ -240,9 +240,15 @@ class TDropSequence: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
+=======
+    virtual const char* Name() const override final { return "TDropSequence"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const auto& drop = Transaction.GetDrop();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -380,7 +386,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TDropSequence");
     }
 

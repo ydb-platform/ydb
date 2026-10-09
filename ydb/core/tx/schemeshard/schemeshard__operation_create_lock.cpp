@@ -92,7 +92,13 @@ public:
     {
     }
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TCreateLock"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
         const TTxId lockTxId = op.HasLockTxId()
@@ -205,9 +211,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateLock AbortPropose"
             << ": opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
     }
 

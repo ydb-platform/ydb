@@ -450,7 +450,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 public:
     using TSubOperationWithContext::TSubOperationWithContext;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TIncrementalRestoreFinalizeOp"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         
@@ -489,9 +495,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TIncrementalRestoreFinalizeOp AbortPropose"
             << ", opId: " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

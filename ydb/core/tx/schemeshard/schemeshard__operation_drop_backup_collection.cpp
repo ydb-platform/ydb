@@ -278,7 +278,7 @@ class TDropBackupCollection : public TSubOperation {
         backupCollection->LastTxId = OperationId.GetTxId();
     }
 
-    void PersistDropBackupCollection(const TOperationContext& context, const TPath& dstPath) const {
+    void PersistDropBackupCollection(const TProposeContext& context, const TPath& dstPath) const {
         const TPathId& pathId = dstPath.Base()->PathId;
 
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
@@ -347,7 +347,7 @@ class TDropBackupCollection : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
@@ -448,8 +448,13 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TDropBackupCollection AbortPropose: opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

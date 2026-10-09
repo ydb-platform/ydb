@@ -205,9 +205,9 @@ public:
 
     THolder<TProposeResponse> Propose(
         const TString& owner,
-        TOperationContext& context) override;
+        TProposeContext& context) override;
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateFileStore");
     }
 
@@ -275,7 +275,7 @@ private:
 
 THolder<TProposeResponse> TCreateFileStore::Propose(
     const TString& owner,
-    TOperationContext& context)
+    TProposeContext& context)
 {
     const auto ssId = context.SS->SelfTabletId();
 

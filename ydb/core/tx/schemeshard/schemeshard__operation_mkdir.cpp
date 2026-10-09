@@ -103,7 +103,13 @@ class TMkDir: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TMkDir"; }
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const auto ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -282,11 +288,16 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                   "MkDir AbortPropose"
                        << ", opId: " << OperationId
                        << ", at schemeshard: " << context.SS->TabletID());
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

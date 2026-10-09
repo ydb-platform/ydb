@@ -19,5 +19,5 @@ Edit `manifest.json`; the `contract` target validates it and generates only
 never appear in the manifest. The guest uses these constants.
 
 Register the built artifact and unchanged `manifest.json` in
-`WasmServices.Modules`, and point an operator-owned binding at the HTTP echo endpoint. No Profile knowledge
+`WasmServices.Modules`, and create an FQ `ExternalService` connection for the HTTP echo endpoint. No Profile knowledge
 or module-specific changes are needed in FQ or the async runtime.

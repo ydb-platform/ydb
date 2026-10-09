@@ -1,22 +1,25 @@
 import concurrent.futures
 import http.server
 import json
+import ssl
 import threading
 
 import grpc
 import pytest
 import yatest.common
 
+from ydb.public.api.protos.draft import fq_pb2 as fq
 from ydb.udfs.wasm.profile.proto.schema import profile_pb2
 from ydb.tests.tools.fq_runner.custom_hooks import *  # noqa: F401,F403
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
+from ydb.tests.library.harness.tls_tools import generate_selfsigned_cert
 from ydb.tests.tools.fq_runner.kikimr_utils import (
     DefaultConfigExtension, ComputeExtension, ExtensionPoint, YQv2Extension, start_kikimr,
 )
 
 
 class MockServices:
-    def __init__(self):
+    def __init__(self, tls=False):
         self.requests = []
         self.lock = threading.Lock()
         self.started = threading.Event()
@@ -59,6 +62,21 @@ class MockServices:
                 pass
 
         self.http = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.tls = tls
+        self.ca_certificate = ''
+        cert, key = (b'', b'')
+        if tls:
+            cert, key = generate_selfsigned_cert('localhost')
+            self.ca_certificate = cert.decode()
+            cert_path = yatest.common.output_path('mock-service.crt')
+            key_path = yatest.common.output_path('mock-service.key')
+            with open(cert_path, 'wb') as output:
+                output.write(cert)
+            with open(key_path, 'wb') as output:
+                output.write(key)
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(cert_path, key_path)
+            self.http.socket = context.wrap_socket(self.http.socket, server_side=True)
         self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
         self.thread.start()
         self.grpc = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2))
@@ -70,7 +88,8 @@ class MockServices:
                 self.lookup_batch, request_deserializer=profile_pb2.ProfileBatchRequest.FromString,
                 response_serializer=profile_pb2.ProfileBatchReply.SerializeToString,
             )}),))
-        self.grpc_port = self.grpc.add_insecure_port('127.0.0.1:0')
+        self.grpc_port = self.grpc.add_secure_port('127.0.0.1:0', grpc.ssl_server_credentials(((key, cert),))) if tls else \
+            self.grpc.add_insecure_port('127.0.0.1:0')
         self.grpc.start()
 
     def lookup(self, request, context):
@@ -106,8 +125,7 @@ class MockServices:
 
 
 class WasmExtension(ExtensionPoint):
-    def __init__(self, services, timeout_ms, batch_config):
-        self.services = services
+    def __init__(self, timeout_ms, batch_config):
         self.timeout_ms = timeout_ms
         self.batch_config = batch_config
 
@@ -129,19 +147,7 @@ class WasmExtension(ExtensionPoint):
             'call_timeout_ms': self.timeout_ms,
             'max_batch_rows': self.batch_config.get('rows', 1),
             'max_batch_bytes': self.batch_config.get('bytes', 32768),
-            'bindings': [
-                {'alias': 'profiles_http', 'endpoint': f'http://127.0.0.1:{self.services.http.server_port}/profile',
-                 'headers': {'Authorization': 'Bearer host-secret'}},
-                {'alias': 'profiles_grpc', 'protocol': 'GRPC', 'endpoint': f'127.0.0.1:{self.services.grpc_port}',
-                 'method': '/NFq.NWasmServices.NTest.MockService/Lookup', 'grpc_insecure': True,
-                 'headers': {'authorization': 'Bearer host-secret'}},
-                {'alias': 'echo_http', 'endpoint': f'http://127.0.0.1:{self.services.http.server_port}/echo',
-                 'headers': {'Authorization': 'Bearer host-secret', 'Content-Type': 'application/octet-stream'}},
-            ],
         }
-        if self.batch_config.get('rows', 1) > 1:
-            config['bindings'][0]['endpoint'] += '/batch'
-            config['bindings'][1]['method'] += 'Batch'
         if self.batch_config.get('echo_small_result_limit'):
             with open(config['modules'][1]['manifest_path']) as source:
                 manifest = json.load(source)
@@ -152,11 +158,12 @@ class WasmExtension(ExtensionPoint):
             config['modules'][1]['manifest_path'] = path
         for tenant in kikimr.tenants.values():
             tenant.fq_config['wasm_services'] = config
+        kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('EXTERNAL_SERVICE')
 
 
 @pytest.fixture
-def services():
-    mock = MockServices()
+def services(request):
+    mock = MockServices(tls=getattr(request, 'param', False))
     try:
         yield mock
     finally:
@@ -172,12 +179,30 @@ def batch_config(request):
 def kikimr(request, services, yq_version, batch_config):
     timeout = 200 if 'deadline' in request.node.originalname else 30000
     extensions = [DefaultConfigExtension(''), YQv2Extension(yq_version), ComputeExtension(),
-                  WasmExtension(services, timeout, batch_config)]
+                  WasmExtension(timeout, batch_config)]
     with start_kikimr(request, extensions) as cluster:
         cluster.control_plane.wait_bootstrap(1)
         yield cluster
 
 
 @pytest.fixture
-def client(kikimr):
-    return FederatedQueryClient('my_folder', streaming_over_kikimr=kikimr)
+def client(kikimr, services, batch_config):
+    client = FederatedQueryClient('my_folder', streaming_over_kikimr=kikimr)
+    batch = batch_config.get('rows', 1) > 1
+    host = 'localhost' if services.tls else '127.0.0.1'
+    scheme = 'https' if services.tls else 'http'
+    client.create_external_service_connection(
+        'profiles_http', f'{scheme}://{host}:{services.http.server_port}/profile' + ('/batch' if batch else ''),
+        insecure=not services.tls, ca_certificate=services.ca_certificate, token='host-secret',
+    )
+    client.create_external_service_connection(
+        'profiles_grpc', f'{host}:{services.grpc_port}', protocol=fq.ExternalService.GRPC,
+        method='/NFq.NWasmServices.NTest.MockService/Lookup' + ('Batch' if batch else ''),
+        insecure=not services.tls, ca_certificate=services.ca_certificate, token='host-secret',
+    )
+    client.create_external_service_connection(
+        'echo_http', f'{scheme}://{host}:{services.http.server_port}/echo', insecure=not services.tls,
+        ca_certificate=services.ca_certificate, token='host-secret',
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+    return client

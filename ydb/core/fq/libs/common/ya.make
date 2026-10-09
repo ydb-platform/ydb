@@ -7,6 +7,8 @@ SRCS(
     debug_info.cpp
     entity_id.cpp
     entity_id.h
+    external_service.cpp
+    external_service.h
     iceberg_processor.cpp
     iceberg_processor.h
     rows_proto_splitter.cpp
@@ -16,6 +18,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/uri
+    ydb/core/fq/libs/config
     ydb/core/fq/libs/control_plane_storage/events
     ydb/core/fq/libs/events
     ydb/public/api/protos

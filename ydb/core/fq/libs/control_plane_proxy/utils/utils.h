@@ -43,6 +43,8 @@ TString ExtractServiceAccountIdWithConnection(const T& setting) {
     case FederatedQuery::ConnectionSetting::kIceberg: {
         return GetServiceAccountId(setting.iceberg().warehouse_auth());
     }
+    case FederatedQuery::ConnectionSetting::kExternalService:
+        return GetServiceAccountId(setting.external_service().auth());
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;

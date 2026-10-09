@@ -240,6 +240,8 @@ TString MakeCreateExternalDataSourceQuery(
 
     TString properties;
     switch (connectionContent.setting().connection_case()) {
+        case FederatedQuery::ConnectionSetting::kExternalService:
+            ythrow yexception() << "External service connections require FQ in-place compute";
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         case FederatedQuery::ConnectionSetting::kYdbDatabase:
             properties = fmt::format(

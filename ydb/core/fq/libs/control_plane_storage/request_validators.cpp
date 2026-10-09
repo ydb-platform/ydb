@@ -1,4 +1,5 @@
 #include <ydb/core/fq/libs/common/iceberg_processor.h>
+#include <ydb/core/fq/libs/common/external_service.h>
 
 #include "request_validators.h"
 
@@ -152,6 +153,10 @@ NYql::TIssues ValidateConnectionSetting(
     case FederatedQuery::ConnectionSetting::kIceberg: {
         TIcebergProcessor p(setting.iceberg(), issues);
         p.Process();
+        break;
+    }
+    case FederatedQuery::ConnectionSetting::kExternalService: {
+        issues.AddIssues(ValidateExternalService(setting.external_service(), disableCurrentIam));
         break;
     }
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET: {

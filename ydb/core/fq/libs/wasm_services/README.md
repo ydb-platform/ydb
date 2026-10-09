@@ -33,22 +33,39 @@ WasmServices {
   MaxBufferedRows: 65536
   MaxBufferedBytes: 67108864
   CallTimeoutMs: 30000
-  Bindings {
-    Alias: "profiles_http"
-    Protocol: HTTP
-    Endpoint: "https://profiles.example.test/profile/batch"
-    CaFile: "/absolute/path/ca.pem"
-    Headers { key: "Content-Type" value: "application/json" }
-    Headers { key: "Authorization" value: "Bearer operator-owned-token" }
-  }
-  Bindings {
-    Alias: "echo_http"
-    Protocol: HTTP
-    Endpoint: "http://127.0.0.1:8080/echo"
-    Headers { key: "Content-Type" value: "application/octet-stream" }
+}
+```
+
+Enable `EXTERNAL_SERVICE` in the existing control-plane storage connection-type
+allowlist (`AvailableConnection`). Create connections through the ordinary FQ
+`CreateConnection` API; no endpoint or credentials belong in `WasmServices`:
+
+```protobuf
+content {
+  name: "profiles_http"
+  acl { visibility: PRIVATE }
+  setting {
+    external_service {
+      protocol: HTTP
+      endpoint: "https://profiles.example.test/profile/batch"
+      method: "POST"
+      auth { token { token: "host-owned-token" } }
+      headers { key: "Content-Type" value: "application/json" }
+      // Optional PEM trust roots, not a path to a file on the FQ server.
+      ca_certificate: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+    }
   }
 }
 ```
+
+For gRPC use `protocol: GRPC`, `endpoint: "host:port"`, and
+`method: "/package.Service/Method"`. TLS is the default; plaintext requires
+`insecure: true` for either protocol. For HTTP the URL scheme must match this
+flag. TLS verification cannot be disabled. `auth.none`, `auth.token` and
+`auth.current_iam` are supported; service-account auth is explicitly rejected
+until asynchronous initial token acquisition is integrated. Authorization is
+derived from `auth`, never a user-supplied header override. Extra headers are
+sensitive and, like bearer tokens, omitted from public connection responses.
 
 `ModulePath` is retained as a single-module configuration shorthand: it requires
 an adjacent `<ModulePath>.manifest.json`. Do not combine it with `Modules`.
@@ -67,7 +84,7 @@ SELECT id, name, score FROM $profiles;
 
 For another module, select its manifest name/method and declared schemas, e.g.
 `EXTERNAL FUNCTION('Echo', 'Echo')`; see `ydb/udfs/wasm/echo/query.sql`.
-Unknown modules/methods/aliases, mismatched row schemas and invalid manifests
+Unknown modules/methods/connections, mismatched row schemas and invalid manifests
 fail registration/query resolution before network dispatch.
 Execution byte/batch limits are checked for the selected method, so an unused
 method with a larger declared row does not disable unrelated modules.
@@ -77,9 +94,17 @@ method with a larger declared row does not disable unrelated modules.
 Each transform owns a compartment, async runtime and native transport. All
 guest entries happen on its actor mailbox; native completions only wake it.
 Pending I/O frees the calling thread. Query teardown cancels calls and drains
-physical native I/O. Endpoints, CA files, methods and credentials stay on the
-host; plans contain module/method/alias identities and guests receive only a
+physical native I/O. Endpoints, PEM roots, methods and credentials stay on the
+host; plans contain module/method/connection identities and guests receive only a
 binding index, protocol and bounded row bytes.
+
+The gateway resolves connection names only against the query's FQ connection
+snapshot, selected by existing scope/visibility rules. Private/public name
+priority is unchanged. Only connections referenced by output transforms are
+sent to compute actors through the existing private `SecureParams` channel;
+credentials are not added to saved graphs, public AST/plans or guest buffers.
+Modifying a connection affects subsequently submitted queries, not an already
+running query's snapshot. Streaming connections remain disabled for this type.
 
 `MaxBatchRows` zero/one selects scalar mode; 2..64 requests batching. Selected
 methods must declare batch support. Cardinality is capped by the method limit,
@@ -104,8 +129,8 @@ Native transport additionally reserves request/response copies and releases
 leases only after physical request handles/buffers are destroyed.
 
 The clients use one curl multi worker for HTTP/timers and one gRPC completion
-queue worker. TLS certificates/hostnames are checked; optional CA files are
-operator-owned. Plaintext gRPC requires explicit `GrpcInsecure: true`.
+queue worker. TLS certificates/hostnames are checked; optional PEM trust roots
+come from the connection entity. Plaintext requires explicit `insecure: true`.
 Redirects, ambient proxies and application/gRPC retries are disabled.
 Diagnostics contain fixed text and numeric error classes, never service
 payloads, endpoints or credentials. The production HTTP gateway choice remains
@@ -127,7 +152,8 @@ in `ydb/udfs/wasm/profile/README.md` and `ydb/udfs/wasm/echo/README.md`.
 This remains opt-in analytical FQ/DQ v1, not KQP/YQv2, synchronous robust UDF
 calls or the production WASM object ABI. Streaming/checkpoints, nested/optional
 row types, Arrow, parallel batches, automatic retries and replay guarantees
-are not implemented. Metadata ACLs, credential refresh, module identity/version
+are not implemented. Service-account credentials/refresh, module identity/version
 pinning, connection-aware pooling and production tenant resource accounting
-remain separate gates. Enabling the prototype grants analytical query users
-access to configured aliases; keep it disabled on shared production tenants.
+remain separate gates. Arbitrary service endpoints need an operator-controlled
+egress policy before enabling this on shared production tenants. This does not
+add KQP external data sources or a network probe to the `TestConnection` API.

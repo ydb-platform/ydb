@@ -4,6 +4,8 @@
 #include <ydb/udfs/wasm/echo/contract/service_methods.h>
 #include <ydb/core/fq/libs/wasm_services/query/manifest.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
+#include <ydb/core/fq/libs/common/external_service.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/mock.grpc.pb.h>
 #include <ydb/udfs/wasm/profile/proto/schema/profile.pb.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
@@ -29,7 +31,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <grpcpp/grpcpp.h>
+#include <google/protobuf/util/json_util.h>
 
+#include <util/charset/utf8.h>
 #include <util/stream/str.h>
 #include <util/stream/file.h>
 #include <util/stream/zlib.h>
@@ -627,6 +631,22 @@ class TProfileConsumer final : public NYql::NDq::IDqOutputConsumer {
     std::shared_ptr<TQueryOutput> Output;
 };
 
+FederatedQuery::Connection TestServiceConnection(const TString& name = "service") {
+    FederatedQuery::Connection connection;
+    connection.mutable_meta()->set_id(name);
+    connection.mutable_content()->set_name(name);
+    auto* service = connection.mutable_content()->mutable_setting()->mutable_external_service();
+    service->set_protocol(FederatedQuery::ExternalService::HTTP);
+    service->set_endpoint("http://unused");
+    service->set_insecure(true);
+    service->mutable_auth()->mutable_none();
+    return connection;
+}
+
+THashMap<TString, FederatedQuery::Connection> TestServiceConnections(const TString& name = "service") {
+    return {{name, TestServiceConnection(name)}};
+}
+
 struct TQueryTransformEnv {
     TTempFile Module;
     TTempFile Manifest;
@@ -635,7 +655,7 @@ struct TQueryTransformEnv {
     NYql::NDq::TFakeCASetup Setup;
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0,
-                       ui32 maxBufferedRows = 65536, ui64 maxBufferedBytes = 0)
+                       ui32 maxBufferedRows = 65536, ui64 maxBufferedBytes = 0, bool grpcInsecure = true)
         : Module(MakeTempName()), Manifest(MakeTempName())
     {
         TFileOutput(Module.Name()).Write(NResource::Find("/fq_transport_coroutine.wasm"));
@@ -650,19 +670,26 @@ struct TQueryTransformEnv {
         config.SetMaxBatchBytes(batchBytes);
         config.SetMaxBufferedRows(maxBufferedRows);
         config.SetMaxBufferedBytes(maxBufferedBytes);
-        auto* entry = config.AddBindings();
-        entry->SetAlias("profiles");
-        entry->SetEndpoint(binding.Endpoint);
-        entry->SetMethod(binding.Method);
-        for (const auto& [key, value] : binding.Headers)
-            (*entry->MutableHeaders())[key] = value;
-        if (binding.Protocol == EProtocol::Grpc) {
-            entry->SetProtocol(NFq::NConfig::TWasmServicesConfig::TBinding::GRPC);
-            entry->SetGrpcInsecure(true);
-            if (batchRows > 1)
-                entry->SetMethod(binding.Method + "Batch");
+        auto connection = TestServiceConnection("profiles");
+        auto* entry = connection.mutable_content()->mutable_setting()->mutable_external_service();
+        entry->set_endpoint(binding.Endpoint);
+        entry->set_method(binding.Method);
+        entry->set_ca_certificate(binding.CaCertificate);
+        if (!binding.CaFile.empty())
+            entry->set_ca_certificate(TFileInput(binding.CaFile).ReadAll());
+        entry->set_insecure(binding.Protocol == EProtocol::Grpc ? grpcInsecure : binding.Endpoint.StartsWith("http://"));
+        for (const auto& [key, value] : binding.Headers) {
+            if (key == "Authorization" || key == "authorization")
+                entry->mutable_auth()->mutable_token()->set_token(value.substr(7));
+            else
+                (*entry->mutable_headers())[key] = value;
         }
-        auto gateway = CreateServiceGatewayFactory(config);
+        if (binding.Protocol == EProtocol::Grpc) {
+            entry->set_protocol(FederatedQuery::ExternalService::GRPC);
+            if (batchRows > 1)
+                entry->set_method(binding.Method + "Batch");
+        }
+        auto gateway = CreateServiceGatewayFactory(config, {{"profiles", connection}});
         auto description =
             gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "profiles")->ResolveFunction({}, "Profile").GetValueSync();
         UNIT_ASSERT_STRING_CONTAINS(description.InvokeUrl, "profiles");
@@ -685,6 +712,7 @@ struct TQueryTransformEnv {
             settings.SetInvokeUrl(description.InvokeUrl);
             desc.MutableTransform()->MutableSettings()->PackFrom(settings);
             THashMap<TString, TString> params;
+            params[ServiceConnectionKey("profiles")] = PrepareServiceConnection(connection, {});
             auto [sink, sinkActor] = Factory.CreateDqOutputTransform(
                 {.OutputDesc = desc, .OutputIndex = 0, .StatsLevel = NYql::NDq::None, .TxId = {}, .TaskId = 1,
                  .TransformOutput = new TProfileConsumer(Output),
@@ -851,36 +879,87 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         TFileOutput(echo.Name()).Write(NResource::Find("/ydb/udfs/wasm/echo/manifest.json"));
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
-        auto* binding = config.AddBindings();
-        binding->SetAlias("service");
-        binding->SetEndpoint("http://unused");
         for (const auto& manifest : {profile.Name(), echo.Name()}) {
             auto* module = config.AddModules();
             module->SetModulePath("unused");
             module->SetManifestPath(manifest);
         }
-        const auto factory = CreateServiceGatewayFactory(config);
+        const auto factory = CreateServiceGatewayFactory(config, TestServiceConnections());
         auto gateway = factory->CreateDqFunctionGateway("Echo", {}, "service");
         const auto description = gateway->ResolveFunction({}, "Length").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(description.Type, "Echo");
         UNIT_ASSERT_STRING_CONTAINS(description.InvokeUrl, "Length");
         UNIT_ASSERT_EXCEPTION(gateway->ResolveFunction({}, "Profile"), yexception);
         UNIT_ASSERT_EXCEPTION(factory->CreateDqFunctionGateway("Echo", {}, "missing"), yexception);
+        const auto hidden = CreateServiceGatewayFactory(config, {});
+        UNIT_ASSERT_EXCEPTION(hidden->CreateDqFunctionGateway("Echo", {}, "service"), yexception);
+        auto wrongType = TestServiceConnections();
+        wrongType.at("service").mutable_content()->mutable_setting()->mutable_monitoring();
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config, wrongType)->CreateDqFunctionGateway("Echo", {}, "service"), yexception);
+        UNIT_ASSERT(!description.InvokeUrl.Contains("http://"));
         config.MutableModules(1)->SetManifestPath(profile.Name());
-        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config, TestServiceConnections()), yexception);
         config.MutableModules(1)->SetManifestPath(echo.Name());
         config.SetMaxBufferedBytes(1);
         UNIT_ASSERT_EXCEPTION(
-            CreateServiceGatewayFactory(config)->CreateDqFunctionGateway("Echo", {}, "service")->ResolveFunction({}, "Echo"), yexception);
+            CreateServiceGatewayFactory(config, TestServiceConnections())->CreateDqFunctionGateway("Echo", {}, "service")->ResolveFunction({}, "Echo"), yexception);
         config.SetMaxBufferedBytes(0);
         config.SetMaxBatchBytes(592);
-        const auto limited = CreateServiceGatewayFactory(config);
+        const auto limited = CreateServiceGatewayFactory(config, TestServiceConnections());
         UNIT_ASSERT(limited->CreateDqFunctionGateway("WASM_PROFILE", {}, "service")->ResolveFunction({}, "Profile").GetValueSync().Type ==
                     "WASM_PROFILE");
         UNIT_ASSERT_EXCEPTION(limited->CreateDqFunctionGateway("Echo", {}, "service")->ResolveFunction({}, "Echo"), yexception);
         config.SetMaxBatchBytes(0);
         config.SetModulePath("ambiguous");
-        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config, TestServiceConnections()), yexception);
+    }
+
+    Y_UNIT_TEST(ExternalServiceValidationAndCredentialIsolation) {
+        auto connection = TestServiceConnection("profiles");
+        auto& service = *connection.mutable_content()->mutable_setting()->mutable_external_service();
+        UNIT_ASSERT(NFq::ValidateExternalService(service, false).Empty());
+        service.set_insecure(false);
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
+        service.set_endpoint("https://service.test/profile");
+        UNIT_ASSERT(NFq::ValidateExternalService(service, false).Empty());
+        for (const auto& url : {"https://user:secret@service.test/profile", "https:///profile", "file:///etc/passwd",
+                                "https://service.test/#fragment", "https://service.test/\r\n"}) {
+            service.set_endpoint(url);
+            UNIT_ASSERT_C(!NFq::ValidateExternalService(service, false).Empty(), url);
+        }
+        service.set_endpoint("https://service.test/profile");
+        service.mutable_auth()->mutable_current_iam();
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, true).Empty());
+        UNIT_ASSERT_EXCEPTION(PrepareServiceConnection(connection, {}), yexception);
+        FederatedQuery::ExternalService resolved;
+        service.set_ca_certificate(TString(4096, 'A'));
+        const auto prepared = PrepareServiceConnection(connection, "host-secret");
+        UNIT_ASSERT(IsUtf(prepared));
+        google::protobuf::StringValue envelope;
+        envelope.set_value(prepared);
+        google::protobuf::StringValue received;
+        UNIT_ASSERT(received.ParseFromString(envelope.SerializeAsString()));
+        UNIT_ASSERT(google::protobuf::util::JsonStringToMessage(received.value(), &resolved).ok());
+        UNIT_ASSERT_VALUES_EQUAL(resolved.ca_certificate(), service.ca_certificate());
+        UNIT_ASSERT_VALUES_EQUAL(resolved.auth().token().token(), "host-secret");
+        UNIT_ASSERT(service.auth().has_current_iam());
+        service.mutable_auth()->mutable_token()->set_token("host-secret");
+        (*service.mutable_headers())["X-Api-Key"] = "header-secret";
+        const auto printed = NKikimr::SecureDebugString(connection);
+        UNIT_ASSERT(!printed.Contains("host-secret"));
+        UNIT_ASSERT(!printed.Contains("header-secret"));
+        (*service.mutable_headers())["Authorization"] = "override";
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
+        service.clear_headers();
+        service.mutable_auth()->mutable_service_account()->set_id("service-account");
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
+        service.mutable_auth()->mutable_none();
+        service.set_protocol(FederatedQuery::ExternalService::GRPC);
+        service.set_endpoint("localhost:443");
+        service.set_method("/package.Service/Call");
+        UNIT_ASSERT(NFq::ValidateExternalService(service, false).Empty());
+        service.set_endpoint("dns:///localhost:443");
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
     }
 
     Y_UNIT_TEST(ServiceRowWireBounds) {
@@ -921,10 +1000,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         NFq::NConfig::TWasmServicesConfig config;
         config.SetEnabled(true);
         config.SetModulePath(artifact.Name());
-        auto* binding = config.AddBindings();
-        binding->SetAlias("service");
-        binding->SetEndpoint("http://unused");
-        const auto factory = CreateServiceGatewayFactory(config);
+        const auto factory = CreateServiceGatewayFactory(config, TestServiceConnections());
         UNIT_ASSERT_VALUES_EQUAL(
             factory->CreateDqFunctionGateway("WASM_PROFILE", {}, "service")->ResolveFunction({}, "Profile").GetValueSync().Type,
             "WASM_PROFILE");
@@ -1137,18 +1213,15 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         auto* module = config.AddModules();
         module->SetModulePath("unused");
         module->SetManifestPath(manifest.Name());
-        auto* binding = config.AddBindings();
-        binding->SetAlias("profiles");
-        binding->SetEndpoint("http://unused");
         config.SetMaxBatchRows(MaxProfileBatchRows + 1);
-        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config, TestServiceConnections("profiles")), yexception);
         config.SetMaxBatchRows(2);
         config.SetMaxBatchBytes(sizeof(TProfileBatchHeader) + sizeof(TProfileResult) - 1);
         UNIT_ASSERT_EXCEPTION(
-            CreateServiceGatewayFactory(config)->CreateDqFunctionGateway("WASM_PROFILE", {}, "profiles")->ResolveFunction({}, "Profile"),
+            CreateServiceGatewayFactory(config, TestServiceConnections("profiles"))->CreateDqFunctionGateway("WASM_PROFILE", {}, "profiles")->ResolveFunction({}, "Profile"),
             yexception);
         config.SetMaxBatchBytes(MaxProfileBatchBytes + 1);
-        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config), yexception);
+        UNIT_ASSERT_EXCEPTION(CreateServiceGatewayFactory(config, TestServiceConnections("profiles")), yexception);
     }
 
     Y_UNIT_TEST(DqProfileHttpBackpressureAndTypedRows) {
@@ -1256,6 +1329,40 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         auto [hostnameStatus, hostnameHeader] = perform(wrongHostnameServer, true, false);
         UNIT_ASSERT(hostnameStatus == EOperationStatus::Failed);
         UNIT_ASSERT(hostnameHeader.Error == EClientError::Tls);
+    }
+
+    Y_UNIT_TEST(DqConnectionHttpTlsPemRoots) {
+        THttpTlsMock http;
+        TBinding binding;
+        binding.Endpoint = http.Url();
+        binding.CaCertificate = http.Ca.Certificate;
+        TQueryTransformEnv env(binding);
+        env.Start();
+        http.ReplyOnce("{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1}");
+        Eventually([&] { return env.Output->Finished.load(); });
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 1);
+    }
+
+    Y_UNIT_TEST(DqConnectionGrpcTlsPemRoots) {
+        using namespace NKikimr::NCertTestUtils;
+        const auto ca = GenerateCA(TProps::AsCA().WithValid(TDuration::Days(1)));
+        const auto cert = GenerateSignedCert(ca, TProps::AsServer().WithValid(TDuration::Days(1)));
+        grpc::SslServerCredentialsOptions options;
+        grpc::SslServerCredentialsOptions::PemKeyCertPair keyCert;
+        keyCert.private_key = cert.PrivateKey;
+        keyCert.cert_chain = cert.Certificate;
+        options.pem_key_cert_pairs.push_back(std::move(keyCert));
+        TGrpcMock grpc(grpc::SslServerCredentials(options));
+        THttpMock http;
+        auto binding = Bindings(http, grpc)[3];
+        binding.Endpoint = TStringBuilder() << "localhost:" << TStringBuf(binding.Endpoint).RNextTok(':');
+        binding.CaCertificate = ca.Certificate;
+        TQueryTransformEnv env(binding, 5000, 1, 0, 65536, 0, false);
+        env.Start();
+        grpc.State->Wait();
+        grpc.State->Reply(0, GrpcProfilePayload(), 0);
+        Eventually([&] { return env.Output->Finished.load(); });
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 1);
     }
 
     Y_UNIT_TEST(TypedGrpcTlsTrustAndUntrustedCa) {

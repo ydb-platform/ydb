@@ -47,6 +47,9 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
         break;
     case FederatedQuery::ConnectionSetting::kIceberg:
         break;
+    case FederatedQuery::ConnectionSetting::kExternalService:
+        setting.mutable_external_service()->clear_headers();
+        break;
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;
     }

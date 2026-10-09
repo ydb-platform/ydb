@@ -3,6 +3,7 @@ import struct
 
 from ydb.public.api.protos.draft import fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
+from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
 
 
 def query(alias, id=42):
@@ -195,7 +196,164 @@ def test_empty_input_has_no_network_access(client, services, yq_version):
 def test_unknown_alias_has_no_network_access(client, services, yq_version):
     query_id = start(client, query('missing'))
     client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-    assert 'Unknown WASM service connection alias' in str(client.describe_query(query_id).result.query.issue)
+    assert 'Unknown or inaccessible external service connection' in str(client.describe_query(query_id).result.query.issue)
+    assert not services.requests
+
+
+@yq_v1
+@pytest.mark.parametrize('services', [True], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_connection_tls(client, services, protocol, yq_version):
+    query_id = start(client, query(f'profiles_{protocol}'))
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    assert services.requests == [(protocol, 42, 'Bearer host-secret')]
+
+
+@yq_v1
+@pytest.mark.parametrize('services', [True], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_connection_untrusted_tls(client, services, protocol, yq_version):
+    endpoint = f'https://localhost:{services.http.server_port}/profile' if protocol == 'http' else f'localhost:{services.grpc_port}'
+    client.create_external_service_connection(
+        'untrusted', endpoint, protocol=fq.ExternalService.HTTP if protocol == 'http' else fq.ExternalService.GRPC,
+        method='' if protocol == 'http' else '/NFq.NWasmServices.NTest.MockService/Lookup', token='host-secret',
+    )
+    query_id = start(client, query('untrusted'))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert 'WASM service failed' in str(client.describe_query(query_id).result.query.issue)
+    assert not services.requests
+    assert 'host-secret' not in str(client.describe_query(query_id).result.query)
+
+
+@yq_v1
+@pytest.mark.parametrize('services', [True], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_connection_tls_hostname_verification(client, services, protocol, yq_version):
+    endpoint = f'https://127.0.0.1:{services.http.server_port}/profile' if protocol == 'http' else f'127.0.0.1:{services.grpc_port}'
+    client.create_external_service_connection(
+        'wrong_hostname', endpoint, protocol=fq.ExternalService.HTTP if protocol == 'http' else fq.ExternalService.GRPC,
+        method='' if protocol == 'http' else '/NFq.NWasmServices.NTest.MockService/Lookup',
+        ca_certificate=services.ca_certificate, token='host-secret',
+    )
+    query_id = start(client, query('wrong_hostname'))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert 'WASM service failed' in str(client.describe_query(query_id).result.query.issue)
+    assert not services.requests
+
+
+@yq_v1
+def test_connection_scope_isolation(client, kikimr, services, yq_version):
+    other = FederatedQueryClient('other_folder', streaming_over_kikimr=kikimr)
+    query_id = start(other, query('profiles_http'))
+    other.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert 'Unknown or inaccessible external service connection' in str(other.describe_query(query_id).result.query.issue)
+    assert not services.requests
+
+
+@yq_v1
+def test_connection_private_visibility(client, kikimr, services, yq_version):
+    class Credentials:
+        def auth_metadata(self):
+            return [('x-ydb-auth-ticket', 'other@builtin')]
+
+    other = FederatedQueryClient('my_folder', streaming_over_kikimr=kikimr, credentials=Credentials())
+    query_id = start(other, query('profiles_http'))
+    other.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert 'Unknown or inaccessible external service connection' in str(other.describe_query(query_id).result.query.issue)
+    assert not services.requests
+
+
+@yq_v1
+def test_connection_wrong_type_has_no_network_access(client, services, yq_version):
+    client.create_storage_connection('not_a_service', 'bucket')
+    query_id = start(client, query('not_a_service'))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert not services.requests
+
+
+@yq_v1
+def test_connection_api_hides_credentials(client, services, yq_version):
+    created = client.create_external_service_connection(
+        'secret_service', f'http://127.0.0.1:{services.http.server_port}/profile', insecure=True,
+        token='hidden-token', headers={'X-Api-Key': 'hidden-header'},
+    ).result.connection_id
+    response = client.service.DescribeConnection(fq.DescribeConnectionRequest(connection_id=created), metadata=client._create_meta())
+    result = fq.DescribeConnectionResult()
+    response.operation.result.Unpack(result)
+    assert not response.operation.issues
+    assert result.connection.content.setting.external_service.auth.HasField('token')
+    assert not result.connection.content.setting.external_service.auth.token.token
+    assert not result.connection.content.setting.external_service.headers
+    listed = client.list_connections(fq.Acl.PRIVATE).result
+    assert 'hidden-token' not in str(listed)
+    assert 'hidden-header' not in str(listed)
+
+
+@yq_v1
+@pytest.mark.parametrize('current_iam', [False, True])
+def test_connection_auth_modes(client, services, yq_version, current_iam):
+    request = fq.CreateConnectionRequest()
+    request.content.name = 'auth_service'
+    request.content.acl.visibility = fq.Acl.PRIVATE
+    service = request.content.setting.external_service
+    service.protocol = fq.ExternalService.HTTP
+    service.endpoint = f'http://127.0.0.1:{services.http.server_port}/profile'
+    service.insecure = True
+    if current_iam:
+        service.auth.current_iam.SetInParent()
+    else:
+        service.auth.none.SetInParent()
+    client.create_connection(request)
+    query_id = start(client, query('auth_service'))
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    assert services.requests == [('http', 42, 'Bearer root@builtin' if current_iam else None)]
+
+
+@yq_v1
+def test_scope_visible_connection_can_be_used_by_another_user(client, kikimr, services, yq_version):
+    class Credentials:
+        def auth_metadata(self):
+            return [('x-ydb-auth-ticket', 'other@builtin')]
+
+    client.create_external_service_connection(
+        'shared_service', f'http://127.0.0.1:{services.http.server_port}/profile', insecure=True,
+        token='host-secret', visibility=fq.Acl.SCOPE,
+    )
+    other = FederatedQueryClient('my_folder', streaming_over_kikimr=kikimr, credentials=Credentials())
+    query_id = start(other, query('shared_service'))
+    other.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    assert services.requests == [('http', 42, 'Bearer host-secret')]
+
+
+@yq_v1
+def test_connection_modification_is_used_by_next_query(client, services, yq_version):
+    created = client.create_external_service_connection(
+        'mutable_service', f'http://127.0.0.1:{services.http.server_port}/profile', insecure=True, token='first-token',
+    ).result.connection_id
+    first = start(client, query('mutable_service'))
+    client.wait_query_status(first, fq.QueryMeta.COMPLETED)
+    request = fq.ModifyConnectionRequest(connection_id=created)
+    request.content.name = 'mutable_service'
+    request.content.acl.visibility = fq.Acl.PRIVATE
+    service = request.content.setting.external_service
+    service.protocol = fq.ExternalService.HTTP
+    service.endpoint = f'http://127.0.0.1:{services.http.server_port}/profile'
+    service.insecure = True
+    service.auth.token.token = 'second-token'
+    client.modify_connection(request)
+    second = start(client, query('mutable_service'))
+    client.wait_query_status(second, fq.QueryMeta.COMPLETED)
+    assert services.requests == [('http', 42, 'Bearer first-token'), ('http', 42, 'Bearer second-token')]
+
+
+@yq_v1
+@pytest.mark.parametrize('endpoint,insecure', [
+    ('http://localhost:8080/profile', False), ('https://user:secret@localhost/profile', False),
+    ('file:///etc/passwd', False), ('https:///missing-host', False),
+])
+def test_invalid_connection_has_no_network_access(client, services, yq_version, endpoint, insecure):
+    response = client.create_external_service_connection('invalid', endpoint, insecure=insecure, check_issues=False)
+    assert response.issues
     assert not services.requests
 
 

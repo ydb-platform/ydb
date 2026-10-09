@@ -214,6 +214,11 @@ public:
                                 Signer, requestCounters));
                 break;
             }
+            case FederatedQuery::ConnectionSetting::kExternalService:
+                requestCounters->Error->Inc();
+                Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(
+                    TIssuesIds::BAD_REQUEST, "External service connections must be tested using a service query")}), 0, ev->Cookie);
+                break;
             default: {
                 LWPROBE(TestUnsupportedConnectionRequest, scope, user);
                 requestCounters->Error->Inc();

@@ -20,6 +20,7 @@ struct TBinding {
     TString Method = "POST";
     TVector<std::pair<TString, TString>> Headers;
     TString CaFile;
+    TString CaCertificate;
     std::shared_ptr<grpc::ChannelCredentials> GrpcCredentials;
 };
 

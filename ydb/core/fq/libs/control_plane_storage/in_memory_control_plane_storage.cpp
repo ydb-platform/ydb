@@ -616,6 +616,12 @@ private:
             }
 
             *resultConnections.Add() = *it;
+            if (!ctx.Event.ExtractSensitiveFields && resultConnections.rbegin()->content().setting().has_external_service()) {
+                auto* service = resultConnections.rbegin()->mutable_content()->mutable_setting()->mutable_external_service();
+                service->clear_headers();
+                if (service->auth().has_token())
+                    service->mutable_auth()->mutable_token()->clear_token();
+            }
             if (resultConnections.size() == ctx.Request.limit() + 1) {
                 ctx.Response.set_next_page_token(ctx.Response.connection(ctx.Response.connection_size() - 1).meta().id());
                 resultConnections.RemoveLast();
@@ -636,6 +642,12 @@ private:
         }
 
         *ctx.Response.mutable_connection() = connectionProto;
+        if (!ctx.Event.ExtractSensitiveFields && ctx.Response.connection().content().setting().has_external_service()) {
+            auto* service = ctx.Response.mutable_connection()->mutable_content()->mutable_setting()->mutable_external_service();
+            service->clear_headers();
+            if (service->auth().has_token())
+                service->mutable_auth()->mutable_token()->clear_token();
+        }
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr& ev) {

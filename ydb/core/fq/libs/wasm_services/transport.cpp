@@ -260,6 +260,10 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
         if (!binding.CaFile.empty()) {
             set(CURLOPT_CAINFO, binding.CaFile.c_str());
         }
+        if (!binding.CaCertificate.empty()) {
+            curl_blob roots{const_cast<char*>(binding.CaCertificate.data()), binding.CaCertificate.size(), CURL_BLOB_COPY};
+            set(CURLOPT_CAINFO_BLOB, &roots);
+        }
         const auto timeout = std::max<ui64>(1, (request.Deadline - TInstant::Now()).MilliSeconds());
         set(CURLOPT_TIMEOUT_MS, static_cast<long>(std::min<ui64>(timeout, std::numeric_limits<long>::max())));
         set(CURLOPT_WRITEFUNCTION, &Write);

@@ -6,6 +6,8 @@ SRCS(query.cpp manifest.cpp)
 
 PEERDIR(
     library/cpp/json
+    ydb/core/fq/libs/common
+    ydb/public/api/protos
     ydb/public/lib/udf/manifest
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/wasm_services

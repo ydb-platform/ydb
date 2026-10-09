@@ -409,6 +409,26 @@ class FederatedQueryClient(object):
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
     @retry.retry_intrusive
+    def create_external_service_connection(self, name, endpoint, protocol=fq.ExternalService.HTTP, method='',
+                                           insecure=False, ca_certificate='', token=None, headers=None,
+                                           visibility=fq.Acl.Visibility.PRIVATE, check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        request.content.acl.visibility = visibility
+        service = request.content.setting.external_service
+        service.protocol = protocol
+        service.endpoint = endpoint
+        service.method = method
+        service.insecure = insecure
+        service.ca_certificate = ca_certificate
+        service.headers.update(headers or {})
+        if token is None:
+            service.auth.none.SetInParent()
+        else:
+            service.auth.token.token = token
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
     def create_ydb_connection(self, name, database_id,
                               secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()

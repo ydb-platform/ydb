@@ -251,6 +251,7 @@ public:
             case FederatedQuery::ConnectionSetting::kIceberg:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
+            case FederatedQuery::ConnectionSetting::kExternalService:
             case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
                 return false;
         }

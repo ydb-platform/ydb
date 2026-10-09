@@ -580,6 +580,26 @@ message Iceberg {
     IcebergCatalog catalog = 4;
 }
 
+// Host-owned transport settings for external service adapters.
+message ExternalService {
+    enum Protocol {
+        PROTOCOL_UNSPECIFIED = 0;
+        HTTP = 1;
+        GRPC = 2;
+    }
+    Protocol protocol = 1;
+    // HTTP URL or gRPC host:port. Never supplied by a WASM module.
+    string endpoint = 2 [(Ydb.length).range = {min: 1, max: 4096}];
+    // HTTP verb (defaults to POST) or /package.Service/Method for gRPC.
+    string method = 3 [(Ydb.length).le = 1024];
+    IamAuth auth = 4;
+    // Explicit plaintext opt-in. TLS verification cannot be disabled.
+    bool insecure = 5;
+    // PEM trust roots; empty uses system roots. Not a server filesystem path.
+    string ca_certificate = 6 [(Ydb.length).le = 65536];
+    map<string, string> headers = 7 [(Ydb.sensitive) = true];
+}
+
 message ConnectionSetting {
     enum ConnectionType {
         CONNECTION_TYPE_UNSPECIFIED = 0;
@@ -593,6 +613,7 @@ message ConnectionSetting {
         MYSQL_CLUSTER = 8;
         LOGGING = 9;
         ICEBERG = 10;
+        EXTERNAL_SERVICE = 11;
     }
 
     oneof connection {
@@ -606,6 +627,7 @@ message ConnectionSetting {
         MySQLCluster mysql_cluster = 8;
         Logging logging = 9;
         Iceberg iceberg = 10;
+        ExternalService external_service = 11;
     }
 }
 

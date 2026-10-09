@@ -76,6 +76,8 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "Logging";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kIceberg:
         return "Iceberg";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kExternalService:
+        return "ExternalService";
     case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }

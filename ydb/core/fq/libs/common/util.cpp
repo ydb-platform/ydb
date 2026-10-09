@@ -147,6 +147,8 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kIceberg: {
         return GetServiceAccountId(setting.iceberg().warehouse_auth());
     }
+    case FederatedQuery::ConnectionSetting::kExternalService:
+        return GetServiceAccountId(setting.external_service().auth());
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -186,6 +188,8 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return {};
         case FederatedQuery::ConnectionSetting::kIceberg:
             return {};
+        case FederatedQuery::ConnectionSetting::kExternalService:
+            return {};
     }
 }
 
@@ -212,6 +216,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
         case FederatedQuery::ConnectionSetting::kLogging:
             return {};
         case FederatedQuery::ConnectionSetting::kIceberg:
+            return {};
+        case FederatedQuery::ConnectionSetting::kExternalService:
             return {};
     }
 }
@@ -240,6 +246,8 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetIamAuthMethod(setting.logging().auth());
         case FederatedQuery::ConnectionSetting::kIceberg:
             return GetIamAuthMethod(setting.iceberg().warehouse_auth());
+        case FederatedQuery::ConnectionSetting::kExternalService:
+            return EYdbComputeAuth::UNKNOWN;
 
     }
 }
@@ -266,6 +274,8 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().logging().auth();
     case FederatedQuery::ConnectionSetting::kIceberg:
         return connection.content().setting().iceberg().warehouse_auth();
+    case FederatedQuery::ConnectionSetting::kExternalService:
+        return connection.content().setting().external_service().auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
     }
@@ -293,6 +303,8 @@ FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setti
         return setting.mutable_logging()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kIceberg:
         return setting.mutable_iceberg()->mutable_warehouse_auth();
+    case FederatedQuery::ConnectionSetting::kExternalService:
+        return setting.mutable_external_service()->mutable_auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return nullptr;
     }

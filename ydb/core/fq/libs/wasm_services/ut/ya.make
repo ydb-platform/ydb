@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/security/certificate_check/test_utils
     ydb/library/actors/http
     ydb/library/actors/testlib
+    ydb/library/protobuf_printer
     ydb/library/services
     ydb/library/yql/providers/common/ut_helpers
     ydb/udfs/wasm/profile/contract

@@ -121,7 +121,7 @@ ui32 TTableRecords::AddRecordImpl(const TTableRecord& record) {
         const Ydb::Value* v = record.GetValuePtr(Columns[i].name());
         if (v) {
             if (!TYDBValue::IsSameType(*v, Columns[i].type())) {
-                ALS_ERROR(NKikimrServices::METADATA_MANAGER);
+                YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_MANAGER, "");
                 Y_DEBUG_ABORT_UNLESS(false);
                 continue;
             }

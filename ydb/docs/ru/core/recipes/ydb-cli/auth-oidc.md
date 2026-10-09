@@ -19,7 +19,7 @@ chmod 700 /home/user/.config/ydb
 
 ## Вход пользователя по коду устройства {#device}
 
-Укажите режим `device` и идентификатор приложения, для которого IdP разрешает вход по коду устройства. Команда [`discovery whoami`](../../reference/ydb-cli/commands/discovery-whoami.md) проверит, под какой учётной записью сервер принял запрос:
+Укажите режим `device` и идентификатор приложения, для которого IdP разрешает вход по коду устройства. [Команда](../../reference/ydb-cli/commands/discovery-whoami.md) `discovery whoami` проверит, под какой учётной записью сервер принял запрос:
 
 ```bash
 {{ ydb-cli }} \

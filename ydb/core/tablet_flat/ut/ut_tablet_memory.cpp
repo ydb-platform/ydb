@@ -297,10 +297,8 @@ Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
         UNIT_ASSERT(held);
         UNIT_ASSERT_VALUES_EQUAL(held->GetMemory(), initialMemory + 50_MB);
         if (hostEnabled) {
-            UNIT_ASSERT(held->HasMemoryDemand());
-            UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryDemand(), 60_MB);
-            UNIT_ASSERT(held->HasMemoryReclaimable());
-            UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryReclaimable(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Report.Demand, 60_MB);
+            UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Report.Reclaimable, 0);
         } else {
             UNIT_ASSERT(!held->HasMemoryDemand());
             UNIT_ASSERT(!held->HasMemoryReclaimable());
@@ -317,7 +315,7 @@ Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
         UNIT_ASSERT(released);
         UNIT_ASSERT_VALUES_EQUAL(released->GetMemory(), initialMemory);
         if (hostEnabled) {
-            UNIT_ASSERT_VALUES_EQUAL(released->GetMemoryDemand(), 60_MB);
+            UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Report.Demand, 60_MB);
         }
     }
 }

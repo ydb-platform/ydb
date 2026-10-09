@@ -152,7 +152,7 @@ CLI получает токен [способом получения токен�
 
 | Поле или блок | Содержимое |
 | --- | --- |
-| `issuer` | Непустая строка с HTTPS-адрес [издателя](#discovery). |
+| `issuer` | Непустая строка с HTTPS-адресом [издателя](#discovery). |
 | `cache_path` | Необязательная непустая строка с путём к [кешу токенов](#cache). Для `static_credentials` не используется. |
 | `static_credentials` | [Готовый токен](#static): путь `access_token_file` либо значение из `YDB_OIDC_ACCESS_TOKEN`, необязательный [срок действия](#static-config) `expires_at`. |
 | `client_credentials_grant` | [Секрет приложения](#client): обязательный `client_id`, путь `client_secret_file` либо секрет из `YDB_OIDC_CLIENT_SECRET`, необязательный список [областей доступа](#scopes) `scope`. |

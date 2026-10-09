@@ -38,6 +38,7 @@ _FEATURE_FLAGS_FOR_CMS = (
     "enable_streaming_query_state_recompute",
     "enable_shared_reading_structured_json_parsing",
     "enable_updating_partitions_on_streaming_query_restart",
+    "enable_dq_source_stream_lookup_join_local_lookups",
     "enable_pq_source_rescaling"
 )
 
@@ -110,6 +111,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     else:
         disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
 
+    disabled_feature_flags.append("enable_streaming_query_scheme_operations")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
     else:

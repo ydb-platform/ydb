@@ -65,7 +65,7 @@ public:
 
 class TResourceMetricsSendState {
 public:
-    TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor = {});
+    TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor = {}, const TActorId& systemTablet = {});
     bool FillChanged(TResourceMetricsValues& src, NKikimrTabletBase::TMetrics& metrics, TInstant now = TInstant::Now(), bool forceAll = false);
     bool TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx);
 
@@ -81,6 +81,7 @@ protected:
     const ui32 FollowerId;
     const TActorId Launcher;
     const TActorId Executor;
+    const TActorId SystemTablet;
     std::optional<NMemory::TConsumerReport> LastTabletMemoryReport;
     std::optional<ui32> LevelCPU;
     std::optional<ui32> LevelMemory;
@@ -99,8 +100,8 @@ protected:
 
 class TResourceMetrics : public TResourceMetricsValues, public TResourceMetricsSendState {
 public:
-    TResourceMetrics(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor = {})
-        : TResourceMetricsSendState(tabletId, followerId, launcher, executor) {}
+    TResourceMetrics(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor = {}, const TActorId& systemTablet = {})
+        : TResourceMetricsSendState(tabletId, followerId, launcher, executor, systemTablet) {}
 
     bool FillChanged(NKikimrTabletBase::TMetrics& metrics, TInstant now = TInstant::Now(), bool forceAll = false) {
         return TResourceMetricsSendState::FillChanged(*this, metrics, now, forceAll);

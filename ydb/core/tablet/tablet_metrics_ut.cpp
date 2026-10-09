@@ -113,6 +113,27 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         AssertMemoryReport(message, 10_MB + 300_KB, 13_MB, 1_MB + 300_KB);
     }
 
+    Y_UNIT_TEST(SubMegabyteZeroTransitionsAreReported) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics message;
+        metrics.SetMemoryReport(100_KB, 200_KB, 1);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        metrics.SetMemoryReport(100_KB, 200_KB, 2);
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        metrics.SetMemoryReport(100_KB, 200_KB, 0);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 100_KB, 200_KB, 0);
+        metrics.SetMemoryReport(100_KB, 200_KB, 1);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 100_KB, 200_KB, 1);
+        metrics.SetMemoryReport(0, 0, 0);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 0, 0, 0);
+    }
+
     Y_UNIT_TEST(LegacyMemoryDoesNotOverwriteMemoryReport) {
         TResourceMetrics metrics(1, 0, TActorId());
         metrics.SetMemoryReport(10_MB, 12_MB, 0);

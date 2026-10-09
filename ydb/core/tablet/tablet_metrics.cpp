@@ -90,11 +90,12 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     }
 }
 
-TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor)
+TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor, const TActorId& systemTablet)
     : TabletId(tabletId)
     , FollowerId(followerId)
     , Launcher(launcher)
     , Executor(executor)
+    , SystemTablet(systemTablet)
 {}
 
 namespace {
@@ -180,7 +181,11 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         const ui32 levelMemory = memory / SignificantChangeMemory;
         const ui32 levelDemand = demand / SignificantChangeMemory;
         const ui32 levelReclaimable = reclaimable / SignificantChangeMemory;
-        if (levelMemory != LevelTabletMemoryUsed || levelDemand != LevelMemoryDemand ||
+        const bool zeroTransition = !LastTabletMemoryReport ||
+            ((memory == 0) != (LastTabletMemoryReport->Used == 0)) ||
+            ((demand == 0) != (LastTabletMemoryReport->Demand == 0)) ||
+            ((reclaimable == 0) != (LastTabletMemoryReport->Reclaimable == 0));
+        if (zeroTransition || levelMemory != LevelTabletMemoryUsed || levelDemand != LevelMemoryDemand ||
             levelReclaimable != LevelMemoryReclaimable || force)
         {
             // Partial updates can violate Reclaimable <= Used <= Demand at the receiver.
@@ -190,6 +195,7 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
             LevelTabletMemoryUsed = levelMemory;
             LevelMemoryDemand = levelDemand;
             LevelMemoryReclaimable = levelReclaimable;
+            LastTabletMemoryReport = src.TabletMemoryReport;
             have = true;
         }
     }
@@ -297,18 +303,11 @@ bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TAc
     }
     NKikimrTabletBase::TMetrics values;
     bool updated = FillChanged(src, values, now, past > TDuration::Seconds(60));
-    const bool reportUpdated = src.TabletMemoryReport &&
-        (!LastTabletMemoryReport || past > TDuration::Seconds(60) ||
-         src.TabletMemoryReport->Used != LastTabletMemoryReport->Used ||
-         src.TabletMemoryReport->Demand != LastTabletMemoryReport->Demand ||
-         src.TabletMemoryReport->Reclaimable != LastTabletMemoryReport->Reclaimable);
-    updated |= reportUpdated;
     if (updated) {
         ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values, Executor,
-            src.TabletMemoryReport));
-        if (reportUpdated) {
-            LastTabletMemoryReport = src.TabletMemoryReport;
-        }
+            src.TabletMemoryReport, SystemTablet));
+        // Other metrics may also carry a fresh owner snapshot. Remember what was sent.
+        LastTabletMemoryReport = src.TabletMemoryReport;
         LastUpdate = now;
     }
     return updated;

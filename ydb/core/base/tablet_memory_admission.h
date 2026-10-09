@@ -89,7 +89,7 @@ public:
             return;
         }
         Zone = zone;
-        // The watermark is the running bytes seen on entering the zone, so nothing may grow past it
+        // Reuse the entry ceiling until the next zone transition; idle progress may raise it.
         Watermark = RunningBytes;
         Drain();
     }

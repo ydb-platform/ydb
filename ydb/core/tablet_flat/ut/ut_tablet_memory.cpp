@@ -166,7 +166,7 @@ struct TMemoryProbeEnv : public TMyEnvBase {
         Observer = Env.AddObserver<TEvLocal::TEvTabletMetrics>([this](TEvLocal::TEvTabletMetrics::TPtr& ev) {
             Reported.emplace_back(ev->Sender, ev->Get()->ResourceValues);
             if (ev->Get()->TabletMemoryReport) {
-                ControllerReports.push_back({ev->Sender, ev->Get()->Executor, *ev->Get()->TabletMemoryReport, ev->Get()->FollowerId});
+                ControllerReports.push_back({ev->Sender, ev->Get()->Executor, *ev->Get()->TabletMemoryReport, ev->Get()->FollowerId, ev->Get()->SystemTablet});
             }
         });
 
@@ -227,6 +227,7 @@ struct TMemoryProbeEnv : public TMyEnvBase {
         TActorId Executor;
         NMemory::TConsumerReport Report;
         ui32 FollowerId;
+        TActorId SystemTablet;
     };
     TVector<TControllerReport> ControllerReports;
     TTestActorRuntime::TEventObserverHolder Observer;
@@ -278,7 +279,7 @@ Y_UNIT_TEST(ReportClearsReclaimableMemory)
     UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryDemand(), 60_MB);
 }
 
-Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
+Y_UNIT_TEST(HiveMemoryIncludesStaticTransactionMemory)
 {
     for (bool hostEnabled : {false, true}) {
         TMemoryProbeEnv env(hostEnabled, {.Used = 40_MB, .Demand = 60_MB}, true);
@@ -372,6 +373,48 @@ Y_UNIT_TEST(TabletSenderKeepsStableExecutorIdentity)
     env.Env.SimulateSleep(TDuration::Seconds(1));
     UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Report.Used, 0u);
     UNIT_ASSERT_VALUES_EQUAL(env.ControllerReports.back().Executor, executorId);
+}
+
+Y_UNIT_TEST(OwnerReportTryUpdateHonorsSignificantChanges)
+{
+    TMemoryProbeEnv env(true, {.Used = 40_MB, .Demand = 60_MB});
+    const auto marker = env.Env.AllocateEdgeActor();
+    const auto systemTablet = env.ControllerReports.back().SystemTablet;
+    UNIT_ASSERT(systemTablet);
+    NMetrics::TResourceMetrics metrics(env.Tablet, 0, env.Edge, marker, systemTablet);
+    metrics.CPU.Set(0);
+    metrics.Memory.Set(0);
+    metrics.Network.Set(0);
+    metrics.StorageSystem.Set(0);
+    TVector<NMemory::TConsumerReport> reports;
+    const auto observer = env.Env.AddObserver<TEvLocal::TEvTabletMetrics>([&](auto& event) {
+        if (event->Get()->Executor == marker) {
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->SystemTablet, systemTablet);
+            reports.push_back(*event->Get()->TabletMemoryReport);
+            event.Reset();
+        }
+    });
+    const auto update = [&](ui64 used, ui64 demand, ui64 reclaimable, bool expected) {
+        env.Env.SimulateSleep(TDuration::Seconds(2));
+        env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto*, const auto& ctx) {
+            metrics.SetMemoryReport(used, demand, reclaimable);
+            UNIT_ASSERT_VALUES_EQUAL(metrics.TryUpdate(ctx), expected);
+            ctx.Send(env.Edge, new TEvents::TEvWakeup);
+        }));
+        env.WaitForWakeUp();
+    };
+    update(10_MB + 100_KB, 12_MB + 100_KB, 1_MB + 100_KB, true);
+    update(10_MB + 100_KB + 1, 12_MB + 100_KB + 1, 1_MB + 100_KB + 1, false);
+    // A legacy metric send carries the complete current snapshot even below its own threshold.
+    metrics.CPU.Set(200000);
+    update(10_MB + 100_KB + 2, 12_MB + 100_KB + 2, 1_MB + 100_KB + 2, true);
+    UNIT_ASSERT_VALUES_EQUAL(reports.back().Used, 10_MB + 100_KB + 2);
+    update(100_KB, 200_KB, 1, true);
+    update(100_KB, 200_KB, 2, false);
+    update(100_KB, 200_KB, 0, true);
+    update(100_KB, 200_KB, 1, true);
+    update(0, 0, 0, true);
+    UNIT_ASSERT_VALUES_EQUAL(reports.size(), 6u);
 }
 
 Y_UNIT_TEST(HostFlagDoesNotChangeHivePlacementMemory)

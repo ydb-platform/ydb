@@ -30,7 +30,7 @@ enum class EAdmitResult {
     Duplicate,
 };
 
-// Gates the start of memory-charged items by the node zone: FIFO, no growth in Yellow, one at a time in Red
+// Gates memory-charged items in FIFO order: Yellow reuses a byte ceiling with idle progress; Red runs one at a time
 // One admission belongs to one tablet and runs only in that tablet's actor context, so it takes no locks by design
 template <class TItem, class TOwner>
 class TMemoryAdmission {
@@ -89,7 +89,8 @@ public:
             return;
         }
         Zone = zone;
-        // Reuse the entry ceiling until the next zone transition; idle progress may raise it.
+        // Snapshot running bytes on each zone transition. Yellow reuses this ceiling;
+        // a later idle start may raise it to that request's charge.
         Watermark = RunningBytes;
         Drain();
     }
@@ -123,7 +124,7 @@ private:
     }
 
     void Run(ui64 uid, TItem&& item, ui64 charge, EAdmitSource source) {
-        // An idle progress request establishes a reusable ceiling for this Yellow interval.
+        // An idle start in Yellow may raise its ceiling; it never lowers it.
         if (Zone == EMemoryZone::Yellow && RunningCount == 0) {
             Watermark = Max(Watermark, charge);
         }

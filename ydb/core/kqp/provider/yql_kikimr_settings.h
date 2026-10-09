@@ -71,6 +71,7 @@ public:
     NCommon::TConfSetting<bool, Static> BlockHashJoinSwapLeftJoinSides;
     NCommon::TConfSetting<bool, Static> EnableBlockHashJoinEqualNulls;
     NCommon::TConfSetting<bool, Static> UseScalarHashJoinForMap;
+    NCommon::TConfSetting<bool, Static> EnableLookupJoinPointPrefixes;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
@@ -273,6 +274,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseBlockHashJoinForCross() const;
     bool GetEnableBlockHashJoinEqualNulls() const;
     bool GetUseScalarHashJoinForMap() const;
+    bool GetEnableLookupJoinPointPrefixes() const;
     bool GetEnableNewRBOPhysicalStagePeephole() const;
     bool GetUseKqpTasksGraphV2() const;
     bool GetWindowFunctionsV2() const;

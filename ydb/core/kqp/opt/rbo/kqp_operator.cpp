@@ -1067,6 +1067,17 @@ TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle p
     Strategy = ELookupStrategy::LookupJoinRows;
 }
 
+TIntrusivePtr<IOperator> TOpTableLookup::GetLeftInput() {
+    if (!KeysFromInputLookup) {
+        return GetInput();
+    }
+
+    Y_ENSURE(GetInput()->Kind == EOperator::TableLookup, "A lookup by keys of the input lookup must be fed by a table lookup");
+    auto inputLookup = CastOperator<TOpTableLookup>(GetInput());
+    Y_ENSURE(inputLookup->IsJoin(), "A lookup by keys of the input lookup must be fed by a table lookup in join mode");
+    return inputLookup->GetLeftInput();
+}
+
 void TOpTableLookup::ComputeOutputIUs() {
     auto result = Columns;
     if (IsJoin()) {

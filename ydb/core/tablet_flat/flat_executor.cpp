@@ -4301,14 +4301,16 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 ui64 memorySize = 0;
                 if (TabletMemoryHostEnabled) {
                     // The report travels to Local in the metrics it already forwards to Hive
-                    memorySize = UsedTabletMemory;
-                    ResourceMetrics->MemoryDemand.Set(UsedTabletMemory + OwnerMemoryReport.Demand - OwnerMemoryReport.Used);
-                    ResourceMetrics->MemoryReclaimable.Set(OwnerMemoryReport.Reclaimable);
+                    // Static transaction memory is managed by the executor, outside the owner's report.
+                    memorySize = UsedTabletMemory + memory.Static;
+                    ResourceMetrics->SetMemoryReport(memorySize,
+                        memorySize + (OwnerMemoryReport.Demand - OwnerMemoryReport.Used),
+                        OwnerMemoryReport.Reclaimable);
                 } else {
                     auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
                     memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
+                    ResourceMetrics->Memory.Set(memorySize);
                 }
-                ResourceMetrics->Memory.Set(memorySize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize);
                 Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize);
             }

@@ -1,11 +1,165 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/protos/tablet.pb.h>
+#include <util/generic/size_literals.h>
 #include "tablet_metrics.h"
 
 namespace NKikimr {
 namespace NMetrics {
 
+namespace {
+
+void AssertMemoryReport(const NKikimrTabletBase::TMetrics& metrics, ui64 used, ui64 demand, ui64 reclaimable) {
+    UNIT_ASSERT(metrics.HasMemory());
+    UNIT_ASSERT(metrics.HasMemoryDemand());
+    UNIT_ASSERT(metrics.HasMemoryReclaimable());
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemory(), used);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemoryDemand(), demand);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.GetMemoryReclaimable(), reclaimable);
+    UNIT_ASSERT_LE(metrics.GetMemoryReclaimable(), metrics.GetMemory());
+    UNIT_ASSERT_LE(metrics.GetMemory(), metrics.GetMemoryDemand());
+}
+
+}
+
 Y_UNIT_TEST_SUITE(TFlatMetrics) {
+    Y_UNIT_TEST(MemoryReportIncludesZeroValues) {
+        TResourceMetricsValues values;
+        NKikimrTabletBase::TMetrics message;
+        values.Fill(message);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+
+        values.SetMemoryReport(10_MB, 12_MB, 0);
+        values.Fill(message);
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        message.Clear();
+        values.SetMemoryReport(0, 0, 0);
+        values.Fill(message);
+        AssertMemoryReport(message, 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(MemoryReportClearsReclaimable) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics message;
+        metrics.SetMemoryReport(12_MB, 15_MB, 10_MB);
+        UNIT_ASSERT(metrics.FillChanged(message));
+
+        message.Clear();
+        metrics.SetMemoryReport(12_MB, 15_MB, 0);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 12_MB, 15_MB, 0);
+
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        AssertMemoryReport(message, 12_MB, 15_MB, 0);
+
+        message.Clear();
+        metrics.SetMemoryReport(0, 0, 0);
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 0, 0, 0);
+
+        TResourceMetrics emptyReport(2, 0, TActorId());
+        emptyReport.SetMemoryReport(0, 0, 0);
+        message.Clear();
+        UNIT_ASSERT(emptyReport.FillChanged(message));
+        AssertMemoryReport(message, 0, 0, 0);
+    }
+
+    Y_UNIT_TEST(MemoryReportPreservesInvariantsAcrossThresholds) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics receiver;
+        metrics.SetMemoryReport(11_MB + 100_KB, 12_MB, 10_MB + 900_KB);
+        UNIT_ASSERT(metrics.FillChanged(receiver));
+
+        // Used crosses a bucket boundary, while reclaimable stays in the same bucket.
+        NKikimrTabletBase::TMetrics update;
+        metrics.SetMemoryReport(10_MB + 500_KB, 12_MB, 10_MB + 400_KB);
+        UNIT_ASSERT(metrics.FillChanged(update));
+        receiver.MergeFrom(update);
+        AssertMemoryReport(receiver, 10_MB + 500_KB, 12_MB, 10_MB + 400_KB);
+
+        metrics.SetMemoryReport(10_MB + 900_KB, 11_MB + 100_KB, 0);
+        update.Clear();
+        UNIT_ASSERT(metrics.FillChanged(update));
+        receiver.MergeFrom(update);
+
+        // Used grows past the previously sent demand; demand's bucket does not change.
+        metrics.SetMemoryReport(11_MB + 500_KB, 11_MB + 700_KB, 0);
+        update.Clear();
+        UNIT_ASSERT(metrics.FillChanged(update));
+        receiver.MergeFrom(update);
+        AssertMemoryReport(receiver, 11_MB + 500_KB, 11_MB + 700_KB, 0);
+    }
+
+    Y_UNIT_TEST(MemoryReportRetainsChangeThrottling) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        NKikimrTabletBase::TMetrics message;
+        metrics.SetMemoryReport(10_MB + 100_KB, 12_MB + 100_KB, 1_MB + 100_KB);
+        UNIT_ASSERT(metrics.FillChanged(message));
+
+        metrics.SetMemoryReport(10_MB + 200_KB, 12_MB + 200_KB, 1_MB + 200_KB);
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        AssertMemoryReport(message, 10_MB + 200_KB, 12_MB + 200_KB, 1_MB + 200_KB);
+
+        // A change in demand alone must also send the other two current values.
+        metrics.SetMemoryReport(10_MB + 300_KB, 13_MB, 1_MB + 300_KB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 10_MB + 300_KB, 13_MB, 1_MB + 300_KB);
+    }
+
+    Y_UNIT_TEST(LegacyMemoryDoesNotOverwriteMemoryReport) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        metrics.SetMemoryReport(10_MB, 12_MB, 0);
+        metrics.Memory.Set(20_MB);
+        NKikimrTabletBase::TMetrics message;
+        metrics.Fill(message);
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        metrics.Memory.Set(30_MB);
+        message.Clear();
+        UNIT_ASSERT(!metrics.FillChanged(message));
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        AssertMemoryReport(message, 10_MB, 12_MB, 0);
+
+        metrics.SetMemoryReport(30_MB, 35_MB, 5_MB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        AssertMemoryReport(message, 30_MB, 35_MB, 5_MB);
+    }
+
+    Y_UNIT_TEST(LegacyMemoryDoesNotEnableMemoryReport) {
+        TResourceMetrics metrics(1, 0, TActorId());
+        metrics.Memory.Set(10_MB);
+        NKikimrTabletBase::TMetrics message;
+        metrics.Fill(message);
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 10_MB);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message));
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 10_MB);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+
+        metrics.Memory.Set(11_MB);
+        message.Clear();
+        UNIT_ASSERT(metrics.FillChanged(message, TInstant::Now(), true));
+        UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 11_MB);
+        UNIT_ASSERT(!message.HasMemoryDemand());
+        UNIT_ASSERT(!message.HasMemoryReclaimable());
+    }
+
     Y_UNIT_TEST(TimeSeriesAvg4) {
         TTimeSeriesValue<ui64, TDuration::Minutes(1).GetValue(), 4> value;
         TInstant time = TInstant::Now();

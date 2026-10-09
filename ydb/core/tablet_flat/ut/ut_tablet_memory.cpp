@@ -1,6 +1,7 @@
 #include <ydb/core/tablet_flat/flat_executor_ut_common.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/base/resource_profile.h>
 #include <ydb/core/mind/local.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -15,6 +16,54 @@ struct TMemoryProbeState : public TThrRefBase {
     NMemory::TConsumerReport Report;
     std::optional<NMemory::EMemoryZone> LastZone;
     std::optional<ui64> LastShare;
+    TAutoPtr<TMemoryToken> HeldMemory;
+};
+
+class TTxHoldStaticMemory : public ITransaction {
+public:
+    TTxHoldStaticMemory(TIntrusivePtr<TMemoryProbeState> state, const TActorId& replyTo)
+        : State(std::move(state))
+        , ReplyTo(replyTo)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (txc.GetMemoryLimit() < 50_MB) {
+            txc.RequestMemory(50_MB - txc.GetMemoryLimit());
+            return false;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(txc.GetTaskId(), 0); // Static allocation, outside ResourceBroker.
+        State->HeldMemory = txc.HoldMemory(50_MB);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(ReplyTo, new TEvents::TEvWakeup);
+    }
+
+private:
+    const TIntrusivePtr<TMemoryProbeState> State;
+    const TActorId ReplyTo;
+};
+
+class TTxReleaseStaticMemory : public ITransaction {
+public:
+    TTxReleaseStaticMemory(TAutoPtr<TMemoryToken> token, const TActorId& replyTo)
+        : Token(std::move(token))
+        , ReplyTo(replyTo)
+    {}
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        txc.UseMemoryToken(std::move(Token));
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(ReplyTo, new TEvents::TEvWakeup);
+    }
+
+private:
+    TAutoPtr<TMemoryToken> Token;
+    const TActorId ReplyTo;
 };
 
 class TMemoryProbeTablet : public TActor<TMemoryProbeTablet>, public TTabletExecutedFlat {
@@ -41,6 +90,8 @@ private:
             }
         } else if (!Booted) {
             TTabletExecutedFlat::StateInitImpl(eh, SelfId());
+        } else if (auto* ev = eh->CastAsLocal<NFake::TEvCall>()) {
+            ev->Callback(Executor(), this->ActorContext());
         } else if (!TTabletExecutedFlat::HandleDefaultEvents(eh, SelfId())) {
             Y_TABLET_ERROR("Unexpected event " << eh->GetTypeName());
         }
@@ -92,10 +143,21 @@ private:
 
 // Boots a flat tablet whose memory report the test controls and records what it sends to its launcher
 struct TMemoryProbeEnv : public TMyEnvBase {
-    TMemoryProbeEnv(bool hostEnabled, NMemory::TConsumerReport report)
+    TMemoryProbeEnv(bool hostEnabled, NMemory::TConsumerReport report, bool allowStaticMemory = false)
     {
         Probe->Report = report;
         Env.GetAppData().FeatureFlags.SetEnableTabletMemoryHost(hostEnabled);
+        if (allowStaticMemory) {
+            auto& profiles = Env.GetAppData().ResourceProfiles;
+            profiles = new TResourceProfiles;
+            TResourceProfiles::TResourceProfile profile;
+            profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
+            profile.SetName("default");
+            profile.SetStaticTabletTxMemoryLimit(0);
+            profile.SetStaticTxMemoryLimit(100_MB);
+            profile.SetTxMemoryLimit(100_MB);
+            profiles->AddProfile(profile);
+        }
 
         Observer = Env.AddObserver<TEvLocal::TEvTabletMetrics>([this](TEvLocal::TEvTabletMetrics::TPtr& ev) {
             Reported.emplace_back(ev->Sender, ev->Get()->ResourceValues);
@@ -115,7 +177,7 @@ struct TMemoryProbeEnv : public TMyEnvBase {
             return new TMemoryProbeTablet(tablet, info, Edge, Probe);
         });
 
-        WaitFor<NFake::TEvReady>();
+        TabletActor = GrabEdgeEvent<NFake::TEvReady>()->Get()->ActorId;
     }
 
     // The sender of the metrics is the executor, which is where a Local sends the zone back to
@@ -137,7 +199,7 @@ struct TMemoryProbeEnv : public TMyEnvBase {
         return nullptr;
     }
 
-    // The three fields travel together, but a later tick may resend only the one whose level moved
+    // A memory report always carries all three fields from the same snapshot.
     const NKikimrTabletBase::TMetrics* LastWholeReport() const
     {
         for (auto it = Reported.rbegin(); it != Reported.rend(); ++it) {
@@ -151,6 +213,7 @@ struct TMemoryProbeEnv : public TMyEnvBase {
     }
 
     TIntrusivePtr<TMemoryProbeState> Probe = MakeIntrusive<TMemoryProbeState>();
+    TActorId TabletActor;
     TVector<std::pair<TActorId, NKikimrTabletBase::TMetrics>> Reported;
     TTestActorRuntime::TEventObserverHolder Observer;
 };
@@ -186,6 +249,63 @@ Y_UNIT_TEST(ReportIsOffWithoutTheFlag)
     for (const auto& reported : env.Reported) {
         UNIT_ASSERT(!reported.second.HasMemoryDemand());
         UNIT_ASSERT(!reported.second.HasMemoryReclaimable());
+    }
+}
+
+Y_UNIT_TEST(ReportClearsReclaimableMemory)
+{
+    TMemoryProbeEnv env(true, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB});
+    env.Probe->Report.Reclaimable = 0;
+    env.Reported.clear();
+    env.Env.SimulateSleep(TDuration::Seconds(30));
+
+    const auto* metrics = env.LastWholeReport();
+    UNIT_ASSERT_C(metrics, "no report clearing reclaimable memory");
+    UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryReclaimable(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics->GetMemoryDemand(), metrics->GetMemory() + 20_MB);
+}
+
+Y_UNIT_TEST(ReportIncludesStaticTransactionMemory)
+{
+    for (bool hostEnabled : {false, true}) {
+        TMemoryProbeEnv env(hostEnabled, {.Used = 40_MB, .Demand = 60_MB}, true);
+        const auto* initial = env.LastWithMemory();
+        UNIT_ASSERT(initial);
+        const ui64 initialMemory = initial->GetMemory();
+
+        env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto* executor, const auto& ctx) {
+            executor->Execute(new TTxHoldStaticMemory(env.Probe, env.Edge), ctx);
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(env.Probe->HeldMemory);
+        env.Env.SimulateSleep(TDuration::Seconds(30));
+
+        const auto* held = env.LastWithMemory();
+        UNIT_ASSERT(held);
+        UNIT_ASSERT_VALUES_EQUAL(held->GetMemory(), initialMemory + 50_MB);
+        if (hostEnabled) {
+            UNIT_ASSERT(held->HasMemoryDemand());
+            UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryDemand(), held->GetMemory() + 20_MB);
+            UNIT_ASSERT(held->HasMemoryReclaimable());
+            UNIT_ASSERT_VALUES_EQUAL(held->GetMemoryReclaimable(), 0);
+        } else {
+            UNIT_ASSERT(!held->HasMemoryDemand());
+            UNIT_ASSERT(!held->HasMemoryReclaimable());
+        }
+
+        env.SendEv(env.TabletActor, new NFake::TEvCall([&](auto* executor, const auto& ctx) {
+            executor->Execute(new TTxReleaseStaticMemory(std::move(env.Probe->HeldMemory), env.Edge), ctx);
+        }));
+        env.WaitForWakeUp();
+        UNIT_ASSERT(!env.Probe->HeldMemory);
+        env.Reported.clear();
+        env.Env.SimulateSleep(TDuration::Seconds(30));
+        const auto* released = env.LastWithMemory();
+        UNIT_ASSERT(released);
+        UNIT_ASSERT_VALUES_EQUAL(released->GetMemory(), initialMemory);
+        if (hostEnabled) {
+            UNIT_ASSERT_VALUES_EQUAL(released->GetMemoryDemand(), initialMemory + 20_MB);
+        }
     }
 }
 

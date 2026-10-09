@@ -176,7 +176,10 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(IssuesLookLikeMissingTable("Table `/x` does not exist"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("table not exists: 123"));
         UNIT_ASSERT(!IssuesLookLikeMissingTable("column already exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("session not exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("IF NOT EXISTS"));
 
         UNIT_ASSERT(IssuesLookLikeMissingColumn("Member not found: fnx"));
         UNIT_ASSERT(IssuesLookLikeMissingColumn("column fnx not found"));

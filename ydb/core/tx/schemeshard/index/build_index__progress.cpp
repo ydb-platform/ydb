@@ -5,6 +5,8 @@
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/index/common.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -21,6 +23,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -50,7 +54,6 @@ class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
     using TBase = TActorBootstrapped<TThis>;
 
 protected:
-    TString LogPrefix;
     const TString DatabaseName;
     const TString TargetTable;
 
@@ -69,6 +72,8 @@ protected:
 
     NDataShard::TUploadStatus UploadStatus;
 
+    NActors::NStructuredLog::TStructuredMessage LogContext;
+
 public:
     TUploadSampleK(const TString& databaseName,
                    const TString& targetTable,
@@ -84,11 +89,11 @@ public:
         , BuildId(buildId)
         , Types(types)
         , InputRows(std::move(rows))
-    {
-        LogPrefix = TStringBuilder()
-            << "TUploadSampleK: BuildIndexId: " << BuildId
-            << " ResponseActorId: " << ResponseActorId;
-    }
+        , LogContext(YDB_LOG_CREATE_MESSAGE(
+            {"buildId", buildId},
+            {"responseActorId", responseActorId},
+        ))
+    {}
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SAMPLE_K_UPLOAD_ACTOR;
@@ -97,10 +102,6 @@ public:
     void UploadStatusToMessage(NKikimrIndexBuilder::TEvUploadSampleKResponse& msg) {
         msg.SetUploadStatus(UploadStatus.StatusCode);
         NYql::IssuesToMessage(UploadStatus.Issues, msg.MutableIssues());
-    }
-
-    void Describe(IOutputStream& out) const noexcept override {
-        out << LogPrefix << Debug();
     }
 
     TString Debug() const {
@@ -127,12 +128,19 @@ private:
             hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                YDB_LOG_ERROR("TUploadSampleK StateWork unexpected event type",
+                    LogContext,
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"event", ev->ToString()},
+                );
         }
     }
 
     void HandleWakeup() {
-        LOG_D("Retry upload " << Debug());
+        YDB_LOG_DEBUG("TUploadSampleK Retry upload ",
+            LogContext,
+            {"uploadStatus", Debug()}
+        );
 
         if (UploadRows) {
             Upload(true);
@@ -140,25 +148,33 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_D("Handle TEvUploadRowsResponse "
-              << Debug()
-              << " Uploader: " << Uploader.ToString()
-              << " ev->Sender: " << ev->Sender.ToString());
+        YDB_LOG_DEBUG("TUploadSampleK Handle TEvUploadRowsResponse",
+            LogContext,
+            {"uploadStatus", Debug()},
+            {"uploader", Uploader.ToString()},
+            {"sender", ev->Sender.ToString()},
+        );
 
         if (!Uploader) {
             return;
         }
-        Y_ENSURE(Uploader == ev->Sender,
-                   LogPrefix << "Mismatch"
-                             << " Uploader: " << Uploader.ToString()
-                             << " ev->Sender: " << ev->Sender.ToString()
-                             << Debug());
+        Y_ENSURE(Uploader == ev->Sender, "TUploadSampleK Mismatch"
+            << " buildid: " << BuildId
+            << " responseActorId: " << ResponseActorId
+            << " Uploader: " << Uploader.ToString()
+            << " ev->Sender: " << ev->Sender.ToString()
+            << Debug()
+        );
 
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = std::move(ev->Get()->Issues);
 
         if (UploadStatus.IsRetriable() && RetryCount < ScanSettings.GetMaxBatchRetries()) {
-            LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
+            YDB_LOG_NOTICE("TUploadSampleK Got retriable error",
+                LogContext,
+                {"uploadStatus", Debug()},
+                {"retryCount", RetryCount},
+            );
 
             this->Schedule(NDataShard::GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
@@ -268,8 +284,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
         Y_ENSURE(false, "Unknown operation kind while building CreateIndexPropose");
     }
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateIndexPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("CreateIndexPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -296,8 +315,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.MutableDrop()->SetName(path->Name);
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "DropBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("DropBuildPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -362,9 +384,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
 
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-            "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
+        YDB_LOG_NOTICE("CreateBuildPropose",
+            {"buildId", buildInfo.Id},
+            {"state", buildInfo.State},
+            {"propose", propose->Record.ShortDebugString()},
+        );
         return propose;
     }
 
@@ -389,8 +413,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
                 op.AddSplitBoundary()->SetSerializedKeyPrefix(x->EndOfRange);
             }
         }
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-            "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+        YDB_LOG_NOTICE("CreateBuildPropose",
+            {"buildId", buildInfo.Id},
+            {"state", buildInfo.State},
+            {"propose", propose->Record.ShortDebugString()},
+        );
         return propose;
     }
 
@@ -399,14 +426,22 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo, maxShardsInPath);
 
     auto& policy = *resetPartitionsSettings();
-    static constexpr std::string_view LogPrefix = "Create build table boundaries for ";
-    LOG_D(buildInfo.Id << " table " << suffix
-        << ", count: " << count << ", parts: " << parts << ", step: " << step
-        << ", " << buildInfo.DebugString());
+    YDB_LOG_DEBUG("Create build table boundaries for table",
+        {"buildId", buildInfo.Id},
+        {"table", suffix},
+        {"count", count},
+        {"parts", parts},
+        {"step", step},
+        {"buildInfo", buildInfo.DebugString()},
+    );
     if (parts > 1) {
         const auto from = buildInfo.KMeans.ChildBegin;
         for (auto i = from + step, e = from + count; i < e; i += step) {
-            LOG_D(buildInfo.Id << " table " << suffix << " value: " << i);
+            YDB_LOG_DEBUG("Create build table boundary value for table",
+                {"buildId", buildInfo.Id},
+                {"table", suffix},
+                {"value", i},
+            );
             auto cell = TCell::Make(i);
             op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
         }
@@ -415,9 +450,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         policy.SetMaxPartitionsCount(0);
     }
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
+    YDB_LOG_NOTICE("CreateBuildPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
     return propose;
 }
 
@@ -445,8 +482,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
         seq->SetName(colInfo.DefaultFromSequence);
     }
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("CreateBuildSequencePropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -545,9 +585,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
+    YDB_LOG_NOTICE("CreateBuildPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
     return propose;
 }
 
@@ -593,9 +635,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcP
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
+    YDB_LOG_NOTICE("CreateBuildFulltextRowIdSrcPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
     return propose;
 }
 
@@ -643,8 +687,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterIndexPartitioningPropos
         splitMerge.AddSplitBoundary()->SetSerializedKeyPrefix(parts[i]->EndOfRange);
     }
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "AlterIndexPartitioningPropose " << buildInfo.Id << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("AlterIndexPartitioningPropose",
+        {"buildId", buildInfo.Id},
+        {"propose", propose->Record.ShortDebugString()},
+    );
     return propose;
 }
 
@@ -692,8 +738,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     *propose->Record.AddTransaction() = modifyScheme;
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "AlterMainTablePropose " << buildInfo.Id << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("AlterMainTablePropose",
+        {"buildId", buildInfo.Id},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -715,8 +763,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> PrepareValidationPropose(
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
     modifyScheme.MutablePrepareIndexValidation()->SetTableName(NTableIndex::ImplTable);
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "PrepareValidationPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("PrepareValidationPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -749,8 +800,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
         }
     }
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "ApplyPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("ApplyPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -773,8 +827,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
     indexBuild.SetSnapshotTxId(ui64(buildInfo.InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo.Id));
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "CancelPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("CancelPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -798,9 +855,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropColumnsPropose(
 
     AddDropSequencePropose(ss, buildInfo, *propose);
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "DropColumnsPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-
+    YDB_LOG_NOTICE("DropColumnsPropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
     return propose;
 }
 
@@ -830,8 +889,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterSequencePropose(
     seq->SetStartValue(minValue);
     seq->SetRestart(true);
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "AlterSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("AlterSequencePropose",
+        {"buildId", buildInfo.Id},
+        {"state", buildInfo.State},
+        {"propose", propose->Record.ShortDebugString()},
+    );
 
     return propose;
 }
@@ -932,7 +994,9 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
-        LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvSampleKRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -956,7 +1020,9 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
-        LOG_N("TTxBuildProgress: TEvSampleKRequest (autodetect): " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvSampleKRequest (autodetect)",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1010,7 +1076,9 @@ private:
                 shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
             }
         }
-        LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvReshuffleKMeansRequest",
+            {"record", ToShortDebugString(ev->Record)},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1042,7 +1110,9 @@ private:
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
-        LOG_N("TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvRecomputeKMeansRequest",
+            {"record", ToShortDebugString(ev->Record)},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1074,7 +1144,12 @@ private:
             const auto& range = buildInfo.Shards.at(shardIdx).Range;
             const auto [parentFrom, parentTo] = buildInfo.KMeans.RangeToBorders(range);
             const auto childBegin = buildInfo.KMeans.ChildBegin + (parentFrom - buildInfo.KMeans.ParentBegin) * buildInfo.KMeans.K;
-            LOG_D("shard " << shardIdx << ", parent range { From: " << parentFrom << ", To: " << parentTo << " }, child begin " << childBegin);
+            YDB_LOG_DEBUG(LogPrefix << "shard parent range",
+                {"shardIdx", shardIdx},
+                {"parentRangeFrom", parentFrom},
+                {"parentRangeTo", parentTo},
+                {"childBegin", childBegin},
+            );
             ev->Record.SetParentFrom(parentFrom);
             ev->Record.SetParentTo(parentTo);
             ev->Record.SetChild(childBegin);
@@ -1120,7 +1195,9 @@ private:
                 }
             }
         }
-        LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvLocalKMeansRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1184,7 +1261,9 @@ private:
                 shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
             }
         }
-        LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvPrefixKMeansRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1217,7 +1296,9 @@ private:
         }
 
         auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
-        LOG_N("TTxBuildProgress: TEvFilterKMeansRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvFilterKMeansRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1307,7 +1388,9 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: UploadKMeansBorders: " << buildInfo);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: UploadKMeansBorders",
+            {"buildInfo", buildInfo},
+        );
     }
 
     void SendBuildSecondaryIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1343,7 +1426,9 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
-        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvBuildIndexCreateRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1381,7 +1466,9 @@ private:
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         record.SetTabletId(ui64(shardId));
 
-        LOG_N("TTxBuildProgress: TEvValidateUniqueIndexRequest: " << record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvValidateUniqueIndexRequest",
+            {"record", record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1438,7 +1525,9 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TUploadSampleK",
+            {"buildInfo", buildInfo},
+        );
     }
 
     // Compact rowid-mode prepass: copy the (arbitrary-PK) main table into the transient row-id source
@@ -1472,7 +1561,9 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
-        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid prepass): " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid prepass)",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1540,7 +1631,9 @@ private:
             shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
         }
 
-        LOG_N("TTxBuildProgress: TEvBuildFulltextIndexRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvBuildFulltextIndexRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1623,7 +1716,9 @@ private:
 
         auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
 
-        LOG_N("TTxBuildProgress: TEvBuildFulltextDictRequest: " << ev->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TEvBuildFulltextDictRequest",
+            {"record", ev->Record.ShortDebugString()},
+        );
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1654,7 +1749,9 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TUploadFulltextStats",
+            {"buildInfo", buildInfo},
+        );
     }
 
     void SendUploadFulltextBordersRequest(TIndexBuildInfo& buildInfo) {
@@ -1703,7 +1800,9 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadFulltextBorders: " << buildInfo);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TUploadFulltextBorders",
+            {"buildInfo", buildInfo},
+        );
     }
 
     struct TDocStats {
@@ -1757,7 +1856,9 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadFulltextPrefixBorders: " << buildInfo);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: TUploadFulltextPrefixBorders",
+            {"buildInfo", buildInfo},
+        );
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
@@ -1835,7 +1936,7 @@ private:
     }
 
     bool FillSecondaryIndex(TIndexBuildInfo& buildInfo) {
-        LOG_D("FillSecondaryIndex Start");
+        YDB_LOG_DEBUG(LogPrefix << "FillSecondaryIndex Start");
 
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
@@ -1845,14 +1946,14 @@ private:
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
         if (done) {
-            LOG_D("FillSecondaryIndex Done");
+            YDB_LOG_DEBUG(LogPrefix << "FillSecondaryIndex Done");
         }
 
         return done;
     }
 
     bool ValidateSecondaryUniqueIndex(TIndexBuildInfo& buildInfo, TString& errorDesc) {
-        LOG_D("ValidateSecondaryUniqueIndex Start");
+        YDB_LOG_DEBUG(LogPrefix << "ValidateSecondaryUniqueIndex Start");
 
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
@@ -1870,7 +1971,7 @@ private:
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
         if (done) {
-            LOG_D("ValidateSecondaryUniqueIndex Done");
+            YDB_LOG_DEBUG(LogPrefix << "ValidateSecondaryUniqueIndex Done");
         }
 
         return done;
@@ -1995,12 +2096,16 @@ private:
 
     bool SendKMeansBorders(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-            LOG_D("FillVectorIndex FilterBorders " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex FilterBorders ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
             SendUploadKMeansBordersRequest(buildInfo);
             Progress(BuildId);
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-            LOG_D("FillVectorIndex FilterBorders Done " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex FilterBorders Done ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             NIceDb::TNiceDb db{txc.DB};
             buildInfo.SubState = TIndexBuildInfo::ESubState::None;
             Self->PersistBuildIndexState(db, buildInfo);
@@ -2101,7 +2206,7 @@ private:
                 SendVectorAutodetectRequest(idx, buildInfo);
                 return false;
             }
-            LOG_E("FillPrefixedVectorIndex Autodetect: no shards available");
+            YDB_LOG_ERROR(LogPrefix << "FillPrefixedVectorIndex Autodetect: no shards available");
             buildInfo.KMeans.NeedVectorAutodetect = false;
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexAddIssue(db, buildInfo,
@@ -2119,7 +2224,9 @@ private:
     }
 
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        LOG_D("FillPrefixedVectorIndex Start " << buildInfo.DebugString());
+        YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex Start ",
+            {"buildInfo", buildInfo.DebugString()},
+        );
 
         if (buildInfo.KMeans.Level == 1) {
             if (buildInfo.KMeans.NeedVectorAutodetect) {
@@ -2131,7 +2238,9 @@ private:
             if (!FillSecondaryIndex(buildInfo)) {
                 return false;
             }
-            LOG_D("FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex DoneLevel ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
 
             const ui64 doneShards = buildInfo.DoneShards.size();
             ClearDoneShards(txc, buildInfo);
@@ -2139,7 +2248,9 @@ private:
             buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
             buildInfo.KMeans.PrefixIndexDone(doneShards);
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
-            LOG_D("FillPrefixedVectorIndex PrefixIndexDone " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex PrefixIndexDone ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
 
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
@@ -2174,7 +2285,9 @@ private:
                 return false;
             }
             if (buildInfo.KMeans.OverlapClusters > 1) {
-                LOG_D("FillPrefixedVectorIndex Filter " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex Filter ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
                 PersistKMeansState(txc, buildInfo);
                 ClearDoneShards(txc, buildInfo);
@@ -2187,7 +2300,9 @@ private:
             // continue to NextLevel
         }
 
-        LOG_D("FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
+        YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex DoneLevel ",
+            {"buildInfo", buildInfo.DebugString()},
+        );
 
         ClearDoneShards(txc, buildInfo);
         const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
@@ -2195,13 +2310,17 @@ private:
         if (buildInfo.KMeans.Level == 2) {
             buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
         }
-        LOG_D("FillPrefixedVectorIndex NextLevel " << buildInfo.DebugString());
+        YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex NextLevel ",
+            {"buildInfo", buildInfo.DebugString()},
+        );
 
         PersistKMeansState(txc, buildInfo);
         NIceDb::TNiceDb db{txc.DB};
         Self->PersistBuildIndexShardStatusReset(db, buildInfo);
         if (!needsAnotherLevel) {
-            LOG_D("FillPrefixedVectorIndex Done " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillPrefixedVectorIndex Done ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             return true;
         }
         ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
@@ -2210,7 +2329,9 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
+        YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Start ",
+            {"buildInfo", buildInfo.DebugString()},
+        );
 
         // (Sample -> Recompute* -> Reshuffle -> UploadClusters)* -> MultiLocal -> (Filter)? -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample ||
@@ -2241,7 +2362,9 @@ private:
                 }
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
             }
-            LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2319,7 +2442,9 @@ private:
                     return FillVectorIndexNextParent(txc, buildInfo);
                 }
                 // Otherwise, we collect samples
-                LOG_D("FillVectorIndex Samples " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Samples ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
             }
 
             if (buildInfo.KMeans.NeedVectorAutodetect) {
@@ -2397,7 +2522,9 @@ private:
             Self->PersistBuildIndexSampleToClusters(db, buildInfo);
             buildInfo.Clusters->SetRound(1);
             if (buildInfo.KMeans.Rounds > 1) {
-                LOG_D("FillVectorIndex Recompute " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Recompute ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
                 buildInfo.KMeans.Round = 1;
             } else {
@@ -2409,7 +2536,9 @@ private:
                     buildInfo.Clusters->SetClusterSize(i, 0);
                     Self->PersistBuildIndexClusterSize(db, buildInfo, i);
                 }
-                LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
             }
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
@@ -2429,10 +2558,13 @@ private:
                 // Done
                 return true;
             }
+
             if (buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::UploadClusters) {
                 // Legacy path - reshuffle after uploading clusters in Sample+Upload state
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
-                LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextState",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
                 return false;
@@ -2449,7 +2581,9 @@ private:
     bool FillVectorIndexNextParent(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.KMeans.NextParent()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
-            LOG_D("FillVectorIndex NextParent " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextParent ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2459,7 +2593,9 @@ private:
             AddLocalClusters(buildInfo);
             buildInfo.Cluster2Shards.clear();
             if (!buildInfo.ToUploadShards.empty()) {
-                LOG_D("FillVectorIndex MultiKMeans " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex MultiKMeans ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
@@ -2472,7 +2608,9 @@ private:
 
     bool FillVectorIndexFilter(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1) {
-            LOG_D("FillVectorIndex Filter " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Filter ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
             ClearDoneShards(txc, buildInfo);
             NIceDb::TNiceDb db(txc.DB);
@@ -2491,7 +2629,9 @@ private:
     bool FillVectorIndexNextLevel(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.NextLevel()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
-            LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
+            YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex NextLevel ",
+                {"buildInfo", buildInfo.DebugString()},
+            );
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexShardStatusReset(db, buildInfo);
@@ -2512,7 +2652,9 @@ private:
                 return false;
             }
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillVectorIndex UploadEmpty " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex UploadEmpty ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadClustersRequest(buildInfo);
                 return false;
@@ -2526,7 +2668,9 @@ private:
             }
         }
 
-        LOG_D("FillVectorIndex Done " << buildInfo.DebugString());
+        YDB_LOG_DEBUG(LogPrefix << "FillVectorIndex Done ",
+            {"buildInfo", buildInfo.DebugString()},
+        );
         return true;
     }
 
@@ -2575,14 +2719,14 @@ private:
             // Compact rowid-mode prepass: copy the main table into the row-id source table (a generic
             // secondary-index build over __ydb_row_id), then go back through CreateBuild (to build the
             // 0build posting table) and the posting fill.
-            LOG_D("FillFulltextIndex RowIdSrc");
+            YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex RowIdSrc");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
             }
             done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextRowIdSrcRequest(shardIdx, buildInfo); }) &&
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
-                LOG_D("FillFulltextIndex RowIdSrc Done");
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex RowIdSrc Done");
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
                 buildInfo.SubState = TIndexBuildInfo::ESubState::None;
@@ -2595,14 +2739,14 @@ private:
             break;
         case TIndexBuildInfo::ESubState::None:
             // Build "posting" table (token-documents)
-            LOG_D("FillFulltextIndex Posting");
+            YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex Posting");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
             }
             done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextIndexRequest(shardIdx, buildInfo); }) &&
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
-                LOG_D("FillFulltextIndex Posting Done");
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex Posting Done");
                 if (buildInfo.IsBuildFulltextRelevance() && !buildInfo.IsBuildFulltextPrefixedRelevance()) {
                     NIceDb::TNiceDb db{txc.DB};
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
@@ -2619,12 +2763,16 @@ private:
         case TIndexBuildInfo::ESubState::FulltextIndexStats:
             // Non-prefixed with relevance - index statistics table (DocCount & TotalDocLength)
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillFulltextIndex SendUploadStats " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex SendUploadStats ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextStatsRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-                LOG_D("FillFulltextIndex UploadStats Done " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex UploadStats Done ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 ChangeToFulltextDictionary(txc, buildInfo);
             }
             break;
@@ -2632,14 +2780,14 @@ private:
             // FulltextRelevance - build dictionary table
             // FulltextCompact - compact token table
             // Prefixed with relevance - per-prefix statistics table
-            LOG_D("FillFulltextIndex Dictionary");
+            YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex Dictionary");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
             }
             done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextDictRequest(shardIdx, buildInfo); }) &&
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
-                LOG_D("FillFulltextIndex Dictionary Done");
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex Dictionary Done");
                 NIceDb::TNiceDb db{txc.DB};
                 if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance) {
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
@@ -2661,12 +2809,16 @@ private:
         case TIndexBuildInfo::ESubState::FulltextIndexBorders:
             // FulltextRelevance - aggregate border values for token dictionary
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillFulltextIndex SendUploadBorders " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex SendUploadBorders ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextBordersRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-                LOG_D("FillFulltextIndex UploadBorders Done " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex UploadBorders Done ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 if (buildInfo.IsBuildFulltextPrefixedRelevance()) {
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexPrefixBorders;
@@ -2682,12 +2834,16 @@ private:
         case TIndexBuildInfo::ESubState::FulltextIndexPrefixBorders:
             // Prefixed with relevance - aggregate border values for per-prefix statistics
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillFulltextIndex SendUploadPrefixBorders " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex SendUploadPrefixBorders ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextPrefixBordersRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-                LOG_D("FillFulltextIndex UploadPrefixBorders Done " << buildInfo.DebugString());
+                YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex UploadPrefixBorders Done ",
+                    {"buildInfo", buildInfo.DebugString()},
+                );
                 ChangeToFulltextDone(txc, buildInfo);
                 done = true;
             }
@@ -2697,7 +2853,7 @@ private:
         }
 
         if (done) {
-            LOG_D("FillFulltextIndex Done");
+            YDB_LOG_DEBUG(LogPrefix << "FillFulltextIndex Done");
         }
 
         return done;
@@ -2744,7 +2900,10 @@ private:
             return true;
         }
 
-        LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: Performing cross shard unique index validation",
+            {"buildId", BuildId},
+            {"state", buildInfo.State},
+        );
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
@@ -2776,7 +2935,9 @@ private:
         }
 
         if (!NSchemeShard::PerformCrossShardUniqIndexValidation(indexColumnTypeInfos, buildInfo.IndexColumns, sortedRanges, errorDesc)) {
-            LOG_E("TTxBuildProgress: Cross shard index validation failed. " << errorDesc << ". Cancelling unique index build");
+            YDB_LOG_ERROR(LogPrefix << "TTxBuildProgress: Cross shard index validation failed. Cancelling unique index build",
+                {"error", errorDesc},
+            );
             return false;
         }
         return true;
@@ -2807,20 +2968,26 @@ public:
         Y_ENSURE(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->get();
 
-        LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
-        LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
+        YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: Execute",
+            {"buildId", BuildId},
+            {"state", buildInfo.State},
+        );
+        YDB_LOG_DEBUG(LogPrefix << "TTxBuildProgress: Execute",
+            {"buildId", BuildId},
+            {"state", buildInfo.State},
+            {"buildInfo", buildInfo},
+        );
 
         if (buildInfo.IsBroken) {
             return true;
         }
 
         if (!buildInfo.DependencyTxIds.empty()) {
-            TStringBuilder msg;
-            msg << "TTxBuildProgress: " << BuildId << " " << buildInfo.State << ": waiting for dependencies:";
-            for (auto& txId: buildInfo.DependencyTxIds) {
-                msg << " " << txId;
-            }
-            LOG_N(msg);
+            YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: waiting for tx dependencies",
+                {"buildId", BuildId},
+                {"state", buildInfo.State},
+                {"txIds", buildInfo.DependencyTxIds},
+            );
             return true;
         }
 
@@ -3301,8 +3468,9 @@ public:
 
     void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) override {
         if (!buildInfo) {
-            LOG_N("TTxBuildProgress: OnUnhandledException: BuildIndexId not found "
-                << (BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder() << ", id# " << BuildId));
+            YDB_LOG_NOTICE(LogPrefix << "TTxBuildProgress: OnUnhandledException: BuildIndexId not found",
+                {"buildId", BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder() << BuildId},
+            );
             return;
         }
 
@@ -3313,8 +3481,10 @@ public:
         if (buildInfo->State != TIndexBuildInfo::EState::Filling) {
             // no idea how to gracefully stop index build otherwise
             // leave everything as is
-            LOG_E("TTxBuildProgress: OnUnhandledException: not a Filling state, id# " << buildInfo->Id
-                << ", TIndexBuildInfo: " << *buildInfo);
+            YDB_LOG_ERROR(LogPrefix << "TTxBuildProgress: OnUnhandledException: not a Filling state",
+                {"buildId", buildInfo->Id},
+                {"buildInfo", *buildInfo},
+            );
             return;
         }
 
@@ -3331,7 +3501,9 @@ public:
     }
 
     bool InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
-        LOG_D("InitiateShards " << buildInfo.DebugString());
+        YDB_LOG_DEBUG(LogPrefix << "InitiateShards",
+            {"buildInfo", buildInfo.DebugString()},
+        );
 
         Y_ENSURE(buildInfo.Shards.empty());
         Y_ENSURE(buildInfo.ToUploadShards.empty());
@@ -3348,7 +3520,9 @@ public:
             return false;
         }
         Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
-        LOG_D("InitiateShards table: " << path.PathString());
+        YDB_LOG_DEBUG(LogPrefix << "InitiateShards table",
+            {"table", path.PathString()},
+        );
 
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
@@ -3365,10 +3539,15 @@ public:
                 ? TSerializedTableRange() : TSerializedTableRange(prevBound, x->EndOfRange, true, false));
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
-                LOG_D("InitiateShard " << x->ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+                YDB_LOG_DEBUG(LogPrefix << "InitiateShard",
+                    {"shardIdx", x->ShardIdx},
+                    {"shardrange", buildInfo.KMeans.RangeToDebugStr(shardRange)},
+                );
                 buildInfo.AddParent(shardRange, x->ShardIdx);
             } else {
-                LOG_D("InitiateShard " << x->ShardIdx);
+                YDB_LOG_DEBUG(LogPrefix << "InitiateShard",
+                    {"shardIdx", x->ShardIdx},
+                );
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
@@ -3403,7 +3582,9 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& , const TActorContext& ctx) override {
-        LOG_I("TTxReply : TTxBilling, id# " << BuildId);
+        YDB_LOG_INFO(LogPrefix << "TTxReply : TTxBilling",
+            {"buildId", BuildId},
+        );
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
@@ -3438,8 +3619,9 @@ public:
 
     void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) override {
         if (!buildInfo) {
-            LOG_E("TTxReply : OnUnhandledException BuildIndexId not found"
-                << (BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder() << ", id# " << BuildId));
+            YDB_LOG_ERROR(LogPrefix << "TTxReply : OnUnhandledException BuildIndexId not found",
+                {"buildId", BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder() << BuildId},
+            );
             return;
         }
 
@@ -3451,8 +3633,10 @@ public:
             // most replies are used at Filling stage
             // no idea how to gracefully stop index build otherwise
             // leave everything as is
-            LOG_E("TTxReply : OnUnhandledException not a Filling state, id# " << buildInfo->Id
-                << ", TIndexBuildInfo: " << *buildInfo);
+            YDB_LOG_ERROR(LogPrefix << "TTxReply : OnUnhandledException not a Filling state",
+                {"buildId", buildInfo->Id},
+                {"buildInfo", *buildInfo},
+            );
             return;
         }
 
@@ -3485,26 +3669,31 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& shardIdx = Self->GetShardIdx(ShardId);
 
-        LOG_N("TTxReply : PipeRetry, id# " << BuildId
-            << ", shardId# " << ShardId
-            << ", shardIdx# " << shardIdx);
+        YDB_LOG_NOTICE(LogPrefix << "TTxReply : PipeRetry",
+            {"buildId", BuildId},
+            {"shardId", ShardId},
+            {"shardIdx", shardIdx},
+        );
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
             return true;
         }
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_D("TTxReply : PipeRetry"
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", shardId# " << ShardId
-            << ", shardIdx# " << shardIdx);
+        YDB_LOG_DEBUG(LogPrefix << "TTxReply : PipeRetry",
+            {"buildInfo", buildInfo},
+            {"shardId", ShardId},
+            {"shardIdx", shardIdx},
+        );
 
         if (!buildInfo.Shards.contains(shardIdx)) {
             return true;
         }
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_I("TTxReply : PipeRetry superfluous event, id# " << BuildId);
+            YDB_LOG_INFO(LogPrefix << "TTxReply : PipeRetry superfluous event",
+                {"buildId", BuildId},
+            );
             return true;
         }
 
@@ -3539,9 +3728,11 @@ public:
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
 
-        LOG_N("TTxReply : " << TypeName<TEvResponse>() << ", id# " << BuildId
-            << ", shardId# " << shardId
-            << ", shardIdx# " << shardIdx);
+        YDB_LOG_NOTICE(LogPrefix << "TTxReply : " << TypeName<TEvResponse>(),
+            {"buildId", BuildId},
+            {"shardId", shardId},
+            {"shardIdx", shardIdx},
+        );
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
@@ -3549,25 +3740,30 @@ public:
         }
 
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_D("TTxReply : " << TypeName<TEvResponse>()
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", record: " << ResponseShortDebugString()
-            << ", shardId# " << shardId
-            << ", shardIdx# " << shardIdx);
+        YDB_LOG_DEBUG(LogPrefix << "TTxReply : " << TypeName<TEvResponse>(),
+            {"buildInfo", buildInfo},
+            {"record", ResponseShortDebugString()},
+            {"shardId", shardId},
+            {"shardIdx", shardIdx},
+        );
 
         if (!buildInfo.Shards.contains(shardIdx)) {
             return true;
         }
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_N("TTxReply : " << TypeName<TEvResponse>() << " superfluous state event, id# " << BuildId
-                << ", TIndexBuildInfo: " << buildInfo);
+            YDB_LOG_NOTICE(LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << " superfluous state event",
+                {"buildId", BuildId},
+                {"buildInfo", buildInfo},
+            );
             return true;
         }
 
         if (!buildInfo.InProgressShards.contains(shardIdx)) {
-            LOG_N("TTxReply : " << TypeName<TEvResponse>() << " superfluous shard event, id# " << BuildId
-                << ", TIndexBuildInfo: " << buildInfo);
+            YDB_LOG_NOTICE(LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << " superfluous shard event",
+                {"buildId", BuildId},
+                {"buildInfo", buildInfo},
+            );
             return true;
         }
 
@@ -3576,10 +3772,13 @@ public:
         auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
 
         if (actualSeqNo != recordSeqNo) {
-            LOG_D("TTxReply : " << TypeName<TEvResponse>() << " ignore progress message by seqNo"
-                << ", TIndexBuildInfo: " << buildInfo
-                << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
-                << ", record: " << record.ShortDebugString());
+            YDB_LOG_DEBUG(LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << " ignore progress message by seqNo",
+                {"buildInfo", buildInfo},
+                {"shardId", shardId},
+                {"shardIdx", shardIdx},
+                {"actualSeqNo", TStringBuilder() << Self->Generation() << ":" << shardStatus.SeqNoRound},
+                {"record", record.ShortDebugString()},
+            );
             Y_ENSURE(actualSeqNo > recordSeqNo);
             return true;
         }
@@ -3675,9 +3874,10 @@ public:
 
                 int cmp = CompareBorders<true, true>(next.GetCells(), prev.GetCells(), true, true, keyTypes);
                 if (cmp < 0) {
-                    LOG_W("Check that all LastKeyAcks are monotonously increase"
-                        << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)
-                        << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry));
+                    YDB_LOG_WARN(LogPrefix << "Check that all LastKeyAcks are monotonously increase",
+                        {"next", DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)},
+                        {"prev", DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry)},
+                    );
                 } else {
                     shardStatus.LastKeyAck = lastKeyAck;
                 }
@@ -3917,7 +4117,9 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
         const auto& record = UploadSample->Get()->Record;
 
-        LOG_N("TTxReply : TEvUploadSampleKResponse, id# " << BuildId);
+        YDB_LOG_NOTICE(LogPrefix << "TTxReply : TEvUploadSampleKResponse",
+            {"buildId", BuildId},
+        );
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
@@ -3925,13 +4127,16 @@ public:
         }
 
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_D("TTxReply : TEvUploadSampleKResponse"
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", record: " << record.ShortDebugString());
+        YDB_LOG_DEBUG(LogPrefix << "TTxReply : TEvUploadSampleKResponse",
+            {"buildInfo", buildInfo},
+            {"record", record.ShortDebugString()},
+        );
         Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsBuildFulltextIndex());
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_I("TTxReply : TEvUploadSampleKResponse superfluous event, id# " << BuildId);
+            YDB_LOG_INFO(LogPrefix << "TTxReply : TEvUploadSampleKResponse superfluous event",
+                {"buildId", BuildId},
+            );
             return true;
         }
         Y_ENSURE(!buildInfo.IsBuildVectorIndex() || buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
@@ -4090,7 +4295,10 @@ public:
             THashSet<TIndexBuildId> deps = std::move(Self->TxIdToDependentIndexBuild.at(txId));
             Self->TxIdToDependentIndexBuild.erase(txId);
             for (auto& dependentBuildId: deps) {
-                LOG_N("TTxReply txId: " << txId << " : trying to resume dependent index build " << dependentBuildId);
+                YDB_LOG_NOTICE(LogPrefix << "TTxReply: trying to resume dependent index build",
+                    {"txId", txId},
+                    {"dependentBuildId", dependentBuildId},
+                );
                 if (Self->IndexBuilds.contains(dependentBuildId)) {
                     auto& buildInfo = *Self->IndexBuilds.at(dependentBuildId);
                     buildInfo.DependencyTxIds.erase(txId);
@@ -4103,19 +4311,22 @@ public:
         }
 
         if (!buildIdPtr) {
-            LOG_I("TTxReply : TEvNotifyTxCompletionResult superfluous message"
-                << ", txId: " << txId
-                << ", BuildIndexId not found");
+            YDB_LOG_INFO(LogPrefix << "TTxReply : TEvNotifyTxCompletionResult superfluous message",
+                {"txId", txId},
+            );
             return true;
         }
 
         BuildId = *buildIdPtr;
         auto& buildInfo = *Self->IndexBuilds.at(BuildId);
-        LOG_I("TTxReply : TEvNotifyTxCompletionResult, id# " << BuildId
-            << ", txId# " << txId);
-        LOG_D("TTxReply : TEvNotifyTxCompletionResult"
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", txId# " << txId);
+        YDB_LOG_INFO(LogPrefix << "TTxReply : TEvNotifyTxCompletionResult",
+            {"buildId", BuildId},
+            {"txId", txId},
+        );
+        YDB_LOG_DEBUG(LogPrefix << "TTxReply : TEvNotifyTxCompletionResult",
+            {"buildInfo", buildInfo},
+            {"txId", txId},
+        );
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -4228,12 +4439,13 @@ public:
             AddIssue(response.MutableIssues(), buildInfo.GetIssue());
         }
 
-        LOG_N("TIndexBuilder::TTxReply: ReplyOnCreation"
-              << ", BuildIndexId: " << buildInfo.Id
-              << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
-              << ", error: " << buildInfo.GetIssue()
-              << ", replyTo: " << buildInfo.CreateSender.ToString()
-              << ", message: " << responseEv->Record.ShortDebugString());
+        YDB_LOG_NOTICE(LogPrefix << "TIndexBuilder::TTxReply: ReplyOnCreation",
+            {"buildId", buildInfo.Id},
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"error", buildInfo.GetIssue()},
+            {"replyTo", buildInfo.CreateSender.ToString()},
+            {"message", responseEv->Record.ShortDebugString()},
+        );
 
         Send(buildInfo.CreateSender, std::move(responseEv), 0, buildInfo.SenderCookie);
     }
@@ -4244,11 +4456,11 @@ public:
 
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
         if (!buildIdPtr) {
-            LOG_I("TTxReply : TEvModifySchemeTransactionResult superfluous message"
-                << ", cookie: " << ModifyResult->Cookie
-                << ", record: " << record.ShortDebugString()
-                << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
-                << ", BuildIndexId not found");
+            YDB_LOG_INFO(LogPrefix << "TTxReply : TEvModifySchemeTransactionResult superfluous message",
+                {"cookie", ModifyResult->Cookie},
+                {"record", record.ShortDebugString()},
+                {"status", NKikimrScheme::EStatus_Name(record.GetStatus())},
+            );
             return true;
         }
 
@@ -4256,15 +4468,18 @@ public:
         // We need this because we use buildInfo after EraseBuildInfo
         auto buildInfoPin = Self->IndexBuilds.at(BuildId);
         auto& buildInfo = *buildInfoPin;
-        LOG_I("TTxReply : TEvModifySchemeTransactionResult, id# " << BuildId
-            << ", cookie: " << ModifyResult->Cookie
-            << ", record: " << record.ShortDebugString()
-            << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus()));
-        LOG_D("TTxReply : TEvModifySchemeTransactionResult"
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", cookie: " << ModifyResult->Cookie
-            << ", record: " << record.ShortDebugString()
-            << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus()));
+        YDB_LOG_INFO(LogPrefix << "TTxReply : TEvModifySchemeTransactionResult",
+            {"buildId", BuildId},
+            {"cookie", ModifyResult->Cookie},
+            {"record", record.ShortDebugString()},
+            {"status", NKikimrScheme::EStatus_Name(record.GetStatus())},
+        );
+        YDB_LOG_DEBUG(LogPrefix << "TTxReply : TEvModifySchemeTransactionResult",
+            {"buildInfo", buildInfo},
+            {"cookie", ModifyResult->Cookie},
+            {"record", record.ShortDebugString()},
+            {"status", NKikimrScheme::EStatus_Name(record.GetStatus())},
+        );
 
         const auto state = buildInfo.State;
         NIceDb::TNiceDb db(txc.DB);
@@ -4297,7 +4512,10 @@ public:
                 auto it = Self->PathsById.find(buildInfo.TablePathId);
                 if (it != Self->PathsById.end() && it->second->PathState == NKikimrSchemeOp::EPathStateCopying) {
                     auto copyTxId = it->second->LastTxId;
-                    LOG_I("TTxReply : Waiting for txId " << copyTxId << " to retry index build id# " << BuildId);
+                    YDB_LOG_INFO(LogPrefix << "TTxReply : Waiting for txId to retry index build",
+                        {"txId", copyTxId},
+                        {"buildId", BuildId},
+                    );
                     buildInfo.DependencyTxIds.insert(copyTxId);
                     Self->TxIdToDependentIndexBuild[copyTxId].insert(buildInfo.Id);
                     // subscribe to tx notification
@@ -4598,19 +4816,22 @@ public:
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
-            LOG_I("TTxReply : TEvAllocateResult superfluous message"
-                << ", cookie: " << AllocateResult->Cookie
-                << ", txId# " << txId
-                << ", BuildIndexId not found");
+            YDB_LOG_INFO(LogPrefix << "TTxReply : TEvAllocateResult superfluous message",
+                {"cookie", AllocateResult->Cookie},
+                {"txId", txId},
+            );
             return true;
         }
 
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_I("TTxReply : TEvAllocateResult, id# " << BuildId
-            << ", txId# " << txId);
-        LOG_D("TTxReply : TEvAllocateResult"
-            << ", TIndexBuildInfo: " << buildInfo
-            << ", txId# " << txId);
+        YDB_LOG_INFO(LogPrefix << "TTxReply : TEvAllocateResult",
+            {"buildId", BuildId},
+            {"txId", txId},
+        );
+        YDB_LOG_DEBUG(LogPrefix << "TTxReply : TEvAllocateResult",
+            {"buildInfo", buildInfo},
+            {"txId", txId},
+        );
 
         NIceDb::TNiceDb db(txc.DB);
         const auto state = buildInfo.State;
@@ -4763,3 +4984,5 @@ ITransaction* TSchemeShard::CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABil
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

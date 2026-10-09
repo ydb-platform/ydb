@@ -156,38 +156,36 @@ TEST(MetadataConversion, ExternalTableEnrichmentIsOneWay) {
 }
 
 TEST(MetadataConversion, ObjectKindCanOnlyBeInitializedOnceForYdbSource) {
-    using EKind = NYql::TExternalDataSource::EKind;
 
     NKikimrSchemeOp::TAuth auth;
     auth.MutableNone();
     auto source = MakeDataSource("Ydb", auth, "source-path", "grpc://example.com");
-    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
-    source.InitObjectKind(EKind::MessageStream);
+    EXPECT_ANY_THROW(source.InitObjectKind(NFq::EExternalObjectKind::Unknown));
+    source.InitObjectKind(NFq::EExternalObjectKind::MessageStream);
     EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::Ydb);
     EXPECT_TRUE(source.IsMessageStream());
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
-    EXPECT_ANY_THROW(source.InitObjectKind(EKind::MessageStream));
+    EXPECT_ANY_THROW(source.InitObjectKind(NFq::EExternalObjectKind::MessageStream));
 
     auto tableSource = MakeDataSource("Ydb", auth, "table-path", "grpc://example.com");
-    tableSource.InitObjectKind(EKind::Table);
-    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::Table));
-    EXPECT_ANY_THROW(tableSource.InitObjectKind(EKind::MessageStream));
+    tableSource.InitObjectKind(NFq::EExternalObjectKind::Table);
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(NFq::EExternalObjectKind::Table));
+    EXPECT_ANY_THROW(tableSource.InitObjectKind(NFq::EExternalObjectKind::MessageStream));
 
     auto objectStorageSource = MakeDataSource("ObjectStorage", auth);
-    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::Table));
-    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(EKind::MessageStream));
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(NFq::EExternalObjectKind::Table));
+    EXPECT_ANY_THROW(objectStorageSource.InitObjectKind(NFq::EExternalObjectKind::MessageStream));
 }
 
 TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
-    using EKind = NYql::TExternalDataSource::EKind;
     NKikimrSchemeOp::TAuth auth;
     auth.MutableNone();
     const auto factory = NExternalSource::CreateExternalSourceFactory({});
     auto source = MakeDataSource("YT", auth, "source-path", "yt.example.com");
     EXPECT_EQ(source.GetProviderName(factory), NYql::YtProviderName);
     EXPECT_FALSE(source.IsMessageStream());
-    EXPECT_ANY_THROW(source.InitObjectKind(EKind::Unknown));
-    source.InitObjectKind(EKind::MessageStream);
+    EXPECT_ANY_THROW(source.InitObjectKind(NFq::EExternalObjectKind::Unknown));
+    source.InitObjectKind(NFq::EExternalObjectKind::MessageStream);
     EXPECT_TRUE(source.IsMessageStream());
     EXPECT_EQ(source.GetDatabaseType(), NYql::EDatabaseType::YT);
     EXPECT_EQ(source.BuildConnectorProperties().at("source_type"), "YT");
@@ -195,15 +193,15 @@ TEST(MetadataConversion, MessageStreamKeepsConnectionType) {
     EXPECT_EQ(source.GetDataSourcePath(), "source-path");
     EXPECT_EQ(source.GetProviderName(factory), TString(NYql::YtProviderName));
     EXPECT_FALSE(source.IsYdb());
-    EXPECT_ANY_THROW(source.InitObjectKind(EKind::MessageStream));
+    EXPECT_ANY_THROW(source.InitObjectKind(NFq::EExternalObjectKind::MessageStream));
 
     auto table = MakeDataSource("YT", auth);
-    table.InitObjectKind(EKind::Table);
+    table.InitObjectKind(NFq::EExternalObjectKind::Table);
     EXPECT_FALSE(table.IsMessageStream());
     EXPECT_EQ(table.GetProviderName(factory), NYql::YtProviderName);
-    EXPECT_ANY_THROW(table.InitObjectKind(EKind::MessageStream));
+    EXPECT_ANY_THROW(table.InitObjectKind(NFq::EExternalObjectKind::MessageStream));
     auto ydb = MakeDataSource("Ydb", auth);
-    ydb.InitObjectKind(EKind::MessageStream);
+    ydb.InitObjectKind(NFq::EExternalObjectKind::MessageStream);
     EXPECT_TRUE(ydb.IsMessageStream());
     EXPECT_TRUE(ydb.IsYdb());
     EXPECT_EQ(ydb.GetDatabaseType(), NYql::EDatabaseType::Ydb);

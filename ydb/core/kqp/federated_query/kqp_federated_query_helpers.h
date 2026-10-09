@@ -1,9 +1,11 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_provider_integration.h>
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client_settings.h>
 #include <ydb/library/logger/actor.h>
+#include <ydb/library/yql/providers/abstract/object_kind.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -29,6 +31,8 @@ namespace NKqpProto {
 
 namespace NYql {
     class IYdbExternalMetadataClientCache;
+    class TExternalDataSource;
+    struct TKikimrConfiguration;
 }
 
 namespace NKikimr::NKqp {
@@ -239,29 +243,19 @@ namespace NKikimr::NKqp {
     // Used only for unit tests
     bool WaitHttpGatewayFinalization(NMonitoring::TDynamicCounterPtr countersRoot, TDuration timeout = TDuration::Minutes(1), TDuration refreshPeriod = TDuration::MilliSeconds(100));
 
-    struct TGetSchemeEntryResult {
-        TMaybe<NYdb::NScheme::ESchemeEntryType> EntryType;
-        NYql::TIssues Issues;
-    };
-
-    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
+    bool RequiresExternalObjectKindContext(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TString& endpoint,
-        const TString& database,
-        bool useTls,
-        const TString& structuredTokenJson,
-        const TString& path);
+        const NYql::TExternalDataSource& source,
+        const TMaybe<TString>& externalPath,
+        bool resolveEntityInsideDataSource);
 
-    struct TYtEntityTypeResult {
-        bool IsQueue = false;
-        NYql::TIssues Issues;
-    };
-
-    NThreading::TFuture<TYtEntityTypeResult> GetYtEntityType(
+    NThreading::TFuture<NFq::TExternalObjectKindResult> GetExternalObjectKind(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TString& endpoint,
-        const TString& structuredTokenJson,
-        const TString& path);
+        const NYql::TExternalDataSource& source,
+        const TMaybe<TString>& externalPath,
+        bool resolveEntityInsideDataSource,
+        const NYql::TKikimrConfiguration* config,
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory);
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks);
 

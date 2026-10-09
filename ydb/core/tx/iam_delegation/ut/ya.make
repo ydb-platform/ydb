@@ -13,6 +13,7 @@ SRCS(
     durability_ut.cpp
     iam_delegation_ut.cpp
     lifecycle_recovery_ut.cpp
+    revocation_boundaries_ut.cpp
     storage_reopen_ut.cpp
 )
 

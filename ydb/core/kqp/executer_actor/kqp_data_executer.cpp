@@ -2,6 +2,9 @@
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
 #include "kqp_pq_topic_resolver.h"
+#include "kqp_graph_replanning.h"
+
+#include <ydb/core/fq/libs/state/dq_state_load_plan_impl.h>
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -571,8 +574,13 @@ private:
                 {"ctx", *GetUserRequestContext()},
                 {"issues", ev->Get()->Issues.ToOneLineString()},
                 {"traceId", TraceId()});
-            ReplyErrorAndDie(ev->Get()->Status, ev->Get()->Issues);
-            return;
+            if (!UseGraphReplanning()) {
+                ReplyErrorAndDie(ev->Get()->Status, ev->Get()->Issues);
+                return;
+            }
+            PqPlanningSnapshotFailed = true;
+        } else {
+            PqPlanningSnapshot = std::move(ev->Get()->Snapshot);
         }
 
         TopicPartitionSnapshotRequired = false;
@@ -603,7 +611,8 @@ private:
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
 
-                    if (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
+                    if ((AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
+                        || AppData()->FeatureFlags.GetEnableStreamingQueryReplanning())
                         && transaction.Body->GetHasPqSources()
                         && Request.QueryPhysicalGraph
                         && FederatedQuerySetup
@@ -664,7 +673,10 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
-        const bool graphRestored = RestoreTasksGraph(RescalingChangedTaskCount);
+        const bool graphRestored = PrepareGraphReplanning() ? false : RestoreTasksGraph(GraphChangedOnRestart);
+        if (GraphChangedOnRestart) {
+            Request.SaveQueryPhysicalGraph = true;
+        }
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
@@ -735,7 +747,16 @@ private:
 
         if (!graphRestored) {
             const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
-            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
+            if (PreviousPhysicalGraph) {
+                try {
+                    sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
+                    CompleteGraphReplanning();
+                } catch (const std::exception& e) {
+                    FallbackGraphReplanning(e.what());
+                }
+            } else {
+                sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
+            }
         }
 
         TIssue validateIssue;
@@ -833,7 +854,9 @@ private:
     void SavePhysicalGraph() {
         YQL_ENSURE(Request.Transactions.size() == 1);
 
+        auto saveReason = TEvSaveScriptPhysicalGraphRequest::EReason::UnchangedRestore;
         if (!Request.QueryPhysicalGraph) {
+            saveReason = TEvSaveScriptPhysicalGraphRequest::EReason::InitialGraph;
             const auto preparedQuery = Request.Transactions[0].Body->GetPreparedQuery();
             YQL_ENSURE(preparedQuery);
             NKikimrKqp::TQueryPhysicalGraph physicalGraph;
@@ -844,12 +867,22 @@ private:
 
         const auto runScriptActorId = GetUserRequestContext()->RunScriptActorId;
         Y_ENSURE(runScriptActorId);
-        this->Send(runScriptActorId, new TEvSaveScriptPhysicalGraphRequest(*Request.QueryPhysicalGraph));
+        if (GraphChangedOnRestart) {
+            auto transition = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(*Request.QueryPhysicalGraph);
+            transition->SetZeroCheckpointSaved(false);
+            transition->SetRequiresCompatibleStateRecovery(true);
+            Request.QueryPhysicalGraph = std::move(transition);
+            saveReason = TEvSaveScriptPhysicalGraphRequest::EReason::ReplannedGraphTransition;
+        }
+        this->Send(runScriptActorId, new TEvSaveScriptPhysicalGraphRequest(*Request.QueryPhysicalGraph, saveReason));
         Become(&TKqpDataExecuter::WaitResolveState);
     }
 
     void HandleResolve(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
         // TODO: replace with coroutine to flawlessly break executer workflow without additional states.
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && ReplanningCounters) {
+            ReplanningCounters->GetCounter("replan_failed", true)->Inc();
+        }
         YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script physical graph with issues: " << ev->Get()->Issues.ToOneLineString());
         OnShardsResolve();
     }
@@ -1254,9 +1287,8 @@ private:
 
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
-            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                auto& checkpointTask = *graphParams.AddTasks();
-                checkpointTask = task.GetDqTask();
+            graphParams = MakeCheckpointGraphParams(*Request.QueryPhysicalGraph);
+            for (auto& checkpointTask : *graphParams.MutableTasks()) {
                 checkpointTask.ClearSecureParams();
 
                 auto& requestContext = *checkpointTask.MutableRequestContext();
@@ -1320,6 +1352,8 @@ private:
         }
 
         NFq::TCheckpointCoordinatorSettings setting;
+        setting.RequireCompatibleStateRecovery = Request.QueryPhysicalGraph
+            && Request.QueryPhysicalGraph->GetRequiresCompatibleStateRecovery();
         FederatedQuery::StreamingDisposition streamingDisposition;
         if (const auto disposition = context->StreamingDisposition) {
             if (disposition->has_output_start_time()) {
@@ -1349,12 +1383,19 @@ private:
             streamingDisposition.mutable_from_last_checkpoint()->set_force(true);
         }
 
+        if (setting.RequireCompatibleStateRecovery && !Request.QueryPhysicalGraph->GetZeroCheckpointSaved()) {
+            // A saved transition may outlive the executor that created it. Always
+            // select the checkpoint's graph until this graph has its own checkpoint.
+            streamingDisposition.Clear();
+            streamingDisposition.mutable_from_last_checkpoint()->set_force(false);
+        }
+
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT
             : FederatedQuery::EMPTY;
         const bool restoreOffsetsFromForeignCheckpoint =
             (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint())
-            || RescalingChangedTaskCount;
+            || GraphChangedOnRestart;
 
         auto counters = Counters->Counters->GetKqpCounters();
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
@@ -1491,10 +1532,98 @@ private:
         }
     }
 
+    bool UseGraphReplanning() const {
+        return Request.QueryPhysicalGraph
+            && AppData()->FeatureFlags.GetEnableStreamingQueryReplanning()
+            && !Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
+    }
+
+    bool PrepareGraphReplanning() {
+        if (!UseGraphReplanning()) {
+            return false;
+        }
+        const bool hasPqSources = std::any_of(Request.Transactions.begin(), Request.Transactions.end(),
+            [](const auto& tx) { return tx.Body->GetHasPqSources(); });
+        if (!hasPqSources) {
+            return false;
+        }
+        ReplanningCounters = Counters->Counters->GetKqpCounters()->GetSubgroup("subsystem", "streaming_graph_replanning");
+        ReplanningCounters->GetCounter("replan_attempted", true)->Inc();
+        TTaskPlanningConstraints constraints;
+        TString reason;
+        if (PqPlanningSnapshotFailed || PqPlanningSnapshot.empty() || ResourcesSnapshot.empty()) {
+            reason = "Source or resource planning snapshot is unavailable";
+        } else if (CollectReplanningConstraints(*Request.QueryPhysicalGraph, constraints, reason)) {
+            ReplanningCounters->GetCounter("fixed_stateful_stages", true)->Add(constraints.FixedTaskCountByStage.size());
+            YDB_LOG_INFO("Replanning streaming query",
+                {"previousTaskCount", Request.QueryPhysicalGraph->TasksSize()},
+                {"fixedStatefulStages", constraints.FixedTaskCountByStage.size()});
+            PreviousPhysicalGraph = Request.QueryPhysicalGraph;
+            TasksGraph.SetPlanningConstraints(std::move(constraints));
+            TasksGraph.SetPqSourcePlanningSnapshot(std::move(PqPlanningSnapshot));
+            return true;
+        }
+        YDB_LOG_INFO("Streaming graph replanning fallback", {"reason", reason});
+        ReplanningCounters->GetCounter("replan_fallback", true)->Inc();
+        return false;
+    }
+
+    void FallbackGraphReplanning(const TString& reason) {
+        YDB_LOG_INFO("Streaming graph replanning fallback", {"reason", reason});
+        ReplanningCounters->GetCounter("replan_failed", true)->Inc();
+        ReplanningCounters->GetCounter("replan_fallback", true)->Inc();
+        TasksGraph.RestoreAfterReplan(ResourcesSnapshot, *PreviousPhysicalGraph);
+        Request.QueryPhysicalGraph = std::move(PreviousPhysicalGraph);
+    }
+
+    void CompleteGraphReplanning() {
+        TIssue issue;
+        YQL_ENSURE(ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, issue), "Invalid candidate graph: " << issue.ToString());
+        auto candidate = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>();
+        *candidate->MutablePreparedQuery() = PreviousPhysicalGraph->GetPreparedQuery();
+        TasksGraph.PersistTasksGraphInfo(*candidate);
+        if (MaterializedGraphsEqual(*PreviousPhysicalGraph, *candidate)) {
+            YDB_LOG_INFO("Streaming graph replanning unchanged");
+            ReplanningCounters->GetCounter("replan_unchanged", true)->Inc();
+            TasksGraph.RestoreAfterReplan(ResourcesSnapshot, *PreviousPhysicalGraph);
+            Request.QueryPhysicalGraph = std::move(PreviousPhysicalGraph);
+            return;
+        }
+        // Preflight against the previous materialized graph. The coordinator will
+        // independently validate against the graph of the checkpoint it selects.
+        const auto oldParams = MakeCheckpointGraphParams(*PreviousPhysicalGraph);
+        const auto newParams = MakeCheckpointGraphParams(*candidate);
+        const NFq::TGraphStateContext context;
+        const NFq::TGraphStateInfo previous(oldParams, context), next(newParams, context);
+        NFq::TStateLoadPlan plan;
+        NFq::TSourceRecoverySet sources;
+        NYql::TIssues issues;
+        YQL_ENSURE(NFq::MakeContinueFromStreamingOffsetsPlan(previous, next, false, plan, sources, issues, true),
+            "Incompatible candidate state: " << issues.ToOneLineString());
+        candidate->SetZeroCheckpointSaved(false);
+        candidate->SetRequiresCompatibleStateRecovery(true);
+        ReplanningCounters->GetCounter("replan_graph_changed", true)->Inc();
+        ReplanningCounters->GetCounter("foreign_state_mapping_tasks", true)->Add(plan.size());
+        const auto sourceTaskCount = [](const NKikimrKqp::TQueryPhysicalGraph& graph) {
+            return std::count_if(graph.GetTasks().begin(), graph.GetTasks().end(), [](const auto& task) {
+                return std::any_of(task.GetDqTask().GetInputs().begin(), task.GetDqTask().GetInputs().end(),
+                    [](const auto& input) { return input.HasSource() && input.GetSource().GetType() == "PqSource"; });
+            });
+        };
+        YDB_LOG_INFO("Streaming graph replanning changed",
+            {"previousTaskCount", PreviousPhysicalGraph->TasksSize()},
+            {"sourceTaskCountBefore", sourceTaskCount(*PreviousPhysicalGraph)},
+            {"sourceTaskCountAfter", sourceTaskCount(*candidate)},
+            {"candidateTaskCount", candidate->TasksSize()}, {"foreignStateMappingTasks", plan.size()});
+        Request.QueryPhysicalGraph = std::move(candidate);
+        GraphChangedOnRestart = true;
+        Request.SaveQueryPhysicalGraph = true;
+    }
+
     void StartPqTopicResolver() {
         // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
-        auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
-            Request.QueryPhysicalGraph);
+        auto mutableGraph = UseGraphReplanning() ? nullptr
+            : std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(Request.QueryPhysicalGraph);
 
         THashMap<TString, TString> resolvedSecureParams;
         for (const auto& transaction : Request.Transactions) {
@@ -1543,7 +1672,11 @@ private:
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 
-    bool RescalingChangedTaskCount = false;
+    bool GraphChangedOnRestart = false;
+    NMonitoring::TDynamicCounterPtr ReplanningCounters;
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> PreviousPhysicalGraph;
+    TPqSourcePlanningSnapshot PqPlanningSnapshot;
+    bool PqPlanningSnapshotFailed = false;
 };
 
 } // namespace

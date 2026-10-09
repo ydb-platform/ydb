@@ -20,9 +20,12 @@ using TSourceRecoverySet = THashSet<std::pair<ui64, ui64>>; // Target task ID, i
     tied aggregation checkpoints, checks full key/state types, task counts and compiled
     shuffle routing, and identifies changed consumers requiring source preparation.
     FORCE permits unsupported state loss but never transfers an incompatible program checkpoint.
+    Automatic replanning additionally transfers identical hopping programs and initializes
+    newly created topic partitions from the original source start timestamp. It forbids FORCE.
 */
 bool MakeContinueFromStreamingOffsetsPlan(const TGraphStateInfo& src, const TGraphStateInfo& dst,
-    bool force, TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues);
+    bool force, TStateLoadPlan& plan, TSourceRecoverySet& sourcesToPrepare, NYql::TIssues& issues,
+    bool automaticReplanning = false);
 
 /*
     Acounted all stateful operators with supported replay (now only GROUP BY HoppingWindow),

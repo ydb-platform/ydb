@@ -19,8 +19,9 @@ namespace NKikimr::NKqp {
 //
 // The actor collects PQ source descriptors from `transactions`, describes every
 // discovered topic in parallel using `pqGatewayFactory`, patches the partition
-// counts in `*queryPhysicalGraph`, and then sends
-// TEvKqpExecuter::TEvPqTopicResolveStatus back to `owner`.
+// counts in `*queryPhysicalGraph` for legacy restores, and then sends
+// TEvKqpExecuter::TEvPqTopicResolveStatus back to `owner`. With a null graph,
+// returns execution-local source descriptors in the event without mutating saved tasks.
 //
 // Must be called only after SecureParams have been resolved (i.e. after secrets
 // snapshot is obtained) so that the secureParams map is fully populated.

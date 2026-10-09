@@ -351,11 +351,19 @@ struct TEvSaveScriptExternalEffectResponse : public TEventLocal<TEvSaveScriptExt
 };
 
 struct TEvSaveScriptPhysicalGraphRequest : public TEventLocal<TEvSaveScriptPhysicalGraphRequest, TKqpScriptExecutionEvents::EvSaveScriptPhysicalGraphRequest> {
-    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph physicalGraph)
+    enum class EReason {
+        InitialGraph,
+        UnchangedRestore,
+        ReplannedGraphTransition,
+    };
+
+    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph physicalGraph, EReason reason = EReason::UnchangedRestore)
         : PhysicalGraph(std::move(physicalGraph))
+        , Reason(reason)
     {}
 
     NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    EReason Reason;
 };
 
 struct TEvSaveScriptPhysicalGraphResponse : public TEventLocal<TEvSaveScriptPhysicalGraphResponse, TKqpScriptExecutionEvents::EvSaveScriptPhysicalGraphResponse> {

@@ -8,6 +8,12 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
+#include <google/protobuf/util/time_util.h>
+
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT LogComponent
 
 namespace NKikimr {
@@ -230,9 +236,9 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     request.mutable_query_cache_policy()->set_keep_in_cache(true);
 
     if (operationTimeout) {
-        auto* timeout = request.mutable_operation_params()->mutable_operation_timeout();
-        timeout->set_seconds(operationTimeout.Seconds());
-        timeout->set_nanos(operationTimeout.NanoSecondsOfSecond());
+        const auto maxTimeout = TDuration::Seconds(google::protobuf::util::TimeUtil::kDurationMaxSeconds);
+        *request.mutable_operation_params()->mutable_operation_timeout() =
+            NProtoInterop::CastToProto(std::min(operationTimeout, maxTimeout));
     }
 
     if (params) {

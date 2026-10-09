@@ -17,3 +17,15 @@ message Profile {
 message ProfileReply {
     required bytes payload = 1;
 }
+
+message ProfileBatchRequest {
+    repeated uint64 ids = 1;
+}
+
+message ProfileBatchPayload {
+    repeated Profile profiles = 1;
+}
+
+message ProfileBatchReply {
+    required bytes payload = 1;
+}

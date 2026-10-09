@@ -33,6 +33,9 @@ void ValidateConfig(const NConfig::TWasmServicesConfig& config) {
     Y_ENSURE(config.GetEnabled(), "WASM Profile adapter is disabled");
     Y_ENSURE(!config.GetModulePath().empty(), "WASM Profile module path is required");
     Y_ENSURE(config.BindingsSize(), "WASM Profile bindings are required");
+    Y_ENSURE(config.GetMaxBatchRows() <= MaxProfileBatchRows, "WASM Profile batch row limit exceeds 64");
+    Y_ENSURE(!config.GetMaxBatchBytes() || (config.GetMaxBatchBytes() >= sizeof(TProfileBatchHeader) + sizeof(TProfileResult) &&
+                                            config.GetMaxBatchBytes() <= MaxProfileBatchBytes), "Invalid WASM Profile batch byte limit");
     THashSet<TString> aliases;
     for (const auto& binding : config.GetBindings()) {
         Y_ENSURE(!binding.GetAlias().empty() && aliases.insert(binding.GetAlias()).second, "Invalid or duplicate WASM Profile alias");
@@ -64,6 +67,9 @@ struct TPreparedConfig {
     TVector<TBinding> Bindings;
     THashMap<TString, ui32> Aliases;
     ui32 MaxRows = 65536;
+    ui32 BatchRows = 1;
+    ui32 BatchBytes = MaxProfileBatchBytes;
+    ui32 DispatchRows = 1;
     TDuration Timeout = TDuration::Seconds(30);
 };
 
@@ -106,7 +112,10 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
             query->Compartment = CreateRegistryCompartment({});
             AddPrecompiledModule(query->Compartment.get(), Config->Module, "FqProfileAdapter");
             query->Resident = std::make_unique<TCompartmentResidentCache>(query->Compartment.get());
-            Transport = std::make_shared<TTransport>(Config->Bindings);
+            TTransportLimits transportLimits;
+            if (Config->BatchRows > 1)
+                transportLimits.MaxPayloadBytes = Config->BatchBytes;
+            Transport = std::make_shared<TTransport>(Config->Bindings, transportLimits);
             auto wasmAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
             Runtime = std::make_unique<NAsync::TRuntime>(std::move(query), std::move(wasmAlloc), Transport, NAsync::TLimits{},
                                                          [system = NActors::TActivationContext::ActorSystem(), owner = SelfId()] {
@@ -122,7 +131,7 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
         return Index;
     }
     i64 GetFreeSpace() const override {
-        return Failed || Finished ? 0 : static_cast<i64>(Config->MaxRows - Pending.size() - bool(Call) - bool(Result)) * sizeof(ui64);
+        return Failed || Finished ? 0 : static_cast<i64>(Config->MaxRows - BufferedRows()) * sizeof(ui64);
     }
     const TDqAsyncStats& GetEgressStats() const override {
         return Stats;
@@ -131,7 +140,7 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
     void SendData(TUnboxedValueBatch&& batch, i64, const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) override {
         Y_ENSURE(!checkpoint, "WASM Profile prototype does not support checkpoints");
         Y_ENSURE(!Finished && !Failed && !batch.IsWide(), "Invalid WASM Profile input batch");
-        Y_ENSURE(batch.RowCount() <= Config->MaxRows - Pending.size() - bool(Call) - bool(Result), "WASM Profile row quota exceeded");
+        Y_ENSURE(batch.RowCount() <= Config->MaxRows - BufferedRows(), "WASM Profile row quota exceeded");
         batch.ForEachRow([&](const NUdf::TUnboxedValue& row) {
             const auto id = row.GetElement(InputId).Get<ui64>();
             Y_ENSURE(id, "WASM Profile id must be nonzero");
@@ -169,6 +178,47 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
         }
     }
 
+    size_t BufferedRows() const {
+        return Pending.size() + ActiveIds.size() + Results.size();
+    }
+
+    bool DecodeResults(TStringBuf bytes) {
+        TVector<TProfileResult> items;
+        if (Config->BatchRows > 1) {
+            if (bytes.size() < sizeof(TProfileBatchHeader) || bytes.size() > Config->BatchBytes)
+                return false;
+            TProfileBatchHeader header;
+            std::memcpy(&header, bytes.data(), sizeof(header));
+            if (header.Version != ProfileVersion || header.Count != ActiveIds.size() || header.Reserved ||
+                header.MaxBytes != Config->BatchBytes || bytes.size() != sizeof(header) + header.Count * sizeof(TProfileResult))
+                return false;
+            items.resize(header.Count);
+            std::memcpy(items.data(), bytes.data() + sizeof(header), items.size() * sizeof(TProfileResult));
+        } else {
+            if (bytes.size() != sizeof(TProfileResults))
+                return false;
+            TProfileResults decoded;
+            std::memcpy(&decoded, bytes.data(), sizeof(decoded));
+            if (decoded.Version != ProfileVersion || decoded.Count != 1 || ActiveIds.size() != 1)
+                return false;
+            items.push_back(decoded.Items[0]);
+        }
+        // Validate the complete batch before making any row visible downstream.
+        for (size_t i = 0; i < items.size(); ++i) {
+            const auto& item = items[i];
+            if (item.Error != EServiceError::None || item.Profile.Id != ActiveIds[i] || !item.Profile.NameBytes ||
+                item.Profile.NameBytes > MaxProfileNameBytes || item.Profile.Score > 100) {
+                Fail(TStringBuilder() << "WASM Profile service failed: error=" << static_cast<ui32>(item.Error)
+                                      << ", client_error=" << static_cast<ui32>(item.ClientError));
+                return false;
+            }
+        }
+        ActiveIds.clear();
+        for (const auto& item : items)
+            Results.push_back(item.Profile);
+        return true;
+    }
+
     void Pump() {
         if (Failed || !Runtime || !Output)
             return;
@@ -180,43 +230,52 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
                 if (reply.Status == NAsync::ECallStatus::Waiting || reply.Status == NAsync::ECallStatus::Runnable)
                     return;
                 Runtime->Drop(std::exchange(Call, 0));
-                if (reply.Status != NAsync::ECallStatus::Completed || reply.Data.size() != sizeof(TProfileResults)) {
+                if (reply.Status != NAsync::ECallStatus::Completed) {
                     Fail("WASM Profile execution failed or deadline expired");
                     return;
                 }
-                TProfileResults decoded;
-                std::memcpy(&decoded, reply.Data.data(), sizeof(decoded));
-                if (decoded.Version != ProfileVersion || decoded.Count != 1 || decoded.Items[0].Error != EServiceError::None ||
-                    !decoded.Items[0].Profile.Id || !decoded.Items[0].Profile.NameBytes ||
-                    decoded.Items[0].Profile.NameBytes > MaxProfileNameBytes || decoded.Items[0].Profile.Score > 100) {
-                    Fail(TStringBuilder() << "WASM Profile service failed: error=" << static_cast<ui32>(decoded.Items[0].Error)
-                                          << ", client_error=" << static_cast<ui32>(decoded.Items[0].ClientError));
+                if (!DecodeResults(TStringBuf(reply.Data.data(), reply.Data.size()))) {
+                    if (!Failed)
+                        Fail("Invalid WASM Profile result framing");
                     return;
                 }
-                Result = decoded.Items[0].Profile;
             }
-            if (Result) {
+            while (!Results.empty()) {
                 auto guard = Guard(*Alloc);
                 if (Output->GetFillLevel() == HardLimit)
                     return;
+                const auto& result = Results.front();
                 NUdf::TUnboxedValue* members;
                 auto row = HolderFactory.CreateDirectArrayHolder(3, members);
-                members[OutputId] = NUdf::TUnboxedValuePod(Result->Id);
-                members[OutputName] = MakeString(TStringBuf(Result->Name, Result->NameBytes));
-                members[OutputScore] = NUdf::TUnboxedValuePod(Result->Score);
+                members[OutputId] = NUdf::TUnboxedValuePod(result.Id);
+                members[OutputName] = MakeString(TStringBuf(result.Name, result.NameBytes));
+                members[OutputScore] = NUdf::TUnboxedValuePod(result.Score);
                 Output->Consume(std::move(row));
                 Output->Flush();
-                Stats.Bytes += sizeof(ui64) + sizeof(ui32) + Result->NameBytes;
+                Stats.Bytes += sizeof(ui64) + sizeof(ui32) + result.NameBytes;
                 ++Stats.Rows;
-                Result.Clear();
+                Results.pop_front();
                 Callback->ResumeExecution();
             }
             if (!Pending.empty()) {
-                const auto id = Pending.front();
-                Pending.pop_front();
-                const auto mode = Config->Bindings[Binding].Protocol == EProtocol::Http ? EProfileMode::Http : EProfileMode::Grpc;
-                const auto bytes = Encode(TArgumentsHeader{static_cast<ui64>(mode), Binding, Binding, sizeof(id)},
-                                          std::string_view(reinterpret_cast<const char*>(&id), sizeof(id)));
+                {
+                    auto guard = Guard(*Alloc);
+                    if (Output->GetFillLevel() == HardLimit)
+                        return;
+                }
+                const auto count = std::min<size_t>(Config->DispatchRows, Pending.size());
+                for (size_t i = 0; i < count; ++i) {
+                    ActiveIds.push_back(Pending.front());
+                    Pending.pop_front();
+                }
+                const bool http = Config->Bindings[Binding].Protocol == EProtocol::Http;
+                const bool batch = Config->BatchRows > 1;
+                const auto mode =
+                    batch ? (http ? EProfileMode::HttpBatch : EProfileMode::GrpcBatch) : (http ? EProfileMode::Http : EProfileMode::Grpc);
+                std::string payload(reinterpret_cast<const char*>(ActiveIds.data()), ActiveIds.size() * sizeof(ui64));
+                if (batch)
+                    payload = Encode(TProfileBatchHeader{ProfileVersion, static_cast<ui32>(count), Config->BatchBytes}, payload);
+                const auto bytes = Encode(TArgumentsHeader{static_cast<ui64>(mode), Binding, Binding, payload.size()}, payload);
                 Call = Runtime->Start(TStringBuf(bytes.data(), bytes.size()), TInstant::Now() + Config->Timeout);
                 Schedule(Config->Timeout, new NActors::TEvents::TEvWakeup(Call));
                 Send(SelfId(), new TEvReady);
@@ -236,7 +295,8 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
             return;
         Runtime.reset();
         Pending.clear();
-        Result.Clear();
+        ActiveIds.clear();
+        Results.clear();
         Call = 0;
         auto guard = Guard(*Alloc);
         Callback->OnAsyncOutputError(Index, NYql::TIssues{NYql::TIssue(message)}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
@@ -259,7 +319,8 @@ class TProfileTransform final : public NActors::TActorBootstrapped<TProfileTrans
     ui32 InputId, OutputId, OutputName, OutputScore;
     TDqAsyncStats Stats;
     TDeque<ui64> Pending;
-    TMaybe<TProfile> Result;
+    TVector<ui64> ActiveIds;
+    TDeque<TProfile> Results;
     NAsync::THandle Call = 0;
     bool Finished = false, Acknowledged = false, Failed = false;
     std::shared_ptr<TTransport> Transport;
@@ -293,6 +354,12 @@ void RegisterProfileTransform(TDqAsyncIoFactory& factory, const NConfig::TWasmSe
         prepared->MaxRows = config.GetMaxBufferedRows();
     if (config.GetCallTimeoutMs())
         prepared->Timeout = TDuration::MilliSeconds(config.GetCallTimeoutMs());
+    if (config.GetMaxBatchRows())
+        prepared->BatchRows = config.GetMaxBatchRows();
+    if (config.GetMaxBatchBytes())
+        prepared->BatchBytes = config.GetMaxBatchBytes();
+    prepared->DispatchRows =
+        std::min<ui32>(prepared->BatchRows, (prepared->BatchBytes - sizeof(TProfileBatchHeader)) / sizeof(TProfileResult));
     for (const auto& entry : config.GetBindings()) {
         TBinding binding;
         binding.Protocol = entry.GetProtocol() == NConfig::TWasmServicesConfig::TBinding::HTTP ? EProtocol::Http : EProtocol::Grpc;

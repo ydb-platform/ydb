@@ -8,4 +8,5 @@ import "ydb/core/fq/libs/wasm_services/ut/protos/profile.proto";
 service MockService {
     rpc Call(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
     rpc Lookup(ProfileRequest) returns (ProfileReply);
+    rpc LookupBatch(ProfileBatchRequest) returns (ProfileBatchReply);
 }

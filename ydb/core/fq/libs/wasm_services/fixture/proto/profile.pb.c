@@ -13,3 +13,12 @@ PB_BIND(NFq_NWasmServices_NTest_Profile, NFq_NWasmServices_NTest_Profile, 2)
 
 
 PB_BIND(NFq_NWasmServices_NTest_ProfileReply, NFq_NWasmServices_NTest_ProfileReply, 2)
+
+
+PB_BIND(NFq_NWasmServices_NTest_ProfileBatchRequest, NFq_NWasmServices_NTest_ProfileBatchRequest, 2)
+
+
+PB_BIND(NFq_NWasmServices_NTest_ProfileBatchPayload, NFq_NWasmServices_NTest_ProfileBatchPayload, 4)
+
+
+PB_BIND(NFq_NWasmServices_NTest_ProfileBatchReply, NFq_NWasmServices_NTest_ProfileBatchReply, 4)

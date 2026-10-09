@@ -18,6 +18,69 @@ def start(client, sql):
     return client.create_query('wasm_profile', sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
 
 
+def batch_query(alias, ids):
+    source = ' UNION ALL '.join(f'SELECT {id}ul AS id' for id in ids)
+    return query(alias).replace('SELECT 42ul AS id', source)
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 64, 'bytes': 592}], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_batch_profiles(client, services, protocol, yq_version, batch_config):
+    query_id = start(client, batch_query(f'profiles_{protocol}', [42, 42, 43, 44, 45]))
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    rows = client.get_result_data(query_id).result.result_set.rows
+    assert sorted((row.items[0].uint64_value, row.items[1].text_value, row.items[2].uint32_value) for row in rows) == [
+        (42, 'Ada', 97), (42, 'Ada', 97), (43, 'Ada', 97), (44, 'Ada', 97), (45, 'Ada', 97),
+    ]
+    assert len(services.requests) == 3
+    assert sorted(len(request[1]) for request in services.requests) == [1, 2, 2]
+    assert sorted(id for _, ids, _ in services.requests for id in ids) == [42, 42, 43, 44, 45]
+    assert all(kind == protocol and auth == 'Bearer host-secret' for kind, _, auth in services.requests)
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 2}], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_batch_bad_response(client, services, protocol, yq_version, batch_config):
+    query_id = start(client, batch_query(f'profiles_{protocol}', [42, 401]))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert len(services.requests) == 1
+    issues = str(client.describe_query(query_id).result.query.issue)
+    assert 'WASM Profile service failed' in issues
+    assert 'host-secret' not in issues
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 2}], indirect=True)
+def test_batch_deadline(client, services, yq_version, batch_config):
+    query_id = start(client, batch_query('profiles_http', [42, 999]))
+    client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+    assert services.started.is_set()
+    assert len(services.requests) == 1
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 2}], indirect=True)
+def test_batch_cancellation(client, services, yq_version, batch_config):
+    query_id = start(client, batch_query('profiles_grpc', [42, 999]))
+    assert services.started.wait(30)
+    client.abort_query(query_id)
+    client.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
+    assert services.cancelled.wait(10)
+    assert len(services.requests) == 1
+
+
+@yq_v1
+@pytest.mark.parametrize('batch_config', [{'rows': 2}], indirect=True)
+def test_batch_empty_input(client, services, yq_version, batch_config):
+    sql = query('profiles_http').replace('SELECT 42ul AS id', 'SELECT id FROM (SELECT 42ul AS id) WHERE FALSE')
+    query_id = start(client, sql)
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    assert not client.get_result_data(query_id).result.result_set.rows
+    assert not services.requests
+
+
 @yq_v1
 @pytest.mark.parametrize('protocol', ['http', 'grpc'])
 def test_query_typed_profile(client, services, protocol, yq_version):

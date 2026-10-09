@@ -32,6 +32,21 @@ typedef struct _NFq_NWasmServices_NTest_ProfileReply {
     NFq_NWasmServices_NTest_ProfileReply_payload_t payload;
 } NFq_NWasmServices_NTest_ProfileReply;
 
+typedef struct _NFq_NWasmServices_NTest_ProfileBatchRequest {
+    pb_size_t ids_count;
+    uint64_t ids[64];
+} NFq_NWasmServices_NTest_ProfileBatchRequest;
+
+typedef struct _NFq_NWasmServices_NTest_ProfileBatchPayload {
+    pb_size_t profiles_count;
+    NFq_NWasmServices_NTest_Profile profiles[64];
+} NFq_NWasmServices_NTest_ProfileBatchPayload;
+
+typedef PB_BYTES_ARRAY_T(32768) NFq_NWasmServices_NTest_ProfileBatchReply_payload_t;
+typedef struct _NFq_NWasmServices_NTest_ProfileBatchReply {
+    NFq_NWasmServices_NTest_ProfileBatchReply_payload_t payload;
+} NFq_NWasmServices_NTest_ProfileBatchReply;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,9 +56,15 @@ extern "C" {
 #define NFq_NWasmServices_NTest_ProfileRequest_init_default {0}
 #define NFq_NWasmServices_NTest_Profile_init_default {false, 0, false, {0, {0}}, false, 0, false, 0}
 #define NFq_NWasmServices_NTest_ProfileReply_init_default {{0, {0}}}
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_init_default {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_init_default {0, {NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default, NFq_NWasmServices_NTest_Profile_init_default}}
+#define NFq_NWasmServices_NTest_ProfileBatchReply_init_default {{0, {0}}}
 #define NFq_NWasmServices_NTest_ProfileRequest_init_zero {0}
 #define NFq_NWasmServices_NTest_Profile_init_zero {false, 0, false, {0, {0}}, false, 0, false, 0}
 #define NFq_NWasmServices_NTest_ProfileReply_init_zero {{0, {0}}}
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_init_zero {0, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_init_zero {0, {NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero, NFq_NWasmServices_NTest_Profile_init_zero}}
+#define NFq_NWasmServices_NTest_ProfileBatchReply_init_zero {{0, {0}}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define NFq_NWasmServices_NTest_ProfileRequest_id_tag 1
@@ -52,6 +73,9 @@ extern "C" {
 #define NFq_NWasmServices_NTest_Profile_score_tag 3
 #define NFq_NWasmServices_NTest_Profile_version_tag 4
 #define NFq_NWasmServices_NTest_ProfileReply_payload_tag 1
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_ids_tag 1
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_profiles_tag 1
+#define NFq_NWasmServices_NTest_ProfileBatchReply_payload_tag 1
 
 /* Struct field encoding specification for nanopb */
 #define NFq_NWasmServices_NTest_ProfileRequest_FIELDLIST(X, a) \
@@ -72,17 +96,42 @@ X(a, STATIC,   REQUIRED, BYTES,    payload,           1)
 #define NFq_NWasmServices_NTest_ProfileReply_CALLBACK NULL
 #define NFq_NWasmServices_NTest_ProfileReply_DEFAULT NULL
 
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_FIELDLIST(X, a) \
+X(a, STATIC,   REPEATED, UINT64,   ids,               1)
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_CALLBACK NULL
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_DEFAULT NULL
+
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_FIELDLIST(X, a) \
+X(a, STATIC,   REPEATED, MESSAGE,  profiles,          1)
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_CALLBACK NULL
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_DEFAULT NULL
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_profiles_MSGTYPE NFq_NWasmServices_NTest_Profile
+
+#define NFq_NWasmServices_NTest_ProfileBatchReply_FIELDLIST(X, a) \
+X(a, STATIC,   REQUIRED, BYTES,    payload,           1)
+#define NFq_NWasmServices_NTest_ProfileBatchReply_CALLBACK NULL
+#define NFq_NWasmServices_NTest_ProfileBatchReply_DEFAULT NULL
+
 extern const pb_msgdesc_t NFq_NWasmServices_NTest_ProfileRequest_msg;
 extern const pb_msgdesc_t NFq_NWasmServices_NTest_Profile_msg;
 extern const pb_msgdesc_t NFq_NWasmServices_NTest_ProfileReply_msg;
+extern const pb_msgdesc_t NFq_NWasmServices_NTest_ProfileBatchRequest_msg;
+extern const pb_msgdesc_t NFq_NWasmServices_NTest_ProfileBatchPayload_msg;
+extern const pb_msgdesc_t NFq_NWasmServices_NTest_ProfileBatchReply_msg;
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
 #define NFq_NWasmServices_NTest_ProfileRequest_fields &NFq_NWasmServices_NTest_ProfileRequest_msg
 #define NFq_NWasmServices_NTest_Profile_fields &NFq_NWasmServices_NTest_Profile_msg
 #define NFq_NWasmServices_NTest_ProfileReply_fields &NFq_NWasmServices_NTest_ProfileReply_msg
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_fields &NFq_NWasmServices_NTest_ProfileBatchRequest_msg
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_fields &NFq_NWasmServices_NTest_ProfileBatchPayload_msg
+#define NFq_NWasmServices_NTest_ProfileBatchReply_fields &NFq_NWasmServices_NTest_ProfileBatchReply_msg
 
 /* Maximum encoded size of messages (where known) */
-#define NFQ_NWASMSERVICES_NTEST_PROFILE_PB_H_MAX_SIZE NFq_NWasmServices_NTest_ProfileReply_size
+#define NFQ_NWASMSERVICES_NTEST_PROFILE_PB_H_MAX_SIZE NFq_NWasmServices_NTest_ProfileBatchReply_size
+#define NFq_NWasmServices_NTest_ProfileBatchPayload_size 18240
+#define NFq_NWasmServices_NTest_ProfileBatchReply_size 32772
+#define NFq_NWasmServices_NTest_ProfileBatchRequest_size 704
 #define NFq_NWasmServices_NTest_ProfileReply_size 1027
 #define NFq_NWasmServices_NTest_ProfileRequest_size 11
 #define NFq_NWasmServices_NTest_Profile_size     282

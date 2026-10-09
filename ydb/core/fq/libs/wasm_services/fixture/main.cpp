@@ -8,6 +8,8 @@
 #include <pb_encode.h>
 #include <rapidjson/memorystream.h>
 #include <rapidjson/reader.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 #include <memory>
 #include <new>
@@ -21,7 +23,7 @@ namespace {
 // Reusable fixture-only storage: observable lifetime without libc++ string
 // imports.
 constexpr unsigned Slots = 32;
-alignas(16) unsigned char Arena[Slots][17408];
+alignas(16) unsigned char Arena[Slots][65536];
 bool Used[Slots];
 uint64_t LiveObjects = 0;
 
@@ -304,15 +306,7 @@ bool IsValidUtf8(const char* data, size_t size) {
     return true;
 }
 
-EServiceError DecodeGrpcProfile(std::string_view bytes, TProfile& profile) {
-    NFq_NWasmServices_NTest_ProfileReply reply = NFq_NWasmServices_NTest_ProfileReply_init_zero;
-    auto input = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(bytes.data()), bytes.size());
-    if (!pb_decode(&input, NFq_NWasmServices_NTest_ProfileReply_fields, &reply) || input.bytes_left)
-        return EServiceError::Decode;
-    NFq_NWasmServices_NTest_Profile value = NFq_NWasmServices_NTest_Profile_init_zero;
-    auto payload = pb_istream_from_buffer(reply.payload.bytes, reply.payload.size);
-    if (!pb_decode(&payload, NFq_NWasmServices_NTest_Profile_fields, &value) || payload.bytes_left)
-        return EServiceError::Decode;
+EServiceError ConvertProfile(const NFq_NWasmServices_NTest_Profile& value, TProfile& profile) {
     if (!value.has_id || !value.id || !value.has_name || !value.name.size || !value.has_score || value.score > 100 || !value.has_version ||
         value.version != ProfileVersion || value.name.size > MaxProfileNameBytes ||
         HasZeroByte(reinterpret_cast<const char*>(value.name.bytes), value.name.size) ||
@@ -323,6 +317,116 @@ EServiceError DecodeGrpcProfile(std::string_view bytes, TProfile& profile) {
     profile.NameBytes = value.name.size;
     std::memcpy(profile.Name, value.name.bytes, profile.NameBytes);
     return EServiceError::None;
+}
+
+EServiceError DecodeGrpcProfile(std::string_view bytes, TProfile& profile) {
+    NFq_NWasmServices_NTest_ProfileReply reply = NFq_NWasmServices_NTest_ProfileReply_init_zero;
+    auto input = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(bytes.data()), bytes.size());
+    if (!pb_decode(&input, NFq_NWasmServices_NTest_ProfileReply_fields, &reply) || input.bytes_left)
+        return EServiceError::Decode;
+    NFq_NWasmServices_NTest_Profile value = NFq_NWasmServices_NTest_Profile_init_zero;
+    auto payload = pb_istream_from_buffer(reply.payload.bytes, reply.payload.size);
+    if (!pb_decode(&payload, NFq_NWasmServices_NTest_Profile_fields, &value) || payload.bytes_left)
+        return EServiceError::Decode;
+    return ConvertProfile(value, profile);
+}
+
+struct TProfileBatchJsonHandler : TProfileJsonHandler {
+    TProfileBatchResults& Results;
+    uint32_t Count = 0;
+    bool InArray = false, Ended = false;
+    EServiceError Error = EServiceError::None;
+
+    explicit TProfileBatchJsonHandler(TProfileBatchResults& results)
+        : Results(results)
+    {
+    }
+
+    bool StartArray() {
+        if (InArray || Ended)
+            return false;
+        return InArray = true;
+    }
+    bool EndArray(rapidjson::SizeType) {
+        if (!InArray || InObject || Count != Results.Header.Count)
+            return false;
+        InArray = false;
+        return Ended = true;
+    }
+    bool StartObject() {
+        if (!InArray || InObject || Count >= Results.Header.Count)
+            return false;
+        static_cast<TProfileJsonHandler&>(*this) = TProfileJsonHandler{};
+        return TProfileJsonHandler::StartObject();
+    }
+    bool EndObject(rapidjson::SizeType members) {
+        if (!TProfileJsonHandler::EndObject(members) || Field != EField::None || Seen != 15)
+            return false;
+        if (!ProfileValid) {
+            Error = EServiceError::InvalidProfile;
+            return false;
+        }
+        Results.Items[Count++].Profile = Profile;
+        return true;
+    }
+};
+
+EServiceError DecodeHttpBatch(std::string_view bytes, TProfileBatchResults& results) {
+    rapidjson::MemoryStream stream(bytes.data(), bytes.size());
+    TFixedJsonStackAllocator allocator;
+    rapidjson::GenericReader<rapidjson::UTF8<>, rapidjson::UTF8<>, TFixedJsonStackAllocator> reader(&allocator, 256);
+    TProfileBatchJsonHandler handler(results);
+    const auto parsed = reader.Parse<rapidjson::kParseValidateEncodingFlag>(stream, handler);
+    if (handler.Error != EServiceError::None)
+        return handler.Error;
+    return parsed && handler.Ended && !handler.InObject && handler.Count == results.Header.Count ? EServiceError::None
+                                                                                                 : EServiceError::Decode;
+}
+
+EServiceError DecodeGrpcBatch(std::string_view bytes, TProfileBatchResults& results) {
+    auto reply = std::make_unique<NFq_NWasmServices_NTest_ProfileBatchReply>();
+    auto input = pb_istream_from_buffer(reinterpret_cast<const pb_byte_t*>(bytes.data()), bytes.size());
+    if (!pb_decode(&input, NFq_NWasmServices_NTest_ProfileBatchReply_fields, reply.get()) || input.bytes_left)
+        return EServiceError::Decode;
+    auto value = std::make_unique<NFq_NWasmServices_NTest_ProfileBatchPayload>();
+    auto payload = pb_istream_from_buffer(reply->payload.bytes, reply->payload.size);
+    if (!pb_decode(&payload, NFq_NWasmServices_NTest_ProfileBatchPayload_fields, value.get()) || payload.bytes_left ||
+        value->profiles_count != results.Header.Count)
+        return EServiceError::Decode;
+    for (uint32_t i = 0; i < results.Header.Count; ++i) {
+        const auto error = ConvertProfile(value->profiles[i], results.Items[i].Profile);
+        if (error != EServiceError::None)
+            return error;
+    }
+    return EServiceError::None;
+}
+
+TBytes BatchRequestBytes(const uint64_t* ids, uint32_t count, bool grpc) {
+    if (!grpc) {
+        TFixedJsonStackAllocator bufferAllocator, writerAllocator;
+        using TBuffer = rapidjson::GenericStringBuffer<rapidjson::UTF8<>, TFixedJsonStackAllocator>;
+        TBuffer buffer(&bufferAllocator, 2048);
+        rapidjson::Writer<TBuffer, rapidjson::UTF8<>, rapidjson::UTF8<>, TFixedJsonStackAllocator> writer(buffer, &writerAllocator);
+        writer.StartObject();
+        writer.Key("ids");
+        writer.StartArray();
+        for (uint32_t i = 0; i < count; ++i)
+            writer.Uint64(ids[i]);
+        writer.EndArray();
+        writer.EndObject();
+        TBytes bytes(buffer.GetSize());
+        std::memcpy(bytes.Buffer.get(), buffer.GetString(), bytes.Size);
+        return bytes;
+    }
+    NFq_NWasmServices_NTest_ProfileBatchRequest value = NFq_NWasmServices_NTest_ProfileBatchRequest_init_zero;
+    value.ids_count = count;
+    std::memcpy(value.ids, ids, count * sizeof(uint64_t));
+    TBytes bytes(NFq_NWasmServices_NTest_ProfileBatchRequest_size);
+    auto output = pb_ostream_from_buffer(reinterpret_cast<pb_byte_t*>(bytes.Buffer.get()), bytes.Size);
+    if (!pb_encode(&output, NFq_NWasmServices_NTest_ProfileBatchRequest_fields, &value))
+        __builtin_trap();
+    bytes.Size = output.bytes_written;
+    return bytes;
 }
 
 TProfileResult ProfileFailure(EServiceError error, const TReply& reply) {
@@ -336,6 +440,63 @@ TProfileResult ProfileFailure(EServiceError error, const TReply& reply) {
         result.NativeCode = header.NativeCode;
     }
     return result;
+}
+
+TReply BatchResultReply(const TProfileBatchResults& results) {
+    return {EOperationStatus::Ready,
+            Pack(results.Header, {reinterpret_cast<const char*>(results.Items), results.Header.Count * sizeof(TProfileResult)})};
+}
+
+TTask<TReply> RunBatch(TCallContext& context, const TArgumentsHeader* args) {
+    auto results = std::make_unique<TProfileBatchResults>();
+    const auto body = std::string_view(reinterpret_cast<const char*>(args + 1), args->PayloadBytes);
+    if (body.size() < sizeof(TProfileBatchHeader))
+        co_return BatchResultReply(*results);
+    std::memcpy(&results->Header, body.data(), sizeof(TProfileBatchHeader));
+    const auto& header = results->Header;
+    if (header.Version != ProfileVersion || !header.Count || header.Count > MaxProfileBatchRows || header.Reserved ||
+        header.MaxBytes < sizeof(TProfileBatchHeader) + header.Count * sizeof(TProfileResult) || header.MaxBytes > MaxProfileBatchBytes ||
+        body.size() != sizeof(header) + header.Count * sizeof(uint64_t)) {
+        results->Header = {};
+        co_return BatchResultReply(*results);
+    }
+    uint64_t ids[MaxProfileBatchRows];
+    std::memcpy(ids, body.data() + sizeof(header), header.Count * sizeof(uint64_t));
+    for (uint32_t i = 0; i < header.Count; ++i) {
+        if (!ids[i]) {
+            for (uint32_t j = 0; j < header.Count; ++j)
+                results->Items[j] = ProfileFailure(EServiceError::InvalidArguments, {});
+            co_return BatchResultReply(*results);
+        }
+    }
+    const bool grpc = args->Mode == static_cast<uint64_t>(EProfileMode::GrpcBatch);
+    auto payload = BatchRequestBytes(ids, header.Count, grpc);
+    const auto request = Pack(TRequestHeader{WireVersion, args->BindingA, payload.Size}, payload.View());
+    TOperation operation(request.Buffer.get(), request.Size);
+    const auto status = co_await operation.Wait(context);
+    TReply reply{status, {}};
+    EServiceError error = EServiceError::Transport;
+    if (operation.Size() <= header.MaxBytes + sizeof(TResponseHeader)) {
+        reply.Bytes = TBytes(operation.Size());
+        operation.Read(reply.Bytes.Buffer.get(), reply.Bytes.Size);
+        TResponseHeader response;
+        std::string_view responsePayload;
+        if (Decode(reply.Bytes.View(), response, responsePayload) && response.Version == WireVersion &&
+            response.PayloadBytes == responsePayload.size() && status == EOperationStatus::Ready && response.Error == EClientError::None) {
+            error = grpc ? DecodeGrpcBatch(responsePayload, *results) : DecodeHttpBatch(responsePayload, *results);
+            if (error == EServiceError::None) {
+                for (uint32_t i = 0; i < header.Count; ++i) {
+                    if (results->Items[i].Profile.Id != ids[i])
+                        error = EServiceError::InvalidProfile;
+                }
+            }
+        }
+    }
+    if (error != EServiceError::None) {
+        for (uint32_t i = 0; i < header.Count; ++i)
+            results->Items[i] = ProfileFailure(error, reply);
+    }
+    co_return BatchResultReply(*results);
 }
 
 TProfileResult DecodeProfileResponse(TOperation& operation, EOperationStatus status, bool grpc) {
@@ -469,6 +630,9 @@ TReply Collect(TReply first, std::optional<TReply> second = {}) {
 }
 
 TTask<TReply> Run(TCallContext& context, const TArgumentsHeader* args) {
+    if (args->Mode >= static_cast<uint64_t>(EProfileMode::HttpBatch)) {
+        co_return co_await RunBatch(context, args);
+    }
     if (args->Mode >= static_cast<uint64_t>(EProfileMode::Http)) {
         co_return co_await RunProfile(context, args);
     }
@@ -527,7 +691,7 @@ extern "C" uint64_t WasmAsyncCallStart(uint64_t arguments, uint64_t size) {
         __builtin_trap();
     }
     const auto* args = reinterpret_cast<const TArgumentsHeader*>(arguments);
-    if (args->PayloadBytes != size - sizeof(*args) || args->Mode > static_cast<uint64_t>(EProfileMode::Parallel)) {
+    if (args->PayloadBytes != size - sizeof(*args) || args->Mode > static_cast<uint64_t>(EProfileMode::GrpcBatch)) {
         __builtin_trap();
     }
     return reinterpret_cast<uint64_t>(new TCall(args));

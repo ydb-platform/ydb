@@ -319,6 +319,20 @@ class TGrpcMock : public NFq::NWasmServices::NTest::MockService::Service {
         response->set_payload(exchange->Reply.data(), exchange->Reply.size());
         return grpc::Status::OK;
     }
+
+    grpc::Status LookupBatch(grpc::ServerContext* context, const NFq::NWasmServices::NTest::ProfileBatchRequest* request,
+                             NFq::NWasmServices::NTest::ProfileBatchReply* response) override {
+        TVector<std::pair<TString, TString>> headers;
+        for (const auto& [name, value] : context->client_metadata())
+            headers.emplace_back(TString(name.data(), name.size()), TString(value.data(), value.size()));
+        auto exchange = State->Record(request->SerializeAsString(), "/NFq.NWasmServices.NTest.MockService/LookupBatch", std::move(headers));
+        if (!State->AwaitReply(exchange, [context] { return context->IsCancelled(); }))
+            return grpc::Status(grpc::StatusCode::CANCELLED, "Mock stopped or client cancelled");
+        if (exchange->Code)
+            return grpc::Status(static_cast<grpc::StatusCode>(exchange->Code), "Controlled mock error");
+        response->set_payload(exchange->Reply.data(), exchange->Reply.size());
+        return grpc::Status::OK;
+    }
 };
 
 TVector<TBinding> Bindings(const THttpMock& http, const TGrpcMock& grpc,
@@ -408,6 +422,13 @@ struct TEnv {
         }
     }
 
+    TCallResult AwaitTerminal(THandle call) {
+        auto result = Runtime->Poll(call);
+        while (result.Status == ECallStatus::Waiting || result.Status == ECallStatus::Runnable)
+            result = Resume(call);
+        return result;
+    }
+
     void Clean(THandle call) {
         Runtime->Drop(call);
         UNIT_ASSERT_VALUES_EQUAL(Runtime->Stats().Calls, 0);
@@ -477,6 +498,30 @@ TString GrpcProfilePayload(ui64 id = 42, TString name = "Ada", ui32 score = 97, 
     return profile.SerializeAsString();
 }
 
+TString GrpcBatchPayload(const TVector<ui64>& ids, TString name = "Ada", ui32 score = 97) {
+    NFq::NWasmServices::NTest::ProfileBatchPayload payload;
+    for (const auto id : ids) {
+        auto* profile = payload.add_profiles();
+        profile->set_id(id);
+        profile->set_name(name);
+        profile->set_score(score);
+        profile->set_version(ProfileVersion);
+    }
+    return payload.SerializeAsString();
+}
+
+TString HttpBatchPayload(const TVector<ui64>& ids) {
+    TStringBuilder text;
+    text << "[";
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i)
+            text << ",";
+        text << "{\"id\":" << ids[i] << ",\"name\":\"Ada\",\"score\":97,\"version\":1}";
+    }
+    text << "]";
+    return text;
+}
+
 struct TDirectReply {
     std::mutex Mutex;
     std::condition_variable Changed;
@@ -524,6 +569,7 @@ struct TQueryOutput {
     TVector<TProfile> Rows;
     std::atomic<bool> Blocked = false;
     std::atomic<bool> Finished = false;
+    std::atomic<ui32> BlockAfterRows = 0;
 };
 
 class TProfileConsumer final : public NYql::NDq::IDqOutputConsumer {
@@ -545,6 +591,8 @@ class TProfileConsumer final : public NYql::NDq::IDqOutputConsumer {
         profile.Score = row.GetElement(2).Get<ui32>();
         std::lock_guard lock(Output->Mutex);
         Output->Rows.push_back(profile);
+        if (Output->BlockAfterRows && Output->Rows.size() >= Output->BlockAfterRows)
+            Output->Blocked = true;
     }
     void WideConsume(NYql::NUdf::TUnboxedValue[], ui32) override {
         UNIT_FAIL("Unexpected wide Profile output");
@@ -577,7 +625,8 @@ struct TQueryTransformEnv {
     std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
     NYql::NDq::TFakeCASetup Setup;
 
-    TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000)
+    TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0,
+                       ui32 maxBufferedRows = 65536)
         : Module(MakeTempName())
     {
         TFileOutput(Module.Name()).Write(NResource::Find("/fq_transport_coroutine.wasm"));
@@ -585,6 +634,9 @@ struct TQueryTransformEnv {
         config.SetEnabled(true);
         config.SetModulePath(Module.Name());
         config.SetCallTimeoutMs(timeoutMs);
+        config.SetMaxBatchRows(batchRows);
+        config.SetMaxBatchBytes(batchBytes);
+        config.SetMaxBufferedRows(maxBufferedRows);
         auto* entry = config.AddBindings();
         entry->SetAlias("profiles");
         entry->SetEndpoint(binding.Endpoint);
@@ -594,6 +646,8 @@ struct TQueryTransformEnv {
         if (binding.Protocol == EProtocol::Grpc) {
             entry->SetProtocol(NFq::NConfig::TWasmServicesConfig::TBinding::GRPC);
             entry->SetGrpcInsecure(true);
+            if (batchRows > 1)
+                entry->SetMethod(binding.Method + "Batch");
         }
         auto gateway = CreateProfileGatewayFactory(config);
         auto description =
@@ -632,7 +686,7 @@ struct TQueryTransformEnv {
         });
     }
 
-    void Start(TVector<ui64> ids = {42}) {
+    void Start(TVector<ui64> ids = {42}, bool finished = true) {
         Setup.AsyncOutputWrite([&](NKikimr::NMiniKQL::THolderFactory& holders) {
             NKikimr::NMiniKQL::TUnboxedValueBatch batch;
             for (const auto id : ids) {
@@ -642,23 +696,215 @@ struct TQueryTransformEnv {
                 batch.emplace_back(std::move(row));
             }
             return batch;
-        }, Nothing(), true);
+        }, Nothing(), finished);
     }
 };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
+    Y_UNIT_TEST(DqBatchQuotaCountsActiveAndUndeliveredRows) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 2, 0, 5);
+        env.Output->BlockAfterRows = 1;
+        env.Start({42, 43, 44}, false);
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait()->Payload, "{\"ids\":[42,43]}");
+        env.Setup.Execute(
+            [](NYql::NDq::TFakeActor& actor) { UNIT_ASSERT_VALUES_EQUAL(actor.DqAsyncOutput->GetFreeSpace(), 2 * sizeof(ui64)); });
+        http.State->Reply(0, HttpBatchPayload({42, 43}), 200);
+        Eventually([&] { return env.Output->Blocked.load(); });
+        env.Setup.Execute(
+            [](NYql::NDq::TFakeActor& actor) { UNIT_ASSERT_VALUES_EQUAL(actor.DqAsyncOutput->GetFreeSpace(), 3 * sizeof(ui64)); });
+        env.Start({45, 46, 47});
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), 1);
+        env.Output->BlockAfterRows = 0;
+        env.Output->Blocked = false;
+        env.Setup.Execute([](NYql::NDq::TFakeActor& actor) { actor.DqAsyncOutput->OnOutputConsumerReady(); });
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(1)->Payload, "{\"ids\":[44,45]}");
+        http.State->Reply(1, HttpBatchPayload({44, 45}), 200);
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(2)->Payload, "{\"ids\":[46,47]}");
+        http.State->Reply(2, HttpBatchPayload({46, 47}), 200);
+        Eventually([&] { return env.Output->Finished.load(); });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 6);
+        for (size_t i = 0; i < env.Output->Rows.size(); ++i)
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows[i].Id, 42 + i);
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), 3);
+    }
+
+    Y_UNIT_TEST(DqHttpBatchSplitsAndHonorsBackpressure) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 2);
+        env.Output->BlockAfterRows = 1;
+        env.Start({42, 42, 43, 44, 45});
+        auto request = http.State->Wait();
+        UNIT_ASSERT_VALUES_EQUAL(request->Payload, "{\"ids\":[42,42]}");
+        UNIT_ASSERT(HasHeader(*request, "Authorization", "Bearer host-secret"));
+        http.State->Reply(0, HttpBatchPayload({42, 42}), 200);
+        Eventually([&] { return env.Output->Blocked.load(); });
+        {
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), 1);
+        env.Output->BlockAfterRows = 0;
+        env.Output->Blocked = false;
+        env.Setup.Execute([](NYql::NDq::TFakeActor& actor) { actor.DqAsyncOutput->OnOutputConsumerReady(); });
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(1)->Payload, "{\"ids\":[43,44]}");
+        http.State->Reply(1, HttpBatchPayload({43, 44}), 200);
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(2)->Payload, "{\"ids\":[45]}");
+        http.State->Reply(2, HttpBatchPayload({45}), 200);
+        Eventually([&] { return env.Output->Finished.load(); });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 5);
+        for (size_t i = 0; i < 5; ++i)
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows[i].Id, (TVector<ui64>{42, 42, 43, 44, 45})[i]);
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), 3);
+    }
+
+    Y_UNIT_TEST(DqGrpcBatchByteLimitAndFinalPartial) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TQueryTransformEnv env(Bindings(http, grpc)[3], 5000, 64, sizeof(TProfileBatchHeader) + 2 * sizeof(TProfileResult));
+        env.Start({42, 43, 44, 45, 46});
+        const TVector<TVector<ui64>> batches{{42, 43}, {44, 45}, {46}};
+        for (size_t i = 0; i < batches.size(); ++i) {
+            auto request = grpc.State->Wait(i);
+            UNIT_ASSERT(HasHeader(*request, "authorization", "Bearer host-secret"));
+            NFq::NWasmServices::NTest::ProfileBatchRequest parsed;
+            UNIT_ASSERT(parsed.ParseFromString(request->Payload));
+            UNIT_ASSERT_VALUES_EQUAL(parsed.ids_size(), batches[i].size());
+            for (size_t j = 0; j < batches[i].size(); ++j)
+                UNIT_ASSERT_VALUES_EQUAL(parsed.ids(j), batches[i][j]);
+            grpc.State->Reply(i, GrpcBatchPayload(batches[i]), 0);
+        }
+        Eventually([&] { return env.Output->Finished.load(); });
+        std::lock_guard lock(env.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(grpc.State->Count(), 3);
+    }
+
+    Y_UNIT_TEST(DqHttpInvalidBatchDoesNotPublishPartialRows) {
+        const TVector<TString> replies{
+            HttpBatchPayload({42}),
+            HttpBatchPayload({42, 43, 44}),
+            HttpBatchPayload({43, 42}),
+            "[{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1},"
+            "{\"id\":43,\"name\":\"Ada\",\"score\":101,\"version\":1}]",
+            "[{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1},{}]",
+            TString(40000, 'x'),
+        };
+        for (const auto& reply : replies) {
+            THttpMock http;
+            TGrpcMock grpc;
+            TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 2);
+            const auto error = env.Setup.AsyncOutputPromises->Issue.GetFuture();
+            env.Start({42, 43});
+            http.State->Wait();
+            http.State->Reply(0, reply, 200);
+            UNIT_ASSERT(error.Wait(TDuration::Seconds(10)));
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT(env.Output->Rows.empty());
+            UNIT_ASSERT(!env.Output->Finished);
+        }
+    }
+
+    Y_UNIT_TEST(DqGrpcInvalidBatchDoesNotPublishPartialRows) {
+        const TVector<TString> replies{
+            GrpcBatchPayload({42}),
+            GrpcBatchPayload({42, 43, 44}),
+            GrpcBatchPayload({43, 42}),
+            GrpcBatchPayload({42, 43}, "Ada", 101),
+            GrpcBatchPayload({42, 43}, TString("\xc0\x80", 2)),
+            "not protobuf",
+        };
+        for (const auto& reply : replies) {
+            THttpMock http;
+            TGrpcMock grpc;
+            TQueryTransformEnv env(Bindings(http, grpc)[3], 5000, 2);
+            const auto error = env.Setup.AsyncOutputPromises->Issue.GetFuture();
+            env.Start({42, 43});
+            grpc.State->Wait();
+            grpc.State->Reply(0, reply, 0);
+            UNIT_ASSERT(error.Wait(TDuration::Seconds(10)));
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT(env.Output->Rows.empty());
+        }
+    }
+
+    Y_UNIT_TEST(DqBatchMaximumSizeAndLargeIds) {
+        for (const auto binding : {2, 3}) {
+            THttpMock http;
+            TGrpcMock grpc;
+            TQueryTransformEnv env(Bindings(http, grpc)[binding], 5000, MaxProfileBatchRows);
+            TVector<ui64> ids;
+            for (ui32 i = 0; i < MaxProfileBatchRows; ++i)
+                ids.push_back(Max<ui64>() - i);
+            env.Start(ids);
+            auto state = binding == 2 ? http.State : grpc.State;
+            state->Wait();
+            state->Reply(0, binding == 2 ? HttpBatchPayload(ids) : GrpcBatchPayload(ids), binding == 2 ? 200 : 0);
+            Eventually([&] { return env.Output->Finished.load(); });
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), MaxProfileBatchRows);
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.back().Id, ids.back());
+            UNIT_ASSERT_VALUES_EQUAL(state->Count(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(DqBatchDeadlineAndCancellation) {
+        THttpMock http;
+        TGrpcMock grpc;
+        {
+            TQueryTransformEnv env(Bindings(http, grpc)[2], 100, 2);
+            const auto error = env.Setup.AsyncOutputPromises->Issue.GetFuture();
+            env.Start({42, 43});
+            http.State->Wait();
+            UNIT_ASSERT(error.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!env.Output->Finished);
+        }
+        {
+            TQueryTransformEnv env(Bindings(http, grpc)[3], 5000, 2);
+            env.Start({42, 43});
+            grpc.State->Wait();
+            env.Setup.Terminate();
+            Eventually([&] {
+                std::lock_guard lock(grpc.State->Mutex);
+                return grpc.State->Requests[0]->Cancelled;
+            });
+            UNIT_ASSERT(!env.Output->Finished);
+        }
+    }
+
+    Y_UNIT_TEST(DqBatchRejectsInvalidConfig) {
+        NFq::NConfig::TWasmServicesConfig config;
+        config.SetEnabled(true);
+        config.SetModulePath("unused");
+        auto* binding = config.AddBindings();
+        binding->SetAlias("profiles");
+        binding->SetEndpoint("http://unused");
+        config.SetMaxBatchRows(MaxProfileBatchRows + 1);
+        UNIT_ASSERT_EXCEPTION(CreateProfileGatewayFactory(config), yexception);
+        config.SetMaxBatchRows(2);
+        config.SetMaxBatchBytes(sizeof(TProfileBatchHeader) + sizeof(TProfileResult) - 1);
+        UNIT_ASSERT_EXCEPTION(CreateProfileGatewayFactory(config), yexception);
+        config.SetMaxBatchBytes(MaxProfileBatchBytes + 1);
+        UNIT_ASSERT_EXCEPTION(CreateProfileGatewayFactory(config), yexception);
+    }
+
     Y_UNIT_TEST(DqProfileHttpBackpressureAndTypedRows) {
         THttpMock http;
         TGrpcMock grpc;
         TQueryTransformEnv env(Bindings(http, grpc)[2]);
-        env.Output->Blocked = true;
+        env.Output->BlockAfterRows = 1;
         env.Start({42, 43});
         UNIT_ASSERT_VALUES_EQUAL(http.State->Wait()->Payload, "{\"id\":42}");
         http.State->Reply(0, "{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1}", 200);
         Sleep(TDuration::MilliSeconds(50));
         UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), 1);
+        env.Output->BlockAfterRows = 0;
         env.Output->Blocked = false;
         env.Setup.Execute([](NYql::NDq::TFakeActor& actor) { actor.DqAsyncOutput->OnOutputConsumerReady(); });
         UNIT_ASSERT_VALUES_EQUAL(http.State->Wait(1)->Payload, "{\"id\":43}");
@@ -784,8 +1030,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         THttpMock untrustedHttp;
         TEnv untrustedEnv(Bindings(untrustedHttp, untrustedGrpc, grpc::SslCredentials(grpc::SslCredentialsOptions{})));
         const auto failedCall = untrustedEnv.StartProfile(EProfileMode::Grpc, 42, 3, 3);
-        UNIT_ASSERT(untrustedEnv.Runtime->Poll(failedCall).Status == ECallStatus::Waiting);
-        const auto failed = untrustedEnv.Resume(failedCall);
+        const auto failed = untrustedEnv.AwaitTerminal(failedCall);
         UNIT_ASSERT(failed.Status == ECallStatus::Completed);
         decoded = ProfileResult(failed);
         UNIT_ASSERT(decoded.Items[0].Error == EServiceError::Transport);
@@ -893,7 +1138,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         parallelGrpc.State->Wait();
         parallelGrpc.State->Reply(0, GrpcProfilePayload(), 0);
         parallelHttp.State->Reply(0, "{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1}", 200);
-        auto parallelResult = parallelEnv.Resume(parallelCall);
+        auto parallelResult = parallelEnv.AwaitTerminal(parallelCall);
         UNIT_ASSERT(parallelResult.Status == ECallStatus::Completed);
         auto parallelProfiles = ProfileResult(parallelResult);
         UNIT_ASSERT_VALUES_EQUAL(parallelProfiles.Count, 2);

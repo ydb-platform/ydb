@@ -69,6 +69,11 @@ The checked-in WASM resource is generated from `fixture/main.cpp`. Regenerate
 it with the current supported toolchain and rerun the native tests:
 
 ```bash
+./ya make --build relwithdebinfo contrib/tools/protoc contrib/libs/nanopb/generator
+contrib/tools/protoc/protoc -I ydb/core/fq/libs/wasm_services/ut/protos \
+    --plugin=protoc-gen-nanopb="$PWD/contrib/libs/nanopb/generator/generator" \
+    --nanopb_opt=-fydb/core/fq/libs/wasm_services/ut/protos/profile.options \
+    --nanopb_out=ydb/core/fq/libs/wasm_services/fixture/proto profile.proto
 ./ya make --build release --target-platform=clang20-emscripten-wasm64 ydb/core/fq/libs/wasm_services/fixture
 cp -L ydb/core/fq/libs/wasm_services/fixture/libwasm_services-fixture.so ydb/core/fq/libs/wasm_services/ut/data/transport_coroutine.wasm
 chmod 644 ydb/core/fq/libs/wasm_services/ut/data/transport_coroutine.wasm
@@ -99,8 +104,8 @@ provider and DQ output-transform interface. It is available only for analytical
 queries on the FQ DQ compute path (v1), not KQP/YQv2 or streaming/checkpoints.
 Each transform owns a WASM compartment and native transport. Calls are processed
 one at a time, with a bounded input queue (65536 IDs by default) and one pending
-typed result. A full downstream buffer stops further network dispatch. Native
-I/O only wakes the actor; the actor enters WASM on its own mailbox. Query teardown
+batch of typed results. A full downstream buffer stops further network dispatch.
+Native I/O only wakes the actor; the actor enters WASM on its own mailbox. Query teardown
 cancels the runtime and drains native I/O. `CallTimeoutMs` sets a per-call wall
 deadline (30000 by default); the enclosing FQ query deadline cancels the actor.
 
@@ -119,6 +124,7 @@ WasmServices {
     Endpoint: "https://profiles.example.test/profile"
     Method: "POST"
     CaFile: "/absolute/path/ca.pem"
+    Headers { key: "Content-Type" value: "application/json" }
     Headers { key: "Authorization" value: "Bearer operator-owned-token" }
   }
   Bindings {
@@ -157,8 +163,48 @@ Change the connection to `profiles_grpc` for protobuf/gRPC. The private request
 and response formats are defined in `fixture/main.cpp` and `ut/protos/profile.proto`.
 Unknown aliases, wrong row schemas, service errors, invalid payloads and deadline
 expiration fail the query. Diagnostics contain fixed messages and numeric error
-classes, not response bodies, endpoints or credentials. No concurrency, batching
-or replay guarantees are offered by this experimental integration.
+classes, not response bodies, endpoints or credentials. Batching is explicitly
+enabled as below. There are no parallel-call, automatic retry or replay
+guarantees in either mode.
+
+### Batching
+
+`MaxBatchRows: 0` or `1` preserves the existing single-row protocol (the default).
+Set `MaxBatchRows` to `2..64` to enable the private batch protocol on all bindings.
+Configure batch-capable HTTP endpoints and gRPC methods; a scalar service cannot
+be converted to a batch API by the host. The SQL and row schemas stay unchanged.
+
+```protobuf
+MaxBatchRows: 32
+MaxBatchBytes: 32768
+```
+
+The HTTP request is `{"ids":[42,43]}` and the response is an ordered JSON array
+of Profile objects. The gRPC method uses `ProfileBatchRequest` and
+`ProfileBatchReply`, whose opaque payload contains `ProfileBatchPayload`.
+For the mocks, use `/profile/batch` and
+`/NFq.NWasmServices.NTest.MockService/LookupBatch` respectively.
+
+The transform takes up to the configured number of already available rows;
+there is no timer waiting for a full batch. Partial batches, including the final
+single row, use the batch protocol. Exactly one RPC is sent per batch. The
+maximum is a cap, not a guarantee of full batches; DQ input delivery and task
+partitioning can produce smaller groups. There is one active batch per transform.
+
+`MaxBatchBytes` defaults to 32768 and must be between 304 and 32768. It caps each
+application request/response and the guest result, excluding native transport
+framing. Batch cardinality is conservatively reduced to fit the typed guest
+result header and fixed-size result items. Native clients bound response buffers
+by this cap, and the guest separately checks framing and decoded data.
+
+Responses must contain exactly one result per input position, in the same order,
+with the corresponding `id`; repeated IDs are allowed and are not deduplicated.
+All items are validated before any row from that batch is published. A malformed,
+missing, extra, reordered, invalid or oversized item/response fails the query;
+there are no partial-success semantics. Deadlines and cancellation cover the
+whole active batch. Buffered input, active IDs and undelivered results all count
+toward `MaxBufferedRows`. Backpressure retains undelivered results and prevents
+new dispatch. Arrow and parallel batches are not implemented.
 
 The native suite includes output-transform backpressure, typed HTTP/gRPC rows,
 deadline, malformed response and in-flight gRPC cancellation. Full FQ API tests:

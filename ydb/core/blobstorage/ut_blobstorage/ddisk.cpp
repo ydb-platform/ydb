@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto collect = [&](ui64 firstGroupId) {
             for (ui64 i = 0; i < 64; ++i) {
                 auto group = f.DefineDirectBlockGroup(firstGroupId + i, 3, 1, 3);
-                for (int k = 0; k < group.PersistentBufferDDiskIdSize(); ++k) {
+                for (size_t k = 0; k < group.PersistentBufferDDiskIdSize(); ++k) {
                     const auto& pb = group.GetPersistentBufferDDiskId(k);
                     UNIT_ASSERT_C(TDDiskId(pb) != TDDiskId(group.GetDDiskId(k)),
                         "PB allocated on the excluded data DDisk");

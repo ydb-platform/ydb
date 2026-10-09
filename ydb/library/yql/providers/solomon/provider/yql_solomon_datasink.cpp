@@ -158,6 +158,21 @@ public:
         }
     }
 
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
+        if (auto maybeWrite = TMaybeNode<TSoWriteToShard>(&node)) {
+            auto write = maybeWrite.Cast();
+            outputs.push_back(TPinInfo(
+                /*dataSource*/ nullptr,
+                write.DataSink().Raw(),
+                write.Shard().Raw(),
+                write.DataSink().Cluster().StringValue() + '.' + write.Shard().StringValue(),
+                /*hideInBasicPlan*/ false));
+            return 1;
+        }
+        return 0;
+    }
+
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
         Y_UNUSED(compact);
         if (CanExecute(node)) {
@@ -169,6 +184,16 @@ public:
 
     TString GetProviderPath(const TExprNode& node) override {
         return TStringBuilder() << SolomonProviderName << '.' << node.Child(1)->Content();
+    }
+
+    void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        writer.OnKeyedItem("Cluster");
+        writer.OnStringScalar(node.Child(1)->Content());
+    }
+
+    void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        writer.OnKeyedItem("Table");
+        writer.OnStringScalar(node.Content());
     }
 
     IDqIntegration* GetDqIntegration() override {

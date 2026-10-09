@@ -444,5 +444,5 @@ message TFeatureFlags {
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
-    optional bool EnableUnsafeTruncateTable = 362 [default = false];
+    optional bool EnableUnsafeTruncateTable = 363 [default = false];
 }

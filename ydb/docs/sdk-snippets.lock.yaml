@@ -49,7 +49,7 @@ sources:
     requested-ref:
       kind: branch
       name: docs/topic-snippets
-    resolved-commit: 904c860de96da3517c4c2c1c6881c30bef9fb73b
+    resolved-commit: 783cfd6c1803bbd607577c5b59c4ae0cc9a5d9a7
     include:
     - examples/ydb_tech/topic/Program.cs
     files:

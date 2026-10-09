@@ -26,7 +26,7 @@ The snippets below are parts of the complete executable examples linked in the n
 
 - C#
 
-  [Executable example on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/904c860de96da3517c4c2c1c6881c30bef9fb73b/examples/ydb_tech/topic)
+  [Executable example on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/783cfd6c1803bbd607577c5b59c4ae0cc9a5d9a7/examples/ydb_tech/topic)
 
 - JavaScript
 

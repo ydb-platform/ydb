@@ -7,6 +7,7 @@
 #include "flat_dbase_misc.h"
 #include "flat_iterator.h"
 #include "flat_table_observer.h"
+#include "flat_table_savepoints.h"
 #include "util_basics.h"
 
 namespace NKikimr {
@@ -162,12 +163,29 @@ public:
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
 
     /**
+     * Removes operations of txId with savepoint seq nums in [fromSavepointSeqNum, toSavepointSeqNum], a partial
+     * counterpart of RemoveTx used for ROLLBACK TO SAVEPOINT. Like with RemoveTx
+     * the data stays in place and is dropped later, the transaction stays open.
+     * Unknown transactions or transactions without data are allowed, committed
+     * or removed transactions are not. Removed operations are kept until the
+     * transaction is committed or removed and has no data left.
+     */
+    void RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum);
+
+    /**
      * Returns true when table has an open transaction that is not committed or removed yet
      */
     bool HasOpenTx(ui32 table, ui64 txId) const;
     bool HasTxData(ui32 table, ui64 txId) const;
     bool HasCommittedTx(ui32 table, ui64 txId) const;
     bool HasRemovedTx(ui32 table, ui64 txId) const;
+
+    /**
+     * Returns removed operations (savepoint seq nums) of txId, nullptr when there are none.
+     * The pointer is only valid until the next change of the table: RemoveTxOps for any
+     * txId, transaction rollback, compaction, borrowing or garbage collection.
+     */
+    const TSavepointSeqNumRanges* FindRemovedTxOps(ui32 table, ui64 txId) const;
 
     /**
      * Returns a set of open transactions in the provided table. This only
@@ -188,6 +206,7 @@ public:
     size_t GetTxsWithStatusCount(ui32 table) const;
     size_t GetCommittedTxCount(ui32 table) const;
     size_t GetRemovedTxCount(ui32 table) const;
+    size_t GetRemovedTxOpsCount(ui32 table) const;
 
     /**
      * Remove row versions [lower, upper) from the given table

@@ -394,6 +394,19 @@ void TDatabase::RemoveTx(ui32 table, ui64 txId)
     RequireForUpdate(table)->RemoveTx(txId);
 }
 
+void TDatabase::RemoveTxOps(ui32 table, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
+{
+    // Seq num 0 means an operation without a savepoint seq num, it cannot be rolled back
+    Y_ENSURE(0 < fromSavepointSeqNum && fromSavepointSeqNum <= toSavepointSeqNum, "Invalid savepoint seq num range [" << fromSavepointSeqNum << ", " << toSavepointSeqNum << "]");
+    // Removing operations of a committed transaction would change committed data,
+    // and removed operations of a decided transaction must not outlive its status
+    Y_ENSURE(!Require(table)->HasCommittedTx(txId), "Cannot remove operations of committed tx " << txId);
+    Y_ENSURE(!Require(table)->HasRemovedTx(txId), "Cannot remove operations of removed tx " << txId);
+
+    Redo->EvRemoveTxOps(table, txId, fromSavepointSeqNum, toSavepointSeqNum);
+    RequireForUpdate(table)->RemoveTxOps(txId, fromSavepointSeqNum, toSavepointSeqNum);
+}
+
 void TDatabase::CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
 {
     Redo->EvCommitTx(table, txId, rowVersion);
@@ -418,6 +431,11 @@ bool TDatabase::HasCommittedTx(ui32 table, ui64 txId) const
 bool TDatabase::HasRemovedTx(ui32 table, ui64 txId) const
 {
     return Require(table)->HasRemovedTx(txId);
+}
+
+const TSavepointSeqNumRanges* TDatabase::FindRemovedTxOps(ui32 table, ui64 txId) const
+{
+    return Require(table)->FindRemovedTxOps(txId);
 }
 
 const absl::flat_hash_set<ui64>& TDatabase::GetOpenTxs(ui32 table) const
@@ -448,6 +466,11 @@ size_t TDatabase::GetCommittedTxCount(ui32 table) const
 size_t TDatabase::GetRemovedTxCount(ui32 table) const
 {
     return Require(table)->GetRemovedTxCount();
+}
+
+size_t TDatabase::GetRemovedTxOpsCount(ui32 table) const
+{
+    return Require(table)->GetRemovedTxOpsCount();
 }
 
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)

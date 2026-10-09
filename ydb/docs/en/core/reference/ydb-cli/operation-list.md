@@ -4,7 +4,6 @@ Using the `ydb operation list` subcommand, you can get a list of background oper
 
 General command format:
 
-
 ```bash
 {{ ydb-cli }} [global options...] operation list [options...] <kind>
 ```
@@ -12,17 +11,24 @@ General command format:
 * `global options`: [Global parameters](commands/global-options.md).
 * `options`: [Parameters of the subcommand](#options).
 * `kind`: The type of operation. Possible values:
+  * `analyze`: The [ANALYZE](../../yql/reference/syntax/analyze.md) statistics collection operations.
   * `buildindex`: The build index operations.
-  * `export/s3`: The export to S3 operations.
-  * `import/s3`: The import from S3 operations.
+  * `compaction`: The table [compaction](../../concepts/glossary.md#compaction) operations.
+  * `export/s3`: The [export operations to S3](export-import/export-s3.md).
+  * `export/nfs`: The [export operations to NFS](export-import/export-nfs.md).
+  * `import/s3`: The [import operations from S3](export-import/import-s3.md).
+  * `import/nfs`: The [import operations from NFS](export-import/import-nfs.md).
+  * `scriptexec`: The script execution operations.
+  * `fullbackup`: The [full backup](../../concepts/backup.md#full-backup) operations.
+  * `incbackup`: The [incremental backup](../../concepts/backup.md#incremental-backup) operations.
+  * `restore`: The [backup collection](../../concepts/datamodel/backup-collection.md) restore operations.
+  * `setnotnull`: The operations to set the `NOT NULL` constraint.
 
 View the description of the command for getting a list of background operations:
-
 
 ```bash
 {{ ydb-cli }} operation list --help
 ```
-
 
 ## Subcommand parameters {#options}
 
@@ -38,15 +44,12 @@ Name | Default value | Description
 
 Get a list of background index building operations for the `series` table:
 
-
 ```bash
 {{ ydb-cli }} -p quickstart operation list \
   buildindex
 ```
 
-
 Result:
-
 
 ```text
 ┌───────────────────────────────────────┬───────┬─────────┬───────┬──────────┬─────────────────────┬─────────────┐

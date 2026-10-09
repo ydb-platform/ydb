@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    external_table_validation.cpp
     generated_column.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp

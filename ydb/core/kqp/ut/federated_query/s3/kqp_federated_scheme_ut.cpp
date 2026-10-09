@@ -16,6 +16,223 @@ using namespace NTestUtils;
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(KqpFederatedSchemeTest) {
+    Y_UNIT_TEST(ExplainExternalTableLocationValidation) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        NScripting::TScriptingClient client(kikimr->GetDriver());
+        const auto result = client.ExplainYqlScript(R"sql(
+            CREATE EXTERNAL TABLE validated_table (data String NOT NULL) WITH (
+                DATA_SOURCE="not_created_yet", LOCATION="missing/", FORMAT="raw", VALIDATE_LOCATION="true"
+            );
+        )sql", NScripting::TExplainYqlRequestSettings().Mode(NScripting::ExplainYqlRequestMode::Plan)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(!kikimr->GetSchemeClient().DescribePath("/Root/validated_table").GetValueSync().IsSuccess());
+    }
+
+    Y_UNIT_TEST_TWIN(ValidateExternalTableLocation, UseQueryService) {
+        const TString bucket = UseQueryService ? "validate-location-query" : "validate-location-scheme";
+        CreateBucketWithObject(bucket, "data/file.json", TEST_CONTENT);
+        UploadObject(bucket, "empty/", "");
+        UploadObject(bucket, "nested/child/file.json", TEST_CONTENT);
+        UploadObject(bucket, "empty-file", "");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto queryClient = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto execute = [&](const TString& sql) -> NYdb::TStatus {
+            if constexpr (UseQueryService) {
+                return queryClient.ExecuteQuery(sql, TTxControl::NoTx()).GetValueSync();
+            } else {
+                return session.ExecuteSchemeQuery(sql).GetValueSync();
+            }
+        };
+        auto result = execute(fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="NONE"
+            );
+        )sql", GetBucketLocation(bucket)));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        size_t id = 0;
+        auto create = [&](const TString& location, const TString& validation, bool success, const TString& error = "") {
+            const TString name = TStringBuilder() << "table_" << id++;
+            auto result = execute(fmt::format(R"sql(
+                CREATE EXTERNAL TABLE {name} (data String NOT NULL) WITH (
+                    DATA_SOURCE="source", LOCATION="{location}", FORMAT="raw"{validation}
+                );
+            )sql", "name"_a = name, "location"_a = location,
+                "validation"_a = validation.empty() ? TString{} : TStringBuilder() << ", VALIDATE_LOCATION=\"" << validation << "\""));
+            UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), success, result.GetIssues().ToString());
+            if (!success) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+            }
+            const auto description = kikimr->GetSchemeClient().DescribePath("/Root/" + name).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(description.IsSuccess(), success, description.GetIssues().ToString());
+        };
+
+        for (const TString location : {"/data/file.json", "data/*.json", "data/", "nested/", "empty/", "empty-file", "/"}) {
+            create(location, "true", true);
+        }
+        for (const TString location : {"/missing/", "data/missing.json", "data/*.csv", "data/file"}) {
+            create(location, "true", false, "Location does not exist");
+        }
+        create("new-output/", "", true);
+        create("new-output/", "false", true);
+        create("/", "yes", false, "VALIDATE_LOCATION must be 'true' or 'false'");
+        create("", "true", false, "Cannot read from empty path");
+        create("data/{", "true", false, "Invalid LOCATION");
+
+        if constexpr (UseQueryService) {
+            result = execute(R"sql(
+                CREATE EXTERNAL TABLE IF NOT EXISTS table_0 (data String NOT NULL) WITH (
+                    DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_LOCATION="true"
+                );
+            )sql");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const TString emptyBucket = bucket + "-empty";
+        CreateBucket(emptyBucket);
+        result = execute(fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE empty_source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE empty_bucket_table (data String NOT NULL) WITH (
+                DATA_SOURCE="empty_source", LOCATION="/", FORMAT="raw", VALIDATE_LOCATION="true"
+            );
+        )sql", GetBucketLocation(emptyBucket)));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(ValidateExternalTableMissingBucket, UseQueryService) {
+        const TString bucket = UseQueryService ? "missing-location-query" : "missing-location-scheme";
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto queryClient = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto execute = [&](const TString& sql) -> NYdb::TStatus {
+            if constexpr (UseQueryService) {
+                return queryClient.ExecuteQuery(sql, TTxControl::NoTx()).GetValueSync();
+            } else {
+                return session.ExecuteSchemeQuery(sql).GetValueSync();
+            }
+        };
+        auto result = execute(fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="NONE"
+            );
+        )sql", GetBucketLocation(bucket)));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = execute(R"sql(
+            CREATE EXTERNAL TABLE validated_table (data String NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="/", FORMAT="raw", VALIDATE_LOCATION="true"
+            );
+        )sql");
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "NoSuchBucket");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), GetBucketLocation(bucket));
+        UNIT_ASSERT(!kikimr->GetSchemeClient().DescribePath("/Root/validated_table").GetValueSync().IsSuccess());
+
+        // Neither the default nor explicit opt-out should require the bucket to exist.
+        result = execute(R"sql(
+            CREATE EXTERNAL TABLE default_table (data String NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="/", FORMAT="raw"
+            );
+            CREATE EXTERNAL TABLE unchecked_table (data String NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="/", FORMAT="raw", VALIDATE_LOCATION="false"
+            );
+        )sql");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(ValidateExternalTableAwsSecrets, UseQueryService) {
+        const TString bucket = UseQueryService ? "location-aws-query" : "location-aws-scheme";
+        CreateBucketWithObject(bucket, "data.json", TEST_CONTENT);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto queryClient = kikimr->GetQueryClient();
+        auto session = kikimr->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto execute = [&](const TString& sql) -> NYdb::TStatus {
+            if constexpr (UseQueryService) {
+                return queryClient.ExecuteQuery(sql, TTxControl::NoTx()).GetValueSync();
+            } else {
+                return session.ExecuteSchemeQuery(sql).GetValueSync();
+            }
+        };
+        auto result = execute(fmt::format(R"sql(
+            CREATE SECRET access_key WITH (value="test-access-key");
+            CREATE SECRET secret_key WITH (value="test-secret-key");
+            CREATE EXTERNAL DATA SOURCE source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="access_key",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="secret_key", AWS_REGION="us-east-1"
+            );
+            CREATE EXTERNAL TABLE validated_table (data String NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="data.json", FORMAT="raw", VALIDATE_LOCATION="true"
+            );
+        )sql", GetBucketLocation(bucket)));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = execute("DROP SECRET secret_key;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        result = execute(R"sql(
+            CREATE EXTERNAL TABLE missing_secret_table (data String NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="data.json", FORMAT="raw", VALIDATE_LOCATION="true"
+            );
+        )sql");
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "secret_key");
+        UNIT_ASSERT(!kikimr->GetSchemeClient().DescribePath("/Root/missing_secret_table").GetValueSync().IsSuccess());
+
+        if constexpr (UseQueryService) {
+            // An existing table must not require another remote check or available secrets.
+            result = execute(R"sql(
+                CREATE EXTERNAL TABLE IF NOT EXISTS validated_table (data String NOT NULL) WITH (
+                    DATA_SOURCE="source", LOCATION="missing/", FORMAT="raw", VALIDATE_LOCATION="true"
+                );
+            )sql");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ValidateExternalTableReplacement) {
+        const TString bucket = "validate-location-replace";
+        CreateBucketWithObject(bucket, "original.json", TEST_CONTENT);
+        UploadObject(bucket, "replacement.json", R"({"key":"3","value":"replacement"})");
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto client = kikimr->GetQueryClient();
+        auto result = client.ExecuteQuery(fmt::format(R"sql(
+            CREATE EXTERNAL DATA SOURCE source WITH (
+                SOURCE_TYPE="ObjectStorage", LOCATION="{}", AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE validated_table (key Utf8 NOT NULL, value Utf8 NOT NULL) WITH (
+                DATA_SOURCE="source", LOCATION="original.json", FORMAT="json_each_row", VALIDATE_LOCATION="true"
+            );
+        )sql", GetBucketLocation(bucket)), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto replace = [&](const TString& location) {
+            return client.ExecuteQuery(fmt::format(R"sql(
+                CREATE OR REPLACE EXTERNAL TABLE validated_table (key Utf8 NOT NULL, value Utf8 NOT NULL) WITH (
+                    DATA_SOURCE="source", LOCATION="{}", FORMAT="json_each_row", VALIDATE_LOCATION="true"
+                );
+            )sql", location), TTxControl::NoTx()).GetValueSync();
+        };
+        auto checkRows = [&](size_t rows) {
+            auto read = client.ExecuteQuery("SELECT * FROM validated_table;", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(read.GetResultSetParser(0).RowsCount(), rows);
+        };
+        checkRows(2);
+        result = replace("missing.json");
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Location does not exist");
+        checkRows(2);
+        result = replace("replacement.json");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        checkRows(1);
+    }
+
     Y_UNIT_TEST(ExternalTableDdl) {
         enum EEx {
             Empty,

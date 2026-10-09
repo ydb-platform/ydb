@@ -148,6 +148,12 @@ struct IExternalSource : public TThrRefBase {
         of the previous method.
     */
     virtual bool CanLoadDynamicMetadata() const = 0;
+
+    // Check the remote location before creating an external table.
+    virtual NThreading::TFuture<void> ValidateExternalTableLocation(const TMetadata&) {
+        return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(
+            TExternalSourceException() << "Location validation is not supported for this external source"));
+    }
 };
 
 }

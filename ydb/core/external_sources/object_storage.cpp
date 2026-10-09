@@ -45,13 +45,15 @@ struct TObjectStorageExternalSource : public IExternalSource {
                                           size_t pathsLimit,
                                           std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                           bool enableInfer,
-                                          bool allowLocalFiles)
+                                          bool allowLocalFiles,
+                                          std::shared_ptr<NYql::IHTTPGateway> httpGateway)
         : HostnamePatterns(hostnamePatterns)
         , PathsLimit(pathsLimit)
         , ActorSystem(actorSystem)
         , CredentialsFactory(std::move(credentialsFactory))
         , EnableInfer(enableInfer)
         , AllowLocalFiles(allowLocalFiles)
+        , HttpGateway(std::move(httpGateway))
     {}
 
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -486,7 +488,56 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return EnableInfer;
     }
 
+    NThreading::TFuture<void> ValidateExternalTableLocation(const TMetadata& meta) override try {
+        ValidateHostname(HostnamePatterns, meta.DataSourceLocation);
+        if (const auto error = NYql::NS3::ValidateWildcards(meta.TableLocation)) {
+            throw TExternalSourceException() << "Invalid LOCATION '" << meta.TableLocation << "': " << error;
+        }
+
+        NYql::NS3Lister::TListingRequest request{
+            .Url = meta.DataSourceLocation,
+            .Credentials = NYql::TS3Credentials(CredentialsFactory, BuildStructuredToken(meta)),
+        };
+        if (const auto error = NYql::NS3::BuildS3FilePattern(meta.TableLocation, {}, {}, request)) {
+            throw TExternalSourceException() << *error;
+        }
+        const bool directory = meta.TableLocation.EndsWith('/') && !NYql::NS3::HasWildcards(meta.TableLocation);
+        request.IncludeDirectoryMarkers = directory;
+        auto gateway = HttpGateway ? HttpGateway : NYql::IHTTPGateway::Make();
+        auto lister = NYql::NS3Lister::MakeS3Lister(gateway, NYql::GetFqHTTPRetryPolicy(), request,
+            directory && !AllowLocalFiles ? TMaybe<TString>("/") : Nothing(), AllowLocalFiles, ActorSystem);
+        // A successful listing proves that the bucket exists even when it is empty.
+        const bool bucketRoot = directory && request.Prefix.empty();
+        return ValidateListing(lister, bucketRoot).Apply(
+            [gateway, location = meta.TableLocation, source = meta.DataSourceLocation](const NThreading::TFuture<void>& result) {
+                try {
+                    result.GetValue();
+                } catch (const std::exception& e) {
+                    throw TExternalSourceException() << "Failed to validate LOCATION '" << location
+                        << "' in '" << source << "': " << e.what();
+                }
+            });
+    } catch (const std::exception&) {
+        return NThreading::MakeErrorFuture<void>(std::current_exception());
+    }
+
 private:
+    static NThreading::TFuture<void> ValidateListing(const NYql::NS3Lister::IS3Lister::TPtr& lister, bool bucketRoot) {
+        return lister->Next().Apply([lister, bucketRoot](const NThreading::TFuture<NYql::NS3Lister::TListResult>& future) {
+            const auto& result = future.GetValue();
+            if (const auto* error = std::get_if<NYql::NS3Lister::TListError>(&result)) {
+                throw TExternalSourceException() << error->Issues.ToOneLineString();
+            }
+            if (bucketRoot || !std::get<NYql::NS3Lister::TListEntries>(result).Empty()) {
+                return NThreading::MakeFuture();
+            }
+            if (lister->HasNext()) {
+                return ValidateListing(lister, bucketRoot);
+            }
+            throw TExternalSourceException() << "Location does not exist or no objects match the location pattern";
+        });
+    }
+
     // Format used to (re-)infer types of partition columns from collected glob values.
     static constexpr std::string_view kPartitionInferenceCsvFormat = "csv_with_names";
 
@@ -998,6 +1049,7 @@ private:
     std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CredentialsFactory;
     const bool EnableInfer = false;
     const bool AllowLocalFiles;
+    const std::shared_ptr<NYql::IHTTPGateway> HttpGateway;
 };
 
 }
@@ -1008,8 +1060,9 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
                                                         size_t pathsLimit,
                                                         std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                                         bool enableInfer,
-                                                        bool allowLocalFiles) {
-    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);
+                                                        bool allowLocalFiles,
+                                                        std::shared_ptr<NYql::IHTTPGateway> httpGateway) {
+    return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles, std::move(httpGateway));
 }
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location) {

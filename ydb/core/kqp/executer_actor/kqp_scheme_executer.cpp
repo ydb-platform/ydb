@@ -5,7 +5,9 @@
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
+#include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/kqp/provider/external_table_validation.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -85,6 +87,7 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
             EvMakeTempDirResult,
             EvMakeSessionDirResult,
             EvMakeCTASDirResult,
+            EvLocationValidated,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
@@ -102,6 +105,10 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
         struct TEvMakeCTASDirResult : public TEventLocal<TEvMakeCTASDirResult, EEv::EvMakeCTASDirResult> {
             IKqpGateway::TGenericResult Result;
         };
+
+        struct TEvLocationValidated : public TEventLocal<TEvLocationValidated, EEv::EvLocationValidated> {
+            IKqpGateway::TGenericResult Result;
+        };
     };
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -113,7 +120,9 @@ public:
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
         bool expectsResult, TTxAllocatorState::TPtr txAlloc,
-        const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId, TInstant deadline)
+        const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId, TInstant deadline,
+        const TKqpFederatedQuerySetup* federatedQuerySetup,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
         : PhyTx(phyTx)
         , QueryType(queryType)
         , QueryData(queryData)
@@ -132,6 +141,8 @@ public:
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , TraceId(std::move(traceId))
         , Deadline(deadline)
+        , FederatedQuerySetup(federatedQuerySetup ? std::make_optional(*federatedQuerySetup) : std::nullopt)
+        , QueryServiceConfig(queryServiceConfig)
     {
         YQL_ENSURE(RequestContext);
         YQL_ENSURE(PhyTx);
@@ -451,7 +462,29 @@ public:
                 break;
             }
             case NKqpProto::TKqpSchemeOperation::kCreateExternalTable: {
-                const auto& modifyScheme = schemeOp.GetCreateExternalTable();
+                auto modifyScheme = schemeOp.GetCreateExternalTable();
+                auto* table = modifyScheme.MutableCreateExternalTable();
+                NKikimrExternalSources::TGeneral general;
+                if (table->GetSourceType() == "General" && general.ParseFromString(table->GetContent())) {
+                    bool validateLocation = false;
+                    auto& attributes = *general.mutable_attributes();
+                    for (auto it = attributes.begin(); it != attributes.end();) {
+                        if (to_lower(it->first) != "validate_location") {
+                            ++it;
+                            continue;
+                        }
+                        const auto value = to_lower(it->second);
+                        if (value != "true" && value != "false") {
+                            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "VALIDATE_LOCATION must be 'true' or 'false'");
+                        }
+                        validateLocation = value == "true";
+                        it = attributes.erase(it);
+                    }
+                    table->SetContent(general.SerializeAsString());
+                    if (validateLocation && !LocationValidated) {
+                        return ValidateExternalTableLocation(modifyScheme);
+                    }
+                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -779,6 +812,53 @@ public:
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
+    void ValidateExternalTableLocation(const NKikimrSchemeOp::TModifyScheme& scheme) try {
+        if (!FederatedQuerySetup) {
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, "Location validation requires federated query support");
+        }
+        auto* actorSystem = TActivationContext::ActorSystem();
+        const auto& patterns = QueryServiceConfig.GetHostnamePatterns();
+        std::set<NYql::EDatabaseType> availableTypes;
+        for (const auto& type : QueryServiceConfig.GetAvailableExternalDataSources()) {
+            if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+                availableTypes.insert(*databaseType);
+            }
+        }
+        auto factory = NExternalSource::CreateExternalSourceFactory(
+            std::vector<TString>(patterns.begin(), patterns.end()), actorSystem,
+            FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(), FederatedQuerySetup->CredentialsFactory,
+            false, FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
+            QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(), availableTypes);
+        auto loader = std::make_shared<TKqpTableMetadataLoader>(TString{DefaultKikimrPublicClusterName},
+            actorSystem, nullptr, false, nullptr, FederatedQuerySetup, NWilson::TTraceId(TraceId));
+        const auto& table = scheme.GetCreateExternalTable();
+        auto validation = NYql::ValidateExternalTableLocation(
+            JoinPath({scheme.GetWorkingDir(), table.GetName()}), table.GetDataSourcePath(), table.GetLocation(),
+            !scheme.GetFailedOnAlreadyExists() && !scheme.GetReplaceIfExists(), factory,
+            [loader, database = Database, userToken = UserToken](const TString& path, bool auth) {
+                return loader->LoadTableMetadata(TString{DefaultKikimrPublicClusterName}, path,
+                    NYql::IKikimrGateway::TLoadTableMetadataSettings().WithExternalDatasources(true).WithAuthInfo(auth),
+                    database, userToken);
+            });
+        validation.Subscribe([actorSystem, selfId = SelfId()](const TFuture<IKqpGateway::TGenericResult>& future) {
+            auto ev = MakeHolder<TEvPrivate::TEvLocationValidated>();
+            ev->Result = future.GetValue();
+            actorSystem->Send(selfId, ev.Release());
+        });
+        Become(&TKqpSchemeExecuter::ExecuteState);
+    } catch (const std::exception& e) {
+        ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, e.what());
+    }
+
+    void Handle(TEvPrivate::TEvLocationValidated::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!result.Success()) {
+            return ReplyErrorAndDie(GetYdbStatus(result), result.Issues());
+        }
+        LocationValidated = true;
+        MakeSchemeOperationRequest();
+    }
+
     void MakeObjectRequest() {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
         NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TFactory::Construct(schemeOp.GetObjectType()));
@@ -952,6 +1032,7 @@ public:
                 hFunc(TEvPrivate::TEvMakeTempDirResult, Handle);
                 hFunc(TEvPrivate::TEvMakeSessionDirResult, Handle);
                 hFunc(TEvPrivate::TEvMakeCTASDirResult, Handle);
+                hFunc(TEvPrivate::TEvLocationValidated, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -1576,6 +1657,9 @@ private:
     const TActorId KqpTempTablesAgentActor;
     const NWilson::TTraceId TraceId;
     const TInstant Deadline;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    bool LocationValidated = false;
     TString KillSessionId;
     TActorId AnalyzeActorId;
 };
@@ -1589,12 +1673,15 @@ IActor* CreateKqpSchemeExecuter(
     bool temporary, bool createTmpDir, bool isCreateTableAs,
     TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
     bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor,
-    NWilson::TTraceId traceId, TInstant deadline)
+    NWilson::TTraceId traceId, TInstant deadline,
+    const TKqpFederatedQuerySetup* federatedQuerySetup,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, queryData, target, requestType, database, userToken, clientAddress,
         temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx),
-        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor, std::move(traceId), deadline);
+        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor, std::move(traceId), deadline,
+        federatedQuerySetup, queryServiceConfig);
 }
 
 } // namespace NKikimr::NKqp

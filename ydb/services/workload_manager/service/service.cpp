@@ -14,9 +14,7 @@
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/services/workload_manager/actors/actors.h>
-#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/common/helpers.h>
-#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 
 namespace NKikimr::NWorkloadManager {
@@ -57,9 +55,8 @@ class TWorkloadService: public TActorBootstrapped<TWorkloadService> {
     };
 
 public:
-    TWorkloadService(NMonitoring::TDynamicCounterPtr counters, std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
+    explicit TWorkloadService(NMonitoring::TDynamicCounterPtr counters)
         : Counters(counters)
-        , Gateway(std::move(gateway))
     {
     }
 
@@ -77,8 +74,6 @@ public:
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
-        StateActor = Register(CreateWorkloadManagerStateActor(Gateway));
-        TActivationContext::ActorSystem()->RegisterLocalService(MakeWorkloadManagerStateActorId(SelfId().NodeId()), StateActor);
         if (EnabledResourcePools) {
             InitializeWorkloadService();
         }
@@ -99,10 +94,6 @@ public:
             if (poolState.NewPoolHandler) {
                 Send(*poolState.NewPoolHandler, new TEvents::TEvPoison());
             }
-        }
-
-        if (StateActor) {
-            Send(StateActor, new TEvents::TEvPoison());
         }
 
         PassAway();
@@ -721,15 +712,12 @@ private:
     std::unordered_map<TString, TPoolState> PoolIdToState;   // DatabaseID/PoolID to state
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
     ui32 NodeCount = 0;
-    TActorId StateActor;
-    std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway;
 };
 
 }   // anonymous namespace
 
-IActor* CreateService(NMonitoring::TDynamicCounterPtr counters, std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
-{
-    return new NWorkloadManager::TWorkloadService(counters, std::move(gateway));
+IActor* CreateService(NMonitoring::TDynamicCounterPtr counters) {
+    return new NWorkloadManager::TWorkloadService(counters);
 }
 
 NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamicCounterPtr rootCounters) {

@@ -721,6 +721,10 @@ public:
                 YDB_LOG_DEBUG("Failed to get system details");
                 break;
 
+            case NWorkloadManager::TEvSubscribeOnWorkloadManagerReady::EventType:
+                FailParkedQuery(ev->Cookie, Ydb::StatusIds::UNAVAILABLE, TString(NWorkloadManager::WORKLOAD_MANAGER_NOT_READY_MESSAGE));
+                break;
+
             case TKqpEvents::EvCreateSessionRequest: {
                 YDB_LOG_DEBUG("Remote create session request failed");
                 ReplyProcessError(Ydb::StatusIds::UNAVAILABLE, "Session not found.", ev->Cookie);
@@ -2381,29 +2385,39 @@ private:
     }
 
     void Handle(NWorkloadManager::TEvWorkloadManagerReady::TPtr& ev) {
-        const ui64 cookie = ev->Get()->Cookie;
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            FailParkedQuery(ev->Get()->Cookie, ev->Get()->Status, ev->Get()->Message);
+            return;
+        }
+        if (auto parked = TakeParkedQuery(ev->Get()->Cookie)) {
+            TActivationContext::Send(parked.Release());
+        }
+    }
+
+    THolder<IEventHandle> TakeParkedQuery(ui64 cookie) {
         auto it = ParkedClassifierReady.find(cookie);
         if (it == ParkedClassifierReady.end()) {
-            YDB_LOG_DEBUG("Received TEvWorkloadManagerReady with unknown cookie",
-                {"cookie", cookie});
-            return;
+            YDB_LOG_DEBUG("Parked query not found", {"cookie", cookie});
+            return nullptr;
         }
         THolder<IEventHandle> parked = std::move(it->second);
         ParkedClassifierReady.erase(it);
+        return parked;
+    }
 
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            NYql::TIssues issues;
-            if (ev->Get()->Message) {
-                issues.AddIssue(NYql::TIssue(ev->Get()->Message));
-            }
-            Send(SelfId(),
-                 new TEvKqp::TEvDelayedRequestError(std::move(parked), ev->Get()->Status, std::move(issues)),
-                 0,
-                 static_cast<ui64>(EDelayedRequestType::WorkloadManagerClassifierReady));
+    void FailParkedQuery(ui64 cookie, Ydb::StatusIds::StatusCode status, const TString& message) {
+        auto parked = TakeParkedQuery(cookie);
+        if (!parked) {
             return;
         }
-
-        TActivationContext::Send(parked.Release());
+        NYql::TIssues issues;
+        if (message) {
+            issues.AddIssue(NYql::TIssue(message));
+        }
+        Send(SelfId(),
+             new TEvKqp::TEvDelayedRequestError(std::move(parked), status, std::move(issues)),
+             0,
+             static_cast<ui64>(EDelayedRequestType::WorkloadManagerClassifierReady));
     }
 
     void InitSharedReading() {

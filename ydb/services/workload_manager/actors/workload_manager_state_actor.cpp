@@ -128,8 +128,8 @@ void NPrivate::TWorkloadManagerGateway::SubscribeOnReady(const TString& database
             subscriber, {}, new TEvWorkloadManagerReady(cookie, Ydb::StatusIds::UNAVAILABLE, "Workload manager gateway not initialized")));
         return;
     }
-    NActors::TActivationContext::Send(
-        new NActors::IEventHandle(snapshot->StateActorId, subscriber, new TEvSubscribeOnWorkloadManagerReady(databaseId, subscriber, cookie)));
+    NActors::TActivationContext::Send(new NActors::IEventHandle(snapshot->StateActorId, subscriber,
+        new TEvSubscribeOnWorkloadManagerReady(databaseId, subscriber, cookie), NActors::IEventHandle::FlagTrackDelivery, cookie));
 }
 
 void NPrivate::TWorkloadManagerGateway::Warmup(const TString& databasePath) {
@@ -191,7 +191,7 @@ public:
 
     void PassAway() override {
         Gateway_->OnUnregistered();
-        ReplyToAll(DatabaseTracker_.TakeAllSubscribers());
+        ReplyToAll(DatabaseTracker_.TakeAllSubscribers(), Ydb::StatusIds::UNAVAILABLE, TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE));
         UnsubscribeFromMetadataForClassifiers();
 
         for (const auto& [_, watchKey] : WatchKeys_) {
@@ -301,7 +301,6 @@ private:
 
         const auto fetchPath = DatabaseTracker_.AddSubscriber(
             msg->DatabaseId, NPrivate::TPendingSubscriber{ msg->Subscriber, msg->Cookie }, TActivationContext::Now());
-
         if (fetchPath) {
             StartFetchDatabaseInfo(*fetchPath);
         }
@@ -374,7 +373,7 @@ private:
     }
 
     void ReplySettled() {
-        Reply(DatabaseTracker_.TakeSettledSubscribers(MetadataTracker_.GetState()));
+        Reply(DatabaseTracker_.TakeSettledSubscribers(MetadataTracker_.GetState(), EnableResourcePoolsOnServerless_));
     }
 
     void Reply(const std::vector<NPrivate::TSubscriberReply>& replies) {
@@ -443,7 +442,7 @@ private:
             ScheduleInFlightRequestsCheck();
         }
 
-        Rebuild();
+        PublishAndReply();
 
         if (!EnableResourcePools_) {
             ReplyToAll(DatabaseTracker_.TakeAllSubscribers());

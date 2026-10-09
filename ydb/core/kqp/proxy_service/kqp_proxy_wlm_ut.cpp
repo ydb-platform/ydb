@@ -290,6 +290,43 @@ Y_UNIT_TEST_SUITE(KqpProxyWorkloadManager) {
                                     reply->Get()->Record.GetResponse().GetQueryIssues());
     }
 
+    ///
+    /// Test parked query fails with retryable UNAVAILABLE when the subscription
+    /// is not delivered because the state actor is gone
+    ///
+    Y_UNIT_TEST(QueryFailsRetryablyWhenWlmSubscriptionUndelivered) {
+        TWlmFixture fx;
+        const TActorId stateActor = fx.StateActorId();
+
+        std::vector<TAutoPtr<IEventHandle>> held;
+        fx.Runtime->SetEventFilter([&held](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> bool {
+            if (ev->GetTypeRewrite() == NWorkloadManager::TEvSubscribeOnWorkloadManagerReady::EventType) {
+                held.push_back(ev.Release());
+                return true;
+            }
+            return false;
+        });
+
+        fx.Runtime->Send(new IEventHandle(fx.KqpProxy, fx.Sender, MakeSelect42Query("/Root").Release()));
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&held](IEventHandle&) { return !held.empty(); });
+        fx.Runtime->DispatchEvents(opts);
+        UNIT_ASSERT_C(!held.empty(), "Expected proxy to park query and subscribe on wlm readiness");
+
+        fx.Runtime->Send(new IEventHandle(stateActor, fx.Sender, new TEvents::TEvPoison()));
+        fx.Runtime->DispatchEvents({}, TDuration::MilliSeconds(100));
+
+        fx.Runtime->SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) { return false; });
+        for (auto& e : held) {
+            fx.Runtime->Send(e.Release());
+        }
+
+        auto reply = fx.Runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(fx.Sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::UNAVAILABLE,
+                                    reply->Get()->Record.GetResponse().GetQueryIssues());
+    }
+
 }
 
 } // namespace NKikimr::NKqp

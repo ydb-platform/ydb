@@ -6,15 +6,14 @@ SRCS(
     database_readiness_tracker.cpp
     pool_handlers_actors.cpp
     resource_pool_tracker.cpp
-    workload_manager_state_actor.cpp
     scheme_actors.cpp
+    workload_manager_state_actor.cpp
 )
 
 PEERDIR(
+    ydb/core/tx/tx_proxy
     ydb/services/workload_manager/common
     ydb/services/workload_manager/tables
-
-    ydb/core/tx/tx_proxy
 )
 
 END()

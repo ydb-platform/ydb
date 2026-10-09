@@ -9,9 +9,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-<<<<<<< HEAD
-void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
-=======
 TConclusion<std::shared_ptr<IFetchLogic>> IDataSource::StartFetchHeader(
     const TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
     auto applied = DoApplyPendingFetcher(context, fetchContext.GetColumnId());
@@ -30,9 +27,9 @@ TConclusion<std::shared_ptr<IFetchLogic>> IDataSource::StartFetchData(const TPro
         return applied;
     }
     auto acc = context.GetResources().GetAccessorOptional(addr.GetColumnId());
-    THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName> subColumnsToFetch;
+    THashSet<TString> subColumnsToFetch;
     for (auto&& sc : addr.GetSubColumnNames(true)) {
-        if (!acc || !acc->HasSubColumnData(sc.GetValue())) {
+        if (!acc || !acc->HasSubColumnData(sc)) {
             if (!sc && acc) {
                 context.MutableResources().Remove(addr.GetColumnId());
             }
@@ -45,9 +42,7 @@ TConclusion<std::shared_ptr<IFetchLogic>> IDataSource::StartFetchData(const TPro
     return DoStartFetchData(context, addr.SelectSubColumns(subColumnsToFetch));
 }
 
-TConclusionStatus TSimpleDataSource::DoAssembleAccessor(
-    const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
->>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
+void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
     auto itBlob = Blobs.find(TBlobAddress(columnId, subColumnName));
     AFL_VERIFY(itBlob != Blobs.end());
     auto it = Info.find(columnId);

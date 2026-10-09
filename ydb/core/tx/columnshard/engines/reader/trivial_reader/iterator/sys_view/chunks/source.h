@@ -66,15 +66,11 @@ private:
 
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
 
-<<<<<<< HEAD
-    virtual TConclusion<bool> DoStartFetchImpl(
-=======
     // ChunkDetails blobs land in OriginalData. The finished column is also published into the processor
     // resources, otherwise the next data fetch does not see it and reads the same blobs again.
     virtual TConclusionStatus DoApplyPendingFetcher(const NArrow::NSSA::TProcessorContext& context, const ui32 entityId) override;
 
-    virtual TConclusion<NReader::NCommon::TExecutionResult> DoStartFetchImpl(
->>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
+    virtual TConclusion<bool> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(

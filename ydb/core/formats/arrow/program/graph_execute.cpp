@@ -159,13 +159,8 @@ TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const ICol
             node->SetRemoveResourceIds(i.second.GetLastUsageResources());
         }
     }
-<<<<<<< HEAD
     AFL_TRACE(NKikimrServices::SSA_GRAPH_EXECUTION)("graph_constructed", DebugDOT());
 //    Cerr << DebugDOT() << Endl;
-=======
-    YDB_LOG_TRACE("",
-        {"graphConstructed", DebugDOT()});
->>>>>>> b925bc240c1 (Fix YDBBUG-934 (#55201))
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(

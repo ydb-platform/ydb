@@ -161,7 +161,7 @@ class ConfigsTest(unittest.TestCase):
 
         generated_config = generated["config"]
         self.assertEqual(generated_config["grpc_config"]["services_enabled"], ["legacy"])
-        self.assertEqual(generated_config["nbs_config"]["enabled"], True)
+        self.assertIs(generated_config["feature_flags"]["enable_nbs_disks_ssd_io_v2"], True)
         self.assertEqual(
             generated_config["nbs_config"]["nbs_storage_config"],
             {
@@ -196,3 +196,5 @@ class ConfigsTest(unittest.TestCase):
 
         self.assertNotIn("grpc_config", generated["config"])
         self.assertNotIn("nbs_config", generated["config"])
+        feature_flags = generated["config"].get("feature_flags") or {}
+        self.assertNotIn("enable_nbs_disks_ssd_io_v2", feature_flags)

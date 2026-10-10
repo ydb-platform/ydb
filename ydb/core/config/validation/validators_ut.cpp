@@ -903,7 +903,7 @@ Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
 
     Y_UNIT_TEST(ShouldAcceptEnabledFrontend) {
         NKikimrConfig::TAppConfig config;
-        config.MutableNbsConfig()->SetEnabled(true);
+        config.MutableFeatureFlags()->SetEnableNbsDisksSsdIoV2(true);
         config.MutableNbsConfig()
             ->MutableNbsFrontendConfig()
             ->SetEnabled(true);
@@ -920,7 +920,7 @@ Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
     Y_UNIT_TEST(ShouldRejectInvalidEnabledFrontend) {
         struct TTestCase
         {
-            bool NbsEnabled;
+            bool EnableNbsDisksSsdIoV2;
             bool HasGrpcConfig;
             bool StartGrpcProxy;
             ui32 Port;
@@ -929,23 +929,23 @@ Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
 
         const TVector<TTestCase> testCases = {
             {
-                .NbsEnabled = false,
+                .EnableNbsDisksSsdIoV2 = false,
                 .HasGrpcConfig = true,
                 .StartGrpcProxy = true,
                 .Port = 2135,
                 .ExpectedError =
-                    "NbsConfig.Enabled: expected true when "
+                    "FeatureFlags.EnableNbsDisksSsdIoV2: expected true when "
                     "NbsConfig.NbsFrontendConfig.Enabled=true, got false",
             },
             {
-                .NbsEnabled = true,
+                .EnableNbsDisksSsdIoV2 = true,
                 .HasGrpcConfig = false,
                 .ExpectedError =
                     "GRpcConfig: required when "
                     "NbsConfig.NbsFrontendConfig.Enabled=true, got missing",
             },
             {
-                .NbsEnabled = true,
+                .EnableNbsDisksSsdIoV2 = true,
                 .HasGrpcConfig = true,
                 .StartGrpcProxy = false,
                 .Port = 2135,
@@ -954,7 +954,7 @@ Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
                     "NbsConfig.NbsFrontendConfig.Enabled=true, got false",
             },
             {
-                .NbsEnabled = true,
+                .EnableNbsDisksSsdIoV2 = true,
                 .HasGrpcConfig = true,
                 .StartGrpcProxy = true,
                 .Port = 65536,
@@ -966,7 +966,9 @@ Y_UNIT_TEST_SUITE(NbsFrontendConfigValidation) {
 
         for (const auto& testCase: testCases) {
             NKikimrConfig::TAppConfig config;
-            config.MutableNbsConfig()->SetEnabled(testCase.NbsEnabled);
+            if (testCase.EnableNbsDisksSsdIoV2) {
+                config.MutableFeatureFlags()->SetEnableNbsDisksSsdIoV2(true);
+            }
             config.MutableNbsConfig()
                 ->MutableNbsFrontendConfig()
                 ->SetEnabled(true);

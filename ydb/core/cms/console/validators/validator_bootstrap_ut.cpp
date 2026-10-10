@@ -1,6 +1,8 @@
 #include "validator_bootstrap.h"
 #include "validator_ut_common.h"
 
+#include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
 namespace NKikimr::NConsole {
@@ -165,6 +167,21 @@ Y_UNIT_TEST_SUITE(BootstrapTabletsValidatorTests) {
         auto config = MakeDefaultBootstrapConfig();
         config.MutableCompactionBroker();
         CheckConfig(config, false);
+    }
+
+    // MakeDefaultBootstrapConfig has no DBS_CONTROLLER. 
+    // Enable bsDisksSsdIoV2 feature flag for DBS_CONTROLLER.
+    Y_UNIT_TEST(TestNbs2DbsController) {
+        const auto kinds = TBootstrapConfigValidator().GetCheckedConfigItemKinds();
+        UNIT_ASSERT(kinds.contains((ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem));
+
+        CheckConfig(MakeDefaultBootstrapConfig(), true, 0);
+
+        NKikimrConfig::TAppConfig cfg;
+        cfg.MutableBootstrapConfig()->CopyFrom(MakeDefaultBootstrapConfig());
+        cfg.MutableNameserviceConfig()->CopyFrom(MakeDefaultNameserviceConfig());
+        cfg.MutableFeatureFlags()->SetEnableNbsDisksSsdIoV2(true);
+        NTests::CheckConfig<TBootstrapConfigValidator>(cfg, true, 1);
     }
 }
 

@@ -3,17 +3,22 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 
 #include <util/string/builder.h>
 
 namespace NKikimr::NConsole {
 
+// CMS builds a validator's input only from the kinds listed here
+// (TModificationsValidator::BuildConfigs).
+// FeatureFlagsItem  makes a feature-flag-only update run this check.
 TBootstrapConfigValidator::TBootstrapConfigValidator()
     : IConfigValidator("bootstrap",
                        { (ui32)NKikimrConsole::TConfigItem::NameserviceConfigItem,
                          (ui32)NKikimrConsole::TConfigItem::BootstrapConfigItem,
-                         (ui32)NKikimrConsole::TConfigItem::ResourceBrokerConfigItem, })
+                         (ui32)NKikimrConsole::TConfigItem::ResourceBrokerConfigItem,
+                         (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem, })
 {
 }
 
@@ -70,7 +75,8 @@ bool TBootstrapConfigValidator::CheckTablets(const NKikimrConfig::TAppConfig &co
         NKikimrConfig::TBootstrap::TENANT_SLOT_BROKER,
     };
 
-    if (config.HasNbsConfig() && config.GetNbsConfig().GetEnabled()) {
+    // EnableNbsDisksSsdIoV2 is the nbs2 switch, read at process start.
+    if (config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2()) {
         importantTablets.insert(NKikimrConfig::TBootstrap::DBS_CONTROLLER);
     }
 

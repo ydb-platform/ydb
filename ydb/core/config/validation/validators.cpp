@@ -302,8 +302,8 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
 
     if (config.GetNbsConfig().GetNbsFrontendConfig().GetEnabled()) {
         CHECK_ERR(
-            config.GetNbsConfig().GetEnabled(),
-            "NbsConfig.Enabled: expected true when "
+            config.GetFeatureFlags().GetEnableNbsDisksSsdIoV2(),
+            "FeatureFlags.EnableNbsDisksSsdIoV2: expected true when "
             "NbsConfig.NbsFrontendConfig.Enabled=true, got false");
         CHECK_ERR(
             config.HasGRpcConfig(),

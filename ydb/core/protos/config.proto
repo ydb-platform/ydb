@@ -3586,6 +3586,8 @@ message TNbsFrontendConfig {
 }
 
 message TNbsConfig {
+    // Ignored. EnableNbsDisksSsdIoV2 is the nbs2 switch.
+    // The field remains so existing yaml still parses.
     optional bool Enabled = 1;
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
     optional TNbsFrontendConfig NbsFrontendConfig = 3;

@@ -219,6 +219,7 @@ selector_config:
     Y_UNIT_TEST(CoupledNbsGrpc) {
         auto doc = NFyaml::TDocument::Parse(R"(
 config:
+  feature_flags: {enable_nbs_disks_ssd_io_v2: true}
   nbs_config:
     enabled: true
     nbs_frontend_config:

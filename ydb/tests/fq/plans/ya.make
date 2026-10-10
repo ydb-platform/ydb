@@ -4,7 +4,6 @@ STYLE_PYTHON()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
-REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/python/boto3
     library/python/port_manager
@@ -18,6 +17,7 @@ DEPENDS(
     contrib/python/moto/bin
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

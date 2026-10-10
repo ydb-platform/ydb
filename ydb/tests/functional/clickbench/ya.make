@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:1)
 IF (NOT SANITIZER_TYPE)
 
 PY3TEST()
@@ -11,7 +12,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_FEATURE_FLAGS="enable_resource_pools")
 
-REQUIREMENTS(ram:32 cpu:1)
+REQUIREMENTS(ram:32 cpu:2)
 
 DEPENDS(
     ydb/apps/ydb

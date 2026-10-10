@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/core/wrappers)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(20)
 
-REQUIREMENTS(cpu:1)
 IF (NOT OS_WINDOWS)
     PEERDIR(
         ydb/library/actors/core

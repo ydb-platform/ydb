@@ -1,8 +1,8 @@
-REQUIREMENTS(cpu:1)
 IF (NOT OS_WINDOWS AND CLANG AND NOT WITH_VALGRIND)
 
 UNITTEST_FOR(ydb/library/yql/providers/s3/compressors)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     decompressor_ut.cpp
     output_queue_ut.cpp

@@ -2,7 +2,6 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:1)
 IF (WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -10,6 +9,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/testlib/default

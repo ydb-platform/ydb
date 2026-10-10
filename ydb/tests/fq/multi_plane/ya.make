@@ -6,7 +6,6 @@ FORK_TEST_FILES()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
-REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/tools/datastreams_helpers
     ydb/tests/tools/fq_runner
@@ -19,6 +18,7 @@ TEST_SRCS(
     test_retry_high_rate.py
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

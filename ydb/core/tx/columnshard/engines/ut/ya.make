@@ -4,7 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
@@ -31,6 +30,7 @@ PEERDIR(
     yql/essentials/udfs/common/json2
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

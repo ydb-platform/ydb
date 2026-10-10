@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
 
-REQUIREMENTS(cpu:1)
 SRCS(
     database_space_ut.cpp
     grouper_ut.cpp
@@ -11,6 +10,7 @@ SRCS(
 FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

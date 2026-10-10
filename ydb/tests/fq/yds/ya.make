@@ -8,7 +8,6 @@ SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
-REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/public/api/protos
     ydb/public/api/grpc
@@ -52,6 +51,7 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

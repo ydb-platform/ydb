@@ -5,10 +5,11 @@ IF (NOT WITH_VALGRIND)
 
     SPLIT_FACTOR(60)
 
+REQUIREMENTS(cpu:1)
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-        REQUIREMENTS(ram:12 cpu:1)
+        REQUIREMENTS(ram:12)
     ELSE()
         SIZE(MEDIUM)
     ENDIF()

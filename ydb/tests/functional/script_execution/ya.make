@@ -2,7 +2,6 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
-REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/python
@@ -22,6 +21,7 @@ FORK_TEST_FILES()
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

@@ -4,8 +4,9 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(test.py)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 DEPENDS(
 )

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
-REQUIREMENTS(cpu:1)
 
+REQUIREMENTS(cpu:1)
     IF (SANITIZER_TYPE)
         SIZE(MEDIUM)
     ELSE()

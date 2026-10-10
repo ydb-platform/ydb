@@ -10,13 +10,14 @@ PEERDIR(
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 YQL_LAST_ABI_VERSION()
 
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:1)
+    REQUIREMENTS(ram:16 cpu:2)
 ENDIF()
 
 END()

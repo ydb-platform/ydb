@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:4)
 IF (OS_LINUX AND NOT SANITIZER_TYPE)
 
 PY3TEST()
@@ -7,7 +8,6 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 

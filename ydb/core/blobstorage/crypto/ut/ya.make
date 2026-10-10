@@ -1,6 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/crypto)
 
-REQUIREMENTS(cpu:1)
 IF (NOT OS_WINDOWS AND NOT ARCH_ARM64)
     SRCS(
         chacha_ut.cpp
@@ -19,6 +18,7 @@ ELSE()
     )
 ENDIF()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/blobstorage/crypto/chacha_512
 )

@@ -1,7 +1,8 @@
 UNITTEST_FOR(ydb/library/yql/dq/comp_nodes/hash_join_utils)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
-    REQUIREMENTS(ram:32 cpu:1)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread")

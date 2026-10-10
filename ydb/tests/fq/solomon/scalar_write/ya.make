@@ -13,8 +13,9 @@ PY_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1 ram:16)
+    REQUIREMENTS(cpu:2 ram:16)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)

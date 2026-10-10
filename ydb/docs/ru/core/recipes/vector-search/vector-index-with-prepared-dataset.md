@@ -45,26 +45,55 @@ CREATE TABLE wikipedia (
 
 ## Шаг 2. Скачивание набора данных {#step2}
 
-На этом шаге будет скачан [набор данных](https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings), подготовленный сообществом [Hugging Face](https://huggingface.co), содержащий тексты из английской Википедии. Текст разбит на параграфы, каждому параграфу сопоставлен вектор-эмбеддинг.
+На этом шаге будет скачан [набор данных](https://huggingface.co/datasets/timescale/wikipedia-22-12-simple-embeddings), подготовленный сообществом [Hugging Face](https://huggingface.co). Это форк датасета Cohere `wikipedia-22-12-simple-embeddings`, который распространяется под лицензией [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0). Он содержит тексты из английской Википедии, разбитые на параграфы. Каждому параграфу сопоставлен вектор-эмбеддинг.
+
+{% note info %}
+
+В форке схема колонок отличается от таблицы в [шаге 1](#step1): скрипт ниже приводит данные к этой схеме.
+
+{% endnote %}
 
 В рабочей директории нужно создать файл `import_dataset.py`, содержащий скрипт на Python:
 
 ```python
 #!/usr/bin/env python
+import json
 from datasets import load_dataset
 
 # Load the dataset
-dataset = load_dataset("Cohere/wikipedia-22-12-simple-embeddings")
+dataset = load_dataset(
+    "timescale/wikipedia-22-12-simple-embeddings",
+    split="train",
+)
 
-# Save it as CSV or another format locally
-dataset['train'].to_csv('wikipedia_embeddings_train.csv', index=False)
+# Flatten Timescale schema to match the wikipedia table
+def flatten(row):
+    meta = row["meta"]
+    if isinstance(meta, str):
+        meta = json.loads(meta)
+    return {
+        "id": row["id"],
+        "title": meta.get("title"),
+        "text": row["contents"],
+        "url": meta.get("url"),
+        "wiki_id": meta.get("wiki_id"),
+        "views": meta.get("views"),
+        "paragraph_id": meta.get("paragraph_id"),
+        "langs": meta.get("langs"),
+        # Space-separate floats for the YQL conversion in step 3
+        "emb": row["embedding"].replace(",", " "),
+    }
+
+# Save it as CSV
+flattened = dataset.map(flatten, remove_columns=dataset.column_names)
+flattened.to_csv("wikipedia_embeddings_train.csv", index=False)
 ```
 
 Далее следует установить пакет `datasets` и выполнить подготовленный скрипт `import_dataset.py`:
 
-```python
+```bash
 pip3 install datasets
-python3 `import_dataset.py`
+python3 import_dataset.py
 ```
 
 В рабочей директории будет создан файл `wikipedia_embeddings_train.csv`, содержащий набор данных с текстами из Википедии и эмбеддингами.

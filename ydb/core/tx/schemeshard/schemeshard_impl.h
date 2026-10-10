@@ -527,8 +527,15 @@ public:
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
+    // Empty-body variant for prefix/delta assembly: the caller appends the serialized
+    // pieces directly into Record.MutableTxBody() (see schemeshard_proposal_body.h).
+    THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
+        const TActorContext& ctx) const;
     THolder<TEvColumnShard::TEvProposeTransaction> MakeColumnShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx, NKikimrTxColumnShard::ETransactionKind kind = NKikimrTxColumnShard::TX_KIND_SCHEMA) const;
+    // Empty-body variant for prefix/delta assembly (see schemeshard_proposal_body.h).
+    THolder<TEvColumnShard::TEvProposeTransaction> MakeColumnShardProposal(const TPathId& pathId, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TActorContext& ctx, NKikimrTxColumnShard::ETransactionKind kind = NKikimrTxColumnShard::TX_KIND_SCHEMA) const;
 
     THolder<::NActors::IEventBase> MakeShardProposal(const TPath& path, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const;
@@ -1401,7 +1408,27 @@ public:
                                       TString& errStr);
 
     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
+    // Prefix/delta split of FillAlterTableTxBody for per-shard propose loops: the common
+    // piece (everything except PartitionConfig) is serialized once per round, the tiny
+    // per-shard delta (the possibly patched PartitionConfig) is appended per shard.
+    // Concatenating the two is semantically identical to the full build (see
+    // schemeshard_proposal_body.h).
+    TString FillAlterTableTxBodyCommon(TPathId tableId, TMessageSeqNo seqNo) const;
+    void AppendAlterTableTxBodyDelta(TPathId tableId, TShardIdx shardIdx, TString& out) const;
+    // Prefix/delta split of the CreateTable proposal body for the TxCreateTable
+    // ConfigureParts loop (see schemeshard_proposal_body.h): the common piece
+    // (description minus ranges/schema version/PartitionConfig, plus the async-index
+    // template and SeqNo) is serialized once per round; the per-partition delta carries
+    // the range, schema version and the possibly patched PartitionConfig.
+    TString FillCreateTableTxBodyCommon(TPathId tableId, TMessageSeqNo seqNo,
+        const NKikimrTxDataShard::TFlatSchemeTransaction& txTemplate);
+    void AppendCreateTableTxBodyDelta(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, TString& out);
     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
+    // Prefix/delta split of FillBackupTxBody for per-shard propose loops (see
+    // schemeshard_proposal_body.h): the common piece (task minus ShardNum) is
+    // serialized once per round, the per-shard delta is just the ShardNum scalar.
+    TString FillBackupTxBodyCommon(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, TMessageSeqNo seqNo) const;
+    void AppendBackupTxBodyDelta(ui32 shardNum, TString& out) const;
 
     static void FillSeqNo(NKikimrTxDataShard::TFlatSchemeTransaction &tx, TMessageSeqNo seqNo);
     static void FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody &tx, TMessageSeqNo seqNo);

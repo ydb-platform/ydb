@@ -49,27 +49,29 @@ public:
 
         txState->ClearShardsInProgress();
 
+        // The body is identical for all shards: build and serialize it once.
+        auto seqNo = context.SS->StartRound(*txState);
+
+        NKikimrTxDataShard::TFlatSchemeTransaction tx;
+
+        auto* createSnapshot = tx.MutablePrepareIndexValidation();
+        pathId.ToProto(createSnapshot->MutableIndexId());
+        createSnapshot->SetSnapshotName("Snapshot0");
+        createSnapshot->SetTableSchemaVersion(table->AlterVersion+1);
+
+        context.SS->FillSeqNo(tx, seqNo);
+        const TString txBody = tx.SerializeAsString();
+
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
             TTabletId datashardId = context.SS->ShardInfos[shardIdx].TabletID;
-
-            auto seqNo = context.SS->StartRound(*txState);
-
-            NKikimrTxDataShard::TFlatSchemeTransaction tx;
-
-            auto* createSnapshot = tx.MutablePrepareIndexValidation();
-            pathId.ToProto(createSnapshot->MutableIndexId());
-            createSnapshot->SetSnapshotName("Snapshot0");
-            createSnapshot->SetTableSchemaVersion(table->AlterVersion+1);
-
-            context.SS->FillSeqNo(tx, seqNo);
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "sending TFlatSchemeTransaction to datashard with publish shadow data request",
                 {"datashard", datashardId},
                 {"seqNo", seqNo},
             );
 
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
 

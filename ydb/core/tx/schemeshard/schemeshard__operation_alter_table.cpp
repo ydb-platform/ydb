@@ -399,6 +399,11 @@ public:
 
         txState->ClearShardsInProgress();
 
+        // The seqNo and the invariant part of the alter body are shared by all shards
+        // in this round; only the per-shard PartitionConfig delta differs.
+        const auto seqNo = context.SS->StartRound(*txState);
+        const auto txBodyCommon = context.SS->FillAlterTableTxBodyCommon(txState->TargetPathId, seqNo);
+
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -407,9 +412,10 @@ public:
                 {"datashardId", datashardId},
             );
 
-            const auto seqNo = context.SS->StartRound(*txState);
-            const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, context.Ctx);
+            TString& txBody = *event->Record.MutableTxBody();
+            txBody.append(txBodyCommon);
+            context.SS->AppendAlterTableTxBodyDelta(txState->TargetPathId, idx, txBody);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
         }
 

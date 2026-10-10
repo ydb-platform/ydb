@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 PEERDIR(
     ydb/core/formats/arrow/accessor/plain
+    ydb/core/formats/arrow/accessor/sparsed
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/program

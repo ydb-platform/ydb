@@ -2,6 +2,7 @@
 #include "execution.h"
 #include "stream_logic.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -56,6 +57,17 @@ TConclusion<bool> TStreamLogicProcessor::AddMonoValue(
     return false;
 }
 
+TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const TProcessorContext& context) const {
+    auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
+    if (result.IsFail()) {
+        return result;
+    }
+    const auto accessor = result.DetachResult().GetAccessorVerified();
+    context.MutableResources().Remove(GetOutputColumnIdOnce());
+    context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
+    return IsFinishAccessor(accessor);
+}
+
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     AFL_VERIFY(!context.GetResources().HasMarker(FinishMarker));
@@ -73,20 +85,21 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
             context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
         } else {
-            auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
-            if (result.IsFail()) {
-                return result;
-            }
-            const auto accessor = result.DetachResult().GetAccessorVerified();
-            context.MutableResources().Remove(GetOutputColumnIdOnce());
-            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
-            if (IsFinishAccessor(accessor)) {
-                return true;
-            }
+            return CombineInput(inputId, context);
         }
         return false;
     } else {
         const auto& scalarInput = context.GetResources().GetConstantScalarVerified(inputId);
+        if (!scalarInput->is_valid) {
+            AFL_VERIFY(scalarInput->type->id() == arrow::uint8()->id())("type", scalarInput->type->ToString());
+            if (!accResult) {
+                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
+                    std::make_shared<NAccessor::TTrivialArray>(TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
+                        *scalarInput, context.GetResources().GetRecordsCountRobustVerified()))), false);
+                return false;
+            }
+            return CombineInput(inputId, context);
+        }
 
         TConclusion<bool> isMonoInput = GetMonoInput(scalarInput);
         if (isMonoInput.IsFail()) {
@@ -168,13 +181,13 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
         const ui8* values = ui8Arr.raw_values();
         if (Operation == NKernels::EOperation::And) {
             for (ui32 i = 0; i < ui8Arr.length(); ++i) {
-                if (values[i] != 0) {
+                if (ui8Arr.IsNull(i) || values[i] != 0) {
                     return false;
                 }
             }
         } else if (Operation == NKernels::EOperation::Or) {
             for (ui32 i = 0; i < ui8Arr.length(); ++i) {
-                if (values[i] == 0) {
+                if (ui8Arr.IsNull(i) || values[i] == 0) {
                     return false;
                 }
             }
@@ -195,7 +208,7 @@ bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray
 TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const {
     std::shared_ptr<arrow::Scalar> monoValue;
     const auto isMonoValue = inputArray->CheckOneValueAccessor(monoValue);
-    if (!isMonoValue || !*isMonoValue) {
+    if (!isMonoValue || !*isMonoValue || !monoValue->is_valid) {
         return std::optional<bool>();
     }
     const auto isFalseConclusion = ScalarIsFalse(monoValue);

@@ -92,7 +92,7 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
 }
 
 std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-    std::optional<std::shared_ptr<arrow::Scalar>> result;
+    std::shared_ptr<arrow::Scalar> result;
     for (auto&& i : Chunks) {
         std::shared_ptr<arrow::Scalar> valLocal;
         auto res = i->CheckOneValueAccessor(valLocal);
@@ -101,12 +101,12 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
         }
         if (!result) {
             result = valLocal;
-        } else if (!NArrow::ScalarCompareNullable(*result, valLocal)) {
+        } else if (!result->Equals(*valLocal)) {
             return false;
         }
     }
-    AFL_VERIFY(!!result);
-    value = *result;
+    AFL_VERIFY(result);
+    value = result;
     return true;
 }
 

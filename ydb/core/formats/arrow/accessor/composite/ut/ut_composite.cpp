@@ -123,4 +123,46 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         UNIT_ASSERT_VALUES_EQUAL(chunkedArray->length(), 0);
         UNIT_ASSERT(chunkedArray->type()->Equals(arrow::utf8()));
     }
+
+    static std::shared_ptr<IChunkedArray> BuildCompositeFromScalars(
+        const std::shared_ptr<arrow::Scalar>& first, const std::shared_ptr<arrow::Scalar>& second) {
+        TCompositeChunkedArray::TBuilder builder(first->type);
+        builder.AddChunk(std::make_shared<TTrivialArray>(first));
+        builder.AddChunk(std::make_shared<TTrivialArray>(second));
+        return builder.Finish();
+    }
+
+    Y_UNIT_TEST(DifferentScalarChunksAreNotOneValue) {
+        auto composite = BuildCompositeFromScalars(
+            std::make_shared<arrow::StringScalar>("Ada"), std::make_shared<arrow::StringScalar>("Bobby"));
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = composite->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && !*oneValue);
+    }
+
+    Y_UNIT_TEST(EqualScalarChunksAreOneValue) {
+        auto composite = BuildCompositeFromScalars(
+            std::make_shared<arrow::StringScalar>("Ada"), std::make_shared<arrow::StringScalar>("Ada"));
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = composite->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && *oneValue);
+        UNIT_ASSERT(value->Equals(arrow::StringScalar("Ada")));
+    }
+
+    Y_UNIT_TEST(NullStringScalarChunksAreOneValue) {
+        auto composite = BuildCompositeFromScalars(
+            arrow::MakeNullScalar(arrow::utf8()), arrow::MakeNullScalar(arrow::utf8()));
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = composite->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && *oneValue);
+        UNIT_ASSERT(value && !value->is_valid);
+    }
+
+    Y_UNIT_TEST(NullAndZeroScalarChunksAreNotOneValue) {
+        auto composite = BuildCompositeFromScalars(
+            arrow::MakeNullScalar(arrow::uint8()), std::make_shared<arrow::UInt8Scalar>(0));
+        std::shared_ptr<arrow::Scalar> value;
+        const auto oneValue = composite->CheckOneValueAccessor(value);
+        UNIT_ASSERT(oneValue && !*oneValue);
+    }
 };

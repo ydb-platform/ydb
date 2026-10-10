@@ -857,9 +857,9 @@ private:
 
     virtual void DoOnRequestsFinished(
         NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
-        NActors::TActivationContext::Send(TabletActorId,
-            std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
-                NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard)), std::move(OnApplied)));
+        NActors::TActivationContext::Send(
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
+                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard)), OnApplied));
     }
 
 public:
@@ -869,7 +869,7 @@ public:
         , Processor(processor)
         , Generation(gen)
         , InFlight(inFlight)
-        , OnApplied(std::move(onApplied))
+        , OnApplied(onApplied)
     {
         InFlight->Inc();
     }
@@ -912,7 +912,7 @@ public:
 
 void TColumnShard::StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
-    const TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied& onApplied) {
+    TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied) {
     for (auto&& i : requests) {
         const ui64 accessorsMemory =
             i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());

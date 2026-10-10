@@ -4,13 +4,21 @@
 #include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_yt_client.h>
 #include <ydb/library/yql/providers/common/message_stream/provider.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yt/yt/client/api/client.h>
+#include <yt/yt/client/table_client/row_base.h>
+#include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/ytree/convert.h>
 #include <thread>
 
 namespace NYql {
 namespace {
 class TYtMessageStreamLoadMetadata final : public TGraphTransformerBase {
     using TKey = std::pair<TString, TString>;
-    using TResult = NFq::TMessageStreamResult<NFq::TMessageStreamDescription>;
+    struct TResult {
+        NFq::TMessageStreamResult<NFq::TMessageStreamDescription> Description;
+        NYT::NTableClient::TTableSchema Schema;
+    };
     struct TPending {
         TPositionHandle Pos;
         NThreading::TFuture<TResult> Future;
@@ -48,8 +56,16 @@ private:
                 std::thread([promise, config, path, credentials = State_->Credentials]() mutable {
                     try {
                         const auto auth = credentials->Create(config.Token)->CreateProvider()->GetAuthInfo();
-                        auto client = CreateQytMessageStreamClient(path, {.Client = CreateYtClient(config.Endpoint, TString(auth))});
-                        promise.SetValue(client->DescribeStream().GetValueSync());
+                        auto configClient = CreateYtClient(config.Endpoint, TString(auth));
+                        auto client = CreateQytMessageStreamClient(path, {.Client = configClient});
+                        TResult result;
+                        result.Description = client->DescribeStream().GetValueSync();
+                        if (result.Description.IsSuccess()) {
+                            const auto schemaYson = NYT::NConcurrency::WaitFor(
+                                configClient->GetNode(path + "/@schema")).ValueOrThrow();
+                            result.Schema = NYT::NYTree::ConvertTo<NYT::NTableClient::TTableSchema>(schemaYson);
+                        }
+                        promise.SetValue(std::move(result));
                     } catch (...) {
                         promise.SetException(std::current_exception());
                     }
@@ -79,9 +95,10 @@ private:
         for (const auto& [key, pending] : Pending_) {
             try {
                 const auto& description = pending.Future.GetValue();
-                Y_ENSURE(description.IsSuccess(), description.Issues.ToString());
-                Y_ENSURE(!description.Value.Partitions.empty(), "YT queue has no partitions");
-                State_->Partitions[key] = description.Value.Partitions.size();
+                Y_ENSURE(description.Description.IsSuccess(), description.Description.Issues.ToString());
+                Y_ENSURE(!description.Description.Value.Partitions.empty(), "YT queue has no partitions");
+                State_->Partitions[key] = description.Description.Value.Partitions.size();
+                State_->Schemas[key] = description.Schema;
             } catch (const std::exception& error) {
                 ctx.AddError(TIssue(ctx.GetPosition(pending.Pos), error.what()));
                 failed = true;

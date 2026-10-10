@@ -18,6 +18,12 @@ using namespace testing;
 using namespace NFq;
 using NYT::NApi::TMockClient;
 
+NYT::NTableClient::TTableSchema DataSchema() {
+    return NYT::NTableClient::TTableSchema({
+        NYT::NTableClient::TColumnSchema("data", NYT::NTableClient::ESimpleLogicalValueType::Utf8),
+    });
+}
+
 
 class TTestMountCache : public NYT::NTabletClient::ITableMountCache {
 public:
@@ -100,7 +106,7 @@ TEST(TQytMessageStream, ConfirmStartAndEventLimit) {
     EXPECT_CALL(*yt, GetTabletInfos("//topic", ElementsAre(2), _))
         .WillOnce(Return(NYT::MakeFuture(std::vector{info})));
 
-    auto client = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1});
+    auto client = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1});
     TMessageStreamReadSessionSettings settings;
     settings.PartitionIds = {TMessageStreamPartitionId{0}};
     settings.Consumer = "//consumer";
@@ -156,7 +162,7 @@ void CheckReadData(bool withWriteTime) {
     settings.Consumer = "//consumer";
     settings.RequireWriteTime = withWriteTime;
     settings.PartitionIds = {TMessageStreamPartitionId{2}};
-    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1})->CreateReadSession(settings);
+    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1})->CreateReadSession(settings);
     ASSERT_TRUE(session->WaitEvent().Wait(TDuration::Seconds(5)));
     auto events = session->GetEvents({.MaxEventsCount = 1});
     ASSERT_EQ(events.size(), 1u);
@@ -168,7 +174,7 @@ void CheckReadData(bool withWriteTime) {
     ASSERT_NE(data, nullptr);
     ASSERT_EQ(data->Records.size(), 1u);
     EXPECT_EQ(data->PartitionControl->GetPartitionId().Value, 2u);
-    EXPECT_EQ(data->Records.front().Data.value(), "payload");
+    EXPECT_EQ(data->Records.front().Data.value(), R"({"data":"payload"})");
     EXPECT_EQ(data->Records.front().Id.PartitionId.Value, 2u);
     EXPECT_EQ(data->Records.front().Id.Offset, 42u);
     EXPECT_FALSE(data->Records.front().CreateTime);
@@ -214,7 +220,7 @@ TEST(TQytMessageStream, InclusiveMaxOffset) {
     settings.PartitionIds = {TMessageStreamPartitionId{0}};
     settings.Consumer = "//consumer";
     settings.AutoPartitioningSupport = false;
-    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1})->CreateReadSession(settings);
+    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1})->CreateReadSession(settings);
     ASSERT_TRUE(session->WaitEvent().Wait(TDuration::Seconds(5)));
     auto events = session->GetEvents({.MaxEventsCount = 1});
     ASSERT_EQ(events.size(), 1u);
@@ -240,7 +246,7 @@ TEST(TQytMessageStream, CloseBeforeConfirmStart) {
     TMessageStreamReadSessionSettings settings;
     settings.PartitionIds = {TMessageStreamPartitionId{0}};
     settings.Consumer = "//consumer";
-    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1})->CreateReadSession(settings);
+    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1})->CreateReadSession(settings);
     ASSERT_TRUE(session->WaitEvent().Wait(TDuration::Seconds(5)));
     session->Close().GetValueSync();
 }
@@ -272,11 +278,25 @@ TEST(TQytMessageStream, ConsumerLookupFailureIsNotReplacedWithZero) {
     auto yt = NYT::New<StrictMock<TMockClient>>();
     EXPECT_CALL(*yt, GetClusterName(_))
         .WillOnce(Return(NYT::MakeFuture<std::optional<std::string>>(NYT::TError("consumer unavailable"))));
-    auto client = CreateQytMessageStreamClient("//topic", {.Client = yt});
+    auto client = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema()});
     TMessageStreamReadSessionSettings settings;
     settings.Consumer = "//consumer";
     settings.PartitionIds = {TMessageStreamPartitionId{0}};
     EXPECT_ANY_THROW(client->CreateReadSession(settings));
+}
+
+TEST(TQytMessageStream, RejectReadSessionWithoutSchemaColumns) {
+    auto yt = NYT::New<StrictMock<TMockClient>>();
+    auto client = CreateQytMessageStreamClient("//topic", {.Client = yt});
+    TMessageStreamReadSessionSettings settings;
+    settings.Consumer = "//consumer";
+    settings.PartitionIds = {TMessageStreamPartitionId{0}};
+    try {
+        client->CreateReadSession(settings);
+        FAIL() << "Expected InvalidArgument";
+    } catch (const TMessageStreamException& error) {
+        EXPECT_EQ(error.GetStatus(), EMessageStreamStatus::InvalidArgument);
+    }
 }
 
 TEST(TQytMessageStream, StreamIdentityIsImmutableAndNonempty) {
@@ -299,7 +319,7 @@ TEST(TQytMessageStream, MultiplePartitionsHaveIndependentControls) {
     settings.Consumer = "//consumer";
     settings.PartitionIds = {TMessageStreamPartitionId{0}, TMessageStreamPartitionId{1}};
     settings.AutoPartitioningSupport = false;
-    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1})->CreateReadSession(settings);
+    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1})->CreateReadSession(settings);
     std::vector<std::shared_ptr<IMessageStreamPartitionControl>> controls;
     for (int i = 0; i < 2; ++i) {
         ASSERT_TRUE(session->WaitEvent().Wait(TDuration::Seconds(5)));
@@ -397,7 +417,7 @@ TEST(TQytMessageStream, TrimmedStartAndAcknowledgement) {
     settings.Consumer = "//consumer";
     settings.PartitionIds = {TMessageStreamPartitionId{0}};
     settings.AutoPartitioningSupport = false;
-    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1})->CreateReadSession(settings);
+    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1})->CreateReadSession(settings);
     ASSERT_TRUE(session->WaitEvent().Wait(TDuration::Seconds(5)));
     auto events = session->GetEvents({.MaxEventsCount = 1});
     auto control = std::get<TMessageStreamPartitionStartRequestedEvent>(events.front()).PartitionControl;
@@ -430,7 +450,7 @@ TEST(TQytMessageStream, CloseCancelsOutstandingPull) {
     TMessageStreamReadSessionSettings settings;
     settings.Consumer = "//consumer";
     settings.PartitionIds = {TMessageStreamPartitionId{0}};
-    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .PollPeriodMs = 1})->CreateReadSession(settings);
+    auto session = CreateQytMessageStreamClient("//topic", {.Client = yt, .Schema = DataSchema(), .PollPeriodMs = 1})->CreateReadSession(settings);
     ASSERT_TRUE(session->WaitEvent().Wait(TDuration::Seconds(5)));
     auto events = session->GetEvents({.MaxEventsCount = 1});
     auto control = std::get<TMessageStreamPartitionStartRequestedEvent>(events.front()).PartitionControl;

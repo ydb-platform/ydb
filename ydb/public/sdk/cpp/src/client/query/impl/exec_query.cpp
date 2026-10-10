@@ -68,6 +68,10 @@ public:
         StreamProcessor_->Cancel();
     }
 
+    void Cancel() {
+        StreamProcessor_->Cancel();
+    }
+
     bool IsFinished() const {
         return Finished_;
     }
@@ -149,6 +153,12 @@ TAsyncExecuteQueryPart TExecuteQueryIterator::ReadNext() {
     }
 
     return ReaderImpl_->ReadNext(ReaderImpl_);
+}
+
+void TExecuteQueryIterator::Cancel() {
+    if (ReaderImpl_) {
+        ReaderImpl_->Cancel();
+    }
 }
 
 using TExecuteQueryProcessorPtr = TExecuteQueryIterator::TReaderImpl::TStreamProcessorPtr;

@@ -66,16 +66,25 @@ To compare plans, the optimizer needs to estimate their costs. The cost function
 
 ### Statistics for the Cost-Based Optimizer {#statistics}
 
-The cost-based optimizer relies on table statistics and individual column statistics. {{ ydb-short-name }} collects and maintains these statistics in the background. You can manually force statistics collection using the [ANALYZE](../../yql/reference/syntax/analyze.md) query.
+The cost-based optimizer uses statistics for tables and individual columns.
 
-The current set of table statistics includes:
+Table statistics include the row count and size in bytes. {{ ydb-short-name }} updates them in the background using scheme statistics.
 
-* Number of records
-* Table size in bytes
+Column statistics are collected by [ANALYZE](../../yql/reference/syntax/analyze.md):
 
-The current set of column statistics includes:
+* A [count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch) estimates value frequencies and helps estimate the selectivity of equality predicates.
+* An equi-width histogram for a numeric column estimates value ranges and the overlap between the values in the join columns of two tables.
+* An equi-height histogram for a [declared tuple of columns](../../yql/reference/syntax/create_table/statistics.md) refines join selectivity when both tables have a histogram for the same columns in the same order.
 
-* [Count-min sketch](https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch)
+A primary-key equi-height histogram is built only when [`analyze_collect_primary_key_histogram`](../../reference/configuration/statistics_config.md#analyze-collect-primary-key-histogram) is enabled. This setting is disabled by default. A histogram declared with `STATISTICS` is collected regardless of this setting.
+
+Background collection of column statistics is enabled by [`enable_background_column_stats_collection`](../../reference/configuration/statistics_config.md#enable-background-column-stats-collection), which is off by default. Once enabled, a table is scanned about once every 24 hours. It may be scanned sooner if the percentage of rows updated or deleted since the last full `ANALYZE` reaches [`background_analyze_change_ratio_threshold_percent`](../../reference/configuration/statistics_config.md#background-analyze-change-ratio-threshold-percent). The default threshold is 20%:
+
+`(row updates + row deletes since the last full ANALYZE) / row count × 100%`
+
+`ANALYZE SAMPLE` does not reset the background collection schedule. The internal table `.metadata/statistics_v2` is excluded from the schedule.
+
+To collect statistics immediately, run [ANALYZE](../../yql/reference/syntax/analyze.md).
 
 ### Cost Optimization Levels
 

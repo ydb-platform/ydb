@@ -4,6 +4,9 @@ import random
 import string
 
 from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config, set_test_env
+from ydb.tests.library.harness.param_constants import kikimr_driver_path
+from ydb.tests.library.compatibility.fixtures import inter_stable_binary_path
+
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +15,22 @@ logger = logging.getLogger(__name__)
 def kikimr(request):
     param = getattr(request, "param", {})
     set_test_env(request)
+
+    main_binary_path = kikimr_driver_path()
+
+    logger.info(f"Main binary path: {main_binary_path}")
+    logger.info(f"Stable binary path: {inter_stable_binary_path}")
+
+    config = get_ydb_config(request)
+    config.set_binary_paths([main_binary_path])
+
     kikimr = Kikimr(
-        get_ydb_config(request),
+        config,
+        main_binary_path=main_binary_path,
+        stable_binary_path=inter_stable_binary_path,
         enable_discovery=param.get("enable_discovery", True),
         tenant_database="/Root/my_tenant",
+        is_compatibility_tests=param.get("is_compatibility_tests", False),
     )
     yield kikimr
     kikimr.stop()

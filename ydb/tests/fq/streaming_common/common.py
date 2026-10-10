@@ -26,6 +26,7 @@ from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.harness.util import LogLevels
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    is_compatibility_tests = param.get("is_compatibility_tests", False)
+
     enable_external_data_sources = param.get("enable_external_data_sources", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
     enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
@@ -88,7 +91,12 @@ def get_ydb_config(request, enable_fq_connector=None):
     for flag in (
         "enable_streaming_aggregation",
         "enable_streaming_aggregation_advanced",
+        "enable_streaming_query_scheme_operations",
         "enable_streaming_query_state_recompute",
+        "enable_shared_reading_structured_json_parsing",
+        "enable_updating_partitions_on_streaming_query_restart",
+        "enable_dq_source_stream_lookup_join_local_lookups",
+        "enable_pq_source_rescaling",
     ):
         if flag in param:
             if param[flag]:
@@ -100,8 +108,7 @@ def get_ydb_config(request, enable_fq_connector=None):
     else:
         disabled_feature_flags.append("enable_shared_reading_in_streaming_queries")
 
-    if enable_shared_reading_structured_json_parsing:
-        extra_feature_flags.add("enable_shared_reading_structured_json_parsing")
+    disabled_feature_flags.append("enable_streaming_query_scheme_operations")
     if enable_streaming_queries:
         extra_feature_flags.add("enable_streaming_queries")
     else:
@@ -109,6 +116,7 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     if enable_dq_source_stream_lookup_join_local_lookups:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_local_lookups")
+
     if enable_dq_source_stream_lookup_join_fullscan:
         extra_feature_flags.add("enable_dq_source_stream_lookup_join_fullscan")
     if enable_dq_source_stream_lookup_join_shuffle_mode:
@@ -145,7 +153,10 @@ def get_ydb_config(request, enable_fq_connector=None):
 
     config = KikimrConfigGenerator(
         erasure=Erasure.NONE,
-        additional_log_configs=param.get("log_levels"),
+        additional_log_configs={
+            'GRPC_LIBRARY': LogLevels.CRIT,
+            **(param.get("log_levels") or {}),
+        },
         pq_client_service_types=["yandex-query"],
         extra_feature_flags=extra_feature_flags,
         disabled_feature_flags=disabled_feature_flags,
@@ -168,6 +179,7 @@ def get_ydb_config(request, enable_fq_connector=None):
         replication_config=replication_config,
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
+        log_prefix="logfile_main_",
     )
 
     if enable_fq_connector:
@@ -184,10 +196,13 @@ def get_ydb_config(request, enable_fq_connector=None):
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
-    config.yaml_config["auth_config"]["local_metadata_service"] = {
-        "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
-        "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
-    }
+
+    if not is_compatibility_tests:
+        config.yaml_config["auth_config"]["local_metadata_service"] = {
+            "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
+            "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
+        }
+
     config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
     config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
@@ -382,6 +397,9 @@ class YdbClient:
                 result.extend(_read_batch())
             return result
 
+    def wait_connection(self, timeout=5):
+        self.driver.wait(timeout, fail_fast=True)
+
 
 _SECTIONS_FOR_CMS = [
     "table_service_config",
@@ -414,6 +432,7 @@ def _replace_config_via_cms(cluster, full_yaml_config):
 
 def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 30) -> None:
     expected_sections = {section: full_yaml_config[section] for section in _SECTIONS_FOR_CMS}
+    expected_feature_flags = full_yaml_config.get("feature_flags", {})
     deadline = time.monotonic() + timeout
     attempt = 0
 
@@ -435,6 +454,11 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
                 mismatched_sections = [
                     section for section, value in expected_sections.items() if applied_config.get(section) != value
                 ]
+                mismatched_sections.extend(
+                    f"feature_flags.{flag}"
+                    for flag, value in expected_feature_flags.items()
+                    if applied_config.get("feature_flags", {}).get(flag) != value
+                )
                 if mismatched_sections:
                     logger.info(
                         "CMS config has not been applied to node %s yet (attempt %d): mismatched sections: %s",
@@ -460,14 +484,17 @@ def get_streaming_query_diagnostics(context, path: str) -> str:
         query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
         if hasattr(context, "kikimr"):
             result_sets = context.kikimr.ydb_client.query(query)
+        elif hasattr(context, "ydb_client"):
+            result_sets = context.ydb_client.query(query)
         elif hasattr(context, "driver"):
             with ydb.QuerySessionPool(context.driver) as session_pool:
                 result_sets = session_pool.execute_with_retries(query)
         else:
-            raise AttributeError("Context must provide either 'kikimr' or 'driver'")
+            raise AttributeError("Context must provide 'kikimr', 'ydb_client', or 'driver'")
         return (
             "\n".join(
-                "Status: {status}\nIssues:\n{issues}".format(
+                "Query path: {path}\nStatus: {status}\nIssues:\n{issues}".format(
+                    path=path,
                     status=row["Status"],
                     issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
                 )
@@ -604,17 +631,31 @@ class Kikimr:
     def __init__(
         self,
         config: KikimrConfigGenerator,
+        main_binary_path: Optional[str] = None,
+        stable_binary_path: Optional[str] = None,
         timeout_seconds: int = 240,
         enable_discovery: bool = True,
         tenant_database: str = "/Root/my_tenant",
+        is_compatibility_tests: bool = False,
     ):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
-        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        if main_binary_path is None:
+            main_binary_path = config.get_binary_path(0)
+        if stable_binary_path is None:
+            stable_binary_path = main_binary_path
+        logger.info(yatest.common.execute([main_binary_path, "-V"], wait=True).stdout.decode("utf-8"))
+
+        self.main_binary_path = main_binary_path
+        self.stable_binary_path = stable_binary_path
 
         full_yaml_config = copy.deepcopy(config.yaml_config)
 
         for section in _SECTIONS_FOR_CMS:
             config.yaml_config.pop(section, None)
+
+        # Stable binaries may not recognize current feature flags at startup.
+        # Compatibility tests receive all feature flags through CMS instead.
+        if is_compatibility_tests:
+            config.yaml_config.pop("feature_flags", None)
 
         # Tenant slots start before the full config reaches CMS. Keep this setting
         # in the bootstrap config so KQP honors it for the first test queries.
@@ -657,6 +698,12 @@ class Kikimr:
     def recreate_driver(self, node_id=None):
         if hasattr(self, "ydb_client"):
             self.ydb_client.stop()
+        logger.info(
+            "Recreating ydb driver: endpoint=grpc://%s, port=%s, database=%s",
+            self.endpoint.endpoint,
+            self.endpoint.endpoint.rsplit(":", 1)[-1],
+            self.endpoint.database,
+        )
 
         if node_id is None:
             node_id = random.choice(list(self.cluster.slots.keys()))
@@ -679,6 +726,65 @@ class Kikimr:
 
     def get_database_name(self) -> str:
         return self.endpoint.database
+
+    def wait_for_readiness(self, timeout: int = 60) -> None:
+        """Spin until the cluster accepts queries (verified via the stable node)."""
+        deadline = time.time() + timeout
+        last_exc = None
+        while time.time() < deadline:
+            try:
+                self.ydb_client.wait_connection(timeout=5)
+                self.ydb_client.query("SELECT 42;", fail_fast=True, timeout=5)
+                return
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("Readiness check failed: %r", exc)
+                time.sleep(2)
+        raise TimeoutError(f"Cluster not ready after {timeout}s") from last_exc
+
+    def wait_for_node_readiness(self, node_id: int, timeout: int = 60) -> None:
+        node = self.cluster.slots[node_id]
+        if not wait_for(lambda: node.is_port_listening(node.port), timeout_seconds=timeout):
+            raise TimeoutError(f"Node {node_id} did not open gRPC port {node.port} after {timeout}s")
+        self.recreate_driver(node_id)
+        self.wait_for_readiness(timeout)
+
+    def rolling(self):
+        rolling_slot_id = 1
+        logger.info(f"rolling update: step 1 — switching slot {rolling_slot_id} to stable version")
+        rolling_node = self.cluster.slots[rolling_slot_id]
+        rolling_node.stop()
+        rolling_node.binary_path = self.stable_binary_path
+        rolling_node.set_log_file_prefix("logfile_stable_")
+        rolling_node.start()
+        self.wait_for_node_readiness(rolling_slot_id)
+        logger.info(f"rolling update: step 1 complete")
+        yield
+
+        rolling_slot_id = 2
+        logger.info(f"rolling update: step2  — switching slot {rolling_slot_id} to stable version")
+        rolling_node = self.cluster.slots[rolling_slot_id]
+        rolling_node.stop()
+        rolling_node.binary_path = self.stable_binary_path
+        rolling_node.set_log_file_prefix("logfile_stable_")
+        rolling_node.start()
+        self.wait_for_node_readiness(rolling_slot_id)
+        logger.info(f"rolling update: step 2 complete")
+        yield
+
+        logger.info(f"rolling update: step 3 — switching slots back to main version")
+        for rolling_node in self.cluster.slots.values():
+            rolling_node.stop()
+
+        for rolling_node in self.cluster.slots.values():
+            rolling_node.binary_path = self.main_binary_path
+            rolling_node.set_log_file_prefix("logfile_main_restored_")
+
+        for rolling_node in self.cluster.slots.values():
+            rolling_node.start()
+        self.wait_for_node_readiness(next(iter(self.cluster.slots)))
+        logger.info("rolling update: step 3 complete")
+        yield
 
     def wait_kqp_node_count(self, expected_count: int, timeout_seconds: int = 60) -> None:
         node_counts = {}
@@ -750,25 +856,7 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            diagnostics = "failed to retrieve Status / Issues"
-            try:
-                result_sets = kikimr.ydb_client.query(
-                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
-                )
-                diagnostics = (
-                    "\n".join(
-                        "Status: {status}\nIssues:\n{issues}".format(
-                            status=row["Status"],
-                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
-                        )
-                        for row in result_sets[0].rows
-                    )
-                    if result_sets
-                    else []
-                )
-            except Exception as diagnostics_error:
-                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
-            raise AssertionError(f"{error}\n{diagnostics}") from error
+            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(kikimr, path)}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -813,6 +901,7 @@ class StreamingTestBase(TestYdsBase):
         path = f"{kikimr.endpoint.database.rstrip('/')}/{query_name}"
         sum = 0
         found = False
+
         for node_id in counter_nodes(kikimr.cluster):
             sensor = get_sensors(kikimr.cluster, node_id, "kqp").find_sensor(
                 {"path": path, "subsystem": "streaming_queries", "sensor": metric_name}
@@ -926,7 +1015,7 @@ class StreamingTestBase(TestYdsBase):
         return endpoint, refs[0], paths[0]
 
     def roll(self, kikimr):
-        all_nodes = [(id, n, "node") for id, n in kikimr.cluster.slots.items()] + [
+        all_nodes = [
             (id, n, "slot") for id, n in kikimr.cluster.slots.items()
         ]
 

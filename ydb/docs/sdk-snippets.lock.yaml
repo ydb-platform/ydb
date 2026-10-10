@@ -1,0 +1,98 @@
+version: 1
+sources:
+  go:
+    repository: https://github.com/ydb-platform/ydb-go-sdk
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: 8ad2661ef04180780d314fb0706ec3f8a7ccfc8d
+    include:
+    - examples/ydb_tech/topic/main.go
+    files:
+      examples/ydb_tech/topic/main.go:
+        git-blob: 447510ee9db4e8a547522b32f1ba71479c19e580
+        size: 30073
+        sha256: 76339fdd9557a2e1fb7a9c6f9c64cfa5835e09adf75fa8bc890c69c2a5db4157
+  java:
+    repository: https://github.com/ydb-platform/ydb-java-examples
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: a220a4a6648b26136315e63349bccc5408e7841b
+    include:
+    - examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java
+    files:
+      examples/ydb_tech/topic/src/main/java/tech/ydb/examples/topic/TopicExample.java:
+        git-blob: 83e1f03707f1790861919fcb6c507b3946e8048b
+        size: 46113
+        sha256: 697d811102cafd63984a7089da921cefc4e613871c58ec190f7c884b14cd2c37
+  python:
+    repository: https://github.com/ydb-platform/ydb-python-sdk
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: 0409ca98c5ee473919298ec09a2c4ec0d5e21a43
+    include:
+    - examples/ydb_tech/topic/sync_example.py
+    - examples/ydb_tech/topic/async_example.py
+    files:
+      examples/ydb_tech/topic/async_example.py:
+        git-blob: d92704dfbccf85f84409a80d2fde378b96cc6f17
+        size: 14764
+        sha256: eb9c8f0626cabd8f3adb97abf8c65d67fe01394bb4e2de4a4234257c9eb118b9
+      examples/ydb_tech/topic/sync_example.py:
+        git-blob: 88755e7978addf03a18b809f2a1aef2b2f5c498b
+        size: 15904
+        sha256: 053da0268e4115d7128047e5392b930e1dc251094ccff8016ecf4c4a54385b3f
+  dotnet:
+    repository: https://github.com/ydb-platform/ydb-dotnet-sdk
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: 783cfd6c1803bbd607577c5b59c4ae0cc9a5d9a7
+    include:
+    - examples/ydb_tech/topic/Program.cs
+    files:
+      examples/ydb_tech/topic/Program.cs:
+        git-blob: c366ff2aa528c0fe61ea038b722160e2b2e1ece3
+        size: 8631
+        sha256: 6193cc9220dff35fc985993e9331595e17375e1375c2814c6ca542c2b5174483
+  javascript:
+    repository: https://github.com/ydb-platform/ydb-js-sdk
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: e107f68250200a6ddfaa6074ccd1ec48ed1ae839
+    include:
+    - examples/ydb_tech/topic/main.ts
+    files:
+      examples/ydb_tech/topic/main.ts:
+        git-blob: 2e1cf3e25aeb3684a7119d6d7a2d63c4889006ca
+        size: 12784
+        sha256: 12776668069975e48380e6ab749f2a5678c82c2042b403cb41bda4ca1ae586a4
+  rust:
+    repository: https://github.com/ydb-platform/ydb-rs-sdk
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: 041636b79c6d607c6ce2e594b28bb510db514680
+    include:
+    - ydb/examples/ydb_tech/topic/main.rs
+    files:
+      ydb/examples/ydb_tech/topic/main.rs:
+        git-blob: cf769fe548d037085c718175aa77dd1d09e96a01
+        size: 8264
+        sha256: 1ad22d9643b715422bd981413fa4be7686aca4304a173c53d8f04170802048d0
+  cpp:
+    repository: https://github.com/ydb-platform/ydb-cpp-sdk
+    requested-ref:
+      kind: branch
+      name: docs/topic-snippets
+    resolved-commit: 57e19f101afcfa49caab6a8fb24d6c222c362bd2
+    include:
+    - examples/ydb_tech/topic/main.cpp
+    files:
+      examples/ydb_tech/topic/main.cpp:
+        git-blob: 12cf73756c513cc652b9a020790915744a24ce6c
+        size: 42316
+        sha256: 3c7347ff8b1af400a87d861b5b1c47642b514eee0c9b20dc6720816306217a45

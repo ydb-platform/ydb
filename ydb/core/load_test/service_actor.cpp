@@ -537,7 +537,7 @@ public:
 
     bool NbsDbgLikeLoadTabletBusy(ui64 tabletId) const {
         for (const auto& [cookie, pending] : NbsDbgLikeLoadPending) {
-            if (pending.Request.GetOperation() == TNbsDbgLikeLoadControl::DELETE
+            if (pending.Request.GetOperation() == NKikimrClient::TNbsDbgLikeLoadControl_EOperation_DELETE
                 && pending.Request.GetTabletId() == tabletId) {
                 return true;
             }
@@ -585,7 +585,7 @@ public:
         if (op == TNbsDbgLikeLoadControl::CAPABILITIES) {
             NKikimrClient::TNbsDbgLikeLoadControlResponse response;
             for (auto operation : {TNbsDbgLikeLoadControl::CAPABILITIES, TNbsDbgLikeLoadControl::CREATE, TNbsDbgLikeLoadControl::LIST,
-                TNbsDbgLikeLoadControl::DESCRIBE, TNbsDbgLikeLoadControl::DELETE, TNbsDbgLikeLoadControl::START, TNbsDbgLikeLoadControl::GET, TNbsDbgLikeLoadControl::STOP}) {
+                TNbsDbgLikeLoadControl::DESCRIBE, NKikimrClient::TNbsDbgLikeLoadControl_EOperation_DELETE, TNbsDbgLikeLoadControl::START, TNbsDbgLikeLoadControl::GET, TNbsDbgLikeLoadControl::STOP}) {
                 response.AddOperations(operation);
             }
             return NbsDbgLikeLoadReply(ev->Sender, ev->Cookie, request, std::move(response));
@@ -660,7 +660,7 @@ public:
             *response.MutableRun() = run->Result;
             NbsDbgLikeLoadReply(ev->Sender, ev->Cookie, request, std::move(response));
         } else if (op != TNbsDbgLikeLoadControl::CREATE && op != TNbsDbgLikeLoadControl::LIST
-            && op != TNbsDbgLikeLoadControl::DESCRIBE && op != TNbsDbgLikeLoadControl::DELETE) {
+            && op != TNbsDbgLikeLoadControl::DESCRIBE && op != NKikimrClient::TNbsDbgLikeLoadControl_EOperation_DELETE) {
             return fail("unsupported control operation");
         }
         const ui64 cookie = NextNbsDbgLikeLoadCookie++;
@@ -797,7 +797,7 @@ public:
             *response.AddTablets() = std::move(tablet);
             return NbsDbgLikeLoadReply(pending.Origin, pending.Cookie, request, std::move(response));
         }
-        if (request.GetOperation() == TNbsDbgLikeLoadControl::DELETE && found && NbsDbgLikeLoadTabletBusy(found->GetTabletId())) {
+        if (request.GetOperation() == NKikimrClient::TNbsDbgLikeLoadControl_EOperation_DELETE && found && NbsDbgLikeLoadTabletBusy(found->GetTabletId())) {
             return NbsDbgLikeLoadError(pending.Origin, pending.Cookie, request, "tablet has an active run on this coordinator");
         }
         if (!request.HasOwnerIndex()) {

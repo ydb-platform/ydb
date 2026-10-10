@@ -69,7 +69,7 @@ IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:1)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

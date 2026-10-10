@@ -13,7 +13,7 @@ BENCHMARK_OPTS(
     --benchmark_min_time=0.05s
 )
 
-SIZE(SMALL)
-REQUIREMENTS(cpu:1)
+SIZE(LARGE)
+REQUIREMENTS(cpu:16)
 
 END()

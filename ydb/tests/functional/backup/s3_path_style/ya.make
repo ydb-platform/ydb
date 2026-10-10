@@ -21,7 +21,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:4)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16 cpu:4)

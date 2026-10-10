@@ -8,8 +8,8 @@ TEST_SRCS(
     test_tablet.py
 )
 
-SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+SIZE(LARGE)
+REQUIREMENTS(cpu:8)
 
 
 DEPENDS(

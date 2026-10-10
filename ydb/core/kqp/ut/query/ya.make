@@ -3,8 +3,8 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-REQUIREMENTS(cpu:2)
-SIZE(MEDIUM)
+REQUIREMENTS(cpu:8)
+SIZE(LARGE)
 
 SRCS(
     kqp_analyze_ut.cpp

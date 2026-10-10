@@ -2,8 +2,8 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/common)
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+SIZE(LARGE)
+REQUIREMENTS(cpu:16)
 
 PEERDIR(
     library/cpp/getopt

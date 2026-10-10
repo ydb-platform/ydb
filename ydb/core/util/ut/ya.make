@@ -1,8 +1,8 @@
 UNITTEST_FOR(ydb/core/util)
 
 FORK_SUBTESTS()
-REQUIREMENTS(cpu:4)
-SIZE(MEDIUM)
+REQUIREMENTS(cpu:8)
+SIZE(LARGE)
 
 PEERDIR(
     library/cpp/getopt

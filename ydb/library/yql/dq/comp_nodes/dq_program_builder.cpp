@@ -236,13 +236,11 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-    if (settings.BuildSide != EBuildSide::Right || !settings.EqualNullsKeys.empty()) {
-        TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
-        if (!settings.EqualNullsKeys.empty()) {
-            settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
-        }
-        callableBuilder.Add(NewTuple(settingsNodes));
+    TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
+    if (!settings.EqualNullsKeys.empty()) {
+        settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
     }
+    callableBuilder.Add(NewTuple(settingsNodes));
     AddJoinFilters(callableBuilder, leftFlow, rightFlow, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);

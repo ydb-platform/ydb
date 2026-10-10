@@ -41,6 +41,26 @@ struct TRestore {
         const auto& pathId = txState.TargetPathId;
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         const auto seqNo = context.SS->StartRound(txState);
+
+        // The body differs across shards only by the ShardNum scalar: build the
+        // invariant common piece once and append a tiny per-shard delta (see
+        // schemeshard_proposal_body.h for the wire-concatenation rules).
+        TString txBodyCommon;
+        if (sourcePath->IsTable()) {
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            context.SS->FillSeqNo(tx, seqNo);
+            auto& restore = *tx.MutableRestore();
+            restore.CopyFrom(restoreSettings);
+            restore.SetTableId(pathId.LocalPathId);
+            Y_ABORT_UNLESS(tx.SerializeToString(&txBodyCommon));
+        } else {
+            NKikimrTxColumnShard::TRestoreTxBody txBodyRestore;
+            auto& restore = *txBodyRestore.MutableRestoreTask();
+            restore.CopyFrom(restoreSettings);
+            restore.SetTableId(pathId.LocalPathId);
+            Y_ABORT_UNLESS(txBodyRestore.SerializeToString(&txBodyCommon));
+        }
+
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             const auto& idx = txState.Shards[i].Idx;
             const auto& shardId = context.SS->ShardInfos[idx].TabletID;
@@ -51,24 +71,30 @@ struct TRestore {
                 {"schemeshard", context.SS->TabletID()},
             );
 
-            auto fillRestoreTask = [&](auto& restore) {
-                restore.CopyFrom(restoreSettings);
-                restore.SetTableId(pathId.LocalPathId);
-                restore.SetShardNum(i);
-            };
+            // Per-shard delta: only the ShardNum scalar, wrapped in the same
+            // outer message type so the wire tags match on concatenation.
+            TString deltaPiece;
+            if (sourcePath->IsTable()) {
+                NKikimrTxDataShard::TFlatSchemeTransaction deltaTx;
+                deltaTx.MutableRestore()->SetShardNum(i);
+                Y_ABORT_UNLESS(deltaTx.SerializeToString(&deltaPiece));
+            } else {
+                NKikimrTxColumnShard::TRestoreTxBody deltaBody;
+                deltaBody.MutableRestoreTask()->SetShardNum(i);
+                Y_ABORT_UNLESS(deltaBody.SerializeToString(&deltaPiece));
+            }
 
             if (sourcePath->IsTable()) {
-                NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                context.SS->FillSeqNo(tx, seqNo);
-                auto& restore = *tx.MutableRestore();
-                fillRestoreTask(restore);
-                auto ev = context.SS->MakeDataShardProposal(pathId, opId, tx.SerializeAsString(), context.Ctx);
+                auto ev = context.SS->MakeDataShardProposal(pathId, opId, context.Ctx);
+                TString& txBody = *ev->Record.MutableTxBody();
+                txBody.append(txBodyCommon);
+                txBody.append(deltaPiece);
                 context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
             } else {
-                NKikimrTxColumnShard::TRestoreTxBody txBodyRestore;
-                auto& restore = *txBodyRestore.MutableRestoreTask();
-                fillRestoreTask(restore);
-                auto ev = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, txBodyRestore.SerializeAsString(), context.Ctx, NKikimrTxColumnShard::TX_KIND_RESTORE);
+                auto ev = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, context.Ctx, NKikimrTxColumnShard::TX_KIND_RESTORE);
+                TString& txBody = *ev->Record.MutableTxBody();
+                txBody.append(txBodyCommon);
+                txBody.append(deltaPiece);
                 context.OnComplete.BindMsgToPipe(opId, shardId, idx, ev.Release());
             }
         }

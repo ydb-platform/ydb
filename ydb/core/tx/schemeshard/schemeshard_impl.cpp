@@ -600,6 +600,15 @@ THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal
     );
 }
 
+THolder<TEvDataShard::TEvProposeTransaction> TSchemeShard::MakeDataShardProposal(
+        const TPathId& pathId, const TOperationId& opId, const TActorContext& ctx) const
+{
+    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
+        NKikimrTxDataShard::TX_KIND_SCHEME, TabletID(), ctx.SelfID,
+        ui64(opId.GetTxId()), TStringBuf(""), SelectProcessingParams(pathId)
+    );
+}
+
 THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
         const TPathId& pathId, const TOperationId& opId,
         const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx,
@@ -608,6 +617,18 @@ THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProp
     return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
         kind, TabletID(), ctx.SelfID,
         ui64(opId.GetTxId()), body, seqNo,  SelectProcessingParams(pathId),
+        0, 0
+    );
+}
+
+THolder<TEvColumnShard::TEvProposeTransaction> TSchemeShard::MakeColumnShardProposal(
+        const TPathId& pathId, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TActorContext& ctx,
+        NKikimrTxColumnShard::ETransactionKind kind) const
+{
+    return MakeHolder<TEvColumnShard::TEvProposeTransaction>(
+        kind, TabletID(), ctx.SelfID,
+        ui64(opId.GetTxId()), TString(), seqNo, SelectProcessingParams(pathId),
         0, 0
     );
 }
@@ -6781,17 +6802,38 @@ void TSchemeShard::DropPaths(const THashSet<TPathId> &paths, TStepId step, TTxId
     }
 }
 
-TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const
+// Invariant part of the backup proposal body: the whole task (minus ShardNum) plus
+// TableId and SeqNo. Serialized once per propose round and shared by all shards.
+TString TSchemeShard::FillBackupTxBodyCommon(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, TMessageSeqNo seqNo) const
 {
     NKikimrTxDataShard::TFlatSchemeTransaction tx;
     FillSeqNo(tx, seqNo);
     auto backup = tx.MutableBackup();
     backup->CopyFrom(task);
+    backup->ClearShardNum();
     backup->SetTableId(pathId.LocalPathId);
-    backup->SetShardNum(shardNum);
 
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+    return txBody;
+}
+
+// Per-shard delta of the backup proposal body: just the ShardNum scalar. Appended to
+// the common piece; the merged parse yields the shard's exact task.
+void TSchemeShard::AppendBackupTxBodyDelta(ui32 shardNum, TString& out) const
+{
+    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+    tx.MutableBackup()->SetShardNum(shardNum);
+
+    TString delta;
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&delta);
+    out.append(delta);
+}
+
+TString TSchemeShard::FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const
+{
+    TString txBody = FillBackupTxBodyCommon(pathId, task, seqNo);
+    AppendBackupTxBodyDelta(shardNum, txBody);
     return txBody;
 }
 
@@ -8351,7 +8393,11 @@ void TSchemeShard::FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody& tx, TMessageSe
     tx.MutableSeqNo()->SetRound(seqNo.Round);
 }
 
-TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, TMessageSeqNo seqNo) const {
+// Invariant part of the alter-table proposal body: everything except PartitionConfig
+// (which is per-shard and is emitted by the delta only — a duplicated message field
+// would merge on parse instead of overriding). Serialized once per propose round and
+// shared by all shards of the table.
+TString TSchemeShard::FillAlterTableTxBodyCommon(TPathId pathId, TMessageSeqNo seqNo) const {
     Y_VERIFY_S(Tables.contains(pathId), "Unknown table " << pathId);
     Y_VERIFY_S(PathsById.contains(pathId), "Unknown path " << pathId);
 
@@ -8405,14 +8451,6 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->AddKeyColumnIds(keyId);
     }
 
-    proto->MutablePartitionConfig()->CopyFrom(alterData->PartitionConfigCompatible());
-
-    if (auto* patch = tableInfo->PerShardPartitionConfig.FindPtr(shardIdx)) {
-        ApplyPartitionConfigStoragePatch(
-            *proto->MutablePartitionConfig(),
-            *patch);
-    }
-
     if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasReplicationConfig()) {
         proto->MutableReplicationConfig()->CopyFrom(alterData->TableDescriptionFull->GetReplicationConfig());
     } else if (tableInfo->HasReplicationConfig()) {
@@ -8437,6 +8475,36 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+    return txBody;
+}
+
+// Per-shard delta of the alter-table proposal body: the (possibly per-shard-patched)
+// PartitionConfig, as an AlterTable submessage. Appended to the common piece; the
+// merged parse yields exactly this config for the shard.
+void TSchemeShard::AppendAlterTableTxBodyDelta(TPathId pathId, TShardIdx shardIdx, TString& out) const {
+    Y_VERIFY_S(Tables.contains(pathId), "Unknown table " << pathId);
+
+    TTableInfo::TPtr tableInfo = Tables.at(pathId);
+    TTableInfo::TAlterDataPtr alterData = tableInfo->AlterData;
+
+    Y_VERIFY_S(alterData, "No alter data for table " << pathId);
+
+    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+    auto* config = tx.MutableAlterTable()->MutablePartitionConfig();
+    config->CopyFrom(alterData->PartitionConfigCompatible());
+
+    if (auto* patch = tableInfo->PerShardPartitionConfig.FindPtr(shardIdx)) {
+        ApplyPartitionConfigStoragePatch(*config, *patch);
+    }
+
+    TString delta;
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&delta);
+    out.append(delta);
+}
+
+TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, TMessageSeqNo seqNo) const {
+    TString txBody = FillAlterTableTxBodyCommon(pathId, seqNo);
+    AppendAlterTableTxBodyDelta(pathId, shardIdx, txBody);
     return txBody;
 }
 
@@ -8617,6 +8685,81 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                     << ", childType# " << static_cast<ui32>(childPath->PathType));
         }
     }
+}
+
+// Invariant part of the CreateTable proposal body for a freshly created table: the
+// cached description with children (indexes/cdc/sequences — repeated fields), the
+// async-index template, and SeqNo. Per-partition fields (ranges, schema version) and
+// PartitionConfig are stripped — the delta supplies them (a duplicated message field
+// would merge on parse, so PartitionConfig must be emitted by the delta only).
+TString TSchemeShard::FillCreateTableTxBodyCommon(
+    TPathId tableId, TMessageSeqNo seqNo,
+    const NKikimrTxDataShard::TFlatSchemeTransaction& txTemplate)
+{
+    Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
+
+    NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
+    FillSeqNo(tx, seqNo);
+    auto* createTable = tx.MutableCreateTable();
+    // Partition 0's full description is exactly the invariant base...
+    FillTableDescription(tableId, 0, 0 /* stripped below */, createTable);
+    // ...minus the per-partition delta fields and minus PartitionConfig.
+    createTable->ClearPartitionConfig();
+    createTable->ClearPartitionRangeBegin();
+    createTable->ClearPartitionRangeEnd();
+    createTable->ClearPartitionRangeBeginIsInclusive();
+    createTable->ClearPartitionRangeEndIsInclusive();
+    createTable->ClearTableSchemaVersion();
+
+    TString txBody;
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+    return txBody;
+}
+
+// Per-partition delta of the CreateTable proposal body: the shard's range, the schema
+// version, and the full (possibly per-shard-patched) PartitionConfig. Appended to the
+// common piece; the merged parse yields exactly the full per-shard description.
+void TSchemeShard::AppendCreateTableTxBodyDelta(
+    TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, TString& out)
+{
+    Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
+    const TTableInfo::TPtr tinfo = Tables.at(tableId);
+
+    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+    auto* delta = tx.MutableCreateTable();
+
+    TString rangeBegin = (partitionIdx != 0)
+        ? tinfo->GetPartitions()[partitionIdx-1]->EndOfRange
+        : TString();
+    if (rangeBegin.empty()) {
+        // First partition starts with <NULL, NULL, ..., NULL> key
+        TVector<TCell> nullKey(tinfo->KeyColumnIds.size());
+        rangeBegin = TSerializedCellVec::Serialize(nullKey);
+    }
+    delta->SetPartitionRangeBegin(std::move(rangeBegin));
+    delta->SetPartitionRangeEnd(tinfo->GetPartitions()[partitionIdx]->EndOfRange);
+    delta->SetPartitionRangeBeginIsInclusive(true);
+    delta->SetPartitionRangeEndIsInclusive(false);
+    FillTableSchemaVersion(schemaVersion, delta);
+
+    // Patch partition config for new-style shards. Emitted here only (never in the
+    // common piece): a duplicated message field would merge on parse.
+    const auto& shardIdx = tinfo->GetPartitions()[partitionIdx]->ShardIdx;
+    if (const auto* patch = tinfo->PerShardPartitionConfig.FindPtr(shardIdx);
+        patch || tinfo->TableDescription.HasPartitionConfig())
+    {
+        auto* config = delta->MutablePartitionConfig();
+        if (tinfo->TableDescription.HasPartitionConfig()) {
+            config->CopyFrom(tinfo->TableDescription.GetPartitionConfig());
+        }
+        if (patch) {
+            ApplyPartitionConfigStoragePatch(*config, *patch);
+        }
+    }
+
+    TString piece;
+    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&piece);
+    out.append(piece);
 }
 
 // Fills CreateTable transaction that is sent to datashards

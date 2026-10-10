@@ -6,6 +6,7 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_copy_table.h"  // for TShardProposal and TShardProposalInputs
+#include "schemeshard_proposal_body.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -130,22 +131,11 @@ void FillTableDescription(
     tableDescr->SetTableSchemaVersion(schemaVersion);
 }
 
-// The proposal event is created with an empty body; the caller appends the
-// serialized pieces directly into Record.MutableTxBody(), avoiding an
-// intermediate serialization buffer and a copy.
-THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(
-    ui64 tabletId,
-    const TActorId& selfId,
-    TTxId txId,
-    const NKikimrSubDomains::TProcessingParams& processingParams
-) {
-    return MakeHolder<TEvDataShard::TEvProposeTransaction>(
-        NKikimrTxDataShard::TX_KIND_SCHEME, tabletId, selfId,
-        ui64(txId), TStringBuf(""), processingParams
-    );
-}
-
 // TShardProposal and TShardProposalInputs are declared in schemeshard__operation_copy_table.h.
+// SerializePiece and the empty-body MakeDataShardProposal live in schemeshard_proposal_body.h
+// (shared with the other proposal-building sites).
+using NProposalBody::MakeDataShardProposal;
+using NProposalBody::SerializePiece;
 
 namespace {
 
@@ -157,10 +147,6 @@ namespace {
 // small per-partition delta. The delta must never contain a repeated field, and
 // PartitionConfig must live in the delta only (a duplicated message field would
 // merge on parse instead of overriding).
-void SerializePiece(TString& out, NKikimrTxDataShard::TFlatSchemeTransaction& t) {
-    out.clear();
-    Y_PROTOBUF_SUPPRESS_NODISCARD t.SerializeToString(&out);
-}
 
 // SeqNo is identical for all partitions in one round.
 TString BuildSeqNoPiece(const TShardProposalInputs& in) {

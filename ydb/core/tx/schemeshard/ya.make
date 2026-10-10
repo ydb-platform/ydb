@@ -310,6 +310,8 @@ SRCS(
     schemeshard_path_element.h
     schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h
+    schemeshard_proposal_body.cpp
+    schemeshard_proposal_body.h
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h

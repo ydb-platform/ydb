@@ -220,24 +220,27 @@ public:
 
         txState->ClearShardsInProgress();
 
+        // The seqNo and the invariant part of the CreateTable body are shared by all
+        // shards in this round; only the per-shard range/schema-version/PartitionConfig
+        // delta differs. Assemble by concatenation (see schemeshard_proposal_body.h).
+        const auto seqNo = context.SS->StartRound(*txState);
+        const TString txBodyCommon = context.SS->FillCreateTableTxBodyCommon(txState->TargetPathId, seqNo, txTemplate);
+        const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
+
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
             TTabletId datashardId = context.SS->ShardInfos[shardIdx].TabletID;
-
-            auto seqNo = context.SS->StartRound(*txState);
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState: Propose modify scheme on datashard",
                 {"datashardId", datashardId},
                 {"seqNo", seqNo},
             );
 
-            NKikimrTxDataShard::TFlatSchemeTransaction tx(txTemplate);
-            auto tableDesc = tx.MutableCreateTable();
-            context.SS->FillSeqNo(tx, seqNo);
-            context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
-
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
-            if (const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId) {
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, context.Ctx);
+            TString& txBody = *event->Record.MutableTxBody();
+            txBody.append(txBodyCommon);
+            context.SS->AppendCreateTableTxBodyDelta(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, txBody);
+            if (subDomainPathId) {
                 event->Record.SetSubDomainPathId(subDomainPathId);
             }
 

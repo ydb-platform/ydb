@@ -1141,21 +1141,18 @@ void TTableInfo::ResetDescriptionCache() {
 
 TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
     Y_ENSURE(pathInfo && pathInfo->IsTable());
+    return FillDescriptionCache(pathInfo->Name, pathInfo->PathId);
+}
 
-    TVector<ui32> keyColumnIds;
-    for (auto& col : Columns) {
-        ui32 colId = col.second.Id;
-        ui32 keyOrder = col.second.KeyOrder;
-        if (keyOrder != (ui32)-1) {
-            keyColumnIds.resize(std::max<ui32>(keyColumnIds.size(), keyOrder+1));
-            keyColumnIds[keyOrder] = colId;
-        }
-    }
+TVector<ui32> TTableInfo::FillDescriptionCache(const TString& name, TPathId pathId) {
+    // KeyColumnIds is maintained at every Columns mutation point (creation, init load,
+    // FinishAlter), so reuse it instead of rescanning Columns on every call.
+    const TVector<ui32>& keyColumnIds = KeyColumnIds;
 
     if (!TableDescription.HasPathId()) {
-        TableDescription.SetName(pathInfo->Name);
-        TableDescription.SetId_Deprecated(pathInfo->PathId.LocalPathId);
-        pathInfo->PathId.ToProto(TableDescription.MutablePathId());
+        TableDescription.SetName(name);
+        TableDescription.SetId_Deprecated(pathId.LocalPathId);
+        pathId.ToProto(TableDescription.MutablePathId());
 
         for (auto& c : Columns) {
             const TColumn& column = c.second;

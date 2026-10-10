@@ -23,6 +23,12 @@
 * [INSERT](insert_into.md)
 * [SHOW CREATE](show_create.md)
 
+{% if feature_serial %}
+
+* [ALTER SEQUENCE](alter-sequence.md)
+
+{% endif %}
+
 {% if backend_name == "YDB" %}
 
 * [ANALYZE](analyze.md)

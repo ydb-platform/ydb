@@ -45,7 +45,7 @@
 | Элемент схемы MySQL | Решение mysql2ydb |
 |---|---|
 | Имена таблиц и колонок | Как в MySQL (`users`, `orders`, …); должны быть допустимыми идентификаторами {{ ydb-short-name }} |
-| `AUTO_INCREMENT` | `BigSerial` + `ALTER SEQUENCE … START WITH` из `TABLES.AUTO_INCREMENT` |
+| `AUTO_INCREMENT` | `BigSerial` + [ALTER SEQUENCE … START WITH … RESTART](../../yql/reference/syntax/alter-sequence.md) из `TABLES.AUTO_INCREMENT` |
 | Вторичные `KEY` / `UNIQUE KEY` | `INDEX … GLOBAL ASYNC` / `GLOBAL UNIQUE SYNC` в `CREATE TABLE` |
 | Таблица без `PRIMARY KEY` | Не поддерживается при автоматическом создании схемы — см. [Таблицы без первичного ключа](#tables-without-pk) |
 | Партиционирование | Только `AUTO_PARTITIONING_BY_LOAD` |

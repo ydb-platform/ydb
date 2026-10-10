@@ -188,10 +188,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
         }
         ++retryCount;
         if (queryInfo.AlterTable) {
-            auto result = TableClient->RetryOperationSync([&queryInfo](NTable::TSession session) {
-                return session.AlterTable(queryInfo.TablePath, queryInfo.AlterTable.value()).GetValueSync();
-            });
-            return result;
+            // Execute directly on the session handed to us by the outer
+            // RetryOperationSync (see runQuery): a single retry layer is enough.
+            return session.AlterTable(queryInfo.TablePath, queryInfo.AlterTable.value()).GetValueSync();
         } else if (queryInfo.UseReadRows) {
             auto result = TableClient->ReadRows(queryInfo.TablePath, std::move(*queryInfo.KeyToRead))
                 .GetValueSync();
@@ -233,7 +232,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
     };
 
     auto runQuery = [this, &runQueryClient, &runTableClient, &queryInfo]() -> NYdb::TStatus {
-        if (QueryExecuterType == "data") {
+        if (QueryExecuterType == "data" || queryInfo.AlterTable) {
+            // AlterTable is only supported by the table client; route it there
+            // regardless of the selected executer.
             return TableClient->RetryOperationSync(runTableClient);
         } else {
             auto result = QueryClient->RetryQuery(runQueryClient).GetValueSync();
@@ -255,18 +256,29 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
         for (const auto& q: shuffledQueries) {
             queryInfo = q;
-            auto opStartTime = Now();
-            if (opStartTime >= StopTime) {
+            if (Now() >= StopTime) {
                 break;
             }
             if (Rate != 0)
             {
-                const ui64 expectedQueries = (Now() - StartTime).SecondsFloat() * Rate;
-                if (TotalQueries > expectedQueries) {
+                // Wait for the rate budget instead of discarding the query:
+                // workload generators may return one-shot operations (e.g. a
+                // merge ALTER) that are never re-issued, so skipping them here
+                // would drop them permanently.
+                while (Now() < StopTime) {
+                    const ui64 expectedQueries = (Now() - StartTime).SecondsFloat() * Rate;
+                    if (TotalQueries <= expectedQueries) {
+                        break;
+                    }
                     Sleep(TDuration::MilliSeconds(1));
-                    continue;
+                }
+                if (Now() >= StopTime) {
+                    break;
                 }
             }
+            // Capture the start time after the rate-limiter wait so the wait
+            // itself is not recorded into the latency histograms.
+            auto opStartTime = Now();
 
             auto status = queryInfo.TableOperation ? TableClient->RetryOperationSync(runTableClient) : runQuery();
             if (status.IsSuccess()) {

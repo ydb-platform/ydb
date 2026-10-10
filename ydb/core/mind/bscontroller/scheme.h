@@ -85,6 +85,9 @@ struct Schema : NIceDb::Schema {
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
+        struct EnableSingleDcMode : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct SurvivingDc : Column<19, NScheme::NTypeIds::Uint32> {};
+
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
@@ -100,7 +103,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
+              SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, EnableSingleDcMode, SurvivingDc, VirtualGroupName, VirtualGroupState,
               HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
     };
 

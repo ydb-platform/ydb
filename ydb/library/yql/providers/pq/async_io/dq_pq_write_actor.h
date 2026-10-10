@@ -14,6 +14,8 @@
 #include <util/generic/size_literals.h>
 #include <util/system/types.h>
 
+#include <functional>
+
 namespace NYql::NDq {
 
 constexpr i64 DqPqDefaultFreeSpace = 16_MB;
@@ -43,6 +45,6 @@ void RegisterDqPqWriteActorFactory(
     const IPqStaticGateway::TPtr& pqGateway,
     const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
     bool enableStreamingQueriesCounters = true,
-    bool enableDeduplicationFeatureFlag = true);
+    std::function<bool()> getEnableDeduplicationFeatureFlag = [] { return true; });
 
 } // namespace NYql::NDq

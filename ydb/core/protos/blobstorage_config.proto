@@ -633,6 +633,14 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
+// Configuration contract only; command handling is not implemented yet.
+message TSetGroupSingleDcMode {
+    uint32 GroupId = 1;
+    uint32 GroupGeneration = 2; // expected generation to prevent updating a stale group configuration
+    optional bool EnableSingleDcMode = 3; // required; explicit false requests disabling the mode
+    optional uint32 SurvivingDc = 4; // zero-based fail realm index; required when enabling the mode
+}
+
 message TReconfigureVirtualGroup {
     string Name = 1;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
@@ -726,6 +734,7 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
+            TSetGroupSingleDcMode SetGroupSingleDcMode = 64;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

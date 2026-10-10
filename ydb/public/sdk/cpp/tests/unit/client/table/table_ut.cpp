@@ -1029,15 +1029,15 @@ TEST(VectorIndexSettings, HnswDefaultsAndAbsoluteDeltaRows) {
     EXPECT_EQ(NTable::TVectorIndexSettings::FromProto(proto).DeltaRows, 0u);
 }
 
-TEST(VectorIndexSettings, HnswLegacyWireFieldsKeepTheirMeaning) {
+TEST(VectorIndexSettings, HnswWireFieldNumbers) {
     Ydb::Table::VectorIndexSettings proto;
-    // Existing min_rows/M/ef_construction tags remain 4/5/6. Old search and
-    // percentage settings at tags 7/8 must not become a delta row count.
+    // min_rows/M/ef_construction/delta_rows use tags 4/5/6/7.
+    // Unknown tag 8 does not affect the supported settings.
     ASSERT_TRUE(proto.ParseFromString(std::string("\x20\x01\x28\x18\x30\xc8\x01\x38\x32\x40\x05", 11)));
     const auto settings = NTable::TVectorIndexSettings::FromProto(proto);
     EXPECT_EQ(settings.MinRows, 1u);
     EXPECT_EQ(settings.M, 24u);
     EXPECT_EQ(settings.EfConstruction, 200u);
-    EXPECT_EQ(settings.DeltaRows, 10000u);
-    EXPECT_FALSE(proto.has_delta_rows());
+    EXPECT_EQ(settings.DeltaRows, 50u);
+    EXPECT_TRUE(proto.has_delta_rows());
 }

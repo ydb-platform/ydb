@@ -761,6 +761,10 @@ message TConfigRequest {
     // ignore disintegrated groups checking
     bool IgnoreDisintegratedGroupsChecks = 11;
 
+    // treat all REPLICATING VDisks with only phantom-like blobs remaining as working ones when calculating group
+    // failure model and DEGRADED state; it is up to the caller to ensure that these blobs are really phantoms
+    bool TreatPhantomsOnlyVDisksAsWorking = 16;
+
     // do not settle slots over non-operating PDisks
     bool SettleOnlyOnOperationalDisks = 9;
 

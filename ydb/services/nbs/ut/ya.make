@@ -4,6 +4,7 @@ SRCDIR(
     ydb/core/nbs/cloud/blockstore/libs/nbs_frontend
 )
 
+REQUIREMENTS(cpu:1)
 SRCS(
     classic_grpc_service_ut.cpp
     frontend_test.cpp

@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:1)
 IF (NOT SANITIZER_TYPE)
     UNITTEST_FOR(ydb/library/actors/core)
 

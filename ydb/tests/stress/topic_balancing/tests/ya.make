@@ -7,7 +7,7 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:8)
+REQUIREMENTS(ram:32 cpu:1)
 SIZE(LARGE)
 TAG(ya:fat)
 TIMEOUT(2400)

@@ -1,5 +1,6 @@
 GTEST()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy

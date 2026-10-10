@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/services/persqueue_v1/actors/schema/pqv1)
 FORK_SUBTESTS()
 SPLIT_FACTOR(8)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 YQL_LAST_ABI_VERSION()
 

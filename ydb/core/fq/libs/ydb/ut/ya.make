@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/fq/libs/ydb)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     ydb_ut.cpp
 )

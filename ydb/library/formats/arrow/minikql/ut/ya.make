@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/formats/arrow/minikql)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     ut_helpers.cpp

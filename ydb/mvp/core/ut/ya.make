@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/mvp/core)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     cracked_page_ut.cpp

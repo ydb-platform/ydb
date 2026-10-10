@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(45)
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:1)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TEST_SRCS(
     conftest.py

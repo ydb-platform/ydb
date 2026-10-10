@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(3)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_query_trace_ut.cpp

@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/storage/indexes/helper)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     case_helper_ut.cpp
 )

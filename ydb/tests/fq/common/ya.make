@@ -4,6 +4,7 @@ STYLE_PYTHON()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/python/testing/yatest_common
 )

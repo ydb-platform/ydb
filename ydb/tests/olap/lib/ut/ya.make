@@ -1,6 +1,7 @@
 PY3TEST()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/tests/olap/lib

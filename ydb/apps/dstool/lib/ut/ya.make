@@ -1,6 +1,7 @@
 PY3TEST()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 TEST_SRCS(
     test_capacity_metrics.py

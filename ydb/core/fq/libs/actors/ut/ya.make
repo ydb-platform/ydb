@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/actors)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

@@ -2,6 +2,7 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     utf8_ut.cpp
     yql_issue_ut.cpp

@@ -5,6 +5,7 @@ PY_SRCS(
     main.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tools/include_sanitizer
 )

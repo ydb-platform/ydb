@@ -1,6 +1,7 @@
 UNITTEST()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     pdisk_log_ut.cpp

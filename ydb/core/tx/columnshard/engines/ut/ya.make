@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base

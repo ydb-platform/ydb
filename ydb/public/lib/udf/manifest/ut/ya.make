@@ -1,4 +1,5 @@
 UNITTEST_FOR(ydb/public/lib/udf/manifest)
+REQUIREMENTS(cpu:1)
 SRCS(manifest_ut.cpp)
 PEERDIR(library/cpp/testing/unittest library/cpp/json)
 END()

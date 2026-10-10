@@ -4,6 +4,7 @@ PY_SRCS(
     __main__.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/stress/min_max_workload/workload
 )

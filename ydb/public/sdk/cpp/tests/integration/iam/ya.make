@@ -7,6 +7,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 ENV(YDB_ENFORCE_USER_TOKEN_REQUIREMENT=true)
 ENV(YDB_DEFAULT_CLUSTERADMIN=root@builtin)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)

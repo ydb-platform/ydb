@@ -1,4 +1,5 @@
 PY3TEST()
+REQUIREMENTS(cpu:1)
 
     TAG(ya:manual)
 

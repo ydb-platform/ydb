@@ -7,6 +7,7 @@ IF (WITH_VALGRIND)
 ENDIF()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt

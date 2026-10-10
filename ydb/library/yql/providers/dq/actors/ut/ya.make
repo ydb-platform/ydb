@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/dq/actors)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/testing/unittest
     library/cpp/time_provider

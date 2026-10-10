@@ -1,4 +1,5 @@
 PY3_PROGRAM(mnc)
+REQUIREMENTS(cpu:1)
 
     SUBSCRIBER(kruall)
 

@@ -2,6 +2,7 @@ PY3_PROGRAM(local_ydb)
 
 PY_SRCS(__main__.py)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     yql/essentials/providers/common/proto
     ydb/public/tools/lib/cmds

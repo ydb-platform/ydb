@@ -14,6 +14,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 
 DEPENDS(ydb/apps/ydb)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/python/pytest
     library/python/testing/yatest_common

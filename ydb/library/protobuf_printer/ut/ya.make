@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/protobuf_printer)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/json
     library/cpp/protobuf/json

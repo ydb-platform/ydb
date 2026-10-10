@@ -5,6 +5,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 FORK_SUBTESTS()
 SPLIT_FACTOR(45)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

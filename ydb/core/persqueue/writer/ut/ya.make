@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/persqueue/writer)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 YQL_LAST_ABI_VERSION()
 

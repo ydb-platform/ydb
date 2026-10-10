@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/statistics/database)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 YQL_LAST_ABI_VERSION()
 

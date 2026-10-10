@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/services/persqueue_cluster_discovery)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     cluster_discovery_service_ut.cpp

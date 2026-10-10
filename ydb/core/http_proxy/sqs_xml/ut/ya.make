@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/http_proxy/sqs_xml
     yql/essentials/sql/pg_dummy

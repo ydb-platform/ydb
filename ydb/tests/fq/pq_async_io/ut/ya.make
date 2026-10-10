@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/pq/async_io)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 

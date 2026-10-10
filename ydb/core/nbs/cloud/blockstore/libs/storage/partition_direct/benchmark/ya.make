@@ -1,6 +1,7 @@
 G_BENCHMARK(nbs_partition_direct_requests_creation_benchmark)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 # Keeps the case inside the SMALL test budget. Run the binary directly without
 # this option (or with a larger --benchmark_min_time) when comparing numbers.

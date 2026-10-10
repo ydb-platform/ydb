@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/fq/libs/metrics)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

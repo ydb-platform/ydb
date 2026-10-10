@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     dq_pq_cpu_quota_ut.cpp
     dq_pq_read_state_ut.cpp

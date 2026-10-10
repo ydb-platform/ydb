@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/nbs/cloud/storage/core/libs/common)
 
 SRCDIR(ydb/core/nbs/cloud/storage/core/libs/common)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/nbs/cloud/storage/core/libs/common
 

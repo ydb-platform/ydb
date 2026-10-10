@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/services/udf_store/compile_controller)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/testing/unittest

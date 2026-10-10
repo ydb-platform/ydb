@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/yql/dq/actors/spilling)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     spilling_file_ut.cpp

@@ -1,6 +1,7 @@
 UNITTEST()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     mdb_endpoint_generator_ut.cpp

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/mvp/oidc_proxy)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     mvp_config_validation_ut.cpp

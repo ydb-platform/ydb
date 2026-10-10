@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/federated_query/actors)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

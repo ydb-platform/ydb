@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ddisk)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/blobstorage/ddisk

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt

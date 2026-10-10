@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/grpc_streaming)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     grpc_streaming_ut.cpp

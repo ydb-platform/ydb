@@ -50,6 +50,7 @@ RESOURCE(
 )
 
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/wardens

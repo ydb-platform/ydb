@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/config/init)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     init_ut.cpp
     yaml_config_helpers_ut.cpp

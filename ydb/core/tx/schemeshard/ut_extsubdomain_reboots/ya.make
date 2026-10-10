@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

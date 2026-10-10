@@ -3,6 +3,7 @@ UNITTEST()
 FORK_SUBTESTS(MODULO)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/protobuf/util

@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/sys_view/service)
 
 FORK_SUBTESTS()
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/testing/unittest

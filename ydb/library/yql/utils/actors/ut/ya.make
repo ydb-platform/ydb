@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:1)
 IF (OS_LINUX OR OS_DARWIN)
     UNITTEST_FOR(ydb/library/yql/utils/actors)
 

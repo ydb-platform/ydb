@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/yql/providers/dq/task_runner)
 
 NO_BUILD_IF(OS_WINDOWS)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/yql/providers/dq/common
     yql/essentials/public/udf/service/exception_policy

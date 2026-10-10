@@ -1,6 +1,7 @@
 GTEST()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     message_stream_ut.cpp

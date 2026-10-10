@@ -1,4 +1,5 @@
 # Disable test on windows until DEVTOOLS-5591 and DEVTOOLS-5388 will be fixed.
+REQUIREMENTS(cpu:1)
 IF (NOT OS_WINDOWS)
     UNITTEST_FOR(ydb/core/quoter)
 

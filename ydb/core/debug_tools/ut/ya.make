@@ -1,4 +1,5 @@
 UNITTEST()
+REQUIREMENTS(cpu:1)
 
     SIZE(SMALL)
 

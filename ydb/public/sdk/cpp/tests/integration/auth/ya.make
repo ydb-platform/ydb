@@ -3,6 +3,7 @@ GTEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)

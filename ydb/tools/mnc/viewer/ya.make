@@ -1,4 +1,5 @@
 PY3_PROGRAM(mnc_viewer)
+REQUIREMENTS(cpu:1)
 
     SUBSCRIBER(kruall)
 

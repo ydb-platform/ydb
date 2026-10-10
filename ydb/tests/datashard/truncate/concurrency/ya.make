@@ -5,6 +5,7 @@ TEST_SRCS(
     test_truncate_table_concurrency.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/datashard/lib
     ydb/tests/sql/lib

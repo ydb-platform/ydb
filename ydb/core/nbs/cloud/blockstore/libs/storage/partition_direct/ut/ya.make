@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     base_test_fixture.cpp
     ddisk_data_copier_ut.cpp

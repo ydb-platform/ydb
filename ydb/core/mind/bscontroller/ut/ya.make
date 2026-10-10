@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/mind/bscontroller)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     database_space_ut.cpp
     grouper_ut.cpp

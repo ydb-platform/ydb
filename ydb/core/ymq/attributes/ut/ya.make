@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/ymq/attributes
     ydb/core/persqueue/public

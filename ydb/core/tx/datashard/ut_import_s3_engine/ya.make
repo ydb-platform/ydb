@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/datashard)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/zstd

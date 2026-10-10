@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/services/persqueue_v1/actors/schema/topic)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 FORK_SUBTESTS()
 
 YQL_LAST_ABI_VERSION()

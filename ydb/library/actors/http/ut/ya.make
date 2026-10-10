@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/actors/http)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     contrib/libs/poco/NetSSL_OpenSSL

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/services/test_shard)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     grpc_service_ut.cpp

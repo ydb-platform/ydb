@@ -2,6 +2,7 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/python

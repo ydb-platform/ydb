@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/gateway/clients/message_stream)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     yql_qyt_blocking_queue_ut.cpp

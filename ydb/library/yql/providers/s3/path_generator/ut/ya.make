@@ -1,3 +1,4 @@
+REQUIREMENTS(cpu:1)
 IF (NOT OS_WINDOWS)
 
 UNITTEST_FOR(ydb/library/yql/providers/s3/path_generator)

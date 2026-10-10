@@ -2,6 +2,7 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     grpc_client_low_ut.cpp
 )

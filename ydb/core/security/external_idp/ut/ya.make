@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/security/external_idp)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/security/external_idp/test_utils

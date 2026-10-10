@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/dq/comp_nodes)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/comp_nodes/ut/utils

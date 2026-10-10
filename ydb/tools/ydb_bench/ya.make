@@ -76,6 +76,7 @@ RESOURCE(
 
 RESOURCE(- ydb_bench/build_type=${BUILD_TYPE})
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/python/resource
     library/python/svn_version

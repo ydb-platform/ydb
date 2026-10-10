@@ -7,6 +7,7 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 

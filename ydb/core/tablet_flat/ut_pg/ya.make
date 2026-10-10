@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     flat_database_pg_ut.cpp
 )

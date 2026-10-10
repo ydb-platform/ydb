@@ -1195,7 +1195,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
      * to what is there. So the two would not sum to a wrong 200 — they would take turns
      * overwriting each other, and row_count would flap to whatever the last recalculation
      * saw. Leaving the bucket to the aggregator of the leaders is what removes the
-     * collision, and it agrees with the rule that the high level table.datashard.*
+     * collision, and it agrees with the rule that the LeaderOnly table.datashard.*
      * metrics are computed from the leaders alone.
      *
      * @note Two independent mechanisms defend this, and this test pins the second.

@@ -6,12 +6,16 @@ ADDINCL(
 
 SRCS(
     db_metadata_cache.h
-    query/service_query.h
     grpc_mon.cpp
     grpc_publisher_service_actor.cpp
     grpc_request_proxy.cpp
     grpc_request_proxy_simple.cpp
+    # Own TU: this file reaches into ydb/core/client/server, which already
+    # PEERDIRs this library. Joining it would force every grpc_services
+    # dependent to resolve msgbus symbols.
+    legacy/rpc_legacy.cpp
     query/rpc_execute_script.cpp
+    query/service_query.h
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
@@ -57,16 +61,6 @@ SRCS(
     rpc_rollback_transaction.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
-    ydb_over_fq/create_session.cpp
-    ydb_over_fq/describe_table.cpp
-    ydb_over_fq/execute_data_query.cpp
-    ydb_over_fq/explain_data_query.cpp
-    ydb_over_fq/keep_alive.cpp
-    ydb_over_fq/list_directory.cpp
-    # Own TU: this file reaches into ydb/core/client/server, which already
-    # PEERDIRs this library. Joining it would force every grpc_services
-    # dependent to resolve msgbus symbols.
-    legacy/rpc_legacy.cpp
 )
 
 JOIN_SRCS(
@@ -129,15 +123,15 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_misc_2_m4.cpp
-    rpc_dynamic_config.cpp
     query/rpc_fetch_script_results.cpp
+    rpc_dynamic_config.cpp
 )
 
 JOIN_SRCS(
     all_misc_3_m1.cpp
-    rpc_forget_operation.cpp
     fs_path_validation.cpp
     local_rate_limiter.cpp
+    rpc_forget_operation.cpp
 )
 
 JOIN_SRCS(
@@ -148,10 +142,10 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_misc_4_m1.cpp
+    operation_helpers.cpp
     rpc_maintenance.cpp
     rpc_monitoring.cpp
     rpc_node_registration.cpp
-    operation_helpers.cpp
 )
 
 JOIN_SRCS(
@@ -168,16 +162,16 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_misc_5_m1.cpp
-    rpc_prepare_data_query.cpp
     resolve_local_db_table.cpp
+    rpc_prepare_data_query.cpp
     rpc_scheme_base.cpp
 )
 
 JOIN_SRCS(
     all_misc_6_m1.cpp
-    table_settings.cpp
     rpc_test_shard.cpp
     rpc_topic_deferred_publish.cpp
+    table_settings.cpp
 )
 
 JOIN_SRCS(
@@ -200,12 +194,12 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats
-    ydb/core/fq/libs/events
     ydb/core/fq/libs/control_plane_proxy/events
+    ydb/core/fq/libs/events
     ydb/core/grpc_services/base
+    ydb/core/grpc_services/cancelation
     ydb/core/grpc_services/counters
     ydb/core/grpc_services/local_rpc
-    ydb/core/grpc_services/cancelation
     ydb/core/grpc_streaming
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
@@ -215,36 +209,36 @@ PEERDIR(
     ydb/core/local_indexes/bloom
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
-    ydb/core/statistics
     ydb/core/scheme
-    ydb/core/sys_view
-    ydb/core/tx
-    ydb/core/tx/datashard
-    ydb/core/tx/sharding
-    ydb/core/tx/data_events
-    ydb/core/tx/schemeshard/olap/bg_tasks/events
-    ydb/core/util
-    ydb/core/ydb_convert
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/core/security/sasl
+    ydb/core/statistics
+    ydb/core/sys_view
+    ydb/core/tx
+    ydb/core/tx/data_events
+    ydb/core/tx/datashard
+    ydb/core/tx/schemeshard/olap/bg_tasks/events
+    ydb/core/tx/sharding
+    ydb/core/util
+    ydb/core/ydb_convert
     ydb/library/aclib
-    yql/essentials/types/binary_json
-    yql/essentials/types/dynumber
+    ydb/library/cloud_permissions
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer
-    ydb/library/yaml_config
-    ydb/library/cloud_permissions
-    yql/essentials/parser/pg_wrapper/interface
-    yql/essentials/public/types
-    yql/essentials/public/issue
     ydb/library/services
+    ydb/library/yaml_config
     ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/public/lib/fq
-    ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/resources
+    ydb/public/sdk/cpp/src/library/operation_id
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/issue
+    yql/essentials/public/types
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
 )
 
 
@@ -272,12 +266,14 @@ END()
 RECURSE(
     base
     counters
+    local_grpc
     local_rpc
     tablet
+    ydb_over_fq
 )
 
 RECURSE_FOR_TESTS(
-    ut
     grpc_request_check_actor_ut
     grpc_request_tracing_ut
+    ut
 )

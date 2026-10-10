@@ -389,6 +389,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetIoSizeBytes(blockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());
         });
+        // Configuration drains and reconfigures the workers asynchronously.
+        // Inject the PB failure only after writes can reach those workers.
         auto configured = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
             f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(30)));
         UNIT_ASSERT(configured);

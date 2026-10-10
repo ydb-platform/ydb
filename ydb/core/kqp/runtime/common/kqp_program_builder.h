@@ -1,0 +1,81 @@
+#pragma once
+
+#include <ydb/core/scheme_types/scheme_type_info.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
+
+namespace NKikimr {
+
+struct TTableId;
+
+namespace NMiniKQL {
+
+struct TKqpTableColumn {
+    ui32 Id;
+    TString Name;
+    NUdf::TDataTypeId Type;
+    bool NotNull;
+    NScheme::TTypeInfo TypeInfo;
+
+    TKqpTableColumn(ui32 id, const TStringBuf& name, NUdf::TDataTypeId type, bool notNull, const NScheme::TTypeInfo& typeInfo)
+        : Id(id)
+        , Name(name)
+        , Type(type)
+        , NotNull(notNull)
+        , TypeInfo(typeInfo) {}
+};
+
+using TKqpKeyTuple = TVector<TRuntimeNode>;
+
+struct TKqpKeyRange {
+    TKqpKeyTuple FromTuple;
+    TKqpKeyTuple ToTuple;
+    bool FromInclusive = false;
+    bool ToInclusive = false;
+    TSmallVec<bool> SkipNullKeys;
+    TRuntimeNode ItemsLimit;
+    bool Reverse = false;
+};
+
+struct TKqpKeyRanges {
+    TRuntimeNode Ranges;
+    TSmallVec<bool> SkipNullKeys;
+    TRuntimeNode ItemsLimit;
+    bool Reverse = false;
+};
+
+class TKqpProgramBuilder: public TDqProgramBuilder {
+public:
+    TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
+
+    TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
+        const TArrayRef<TKqpTableColumn>& columns);
+
+    TRuntimeNode KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
+        const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
+
+    TRuntimeNode KqpBlockReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
+        const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
+
+    TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
+
+    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion = 0);
+
+    TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode);
+
+    // input: List/Flow/Stream<T> -> same container of Tuple<Uint64, T> with a 1-based rank.
+    TRuntimeNode KqpStreamEnumerate(TRuntimeNode input);
+
+    TRuntimeNode KqpStreamingAggregation(TRuntimeNode flow,
+        const TUnaryLambda& keyExtractor, // (input_item) -> (key)
+        const TUnaryLambda& init, // (input_item) -> (state)
+        const TBinaryLambda& update, // (state, input_item) -> (state)
+        const TBinaryLambda& finish, // (key, state) -> (output_item)
+        TRuntimeNode stateTablePath, // String path or Tuple<path, Struct<aggregation column: table column>> literal
+        const TUnaryLambda& save = {}, // (state) -> (saved_state)
+        const TUnaryLambda& load = {}, // (saved_state) -> (state)
+        const TBinaryLambda& merge = {}); // (state, state) -> (state)
+};
+
+} // namespace NMiniKQL
+
+} // namespace NKikimr

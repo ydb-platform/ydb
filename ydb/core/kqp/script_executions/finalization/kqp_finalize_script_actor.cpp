@@ -1,0 +1,249 @@
+#include "kqp_finalize_script_actor.h"
+
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/datashard/const.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+
+namespace NKikimr::NKqp {
+
+namespace {
+
+// Actor for performing finalization of script execution external effects (for example commit / roll back S3 uploads).
+// NOTE: if S3 become unavailable and/or secrets unavailable script execution will be never finalized and therefore cannot be removed.
+
+class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
+public:
+    TScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactor)
+        : ReplyActor(request->Sender)
+        , ExecutionId(request->Get()->Description.ExecutionId)
+        , Database(request->Get()->Description.Database)
+        , FinalizationStatus(request->Get()->Description.FinalizationStatus)
+        , LeaseGeneration(request->Get()->Description.LeaseGeneration)
+        , Request(std::move(request))
+        , FinalizationTimeout(TDuration::Seconds(queryServiceConfig.GetFinalizeScriptServiceConfig().GetScriptFinalizationTimeoutSeconds()))
+        , FederatedQuerySetup(federatedQuerySetup)
+        , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
+        , S3ActorsFactor(std::move(s3ActorsFactor))
+    {}
+
+    void Bootstrap() {
+        auto& description = Request->Get()->Description;
+        const auto& artifacts = CompressScriptArtifacts(description.QueryAst, description.QueryPlan, Compressor);
+        description.QueryAst = artifacts.Ast;
+        description.QueryAstCompressionMethod = artifacts.AstCompressionMethod;
+        description.QueryPlan = artifacts.Plan;
+        description.QueryPlanCompressionMethod = artifacts.PlanCompressionMethod;
+        description.Issues.AddIssues(artifacts.Issues);
+
+        Register(CreateSaveScriptFinalStatusActor(SelfId(), std::move(Request)));
+        Become(&TScriptFinalizerActor::FetchState);
+    }
+
+    STRICT_STFUNC(FetchState,
+        hFunc(TEvSaveScriptFinalStatusResponse, Handle);
+    )
+
+    void Handle(TEvSaveScriptFinalStatusResponse::TPtr& ev) {
+        if (!ev->Get()->ApplicateScriptExternalEffectRequired || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            auto& into = *ev->Get();
+            Reply(into.Status, into.ExecutionEntryExists, into.FinalStatusAlreadySaved, std::move(into.Issues));
+            return;
+        }
+
+        Schedule(FinalizationTimeout, new TEvents::TEvWakeup());
+        Become(&TScriptFinalizerActor::PrepareState);
+
+        CustomerSuppliedId = ev->Get()->CustomerSuppliedId;
+        Sinks = std::move(ev->Get()->Sinks);
+        UserToken = ev->Get()->UserToken;
+        SecretNames = std::move(ev->Get()->SecretNames);
+
+        if (Sinks.empty()) {
+            FinishScriptFinalization();
+        } else if (SecretNames.empty()) {
+            ComputeScriptExternalEffect();
+        } else {
+            FetchSecrets();
+        }
+    }
+
+private:
+    STRICT_STFUNC(PrepareState,
+        hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvDescribeSecretsResponse, Handle);
+        hFunc(NFq::TEvents::TEvEffectApplicationResult, Handle);
+    )
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        FinishScriptFinalization(Ydb::StatusIds::TIMEOUT, "Script finalization timeout");
+    }
+
+    void FetchSecrets() {
+        RegisterDescribeSecretsActor(SelfId(), UserToken, Database, SecretNames, ActorContext().ActorSystem());
+    }
+
+    void Handle(TEvDescribeSecretsResponse::TPtr& ev) {
+        if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
+            FinishScriptFinalization(ev->Get()->Description.Status, std::move(ev->Get()->Description.Issues));
+            return;
+        }
+
+        FillSecureParams(ev->Get()->Description.SecretValues);
+    }
+
+    void FillSecureParams(const std::vector<TString>& secretValues) {
+        std::map<TString, TString> secretsMap;
+        for (size_t i = 0; i < secretValues.size(); ++i) {
+            secretsMap.emplace(SecretNames[i], secretValues[i]);
+        }
+
+        for (const auto& sink : Sinks) {
+            const auto& sinkName = sink.GetSinkName();
+
+            if (sinkName) {
+                const auto& structuredToken = NYql::CreateStructuredTokenParser(sink.GetAuthInfo()).ToBuilder().ReplaceReferences(secretsMap).ToJson();
+                SecureParams.emplace(sinkName, structuredToken);
+            }
+        }
+
+        ComputeScriptExternalEffect();
+    }
+
+private:
+    static void AddExternalEffectS3(const NKqpProto::TKqpExternalSink& sink, NYql::NDqProto::TExternalEffect& externalEffectS3) {
+        NYql::NS3::TSink sinkSettings;
+        sink.GetSettings().UnpackTo(&sinkSettings);
+
+        NYql::NS3::TEffect sinkEffect;
+        sinkEffect.SetToken(sink.GetSinkName());
+        sinkEffect.MutableCleanup()->SetUrl(sinkSettings.GetUrl());
+        sinkEffect.MutableCleanup()->SetPrefix(sinkSettings.GetPath());
+
+        externalEffectS3.AddEffects()->SetData(sinkEffect.SerializeAsString());
+    }
+
+    void ComputeScriptExternalEffect() {
+        NYql::NDqProto::TExternalEffect externalEffectS3;
+        externalEffectS3.SetProviderName(TString(NYql::S3ProviderName));
+
+        for (const auto& sink : Sinks) {
+            const TString& sinkType = sink.GetType();
+
+            if (sinkType == "S3Sink") {
+                AddExternalEffectS3(sink, externalEffectS3);
+            } else {
+                FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "unknown effect sink type: " << sinkType);
+                return;
+            }
+        }
+
+        RunS3ApplicatorActor(externalEffectS3);
+    }
+
+    void RunS3ApplicatorActor(const NYql::NDqProto::TExternalEffect& externalEffect) {
+        if (!FederatedQuerySetup || !S3ActorsFactor) {
+            FinishScriptFinalization(Ydb::StatusIds::INTERNAL_ERROR, "unable to apply s3 external effect, invalid federated query setup");
+            return;
+        }
+
+        Register(S3ActorsFactor->CreateS3ApplicatorActor(
+            SelfId(),
+            FederatedQuerySetup->HttpGateway,
+            CreateGuidAsString(),
+            CustomerSuppliedId,
+            std::nullopt,
+            FinalizationStatus == EFinalizationStatus::FS_COMMIT,
+            THashMap<TString, TString>(SecureParams.begin(), SecureParams.end()),
+            FederatedQuerySetup->CredentialsFactory,
+            externalEffect
+        ).Release());
+    }
+
+    void Handle(NFq::TEvents::TEvEffectApplicationResult::TPtr& ev) {
+        if (ev->Get()->FatalError) {
+            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, AddRootIssue("Failed to commit/abort s3 multipart uploads", ev->Get()->Issues));
+        } else {
+            FinishScriptFinalization();
+        }
+    }
+
+private:
+    STRICT_STFUNC(FinishState,
+        IgnoreFunc(TEvents::TEvWakeup);
+        IgnoreFunc(TEvDescribeSecretsResponse);
+        IgnoreFunc(NFq::TEvents::TEvEffectApplicationResult);
+        hFunc(TEvScriptExecutionFinished, Handle);
+    )
+
+    void FinishScriptFinalization(std::optional<Ydb::StatusIds::StatusCode> status, NYql::TIssues issues) {
+        Register(CreateScriptFinalizationFinisherActor(SelfId(), Database, ExecutionId, status, std::move(issues), LeaseGeneration));
+        Become(&TScriptFinalizerActor::FinishState);
+    }
+
+    void FinishScriptFinalization(Ydb::StatusIds::StatusCode status, const TString& message) {
+        FinishScriptFinalization(status, { NYql::TIssue(message) });
+    }
+
+    void FinishScriptFinalization() {
+        FinishScriptFinalization(std::nullopt, {});
+    }
+
+    void Handle(TEvScriptExecutionFinished::TPtr& ev) {
+        const auto& info = ev->Get()->Info;
+        Reply(ev->Get()->Status, info.ExecutionEntryExists, info.AlreadyStopped, std::move(ev->Get()->Issues));
+    }
+
+    void Reply(const Ydb::StatusIds::StatusCode status, bool executionEntryExists, bool alreadyStopped, NYql::TIssues&& issues) {
+        Send(ReplyActor, new TEvScriptExecutionFinished(status, {
+            .ExecutionEntryExists = executionEntryExists,
+            .AlreadyStopped = alreadyStopped,
+        }, std::move(issues)));
+        Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId));
+        PassAway();
+    }
+
+private:
+    const TActorId ReplyActor;
+    const TString ExecutionId;
+    const TString Database;
+    const EFinalizationStatus FinalizationStatus;
+    const i64 LeaseGeneration = 0;
+    TEvScriptFinalizeRequest::TPtr Request;
+
+    const TDuration FinalizationTimeout;
+    const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    const TCompressor Compressor;
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactor;
+
+    TString CustomerSuppliedId;
+    std::vector<NKqpProto::TKqpExternalSink> Sinks;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    std::vector<TString> SecretNames;
+    std::unordered_map<TString, TString> SecureParams;
+};
+
+}  // anonymous namespace
+
+IActor* CreateScriptFinalizerActor(TEvScriptFinalizeRequest::TPtr request,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    ) {
+    return new TScriptFinalizerActor(std::move(request), queryServiceConfig, federatedQuerySetup, std::move(s3ActorsFactory));
+}
+
+}  // namespace NKikimr::NKqp

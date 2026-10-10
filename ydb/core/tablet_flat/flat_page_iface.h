@@ -251,7 +251,8 @@ namespace NPage {
         Ever    = 2,    /* Keep in cache util the end  */
     };
 
-    enum class ECacheMode : ui32 {
+    // ui16 on purpose: the value is stored in a 16-bit bit-field of NSharedCache::TPage
+    enum class ECacheMode : ui16 {
         Regular = 0,
         TryKeepInMemory = 1,
     };

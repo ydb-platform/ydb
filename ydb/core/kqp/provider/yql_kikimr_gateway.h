@@ -9,6 +9,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/providers/abstract/object_kind.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <ydb/core/external_sources/external_source.h>
@@ -900,16 +901,9 @@ public:
 };
 
 class TExternalDataSource {
-public:
-    enum class EKind {
-        Unknown,
-        Table,
-        MessageStream,
-    };
-
 private:
     std::optional<EDatabaseType> DatabaseType;
-    EKind Kind = EKind::Unknown;
+    NFq::EExternalObjectKind Kind = NFq::EExternalObjectKind::Unknown;
     TString Location;
     TString Installation;
     TString DataSourcePath;
@@ -924,7 +918,7 @@ public:
     static TExternalDataSource CreateFromDescription(
         const NKikimrSchemeOp::TExternalDataSourceDescription& description,
         const TString& dataSourcePath,
-        EKind kind = EKind::Unknown);
+        NFq::EExternalObjectKind kind = NFq::EExternalObjectKind::Unknown);
 
     static TExternalDataSource CreateForLocalTopic(const TString& cluster,
         const TString& database, const TString& transientToken);
@@ -934,7 +928,7 @@ public:
     }
 
     void ApplyInferredMetadata(const TString& type, const TString& dataSourcePath);
-    void InitObjectKind(EKind kind);
+    void InitObjectKind(NFq::EExternalObjectKind kind);
 
     bool IsYdb() const;
     bool IsMessageStream() const;

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    yql_ydb_external_object_type.cpp
     yql_ydb_external_config.cpp
     yql_ydb_external_dq_integration.cpp
     yql_ydb_external_load_meta.cpp
@@ -12,11 +13,15 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    ydb/core/base
+    ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/scheme
     ydb/library/yql/providers/ydb_external/common
     library/cpp/json
     library/cpp/threading/future
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/abstract
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/native

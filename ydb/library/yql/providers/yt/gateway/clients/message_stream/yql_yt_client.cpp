@@ -50,4 +50,34 @@ NThreading::TFuture<bool> IsYtQueue(const NYT::NApi::IClientPtr& client, const T
     return promise.GetFuture();
 }
 
+NThreading::TFuture<NFq::TExternalObjectKindResult> GetYtObjectType(
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const TString& endpoint,
+    const TString& structuredToken,
+    const TString& path) {
+    try {
+        Y_ENSURE(credentialsFactory, "YT external data source credentials factory is unavailable");
+        auto credentials = credentialsFactory->Create(structuredToken)->CreateProvider();
+        auto client = CreateYtClient(endpoint, TString(credentials->GetAuthInfo()));
+        return IsYtQueue(client, path).Apply([](const NThreading::TFuture<bool>& future) {
+            NFq::TExternalObjectKindResult result;
+            try {
+                result.Kind = future.GetValue() ? NFq::EExternalObjectKind::MessageStream
+                    : NFq::EExternalObjectKind::Table;
+            } catch (const std::exception& error) {
+                TIssue issue("Could not determine YT object type");
+                issue.AddSubIssue(MakeIntrusive<TIssue>(error.what()));
+                result.Issues.AddIssue(issue);
+            }
+            return result;
+        });
+    } catch (const std::exception& error) {
+        NFq::TExternalObjectKindResult result;
+        TIssue issue("Could not determine YT object type");
+        issue.AddSubIssue(MakeIntrusive<TIssue>(error.what()));
+        result.Issues.AddIssue(issue);
+        return NThreading::MakeFuture(std::move(result));
+    }
+}
+
 }

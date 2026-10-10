@@ -42,6 +42,31 @@ struct TBackup {
         backup.SetSnapshotTxId(snapshotTime.TxId);
 
         const auto seqNo = context.SS->StartRound(txState);
+
+        // The body is identical across shards except ShardNum; shard 0 additionally
+        // carries the Table/ChangefeedUnderlyingTopics fields (cleared from the
+        // task after the first shard in the original per-shard build). Assemble by
+        // concatenation: a common piece serialized once + a tiny per-shard delta.
+        NKikimrTxColumnShard::TBackupTxBody txBodyCommon;
+        {
+            NKikimrSchemeOp::TBackupTask commonTask = backup;
+            commonTask.ClearTable();
+            commonTask.ClearChangefeedUnderlyingTopics();
+            commonTask.SetTableId(pathId.LocalPathId);
+            *txBodyCommon.MutableBackupTask() = std::move(commonTask);
+        }
+        const TString commonPiece = txBodyCommon.SerializeAsString();
+
+        NKikimrTxColumnShard::TBackupTxBody txBodyShard0Extra;
+        TString shard0ExtraPiece;
+        {
+            auto* task = txBodyShard0Extra.MutableBackupTask();
+            *task->MutableTable() = backup.GetTable();
+            *task->MutableChangefeedUnderlyingTopics() = backup.GetChangefeedUnderlyingTopics();
+            shard0ExtraPiece = txBodyShard0Extra.SerializeAsString();
+        }
+
+        NKikimrTxColumnShard::TBackupTxBody txBodyDelta;
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             auto idx = txState.Shards[i].Idx;
             auto columnShardId = context.SS->ShardInfos[idx].TabletID;
@@ -52,15 +77,16 @@ struct TBackup {
                 {"schemeshard", context.SS->SelfTabletId()},
             );
 
-            NKikimrTxColumnShard::TBackupTxBody txBodyBackup;
-            *txBodyBackup.MutableBackupTask() = backup;
-            txBodyBackup.MutableBackupTask()->SetTableId(pathId.LocalPathId);
-            txBodyBackup.MutableBackupTask()->SetShardNum(i);
-            auto event = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, txBodyBackup.SerializeAsString(), context.Ctx, NKikimrTxColumnShard::TX_KIND_BACKUP);
+            txBodyDelta.Clear();
+            txBodyDelta.MutableBackupTask()->SetShardNum(i);
+            auto event = context.SS->MakeColumnShardProposal(pathId, opId, seqNo, context.Ctx, NKikimrTxColumnShard::TX_KIND_BACKUP);
+            TString& body = *event->Record.MutableTxBody();
+            body.append(commonPiece);
+            if (i == 0) {
+                body.append(shard0ExtraPiece);
+            }
+            body.append(txBodyDelta.SerializeAsString());
             context.OnComplete.BindMsgToPipe(opId, columnShardId, idx, event.Release());
-
-            backup.ClearTable();
-            backup.ClearChangefeedUnderlyingTopics();
         }
     }
 
@@ -73,6 +99,23 @@ struct TBackup {
         backup.SetSnapshotTxId(snapshotTime.TxId);
 
         const auto seqNo = context.SS->StartRound(txState);
+        // The body is identical across shards except ShardNum; shard 0 additionally
+        // carries the Table/ChangefeedUnderlyingTopics fields (the original per-shard
+        // build cleared them from the task after the first shard). Assemble by
+        // concatenation: a common piece serialized once + a shard-0 extra piece + a
+        // tiny per-shard delta.
+        NKikimrSchemeOp::TBackupTask commonTask = backup;
+        commonTask.ClearTable();
+        commonTask.ClearChangefeedUnderlyingTopics();
+        const TString txBodyCommon = context.SS->FillBackupTxBodyCommon(pathId, commonTask, seqNo);
+
+        NKikimrTxDataShard::TFlatSchemeTransaction txBodyShard0Extra;
+        {
+            auto* task = txBodyShard0Extra.MutableBackup();
+            *task->MutableTable() = backup.GetTable();
+            *task->MutableChangefeedUnderlyingTopics() = backup.GetChangefeedUnderlyingTopics();
+        }
+        const TString shard0ExtraPiece = txBodyShard0Extra.SerializeAsString();
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             auto idx = txState.Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -83,12 +126,14 @@ struct TBackup {
                 {"schemeshard", context.SS->SelfTabletId()},
             );
 
-            const auto txBody = context.SS->FillBackupTxBody(pathId, backup, i, seqNo);
-            auto event = context.SS->MakeDataShardProposal(pathId, opId, txBody, context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(pathId, opId, context.Ctx);
+            TString& txBody = *event->Record.MutableTxBody();
+            txBody.append(txBodyCommon);
+            if (i == 0) {
+                txBody.append(shard0ExtraPiece);
+            }
+            context.SS->AppendBackupTxBodyDelta(i, txBody);
             context.OnComplete.BindMsgToPipe(opId, datashardId, idx, event.Release());
-
-            backup.ClearTable();
-            backup.ClearChangefeedUnderlyingTopics();
         }
     }
 

@@ -48,32 +48,34 @@ public:
         const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
         const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
+        // The body is identical for all shards: build and serialize it once.
+        auto seqNo = context.SS->StartRound(*txState);
+
+        NKikimrTxDataShard::TFlatSchemeTransaction tx;
+        auto* op = tx.MutableFinalizeBuildIndex();
+        pathId.ToProto(op->MutablePathId());
+
+        op->SetSnapshotTxId(ui64(snapshotTxId));
+        op->SetSnapshotStep(ui64(snapshotStepId));
+        op->SetTableSchemaVersion(table->AlterVersion+1);
+        op->SetBuildIndexId(ui64(txState->BuildIndexId));
+        if (txState->BuildIndexOutcome) {
+            op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
+        }
+
+        context.SS->FillSeqNo(tx, seqNo);
+        const TString txBody = tx.SerializeAsString();
+
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
             TTabletId datashardId = context.SS->ShardInfos[shardIdx].TabletID;
-
-            auto seqNo = context.SS->StartRound(*txState);
-
-            NKikimrTxDataShard::TFlatSchemeTransaction tx;
-            auto* op = tx.MutableFinalizeBuildIndex();
-            pathId.ToProto(op->MutablePathId());
-
-            op->SetSnapshotTxId(ui64(snapshotTxId));
-            op->SetSnapshotStep(ui64(snapshotStepId));
-            op->SetTableSchemaVersion(table->AlterVersion+1);
-            op->SetBuildIndexId(ui64(txState->BuildIndexId));
-            if (txState->BuildIndexOutcome) {
-                op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
-            }
-
-            context.SS->FillSeqNo(tx, seqNo);
 
             YDB_LOG_DEBUG_CTX(context.Ctx, "Sending TFlatSchemeTransaction to datashard with drop snapshot request",
                 {"datashard", datashardId},
                 {"seqNo", seqNo},
             );
 
-            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, tx.SerializeAsString(), context.Ctx);
+            auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
             context.OnComplete.BindMsgToPipe(OperationId, datashardId, shardIdx, event.Release());
         }
 

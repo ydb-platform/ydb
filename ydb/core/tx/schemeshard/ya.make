@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     ut_consistent_copy_tables
     ut_continuous_backup
     ut_continuous_backup_reboots
+    ut_copy_table_bench
     ut_shred
     ut_shred_reboots
     ut_export
@@ -309,6 +310,8 @@ SRCS(
     schemeshard_path_element.h
     schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h
+    schemeshard_proposal_body.cpp
+    schemeshard_proposal_body.h
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h

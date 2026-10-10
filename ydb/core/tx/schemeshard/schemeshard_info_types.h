@@ -1198,6 +1198,9 @@ public:
 
     void ResetDescriptionCache();
     TVector<ui32> FillDescriptionCache(TPathElement::TPtr pathInfo);
+    // Tablet-free overload: fills the description cache from the path name/id directly,
+    // without a TPathElement. Used by the CopyTable proposal builders and the benchmark.
+    TVector<ui32> FillDescriptionCache(const TString& name, TPathId pathId);
 
     void SetRoom(const TStorageRoom& room) {
         // WARNING: this is legacy support code

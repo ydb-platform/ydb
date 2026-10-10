@@ -117,6 +117,32 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
     return std::optional<TString>(policy);
 }
 
+TYqlConclusion<std::optional<TString>> ParseStatsCollectionMode(NYql::TFeaturesExtractor& featuresExtractor) {
+    const auto& value = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::StatsCollectionMode);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    auto str = to_upper(*value);
+
+    constexpr auto prefix = "STATS_COLLECTION_"sv;
+    if (str && !str.StartsWith(prefix)) {
+        str = prefix + str;
+    }
+
+    Ydb::Table::QueryStatsCollection::Mode mode;
+    auto parsed = Ydb::Table::QueryStatsCollection::Mode_Parse(str, &mode);
+
+    if (!parsed || mode == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED) {
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            TStringBuilder() << "Invalid value for " << TStreamingQueryConfig::TProperties::StatsCollectionMode << ": '" << *value << "'"
+        );
+    }
+
+    return std::optional<TString>(std::move(str));
+}
+
 TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TString& value) {
     NYql::NPq::NProto::StreamingDisposition result;
 
@@ -219,6 +245,14 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
     }
     if (const auto watermarkLateEventsPolicy = watermarkLateEventsPolicyStatus.DetachResult()) {
         properties.emplace(TStreamingQueryConfig::TProperties::WatermarkLateEventsPolicy, *watermarkLateEventsPolicy);
+    }
+
+    auto statsCollectionModeStatus = ParseStatsCollectionMode(featuresExtractor);
+    if (statsCollectionModeStatus.IsFail()) {
+        return statsCollectionModeStatus;
+    }
+    if (const auto statsCollectionMode = statsCollectionModeStatus.DetachResult()) {
+        properties.emplace(TStreamingQueryConfig::TProperties::StatsCollectionMode, *statsCollectionMode);
     }
 
     if (!featuresExtractor.IsFinished()) {

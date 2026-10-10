@@ -302,13 +302,8 @@ private:
             const auto roles = MakeColumnRoles(Meta_->UserTypes.SelectSide(side).size(), keyColumns);
             converters.SelectSide(side) =
                 MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
-            TVector<ui32> equalNullsInputColumns;
-            equalNullsInputColumns.reserve(Meta_->Settings.EqualNullsKeys.size());
-            for (ui32 joinKeyIdx : Meta_->Settings.EqualNullsKeys) {
-                MKQL_ENSURE(joinKeyIdx < keyColumns.size(), "EqualNulls key index is out of range");
-                equalNullsInputColumns.push_back(keyColumns[joinKeyIdx]);
-            }
-            converters.SelectSide(side)->ApplyEqualNulls(equalNullsInputColumns);
+            converters.SelectSide(side)->ApplyEqualNulls(
+                EqualNullsInputColumns(Meta_->Settings.EqualNullsKeys, keyColumns));
         }
 
         state = ctx.HolderFactory.Create<TStreamState>(
@@ -388,27 +383,16 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     if (hasSettings) {
         meta.Settings = ParseHashJoinSettingsTuple(callable.GetInput(InputsWithoutSettings));
     }
-    if (meta.Settings.LeftIsBuild()) {
-        std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
-        std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
-        for (auto& rename : meta.Renames) {
-            rename.Side = OtherSide(rename.Side);
-        }
-    }
+    const bool leftIsBuild = meta.Settings.LeftIsBuild();
+    ApplyLeftBuildSwap(leftIsBuild, meta.InputTypes, meta.KeyColumns, meta.Renames);
 
     ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 0, meta.Renames,
                               meta.ColumnPermutation);
-    const ESide preservedSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
+    const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
     meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, OtherSide(preservedSide), ctx.Env);
 
-    const auto flows = meta.Settings.LeftIsBuild()
-        ? TSides<IComputationWideFlowNode*>{.Build = leftFlow, .Probe = rightFlow}
-        : TSides<IComputationWideFlowNode*>{.Build = rightFlow, .Probe = leftFlow};
-
-    TJoinFilters filters = ParseJoinFilters(ctx, callable, filterStart);
-    if (meta.Settings.LeftIsBuild()) {
-        filters.SwapSides();
-    }
+    const auto flows = SidesForLeftBuild(leftIsBuild, leftFlow, rightFlow);
+    TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, filterStart, leftIsBuild);
 
     return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
         joinKind, preservedSide, isGrid,

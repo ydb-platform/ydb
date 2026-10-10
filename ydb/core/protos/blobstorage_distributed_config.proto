@@ -186,8 +186,10 @@ message TEvNodeConfigInvokeOnRoot {
         TStorageConfig Config = 1;
     }
 
-    message TQueryConfig
-    {}
+    message TQueryConfig {
+        // Recollect persistent configs before replying; ignored by older roots.
+        bool RequireFresh = 1;
+    }
 
     // Return a scepter only for a local root with a configured static group.
     // Do not forward or wait for root operations.
@@ -370,6 +372,8 @@ message TEvNodeConfigInvokeOnRootResult {
 
     message TQueryConfig {
         TStorageConfig Config = 1;
+        // Confirms that this root honored RequireFresh.
+        bool Fresh = 2;
     }
 
     message TFetchStorageConfig {

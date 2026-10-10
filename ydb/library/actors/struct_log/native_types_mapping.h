@@ -13,6 +13,19 @@ namespace NActors::NStructuredLog {
 
 enum class TNativeTypeCode : std::uint8_t {
     String = 0,
+    Int8,
+    UInt8,
+    Int16,
+    UInt16,
+    Int32,
+    UInt32,
+    Int64,
+    UInt64,
+    Float,
+    Double,
+    LongDouble,
+    Bool,
+    Instant
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;
@@ -62,7 +75,14 @@ struct TNativeTypeCodeMapping {
 
     template <typename T>
     static bool Deserialize(T& value, TNativeTypeCode code, const void* data, std::size_t length) {
-        return Invoke(code, data, length, TOverloaded{[&value](const T& v) { value = v; }, [](const auto&) {}});
+        bool ok {false};
+        if (!Invoke(code, data, length,
+            TOverloaded{
+                [&value, &ok](const T& v) { value = v; ok = true;},
+                [](const auto&) {}})) {
+            return false;
+        }
+        return ok;
     }
 
     template <typename T>
@@ -124,7 +144,14 @@ struct TNativeTypeCodeMapping<TPair> {
 
     template <typename T>
     static bool Deserialize(T& value, TNativeTypeCode code, const void* data, std::size_t length) {
-        return Invoke(code, data, length, TOverloaded{[&value](const T& v) { value = v; }, [](const auto&) {}});
+        bool ok {false};
+        if (!Invoke(code, data, length,
+            TOverloaded{
+                [&value, &ok](const T& v) { value = v; ok = true;},
+                [](const auto&) {}})) {
+            return false;
+        }
+        return ok;
     }
 
     template <typename T>
@@ -160,6 +187,21 @@ struct TNativeTypeCodeMapping<TPair> {
     }
 };
 
-using TTypesMapping = TNativeTypeCodeMapping<TNativeTypeCodePair<TString, TNativeTypeCode::String>>;
+using TTypesMapping = TNativeTypeCodeMapping<
+    TNativeTypeCodePair<TString, TNativeTypeCode::String>,
+    TNativeTypeCodePair<ui8, TNativeTypeCode::UInt8>,
+    TNativeTypeCodePair<i8, TNativeTypeCode::Int8>,
+    TNativeTypeCodePair<ui16, TNativeTypeCode::UInt16>,
+    TNativeTypeCodePair<i16, TNativeTypeCode::Int16>,
+    TNativeTypeCodePair<ui32, TNativeTypeCode::UInt32>,
+    TNativeTypeCodePair<i32, TNativeTypeCode::Int32>,
+    TNativeTypeCodePair<ui64, TNativeTypeCode::UInt64>,
+    TNativeTypeCodePair<i64, TNativeTypeCode::Int64>,
+    TNativeTypeCodePair<bool, TNativeTypeCode::Bool>,
+    TNativeTypeCodePair<float, TNativeTypeCode::Float>,
+    TNativeTypeCodePair<double, TNativeTypeCode::Double>,
+    TNativeTypeCodePair<long double, TNativeTypeCode::LongDouble>,
+    TNativeTypeCodePair<TInstant, TNativeTypeCode::Instant>
+    >;
 
 }  // namespace NActors::NStructuredLog

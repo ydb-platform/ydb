@@ -90,7 +90,7 @@ TTextWriter::TValueWriter::TValueWriter(TTextWriter& writer)
     : TBaseValueWriter<TTextWriter>(writer)
 {}
 
-void TTextWriter::TValueWriter::operator()(const TString& value) const {
+void TTextWriter::TValueWriter::Append(const TString& value) const {
     auto& outputText = *Writer.OutputText;
     if (Writer.FirstValue) {
         Writer.FirstValue = false;

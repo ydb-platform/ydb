@@ -485,6 +485,21 @@ message TLogConfig {
     optional bool IgnoreUnknownComponents = 15 [default = true];
     optional string TenantName = 16;
     optional bool EnableStructuredLogInJson = 17 [default = false];
+
+    message TSink {
+        optional string Source = 1;
+        optional string Destination = 2;
+
+        // Local database destionation params
+        optional string DatabasePath = 3;
+        optional string StorageName = 4;
+        optional string TableName = 5;
+        optional uint32 MaxBatchSize = 6 [default = 1000];
+        optional uint32 FlushTimeout = 7 [default = 1000];
+        optional uint32 StoreShardsCount = 8 [default = 5];
+        optional uint32 TableShardsCount = 9 [default = 5];
+    }
+    repeated TSink Sink = 18;
 }
 
 message TInterconnectConfig {

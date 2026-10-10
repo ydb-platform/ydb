@@ -427,6 +427,9 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+    
+    // Captures the immutable source scheme for exporting CREATE TABLE SQL before the data backup starts
+    optional bool CaptureBackupSchemeSnapshot = 56 [default = false];
 }
 
 message TCompressionOptions {
@@ -1064,6 +1067,9 @@ message TColumnTableDescription {
     optional bool IsBackup = 17;
 
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
+
+    // Captures the immutable source scheme for exporting CREATE TABLE SQL before the data backup starts
+    optional bool CaptureBackupSchemeSnapshot = 19 [default = false];
 }
 
 message TAlterColumnTable {
@@ -1487,6 +1493,9 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
     map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
+
+    // Internal option used by SQL-enabled exports only
+    optional bool CaptureBackupSchemeSnapshot = 12 [default = false];
 }
 
 message TConsistentTableCopyingConfig {

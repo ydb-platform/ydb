@@ -1,11 +1,43 @@
 #pragma once
 
+#include "schemeshard_export_table_scheme.h"
 #include "schemeshard_impl.h"
 
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
+
+TString ComputeIndexItemSuffix(
+    const NKikimrSchemeOp::TBackupTask* schemeSnapshot,
+    const NKikimrSchemeOp::TPathDescription& sourceDescription,
+    const TString& indexImplTablePath,
+    bool encrypted
+);
+
+bool FillExportTableSchemePaths(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    TExportTableSchemeContext& context,
+    TString& error
+);
+
+bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
+    const TPath& sourcePath,
+    const TPath& exportItemPath,
+    TExportTableSchemeContext& context,
+    TString& error
+);
+
+bool PrepareExportTableSchemeContext(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    const NKikimrSchemeOp::TBackupTask& task,
+    const TPath& exportItemPath,
+    TExportTableSchemeContext& context,
+    TString& error
+);
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TSchemeShard* ss,
@@ -23,7 +55,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(

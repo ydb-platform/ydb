@@ -75,7 +75,9 @@ public:
         TFsPath basePath(GetTempDir().Path());
         TSet<TString> actual;
         CollectFiles(basePath, basePath, actual);
-        UNIT_ASSERT_VALUES_EQUAL(actual, paths);
+        auto expectedPaths = paths;
+        AddExpectedTableBackupAsSqlFiles(expectedPaths);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expectedPaths);
     }
 
 private:

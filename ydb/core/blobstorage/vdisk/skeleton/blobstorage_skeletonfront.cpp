@@ -724,6 +724,8 @@ namespace NKikimr {
         std::vector<std::pair<TString, TString>> CountersChain;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCountersBase;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCountersBase;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCounters;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskSpaceReportCountersBase;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskSpaceReportCounters;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> SkeletonFrontGroup;
@@ -810,7 +812,7 @@ namespace NKikimr {
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
                         TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.PDiskId, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
-                        baseInfo.ReplNodeResponseQuoter, VDiskSpaceReportCounters);
+                        baseInfo.ReplNodeResponseQuoter, VDiskSpaceReportCounters, VDiskAsyncCounters);
 
             // report every change of local chunk space color to the NodeWarden right away (it forwards the report to
             // BS_CONTROLLER); from then on NodeWarden takes this VDisk's color from these reports only
@@ -2444,6 +2446,8 @@ namespace NKikimr {
             , CountersChain(CreateCountersChain(Config, GInfo))
             , VDiskCountersBase(GetServiceCounters(counters, "vdisks"))
             , VDiskCounters(CreateVDiskCounters(VDiskCountersBase, CountersChain))
+            , VDiskAsyncCountersBase(GetServiceCounters(counters, "vdisks_async"))
+            , VDiskAsyncCounters(CreateVDiskCounters(VDiskAsyncCountersBase, CountersChain))
             , VDiskSpaceReportCountersBase(GetServiceCounters(counters, "vdisk_space_report"))
             , VDiskSpaceReportCounters(CreateVDiskCounters(VDiskSpaceReportCountersBase, CountersChain))
             , SkeletonFrontGroup(VDiskCounters->GetSubgroup("subsystem", "skeletonfront"))
@@ -2516,6 +2520,7 @@ namespace NKikimr {
                 VDiskMonGroup.ClearHeapAllocatorMode();
             }
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
+            VDiskAsyncCountersBase->RemoveSubgroupChain(CountersChain);
             VDiskSpaceReportCountersBase->RemoveSubgroupChain(CountersChain);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));

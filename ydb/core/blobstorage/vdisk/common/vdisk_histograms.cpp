@@ -11,21 +11,29 @@ namespace NKikimr {
             for (const auto& item : {
                     std::make_pair(&VGetFastLatencyHistogram,      "GetFast"     ),
                     std::make_pair(&VPutTabletLogLatencyHistogram, "PutTabletLog"),
-                    std::make_pair(&VPutUserDataLatencyHistogram,  "PutUserData" )
-                    }) {
-                *item.first = std::make_shared<NVDiskMon::TLtcHisto>(counters, "handleclass", item.second, type);
-            }
-
-            // Background latency needs fewer buckets, independently of the media's foreground bounds.
-            const NMonitoring::TBucketBounds asyncBounds = {1, 8, 32, 128, 1'024, 65'536}; // ms
-            for (const auto& item : {
+                    std::make_pair(&VPutUserDataLatencyHistogram,  "PutUserData" ),
                     std::make_pair(&VGetAsyncLatencyHistogram,     "GetAsync"    ),
                     std::make_pair(&VGetDiscoverLatencyHistogram,  "GetDiscover" ),
                     std::make_pair(&VGetLowLatencyHistogram,       "GetLow"      ),
                     std::make_pair(&VPutAsyncBlobLatencyHistogram, "PutAsyncBlob")
                     }) {
-                *item.first = std::make_shared<NVDiskMon::TLtcHisto>(asyncCounters, "handleclass", item.second, asyncBounds);
+                if (IsAsyncHandleClass(item.second)) {
+                    *item.first = std::make_shared<TLtcHisto>(asyncCounters, "handleclass", item.second,
+                        GetAsyncLatencyHistBounds());
+                } else {
+                    *item.first = std::make_shared<TLtcHisto>(counters, "handleclass", item.second, type);
+                }
             }
+        }
+
+        bool THistograms::IsAsyncHandleClass(TStringBuf handleClass) {
+            return handleClass == "GetAsync" || handleClass == "GetDiscover"
+                || handleClass == "GetLow" || handleClass == "PutAsyncBlob";
+        }
+
+        NMonitoring::TBucketBounds THistograms::GetAsyncLatencyHistBounds() {
+            // Background bounds are fixed independently of the media's foreground configuration.
+            return {1, 8, 32, 128, 1'024, 65'536}; // ms
         }
 
         const NVDiskMon::TLtcHistoPtr &THistograms::GetHistogram(NKikimrBlobStorage::EGetHandleClass handleClass) const {

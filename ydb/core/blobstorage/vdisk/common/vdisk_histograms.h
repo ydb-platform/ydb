@@ -20,6 +20,9 @@ namespace NKikimr {
             const NVDiskMon::TLtcHistoPtr &GetHistogram(NKikimrBlobStorage::EPutHandleClass handleClass) const;
             void UpdateCounters(TInstant now);
 
+            static bool IsAsyncHandleClass(TStringBuf handleClass);
+            static NMonitoring::TBucketBounds GetAsyncLatencyHistBounds();
+
             NVDiskMon::TLtcHistoPtr VGetDiscoverLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VGetFastLatencyHistogram;
             NVDiskMon::TLtcHistoPtr VGetAsyncLatencyHistogram;

@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_histograms.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -112,8 +113,7 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskConfig>& config,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             const TString& handleClass) {
-            const bool async = handleClass == "GetAsync" || handleClass == "GetDiscover"
-                || handleClass == "GetLow" || handleClass == "PutAsyncBlob";
+            const bool async = NVDiskMon::THistograms::IsAsyncHandleClass(handleClass);
             auto group = GetServiceCounters(counters, async ? "vdisks_async" : "vdisks");
             group = FindSubgroup(group, "storagePool", config->BaseInfo.StoragePoolName);
             group = FindSubgroup(group, "group", Sprintf("%09" PRIu32, info->GroupID.GetRawId()));

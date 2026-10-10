@@ -1,5 +1,6 @@
 #include "vdisk_histogram_latency.h"
 #include "vdisk_histograms.h"
+#include "vdisk_context.h"
 
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 
@@ -10,13 +11,26 @@ namespace NKikimr::NVDiskMon {
 
     Y_UNIT_TEST_SUITE(TVDiskLatencyCounters) {
 
+        Y_UNIT_TEST(AsyncCountersRemainVisibleWithoutSeparateRoot) {
+            auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+            auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto context = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters,
+                TVDiskID(0, 1, 0, 0, 0), nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
+            UNIT_ASSERT(context->VDiskAsyncCounters == counters);
+            for (const auto* handleClass : {"GetAsync", "GetDiscover", "GetLow", "PutAsyncBlob"}) {
+                auto group = counters->FindSubgroup("handleclass", handleClass);
+                UNIT_ASSERT_C(group, handleClass);
+                UNIT_ASSERT(group->FindSubgroup("subsystem", "latency_histo")->FindHistogram("LatencyMs"));
+            }
+        }
+
         Y_UNIT_TEST(AsyncClassesUseSeparateCountersAndCoarseBounds) {
             for (auto type : {NPDisk::DEVICE_TYPE_UNKNOWN, NPDisk::DEVICE_TYPE_ROT,
                     NPDisk::DEVICE_TYPE_SSD, NPDisk::DEVICE_TYPE_NVME}) {
                 auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
                 auto asyncCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
                 THistograms histograms(counters, asyncCounters, type);
-                const NMonitoring::TBucketBounds asyncBounds = {1, 8, 32, 128, 1'024, 65'536};
+                const auto asyncBounds = THistograms::GetAsyncLatencyHistBounds();
                 const auto foregroundBounds = GetCommonLatencyHistBounds(type);
 
                 auto check = [&](const TLtcHistoPtr& histogram, const TString& handleClass, bool async) {

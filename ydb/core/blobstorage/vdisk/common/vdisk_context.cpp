@@ -40,7 +40,7 @@ namespace NKikimr {
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
         , VDiskCounters(vdiskCounters)
-        , VDiskAsyncCounters(vdiskAsyncCounters ? std::move(vdiskAsyncCounters) : MakeIntrusive<::NMonitoring::TDynamicCounters>())
+        , VDiskAsyncCounters(vdiskAsyncCounters ? std::move(vdiskAsyncCounters) : vdiskCounters)
         , VDiskSpaceReportCounters(std::move(vdiskSpaceReportCounters))
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , Histograms(VDiskCounters, VDiskAsyncCounters, type)

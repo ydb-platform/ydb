@@ -17,5 +17,6 @@ struct TBlockArrayTree {
 };
 
 arrow::Datum ToChunkedArray(TBlockArrayTree& tree, arrow::MemoryPool* pool);
+arrow::Datum ToChunkedArray(TBlockArrayTree& tree, const std::shared_ptr<arrow::ArrayData>& emptyPayload);
 
 } // namespace NYql::NUdf

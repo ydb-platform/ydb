@@ -10,6 +10,7 @@
 namespace NKikimr::NMiniKQL {
     class TTypeEnvironment;
     class THolderFactory;
+    enum class EValuePackerVersion;
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
@@ -44,6 +45,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
     TVector<TColumnInfo>&& keyColumns, const  NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NKikimr::NMiniKQL::EValuePackerVersion packerVersion,
     TMaybe<ui8> minFillPercentage,
     const NDqProto::TTaskOutputHashPartition& hashPartition,
     NUdf::IPgBuilder* pgBuilder

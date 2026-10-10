@@ -162,6 +162,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/services/nbs/classic_grpc_service_factory.h>
@@ -2198,8 +2199,11 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemoryControllerInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    auto workloadManagerGateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+    AppData->WorkloadManagerGateway = workloadManagerGateway;
+
     if (serviceMask.EnableWorkloadManagerService) {
-        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig));
+        sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig, workloadManagerGateway));
     }
 
     if (serviceMask.EnableKqp) {

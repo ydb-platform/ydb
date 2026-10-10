@@ -248,6 +248,21 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceSubscriptions) {
         UNIT_ASSERT_C(!response->Get()->Config, "Unexpected pool config");
         UNIT_ASSERT_C(!response->Get()->SecurityObject, "Unexpected security object");
     }
+
+    // Subscribe on a missing pool: the workload service replies with TEvUpdatePoolInfo without config and security object.
+    Y_UNIT_TEST(TestResourcePoolSubscriptionNotExistingPool) {
+        auto ydb = TYdbSetupSettings().Create();
+        auto& runtime = *ydb->GetRuntime();
+        const auto& edgeActor = runtime.AllocateEdgeActor();
+
+        runtime.Send(MakeServiceId(runtime.GetNodeId()), edgeActor, new TEvSubscribeOnPoolChanges(ydb->GetSettings().DomainName_, "another_pool_id"));
+
+        const auto& response = runtime.GrabEdgeEvent<TEvUpdatePoolInfo>(edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_C(response, "Subscription update not found");
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->PoolId, "another_pool_id");
+        UNIT_ASSERT_C(!response->Get()->Config, "Unexpected pool config");
+        UNIT_ASSERT_C(!response->Get()->SecurityObject, "Unexpected security object");
+    }
 }
 
 }  // namespace NKikimr::NWorkloadManager

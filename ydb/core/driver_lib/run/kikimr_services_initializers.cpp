@@ -91,6 +91,7 @@
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -2536,11 +2537,18 @@ void TQuoterServiceInitializer::InitializeServices(NActors::TActorSystemSetup* s
     );
 }
 
-TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig)
+TWorkloadManagerServiceInitializer::TWorkloadManagerServiceInitializer(
+    const TKikimrRunConfig& runConfig,
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway)
     : IKikimrServicesInitializer(runConfig)
+    , Gateway_(std::move(gateway))
 {}
 
 void TWorkloadManagerServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.push_back(std::make_pair(
+        NWorkloadManager::MakeWorkloadManagerStateActorId(NodeId),
+        TActorSetupCmd(NWorkloadManager::CreateWorkloadManagerStateActor(Gateway_), TMailboxType::HTSwap, appData->UserPoolId)));
+
     auto workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData->Counters));
     setup->LocalServices.push_back(std::make_pair(
         NWorkloadManager::MakeServiceId(NodeId),

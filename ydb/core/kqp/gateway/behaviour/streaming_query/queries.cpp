@@ -1012,8 +1012,15 @@ private:
         Tracking->SetObjectGeneration(path.GetVersion().GetStreamingQueryVersion());
         Tracking->SetRequestGeneration(Generation);
         Tracking->SetOperationOwner(owner);
+        Tracking->MutableProperties().reserve(entry.StreamingQueryInfo->Description.GetProperties().PropertiesSize());
         for (const auto& [key, value] : entry.StreamingQueryInfo->Description.GetProperties().GetProperties()) {
             Tracking->MutableProperties().emplace(key, value);
+        }
+
+        if (UserToken) {
+            NACLib::TUserToken token(UserToken->GetUserSID(), UserToken->GetGroupSIDs());
+            token.SaveSerializationInfo();
+            Tracking->SetUserToken(std::move(token));
         }
 
         Navigation = ENavigation::Database;
@@ -3142,14 +3149,8 @@ private:
 
                 auto& properties = *create.MutableProperties()->MutableProperties();
                 properties.erase(TStreamingQueryConfig::TProperties::InflightOperation);
-                properties.erase(TStreamingQueryConfig::TProperties::OperationOwnerUserToken);
             } else {
                 ActorIdToProto(TBase::SelfId(), create.MutableOperationOwnerActorId());
-                auto& properties = *create.MutableProperties()->MutableProperties();
-                properties.erase(TStreamingQueryConfig::TProperties::OperationOwnerUserToken);
-                if (const auto& token = Context.GetUserToken()) {
-                    properties[TStreamingQueryConfig::TProperties::OperationOwnerUserToken] = NACLib::TUserToken(token->GetUserSID(), token->GetGroupSIDs()).SerializeAsString();
-                }
             }
         }
 
@@ -3641,12 +3642,7 @@ void DoDropStreamingQuery(const NKikimrSchemeOp::TModifyScheme& schemeTx, IStrea
 }
 
 void DoTrackStreamingQueryOperation(const TString& queryName, IStreamingQueryOperationController::TPtr controller, const NMetadata::NModifications::IOperationsManager::TOperationTrackContext& context) {
-    auto externalContext = context.GetExternalData();
-
-    if (const auto it = context.GetProperties().find(TStreamingQueryConfig::TProperties::OperationOwnerUserToken); it != context.GetProperties().end()) {
-        externalContext.SetUserToken(NACLib::TUserToken(it->second));
-    }
-
+    const auto& externalContext = context.GetExternalData();
     externalContext.GetActorSystem()->Register(new TStreamingOperationTrackerActor(queryName, externalContext, std::move(controller), {
         .SchemeShardGeneration = context.GetRequestGeneration(),
         .SchemeTxId = context.GetSchemeTxId(),

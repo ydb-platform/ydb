@@ -382,7 +382,7 @@ runs:
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        YA_MAKE_COMMAND="\"$YA_BIN\" make ${params[@]}"
+        YA_MAKE_COMMAND="$YA_BIN make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then

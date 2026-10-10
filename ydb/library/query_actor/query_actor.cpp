@@ -8,6 +8,12 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
+#include <google/protobuf/util/time_util.h>
+
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT LogComponent
 
 namespace NKikimr {
@@ -212,7 +218,7 @@ void TQueryBase::RunQuery() {
     }
 }
 
-void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl) {
+void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxControl txControl, TDuration operationTimeout) {
     using TExecuteDataQueryRequest = TGrpcRequestOperationCall<Table::ExecuteDataQueryRequest, Table::ExecuteDataQueryResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
@@ -228,6 +234,12 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     request.set_session_id(SessionId);
     *request.mutable_query()->mutable_yql_text() = std::move(sql);
     request.mutable_query_cache_policy()->set_keep_in_cache(true);
+
+    if (operationTimeout) {
+        const auto maxTimeout = TDuration::Seconds(google::protobuf::util::TimeUtil::kDurationMaxSeconds);
+        *request.mutable_operation_params()->mutable_operation_timeout() =
+            NProtoInterop::CastToProto(std::min(operationTimeout, maxTimeout));
+    }
 
     if (params) {
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());

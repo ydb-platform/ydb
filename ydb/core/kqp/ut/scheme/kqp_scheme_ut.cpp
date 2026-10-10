@@ -5135,8 +5135,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             BuildIndexRequest.Wait();
         }
 
+        // Called from RunCall's pool thread while the main thread dispatches events: a plain Send would run
+        // the recipient right here, concurrently with the dispatcher. SendAsync only queues the event.
         void ContinueBuildIndex() {
-            GetTestServer().GetRuntime()->Send(BuildIndexRequestEvent.Release());
+            GetTestServer().GetRuntime()->SendAsync(BuildIndexRequestEvent.Release());
         }
 
         void WaitValidateIndex() {
@@ -5144,7 +5146,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         void ContinueValidateIndex() {
-            GetTestServer().GetRuntime()->Send(ValidateIndexRequestEvent.Release());
+            GetTestServer().GetRuntime()->SendAsync(ValidateIndexRequestEvent.Release());
         }
 
         ui64 GetValidateIndexTabletId() const {

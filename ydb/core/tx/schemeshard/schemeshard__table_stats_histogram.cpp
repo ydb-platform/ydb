@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "index/index_build_info.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -194,9 +195,45 @@ private:
 }; // TTxStorePartitionStats
 
 
+TSmallVec<NScheme::TTypeInfo> GetKeyColumnTypes(const TTableInfo& tableInfo);
+
 void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     const auto& rec = msg->Record;
+    if (rec.HasHnswIndexBuildId()) {
+        const auto it = IndexBuilds.find(TIndexBuildId(rec.GetHnswIndexBuildId()));
+        if (it == IndexBuilds.end()) {
+            return;
+        }
+        auto& buildInfo = *it->second;
+        if (buildInfo.State != TIndexBuildInfo::EState::Applying || !buildInfo.ApplyTxDone
+                || buildInfo.HnswProbeRound != rec.GetHnswProbeRound()
+                || !buildInfo.HnswProbeTablets.contains(rec.GetDatashardId())
+                || ui64(buildInfo.HnswPostingPathId.OwnerId) != rec.GetTableOwnerId()
+                || ui64(buildInfo.HnswPostingPathId.LocalPathId) != rec.GetTableLocalId()) {
+            return;
+        }
+        auto& status = buildInfo.HnswBuildStatuses[rec.GetDatashardId()];
+        if (rec.GetFollowerId()) {
+            status.FollowerBuilds[rec.GetFollowerId()] = rec.GetHnswBuildInProgress();
+            return;
+        }
+        status.LeaderReported = true;
+        status.Followers = rec.GetHnswFollowersCount();
+        status.StatisticsDisabled = rec.GetHnswStatisticsDisabled();
+        status.StatisticsReady = status.StatisticsDisabled || (rec.GetFullStatsReady() && rec.GetHnswStatsFresh());
+        status.Building = rec.GetHnswBuildInProgress();
+        status.ShardState = rec.GetShardState();
+        status.DataSize = rec.GetTableStats().GetDataSize();
+        if (const auto table = Tables.find(buildInfo.HnswPostingPathId); table != Tables.end()) {
+            status.CanSplit = !GetSplitBoundaryBySize(rec.GetTableStats(), GetKeyColumnTypes(*table->second)).GetBuffer().empty();
+        }
+        if (!rec.GetHnswStatsFresh() || rec.GetShardState() != NKikimrTxDataShard::Ready) {
+            return;
+        }
+        // Also pass fresh histograms through the ordinary split policy. This
+        // lets size splits settle before the build operation reports success.
+    }
 
     TabletCounters->Percentile()[COUNTER_GET_TABLE_STATS_RESULT_ARENA_SPACE_USED].IncrementFor(msg->Arena->Get()->SpaceUsed());
 

@@ -5908,6 +5908,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
+    EnableHnswIndex = appData->FeatureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
@@ -5923,6 +5924,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     MaxBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxBuildIndexShardsInFlight();
     MaxStoredIndexBuilds = appData->SchemeShardConfig.GetMaxStoredIndexBuilds();
+    HnswIndexBuildWaitTimeout = TDuration::Seconds(appData->SchemeShardConfig.GetHnswIndexBuildWaitTimeoutSeconds());
     ConfigureCondErase(appData->SchemeShardConfig, ctx);
 
     SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
@@ -6218,6 +6220,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvIndexBuilder::TEvListRequest, Handle);
         HFuncTraced(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
         HFuncTraced(TEvPrivate::TEvIndexBuildingMakeABill, Handle);
+        HFuncTraced(TEvPrivate::TEvProgressHnswIndexBuild, Handle);
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
@@ -8435,6 +8438,30 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
     }
 
+    // Forwarded only for the alter that publishes a vector index posting table,
+    // so the shard can build its in-memory HNSW index (see FinalizeIndexImplTable).
+    if (alterData->TableDescriptionFull.Defined()
+        && alterData->TableDescriptionFull->HasVectorIndexKmeansTreeDescription())
+    {
+        proto->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
+            alterData->TableDescriptionFull->GetVectorIndexKmeansTreeDescription());
+        proto->SetVectorIndexHnsw(alterData->TableDescriptionFull->GetVectorIndexHnsw());
+        proto->SetVectorIndexEmbeddingColumn(
+            alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumn());
+        if (alterData->TableDescriptionFull->HasVectorIndexEmbeddingColumnId()) {
+            proto->SetVectorIndexEmbeddingColumnId(
+                alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumnId());
+        }
+        proto->MutableVectorIndexTablePathId()->CopyFrom(
+            alterData->TableDescriptionFull->GetVectorIndexTablePathId());
+        proto->SetVectorIndexTablePath(
+            alterData->TableDescriptionFull->GetVectorIndexTablePath());
+        proto->MutableVectorIndexPathId()->CopyFrom(
+            alterData->TableDescriptionFull->GetVectorIndexPathId());
+        proto->SetVectorIndexPath(
+            alterData->TableDescriptionFull->GetVectorIndexPath());
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;
@@ -8525,6 +8552,37 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
         tinfo->TableDescription.SetPath(PathToString(pinfo));
     }
     tableDescr->CopyFrom(tinfo->TableDescription);
+
+    // A split creates the destination from SchemeShard metadata, not from the
+    // source tablet's schema. Recover posting-table cache settings from the
+    // owning index, including indexes created before these settings were
+    // persisted by DataShard.
+    if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
+        const auto indexIt = Indexes.find(pinfo->ParentPathId);
+        if (indexIt != Indexes.end()
+                && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                && indexIt->second->State == NKikimrSchemeOp::EIndexStateReady
+                && !indexIt->second->IndexKeys.empty()) {
+            const auto& index = *indexIt->second;
+            const auto& embedding = index.IndexKeys.back();
+            for (const auto& [columnId, column] : tinfo->Columns) {
+                if (column.Name != embedding || column.IsDropped()) {
+                    continue;
+                }
+                tableDescr->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
+                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription));
+                tableDescr->SetVectorIndexHnsw(true);
+                tableDescr->SetVectorIndexEmbeddingColumn(embedding);
+                tableDescr->SetVectorIndexEmbeddingColumnId(columnId);
+                const auto indexPath = PathsById.at(pinfo->ParentPathId);
+                indexPath->PathId.ToProto(tableDescr->MutableVectorIndexPathId());
+                tableDescr->SetVectorIndexPath(PathToString(indexPath));
+                indexPath->ParentPathId.ToProto(tableDescr->MutableVectorIndexTablePathId());
+                tableDescr->SetVectorIndexTablePath(PathToString(PathsById.at(indexPath->ParentPathId)));
+                break;
+            }
+        }
+    }
 
     if (rangeBegin.empty()) {
         // First partition starts with <NULL, NULL, ..., NULL> key
@@ -8951,6 +9009,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
+        HnswIndexBuildWaitTimeout = TDuration::Seconds(schemeShardConfig.GetHnswIndexBuildWaitTimeoutSeconds());
         ConfigureCondErase(schemeShardConfig, ctx);
     }
 
@@ -9003,6 +9062,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
+    EnableHnswIndex = featureFlags.GetEnableHnswIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
     EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();

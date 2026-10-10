@@ -6682,7 +6682,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndexSql) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected at the KQP exec layer.
         NKikimrConfig::TFeatureFlags featureFlags;
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
@@ -6710,7 +6710,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_UNEQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(),
-                "only supported for vector_kmeans_tree");
+                "only supported for vector indexes");
         }
     }
 

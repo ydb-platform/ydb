@@ -380,6 +380,7 @@ bool TSnapshotManager::AdvanceWatermark(NTable::TDatabase& db, const TRowVersion
 
     NIceDb::TNiceDb nicedb(db);
     SetLowWatermark(nicedb, to);
+    db.OnCommit([self = Self] { self->PruneHnswIndexes(); });
 
     return true;
 }

@@ -14,10 +14,12 @@ if __name__ == '__main__':
                         help='Mode: standalone (default), generate (generate + dump), load (restore + run), s3 (import from S3)')
     parser.add_argument('--data-dir', default=None, help='Directory for dump/restore data (required for generate/load modes)')
     parser.add_argument('--targets', default=1000, type=int, help='Number of query vectors for run select (default: 1000)')
+    parser.add_argument('--client-timeout', default='30s', help='Per-query client timeout, applied to warmup and measurement (default: 30s)')
     parser.add_argument('--warmup', default=0, type=int, help='Warmup duration in seconds before measured run (default: 0, disabled)')
     parser.add_argument('--rows', default=10000, type=int, help='Number of rows in generated database (default: 10000)')
     parser.add_argument('--threads', default=10, type=int, help='Number of threads for load testing (default: 10)')
     parser.add_argument('--index-type', default=None, help='Type of vector index (default: KmeansTree)')
+    parser.add_argument('--min-rows', default=None, type=int, help='Minimum partition rows for HNSW acceleration')
     parser.add_argument('--clusters', default=None, type=int, help='Number of clusters in kmeans tree (default: server auto-detect)')
     parser.add_argument('--levels', default=None, type=int, help='Number of levels in kmeans tree (default: server auto-detect)')
     parser.add_argument('--s3-endpoint', default=None, help='S3 endpoint for dataset import (required for --mode=s3)')
@@ -47,8 +49,8 @@ if __name__ == '__main__':
 
     workload = YdbVectorWorkload(args.endpoint, args.database, duration=args.duration,
                                  mode=args.mode, data_dir=args.data_dir, targets=args.targets,
-                                 warmup=args.warmup, rows=args.rows, threads=args.threads,
-                                 index_type=args.index_type,
+                                 warmup=args.warmup, rows=args.rows, threads=args.threads, client_timeout=args.client_timeout,
+                                 index_type=args.index_type, min_rows=args.min_rows,
                                  clusters=args.clusters, levels=args.levels,
                                  s3_endpoint=args.s3_endpoint, s3_bucket=args.s3_bucket,
                                  s3_source=args.s3_source, s3_destination=args.s3_destination,

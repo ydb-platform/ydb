@@ -59,6 +59,7 @@ namespace TEvPrivate {
         EvMoveShardToStoragePool,
         EvPeriodicTableStatsParsed,
         EvRevisitSplitMerge,
+        EvProgressHnswIndexBuild,
         EvEnd
     };
 
@@ -105,6 +106,11 @@ namespace TEvPrivate {
         explicit TEvFlushConditionalEraseBatch(const TInstant& batchStartTime)
             : BatchStartTime(batchStartTime)
         { }
+    };
+
+    struct TEvProgressHnswIndexBuild : public TEventLocal<TEvProgressHnswIndexBuild, EvProgressHnswIndexBuild> {
+        ui64 BuildId;
+        explicit TEvProgressHnswIndexBuild(ui64 buildId) : BuildId(buildId) {}
     };
 
     struct TEvIndexBuildingMakeABill: public TEventLocal<TEvIndexBuildingMakeABill, EvIndexBuildBilling> {

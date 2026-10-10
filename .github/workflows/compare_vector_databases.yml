@@ -1,0 +1,183 @@
+name: Compare YDB and PostgreSQL vector search
+
+on:
+  workflow_dispatch:
+    inputs:
+      ydb_endpoint:
+        description: 'YDB endpoint (grpc://host:2135 or grpcs://host:2135)'
+        type: string
+        required: true
+      ydb_database:
+        description: 'Existing YDB database path'
+        type: string
+        required: true
+      pg_dsn_secret:
+        description: 'Name of the GitHub secret containing PostgreSQL PG_DSN'
+        type: string
+        default: PG_DSN
+      dataset:
+        description: 'Dataset to load and compare'
+        type: choice
+        options: [text2image-10M, yfcc-10M, sparse]
+        default: text2image-10M
+      ydb_index:
+        description: 'YDB index type (PostgreSQL always uses pgvector HNSW)'
+        type: choice
+        options: [hnsw, vector_kmeans_tree]
+        default: hnsw
+      s3_endpoint:
+        description: 'S3 endpoint'
+        type: string
+        default: https://storage.yandexcloud.net
+      s3_bucket:
+        description: 'Bucket containing ydb_vector_data/ and pgbench_data/ exports'
+        type: string
+        required: true
+      s3_prefix:
+        description: 'Common object prefix before the two export directories'
+        type: string
+        default: ''
+      s3_unsigned:
+        description: 'Download from a public bucket without S3 credentials'
+        type: boolean
+        default: false
+      duration:
+        description: 'Measured seconds per backend per iteration'
+        type: number
+        default: 100
+      warmup:
+        description: 'Warmup seconds before each measurement'
+        type: number
+        default: 60
+      iterations:
+        description: 'Measured iterations; median QPS is reported'
+        type: number
+        default: 3
+      threads:
+        description: 'Concurrent clients for each backend'
+        type: number
+        default: 50
+      targets:
+        description: 'Size of the query ID range used by both backends'
+        type: number
+        default: 1000
+      limit:
+        description: 'Top K neighbors'
+        type: number
+        default: 10
+      ef_search:
+        description: 'Search breadth for HNSW on both backends'
+        type: number
+        default: 50
+      levels:
+        description: 'YDB index construction levels'
+        type: number
+        default: 1
+      clusters:
+        description: 'YDB index construction clusters (not physical partitions)'
+        type: number
+        default: 10
+      keep_data:
+        description: 'Keep this run’s newly created tables and indexes after completion'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Do not overlap this benchmark against the same remote services.
+concurrency:
+  group: vector-external-comparison
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    runs-on: [self-hosted, auto-provisioned, build-preset-release]
+    timeout-minutes: 1440
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check connection settings
+        env:
+          YDB_ENDPOINT: ${{ inputs.ydb_endpoint }}
+          YDB_DATABASE: ${{ inputs.ydb_database }}
+          PG_DSN: ${{ secrets[inputs.pg_dsn_secret] }}
+        run: |
+          set -euo pipefail
+          : "${YDB_ENDPOINT:?Set ydb_endpoint}"
+          : "${YDB_DATABASE:?Set ydb_database}"
+          : "${PG_DSN:?Configure the PostgreSQL secret selected by pg_dsn_secret}"
+          mkdir -p "$RUNNER_TEMP/vector-comparison-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/results"
+      - name: Install benchmark clients
+        run: |
+          set -euo pipefail
+          if ! psql --version >/dev/null 2>&1 || ! pgbench --version >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client postgresql-contrib libpq5
+          fi
+          python3 -m venv "$RUNNER_TEMP/vector-comparison-venv"
+          "$RUNNER_TEMP/vector-comparison-venv/bin/python" -m pip install 'boto3>=1.34,<2'
+      - name: Test orchestration
+        run: |
+          "$RUNNER_TEMP/vector-comparison-venv/bin/python" -m unittest discover \
+            -s ydb/tests/stress/vector_compare_external -p 'test_*.py' -v
+      - name: Build YDB CLI
+        run: ./ya make -r ydb/apps/ydb
+      - name: Download, load, build indexes, and benchmark
+        env:
+          YDB_ENDPOINT: ${{ inputs.ydb_endpoint }}
+          YDB_DATABASE: ${{ inputs.ydb_database }}
+          YDB_TOKEN: ${{ secrets.VECTOR_BENCH_YDB_TOKEN }}
+          PG_DSN: ${{ secrets[inputs.pg_dsn_secret] }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.VECTOR_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.VECTOR_S3_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.VECTOR_S3_SESSION_TOKEN }}
+          DATASET: ${{ inputs.dataset }}
+          YDB_INDEX: ${{ inputs.ydb_index }}
+          S3_ENDPOINT: ${{ inputs.s3_endpoint }}
+          S3_BUCKET: ${{ inputs.s3_bucket }}
+          S3_PREFIX: ${{ inputs.s3_prefix }}
+          S3_UNSIGNED: ${{ inputs.s3_unsigned }}
+          DURATION: ${{ inputs.duration }}
+          WARMUP: ${{ inputs.warmup }}
+          ITERATIONS: ${{ inputs.iterations }}
+          THREADS: ${{ inputs.threads }}
+          TARGETS: ${{ inputs.targets }}
+          TOP_K: ${{ inputs.limit }}
+          EF_SEARCH: ${{ inputs.ef_search }}
+          LEVELS: ${{ inputs.levels }}
+          CLUSTERS: ${{ inputs.clusters }}
+          KEEP_DATA: ${{ inputs.keep_data }}
+        run: |
+          set -euo pipefail
+          extra=()
+          if [[ "$S3_UNSIGNED" == true ]]; then extra+=(--s3-unsigned); fi
+          if [[ "$KEEP_DATA" == true ]]; then extra+=(--keep-data); fi
+          "$RUNNER_TEMP/vector-comparison-venv/bin/python" \
+            ydb/tests/stress/vector_compare_external/run.py \
+            --dataset "$DATASET" --ydb-index "$YDB_INDEX" \
+            --ydb-bin "$GITHUB_WORKSPACE/ydb/apps/ydb/ydb" \
+            --s3-endpoint "$S3_ENDPOINT" --s3-bucket "$S3_BUCKET" --s3-prefix "$S3_PREFIX" \
+            --duration "$DURATION" --warmup "$WARMUP" --iterations "$ITERATIONS" \
+            --threads "$THREADS" --targets "$TARGETS" --limit "$TOP_K" --ef-search "$EF_SEARCH" \
+            --levels "$LEVELS" --clusters "$CLUSTERS" \
+            --output "$RUNNER_TEMP/vector-comparison-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/results" "${extra[@]}"
+      - name: Publish comparison summary
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/vector-comparison-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}/results/report.md"
+          if [[ -f "$report" ]]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Benchmark did not reach measurement. See the failed step.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload results and sanitized logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vector-comparison-${{ inputs.dataset }}-${{ inputs.ydb_index }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/vector-comparison-${{ github.run_id }}-${{ github.run_attempt }}/results/
+          if-no-files-found: warn
+          retention-days: 14

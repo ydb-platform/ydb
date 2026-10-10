@@ -929,7 +929,48 @@ TJoinTestData InnerJoinEqualNullsTestData() {
     return td;
 }
 
-// EqualNulls still distinguishes NULL from a present value (including 0).
+TJoinTestData InnerJoinEqualNullsAfterTupleKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    TType* ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    TType* tupleType = pb.NewTupleType({ui64Type, ui64Type});
+    TType* optionalType = pb.NewOptionalType(ui64Type);
+
+    const auto tuple = [&](ui64 first, ui64 second) {
+        return pb.NewTuple({pb.NewDataLiteral<ui64>(first), pb.NewDataLiteral<ui64>(second)});
+    };
+    const auto opt = [&](std::optional<ui64> key) {
+        return key ? pb.NewOptional(pb.NewDataLiteral<ui64>(*key)) : pb.NewEmptyOptional(optionalType);
+    };
+    const auto makeList = [&](TType* rowType, TRuntimeNode::TList items) {
+        const auto list = pb.NewList(rowType, items);
+        return TypeAndValue{list.GetStaticType(), setup.BuildGraph(list)->GetValue()};
+    };
+
+    const auto rowType = pb.NewTupleType({tupleType, optionalType});
+    td.Left = makeList(rowType, {
+        pb.NewTuple({tuple(1, 2), opt(std::nullopt)}),
+        pb.NewTuple({tuple(1, 2), opt(5)}),
+        pb.NewTuple({tuple(3, 4), opt(7)}),
+    });
+    td.Right = makeList(rowType, {
+        pb.NewTuple({tuple(1, 2), opt(std::nullopt)}),
+        pb.NewTuple({tuple(1, 3), opt(std::nullopt)}),
+        pb.NewTuple({tuple(3, 4), opt(7)}),
+    });
+    td.Result = makeList(pb.NewTupleType({tupleType, optionalType, tupleType, optionalType}), {
+        pb.NewTuple({tuple(1, 2), opt(std::nullopt), tuple(1, 2), opt(std::nullopt)}),
+        pb.NewTuple({tuple(3, 4), opt(7), tuple(3, 4), opt(7)}),
+    });
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {1};
+    return td;
+}
 TJoinTestData InnerJoinEqualNullsNullVsZeroTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -2599,6 +2640,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNulls, BlockJoin) {
         Test(InnerJoinEqualNullsTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsAfterTupleKey) {
+        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), /*blockJoin=*/false);
     }
 
     // arrow builders zero null slotsPoison

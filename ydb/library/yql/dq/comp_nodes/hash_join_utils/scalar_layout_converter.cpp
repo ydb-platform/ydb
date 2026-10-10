@@ -805,7 +805,13 @@ public:
     }
 
     void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
-        TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
+        TVector<ui32> flattened;
+        for (ui32 inputColumn : equalNullsJoinKeys) {
+            Y_ENSURE(inputColumn < InnerMapping_.size(), "EqualNulls column index is out of range");
+            const auto& mapping = InnerMapping_[inputColumn];
+            flattened.insert(flattened.end(), mapping.begin(), mapping.end());
+        }
+        TupleLayout_->ApplyEqualNulls(flattened);
     }
 
 private:

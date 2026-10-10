@@ -117,11 +117,11 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
 }
 
-NOlap::NActualizer::TMoveDataQueueSizes TColumnShard::RefreshMoveDataQueueSizes() {
+NOlap::NActualizer::TMoveDataQueueSizes TColumnShard::UpdateMoveDataQueueSizes() {
     if (!HasIndex()) {
         return {};
     }
-    return MutableIndexAs<NOlap::TColumnEngineForLogs>().RefreshMoveDataQueueSizes();
+    return MutableIndexAs<NOlap::TColumnEngineForLogs>().UpdateMoveDataQueueSizes();
 }
 
 void TColumnShard::CheckMoveDataGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
@@ -219,7 +219,7 @@ void TMoveDataDriver::StartAndCheckGate(const TActorContext& ctx) {
         Self->RestartMoveDataActualizer();
     }
     // One index walk per turn: prune retired ids and use the sizes to select work and check the gate.
-    const NOlap::NActualizer::TMoveDataQueueSizes queues = Self->RefreshMoveDataQueueSizes();
+    const NOlap::NActualizer::TMoveDataQueueSizes queues = Self->UpdateMoveDataQueueSizes();
     if (queues.Pending) {
         Self->SetupMoveDataMetadata();
     }

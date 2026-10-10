@@ -190,10 +190,10 @@ public:
         }
     }
 
-    NActualizer::TMoveDataQueueSizes RefreshMoveDataQueueSizes() {
+    NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes() {
         NActualizer::TMoveDataQueueSizes result;
         for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
-            result += granule->RefreshMoveDataQueueSizes();
+            result += granule->UpdateMoveDataQueueSizes();
         }
         return result;
     }

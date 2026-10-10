@@ -182,7 +182,6 @@ void THive::RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EH
         {"details", event.Details});
     RecentTabletEvents.PushBack(TRecentTabletEvent{.TabletId = tablet.GetFullTabletId(), .Event = event});
     if (!tablet.EventHistory) {
-        // a config change does not resize already constructed histories
         const ui64 historySize = GetTabletEventHistorySize();
         if (historySize == 0) {
             return;
@@ -192,8 +191,7 @@ void THive::RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EH
     tablet.EventHistory->PushBack(event);
 }
 
-// rebuilds an existing history with the new capacity, keeping the newest events that fit; 0 drops the history
-static void ResizeEventHistory(TMaybe<TSimpleRingBuffer<THiveEvent>>& history, ui64 newSize) {
+void ResizeEventHistory(TMaybe<TSimpleRingBuffer<THiveEvent>>& history, ui64 newSize) {
     if (!history) {
         return;
     }

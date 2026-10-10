@@ -151,6 +151,10 @@ struct THiveEvent {
 
 static_assert(sizeof(THiveEvent) <= 16, "THiveEvent is expected to stay compact");
 
+// Rebuilds an existing history with the new capacity, keeping the newest events that fit; 0 drops the history.
+// An undefined history (no events recorded yet) is left as is.
+void ResizeEventHistory(TMaybe<TSimpleRingBuffer<THiveEvent>>& history, ui64 newSize);
+
 struct TRecentNodeEvent {
     TNodeId NodeId = 0;
     THiveEvent Event;

@@ -2911,8 +2911,8 @@ message THiveConfig {
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
     optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
     optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
-    optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history."];
-    optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history."];
+    optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history, values above 5000 are capped."];
+    optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history, values above 5000 are capped."];
 }
 
 message THealthCheckConfig {

@@ -5680,7 +5680,7 @@ public:
     TNodeId NodeId = 0;
     bool Json = false;
 
-    size_t MaxTablets = 100; // per volatile state
+    size_t MaxTablets = 100; // per tablet type
 
     TTxMonEvent_NodeInfo(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)

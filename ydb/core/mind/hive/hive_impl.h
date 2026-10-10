@@ -955,6 +955,10 @@ public:
         return TDuration::MilliSeconds(CurrentConfig.GetTabletRestartsPeriod());
     }
 
+    // upper bound for TabletEventHistorySize / NodeEventHistorySize, applied in BuildCurrentConfig:
+    // a history is allocated per tablet and per node
+    static constexpr ui64 MAX_EVENT_HISTORY_SIZE = 5000;
+
     ui64 GetTabletEventHistorySize() const {
         return CurrentConfig.GetTabletEventHistorySize();
     }

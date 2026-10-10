@@ -842,6 +842,8 @@ void THive::BuildCurrentConfig() {
     const ui64 previousNodeEventHistorySize = GetNodeEventHistorySize();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
+    CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
+    CurrentConfig.SetNodeEventHistorySize(std::min(CurrentConfig.GetNodeEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);

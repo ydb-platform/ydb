@@ -5,7 +5,8 @@ namespace NKikimr::NSchemeShard {
 bool IsSupportedIndex(TPathId pathId, const TSchemeShard* ss) {
     auto indexInfo = ss->Indexes.at(pathId);
     return indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
-            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree ||
+            indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
 }
 
 bool IsSupportedIndex(TPathId pathId, const TOperationContext& context) {

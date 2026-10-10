@@ -2509,7 +2509,7 @@ TShardIdx TTableInfo::PickMostDeferredPartition() {
     ui32 bestWeight = 0;
     TInstant bestCandidate;
     TVector<TShardIdx> stale;
-    for (const auto& [shardIdx, wantsSplit] : tableState.DeferredShards) {
+    for (const auto& shardIdx : std::views::keys(tableState.DeferredShards)) {
         const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
         if (!h) {
             // No per-shard state: the entry is stale by definition; prune it so the table
@@ -2533,13 +2533,7 @@ TShardIdx TTableInfo::PickMostDeferredPartition() {
             if (it == tableState.DeferredShards.end()) {
                 continue;
             }
-            if (it->second.WantsSplit) {
-                if (tableState.SplitDemandCount) {
-                    --tableState.SplitDemandCount;
-                }
-            } else if (tableState.MergeDemandCount) {
-                --tableState.MergeDemandCount;
-            }
+            tableState.DecrementDemandCount(it->second.WantsSplit);
             tableState.DeferredShards.erase(it);
         }
         RecomputeOldestPendingCandidateAt();
@@ -2562,13 +2556,7 @@ void TTableInfo::DropFromSplitMergeState(const TShardIdx& shardIdx) {
         return;
     }
     // Decrement exactly the count that was incremented on insert (stored direction).
-    if (it->second.WantsSplit) {
-        if (tableState.SplitDemandCount) {
-            --tableState.SplitDemandCount;
-        }
-    } else if (tableState.MergeDemandCount) {
-        --tableState.MergeDemandCount;
-    }
+    tableState.DecrementDemandCount(it->second.WantsSplit);
     tableState.DeferredShards.erase(it);
     InvalidateSplitMergePickCache(shardIdx);
     if (tableState.DeferredShards.empty()) {

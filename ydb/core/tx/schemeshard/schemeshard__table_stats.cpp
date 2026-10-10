@@ -145,7 +145,7 @@ private:
 
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MergeRequest(
-    TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
+    TSchemeShard* ss, const TTxId& txId, const TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
 {
     auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->TabletID()));
     auto& record = request->Record;
@@ -433,10 +433,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             {"reason", splitReason},
         );
 
-        Self->NoteSplitDemandDetected();
-        if (DemandTracking) {
-            Self->RecordSplitDemand(pathId, *table, shardIdx, /* byLoad */ true, now);
-        }
+        Self->RecordSplitDemand(*table, shardIdx, /* byLoad */ true, now, DemandTracking);
 
         // The leader and all followers report on the same physical partition (same shardIdx,
         // keyed by TShardIdx, not by FollowerId); mirror the leader path's success/deferralReason
@@ -457,10 +454,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             deferralReason
         );
         if (!success) {
-            Self->NoteSplitMergeDeferral();
-            if (DemandTracking) {
-                Self->RecordSplitDeferral(pathId, *table, shardIdx, deferralReason, now, DemandTracking);
-            }
+            Self->RecordSplitDeferral(pathId, *table, shardIdx, deferralReason, now, DemandTracking);
         }
 
         return true;
@@ -667,20 +661,12 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, now, mergeReason, mergeByLoad)) {
 
-        Self->NoteMergeDemandDetected();
-        if (DemandTracking) {
-            Self->RecordMergeDemand(pathId, *table, shardIdx, mergeByLoad, now);
-        }
+        Self->RecordMergeDemand(*table, shardIdx, mergeByLoad, now, DemandTracking);
 
         if (slotBlocked) {
-            // The slot limit is exhausted: this partition is a deferred candidate. Record it with
-            // the now-known direction so the fair scheduler can service it (round-robin) when a
-            // slot frees, instead of waiting for the next stats cycle (whoever reports first
-            // would otherwise win).
-            Self->NoteSplitMergeDeferral();
-            if (DemandTracking) {
-                Self->RecordMergeDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::InFlightLimit, now, DemandTracking);
-            }
+            // Slot limit exhausted: record the deferral with the now-known direction so the
+            // fair scheduler can service it round-robin when a slot frees.
+            Self->RecordMergeDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::InFlightLimit, now, DemandTracking);
             return true;
         }
 
@@ -693,10 +679,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             );
             // The merge is wanted but cannot start without an internal txId: record the
             // deferral so the fair scheduler retries when txIds are available again.
-            Self->NoteSplitMergeDeferral();
-            if (DemandTracking) {
-                Self->RecordMergeDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::NoCachedTxId, now, DemandTracking);
-            }
+            Self->RecordMergeDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::NoCachedTxId, now, DemandTracking);
             return true;
         }
 
@@ -716,13 +699,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         dbChanges.Apply(Self, txc, ctx);
         MergeOpSideEffects.ApplyOnExecute(Self, txc, ctx);
 
-        if (DemandTracking) {
-            // Only clear the deferred state when the op actually ignited; on rejection the
-            // recorded demand must survive so the shard keeps its fair-scheduling turn.
-            if (response->IsAccepted() || response->IsDone() || response->IsConditionalAccepted()) {
-                for (const TShardIdx& merged : shardsToMerge) {
-                    Self->RecordMergeApplied(pathId, *table, merged, now);
-                }
+        if (DemandTracking && IsOperationIgnited(response)) {
+            for (const TShardIdx& merged : shardsToMerge) {
+                Self->RecordMergeApplied(pathId, *table, merged, now);
             }
         }
 
@@ -741,16 +720,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             {"reason", splitReason},
         );
 
-        Self->NoteSplitDemandDetected();
-        if (DemandTracking) {
-            Self->RecordSplitDemand(pathId, *table, shardIdx, splitByLoad, now);
-        }
+        Self->RecordSplitDemand(*table, shardIdx, splitByLoad, now, DemandTracking);
 
         if (slotBlocked) {
-            Self->NoteSplitMergeDeferral();
-            if (DemandTracking) {
-                Self->RecordSplitDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::InFlightLimit, now, DemandTracking);
-            }
+            Self->RecordSplitDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::InFlightLimit, now, DemandTracking);
             return true;
         }
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
@@ -768,16 +741,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         );
         splitByLoad = true;
 
-        Self->NoteSplitDemandDetected();
-        if (DemandTracking) {
-            Self->RecordSplitDemand(pathId, *table, shardIdx, splitByLoad, now);
-        }
+        Self->RecordSplitDemand(*table, shardIdx, splitByLoad, now, DemandTracking);
 
         if (slotBlocked) {
-            Self->NoteSplitMergeDeferral();
-            if (DemandTracking) {
-                Self->RecordSplitDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::InFlightLimit, now, DemandTracking);
-            }
+            Self->RecordSplitDeferral(pathId, *table, shardIdx, TPartitionSplitMergeState::EDeferralReason::InFlightLimit, now, DemandTracking);
             return true;
         }
     } else {
@@ -815,10 +782,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         deferralReason
     );
     if (!success) {
-        Self->NoteSplitMergeDeferral();
-        if (DemandTracking) {
-            Self->RecordSplitDeferral(pathId, *table, shardIdx, deferralReason, now, DemandTracking);
-        }
+        Self->RecordSplitDeferral(pathId, *table, shardIdx, deferralReason, now, DemandTracking);
     }
 
     return true;
@@ -1129,14 +1093,22 @@ void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
 
 // ===================== Split/merge candidacy memory + fair scheduler =====================
 
-void TSchemeShard::RecordSplitDemand(const TPathId& /*pathId*/, TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now) {
+void TSchemeShard::RecordSplitDemand(TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now, bool demandTracking) {
+    NoteSplitDemandDetected();
+    if (!demandTracking) {
+        return;
+    }
     auto& h = table.MutablePartitionSplitMergeState(shardIdx);
     ++h.SplitCandidateCount;
     h.LastSplitCandidate = now;
     (byLoad ? h.LoadThresholdCross.SplitSide : h.SizeThresholdCross.SplitSide) = now;
 }
 
-void TSchemeShard::RecordMergeDemand(const TPathId& /*pathId*/, TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now) {
+void TSchemeShard::RecordMergeDemand(TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now, bool demandTracking) {
+    NoteMergeDemandDetected();
+    if (!demandTracking) {
+        return;
+    }
     auto& h = table.MutablePartitionSplitMergeState(shardIdx);
     ++h.MergeCandidateCount;
     h.LastMergeCandidate = now;
@@ -1157,31 +1129,23 @@ void TSchemeShard::RecordMergeDeferral(const TPathId& pathId, TTableInfo& table,
 
 void TSchemeShard::RecordSplitMergeDeferralImpl(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,
         bool wantsSplit, TPartitionSplitMergeState::EDeferralReason reason, TInstant now, bool demandTracking) {
+    NoteSplitMergeDeferral();
+    if (!demandTracking) {
+        return;
+    }
     auto& h = table.MutablePartitionSplitMergeState(shardIdx);
     ++h.DeferredCount(wantsSplit);
     h.RecordDeferral(reason);
 
     auto& tableState = table.MutableTableSplitMergeState();
-    const auto [it, newlyDeferred] = tableState.DeferredShards.emplace(
-        shardIdx, TTableSplitMergeState::TDeferredShardInfo{wantsSplit, reason});
-    if (newlyDeferred) {
-        ++tableState.DemandCount(wantsSplit);
+    if (tableState.UpsertDeferredShard(shardIdx, wantsSplit, reason)) {
         if (tableState.DeferredShards.size() == 1) {
             TablesWithDeferredSplitMerge.insert(pathId);
         }
-    } else {
-        if (it->second.WantsSplit != wantsSplit) {
-            // Re-deferral with a changed direction: move the count so the aggregate always
-            // mirrors the latest direction of the deferral.
-            it->second.WantsSplit = wantsSplit;
-            tableState.MoveDemandCount(wantsSplit);
-        }
-        // Refresh the saved reason on re-deferral: the latest evidence wins, and the
-        // revisit path's reason gate must not act on a stale reason.
-        it->second.Reason = reason;
     }
 
-    const TInstant candidate = h.LastCandidate(wantsSplit) ? h.LastCandidate(wantsSplit) : now;
+    const TInstant& last = h.LastCandidate(wantsSplit);
+    const TInstant candidate = last ? last : now;
     if (!tableState.OldestPendingCandidateAt || candidate < tableState.OldestPendingCandidateAt) {
         tableState.OldestPendingCandidateAt = candidate;
     }
@@ -1370,49 +1334,10 @@ public:
                     // TryMergeInline from cached stats; the periodic stats stream refreshes
                     // those) -- and its split-only evidence must not expire their deferral.
                     const auto* deferred = table->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx);
-                    bool reRequestStats = deferred && deferred->WantsSplit;
-                    if (reRequestStats) {
-                        // Reason-aware gating (Finding 20): only slot-related deferrals
-                        // (InFlightLimit, or no recorded reason) are re-driven unconditionally.
-                        // Reasons with their own recovery edge used to wait for that edge --
-                        // but the edge only re-nudges the scheduler, it never resets the
-                        // reason, so the shard was stranded and (being deterministically
-                        // re-picked) starved its siblings (Review B regression). Re-check the
-                        // blocking condition from current state instead: once cleared, the
-                        // shard is serviceable and gets its stats request like an
-                        // InFlightLimit deferral; while blocked, send nothing (a stats round
-                        // trip cannot resolve the condition and would spin at RTT speed).
-                        switch (deferred->Reason) {
-                            case TPartitionSplitMergeState::EDeferralReason::InFlightLimit:
-                                break;  // slot-related: the slot is free in this wave
-                            case TPartitionSplitMergeState::EDeferralReason::PathLocked:
-                                // Lock dropped -> serviceable; still locked -> wait for the
-                                // drop-lock edge.
-                                reRequestStats = !Self->LockedPaths.contains(pathId);
-                                break;
-                            case TPartitionSplitMergeState::EDeferralReason::Borrowed:
-                                // Compaction finished -> serviceable; still borrowed -> wait
-                                // for the compaction-done edge.
-                                reRequestStats = !Self->ShardsWithBorrowed.contains(shardIdx);
-                                break;
-                            case TPartitionSplitMergeState::EDeferralReason::NoCachedTxId:
-                                // txIds replenished -> serviceable; still empty -> nothing to
-                                // propose with (this also makes the Finding 25 replenish
-                                // nudge effective).
-                                reRequestStats = !Self->CachedTxIds.empty();
-                                break;
-                            case TPartitionSplitMergeState::EDeferralReason::ShardLimitPath:
-                            case TPartitionSplitMergeState::EDeferralReason::ShardLimitSubdomain:
-                                // A quota change is not cheaply re-checkable here; the
-                                // periodic stats stream re-drives these once the quota allows.
-                                reRequestStats = false;
-                                break;
-                            default:
-                                reRequestStats = false;
-                                break;
-                        }
-                    }
-                    if (reRequestStats) {
+                    if (deferred
+                        && deferred->WantsSplit
+                        && ShouldReRequestStats(pathId, shardIdx, deferred->Reason)
+                    ) {
                         if (const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx)) {
                             // Key sample is only needed to compute a split boundary; the
                             // re-request is split-wanting only (gated above).
@@ -1456,6 +1381,38 @@ public:
     }
 
 private:
+    // Reason-aware gating: a stats round trip only resolves slot-related deferrals.
+    // Other reasons are re-checked from current state -- the recovery edge re-nudges the
+    // scheduler but never resets the reason, so waiting for it would strand the shard
+    // (and deterministically re-picking it would starve its siblings). While a condition
+    // is still blocked, send nothing: a stats round trip cannot resolve it and would
+    // spin at RTT speed.
+    bool ShouldReRequestStats(const TPathId& pathId, const TShardIdx& shardIdx,
+            TPartitionSplitMergeState::EDeferralReason reason) const {
+        switch (reason) {
+            case TPartitionSplitMergeState::EDeferralReason::InFlightLimit:
+                return true;   // slot-related: the slot is free in this wave
+            case TPartitionSplitMergeState::EDeferralReason::PathLocked:
+                // Lock dropped -> serviceable; still locked -> wait for the drop-lock edge.
+                return !Self->LockedPaths.contains(pathId);
+            case TPartitionSplitMergeState::EDeferralReason::Borrowed:
+                // Compaction finished -> serviceable; still borrowed -> wait for the
+                // compaction-done edge.
+                return !Self->ShardsWithBorrowed.contains(shardIdx);
+            case TPartitionSplitMergeState::EDeferralReason::NoCachedTxId:
+                // txIds replenished -> serviceable; still empty -> nothing to propose with
+                // (this also makes the txId-replenish nudge effective).
+                return !Self->CachedTxIds.empty();
+            case TPartitionSplitMergeState::EDeferralReason::ShardLimitPath:
+            case TPartitionSplitMergeState::EDeferralReason::ShardLimitSubdomain:
+                // A quota change is not cheaply re-checkable here; the periodic stats
+                // stream re-drives these once the quota allows.
+                return false;
+            default:
+                return false;
+        }
+    }
+
     bool TryMergeInline(const TPathId& pathId, TTableInfo::TPtr table, const TShardIdx& shardIdx,
             TInstant now, TTransactionContext& txc, const TActorContext& ctx) {
         const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
@@ -1491,11 +1448,11 @@ private:
             return false;
         }
 
-        auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge);
+        auto request = MergeRequest(Self, txId, shardInfo->PathId, shardsToMerge);
 
         YDB_LOG_INFO_CTX(ctx, "Fair scheduler proposing merge",
             {"reason", mergeReason},
-            {"message", request->Record.ShortDebugString()}
+            {"message", request->Record.ShortDebugString()},
         );
 
         // Per-proposal side effects (Finding 17): a rejected sibling merge in the same wave
@@ -1509,10 +1466,7 @@ private:
 
         auto response = Self->IgniteOperation(*request, context);
 
-        // Only clear the deferred state when the op actually ignited; on rejection the
-        // recorded demand survives so the shard keeps its fair-scheduling turn.
-        const bool ignited = response
-            && (response->IsAccepted() || response->IsDone() || response->IsConditionalAccepted());
+        const bool ignited = IsOperationIgnited(response);
         if (!ignited) {
             YDB_LOG_NOTICE_CTX(ctx, "Fair scheduler merge propose rejected; deferred state kept",
                 {"status", response ? NKikimrScheme::EStatus_Name(response->Record.GetStatus()) : TString("unknown")},

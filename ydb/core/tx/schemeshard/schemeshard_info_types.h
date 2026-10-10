@@ -663,9 +663,26 @@ struct TTableSplitMergeState {
     THashMap<TShardIdx, TDeferredShardInfo> DeferredShards;
     bool QueuedForRevisit = false;         // membership guard: table appears once in the RR queue
 
-    // Re-deferral with a changed direction: move the aggregate count from the opposite
-    // direction to `wantsSplit`, so the aggregate always mirrors the latest deferral
-    // direction. The guard protects against underflow on inconsistent state.
+    // Insert or refresh a deferred-shard entry; returns true when newly deferred.
+    // Re-deferral with a flipped direction moves the aggregate count; the latest reason wins.
+    bool UpsertDeferredShard(const TShardIdx& shardIdx, bool wantsSplit, TPartitionSplitMergeState::EDeferralReason reason) {
+        const auto [it, inserted] = DeferredShards.emplace(
+            shardIdx, TDeferredShardInfo{wantsSplit, reason});
+        if (inserted) {
+            ++DemandCount(wantsSplit);
+            return true;
+        }
+        if (it->second.WantsSplit != wantsSplit) {
+            it->second.WantsSplit = wantsSplit;
+            MoveDemandCount(wantsSplit);
+        }
+        // Refresh the reason on re-deferral: the latest evidence wins, and the revisit
+        // path's reason gate must not act on a stale reason.
+        it->second.Reason = reason;
+        return false;
+    }
+
+    // Re-deferral with a flipped direction: move the count so the aggregate mirrors the latest direction.
     void MoveDemandCount(bool wantsSplit) {
         ui32& opposite = wantsSplit ? MergeDemandCount : SplitDemandCount;
         ui32& target = wantsSplit ? SplitDemandCount : MergeDemandCount;
@@ -675,9 +692,15 @@ struct TTableSplitMergeState {
         ++target;
     }
 
-    // Direction-indexed accessor: internal use only (the Record* family and its impl).
-    // A wrong `wantsSplit` silently corrupts the opposite counter, so it must not leak
-    // beyond that code; the public API names the direction in the method instead.
+    // Decrement the demand count for the stored direction (guarded against underflow).
+    void DecrementDemandCount(bool wantsSplit) {
+        ui32& c = DemandCount(wantsSplit);
+        if (c) {
+            --c;
+        }
+    }
+
+    // Internal, direction-indexed: a wrong wantsSplit corrupts the opposite counter.
     ui32& DemandCount(bool wantsSplit) {
         return wantsSplit ? SplitDemandCount : MergeDemandCount;
     }

@@ -227,7 +227,7 @@ TSmallVec<NScheme::TTypeInfo> GetKeyColumnTypes(const TTableInfo& tableInfo) {
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> SplitRequest(
-    TSchemeShard* ss, TTxId& txId, const TPathId& pathId, TTabletId datashardId, const TString& keyBuff,
+    TSchemeShard* ss, const TTxId& txId, const TPathId& pathId, TTabletId datashardId, const TString& keyBuff,
     bool loadSplitLineage)
 {
     auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->SelfTabletId()));
@@ -295,20 +295,22 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             {"schemeshard", Self->TabletID()},
         );
         // Slot limit exhausted at the histogram stage too: this partition is a deferred split
-        // candidate (histogram data only drives splits, so the direction is known here) --
-        // record it for the fair scheduler (resolve its shard/table locally first).
-        Self->NoteSplitMergeDeferral();
-        if (DemandTracking) {
-            const auto shardIt = Self->TabletIdToShardIdx.find(datashardId);
-            if (auto* table = Self->Tables.FindPtr(tableId);
-                    table && shardIt != Self->TabletIdToShardIdx.end()
-                    // Live-partition check: a delayed histogram response can outlive the shard
-                    // (split/merge/drop reshaped the table). Recording deferral for a dead
-                    // shardIdx would pollute DeferredShards, the pick cache and the gauges.
-                    && (*table)->GetPartitionStore().contains(shardIt->second)) {
-                Self->RecordSplitDeferral(tableId, **table, shardIt->second,
-                    TPartitionSplitMergeState::EDeferralReason::InFlightLimit, ctx.Now(), DemandTracking);
-            }
+        // candidate (histogram data only drives splits, so the direction is known here).
+        // The deferral counter is unconditional; the structured recording (and its
+        // shard/table resolution lookups) is flag-gated to keep the flag-off path cheap.
+        if (!DemandTracking) {
+            Self->NoteSplitMergeDeferral();
+            return true;
+        }
+        const auto shardIt = Self->TabletIdToShardIdx.find(datashardId);
+        if (auto* table = Self->Tables.FindPtr(tableId);
+                table && shardIt != Self->TabletIdToShardIdx.end()
+                // Live-partition check: a delayed histogram response can outlive the shard
+                // (split/merge/drop reshaped the table). Recording deferral for a dead
+                // shardIdx would pollute DeferredShards, the pick cache and the gauges.
+                && (*table)->GetPartitionStore().contains(shardIt->second)) {
+            Self->RecordSplitDeferral(tableId, **table, shardIt->second,
+                TPartitionSplitMergeState::EDeferralReason::InFlightLimit, ctx.Now(), DemandTracking);
         }
         return true;
     }
@@ -408,14 +410,8 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             {"shardIdx", shardIdx},
             {"pathId", tableId},
         );
-        // Count the deferral unconditionally (like every other deferral site) so the
-        // cumulative COUNTER_SPLIT_MERGE_DEFERRALS does not undercount borrowed
-        // deferrals (Finding 31b); the structured recording stays flag-gated.
-        Self->NoteSplitMergeDeferral();
-        if (DemandTracking) {
-            Self->RecordSplitDeferral(tableId, *tableInfo, shardIdx,
-                TPartitionSplitMergeState::EDeferralReason::Borrowed, ctx.Now(), DemandTracking);
-        }
+        Self->RecordSplitDeferral(tableId, *tableInfo, shardIdx,
+            TPartitionSplitMergeState::EDeferralReason::Borrowed, ctx.Now(), DemandTracking);
         return true;
     }
 
@@ -584,10 +580,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     dbChanges.Apply(Self, txc, ctx);
     SplitOpSideEffects.ApplyOnExecute(Self, txc, ctx);
 
-    // Only clear the deferred state when the op actually ignited; on rejection the
-    // recorded demand must survive so the shard keeps its fair-scheduling turn.
-    const bool ignited = response
-        && (response->IsAccepted() || response->IsDone() || response->IsConditionalAccepted());
+    const bool ignited = IsOperationIgnited(response);
     if (!ignited) {
         YDB_LOG_NOTICE_CTX(ctx, "Histogram split propose rejected; deferred state kept",
             {"status", response ? NKikimrScheme::EStatus_Name(response->Record.GetStatus()) : TString("unknown")},

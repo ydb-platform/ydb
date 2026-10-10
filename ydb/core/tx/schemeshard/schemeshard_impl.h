@@ -1178,8 +1178,8 @@ public:
     // instead of taking a boolean, so a call site where the direction is not (yet) known
     // is visible as such. All take (pathId, table, shardIdx, ...).
     // Record that a partition became a split/merge candidate this stats cycle.
-    void RecordSplitDemand(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now);
-    void RecordMergeDemand(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now);
+    void RecordSplitDemand(TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now, bool demandTracking);
+    void RecordMergeDemand(TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now, bool demandTracking);
     // Record that a wanted split/merge was deferred (blocked); enqueues the table for fair re-eval.
     // `demandTracking` must be the caller's tx-level snapshot of EnableSplitMergeDemandTracking
     // (not re-read here): the flag is reloadable at runtime, and re-reading it inside this

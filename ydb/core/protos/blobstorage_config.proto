@@ -633,7 +633,6 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
-// Configuration contract only; command handling is not implemented yet.
 message TSetGroupSingleDcMode {
     uint32 GroupId = 1;
     uint32 GroupGeneration = 2; // expected generation to prevent updating a stale group configuration

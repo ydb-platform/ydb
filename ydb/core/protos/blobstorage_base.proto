@@ -125,7 +125,7 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
-    // Reserved settings for emergency mirror-3-dc operation; runtime support is not implemented yet.
+    // Settings for emergency mirror-3-dc operation.
     optional bool EnableSingleDcMode = 22 [default = false];
     // Zero-based index in Rings of the surviving logical fail realm; required when EnableSingleDcMode is true.
     optional uint32 SurvivingDc = 23;

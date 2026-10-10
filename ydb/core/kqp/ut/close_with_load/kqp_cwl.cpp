@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
@@ -292,15 +293,22 @@ Y_UNIT_TEST_SUITE(KqpService) {
     Y_UNIT_TEST(UndeliveredIdleCloseReleasesSessionQuota) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
-        settings.AppConfig.MutableTableServiceConfig()->SetSessionIdleDurationSeconds(1);
 
         auto kikimr = TKikimrRunner(settings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto createResult = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
-        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
+
+        // Apply the short idle timeout after the SDK has finished creating sample tables.
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
+        settings.AppConfig.MutableTableServiceConfig()->SetSessionIdleDurationSeconds(1);
+        const auto configSender = runtime->AllocateEdgeActor();
+        auto config = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *config->Record.MutableConfig() = settings.AppConfig;
+        runtime->Send(MakeKqpProxyID(runtime->GetNodeId()), configSender, config.Release());
+        auto configured = runtime->GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            configSender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(configured, "KQP proxy did not acknowledge the session settings");
 
         TActorId proxyId;
         TActorId sessionActorId;
@@ -316,6 +324,9 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
+        auto createResult = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
+        UNIT_ASSERT_C(createResult.IsSuccess(), createResult.GetIssues().ToString());
 
         runtime->SimulateSleep(TDuration::Seconds(3));
         {

@@ -8,6 +8,16 @@
 #include <aws/core/utils/Array.h>
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/core/utils/memory/stl/SimpleStringStream.h>
+#include <aws/sqs/model/SendMessageRequest.h>
+#include <aws/sqs/model/DeleteMessageRequest.h>
+#include <aws/sqs/model/ChangeMessageVisibilityRequest.h>
+#include <aws/sqs/model/ChangeMessageVisibilityBatchRequest.h>
+#include <aws/sqs/model/GetQueueAttributesRequest.h>
+#include <aws/sqs/model/ListQueuesRequest.h>
+#include <aws/sqs/model/PurgeQueueRequest.h>
+#include <aws/sqs/model/CreateQueueRequest.h>
+#include <aws/sqs/model/DeleteQueueRequest.h>
+#include <aws/sqs/model/SetQueueAttributesRequest.h>
 #include <aws/sqs/model/DeleteMessageBatchRequest.h>
 #include <aws/sqs/model/GetQueueUrlRequest.h>
 #include <aws/sqs/model/MessageSystemAttributeNameForSends.h>
@@ -162,7 +172,8 @@ namespace NYdb::NConsoleClient {
         Aws::String bodyString((std::istreambuf_iterator<char>(responseStream)),
                                std::istreambuf_iterator<char>());
 
-        Aws::Utils::Json::JsonValue jsonValue(bodyString);
+        // SQS operations with no result may return an empty HTTP body.
+        Aws::Utils::Json::JsonValue jsonValue(bodyString.empty() ? Aws::String("{}") : bodyString);
 
         if (!jsonValue.WasParseSuccessful()) {
             Cerr << "Failed to parse JSON: " << jsonValue.GetErrorMessage() << Endl;
@@ -193,8 +204,6 @@ namespace NYdb::NConsoleClient {
         const SendMessageBatchRequest& sendMessageBatchRequest)
         const {
         const auto& queueUrl = sendMessageBatchRequest.GetQueueUrl();
-        auto request = CreateBaseRequest(queueUrl);
-        AddHeaders(sendMessageBatchRequest.GetAdditionalCustomHeaders(), request);
 
         Aws::Utils::Json::JsonValue jsonRequest;
         jsonRequest.WithString("QueueUrl", queueUrl);
@@ -207,6 +216,9 @@ namespace NYdb::NConsoleClient {
             jsonEntry.WithString("Id", entry.GetId())
                 .WithString("MessageBody", entry.GetMessageBody());
 
+            if (entry.DelaySecondsHasBeenSet()) {
+                jsonEntry.WithInteger("DelaySeconds", entry.GetDelaySeconds());
+            }
             if (entry.MessageGroupIdHasBeenSet()) {
                 jsonEntry.WithString("MessageGroupId", entry.GetMessageGroupId());
             }
@@ -239,31 +251,12 @@ namespace NYdb::NConsoleClient {
 
         jsonRequest.WithArray("Entries", entriesArray);
 
-        auto jsonBody = jsonRequest.View().WriteCompact();
-        auto bodyStream =
-            Aws::MakeShared<Aws::SimpleStringStream>("json-body", jsonBody);
-        request->SetContentLength(
-            Aws::Utils::StringUtils::to_string(jsonBody.size()));
-        request->AddContentBody(bodyStream);
-
-        Signer->SignRequest(*request);
-
-        auto response = HttpClient->MakeRequest(request);
-        if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            return SendMessageBatchOutcome(error);
+        const auto response = ExecuteJsonRequest("SendMessageBatch", jsonRequest,
+            sendMessageBatchRequest.GetAdditionalCustomHeaders(), queueUrl);
+        if (!response.IsSuccess()) {
+            return SendMessageBatchOutcome(response.GetError());
         }
-
-        auto responseJson = ReadResponseBody(*response);
-        if (!responseJson.WasParseSuccessful()) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            error.SetMessage(responseJson.GetErrorMessage());
-            return SendMessageBatchOutcome(error);
-        }
+        const auto& responseJson = response.GetResult();
 
         SendMessageBatchResult result;
         const auto& view = responseJson.View();
@@ -277,8 +270,8 @@ namespace NYdb::NConsoleClient {
                         .WithMessageId(successful[i].GetString("MessageId"))
                         .WithMD5OfMessageBody(
                             successful[i].GetString("MD5OfMessageBody"))
-                        .WithSequenceNumber(
-                            successful[i].GetString("SequenceNumber")));
+                        .WithSequenceNumber(successful[i].KeyExists("SequenceNumber")
+                            ? successful[i].GetString("SequenceNumber") : Aws::String{}));
             }
         }
 
@@ -301,18 +294,22 @@ namespace NYdb::NConsoleClient {
     ReceiveMessageOutcome TSQSJsonClient::ReceiveMessage(
         const ReceiveMessageRequest& receiveMessageRequest) const {
         const auto& queueUrl = receiveMessageRequest.GetQueueUrl();
-        auto request = CreateBaseRequest(queueUrl);
-        AddHeaders(receiveMessageRequest.GetAdditionalCustomHeaders(), request);
 
         Aws::Utils::Json::JsonValue jsonRequest;
         jsonRequest.WithString("QueueUrl", queueUrl);
-        jsonRequest.WithInteger("MaxNumberOfMessages",
-                                receiveMessageRequest.GetMaxNumberOfMessages());
-        jsonRequest.WithInteger("VisibilityTimeout",
-                                receiveMessageRequest.GetVisibilityTimeout());
-        jsonRequest.WithInteger("WaitTimeSeconds",
-                                receiveMessageRequest.GetWaitTimeSeconds());
+        if (receiveMessageRequest.MaxNumberOfMessagesHasBeenSet()) {
+            jsonRequest.WithInteger("MaxNumberOfMessages", receiveMessageRequest.GetMaxNumberOfMessages());
+        }
+        if (receiveMessageRequest.VisibilityTimeoutHasBeenSet()) {
+            jsonRequest.WithInteger("VisibilityTimeout", receiveMessageRequest.GetVisibilityTimeout());
+        }
+        if (receiveMessageRequest.WaitTimeSecondsHasBeenSet()) {
+            jsonRequest.WithInteger("WaitTimeSeconds", receiveMessageRequest.GetWaitTimeSeconds());
+        }
 
+        if (receiveMessageRequest.ReceiveRequestAttemptIdHasBeenSet()) {
+            jsonRequest.WithString("ReceiveRequestAttemptId", receiveMessageRequest.GetReceiveRequestAttemptId());
+        }
         if (!receiveMessageRequest.GetAttributeNames().empty()) {
             Aws::Utils::Array<Aws::Utils::Json::JsonValue> attributeNames(
                 receiveMessageRequest.GetAttributeNames().size());
@@ -340,31 +337,12 @@ namespace NYdb::NConsoleClient {
             jsonRequest.WithArray("MessageAttributeNames", messageAttributeNames);
         }
 
-        auto jsonBody = jsonRequest.View().WriteCompact();
-        auto bodyStream =
-            Aws::MakeShared<Aws::SimpleStringStream>("json-body", jsonBody);
-        request->SetContentLength(
-            Aws::Utils::StringUtils::to_string(jsonBody.size()));
-        request->AddContentBody(bodyStream);
-
-        Signer->SignRequest(*request);
-
-        auto response = HttpClient->MakeRequest(request);
-        if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            return ReceiveMessageOutcome(error);
+        const auto response = ExecuteJsonRequest("ReceiveMessage", jsonRequest,
+            receiveMessageRequest.GetAdditionalCustomHeaders(), queueUrl);
+        if (!response.IsSuccess()) {
+            return ReceiveMessageOutcome(response.GetError());
         }
-
-        auto responseJson = ReadResponseBody(*response);
-        if (!responseJson.WasParseSuccessful()) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            error.SetMessage(responseJson.GetErrorMessage());
-            return ReceiveMessageOutcome(error);
-        }
+        const auto& responseJson = response.GetResult();
 
         ReceiveMessageResult result;
         const auto& view = responseJson.View();
@@ -379,8 +357,10 @@ namespace NYdb::NConsoleClient {
             message.WithBody(messages[i].GetString("Body"))
                 .WithMessageId(messages[i].GetString("MessageId"))
                 .WithReceiptHandle(messages[i].GetString("ReceiptHandle"))
-                .WithMD5OfBody(messages[i].GetString("MD5OfBody"))
-                .WithMD5OfMessageAttributes(messages[i].GetString("MD5OfMessageAttributes"));
+                .WithMD5OfBody(messages[i].GetString("MD5OfBody"));
+            if (messages[i].KeyExists("MD5OfMessageAttributes")) {
+                message.SetMD5OfMessageAttributes(messages[i].GetString("MD5OfMessageAttributes"));
+            }
 
             if (messages[i].KeyExists("Attributes")) {
                 const auto& messageAttributes = messages[i].GetObject("Attributes");
@@ -446,8 +426,6 @@ namespace NYdb::NConsoleClient {
         const DeleteMessageBatchRequest& deleteMessageBatchRequest)
         const {
         const auto& queueUrl = deleteMessageBatchRequest.GetQueueUrl();
-        auto request = CreateBaseRequest(queueUrl);
-        AddHeaders(deleteMessageBatchRequest.GetAdditionalCustomHeaders(), request);
 
         Aws::Utils::Json::JsonValue jsonRequest;
         jsonRequest.WithString("QueueUrl", queueUrl);
@@ -464,32 +442,12 @@ namespace NYdb::NConsoleClient {
 
         jsonRequest.WithArray("Entries", entriesArray);
 
-        auto jsonBody = jsonRequest.View().WriteCompact();
-        auto bodyStream =
-            Aws::MakeShared<Aws::SimpleStringStream>("json-body", jsonBody);
-        request->SetContentLength(
-            Aws::Utils::StringUtils::to_string(jsonBody.size()));
-        request->AddContentBody(bodyStream);
-
-        Signer->SignRequest(*request);
-
-        auto response = HttpClient->MakeRequest(request);
-        if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            error.SetMessage(response->GetClientErrorMessage());
-            return DeleteMessageBatchOutcome(error);
+        const auto response = ExecuteJsonRequest("DeleteMessageBatch", jsonRequest,
+            deleteMessageBatchRequest.GetAdditionalCustomHeaders(), queueUrl);
+        if (!response.IsSuccess()) {
+            return DeleteMessageBatchOutcome(response.GetError());
         }
-
-        auto responseJson = ReadResponseBody(*response);
-        if (!responseJson.WasParseSuccessful()) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            error.SetMessage(responseJson.GetErrorMessage());
-            return DeleteMessageBatchOutcome(error);
-        }
+        const auto& responseJson = response.GetResult();
 
         DeleteMessageBatchResult result;
         const auto& view = responseJson.View();
@@ -520,60 +478,19 @@ namespace NYdb::NConsoleClient {
 
     GetQueueUrlOutcome TSQSJsonClient::GetQueueUrl(
         const GetQueueUrlRequest& getQueueUrlRequest) const {
-        auto request = CreateBaseRequest(EndpointOverride);
-        AddHeaders(getQueueUrlRequest.GetAdditionalCustomHeaders(), request);
 
         Aws::Utils::Json::JsonValue jsonRequest;
         jsonRequest.WithString("QueueName", getQueueUrlRequest.GetQueueName());
-
-        auto jsonBody = jsonRequest.View().WriteCompact();
-        auto bodyStream =
-            Aws::MakeShared<Aws::SimpleStringStream>("json-body", jsonBody);
-        request->SetContentLength(
-            Aws::Utils::StringUtils::to_string(jsonBody.size()));
-        request->AddContentBody(bodyStream);
-        request->SetHeaderValue("x-amz-target", "AmazonSQS.GetQueueUrl");
-        Signer->SignRequest(*request);
-
-        auto response = HttpClient->MakeRequest(request);
-        if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
-            Aws::OStringStream oss;
-            auto responseBody = response->GetResponseBody().rdbuf();
-            oss << response->GetClientErrorType() << " " << response->GetResponseCode()
-                << " " << response->GetClientErrorMessage() << " " << responseBody;
-            Cerr << "got error response: " << oss.str() << Endl;
-
-            // Match AWSJsonClient::BuildAWSError / CoreErrorsMapper::GetErrorForHttpResponseCode.
-            const auto responseCode = response->GetResponseCode();
-            Aws::Client::AWSError<Aws::Client::CoreErrors> coreError;
-            if (response->HasClientError()) {
-                const bool retryable =
-                    response->GetClientErrorType() == Aws::Client::CoreErrors::NETWORK_CONNECTION;
-                coreError = Aws::Client::AWSError<Aws::Client::CoreErrors>(
-                    response->GetClientErrorType(),
-                    "",
-                    response->GetClientErrorMessage(),
-                    retryable);
-            } else if (responseCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
-                coreError = Aws::Client::AWSError<Aws::Client::CoreErrors>(
-                    Aws::Client::CoreErrors::NETWORK_CONNECTION, true);
-            } else {
-                coreError = Aws::Client::CoreErrorsMapper::GetErrorForHttpResponseCode(responseCode);
-            }
-            coreError.SetResponseHeaders(response->GetHeaders());
-            coreError.SetResponseCode(responseCode);
-            coreError.SetMessage(oss.str());
-            return GetQueueUrlOutcome(Aws::SQS::SQSError(std::move(coreError)));
+        if (getQueueUrlRequest.QueueOwnerAWSAccountIdHasBeenSet()) {
+            jsonRequest.WithString("QueueOwnerAWSAccountId", getQueueUrlRequest.GetQueueOwnerAWSAccountId());
         }
 
-        auto responseJson = ReadResponseBody(*response);
-        if (!responseJson.WasParseSuccessful()) {
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            error.SetMessage(responseJson.GetErrorMessage());
-            return GetQueueUrlOutcome(error);
+        const auto response = ExecuteJsonRequest("GetQueueUrl", jsonRequest,
+            getQueueUrlRequest.GetAdditionalCustomHeaders(), EndpointOverride);
+        if (!response.IsSuccess()) {
+            return GetQueueUrlOutcome(response.GetError());
         }
+        const auto& responseJson = response.GetResult();
 
         GetQueueUrlResult result;
         const auto& view = responseJson.View();
@@ -582,6 +499,358 @@ namespace NYdb::NConsoleClient {
         }
 
         return GetQueueUrlOutcome(result);
+    }
+
+    TSQSJsonClient::TJsonOutcome TSQSJsonClient::ExecuteJsonRequest(
+        const char* operation,
+        const Aws::Utils::Json::JsonValue& payload,
+        const Aws::Http::HeaderValueCollection& headers,
+        const Aws::String& queueUrl) const {
+        auto request = CreateBaseRequest(queueUrl);
+        AddHeaders(headers, request);
+        request->SetHeaderValue("x-amz-target", Aws::String("AmazonSQS.") + operation);
+        const auto body = payload.View().WriteCompact();
+        request->SetContentLength(Aws::Utils::StringUtils::to_string(body.size()));
+        request->AddContentBody(Aws::MakeShared<Aws::SimpleStringStream>("sqs-json-body", body));
+        if (!Signer->SignRequest(*request)) {
+            return Aws::SQS::SQSError(Aws::Client::AWSError<Aws::Client::CoreErrors>(
+                Aws::Client::CoreErrors::CLIENT_SIGNING_FAILURE, "", "Failed to sign SQS request", false));
+        }
+
+        const auto response = HttpClient->MakeRequest(request);
+        if (!response) {
+            return Aws::SQS::SQSError(Aws::Client::AWSError<Aws::Client::CoreErrors>(
+                Aws::Client::CoreErrors::NETWORK_CONNECTION, "", "No HTTP response", true));
+        }
+        const auto code = response->GetResponseCode();
+        if (response->HasClientError() || code == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+            const auto type = response->HasClientError()
+                ? response->GetClientErrorType() : Aws::Client::CoreErrors::NETWORK_CONNECTION;
+            Aws::SQS::SQSError error(Aws::Client::AWSError<Aws::Client::CoreErrors>(
+                type, "", response->GetClientErrorMessage(), type == Aws::Client::CoreErrors::NETWORK_CONNECTION));
+            error.SetResponseHeaders(response->GetHeaders());
+            error.SetResponseCode(code);
+            return error;
+        }
+
+        auto json = ReadResponseBody(*response);
+        if (code != Aws::Http::HttpResponseCode::OK) {
+            auto error = Aws::Client::CoreErrorsMapper::GetErrorForHttpResponseCode(code);
+            Aws::String name;
+            Aws::String message = Aws::String("SQS request failed: ") + operation;
+            if (json.WasParseSuccessful()) {
+                const auto view = json.View();
+                if (view.KeyExists("__type")) {
+                    name = view.GetString("__type");
+                } else if (view.KeyExists("code")) {
+                    name = view.GetString("code");
+                }
+                // AWS JSON errors can include a namespace before '#'.
+                const auto hash = name.find('#');
+                if (hash != Aws::String::npos) {
+                    name = name.substr(hash + 1);
+                }
+                const auto colon = name.find(':');
+                if (colon != Aws::String::npos) {
+                    name.resize(colon);
+                }
+                if (!name.empty()) {
+                    auto mapped = Aws::SQS::SQSErrorMapper::GetErrorForName(name.c_str());
+                    if (mapped.GetErrorType() == Aws::Client::CoreErrors::UNKNOWN) {
+                        mapped = Aws::SQS::SQSErrorMapper::GetErrorForName(
+                            (Aws::String("AWS.SimpleQueueService.") + name).c_str());
+                    }
+                    if (mapped.GetErrorType() == Aws::Client::CoreErrors::UNKNOWN) {
+                        mapped = Aws::Client::CoreErrorsMapper::GetErrorForName(name.c_str());
+                    }
+                    if (mapped.GetErrorType() != Aws::Client::CoreErrors::UNKNOWN) {
+                        error = std::move(mapped);
+                    }
+                }
+                if (view.KeyExists("message")) {
+                    message = view.GetString("message");
+                } else if (view.KeyExists("Message")) {
+                    message = view.GetString("Message");
+                }
+            } else {
+                message = json.GetErrorMessage();
+            }
+            error.SetExceptionName(name);
+            error.SetMessage(message);
+            error.SetResponseHeaders(response->GetHeaders());
+            error.SetResponseCode(code);
+            return Aws::SQS::SQSError(std::move(error));
+        }
+        if (!json.WasParseSuccessful()) {
+            Aws::SQS::SQSError error(Aws::Client::AWSError<Aws::Client::CoreErrors>(
+                Aws::Client::CoreErrors::UNKNOWN, "InvalidJson", json.GetErrorMessage(), false));
+            error.SetResponseHeaders(response->GetHeaders());
+            error.SetResponseCode(code);
+            return error;
+        }
+        return json;
+    }
+
+    SendMessageOutcome TSQSJsonClient::SendMessage(const SendMessageRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        if (request.MessageBodyHasBeenSet()) {
+            payload.WithString("MessageBody", request.GetMessageBody());
+        }
+        if (request.DelaySecondsHasBeenSet()) {
+            payload.WithInteger("DelaySeconds", request.GetDelaySeconds());
+        }
+        if (request.MessageGroupIdHasBeenSet()) {
+            payload.WithString("MessageGroupId", request.GetMessageGroupId());
+        }
+        if (request.MessageDeduplicationIdHasBeenSet()) {
+            payload.WithString("MessageDeduplicationId", request.GetMessageDeduplicationId());
+        }
+        if (request.MessageAttributesHasBeenSet()) {
+            payload.WithObject("MessageAttributes", BuildMessageAttributesJson(request.GetMessageAttributes()));
+        }
+        if (request.MessageSystemAttributesHasBeenSet()) {
+            payload.WithObject("MessageSystemAttributes", BuildMessageSystemAttributesJson(request.GetMessageSystemAttributes()));
+        }
+        const auto response = ExecuteJsonRequest("SendMessage", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return SendMessageOutcome(response.GetError());
+        }
+        SendMessageResult result;
+        const auto view = response.GetResult().View();
+        if (view.KeyExists("MessageId")) {
+            result.SetMessageId(view.GetString("MessageId"));
+        }
+        if (view.KeyExists("MD5OfMessageBody")) {
+            result.SetMD5OfMessageBody(view.GetString("MD5OfMessageBody"));
+        }
+        if (view.KeyExists("MD5OfMessageAttributes")) {
+            result.SetMD5OfMessageAttributes(view.GetString("MD5OfMessageAttributes"));
+        }
+        if (view.KeyExists("MD5OfMessageSystemAttributes")) {
+            result.SetMD5OfMessageSystemAttributes(view.GetString("MD5OfMessageSystemAttributes"));
+        }
+        if (view.KeyExists("SequenceNumber")) {
+            result.SetSequenceNumber(view.GetString("SequenceNumber"));
+        }
+        return SendMessageOutcome(std::move(result));
+    }
+
+    DeleteMessageOutcome TSQSJsonClient::DeleteMessage(const DeleteMessageRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        if (request.ReceiptHandleHasBeenSet()) {
+            payload.WithString("ReceiptHandle", request.GetReceiptHandle());
+        }
+        const auto response = ExecuteJsonRequest("DeleteMessage", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return DeleteMessageOutcome(response.GetError());
+        }
+        return DeleteMessageOutcome(Aws::NoResult{});
+    }
+
+    ChangeMessageVisibilityOutcome TSQSJsonClient::ChangeMessageVisibility(const ChangeMessageVisibilityRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        if (request.ReceiptHandleHasBeenSet()) {
+            payload.WithString("ReceiptHandle", request.GetReceiptHandle());
+        }
+        if (request.VisibilityTimeoutHasBeenSet()) {
+            payload.WithInteger("VisibilityTimeout", request.GetVisibilityTimeout());
+        }
+        const auto response = ExecuteJsonRequest("ChangeMessageVisibility", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return ChangeMessageVisibilityOutcome(response.GetError());
+        }
+        return ChangeMessageVisibilityOutcome(Aws::NoResult{});
+    }
+
+    ChangeMessageVisibilityBatchOutcome TSQSJsonClient::ChangeMessageVisibilityBatch(const ChangeMessageVisibilityBatchRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        Aws::Utils::Array<Aws::Utils::Json::JsonValue> entries(request.GetEntries().size());
+        for (size_t i = 0; i < request.GetEntries().size(); ++i) {
+            const auto& entry = request.GetEntries()[i];
+            entries[i].WithString("Id", entry.GetId());
+            entries[i].WithString("ReceiptHandle", entry.GetReceiptHandle());
+            if (entry.VisibilityTimeoutHasBeenSet()) {
+                entries[i].WithInteger("VisibilityTimeout", entry.GetVisibilityTimeout());
+            }
+        }
+        payload.WithArray("Entries", std::move(entries));
+        const auto response = ExecuteJsonRequest("ChangeMessageVisibilityBatch", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return ChangeMessageVisibilityBatchOutcome(response.GetError());
+        }
+        ChangeMessageVisibilityBatchResult result;
+        const auto view = response.GetResult().View();
+        if (view.KeyExists("Successful")) {
+            const auto entries = view.GetArray("Successful");
+            for (size_t i = 0; i < entries.GetLength(); ++i) {
+                result.AddSuccessful(ChangeMessageVisibilityBatchResultEntry().WithId(entries[i].GetString("Id")));
+            }
+        }
+        if (view.KeyExists("Failed")) {
+            const auto entries = view.GetArray("Failed");
+            for (size_t i = 0; i < entries.GetLength(); ++i) {
+                BatchResultErrorEntry entry;
+                entry.SetId(entries[i].GetString("Id"));
+                entry.SetCode(entries[i].GetString("Code"));
+                entry.SetSenderFault(entries[i].GetBool("SenderFault"));
+                if (entries[i].KeyExists("Message")) {
+                    entry.SetMessage(entries[i].GetString("Message"));
+                }
+                result.AddFailed(std::move(entry));
+            }
+        }
+        return ChangeMessageVisibilityBatchOutcome(std::move(result));
+    }
+
+    GetQueueAttributesOutcome TSQSJsonClient::GetQueueAttributes(const GetQueueAttributesRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        if (request.AttributeNamesHasBeenSet()) {
+            Aws::Utils::Array<Aws::Utils::Json::JsonValue> names(request.GetAttributeNames().size());
+            for (size_t i = 0; i < request.GetAttributeNames().size(); ++i) {
+                names[i].AsString(QueueAttributeNameMapper::GetNameForQueueAttributeName(request.GetAttributeNames()[i]));
+            }
+            payload.WithArray("AttributeNames", std::move(names));
+        }
+        const auto response = ExecuteJsonRequest("GetQueueAttributes", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return GetQueueAttributesOutcome(response.GetError());
+        }
+        GetQueueAttributesResult result;
+        const auto view = response.GetResult().View();
+        if (view.KeyExists("Attributes")) {
+            for (const auto& [name, value] : view.GetObject("Attributes").GetAllObjects()) {
+                result.AddAttributes(QueueAttributeNameMapper::GetQueueAttributeNameForName(name), value.AsString());
+            }
+        }
+        return GetQueueAttributesOutcome(std::move(result));
+    }
+
+    ListQueuesOutcome TSQSJsonClient::ListQueues(const ListQueuesRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueNamePrefixHasBeenSet()) {
+            payload.WithString("QueueNamePrefix", request.GetQueueNamePrefix());
+        }
+        if (request.NextTokenHasBeenSet()) {
+            payload.WithString("NextToken", request.GetNextToken());
+        }
+        if (request.MaxResultsHasBeenSet()) {
+            payload.WithInteger("MaxResults", request.GetMaxResults());
+        }
+        const auto response = ExecuteJsonRequest("ListQueues", payload,
+            request.GetAdditionalCustomHeaders(), EndpointOverride);
+        if (!response.IsSuccess()) {
+            return ListQueuesOutcome(response.GetError());
+        }
+        ListQueuesResult result;
+        const auto view = response.GetResult().View();
+        if (view.KeyExists("QueueUrls")) {
+            const auto urls = view.GetArray("QueueUrls");
+            for (size_t i = 0; i < urls.GetLength(); ++i) {
+                result.AddQueueUrls(urls[i].AsString());
+            }
+        }
+        if (view.KeyExists("NextToken")) {
+            result.SetNextToken(view.GetString("NextToken"));
+        }
+        return ListQueuesOutcome(std::move(result));
+    }
+
+    PurgeQueueOutcome TSQSJsonClient::PurgeQueue(const PurgeQueueRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        const auto response = ExecuteJsonRequest("PurgeQueue", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return PurgeQueueOutcome(response.GetError());
+        }
+        return PurgeQueueOutcome(Aws::NoResult{});
+    }
+
+    CreateQueueOutcome TSQSJsonClient::CreateQueue(const CreateQueueRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueNameHasBeenSet()) {
+            payload.WithString("QueueName", request.GetQueueName());
+        }
+        Aws::Utils::Json::JsonValue attributes;
+        for (const auto& [name, value] : request.GetAttributes()) {
+            attributes.WithString(QueueAttributeNameMapper::GetNameForQueueAttributeName(name), value);
+        }
+        if (request.AttributesHasBeenSet()) {
+            payload.WithObject("Attributes", std::move(attributes));
+        }
+        if (request.TagsHasBeenSet()) {
+            Aws::Utils::Json::JsonValue tags;
+            for (const auto& [name, value] : request.GetTags()) {
+                tags.WithString(name, value);
+            }
+            payload.WithObject("tags", std::move(tags));
+        }
+        const auto response = ExecuteJsonRequest("CreateQueue", payload,
+            request.GetAdditionalCustomHeaders(), EndpointOverride);
+        if (!response.IsSuccess()) {
+            return CreateQueueOutcome(response.GetError());
+        }
+        CreateQueueResult result;
+        const auto view = response.GetResult().View();
+        if (view.KeyExists("QueueUrl")) {
+            result.SetQueueUrl(view.GetString("QueueUrl"));
+        }
+        return CreateQueueOutcome(std::move(result));
+    }
+
+    DeleteQueueOutcome TSQSJsonClient::DeleteQueue(const DeleteQueueRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        const auto response = ExecuteJsonRequest("DeleteQueue", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return DeleteQueueOutcome(response.GetError());
+        }
+        return DeleteQueueOutcome(Aws::NoResult{});
+    }
+
+    SetQueueAttributesOutcome TSQSJsonClient::SetQueueAttributes(const SetQueueAttributesRequest& request) const {
+        Aws::Utils::Json::JsonValue payload;
+        if (request.QueueUrlHasBeenSet()) {
+            payload.WithString("QueueUrl", request.GetQueueUrl());
+        }
+        Aws::Utils::Json::JsonValue attributes;
+        for (const auto& [name, value] : request.GetAttributes()) {
+            attributes.WithString(QueueAttributeNameMapper::GetNameForQueueAttributeName(name), value);
+        }
+        if (request.AttributesHasBeenSet()) {
+            payload.WithObject("Attributes", std::move(attributes));
+        }
+        const auto response = ExecuteJsonRequest("SetQueueAttributes", payload,
+            request.GetAdditionalCustomHeaders(), request.GetQueueUrl());
+        if (!response.IsSuccess()) {
+            return SetQueueAttributesOutcome(response.GetError());
+        }
+        return SetQueueAttributesOutcome(Aws::NoResult{});
     }
 
 } // namespace NYdb::NConsoleClient

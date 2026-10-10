@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
                 testTopicPath,
                 TAlterTopicSettings()
                     .BeginAddConsumer(fullMirrorConsumerName)
-                        .AddAttribute("_lb_read_rule", R"({"type":"mirror-to","cluster":"cluster_b"})")
+                        .AddAttribute("_lb_read_rules", R"({"rules":[{"read_rule_type":"mirror-to","cluster":"cluster_b"}]})")
                     .EndAddConsumer()
             ).GetValueSync();
             driver.Stop(true);
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
                 srcTopicYdbPath,
                 TAlterTopicSettings()
                     .BeginAddConsumer(prodConsumerName)
-                        .AddAttribute("_lb_read_rule", R"({"type":"mirror-to","cluster":"cluster_b"})")
+                        .AddAttribute("_lb_read_rules", R"({"rules":[{"read_rule_type":"mirror-to","cluster":"cluster_b"}]})")
                     .EndAddConsumer()
             ).GetValueSync();
             driver.Stop(true);
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
             srcTopicYdbPath,
             TAlterTopicSettings()
                 .BeginAddConsumer(prodConsumerName)
-                    .AddAttribute("_lb_read_rule", R"({"type":"mirror-to","cluster":"cluster_b"})")
+                    .AddAttribute("_lb_read_rules", R"({"rules":[{"read_rule_type":"mirror-to","cluster":"cluster_b"}]})")
                 .EndAddConsumer()
         ).GetValueSync();
         driver.Stop(true);

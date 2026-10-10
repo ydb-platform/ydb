@@ -171,6 +171,8 @@ class TPartition : public TBaseTabletActor<TPartition> {
 
 public:
     const TString& TopicName() const;
+    // Scheme path (/Root/account/topic). Logs use this, not the rt3 clientside name.
+    const TString& TopicPath() const;
 
     ui64 GetUsedStorage(const TInstant& ctx);
 

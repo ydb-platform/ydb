@@ -21,6 +21,8 @@
 #include <util/string/printf.h>
 #include <util/system/tempfile.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NPersQueueTests {
 
@@ -500,6 +502,125 @@ static THashMap<TString, TPQTestClusterInfo> CLUSTERS_LIST_ONE_DC = {
         {"dc1", {"localhost", true}}
 };
 
+// Federation tests address topics as account/topic (or a bare name). The scheme
+// object lives at /Root/<account>/<topic>, not under /Root/PQ/rt3.<dc>--...
+// A remote copy uses the -mirrored-from-<dc> leaf. Account-less rt3.<dc>--topic
+// lives at /Root/<topic> so the short client name still resolves.
+struct TTestTopicLocation {
+    TString SchemePath;
+    TString ClientName;
+    TString Account;
+    TString Dc;
+    bool Remote = false;
+
+    // PQv0 metadata still keys topics by the synthesized clientside name.
+    // Step 2 has not replaced that identity.
+    TString ClientsideName() const {
+        const TString dc = Dc.empty() ? TString("dc1") : Dc;
+        TString shortLegacy;
+        if (!ClientName.Contains("/")) {
+            shortLegacy = Account + "--" + ClientName;
+        } else {
+            shortLegacy = NPersQueue::ConvertNewTopicName(ClientName);
+        }
+        const auto mirror = shortLegacy.find("-mirrored-from-");
+        if (mirror != TString::npos) {
+            shortLegacy = shortLegacy.substr(0, mirror);
+        }
+        return "rt3." + dc + "--" + shortLegacy;
+    }
+};
+
+inline TString FederationAccountAttr(TStringBuf accountPath) {
+    TStringBuf account;
+    TStringBuf rest;
+    if (accountPath.TrySplit("/", account, rest) && !account.empty()) {
+        return TString(account);
+    }
+    return TString(accountPath);
+}
+
+inline std::optional<TTestTopicLocation> TryParseRt3Topic(TStringBuf name) {
+    TStringBuf n = name;
+    n.SkipPrefix("/Root/PQ/");
+    n.SkipPrefix("Root/PQ/");
+    if (!n.StartsWith("rt3.")) {
+        return std::nullopt;
+    }
+    n.Skip(4);
+    TStringBuf dc;
+    TStringBuf body;
+    if (!n.TrySplit("--", dc, body) || dc.empty() || body.empty()) {
+        return std::nullopt;
+    }
+    const bool remote = dc != "dc1";
+    TStringBuf account;
+    TStringBuf topic;
+    if (body.TryRSplit("--", account, topic) && !account.empty() && !topic.empty()) {
+        TString accountPath(account);
+        for (auto& ch : accountPath) {
+            if (ch == '@') {
+                ch = '/';
+            }
+        }
+        TString leaf(topic);
+        if (remote) {
+            leaf += "-mirrored-from-";
+            leaf += dc;
+        }
+        TTestTopicLocation loc;
+        loc.SchemePath = TStringBuilder() << "/Root/" << accountPath << "/" << leaf;
+        loc.ClientName = remote
+            ? TStringBuilder() << accountPath << "/" << leaf
+            : TStringBuilder() << accountPath << "/" << topic;
+        loc.Account = FederationAccountAttr(accountPath);
+        loc.Dc = TString(dc);
+        loc.Remote = remote;
+        return loc;
+    }
+
+    TString leaf(body);
+    if (remote) {
+        leaf += "-mirrored-from-";
+        leaf += dc;
+    }
+    TTestTopicLocation loc;
+    loc.SchemePath = TStringBuilder() << "/Root/" << leaf;
+    loc.ClientName = leaf;
+    loc.Account = "lb";
+    loc.Dc = TString(dc);
+    loc.Remote = remote;
+    return loc;
+}
+
+inline TTestTopicLocation LocateTestTopic(const TString& name) {
+    if (auto parsed = TryParseRt3Topic(name)) {
+        return *parsed;
+    }
+    if (name.StartsWith("/Root/") || name.StartsWith("/")) {
+        TStringBuf rest(name);
+        rest.SkipPrefix("/");
+        if (rest.SkipPrefix("Root/")) {
+            TTestTopicLocation loc;
+            loc.SchemePath = name.StartsWith("/Root/") ? name : TStringBuilder() << "/" << name;
+            loc.ClientName = TString(rest);
+            loc.Account = FederationAccountAttr(rest);
+            if (loc.Account == loc.ClientName) {
+                loc.Account = "lb";
+            }
+            loc.Remote = name.Contains("-mirrored-from-");
+            return loc;
+        }
+    }
+    const TString modern(NPersQueue::ConvertOldTopicName(std::string(name)));
+    TTestTopicLocation loc;
+    loc.ClientName = modern;
+    loc.SchemePath = "/Root/" + modern;
+    loc.Account = modern.Contains("/") ? FederationAccountAttr(modern) : TString("lb");
+    loc.Remote = modern.Contains("-mirrored-from-");
+    return loc;
+}
+
 class TFlatMsgBusPQClient : public NFlatTests::TFlatMsgBusClient {
 private:
     static constexpr ui32 FlatDomain = 0;
@@ -878,7 +999,11 @@ public:
         const auto& resp = metaResp.GetCmdGetTopicMetadataResult();
         UNIT_ASSERT(resp.TopicInfoSize() == 1);
         const auto& topicInfo = resp.GetTopicInfo(0);
-        UNIT_ASSERT(topicInfo.GetTopic() == name);
+        // The response topic is the synthesized clientside name. Callers may
+        // pass either that name or the modern client name.
+        const auto clientside = LocateTestTopic(name).ClientsideName();
+        UNIT_ASSERT_C(topicInfo.GetTopic() == name || topicInfo.GetTopic() == clientside,
+            topicInfo.GetTopic() << " vs " << name);
         //UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
         if (cacheSize) {
             UNIT_ASSERT(topicInfo.GetConfig().HasCacheSize());
@@ -891,14 +1016,14 @@ public:
     }
 
     ui32 GetTopicVersionFromPath(const TString& name) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + name);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls(LocateTestTopic(name).SchemePath);
         ui32 version = res->Record.GetPathDescription().GetPersQueueGroup().GetAlterVersion();
         Cerr << "GetTopicVersionFromPath: " << " record " <<  res->Record.DebugString()  << "\n name " << name << " version" << version << "\n";
         return version;
     }
 
     void RestartBalancerTablet(TTestActorRuntime* runtime, const TString& topic) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + topic);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls(LocateTestTopic(topic).SchemePath);
         Cerr << res->Record << "\n";
         const ui64 tablet = res->Record.GetPathDescription().GetPersQueueGroup().GetBalancerTabletID();
         TActorId sender = runtime->AllocateEdgeActor();
@@ -909,7 +1034,7 @@ public:
 
 
     void RestartPartitionTablets(TTestActorRuntime* runtime, const TString& topic) {
-        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + topic);
+        TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls(LocateTestTopic(topic).SchemePath);
         Cerr << res->Record << "\n";
         const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
         THashSet<ui64> tablets;
@@ -930,7 +1055,7 @@ public:
     TVector<TString> GetPQTabletKeys(TTestActorRuntime* runtime, const TString& topic, ui32 partitionId) {
         ui64 tabletId = Max<ui64>();
 
-        auto res = Ls("/Root/PQ/" + topic);
+        auto res = Ls(LocateTestTopic(topic).SchemePath);
         const auto& pq = res->Record.GetPathDescription().GetPersQueueGroup();
         for (ui32 i = 0; i < pq.PartitionsSize(); ++i) {
             const auto& partition = pq.GetPartitions(i);
@@ -1035,10 +1160,34 @@ public:
     }
 
     TString ResolveTopicSdkPath(const TString& name) const {
-        if (UseConfigTables && !name.StartsWith("/Root")) {
-            return TopicPrefix + name;
+        if (TryParseRt3Topic(name) || (!name.StartsWith("/Root") && !name.StartsWith("Root/"))) {
+            return LocateTestTopic(name).SchemePath;
         }
         return name;
+    }
+
+    void EnsureTopicParents(const TString& schemePath) {
+        TVector<TStringBuf> parts;
+        TStringBuf rest(schemePath);
+        rest.SkipPrefix("/");
+        while (!rest.empty()) {
+            TStringBuf part;
+            if (!rest.TrySplit("/", part, rest)) {
+                break;
+            }
+            if (!part.empty()) {
+                parts.push_back(part);
+            }
+        }
+        if (parts.size() < 2) {
+            return;
+        }
+        TString parent = TStringBuilder() << "/" << parts[0];
+        for (size_t i = 1; i < parts.size(); ++i) {
+            MkDir(parent, TString(parts[i]));
+            parent += "/";
+            parent += parts[i];
+        }
     }
 
     static NYdb::NTopic::EAutoPartitioningStrategy ConvertPartitionStrategyType(
@@ -1138,6 +1287,7 @@ public:
         });
         settings.AddAttribute("_allow_unauthenticated_read", "true");
         settings.AddAttribute("_allow_unauthenticated_write", "true");
+        settings.AddAttribute("_federation_account", LocateTestTopic(createRequest.Topic).Account);
         if (createRequest.SourceIdMaxCount != NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts()) {
             settings.AddAttribute("_max_partition_message_groups_seqno_stored", ToString(createRequest.SourceIdMaxCount));
         }
@@ -1189,6 +1339,7 @@ public:
         });
         settings.AllowUnauthenticatedRead(true);
         settings.AllowUnauthenticatedWrite(true);
+        settings.FederationAccount(LocateTestTopic(createRequest.Topic).Account);
         // LocalDC comes from remote_mirror_rule; do not set ClientWriteDisabled.
         settings.RemoteMirrorRule(std::make_optional(
             MakeRemoteMirrorRuleSettings<NYdb::NPersQueue::TCreateTopicSettings>(*createRequest.MirrorFrom)));
@@ -1245,23 +1396,28 @@ public:
     void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true) {
         const TInstant start = TInstant::Now();
 
-        ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
+        const auto loc = LocateTestTopic(createRequest.Topic);
+        ui32 prevVersion = GetTopicVersionFromMetadata(loc.ClientName);
 
         // Non-mirror → Topic SDK (authenticated driver). Mirrors → PersQueue
         // RemoteMirrorRule. Call CreateTopicViaMsgBus for LowWatermark / empty
         // service_type migration UTs.
+        EnsureTopicParents(loc.SchemePath);
         if (createRequest.MirrorFrom) {
             CreateTopicViaPersQueueSdk(createRequest);
         } else {
             CreateTopicViaTopicSdk(createRequest);
         }
 
-        AddTopic(createRequest.Topic);
-        while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
+        // Names without an rt3. prefix do not carry a DC. Test clusters are local dc1
+        // unless LocateTestTopic parsed a remote copy.
+        const TString topicDc = loc.Dc.empty() ? TString("dc1") : loc.Dc;
+        AddTopic(createRequest.Topic, topicDc);
+        while (doWait && GetTopicVersionFromPath(loc.ClientName) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
+        while (doWait && GetTopicVersionFromMetadata(loc.ClientName, prevVersion) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
@@ -1282,8 +1438,6 @@ public:
         ui64 sourceIdLifetime = 86400,
         std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     ) {
-        Y_ABORT_UNLESS(name.StartsWith("rt3."));
-
         Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
         auto request = TRequestCreatePQ(
                 name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom,
@@ -1318,15 +1472,14 @@ public:
         bool fillPartitionConfig = false,
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
     ) {
-        Y_ABORT_UNLESS(name.StartsWith("rt3."));
-
-        ui32 prevVersion = GetTopicVersionFromMetadata(name);
+        const auto loc = LocateTestTopic(name);
+        const TString path = loc.SchemePath;
+        const TString clientName = loc.ClientName;
+        ui32 prevVersion = GetTopicVersionFromMetadata(clientName);
         while (prevVersion == 0) {
             Sleep(TDuration::MilliSeconds(500));
-            prevVersion = GetTopicVersionFromMetadata(name);
+            prevVersion = GetTopicVersionFromMetadata(clientName);
         }
-
-        const TString path = ResolveTopicSdkPath(name);
         if (mirrorFrom) {
             // Topic API has no mirror rule; use PersQueue SDK RemoteMirrorRule.
             auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
@@ -1357,15 +1510,15 @@ public:
 
         const TInstant start = TInstant::Now();
         AlterTopic();
-        auto ver = GetTopicVersionFromMetadata(name, cacheSize);
+        auto ver = GetTopicVersionFromMetadata(clientName, cacheSize);
         while (ver != prevVersion + 1) {
             Cerr << "Alter1 got " << ver << "\n";
 
             Sleep(TDuration::MilliSeconds(500));
-            ver = GetTopicVersionFromMetadata(name, cacheSize);
+            ver = GetTopicVersionFromMetadata(clientName, cacheSize);
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        auto ver2 = GetTopicVersionFromPath(name);
+        auto ver2 = GetTopicVersionFromPath(clientName);
         while (ver2 != prevVersion + 1) {
             Cerr << "Alter2 got " << ver << "\n";
 
@@ -1390,8 +1543,8 @@ public:
             bool waitForTopicDeletion = true
     ) {
 
-        Y_ABORT_UNLESS(name.StartsWith("rt3."));
-        const TString path = ResolveTopicSdkPath(name);
+        const auto loc = LocateTestTopic(name);
+        const TString path = loc.SchemePath;
         auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
         Cerr << "PQ Client: drop topic via Topic SDK: " << path << Endl;
         auto res = topicClient.DropTopic(path).GetValueSync();
@@ -1400,7 +1553,7 @@ public:
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             ui32 i = 0;
             for (; i < 500; ++i) {
-                TAutoPtr<NMsgBusProxy::TBusResponse> r = TryDropPersQueueGroup("/Root/PQ", name);
+                TAutoPtr<NMsgBusProxy::TBusResponse> r = Ls(path);
                 UNIT_ASSERT(r);
                 if (r->Record.GetSchemeStatus() == NKikimrScheme::StatusPathDoesNotExist) {
                     break;
@@ -1712,8 +1865,15 @@ public:
                 UNIT_ASSERT(topicInfo.GetConfig().HasPartitionConfig() || topicInfo.GetErrorCode() != (ui32)NPersQueue::NErrorCode::OK);
             }
             ui32 j = 0;
-            for (; j < topics.size() && topics[j] != topicInfo.GetTopic(); ++j);
-            UNIT_ASSERT(j == 0 || j != topics.size());
+            for (; j < topics.size(); ++j) {
+                if (topics[j] == topicInfo.GetTopic()) {
+                    break;
+                }
+                if (LocateTestTopic(topics[j]).ClientsideName() == topicInfo.GetTopic()) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(j != topics.size(), topicInfo.GetTopic());
         }
         return res;
     }
@@ -1790,13 +1950,26 @@ public:
         Cerr << "CreateTopicNoLegacy: " << params.Name << Endl;
 
         TString path = params.Name;
-        if (UseConfigTables && !path.StartsWith("/Root") && !params.Account) {
+        std::optional<TString> account = params.Account;
+        std::optional<TString> dc = params.Dc;
+        if (auto parsed = TryParseRt3Topic(path)) {
+            path = parsed->SchemePath;
+            if (!account) {
+                account = parsed->Account;
+            }
+            if (!dc) {
+                dc = parsed->Dc;
+            }
+            EnsureTopicParents(path);
+        } else if (UseConfigTables && !path.StartsWith("/Root") && !params.Account) {
             path = TStringBuilder() << "/Root/PQ/" << params.Name;
+        } else if (path.StartsWith("/Root/")) {
+            EnsureTopicParents(path);
         }
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
-        settings.FederationAccount(params.Account);
+        settings.FederationAccount(account);
         settings.SupportedCodecs(params.Codecs);
         settings.RetentionPeriod(params.RetentionPeriod);
         //settings.MaxPartitionWriteSpeed(50_MB);
@@ -1811,7 +1984,7 @@ public:
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
         if (UseConfigTables && !params.ExpectFail) {
-            AddTopic(params.Name, params.Dc);
+            AddTopic(params.Name, dc);
         }
         if (params.ExpectFail) {
             res.Wait();

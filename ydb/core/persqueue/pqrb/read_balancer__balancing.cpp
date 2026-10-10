@@ -2348,7 +2348,7 @@ void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKiki
 TStructuredMessage TBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"tabletId", TopicActor.TabletID()},
-        {"topic", Topic()});
+        {"topic", TopicPath()});
 }
 
 ui32 TBalancer::NextStep() {

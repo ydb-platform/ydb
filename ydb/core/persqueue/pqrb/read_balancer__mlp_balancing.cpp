@@ -227,7 +227,7 @@ TMLPBalancer::TMLPBalancer(TPersQueueReadBalancer& topicActor)
 TStructuredMessage TMLPBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"tabletId", TopicActor.TabletID()},
-        {"topic", TopicActor.Topic});
+        {"topic", TopicActor.Path});
 }
 
 TPrepareGetPartitionResponse TMLPBalancer::PrepareGetPartitionResponse(

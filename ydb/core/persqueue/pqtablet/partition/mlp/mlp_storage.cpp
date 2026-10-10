@@ -707,22 +707,11 @@ size_t TStorage::Compact() {
 
     size_t removed = 0;
 
-    // Remove messages by retention
+    // Remove messages by retention. Every status uses the same deadline:
+    // a message is deleted in the second its age reaches the retention period.
     if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
-        auto dieProcessingDelta = retentionDeadlineDelta.value() + 1;
-
         auto canRemove = [&](auto& message) {
-            switch (message.GetStatus()) {
-                case EMessageStatus::Locked:
-                case EMessageStatus::DLQ:
-                    return message.WriteTimestampDelta <= dieProcessingDelta;
-                case EMessageStatus::Committed:
-                case EMessageStatus::Delayed:
-                case EMessageStatus::Unprocessed:
-                    return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
-                default:
-                    return false;
-            }
+            return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
         };
 
         for (auto it = SlowMessages.begin(); it != SlowMessages.end() && canRemove(it->second);) {
@@ -774,6 +763,7 @@ size_t TStorage::Compact() {
 
     return removed;
 }
+
 static bool TrackMessageStatusInLockedGroups(const TStorage::EMessageStatus status) {
     return !EqualToOneOf(status, TStorage::EMessageStatus::Committed);
 }

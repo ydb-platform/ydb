@@ -97,7 +97,8 @@ ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 NActors::IActor* CreateMessageEnricher(ui64 tabletId,
                                        const ui32 partitionId,
                                        const TString& consumerName,
-                                       std::deque<TReadResult>&& replies);
+                                       std::deque<TReadResult>&& replies,
+                                       const NActors::TActorId& parentActorId);
 
 struct TDLQMoverSettings {
     TActorId ParentActorId;

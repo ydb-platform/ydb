@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap {
@@ -391,7 +393,9 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         PopGCBarriers(*CollectGenStepInFlight);
         if (FirstGC) {
             gcContext.InitializeFirst(TabletInfo);
-            FirstGC = false;
+            // Under MoveData a recovered barrier below this generation proves nothing about it: keep broadcasting until one from it goes out.
+            const bool moveDataEnabled = HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardMoveData();
+            FirstGC = moveDataEnabled && CollectGenStepInFlight->Generation() < CurrentGen;
         }
         if (!BlobsToKeep.IsEmpty()) {
             AFL_VERIFY(*CollectGenStepInFlight < BlobsToKeep.GetMinGenStepVerified())("gs", *CollectGenStepInFlight)(
@@ -411,6 +415,10 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     BlobsManagerCounters.GCCounters.OnGCTask(gcContext.GetKeepsToErase().size(), gcContext.GetKeepBytes(),
         gcContext.GetExtractedToRemoveFromDB().GetSize(), gcContext.GetDeleteBytes(), gcContext.IsFull(), !!CollectGenStepInFlight);
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
+    THashSet<ui32> taskGroups;
+    for (const auto& [address, _] : gcContext.GetPerGroupGCListsInFlight()) {
+        taskGroups.emplace(address.GetGroupId());
+    }
     auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()),
         CollectGenStepInFlight, std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID,
         CurrentGen);
@@ -420,6 +428,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
+    GCTaskInFlightGroups = std::move(taskGroups);
     return result;
 }
 
@@ -542,6 +551,24 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
     return result;
 }
 
+bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
+    // A built GC task drains BlobsToDelete before its rows leave the local DB, so the queues alone lie.
+    for (const ui32 groupId : GCTaskInFlightGroups) {
+        if (groups.contains(groupId)) {
+            return true;
+        }
+    }
+    // GroupFor can answer Max<ui32>, which no target set holds.
+    const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
+        return groups.contains(TabletInfo->GroupFor(blob.Channel(), blob.Generation()));
+    };
+    // Another tablet's borrowed blob is queued here for unlink, not for our collection, so it must not hold our gate.
+    const auto deletedBlobInGroups = [&](const auto& blob) {
+        return blob.second.contains(SelfTabletId) && groups.contains(blob.first.GetDsGroup());
+    };
+    return AnyOf(BlobsToKeep, keptBlobInGroups) || AnyOf(BlobsToDelete, deletedBlobInGroups) || AnyOf(BlobsToDeleteDelayed, deletedBlobInGroups);
+}
+
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
     // We assume here that all the channels have the same group type.
     // We get [2] because it is the first channel where we store data.
@@ -559,6 +586,7 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 }
 
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
+    GCTaskInFlightGroups.clear();
     if (genStep) {
         LastCollectedGenStep = *genStep;
         AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);

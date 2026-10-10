@@ -2,6 +2,7 @@
 #include "background_controller.h"
 #include "columnshard.h"
 #include "columnshard_find_empty_history_intervals.h"
+#include "columnshard_move_data.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -196,6 +197,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TEvWriteCommitSecondaryTransactionOperator;
     friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInit;
+    friend class TMoveDataDriver;
     friend class TTxCleanupSchemasWithnoData;
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
@@ -348,6 +350,16 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
+    virtual void MoveDataCompleted(const TActorContext& ctx) override;
+    // Takes the sizes the driver already walked the index for, so a gate check adds no walk of its own.
+    void CheckMoveDataGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues);
+    NOlap::NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes();
+    // Driver-side: stops and starts the actualizer for the current target set, clearing TargetsChanged.
+    void RestartMoveDataActualizer();
+    void SetupMoveDataRewrites();
+    void StartMoveDataDriver(const TActorContext& ctx);
+    void StopMoveDataDriver(const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -524,6 +536,8 @@ private:
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     NOlap::NResourceBroker::NSubscribe::TTaskContext CompactTaskSubscription;
     NOlap::NResourceBroker::NSubscribe::TTaskContext TTLTaskSubscription;
+    // Own type: this string drives both the broker queue and the ResourceType sensor label.
+    NOlap::NResourceBroker::NSubscribe::TTaskContext MoveDataTaskSubscription;
 
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
@@ -541,6 +555,15 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    TMoveDataState MoveDataState;
+    // Owns the move; the tablet records requests, starts the vacuum leg and pokes it.
+    TActorId MoveDataDriverId;
+
+    // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
+    std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
+    // The move's own count: it gates SetupMoveDataMetadata without queueing behind tiering's requests.
+    std::shared_ptr<TAtomicCounter> MoveDataMetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
@@ -614,7 +637,13 @@ private:
     void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
+    // Re-arms only the move's accessor requests, gated by their own in-flight count so they never queue behind tiering's.
+    void SetupMoveDataMetadata();
+    void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
+        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
+        TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied = nullptr);
     bool SetupTtl();
+    void StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges);
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();

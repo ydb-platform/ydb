@@ -110,6 +110,26 @@ private:
     NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
+    // Aggregation clients, not gauges: tablets share one module_id=CS subgroup, Set() would race.
+    std::shared_ptr<TValueAggregationClient> MoveDataActive;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
+    // Both also count towards GetTotal(), so without them a gate held by either shows every other gauge at zero.
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsUncommitted;
+    std::shared_ptr<TValueAggregationClient> MoveDataPortionsRetired;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataFinishedCount;
+    // The denominator for every GateBlocked counter below.
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateCheckedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByReseedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByGCCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedBySharedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByFirstGCRoundCount;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataPortionsRejectedCount;
+
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadCompactionBytes;
@@ -213,6 +233,68 @@ public:
     void OnSplitCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
         SplitCompactionGranuleBytes->SetValue(bytes);
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
+    }
+
+    void OnMoveDataStarted() const {
+        MoveDataActive->SetValue(1);
+    }
+
+    // Scalars, not TMoveDataQueueSizes: keeps this library off the actualizer headers.
+    void OnMoveDataQueues(
+        const ui64 pending, const ui64 confirmedToMove, const ui64 inFlight, const ui64 uncommitted, const ui64 retired) const {
+        MoveDataPortionsPending->SetValue(pending);
+        MoveDataPortionsConfirmedToMove->SetValue(confirmedToMove);
+        MoveDataPortionsInFlight->SetValue(inFlight);
+        MoveDataPortionsUncommitted->SetValue(uncommitted);
+        MoveDataPortionsRetired->SetValue(retired);
+    }
+
+    void OnMoveDataGateChecked() const {
+        MoveDataGateCheckedCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByReseed() const {
+        MoveDataGateBlockedByReseedCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByVacuum() const {
+        MoveDataGateBlockedByVacuumCount->Add(1);
+    }
+
+    // A portion left the queues because none of its blobs resolved into a target group.
+    void OnMoveDataPortionsRejected(const ui64 count) const {
+        MoveDataPortionsRejectedCount->Add(count);
+    }
+
+    void OnMoveDataGateBlockedByPortions() const {
+        MoveDataGateBlockedByPortionsCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByCleanup() const {
+        MoveDataGateBlockedByCleanupCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByGC() const {
+        MoveDataGateBlockedByGCCount->Add(1);
+    }
+
+    // Shared and borrowed links are not ours to collect, so they are not a GC wait.
+    void OnMoveDataGateBlockedByShared() const {
+        MoveDataGateBlockedBySharedCount->Add(1);
+    }
+
+    void OnMoveDataGateBlockedByFirstGCRound() const {
+        MoveDataGateBlockedByFirstGCRoundCount->Add(1);
+    }
+
+    void OnMoveDataFinished() const {
+        MoveDataFinishedCount->Add(1);
+        MoveDataActive->SetValue(0);
+        MoveDataPortionsPending->SetValue(0);
+        MoveDataPortionsConfirmedToMove->SetValue(0);
+        MoveDataPortionsInFlight->SetValue(0);
+        MoveDataPortionsUncommitted->SetValue(0);
+        MoveDataPortionsRetired->SetValue(0);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

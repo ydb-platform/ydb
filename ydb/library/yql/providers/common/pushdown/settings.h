@@ -19,7 +19,7 @@ struct TSettings {
         ParameterExpression = 1 << 7, // Query parameters
         CastExpression = 1 << 8, // CAST()
         StringTypes = 1 << 9, // Support string types
-        DateTimeTypes = 1 << 10, // Date, Datetime, Timestamp
+        DateTimeTypes = 1 << 10, // Date, Interval, Timestamp
         UuidType = 1 << 11,
         DecimalType = 1 << 12,
         DyNumberType = 1 << 13,

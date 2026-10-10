@@ -359,6 +359,14 @@ public:
     // to caller to stop it if needed.
     bool Remove(const T& item);
 
+    // same as Remove(), but does NOT call StartOperations() when
+    // a running item is removed. Useful for batch removals where
+    // the caller schedules a single consolidated refill afterwards
+    // (e.g. via StartOperations() or by re-enqueueing items).
+    // Note: freed inflight slots stay unused until the next
+    // StartOperations()/Enqueue() call.
+    bool RemoveNoStart(const T& item);
+
     // updates operation either running/waiting/ready by
     // copying item. Used in priority queues to modify
     // priority
@@ -487,6 +495,28 @@ bool TOperationQueue<T, TQueue>::Remove(const T& item) {
     if (RunningItems.Remove(TItemWithTs(item))) {
         StartOperations();
     }
+
+    removed |= WaitingItems.Remove(TItemWithTs(item));
+
+    if (ItemsToShuffle) {
+        auto it = Find(ItemsToShuffle.begin(), ItemsToShuffle.end(), item);
+        if (it != ItemsToShuffle.end()) {
+            ItemsToShuffle.erase(it);
+            return true;
+        }
+    }
+
+    if (removed)
+        UpdateRate();
+
+    return removed;
+}
+
+template <typename T, typename TQueue>
+bool TOperationQueue<T, TQueue>::RemoveNoStart(const T& item) {
+    bool removed = ReadyQueue.Remove(item);
+
+    removed |= RunningItems.Remove(TItemWithTs(item));
 
     removed |= WaitingItems.Remove(TItemWithTs(item));
 

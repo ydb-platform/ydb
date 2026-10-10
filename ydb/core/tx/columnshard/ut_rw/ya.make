@@ -2,12 +2,15 @@ UNITTEST_FOR(ydb/core/tx/columnshard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(60)
+SPLIT_FACTOR(64)
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "memory")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:16)
+    REQUIREMENTS(ram:16 cpu:4)
+ELSEIF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

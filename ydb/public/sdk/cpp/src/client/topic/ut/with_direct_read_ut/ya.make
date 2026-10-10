@@ -3,11 +3,16 @@ UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:2)
+ELSEIF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(20)
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils

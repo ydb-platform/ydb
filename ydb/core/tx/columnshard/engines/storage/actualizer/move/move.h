@@ -59,8 +59,10 @@ public:
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self);
 
     // Drop cleaned-up retired ids; a retired id still in the granule's maps awaits cleanup.
-    TMoveDataQueueSizes GetMoveDataQueueSizes(
+    void PruneRetiredPortions(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
+
+    TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
     // Once, right after construction: a new target set gets a new actualizer.
     void Seed(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);

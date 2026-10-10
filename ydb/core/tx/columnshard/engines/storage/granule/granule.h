@@ -283,8 +283,8 @@ public:
         ActualizationIndex->StopMoveData();
     }
 
-    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
-        return ActualizationIndex->GetMoveDataQueueSizes(Portions, InsertedPortionsById);
+    NActualizer::TMoveDataQueueSizes RefreshMoveDataQueueSizes() {
+        return ActualizationIndex->RefreshMoveDataQueueSizes(Portions, InsertedPortionsById);
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {

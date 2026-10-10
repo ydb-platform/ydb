@@ -93,6 +93,46 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     NotNullFlag = columnSchema.GetNotNull();
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();
+
+    if (columnSchema.HasDefaultFromExpression()) {
+        const auto& generated = columnSchema.GetDefaultFromExpression();
+        if (!AppData()->FeatureFlags.GetEnableGeneratedVirtual()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "VIRTUAL GENERATED columns are disabled. Column: " << Name);
+            return false;
+        }
+        if (generated.GetStored()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "STORED generated column '" << Name << "' is not supported for column tables");
+            return false;
+        }
+        if (columnSchema.HasDefaultValue()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "VIRTUAL generated column '" << Name << "' cannot have a scalar default");
+            return false;
+        }
+        if (columnSchema.HasCompression() || columnSchema.HasSerializer()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Compression cannot be applied to VIRTUAL generated column '" << Name << "'");
+            return false;
+        }
+        if (columnSchema.HasDataAccessorConstructor()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Encoding cannot be applied to VIRTUAL generated column '" << Name << "'");
+            return false;
+        }
+        if (columnSchema.HasStorageId()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Storage id cannot be applied to VIRTUAL generated column '" << Name << "'");
+            return false;
+        }
+        if (columnSchema.HasColumnFamilyId() || columnSchema.HasColumnFamilyName()) {
+            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                << "Column family cannot be applied to VIRTUAL generated column '" << Name << "'");
+            return false;
+        }
+        DefaultFromExpression = generated;
+    }
     if (columnSchema.HasColumnFamilyId()) {
         errors.AddError("Column FAMILY is not supported for column tables");
         return false;
@@ -185,6 +225,11 @@ void TOlapColumnBase::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescrip
     Name = columnSchema.GetName();
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();
+    if (columnSchema.HasDefaultFromExpression()) {
+        DefaultFromExpression = columnSchema.GetDefaultFromExpression();
+    } else {
+        DefaultFromExpression.reset();
+    }
 
     if (columnSchema.HasTypeInfo()) {
         Type = NScheme::TypeInfoModFromProtoColumnType(columnSchema.GetTypeId(), &columnSchema.GetTypeInfo()).TypeInfo;
@@ -224,16 +269,20 @@ void TOlapColumnBase::Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnS
     columnSchema.SetName(Name);
     columnSchema.SetType(TypeName);
     columnSchema.SetNotNull(NotNullFlag);
-    columnSchema.SetStorageId(StorageId);
-    *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
-
-    if (Serializer) {
-        Serializer.SerializeToProto(*columnSchema.MutableSerializer());
-    }
-    if (AccessorConstructor) {
-        *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+    if (DefaultFromExpression) {
+        *columnSchema.MutableDefaultFromExpression() = *DefaultFromExpression;
     } else {
-        columnSchema.ClearDataAccessorConstructor();
+        columnSchema.SetStorageId(StorageId);
+        *columnSchema.MutableDefaultValue() = DefaultValue.SerializeToProto();
+
+        if (Serializer) {
+            Serializer.SerializeToProto(*columnSchema.MutableSerializer());
+        }
+        if (AccessorConstructor) {
+            *columnSchema.MutableDataAccessorConstructor() = AccessorConstructor.SerializeToProto();
+        } else {
+            columnSchema.ClearDataAccessorConstructor();
+        }
     }
 
     auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(Type, "");
@@ -407,6 +456,12 @@ void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescript
         }
         TSet<TString> addColumnNames;
         for (auto& columnSchema : alterRequest.GetAddColumns()) {
+            if (columnSchema.HasDefaultFromExpression()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "ALTER ADD GENERATED column '" << columnSchema.GetName()
+                    << "' is not supported for column tables");
+                return false;
+            }
             TOlapColumnAdd column({});
             if (!column.ParseFromRequest(columnSchema, errors)) {
                 return false;

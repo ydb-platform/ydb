@@ -88,8 +88,6 @@ namespace NKikimr {
         THugeHeapFragmentation HugeHeapFragmentation;
         friend class TDskSpaceTrackerActor;
 
-        NMonGroup::TCostGroup CostMonGroup;
-
     public:
         TLogger Logger;
 
@@ -166,9 +164,6 @@ namespace NKikimr {
 
         template<class TEvent>
         void CountDefragCost(const TEvent& ev) {
-            if (CostModel) {
-                CostMonGroup.DefragCostNs() += CostModel->GetCost(ev);
-            }
             if (CostTracker) {
                 CostTracker->CountDefragRequest(ev);
             }
@@ -176,9 +171,6 @@ namespace NKikimr {
 
         template<class TEvent>
         void CountScrubCost(const TEvent& ev) {
-            if (CostModel) {
-                CostMonGroup.ScrubCostNs() += CostModel->GetCost(ev);
-            }
             if (CostTracker) {
                 CostTracker->CountScrubRequest(ev);
             }
@@ -186,9 +178,6 @@ namespace NKikimr {
 
         template<class TEvent>
         void CountCompactionCost(const TEvent& ev) {
-            if (CostModel) {
-                CostMonGroup.CompactionCostNs() += CostModel->GetCost(ev);
-            }
             if (CostTracker) {
                 CostTracker->CountCompactionRequest(ev);
             }

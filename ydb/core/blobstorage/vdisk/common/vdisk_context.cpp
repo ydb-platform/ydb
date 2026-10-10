@@ -66,7 +66,6 @@ namespace NKikimr {
         , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
         , ResponseStatusMonGroup(std::make_shared<NMonGroup::TResponseStatusGroup>(VDiskCounters))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
-        , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())
     {
         Y_ABORT_UNLESS(!VDiskLogPrefix.empty());

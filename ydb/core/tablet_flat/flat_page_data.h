@@ -93,11 +93,25 @@ namespace NPage {
             }
         } Y_PACKED;
 
+        // Present at the very end of a delta record (after TLocked) when
+        // the record has the savepoint seq num flag, only in version 2 pages
+        struct TDeltaSavepointSeqNum {
+            ui32 SavepointSeqNum_;
+
+            ui32 Get() const noexcept {
+                return SavepointSeqNum_;
+            }
+
+            void Set(ui32 savepointSeqNum) noexcept {
+                SavepointSeqNum_ = savepointSeqNum;
+            }
+        } Y_PACKED;
+
         struct TRecord : public TDataPageRecord<TRecord, TItem> {
             ui8 Fields_;
 
             ERowOp GetRop() const noexcept {
-                return ERowOp(Fields_ & 0x0F);
+                return ERowOp(Fields_ & 0x07);
             }
 
             bool IsErased() const noexcept {
@@ -121,12 +135,17 @@ namespace NPage {
                 return (Fields_ & 0xE0) == 0x20;
             }
 
+            bool HasSavepointSeqNum() const noexcept {
+                return Fields_ & 0x08;
+            }
+
             void SetZero() noexcept {
                 Fields_ = 0;
             }
 
-            void SetFields(ERowOp rop, bool erased, bool versioned, bool delta, bool locked) noexcept {
-                Fields_ = ui8(rop) | (locked ? 0x10 : 0) | (delta ? 0x20 : ((erased ? 0x80 : 0) | (versioned ? 0x40 : 0)));
+            void SetFields(ERowOp rop, bool erased, bool versioned, bool delta, bool locked, bool savepointSeqNum = false) noexcept {
+                Y_DEBUG_ABORT_UNLESS(!savepointSeqNum || delta);
+                Fields_ = ui8(rop) | (savepointSeqNum ? 0x08 : 0) | (locked ? 0x10 : 0) | (delta ? 0x20 : ((erased ? 0x80 : 0) | (versioned ? 0x40 : 0)));
             }
 
             void MarkHasHistory() noexcept {
@@ -175,6 +194,16 @@ namespace NPage {
                 return { l->GetLockMode(), l->GetLockTxId() };
             }
 
+            // Returns 0 when the delta has no savepoint seq num
+            ui32 GetDeltaSavepointSeqNum(const TPartScheme::TGroupInfo& group) const {
+                Y_DEBUG_ABORT_UNLESS(IsDelta());
+                if (!HasSavepointSeqNum()) {
+                    return 0;
+                }
+                size_t offset = GetLockInfoOffset(Fields_) + (IsLocked() ? sizeof(TLocked) : 0);
+                return GetTail<TDeltaSavepointSeqNum>(group, offset)->Get();
+            }
+
             const TRecord* GetAltRecord(size_t index) const {
                 if (index == 0) {
                     return this;
@@ -206,6 +235,9 @@ namespace NPage {
         static_assert(sizeof(TVersion) == 16, "Invalid TDataPage TVersion size");
         static_assert(sizeof(TDelta) == 8, "Invalid TDataPage TDelta size");
         static_assert(sizeof(TLocked) == 9, "Invalid TDataPage TLocked size");
+        static_assert(sizeof(TDeltaSavepointSeqNum) == 4, "Invalid TDataPage TDeltaSavepointSeqNum size");
+        // ERowOp must fit into the lower 3 bits, bit 0x08 is the savepoint seq num flag
+        static_assert(ui8(ERowOp::Reset) < 0x08, "ERowOp doesn't fit into TDataPage record flags");
         static_assert(sizeof(TRecord) == 1, "Invalid TDataPage TRecord size");
         static_assert(sizeof(TExtra) == 8, "Invalid TDataPage page extra chunk");
 
@@ -247,7 +279,8 @@ namespace NPage {
                 const void* base = raw->data();
                 auto data = NPage::TLabelWrapper().Read(*raw, EPage::DataPage);
 
-                Y_ENSURE(data.Version == 1, "Unknown EPage::DataPage version");
+                // Version 2 pages may have delta records with savepoint seq nums
+                Y_ENSURE(data.Version == 1 || data.Version == 2, "Unknown EPage::DataPage version");
 
                 if (data.Codec != ECodec::Plain) {
                     /* Compressed, should convert to regular page */

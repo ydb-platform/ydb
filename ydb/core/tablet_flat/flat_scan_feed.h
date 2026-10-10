@@ -185,7 +185,7 @@ namespace NTable {
                             Y_DEBUG_ABORT_UNLESS(Iter->IsUncommitted());
                             ui64 txId = Iter->GetUncommittedTxId();
                             if (Iter->Row() != ERowOp::Absent && !Subset.RemovedTransactions.Contains(txId)) {
-                                op = VersionScan->Feed(Iter->Row(), txId);
+                                op = VersionScan->Feed(Iter->Row(), txId, Iter->GetUncommittedSavepointSeqNum());
                             } else {
                                 op = EScan::Feed;
                             }
@@ -353,7 +353,9 @@ namespace NTable {
 
             Y_ENSURE(Lead.Key.GetCells().size() <= keyDefaults->Size(), "TLead key is too large");
 
-            Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion, Subset.CommittedTransactions);
+            // Removed operations are skipped by the iterator, so compaction drops them
+            Iter = new TTableIter(Subset.Scheme.Get(), Lead.Tags, -1, SnapshotVersion,
+                TRemovedTxOpsTransactionMap::Create(Subset.CommittedTransactions, Subset.RemovedTxOps));
 
             CurrentEnv = MakeEnv();
 

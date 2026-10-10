@@ -191,6 +191,12 @@ namespace NTest {
             Out << " | RemoveTx " << tid << " txId " << txId << Endl;
         }
 
+        void DoRemoveTxOps(ui32 tid, ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
+        {
+            Out << " | RemoveTxOps " << tid << " txId " << txId
+                << " savepointSeqNums [" << fromSavepointSeqNum << ", " << toSavepointSeqNum << "]" << Endl;
+        }
+
         void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch)
         {
             Out

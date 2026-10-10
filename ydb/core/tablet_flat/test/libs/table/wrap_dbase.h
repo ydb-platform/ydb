@@ -7,18 +7,35 @@ namespace NKikimr {
 namespace NTable {
 namespace NTest {
 
+    // Makes own uncommitted changes of readTxId visible, up to the savepoint seq num bound
+    inline ITransactionMapPtr MakeReadTxMap(const TDatabase& base, ui32 table, ui64 readTxId,
+            ui32 maxVisibleSavepointSeqNum = Max<ui32>())
+    {
+        if (readTxId == 0 || !base.HasOpenTx(table, readTxId)) {
+            return nullptr;
+        }
+        if (maxVisibleSavepointSeqNum == Max<ui32>()) {
+            return new TSingleTransactionMap(readTxId, TRowVersion::Min());
+        }
+        auto txMap = MakeIntrusive<TDynamicTransactionMap>();
+        txMap->Add(readTxId, TRowVersion::Min(), maxVisibleSavepointSeqNum);
+        return txMap;
+    }
+
     template<class TIter>
     struct TWrapDbIterImpl {
 
         TWrapDbIterImpl(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
                 TRowVersion snapshot = TRowVersion::Max(),
                 ui64 readTxId = 0,
+                ui32 readMaxVisibleSavepointSeqNum = Max<ui32>(),
                 ENext mode = ENext::All)
             : Scheme(std::move(scheme))
             , Base(base)
             , Table(table)
             , Snapshot(snapshot)
             , ReadTxId(readTxId)
+            , ReadMaxVisibleSavepointSeqNum(readMaxVisibleSavepointSeqNum)
             , Mode(mode)
         {
 
@@ -72,10 +89,7 @@ namespace NTest {
                 swap(range.MinInclusive, range.MaxInclusive);
             }
 
-            ITransactionMapPtr txMap;
-            if (ReadTxId != 0 && Base.HasOpenTx(Table, ReadTxId)) {
-                txMap = new TSingleTransactionMap(ReadTxId, TRowVersion::Min());
-            }
+            auto txMap = MakeReadTxMap(Base, Table, ReadTxId, ReadMaxVisibleSavepointSeqNum);
 
             Iter = Base.IterateRangeGeneric<TIter>(Table, range, Scheme->Tags(), Snapshot, txMap);
 
@@ -104,6 +118,7 @@ namespace NTest {
         const ui32 Table = Max<ui32>();
         const TRowVersion Snapshot;
         const ui64 ReadTxId;
+        const ui32 ReadMaxVisibleSavepointSeqNum;
         const ENext Mode;
         TAutoPtr<TIter> Iter;
     };

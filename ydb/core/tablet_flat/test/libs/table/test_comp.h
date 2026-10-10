@@ -157,9 +157,9 @@ namespace NTest {
             return Failed = 0, EScan::Feed;
         }
 
-        EScan Feed(const TRow &row, ui64 txId) override
+        EScan Feed(const TRow &row, ui64 txId, ui32 savepointSeqNum) override
         {
-            Writer->AddKeyDelta(row, txId);
+            Writer->AddKeyDelta(row, txId, savepointSeqNum);
 
             return Failed = 0, EScan::Feed;
         }

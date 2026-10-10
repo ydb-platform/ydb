@@ -982,12 +982,13 @@ namespace NTable {
 
                     if (data->GetRop() != ERowOp::Absent) {
                         ui64 txId = data->GetDeltaTxId(info);
-                        const auto* commitVersion = committedTransactions.Find(txId);
-                        if (commitVersion && *commitVersion <= rowVersion) {
-                            // Already committed and correct version
-                            return EReady::Data;
-                        }
-                        if (commitVersion) {
+                        if (committedTransactions.IsSkippedSavepointSeqNum(txId, data->GetDeltaSavepointSeqNum(info))) {
+                            // Skipped deltas are ignored as if they don't exist
+                        } else if (const auto* commitVersion = committedTransactions.Find(txId)) {
+                            if (*commitVersion <= rowVersion) {
+                                // Already committed and correct version
+                                return EReady::Data;
+                            }
                             // Skipping a newer committed delta
                             transactionObserver.OnSkipCommitted(*commitVersion, txId);
                             stats.InvisibleRowSkips++;
@@ -1117,13 +1118,15 @@ namespace NTable {
 
                 if (data->GetRop() != ERowOp::Absent) {
                     ui64 txId = data->GetDeltaTxId(info);
-                    const auto* commitVersion = committedTransactions.Find(txId);
-                    if (commitVersion) {
+                    if (committedTransactions.IsSkippedSavepointSeqNum(txId, data->GetDeltaSavepointSeqNum(info))) {
+                        // Skipped deltas are ignored as if they don't exist
+                    } else if (const auto* commitVersion = committedTransactions.Find(txId)) {
                         // Found a committed delta
                         return { *commitVersion, txId, data->GetRop() };
+                    } else {
+                        // Skip an uncommitted delta
+                        transactionObserver.OnSkipUncommitted(txId);
                     }
-                    // Skip an uncommitted delta
-                    transactionObserver.OnSkipUncommitted(txId);
                 }
 
                 data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
@@ -1184,6 +1187,18 @@ namespace NTable {
 
             const auto& info = Part->Scheme->Groups[0];
             return data->GetDeltaTxId(info);
+        }
+
+        ui32 GetDeltaSavepointSeqNum() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
+
+            const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
+            Y_DEBUG_ABORT_UNLESS(data->IsDelta(), "Current record is not a delta record");
+
+            const auto& info = Part->Scheme->Groups[0];
+            return data->GetDeltaSavepointSeqNum(info);
         }
 
         std::tuple<ELockMode, ui64> GetLockInfo() const noexcept
@@ -1257,8 +1272,10 @@ namespace NTable {
                     if (rop != ERowOp::Absent) {
                         ui64 txId = data->GetDeltaTxId(info);
                         const auto* commitVersion = committedTransactions.Find(txId);
-                        // Apply committed deltas
-                        if (commitVersion) {
+                        if (committedTransactions.IsSkippedSavepointSeqNum(txId, data->GetDeltaSavepointSeqNum(info))) {
+                            // Skipped deltas are ignored as if they don't exist
+                        } else if (commitVersion) {
+                            // Apply committed deltas
                             transactionObserver.OnApplyCommitted(*commitVersion, txId);
                             if (row.Touch(rop)) {
                                 for (auto& pin : Pinout) {
@@ -1759,6 +1776,12 @@ namespace NTable {
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetDeltaTxId();
+        }
+
+        ui32 GetDeltaSavepointSeqNum() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
+            return CurrentIt->GetDeltaSavepointSeqNum();
         }
 
         std::tuple<ELockMode, ui64> GetLockInfo() const noexcept

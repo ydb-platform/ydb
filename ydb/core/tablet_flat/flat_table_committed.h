@@ -21,6 +21,16 @@ namespace NTable {
          * Returns a pointer to a stored row version for a given txId, or nullptr when it's missing
          */
         virtual const TRowVersion* Find(ui64 txId) const = 0;
+
+        /**
+         * Returns true when a delta of txId with a non-zero savepoint seq num
+         * must be skipped as if it doesn't exist: it was removed (rolled back
+         * to a savepoint) or it's above the visibility bound of txId
+         */
+        virtual bool IsSkippedSavepointSeqNum(ui64 txId, ui32 savepointSeqNum) const {
+            Y_UNUSED(txId, savepointSeqNum);
+            return false;
+        }
     };
 
     /**
@@ -35,6 +45,16 @@ namespace NTable {
                 return p->Find(txId);
             }
             return nullptr;
+        }
+
+        bool IsSkippedSavepointSeqNum(ui64 txId, ui32 savepointSeqNum) const {
+            // Deltas without savepoint seq nums are never skipped
+            if (savepointSeqNum) {
+                if (ITransactionMap* p = Get()) {
+                    return p->IsSkippedSavepointSeqNum(txId, savepointSeqNum);
+                }
+            }
+            return false;
         }
     };
 
@@ -66,6 +86,14 @@ namespace NTable {
                 return Ptr->Find(txId);
             }
             return nullptr;
+        }
+
+        bool IsSkippedSavepointSeqNum(ui64 txId, ui32 savepointSeqNum) const {
+            // Deltas without savepoint seq nums are never skipped
+            if (savepointSeqNum && Ptr) {
+                return Ptr->IsSkippedSavepointSeqNum(txId, savepointSeqNum);
+            }
+            return false;
         }
 
     private:
@@ -118,6 +146,11 @@ namespace NTable {
             return Second.Find(txId);
         }
 
+        bool IsSkippedSavepointSeqNum(ui64 txId, ui32 savepointSeqNum) const override {
+            return First.IsSkippedSavepointSeqNum(txId, savepointSeqNum)
+                || Second.IsSkippedSavepointSeqNum(txId, savepointSeqNum);
+        }
+
         static ITransactionMapPtr Create(
                 const ITransactionMapPtr& first,
                 const ITransactionMapPtr& second)
@@ -157,20 +190,42 @@ namespace NTable {
             return Base.Find(txId);
         }
 
+        bool IsSkippedSavepointSeqNum(ui64 txId, ui32 savepointSeqNum) const override {
+            if (!MaxVisibleSavepointSeqNums.empty()) {
+                auto it = MaxVisibleSavepointSeqNums.find(txId);
+                if (it != MaxVisibleSavepointSeqNums.end() && savepointSeqNum > it->second) {
+                    return true;
+                }
+            }
+            return Base.IsSkippedSavepointSeqNum(txId, savepointSeqNum);
+        }
+
         void SetBase(ITransactionMapPtr base) {
             Base = std::move(base);
         }
 
-        void Add(ui64 txId, TRowVersion version) {
+        /**
+         * Makes txId visible at version. Its deltas with savepoint seq nums
+         * above maxVisibleSavepointSeqNum are skipped (e.g. a statement that
+         * must not see its own writes), deltas without seq nums are visible.
+         */
+        void Add(ui64 txId, TRowVersion version, ui32 maxVisibleSavepointSeqNum = Max<ui32>()) {
             Values[txId] = version;
+            if (maxVisibleSavepointSeqNum != Max<ui32>()) {
+                MaxVisibleSavepointSeqNums[txId] = maxVisibleSavepointSeqNum;
+            } else {
+                MaxVisibleSavepointSeqNums.erase(txId);
+            }
         }
 
         void Remove(ui64 txId) {
             Values.erase(txId);
+            MaxVisibleSavepointSeqNums.erase(txId);
         }
 
         void Clear() {
             Values.clear();
+            MaxVisibleSavepointSeqNums.clear();
         }
 
         bool Empty() const {
@@ -180,6 +235,8 @@ namespace NTable {
     private:
         ITransactionMapPtr Base;
         absl::flat_hash_map<ui64, TRowVersion> Values;
+        // Only transactions with a visibility bound, usually empty
+        absl::flat_hash_map<ui64, ui32> MaxVisibleSavepointSeqNums;
     };
 
     /**

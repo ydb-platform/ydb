@@ -697,6 +697,23 @@ enum class EMaterializationMode {
     NonExisting,
 };
 
+namespace NPrivate {
+    // Type-independent parts of the schema materialization, defined in flat_cxx_database.cpp.
+
+    // Returns the part of a (demangled) type name after the last ':', e.g. "NS::Schema::Table::Col" -> "Col".
+    TString StripNamespace(const TString& typeName);
+
+    using TGetNameFunc = TString (*)(const TString& typeName);
+
+    // Adds a column named getName(TypeName(columnTypeInfo)) to the table.
+    void MaterializeColumn(TToughDb& database, ui32 tableId, const std::type_info& columnTypeInfo, TGetNameFunc getName,
+        ui32 columnId, NScheme::TTypeId columnType, bool isNotNull, bool isSensitive, bool isSetNotNullInProgress);
+
+    // Adds a table named StripNamespace(TypeName(tableTypeInfo)) unless the mode says to skip it.
+    // Returns false if the table was skipped and its columns must not be materialized.
+    bool MaterializeTable(TToughDb& database, ui32 tableId, const std::type_info& tableTypeInfo, EMaterializationMode mode);
+}
+
 struct Schema {
     template <typename T>
     struct Precharger {
@@ -735,7 +752,7 @@ struct Schema {
             using BackupPolicy = InBackup;
 
             static TString GetColumnName(const TString& typeName) {
-                return typeName.substr(typeName.rfind(':') + 1);
+                return NPrivate::StripNamespace(typeName);
             }
         };
 
@@ -757,7 +774,9 @@ struct Schema {
             }
 
             static void Materialize(TToughDb& database) {
-                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive, { }, T::IsSetNotNullInProgress);
+                // The column name is T::GetColumnName(TypeName<T>())
+                NPrivate::MaterializeColumn(database, TableId, typeid(T), &T::GetColumnName,
+                    T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive, T::IsSetNotNullInProgress);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {
@@ -784,7 +803,7 @@ struct Schema {
 
             static void Materialize(TToughDb& database) {
                 TableColumns<T>::Materialize(database);
-                TableColumns<Ts...>::Materialize(database);
+                (TableColumns<Ts>::Materialize(database), ...);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {
@@ -931,7 +950,7 @@ struct Schema {
             struct TableKeyMaterializer<T, Ts...> : TableKeyMaterializer<Ts...> {
                 static void Materialize(TToughDb& database) {
                     TableKeyMaterializer<T>::Materialize(database);
-                    TableKeyMaterializer<Ts...>::Materialize(database);
+                    (TableKeyMaterializer<Ts>::Materialize(database), ...);
                 }
             };
 
@@ -2148,7 +2167,7 @@ struct Schema {
     template <typename Type>
     struct SchemaTables<Type> {
         static TString GetTableName(const TString& typeName) {
-            return typeName.substr(typeName.rfind(':') + 1);
+            return NPrivate::StripNamespace(typeName);
         }
 
         static bool Precharge(TToughDb& database) {
@@ -2156,22 +2175,10 @@ struct Schema {
         }
 
         static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) {
-            switch (mode) {
-            case EMaterializationMode::All:
-                break;
-            case EMaterializationMode::Existing:
-                if (!database.GetScheme().GetTableInfo(Type::TableId)) {
-                    return;
-                }
-                break;
-            case EMaterializationMode::NonExisting:
-                if (database.GetScheme().GetTableInfo(Type::TableId)) {
-                    return;
-                }
-                break;
+            // The table name is GetTableName(TypeName<Type>())
+            if (!NPrivate::MaterializeTable(database, Type::TableId, typeid(Type), mode)) {
+                return;
             }
-
-            database.Alter().AddTable(GetTableName(TypeName<Type>()), Type::TableId);
             Type::TColumns::Materialize(database);
             Type::TKey::Materialize(database);
         }

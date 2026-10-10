@@ -39,10 +39,6 @@ private:
         }
     }
 
-    bool DoIsMoveData() const override {
-        return true;
-    }
-
 public:
     TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer)
         : MoveDataActualizer(actualizer)
@@ -215,6 +211,7 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
     const ui64 batchMemorySoftLimit = NYDBTest::TControllers::GetColumnShardController()->GetMetadataRequestSoftMemoryLimit();
     std::vector<TCSMetadataRequest> requests;
     std::shared_ptr<TDataAccessorsRequest> currentRequest;
+    ui64 currentRequestMemory = 0;
 
     for (auto portionId : PendingPortionIds) {
         TPortionInfo::TPtr portion;
@@ -230,9 +227,11 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
             currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
         }
         currentRequest->AddPortion(portion);
-        if (currentRequest->PredictAccessorsMemory(portion->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
+        currentRequestMemory += portion->PredictAccessorsMemory(portion->GetSchema(VersionedIndex));
+        if (currentRequestMemory >= batchMemorySoftLimit) {
             requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self));
             currentRequest.reset();
+            currentRequestMemory = 0;
         }
     }
     if (currentRequest) {
@@ -242,14 +241,17 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
 }
 
 TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes(
-    const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const {
-    const ui64 retired = CountIf(RetiredPortionIds, [&](const ui64 portionId) {
-        return portions.contains(portionId) || uncommitted.contains(portionId);
-    });
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
+    // Cleanup does not notify actualizers again for an already-retired portion.
+    if (!RetiredPortionIds.empty()) {
+        EraseNodesIf(RetiredPortionIds, [&](const ui64 portionId) {
+            return !portions.contains(portionId) && !uncommitted.contains(portionId);
+        });
+    }
     return TMoveDataQueueSizes{ .Pending = PendingPortionIds.size(), .ConfirmedToMove = PortionAddress.size(),
         .InFlight = InFlightPortionIds.size(),
         .Uncommitted = UncommittedOnTarget.size(),
-        .Retired = retired,
+        .Retired = RetiredPortionIds.size(),
         .Rejected = RejectedPortions };
 }
 

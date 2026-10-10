@@ -78,20 +78,11 @@ class IMetadataAccessorResultProcessor {
 private:
     virtual void DoApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) = 0;
 
-    virtual bool DoIsMoveData() const {
-        return false;
-    }
-
 public:
     virtual ~IMetadataAccessorResultProcessor() = default;
 
     void ApplyResult(NResourceBroker::NSubscribe::TResourceContainer<TDataAccessorsResult>&& result, TColumnEngineForLogs& engine) {
         return DoApplyResult(std::move(result), engine);
-    }
-
-    // Only the move's own results change move state, so only they are worth poking the driver for.
-    bool IsMoveData() const {
-        return DoIsMoveData();
     }
 
     IMetadataAccessorResultProcessor() = default;

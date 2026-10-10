@@ -16,6 +16,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 
+#include <functional>
+
 namespace NKikimr::NOlap::NReader {
 class IApplyAction;
 }
@@ -32,6 +34,8 @@ class TGlobalColumnAddress;
 }   // namespace NKikimr::NOlap::NGeneralCache
 
 namespace NKikimr::NColumnShard {
+
+class TColumnShard;
 
 struct TEvPrivate {
     enum EEv {
@@ -119,10 +123,14 @@ struct TEvPrivate {
     };
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
+    public:
+        using TOnApplied = std::function<void(TColumnShard&, const NActors::TActorContext&)>;
+
     private:
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
         const ui64 Generation;
         std::optional<NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>> Result;
+        TOnApplied OnApplied;
 
     public:
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
@@ -133,6 +141,12 @@ struct TEvPrivate {
             return Generation;
         }
 
+        void NotifyApplied(TColumnShard& tablet, const NActors::TActorContext& ctx) const {
+            if (OnApplied) {
+                OnApplied(tablet, ctx);
+            }
+        }
+
         NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
             AFL_VERIFY(Result);
             auto result = std::move(*Result);
@@ -141,10 +155,11 @@ struct TEvPrivate {
         }
 
         TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
-            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result)
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result, TOnApplied onApplied = {})
             : Processor(processor)
             , Generation(gen)
             , Result(std::move(result))
+            , OnApplied(std::move(onApplied))
         {
         }
     };

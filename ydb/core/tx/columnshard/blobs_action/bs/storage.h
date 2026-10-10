@@ -43,8 +43,8 @@ public:
         return Manager->HasToDelete(blobId, tabletId);
     }
 
-    virtual bool HasBlobsForGroups(const THashSet<ui32>& groups) const override {
-        return Manager->HasBlobsForGroups(groups) || TBase::HasBlobsForGroups(groups);
+    virtual bool HasGCBlobsForGroups(const THashSet<ui32>& groups) const override {
+        return Manager->HasBlobsForGroups(groups);
     }
 
     virtual bool HasCollectedBeforeCurrentGeneration() const override {

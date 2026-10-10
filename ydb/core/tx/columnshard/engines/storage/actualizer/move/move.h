@@ -58,9 +58,9 @@ public:
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self);
 
-    // Retired is counted against the granule's maps: a retired id still present there awaits cleanup.
+    // Drop cleaned-up retired ids; a retired id still in the granule's maps awaits cleanup.
     TMoveDataQueueSizes GetMoveDataQueueSizes(
-        const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const;
+        const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
 
     // Once, right after construction: a new target set gets a new actualizer.
     void Seed(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);

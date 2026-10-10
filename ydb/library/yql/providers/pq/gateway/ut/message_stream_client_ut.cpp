@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <utility>
+
 namespace NYql {
 namespace {
 
@@ -239,6 +241,33 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
         control->ConfirmStop();
         fixture.Session->Close().GetValueSync();
         UNIT_ASSERT(fixture.Session->GetEvents({}).empty());
+    }
+
+    Y_UNIT_TEST(ClientStatusesRetainCategory) {
+        const std::pair<NYdb::EStatus, NFq::EMessageStreamStatus> cases[] = {
+            {NYdb::EStatus::TRANSPORT_UNAVAILABLE, NFq::EMessageStreamStatus::Unavailable},
+            {NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED, NFq::EMessageStreamStatus::Timeout},
+            {NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED, NFq::EMessageStreamStatus::Overloaded},
+            {NYdb::EStatus::CLIENT_LIMITS_REACHED, NFq::EMessageStreamStatus::Overloaded},
+            {NYdb::EStatus::CLIENT_INTERNAL_ERROR, NFq::EMessageStreamStatus::InternalError},
+            {NYdb::EStatus::CLIENT_CANCELLED, NFq::EMessageStreamStatus::Cancelled},
+            {NYdb::EStatus::CLIENT_UNAUTHENTICATED, NFq::EMessageStreamStatus::Unauthorized},
+            {NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED, NFq::EMessageStreamStatus::Unsupported},
+            {NYdb::EStatus::CLIENT_DISCOVERY_FAILED, NFq::EMessageStreamStatus::Unavailable},
+            {NYdb::EStatus::CLIENT_OUT_OF_RANGE, NFq::EMessageStreamStatus::Unknown},
+            {NYdb::EStatus::STATUS_UNDEFINED, NFq::EMessageStreamStatus::Unknown},
+        };
+        for (const auto& [status, expected] : cases) {
+            TStreamFixture fixture;
+            fixture.Mock->SetEventProvider([status]() -> NYdb::NTopic::TReadSessionEvent::TEvent {
+                return NYdb::NTopic::TSessionClosedEvent(status, {NYdb::NIssue::TIssue("Connection failed")});
+            });
+            const auto events = fixture.Session->GetEvents({});
+            UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+            const auto& closed = std::get<NFq::TMessageStreamSessionClosedEvent>(events.front());
+            UNIT_ASSERT(closed.Status == expected);
+            UNIT_ASSERT_STRING_CONTAINS(closed.Issues.ToOneLineString(), "Connection failed");
+        }
     }
 
     Y_UNIT_TEST(TerminalEventIsDeliveredOnce) {

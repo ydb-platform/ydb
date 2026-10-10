@@ -1,0 +1,9 @@
+{
+  "release": "26.3.1.16",
+  "release_line": "26.3",
+  "release_notes_pr": {"number": 53488, "state": "merged", "required_checks": "green"},
+  "stable_backport_pr": {"number": 53647, "state": "merged", "required_checks": "green"},
+  "artifacts": {"binary": "verified", "docker": "verified", "source_tag": "verified"},
+  "published_docs": {"en_date": "TBD", "ru_date": "уточняется"},
+  "existing_github_release": false
+}

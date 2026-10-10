@@ -18,8 +18,9 @@ public:
             TVector<NPageCollection::TLargeGlobId> largeGlobIds,
             TString legacy,
             TString opaque,
-            TEpoch epoch)
-        : TColdPart(ExtractLabel(largeGlobIds), epoch)
+            TEpoch epoch,
+            std::optional<TRowVersion> hiddenSince = std::nullopt)
+        : TColdPart(ExtractLabel(largeGlobIds), epoch, hiddenSince)
         , LargeGlobIds(std::move(largeGlobIds))
         , Legacy(std::move(legacy))
         , Opaque(std::move(opaque))

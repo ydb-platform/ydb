@@ -119,6 +119,10 @@ namespace NBoot {
                 Back->Switches.emplace_back().Init(one);
             }
 
+            for (const auto &one : Proto.GetVersionedTableMetadata()) {
+                Back->Switches.emplace_back().Init(one);
+            }
+
             for (const auto &one : Proto.GetDbParts()) {
                 Back->Switches.emplace_back();
                 Back->Switches.back().Init(one);

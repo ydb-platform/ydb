@@ -216,6 +216,7 @@ struct TPendingPartSwitch {
         TLogoBlobID Label;
         NTable::TEpoch RebasedEpoch = NTable::TEpoch::Max();
         ui32 SourceTable = Max<ui32>();
+        std::optional<TRowVersion> HiddenSince;
     };
 
     struct TNewBundleWaiter {
@@ -269,9 +270,12 @@ struct TPendingPartSwitch {
     TVector<TLogoBlobID> Leaving;
     TVector<TLogoBlobID> LeavingTxStatus;
     TVector<TBundleMove> Moves;
+    bool HasVersionedMetadata = false;
+    TVector<NTable::TVersionedTableMetadata> VersionedMetadata;
     NTable::TEpoch Head = NTable::TEpoch::Zero();
 
     ui32 FollowerUpdateStep = 0;
+    bool DeferFollowerGcAck = false;
 
     bool AddPendingBlob(const TLogoBlobID& id, TBlobWaiter waiter) {
         TPendingBlobs::insert_ctx ctx;
@@ -506,6 +510,7 @@ class TExecutor
 
     TDeque<TPendingPartSwitch> PendingPartSwitches;
     size_t ReadyPartSwitches = 0;
+    bool PendingFollowerVersionedMetadata = false;
 
     ui64 UsedTabletMemory = 0;
     ui64 TransactionPagesMemory = 0;
@@ -589,7 +594,7 @@ class TExecutor
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
     ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
-        const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
+        NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
     void StartScan(ui64 serial, ui32 table);
     void StartScan(ui64 task, TResource*);
@@ -660,10 +665,14 @@ class TExecutor
     TIntrusiveConstPtr<NTable::TRowScheme> RowScheme(ui32 table) const override;
     const NTable::TScheme::TTableInfo* TableScheme(ui32 table) override;
     ui64 TableMemSize(ui32 table, NTable::TEpoch epoch) override;
+    std::optional<NTable::TEpoch> TableOldestMemEpoch(ui32 table, NTable::TEpoch before) override;
     NTable::TPartView TablePart(ui32 table, const TLogoBlobID& label) override;
     TVector<NTable::TPartView> TableParts(ui32 table) override;
     TVector<TIntrusiveConstPtr<NTable::TColdPart>> TableColdParts(ui32 table) override;
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
+    std::optional<TRowVersion> TableSourceHiddenSince(
+            ui32 table, NTable::TEpoch epoch, const std::optional<TRowVersion>& stamp) override;
+    bool TableHasEraseAll(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
     void RequestChanges(ui32 table) override;

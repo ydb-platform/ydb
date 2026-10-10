@@ -354,7 +354,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
     // Takes the sizes the driver already walked the index for, so a gate check adds no walk of its own.
     void CheckMoveDataGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues);
-    NOlap::NActualizer::TMoveDataQueueSizes RefreshMoveDataQueueSizes();
+    NOlap::NActualizer::TMoveDataQueueSizes UpdateMoveDataQueueSizes();
     // Driver-side: stops and starts the actualizer for the current target set, clearing TargetsChanged.
     void RestartMoveDataActualizer();
     void SetupMoveDataRewrites();

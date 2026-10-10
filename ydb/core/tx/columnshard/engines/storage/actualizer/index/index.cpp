@@ -84,7 +84,7 @@ void TGranuleActualizationIndex::StopMoveData() {
     MoveDataActualizer.reset();
 }
 
-TMoveDataQueueSizes TGranuleActualizationIndex::RefreshMoveDataQueueSizes(
+TMoveDataQueueSizes TGranuleActualizationIndex::UpdateMoveDataQueueSizes(
     const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
     if (!MoveDataActualizer) {
         return TMoveDataQueueSizes();

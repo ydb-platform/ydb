@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include "yaml/yaml.h"
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
@@ -66,6 +67,19 @@ public:
                 jsonNodeInfo["Address"] = nodeInfo.Address;
                 jsonNodeInfo["Port"] = nodeInfo.Port;
                 if (nodeInfo.Location != TNodeLocation()) {
+                    NActorsInterconnect::TNodeLocation location;
+                    nodeInfo.Location.Serialize(&location, false);
+                    if (location.GetDataCenter().empty()) {
+                        location.ClearDataCenter();
+                    }
+                    if (location.GetRack().empty()) {
+                        location.ClearRack();
+                    }
+                    if (location.GetUnit().empty() || location.GetUnit() == "0") {
+                        location.ClearUnit();
+                    }
+                    Proto2Json(location, jsonNodeInfo["Location"]);
+
                     NJson::TJsonValue& jsonPhysicalLocation = jsonNodeInfo["PhysicalLocation"];
                     const auto& x = nodeInfo.Location.GetLegacyValue();
                     jsonPhysicalLocation["DataCenter"] = x.DataCenter;
@@ -108,6 +122,18 @@ public:
                                             Port:
                                                 type: integer
         )___");
+        auto locationSchema = TProtoToYaml::ProtoToYamlSchema<NActorsInterconnect::TNodeLocation>();
+        for (const auto* field : {"DataCenterNum", "RoomNum", "RackNum", "BodyNum", "Body"}) {
+            locationSchema["properties"].remove(field);
+        }
+        locationSchema["description"] =
+            "Node location from nameservice. Only fields known to this Viewer version are included. "
+            "Unknown protobuf fields are not exposed. Omitted if no location is supplied. "
+            "Normalization follows /viewer/nodes: empty DataCenter and Rack, and empty or \"0\" Unit, are omitted. "
+            "Module \"0\" is preserved, including values converted from legacy RoomNum. "
+            "The object can be empty after normalization.";
+        node["get"]["responses"]["200"]["content"]["application/json"]["schema"]["items"]["properties"]["Location"] =
+            locationSchema;
         return node;
     }
 };

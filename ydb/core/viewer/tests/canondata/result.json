@@ -9437,6 +9437,11 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 1,
+                "Location": {
+                    "DataCenter": "1",
+                    "Rack": "1",
+                    "Unit": "1"
+                },
                 "PhysicalLocation": {
                     "Body": 1,
                     "DataCenter": 49,
@@ -9454,6 +9459,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50000,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9471,6 +9477,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9488,6 +9495,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9505,6 +9513,11 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 1,
+                "Location": {
+                    "DataCenter": "1",
+                    "Rack": "1",
+                    "Unit": "1"
+                },
                 "PhysicalLocation": {
                     "Body": 1,
                     "DataCenter": 49,
@@ -9520,6 +9533,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50001,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,
@@ -9535,6 +9549,7 @@
                 "Address": "",
                 "Host": "text",
                 "Id": 50000,
+                "Location": {},
                 "PhysicalLocation": {
                     "Body": 0,
                     "DataCenter": 0,

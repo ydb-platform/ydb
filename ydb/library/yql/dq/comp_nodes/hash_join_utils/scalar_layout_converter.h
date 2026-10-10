@@ -36,6 +36,9 @@ public:
     virtual void UnpackBatch(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) = 0;
 
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
+
+    // Join-key input columns that compare with IS NOT DISTINCT FROM (NULL matches NULL).
+    virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
 };
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(

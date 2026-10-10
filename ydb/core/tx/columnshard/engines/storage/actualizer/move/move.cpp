@@ -240,14 +240,18 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
     return requests;
 }
 
-TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes(
+void TMoveDataActualizer::PruneRetiredPortions(
     const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
     // Cleanup does not notify actualizers again for an already-retired portion.
+    // An empty THashSet can retain buckets; avoid walking them on every driver turn.
     if (!RetiredPortionIds.empty()) {
         EraseNodesIf(RetiredPortionIds, [&](const ui64 portionId) {
             return !portions.contains(portionId) && !uncommitted.contains(portionId);
         });
     }
+}
+
+TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
     return TMoveDataQueueSizes{ .Pending = PendingPortionIds.size(), .ConfirmedToMove = PortionAddress.size(),
         .InFlight = InFlightPortionIds.size(),
         .Uncommitted = UncommittedOnTarget.size(),

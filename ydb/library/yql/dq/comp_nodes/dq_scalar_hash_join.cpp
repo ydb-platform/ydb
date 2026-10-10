@@ -143,20 +143,23 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
     TFlushResult Flush() {
         TFlushResult res;
-        const i64 nItems = this->Output_.Probe.NTuples;
+        const i64 nItems = this->SizeTuples();
         res.Packs.Build = std::move(this->Output_.Build);
         res.Packs.Probe = std::move(this->Output_.Probe);
 
         res.Buffer.reserve(nItems * this->Columns());
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
-            ProbeValues_.resize(nItems * ProbeWidth_);
-            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
+            const int preservedWidth = Join.Preserved == ESide::Probe ? ProbeWidth_ : BuildWidth_;
+            auto& preservedValues = Join.Preserved == ESide::Probe ? ProbeValues_ : BuildValues_;
+            preservedValues.resize(nItems * preservedWidth);
+            this->Converters_.SelectSide(Join.Preserved)
+                ->UnpackBatch(res.Packs.SelectSide(Join.Preserved), preservedValues.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
-                    MKQL_ENSURE(rename.Side == ESide::Probe,
-                                "renames in Semi or Only Left Join shouldn't contain columns from right side");
-                    res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
+                    MKQL_ENSURE(rename.Side == Join.Preserved,
+                                "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
+                    res.Buffer.push_back(preservedValues[tupleIndex * preservedWidth + rename.Index]);
                 }
             }
         } else {
@@ -262,7 +265,7 @@ private:
             }
             const int width = Output_.Columns();
             return width ? BufferPos_ + width <= Buffer_->Buffer.size()
-                         : BufferPos_ < static_cast<size_t>(Buffer_->Packs.Probe.NTuples);
+                         : BufferPos_ < static_cast<size_t>(Buffer_->Packs.SelectSide(Join.Preserved).NTuples);
         }
 
         EFetchResult FillBuffer() {

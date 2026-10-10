@@ -1349,6 +1349,34 @@ namespace NKikimr::NBsController {
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
         }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetGroupSingleDcMode& cmd, TStatus&) {
+        auto *group = Groups.FindForUpdate(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TSetGroupSingleDcMode::GetGroupId));
+        if (!group) {
+            throw TExGroupNotFound(cmd.GetGroupId());
+        }
+        if (group->Generation != cmd.GetGroupGeneration()) {
+            throw TExGroupGenerationMismatch(cmd.GetGroupId(), cmd.GetGroupGeneration(), group->Generation);
+        }
+        if (!cmd.HasEnableSingleDcMode()) {
+            throw TExError() << "EnableSingleDcMode is required";
+        }
+        if (group->ErasureSpecies != TBlobStorageGroupType::ErasureMirror3dc || group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo) {
+            throw TExError() << "single DC mode requires a physical mirror-3-dc group";
+        }
+        if (cmd.GetEnableSingleDcMode() && (!cmd.HasSurvivingDc() || cmd.GetSurvivingDc() >= 3)) {
+            throw TExError() << "SurvivingDc must be a fail realm index in [0, 3)";
+        }
+        TMaybe<ui32> realm;
+        if (cmd.GetEnableSingleDcMode()) {
+            realm = cmd.GetSurvivingDc();
+        }
+        if (group->EnableSingleDcMode != cmd.GetEnableSingleDcMode() || group->SurvivingDc != realm) {
+            group->EnableSingleDcMode = cmd.GetEnableSingleDcMode();
+            group->SurvivingDc = realm;
+            GroupContentChanged.insert(group->ID);
+        }
+    }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
                 const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
             pb->SetGroupId(group.ID.GetRawId());
@@ -1360,6 +1388,10 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            pb->SetEnableSingleDcMode(group.EnableSingleDcMode);
+            if (group.SurvivingDc) {
+                pb->SetSurvivingDc(*group.SurvivingDc);
+            }
             if (group.GroupSizeInUnits != 0) {
                 pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
             }
@@ -1506,6 +1538,10 @@ namespace NKikimr::NBsController {
                 groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
             }
             groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+            group->SetEnableSingleDcMode(groupInfo.EnableSingleDcMode);
+            if (groupInfo.SurvivingDc) {
+                group->SetSurvivingDc(*groupInfo.SurvivingDc);
+            }
 
             if (poolInfo.DDisk) {
                 group->SetDDisk(true);

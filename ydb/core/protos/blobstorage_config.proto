@@ -869,6 +869,8 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
+        bool EnableSingleDcMode = 14;
+        optional uint32 SurvivingDc = 15;
     }
     message TNode {
         uint32 NodeId = 1;

@@ -1,10 +1,15 @@
 #include <ydb/core/base/hive.h>
+#include <ydb/core/kqp/common/compilation/events.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
@@ -91,6 +96,458 @@ void AssertSingleOperatorName(const NJson::TJsonValue& plan, const TString& opNa
 }
 
 Y_UNIT_TEST_SUITE(KqpStats) {
+
+Y_UNIT_TEST_TWIN(CompilationCacheHitMissCounters, AstCache) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(AstCache);
+    TKikimrRunner kikimr(settings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+    const auto counters = kikimr.GetTestServer().GetRuntime()->GetAppData().Counters->FindSubgroup("counters", "ydb");
+    UNIT_ASSERT(counters);
+    const auto cacheHits = counters->FindNamedCounter("name", "table.query.compilation.cache_hits");
+    const auto cacheMisses = counters->FindNamedCounter("name", "table.query.compilation.cache_misses");
+    const auto compilations = counters->FindNamedCounter("name", "table.query.compilation.count");
+    const auto compilationErrors = counters->FindNamedCounter("name", "table.query.compilation.error_count");
+    const auto kqpCounters = kikimr.GetTestServer().GetRuntime()->GetAppData().Counters->FindSubgroup("counters", "kqp");
+    UNIT_ASSERT(kqpCounters);
+    const auto compileRequests = kqpCounters->FindCounter("Compilation/Requests/Compile");
+    const auto recompileRequests = kqpCounters->FindCounter("Compilation/Requests/Recompile");
+    UNIT_ASSERT(cacheHits);
+    UNIT_ASSERT(cacheMisses);
+    UNIT_ASSERT(compilations);
+    UNIT_ASSERT(compilationErrors);
+    UNIT_ASSERT(compileRequests);
+    UNIT_ASSERT(recompileRequests);
+
+    const ui64 initialHits = cacheHits->Val();
+    const ui64 initialMisses = cacheMisses->Val();
+    const ui64 initialCompilations = compilations->Val();
+    const ui64 initialErrors = compilationErrors->Val();
+    const ui64 initialCompileRequests = compileRequests->Val();
+    const ui64 initialRecompileRequests = recompileRequests->Val();
+    const auto execSettings = TExecDataQuerySettings()
+        .KeepInQueryCache(true)
+        .CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+    auto execute = [&](const TString& query, bool fromCache) {
+        auto result = session.ExecuteDataQuery(query,
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        const auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+        UNIT_ASSERT(result.GetQuery());
+        TString uid;
+        UNIT_ASSERT(NOperationId::DecodePreparedQueryIdCompat(TString(result.GetQuery()->GetId()), uid.MutRef()));
+        return uid;
+    };
+
+    const TString query = Q1_("SELECT 42 AS compilation_cache_counter;");
+    const auto queryUid = execute(query, false);
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + 1);
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 1);
+    UNIT_ASSERT_VALUES_EQUAL(compileRequests->Val(), initialCompileRequests + 1);
+
+    execute(query, true);
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + 1);
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits + 1);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 1);
+    UNIT_ASSERT_VALUES_EQUAL(compileRequests->Val(), initialCompileRequests + (AstCache ? 2 : 1));
+
+    // A text miss followed by an AST hit must not increase the miss counter.
+    execute(Q1_("select 42 as compilation_cache_counter;"), AstCache);
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + (AstCache ? 1 : 2));
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits + (AstCache ? 2 : 1));
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + (AstCache ? 1 : 2));
+    // Requests/Compile includes requests that are subsequently satisfied by the AST cache.
+    UNIT_ASSERT_VALUES_EQUAL(compileRequests->Val(), initialCompileRequests + (AstCache ? 3 : 2));
+
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("cache-counters", "/Root", "cache-counters");
+    auto dbPublicCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    auto dbInternalCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    auto dbCounters = MakeIntrusive<TKqpDbCounters>(dbPublicCounters, dbInternalCounters);
+    TMaybe<TQueryAst> queryAst;
+
+    // Forced recompilation has its own counters and must not classify the client query twice.
+    for (ui64 attempt = 1; attempt <= 2; ++attempt) {
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvRecompileRequest(
+            token, "", queryUid, Nothing(), /*isQueryActionPrepare=*/false, TInstant::Max(),
+            dbCounters, std::make_shared<TGUCSettings>(), Nothing(),
+            std::make_shared<std::atomic<bool>>(true), context, NLWTrace::TOrbit(), nullptr, queryAst)));
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        const auto& result = response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        queryAst = result->QueryAst;
+        UNIT_ASSERT_VALUES_EQUAL(queryAst.Defined(), AstCache);
+
+        UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + (AstCache ? 1 : 2));
+        UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits + (AstCache ? 2 : 1));
+        UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + (AstCache ? 1 : 2) + attempt);
+        UNIT_ASSERT_VALUES_EQUAL(compileRequests->Val(), initialCompileRequests + (AstCache ? 3 : 2) + attempt);
+        UNIT_ASSERT_VALUES_EQUAL(recompileRequests->Val(), initialRecompileRequests + attempt);
+        UNIT_ASSERT_VALUES_EQUAL(dbPublicCounters->FindNamedCounter("name", "table.query.compilation.cache_misses")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(dbPublicCounters->FindNamedCounter("name", "table.query.compilation.cache_hits")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(dbPublicCounters->FindNamedCounter("name", "table.query.compilation.count")->Val(), attempt);
+        UNIT_ASSERT_VALUES_EQUAL(dbInternalCounters->FindCounter("Compilation/Requests/Compile")->Val(), attempt);
+        UNIT_ASSERT_VALUES_EQUAL(dbInternalCounters->FindCounter("Compilation/Requests/Recompile")->Val(), attempt);
+    }
+
+    // A compilation error still follows a definitive cache miss.
+    auto failed = session.ExecuteDataQuery(Q1_("SELECT Key FROM `/Root/CompilationCacheMissingTable`;"),
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), execSettings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(failed.GetStatus(), EStatus::SCHEME_ERROR, failed.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(cacheMisses->Val(), initialMisses + (AstCache ? 1 : 2) + 1);
+    UNIT_ASSERT_VALUES_EQUAL(cacheHits->Val(), initialHits + (AstCache ? 2 : 1));
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + (AstCache ? 1 : 2) + 3);
+    UNIT_ASSERT_VALUES_EQUAL(compileRequests->Val(), initialCompileRequests + (AstCache ? 3 : 2) + 3);
+    UNIT_ASSERT_VALUES_EQUAL(compilationErrors->Val(), initialErrors + 1);
+}
+
+Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    config->SetEnableAstCache(AstCache);
+    config->SetEnableCreateTableAs(true);
+    config->SetEnableDataShardCreateTableAs(true);
+    config->SetEnablePerStatementQueryExecution(true);
+    config->SetCompileMaxActiveRequests(1);
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    const auto publicCounters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
+    const auto internalCounters = runtime.GetAppData().Counters->FindSubgroup("counters", "kqp");
+    UNIT_ASSERT(publicCounters && internalCounters);
+    const auto hits = publicCounters->FindNamedCounter("name", "table.query.compilation.cache_hits");
+    const auto misses = publicCounters->FindNamedCounter("name", "table.query.compilation.cache_misses");
+    const auto compilations = publicCounters->FindNamedCounter("name", "table.query.compilation.count");
+    const auto requests = internalCounters->FindCounter("Compilation/Requests/Compile");
+    const auto queueSize = internalCounters->FindCounter("Compilation/QueueSize");
+    UNIT_ASSERT(hits && misses && compilations && requests && queueSize);
+    const ui64 initialHits = hits->Val();
+    const ui64 initialMisses = misses->Val();
+    auto context = MakeIntrusive<TUserRequestContext>("cache-scenarios", "/Root", "cache-scenarios");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+    auto tempTables = std::make_shared<TKqpTempTablesState>();
+    tempTables->Database = "/Root";
+    tempTables->TempDirName = "cache-counter-session";
+    auto makeQuery = [&](const TString& text, NKikimrKqp::EQueryType type = NKikimrKqp::QUERY_TYPE_SQL_DML) {
+        return TKqpQueryId("db", "/Root", "cache-scenarios", "root@builtin", text,
+            TKqpQuerySettings(type), nullptr, *gucSettings);
+    };
+    auto send = [&](const TKqpQueryId& query, bool keepInCache, TMaybe<TQueryAst> ast = Nothing(), bool split = false,
+                    bool perStatementResult = false) {
+        TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken(query.UserSid, {});
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), TMaybe<TKqpQueryId>(query), keepInCache, false, perStatementResult,
+            TInstant::Max(), nullptr, gucSettings, Nothing(), std::make_shared<std::atomic<bool>>(true),
+            context, NLWTrace::TOrbit(), tempTables, false, ast, split)));
+    };
+    auto receive = [&] {
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        return response;
+    };
+
+    // Disabling insertion must produce a miss on every request.
+    const auto uncached = makeQuery(Q1_("SELECT 17 AS uncached_counter;"));
+    for (ui64 attempt = 1; attempt <= 2; ++attempt) {
+        send(uncached, false);
+        const auto response = receive();
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+            response->Get()->CompileResult->Issues.ToString());
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + attempt);
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
+    }
+
+    // Invalid SQL cannot be satisfied by either cache, even if AST translation fails first.
+    const ui64 beforeInvalidCompilations = compilations->Val();
+    send(makeQuery("SELEC invalid syntax;"), true);
+    UNIT_ASSERT(receive()->Get()->CompileResult->Status != Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 3);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeInvalidCompilations + (AstCache ? 0 : 1));
+
+    // Both cold requests need a new plan, but share one physical compilation.
+    const auto shared = makeQuery(Q1_("SELECT 77 AS shared_compilation_counter;"));
+    const ui64 beforeSharedCompilations = compilations->Val();
+    const auto beforeSharedRequests = requests->Val();
+    TBlockEvents<TEvKqp::TEvCompileResponse> blocked(runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() != edge;
+    });
+    send(shared, true);
+    runtime.WaitFor("blocked compilation response", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+    send(shared, true);
+    runtime.WaitFor("second request queued", [&] { return queueSize->Val() == 1; }, TDuration::Seconds(30));
+    UNIT_ASSERT_VALUES_EQUAL(requests->Val(), beforeSharedRequests + 2);
+    UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSharedCompilations + 1);
+    blocked.Stop().Unblock();
+    TString sharedUid;
+    for (ui64 attempt = 0; attempt < 2; ++attempt) {
+        const auto response = receive();
+        const auto& result = response->Get()->CompileResult;
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        if (sharedUid.empty()) {
+            sharedUid = result->Uid;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result->Uid, sharedUid);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 5);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSharedCompilations + 1);
+
+    send(shared, true);
+    UNIT_ASSERT(receive()->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 5);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 1);
+
+    // AST equivalence must not reuse another user's plan.
+    auto anotherUser = shared;
+    anotherUser.UserSid = "another@builtin";
+    send(anotherUser, true);
+    const auto anotherResponse = receive();
+    UNIT_ASSERT_VALUES_EQUAL_C(anotherResponse->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+        anotherResponse->Get()->CompileResult->Issues.ToString());
+    UNIT_ASSERT(!anotherResponse->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 1);
+
+    // NeedToSplit and SPLIT are intermediate results, not completed client compilations.
+    const auto ctas = makeQuery(R"(
+        CREATE TABLE `/Root/CompilationCacheCtas` (PRIMARY KEY (Key))
+        WITH (STORE = ROW) AS SELECT 1u AS Key;
+    )", NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    send(ctas, false);
+    const auto ctasResponse = receive();
+    UNIT_ASSERT(ctasResponse->Get()->CompileResult->NeedToSplit);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+    const ui64 beforeSplitCompilations = compilations->Val();
+    send(ctas, false, ctasResponse->Get()->CompileResult->QueryAst, true);
+    const auto splitResponse = runtime.GrabEdgeEvent<TEvKqp::TEvSplitResponse>(edge, TDuration::Seconds(30));
+    UNIT_ASSERT(splitResponse);
+    UNIT_ASSERT_VALUES_EQUAL_C(splitResponse->Get()->Status, Ydb::StatusIds::SUCCESS, splitResponse->Get()->Issues.ToString());
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 1);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations);
+
+    // A missing UID is a service error, not a completed non-cached compilation.
+    const auto getRequests = internalCounters->FindCounter("Compilation/Requests/Get");
+    UNIT_ASSERT(getRequests);
+    const auto beforeGetRequests = getRequests->Val();
+    const auto beforeUidCompileRequests = requests->Val();
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    for (const bool invalidated : {false, true}) {
+        if (invalidated) {
+            runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileInvalidateRequest(sharedUid, nullptr)));
+        }
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", sharedUid, Nothing(), true, false, false, TInstant::Max(), nullptr, gucSettings,
+            Nothing(), std::make_shared<std::atomic<bool>>(true), context)));
+        const auto response = receive();
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->CompileResult->Status,
+            invalidated ? Ydb::StatusIds::NOT_FOUND : Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, !invalidated);
+        UNIT_ASSERT_VALUES_EQUAL(getRequests->Val(), beforeGetRequests + (invalidated ? 2 : 1));
+        UNIT_ASSERT_VALUES_EQUAL(requests->Val(), beforeUidCompileRequests);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
+        UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations);
+    }
+    send(shared, true);
+    const auto afterInvalidation = receive();
+    UNIT_ASSERT_VALUES_EQUAL_C(afterInvalidation->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+        afterInvalidation->Get()->CompileResult->Issues.ToString());
+    UNIT_ASSERT(!afterInvalidation->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 7);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations + 1);
+
+    // Per-statement execution counts compiled plans, without counting the initial parse as a miss.
+    const auto multi = makeQuery(Q1_("SELECT 101 AS multi_counter; SELECT 202 AS multi_counter;"),
+        NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+    send(multi, true, Nothing(), false, true);
+    if (AstCache) {
+        const auto parsed = runtime.GrabEdgeEvent<TEvKqp::TEvParseResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(parsed);
+        UNIT_ASSERT_VALUES_EQUAL(parsed->Get()->AstStatements.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 7);
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
+        for (ui64 attempt = 0; attempt < 2; ++attempt) {
+            const auto& ast = parsed->Get()->AstStatements[attempt];
+            send(multi, true, ast, false, true);
+            const auto response = receive();
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+                response->Get()->CompileResult->Issues.ToString());
+            UNIT_ASSERT(!response->Get()->Stats.FromCache);
+            UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 8 + attempt);
+        }
+    } else {
+        const auto response = receive();
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
+            response->Get()->CompileResult->Issues.ToString());
+        UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 8);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations + (AstCache ? 3 : 2));
+}
+
+Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
+    auto* config = settings.AppConfig.MutableTableServiceConfig();
+    config->SetEnableAstCache(AstCache);
+    config->SetCompileMaxActiveRequests(1);
+    config->SetCompileRequestQueueSize(2);
+    TKikimrRunner kikimr(settings);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto service = MakeKqpCompileServiceID(runtime.GetNodeId());
+    const auto publicCounters = runtime.GetAppData().Counters->FindSubgroup("counters", "ydb");
+    const auto internalCounters = runtime.GetAppData().Counters->FindSubgroup("counters", "kqp");
+    UNIT_ASSERT(publicCounters && internalCounters);
+    const auto hits = publicCounters->FindNamedCounter("name", "table.query.compilation.cache_hits");
+    const auto misses = publicCounters->FindNamedCounter("name", "table.query.compilation.cache_misses");
+    const auto compilations = publicCounters->FindNamedCounter("name", "table.query.compilation.count");
+    const auto requests = internalCounters->FindCounter("Compilation/Requests/Compile");
+    const auto queueSize = internalCounters->FindCounter("Compilation/QueueSize");
+    const auto rejected = internalCounters->FindCounter("Compilation/Requests/Rejected");
+    const auto timeouts = internalCounters->FindCounter("Compilation/Requests/Timeout");
+    UNIT_ASSERT(hits && misses && compilations && requests && queueSize && rejected && timeouts);
+    const auto initialHits = hits->Val();
+    const auto initialMisses = misses->Val();
+    const auto initialCompilations = compilations->Val();
+    const auto initialRequests = requests->Val();
+    const auto initialRejected = rejected->Val();
+    const auto initialTimeouts = timeouts->Val();
+    auto dbPublicCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    auto dbInternalCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    auto dbCounters = MakeIntrusive<TKqpDbCounters>(dbPublicCounters, dbInternalCounters);
+    const auto dbHits = dbPublicCounters->FindNamedCounter("name", "table.query.compilation.cache_hits");
+    const auto dbMisses = dbPublicCounters->FindNamedCounter("name", "table.query.compilation.cache_misses");
+    TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
+    auto context = MakeIntrusive<TUserRequestContext>("completed-cache", "/Root", "completed-cache");
+    auto gucSettings = std::make_shared<TGUCSettings>();
+    auto send = [&](const TString& text, bool warmup = false, TInstant deadline = TInstant::Max(),
+                    std::shared_ptr<std::atomic<bool>> interested = std::make_shared<std::atomic<bool>>(true)) {
+        TMaybe<TKqpQueryId> query = TKqpQueryId("db", "/Root", "completed-cache", "root@builtin", text,
+            TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
+        runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
+            token, "", Nothing(), std::move(query), true, false, false, deadline, dbCounters, gucSettings,
+            Nothing(), interested, context, NLWTrace::TOrbit(), nullptr, false, Nothing(), false,
+            nullptr, nullptr, warmup)));
+    };
+    auto receive = [&] {
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvCompileResponse>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(response && response->Get()->CompileResult);
+        return response;
+    };
+
+    // No miss is reported before completion, even with the compiler and queue occupied.
+    TBlockEvents<TEvKqp::TEvCompileResponse> blocked(runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() != edge;
+    });
+    send("SELECT 1 AS active;");
+    runtime.WaitFor("active compilation", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+    send("SELECT 2 AS timed_out;", false, TInstant::MicroSeconds(1));
+    auto interested = std::make_shared<std::atomic<bool>>(true);
+    send("SELECT 3 AS cancelled;", false, TInstant::Max(), interested);
+    runtime.WaitFor("queued requests", [&] { return queueSize->Val() == 2; }, TDuration::Seconds(30));
+    UNIT_ASSERT_VALUES_EQUAL(requests->Val(), initialRequests + 3);
+    send("SELECT 4 AS overloaded;");
+    UNIT_ASSERT_VALUES_EQUAL(receive()->Get()->CompileResult->Status, Ydb::StatusIds::OVERLOADED);
+    UNIT_ASSERT_VALUES_EQUAL(rejected->Val(), initialRejected + 1);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
+    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 1);
+    interested->store(false);
+    blocked.Stop().Unblock();
+    bool completed = false;
+    bool timedOut = false;
+    for (ui32 i = 0; i < 2; ++i) {
+        const auto response = receive();
+        const auto status = response->Get()->CompileResult->Status;
+        UNIT_ASSERT(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::TIMEOUT);
+        completed |= status == Ydb::StatusIds::SUCCESS;
+        timedOut |= status == Ydb::StatusIds::TIMEOUT;
+    }
+    UNIT_ASSERT(completed && timedOut);
+    UNIT_ASSERT_VALUES_EQUAL(timeouts->Val(), initialTimeouts + 1);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 1);
+    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 1);
+
+    // A later completed request also proves that the cancelled queued request was dropped.
+    send("SELECT 5 AS after_cancellation;");
+    UNIT_ASSERT_VALUES_EQUAL(receive()->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 2);
+    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 2);
+
+    // Warmup compilation does not add a client miss; a warmup cache hit is still a hit.
+    const TString warmQuery = "SELECT 6 AS warm_counter;";
+    send(warmQuery, true);
+    const auto warmResponse = receive();
+    UNIT_ASSERT_VALUES_EQUAL(warmResponse->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT(!warmResponse->Get()->Stats.FromCache);
+    send(warmQuery, true);
+    UNIT_ASSERT(receive()->Get()->Stats.FromCache);
+    send("select 6 as warm_counter;", true);
+    const auto warmAstResponse = receive();
+    UNIT_ASSERT_VALUES_EQUAL(warmAstResponse->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(warmAstResponse->Get()->Stats.FromCache, AstCache);
+    const auto warmupHits = AstCache ? 2 : 1;
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 2);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + warmupHits);
+    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(dbHits->Val(), warmupHits);
+    send(warmQuery);
+    UNIT_ASSERT(receive()->Get()->Stats.FromCache);
+    UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + warmupHits + 1);
+    UNIT_ASSERT_VALUES_EQUAL(dbHits->Val(), warmupHits + 1);
+
+    // Classify each waiter separately, regardless of which one starts the shared compilation.
+    for (const bool warmupFirst : {false, true}) {
+        const TString query = warmupFirst ? "SELECT 7 AS warmup_first;" : "SELECT 8 AS client_first;";
+        const auto beforeMisses = misses->Val();
+        const auto beforeDbMisses = dbMisses->Val();
+        const auto beforeRequests = requests->Val();
+        const auto beforeCompilations = compilations->Val();
+        TBlockEvents<TEvKqp::TEvCompileResponse> shared(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() != edge;
+        });
+        send(query, warmupFirst);
+        runtime.WaitFor("shared compilation", [&] { return !shared.empty(); }, TDuration::Seconds(30));
+        send(query, !warmupFirst);
+        runtime.WaitFor("shared waiter queued", [&] { return queueSize->Val() == 1; }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(requests->Val(), beforeRequests + 2);
+        UNIT_ASSERT_VALUES_EQUAL(shared.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeCompilations + 1);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), beforeMisses);
+        shared.Stop().Unblock();
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto response = receive();
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(!response->Get()->Stats.FromCache);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), beforeMisses + 1);
+        UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), beforeDbMisses + 1);
+        UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeCompilations + 1);
+        UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + warmupHits + 1);
+        UNIT_ASSERT_VALUES_EQUAL(dbHits->Val(), warmupHits + 1);
+    }
+}
 
 auto GetYqlStreamIterator(
         TKikimrRunner& kikimr,

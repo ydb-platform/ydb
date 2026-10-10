@@ -14,7 +14,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueMultiCo
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyCdc.TestSetQueueAttributes
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.CustomQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.ShuffleEliminationHashMapping
-ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery07
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery10
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
@@ -33,7 +32,6 @@ ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStrea
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStreamIndex-UseChannelsV2
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
-ydb/core/kqp/ut/batch_operations KqpBatchUpdate.SimplePartitions
 ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable+UserIsClusterAdmin+HasUsePermission
 ydb/core/kqp/ut/indexes KqpStreamIndexes.SecondaryNullDelete
@@ -75,7 +73,6 @@ ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_14
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL
-ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YQL_CBO4_ColumnLineageMapping
 ydb/core/kqp/ut/rbo KqpRboYql.WholePartitionWindowAsAggregateJoin-WindowFunctionsV2
 ydb/core/kqp/ut/rbo KqpRboYql.WindowAggregates+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.WindowFunctions+ColumnStore
@@ -147,7 +144,6 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnDependencyToNull
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingRow
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMultipleRows
-ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnNonDependency
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnSharedDependency
@@ -170,7 +166,6 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningNewRow
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningStar
-ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedVirtual.AlterAddGeneratedColumnIsRejected
 ydb/core/kqp/ut/scheme GeneratedVirtual.AsyncIndexWritesIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme GeneratedVirtual.DmlAndSchemaChangesIgnoreVirtualColumn
@@ -199,7 +194,6 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionVolatileDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithGlobalUniqueIndex
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithPlainFulltextIndex
-ydb/core/kqp/ut/scheme GeneratedVirtual.SyncAndUniqueIndexBuildsIgnoreVirtualColumn
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
@@ -382,7 +376,6 @@ ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard-SmallHistogramBudget
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
-ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
@@ -550,7 +543,6 @@ ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror34.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_fifo_groups_with_dlq_in_cloud[tables_format_v1]
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/finished/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/topic_creation/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor

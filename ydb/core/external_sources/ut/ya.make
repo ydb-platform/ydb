@@ -11,6 +11,7 @@ SRCS(
     external_source_factory_ut.cpp
     iceberg_ddl_ut.cpp
     object_storage_ut.cpp
+    object_storage_location_ut.cpp
 )
 
 END()

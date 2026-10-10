@@ -207,7 +207,9 @@ IActor* CreateKqpSchemeExecuter(
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
     const TActorId& kqpTempTablesAgentActor = TActorId(), NWilson::TTraceId traceId = {},
-    TInstant deadline = TInstant::Max());
+    TInstant deadline = TInstant::Max(),
+    const TKqpFederatedQuerySetup* federatedQuerySetup = nullptr,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = {});
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

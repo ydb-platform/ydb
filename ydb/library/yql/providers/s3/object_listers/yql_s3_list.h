@@ -158,6 +158,8 @@ struct TListingRequest {
     TString Pattern;
     ES3PatternType PatternType = ES3PatternType::Wildcard;
     TString Prefix;
+    // Directory markers are relevant to location validation, but not to reads.
+    bool IncludeDirectoryMarkers = false;
 };
 
 IOutputStream& operator<<(IOutputStream& stream, const TListingRequest& request);

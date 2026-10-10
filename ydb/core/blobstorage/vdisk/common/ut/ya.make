@@ -14,6 +14,7 @@ PEERDIR(
 )
 
 SRCS(
+    vdisk_histogram_latency_ut.cpp
     circlebufresize_ut.cpp
     circlebufstream_ut.cpp
     circlebuf_ut.cpp

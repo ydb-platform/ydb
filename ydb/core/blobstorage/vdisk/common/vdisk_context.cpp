@@ -33,13 +33,15 @@ namespace NKikimr {
                 TReplQuoter::TPtr replPDiskReadQuoter,
                 TReplQuoter::TPtr replPDiskWriteQuoter,
                 TReplQuoter::TPtr replNodeRequestQuoter,
-                TReplQuoter::TPtr replNodeResponseQuoter)
+                TReplQuoter::TPtr replNodeResponseQuoter,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> vdiskAsyncCounters)
         : TBSProxyContext(vdiskCounters->GetSubgroup("subsystem", "memhull"))
         , VDiskActorId(vdiskActorId)
         , Top(std::move(top))
         , VDiskCounters(vdiskCounters)
+        , VDiskAsyncCounters(vdiskAsyncCounters ? std::move(vdiskAsyncCounters) : vdiskCounters)
         , VDiskMemCounters(vdiskCounters->GetSubgroup("subsystem", "memhull"))
-        , Histograms(VDiskCounters, type)
+        , Histograms(VDiskCounters, VDiskAsyncCounters, type)
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)

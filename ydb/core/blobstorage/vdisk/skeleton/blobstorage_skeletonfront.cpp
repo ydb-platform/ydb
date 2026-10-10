@@ -700,6 +700,8 @@ namespace NKikimr {
         std::vector<std::pair<TString, TString>> CountersChain;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCountersBase;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCountersBase;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> VDiskAsyncCounters;
         TIntrusivePtr<::NMonitoring::TDynamicCounters> SkeletonFrontGroup;
         ::NMonitoring::TDynamicCounters::TCounterPtr AccessDeniedMessages;
         std::unique_ptr<TIntQueueClass> IntQueueAsyncGets;
@@ -783,7 +785,7 @@ namespace NKikimr {
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
                         TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.PDiskId, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
-                        baseInfo.ReplNodeResponseQuoter);
+                        baseInfo.ReplNodeResponseQuoter, VDiskAsyncCounters);
 
             // create IntQueues
             IntQueueAsyncGets = std::make_unique<TIntQueueClass>(
@@ -2285,11 +2287,10 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_SKELETON_FRONT;
         }
 
-        static TIntrusivePtr<::NMonitoring::TDynamicCounters> CreateVDiskCounters(
+        static std::vector<std::pair<TString, TString>> CreateCountersChain(
                 TIntrusivePtr<TVDiskConfig> cfg,
-                TIntrusivePtr<TBlobStorageGroupInfo> info,
-                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                std::vector<std::pair<TString, TString>>& chain) {
+                TIntrusivePtr<TBlobStorageGroupInfo> info) {
+            std::vector<std::pair<TString, TString>> chain;
             // add 'storagePool' label
             chain.emplace_back("storagePool", cfg->BaseInfo.StoragePoolName);
 
@@ -2309,6 +2310,12 @@ namespace NKikimr {
             const auto media = cfg->BaseInfo.DeviceType;
             chain.emplace_back("media", to_lower(NPDisk::DeviceTypeStr(media, true)));
 
+            return chain;
+        }
+
+        static TIntrusivePtr<::NMonitoring::TDynamicCounters> CreateVDiskCounters(
+                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                const std::vector<std::pair<TString, TString>>& chain) {
             for (const auto& [name, value] : chain) {
                 counters = counters->GetSubgroup(name, value);
             }
@@ -2325,8 +2332,11 @@ namespace NKikimr {
             , Top(GInfo->PickTopology())
             , SelfVDiskId(GInfo->GetVDiskId(Config->BaseInfo.VDiskIdShort))
             , SkeletonId()
+            , CountersChain(CreateCountersChain(Config, GInfo))
             , VDiskCountersBase(GetServiceCounters(counters, "vdisks"))
-            , VDiskCounters(CreateVDiskCounters(Config, GInfo, VDiskCountersBase, CountersChain))
+            , VDiskCounters(CreateVDiskCounters(VDiskCountersBase, CountersChain))
+            , VDiskAsyncCountersBase(GetServiceCounters(counters, "vdisks_async"))
+            , VDiskAsyncCounters(CreateVDiskCounters(VDiskAsyncCountersBase, CountersChain))
             , SkeletonFrontGroup(VDiskCounters->GetSubgroup("subsystem", "skeletonfront"))
             , AccessDeniedMessages(SkeletonFrontGroup->GetCounter("AccessDeniedMessages", true))
 
@@ -2388,6 +2398,7 @@ namespace NKikimr {
             DisconnectClients(ctx);
             ActiveActors.KillAndClear(ctx);
             VDiskCountersBase->RemoveSubgroupChain(CountersChain);
+            VDiskAsyncCountersBase->RemoveSubgroupChain(CountersChain);
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
             TActorBootstrapped::PassAway();

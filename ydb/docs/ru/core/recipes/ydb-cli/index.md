@@ -1,9 +1,10 @@
-# {{ ydb-short-name }} CLI рецепты
+# Рецепты для {{ ydb-short-name }} CLI
 
 Этот раздел содержит рецепты для различных задач, которые можно решить с помощью {{ ydb-short-name }} CLI.
 
 Содержание:
 
+* [{#T}](auth-oidc.md)
 * [{#T}](convert-table-type.md)
 * [{#T}](benchmarks.md)
 * [{#T}](ttl.md)

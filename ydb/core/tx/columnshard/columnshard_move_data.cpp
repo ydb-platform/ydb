@@ -162,16 +162,16 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx, const NOlap::NAct
         YDB_LOG_INFO("MoveData gate waits for the first GC round", {"tabletId", TabletID()});
         return;
     }
-    if (defaultOperator->HasBlobsForGroups(MoveDataState.TargetGroups)) {
-        // Same wait either way, but a shared or borrowed link is not ours to collect, so it gets its own sensor.
-        const auto& sharedBlobs = defaultOperator->GetSharedBlobs();
-        if (sharedBlobs && sharedBlobs->HasBlobsForGroups(MoveDataState.TargetGroups)) {
-            Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
-            YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", TabletID()});
-        } else {
-            Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-            YDB_LOG_INFO("MoveData gate waits for pending GC", {"tabletId", TabletID()});
-        }
+    // A shared or borrowed link is not ours to collect, so it gets its own sensor.
+    const auto& sharedBlobs = defaultOperator->GetSharedBlobs();
+    if (sharedBlobs && sharedBlobs->HasBlobsForGroups(MoveDataState.TargetGroups)) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
+        YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", TabletID()});
+        return;
+    }
+    if (defaultOperator->HasGCBlobsForGroups(MoveDataState.TargetGroups)) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
+        YDB_LOG_INFO("MoveData gate waits for pending GC", {"tabletId", TabletID()});
         return;
     }
     YDB_LOG_INFO("MoveData gate passed", {"tabletId", TabletID()});
@@ -190,8 +190,12 @@ void TColumnShard::SetupMoveDataMetadata() {
     if (!MoveDataState.Active || !HasIndex() || MoveDataMetadataRequestsInFlight->Val()) {
         return;
     }
-    StartMetadataRequests(
-        GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MoveDataTaskSubscription, MoveDataMetadataRequestsInFlight);
+    StartMetadataRequests(GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MoveDataTaskSubscription,
+        MoveDataMetadataRequestsInFlight, [](TColumnShard& tablet, const TActorContext& ctx) {
+            if (!!tablet.MoveDataDriverId) {
+                ctx.Send(tablet.MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
+            }
+        });
 }
 
 void TColumnShard::SetupMoveDataRewrites() {

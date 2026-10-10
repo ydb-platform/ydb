@@ -299,6 +299,14 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         portions.erase(1);
         UNIT_ASSERT_VALUES_EQUAL_C(
             actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Retired, 0, "the gate must open once cleanup erased the portion");
+
+        // Forgetting a cleaned-up retired id must preserve the seeded membership used on re-add.
+        auto readdedPortion = MakeDefaultTierPortion(1);
+        portions.emplace(1, readdedPortion);
+        actualizer.AddPortion(readdedPortion, NOlap::NActualizer::TAddExternalContext(start, portions));
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Pending, 1);
+        actualizer.RemovePortion(1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Retired, 1);
     }
 
     // A portion seeded with a remove snapshot, as after an aborted write, waits for cleanup instead of a rewrite.

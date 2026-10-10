@@ -1,4 +1,7 @@
 #include "vdisk_histogram_latency.h"
+#include "vdisk_histograms.h"
+
+#include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -6,6 +9,66 @@
 namespace NKikimr::NVDiskMon {
 
     Y_UNIT_TEST_SUITE(TVDiskLatencyCounters) {
+
+        Y_UNIT_TEST(AsyncClassesUseSeparateCountersAndCoarseBounds) {
+            for (auto type : {NPDisk::DEVICE_TYPE_UNKNOWN, NPDisk::DEVICE_TYPE_ROT,
+                    NPDisk::DEVICE_TYPE_SSD, NPDisk::DEVICE_TYPE_NVME}) {
+                auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                auto asyncCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                THistograms histograms(counters, asyncCounters, type);
+                const NMonitoring::TBucketBounds asyncBounds = {1, 8, 32, 128, 1'024, 65'536};
+                const auto foregroundBounds = GetCommonLatencyHistBounds(type);
+
+                auto check = [&](const TLtcHistoPtr& histogram, const TString& handleClass, bool async) {
+                    const auto& expected = async ? asyncCounters : counters;
+                    const auto& other = async ? counters : asyncCounters;
+                    auto group = expected->FindSubgroup("handleclass", handleClass);
+                    UNIT_ASSERT_C(group, handleClass);
+                    UNIT_ASSERT(!other->FindSubgroup("handleclass", handleClass));
+                    auto latency = group->FindSubgroup("subsystem", "latency_histo");
+                    UNIT_ASSERT(latency);
+                    auto latencyHistogram = latency->FindHistogram("LatencyMs");
+                    UNIT_ASSERT(latencyHistogram);
+                    auto snapshot = latencyHistogram->Snapshot();
+                    const auto& bounds = async ? asyncBounds : foregroundBounds;
+                    UNIT_ASSERT_VALUES_EQUAL(snapshot->Count(), bounds.size() + 1);
+                    for (size_t i = 0; i < bounds.size(); ++i) {
+                        UNIT_ASSERT_VALUES_EQUAL(snapshot->UpperBound(i), bounds[i]);
+                        histogram->Collect(TDuration::MicroSeconds(bounds[i] * 1'000), 42);
+                    }
+                    histogram->Collect(TDuration::Seconds(120), 42);
+                    histogram->AddInFlightRequest(1, TInstant::Seconds(1));
+                    // Publishing gauges must not reset accumulated histogram buckets or counters.
+                    for (ui32 i = 1; i <= 120; ++i) {
+                        histograms.UpdateCounters(TInstant::Seconds(i + 1));
+                    }
+                    snapshot = latencyHistogram->Snapshot();
+                    for (size_t i = 0; i < snapshot->Count(); ++i) {
+                        UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(i), 1);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(snapshot->UpperBound(bounds.size()), Max<double>());
+                    UNIT_ASSERT_VALUES_EQUAL(group->FindCounter("requestBytes")->Val(), 42 * snapshot->Count());
+                    UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("LatencyCompletedCount")->Val(), snapshot->Count());
+                    ui64 completedSumUs = 120'000'000;
+                    for (double bound : bounds) {
+                        completedSumUs += TDuration::MicroSeconds(bound * 1'000).MicroSeconds();
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("LatencyUsCompletedSum")->Val(), completedSumUs);
+                    UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("InFlightCount")->Val(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("InFlightLatencyUsSum")->Val(), 120'000'000);
+                    UNIT_ASSERT_VALUES_EQUAL(latency->FindCounter("LatencyUsMax")->Val(), 120'000'000);
+                    histogram->RemoveInFlightRequest(1);
+                };
+
+                check(histograms.GetHistogram(NKikimrBlobStorage::AsyncRead), "GetAsync", true);
+                check(histograms.GetHistogram(NKikimrBlobStorage::Discover), "GetDiscover", true);
+                check(histograms.GetHistogram(NKikimrBlobStorage::LowRead), "GetLow", true);
+                check(histograms.GetHistogram(NKikimrBlobStorage::AsyncBlob), "PutAsyncBlob", true);
+                check(histograms.GetHistogram(NKikimrBlobStorage::FastRead), "GetFast", false);
+                check(histograms.GetHistogram(NKikimrBlobStorage::TabletLog), "PutTabletLog", false);
+                check(histograms.GetHistogram(NKikimrBlobStorage::UserData), "PutUserData", false);
+            }
+        }
 
         Y_UNIT_TEST(CompletedAndInFlightLatencyCountersAreReportedSeparately) {
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();

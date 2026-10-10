@@ -112,7 +112,9 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskConfig>& config,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             const TString& handleClass) {
-            auto group = GetServiceCounters(counters, "vdisks");
+            const bool async = handleClass == "GetAsync" || handleClass == "GetDiscover"
+                || handleClass == "GetLow" || handleClass == "PutAsyncBlob";
+            auto group = GetServiceCounters(counters, async ? "vdisks_async" : "vdisks");
             group = FindSubgroup(group, "storagePool", config->BaseInfo.StoragePoolName);
             group = FindSubgroup(group, "group", Sprintf("%09" PRIu32, info->GroupID.GetRawId()));
             group = FindSubgroup(group, "orderNumber", Sprintf("%02" PRIu32, info->GetOrderNumber(config->BaseInfo.VDiskIdShort)));
@@ -344,6 +346,23 @@ namespace NKikimr {
     } // namespace
 
     Y_UNIT_TEST_SUITE(TSkeletonFrontLatency) {
+
+        Y_UNIT_TEST(AsyncCountersAreRemovedWhenSkeletonFrontStops) {
+            TTestEnv env(0);
+            for (const TString& handleClass : {"GetAsync", "GetDiscover", "GetLow", "PutAsyncBlob",
+                    "GetFast", "PutTabletLog", "PutUserData"}) {
+                UNIT_ASSERT(GetLatencyGroup(env.Counters, env.Config, env.GroupInfo, handleClass));
+            }
+            auto counters = env.Counters->FindSubgroup("counters", "vdisks");
+            auto asyncCounters = env.Counters->FindSubgroup("counters", "vdisks_async");
+            UNIT_ASSERT(counters);
+            UNIT_ASSERT(asyncCounters);
+            SendToSkeletonFront(env.Runtime, env.SkeletonFrontId, env.EdgeActor,
+                new TEvents::TEvPoisonPill(), TEvents::TSystem::PoisonPill);
+            UNIT_ASSERT(!env.Runtime.FindActor(env.SkeletonFrontId, NodeId - 1));
+            UNIT_ASSERT(!counters->FindSubgroup("storagePool", StoragePoolName));
+            UNIT_ASSERT(!asyncCounters->FindSubgroup("storagePool", StoragePoolName));
+        }
 
         Y_UNIT_TEST(DroppedDelayedPutUserDataRemovesInFlightLatency) {
             TTestEnv env(0);

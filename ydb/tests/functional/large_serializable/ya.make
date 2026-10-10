@@ -1,4 +1,3 @@
-REQUIREMENTS(cpu:1)
 IF (NOT SANITIZER_TYPE)
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
@@ -11,6 +10,7 @@ TEST_SRCS(
 
 REQUIREMENTS(
     ram:32
+    cpu:1
 )
 
 SIZE(LARGE)

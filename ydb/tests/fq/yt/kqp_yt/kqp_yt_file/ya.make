@@ -1,5 +1,4 @@
 RECURSE(
-REQUIREMENTS(cpu:1)
     part0
     part1
     part2

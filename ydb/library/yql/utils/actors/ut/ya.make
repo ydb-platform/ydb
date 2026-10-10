@@ -1,6 +1,7 @@
 IF (OS_LINUX OR OS_DARWIN)
-REQUIREMENTS(cpu:1)
     UNITTEST_FOR(ydb/library/yql/utils/actors)
+
+    REQUIREMENTS(cpu:1)
 
     SIZE(SMALL)
 

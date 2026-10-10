@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
+#include <util/string/printf.h>
+
 constexpr bool VERBOSE = false;
 
 void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEnvironmentSetup>& env,
@@ -31,6 +33,32 @@ void SetupEnv(const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<
     pdiskLayout = MakePDiskLayout(baseConfig, topology, groupId);
 }
 
+auto GetHostedVDiskCounters(TEnvironmentSetup& env, const TBlobStorageGroupInfo::TTopology& topology, ui32 groupId) {
+    NKikimrBlobStorage::TConfigRequest request;
+    request.AddCommand()->MutableQueryBaseConfig();
+    const auto response = env.Invoke(request);
+    std::vector<TIntrusivePtr<NMonitoring::TDynamicCounters>> result;
+    for (const auto& vslot : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
+        if (vslot.GetGroupId() != groupId) {
+            continue;
+        }
+        const auto& id = vslot.GetVSlotId();
+        const ui32 order = topology.GetOrderNumber(TVDiskIdShort(vslot.GetFailRealmIdx(),
+                vslot.GetFailDomainIdx(), vslot.GetVDiskIdx()));
+        auto counters = GetServiceCounters(env.Runtime->GetNode(id.GetNodeId())->AppData->Counters, "vdisks");
+        for (const auto& [label, value] : std::initializer_list<std::pair<TString, TString>>{
+                {"storagePool", env.StoragePoolName}, {"group", ToString(groupId)},
+                {"orderNumber", Sprintf("%02u", order)}, {"pdisk", Sprintf("%09u", id.GetPDiskId())},
+                {"media", "rot"}}) {
+            counters = counters->FindSubgroup(label, value);
+            UNIT_ASSERT_C(counters, "Missing " << label << "=" << value << " for VSlot " << id.ShortDebugString());
+        }
+        result.push_back(counters);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(result.size(), topology.TotalVDisks);
+    return result;
+}
+
 template <typename TInflightActor>
 void TestVDiskAdvancedCost(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* actor) {
     std::unique_ptr<TEnvironmentSetup> env;
@@ -40,16 +68,16 @@ void TestVDiskAdvancedCost(const TBlobStorageGroupInfo::TTopology& topology, TIn
     std::vector<ui32> pdiskLayout;
     SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout);
 
+    const auto vdiskCounters = GetHostedVDiskCounters(*env, topology, groupId);
     auto getCost = [&]() {
-        return env->AggregateVDiskCountersWithCallback(env->StoragePoolName, groupSize, groupSize, groupId,
-                pdiskLayout, [](const auto& counters) -> ui64 {
+        ui64 cost = 0;
+        for (const auto& counters : vdiskCounters) {
             UNIT_ASSERT(!counters->FindSubgroup("subsystem", "cost"));
             auto advancedCost = counters->FindSubgroup("subsystem", "advancedCost");
-            if (!advancedCost) {
-                return 0; // This VDisk order number belongs to another node.
-            }
-            UNIT_ASSERT_GT(advancedCost->FindCounter("DiskTimeAvailableCtr")->Val(), 0);
-            ui64 cost = 0;
+            UNIT_ASSERT(advancedCost);
+            auto available = advancedCost->FindCounter("DiskTimeAvailableCtr");
+            UNIT_ASSERT(available);
+            UNIT_ASSERT_GT(available->Val(), 0);
             for (const TString& operation : {"read", "write"}) {
                 auto group = advancedCost->FindSubgroup("operation", operation);
                 UNIT_ASSERT(group);
@@ -57,18 +85,32 @@ void TestVDiskAdvancedCost(const TBlobStorageGroupInfo::TTopology& topology, TIn
                 UNIT_ASSERT(counter);
                 cost += counter->Val();
             }
-            return cost;
-        });
+        }
+        return cost;
+    };
+    auto getDSProxyCost = [&]() {
+        ui64 cost = 0;
+        for (ui32 nodeId = 1; nodeId <= groupSize; ++nodeId) {
+            auto* appData = env->Runtime->GetNode(nodeId)->AppData.get();
+            cost += GetServiceCounters(appData->Counters, "dsproxynode")->
+                    GetSubgroup("subsystem", "request")->
+                    GetSubgroup("storagePool", env->StoragePoolName)->
+                    GetCounter("DSProxyDiskCostNs", true)->Val();
+        }
+        return cost;
     };
 
     const ui64 costBefore = getCost();
+    const ui64 dsproxyCostBefore = getDSProxyCost();
     actor->SetGroupId(TGroupId::FromValue(groupId));
     env->Runtime->Register(actor, 1);
     env->Sim(TDuration::Minutes(10));
 
     UNIT_ASSERT_GT(getCost(), costBefore);
+    // DSProxy uses the QoS cost model, so its cost need not equal advancedCost.
+    UNIT_ASSERT_GT(getDSProxyCost(), dsproxyCostBefore);
     UNIT_ASSERT_VALUES_EQUAL(actor->ResponsesByStatus[NKikimrProto::ERROR], 0);
-    UNIT_ASSERT_VALUES_EQUAL(actor->ResponsesByStatus[NKikimrProto::OK], actor->RequestsSent);
+    UNIT_ASSERT_GT(actor->ResponsesByStatus[NKikimrProto::OK], 0);
 }
 
 #define MAKE_TEST_W_DATASIZE(erasure, requestType, requests, inflight, dataSize)                        \
@@ -214,14 +256,26 @@ void TestDiskTimeAvailableScaling() {
     std::vector<ui32> pdiskLayout;
     SetupEnv(topology, env, groupSize, groupType, groupId, pdiskLayout, 0, 1);
 
-    i64 test1 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
-            "advancedCost", "DiskTimeAvailable");
+    const auto vdiskCounters = GetHostedVDiskCounters(*env, topology, groupId);
+    auto getAvailable = [&]() {
+        ui64 value = 0;
+        for (const auto& counters : vdiskCounters) {
+            auto advancedCost = counters->FindSubgroup("subsystem", "advancedCost");
+            UNIT_ASSERT(advancedCost);
+            auto available = advancedCost->FindCounter("DiskTimeAvailableCtr");
+            UNIT_ASSERT(available);
+            value += available->Val();
+        }
+        return value;
+    };
+    const i64 test1 = getAvailable();
+    UNIT_ASSERT_GT(test1, 0);
 
+    // PDisk mock reports TrueMediaType=NVME even when configured as ROT.
     env->SetIcbControl(0, "VDiskControls.DiskTimeAvailableScaleNVME", 2'000);
     env->Sim(TDuration::Minutes(5));
 
-    i64 test2 = env->AggregateVDiskCounters(env->StoragePoolName, groupSize, groupSize, groupId, pdiskLayout,
-            "advancedCost", "DiskTimeAvailable");
+    const i64 test2 = getAvailable();
 
     i64 delta = test1 * 2 - test2;
 

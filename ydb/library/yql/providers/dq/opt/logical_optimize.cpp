@@ -69,7 +69,7 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
             return false;
         if (auto hashJoinMode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
                 hashJoinMode == EHashJoinMode::Off || hashJoinMode == EHashJoinMode::Map)
-            return true;
+            return right->Stats.ByteSize > 0.0 && right->Stats.ByteSize < 1e6 && right->Stats.Nrows > 0.0;
         break;
 
     case EJoinAlgoType::GraceJoin:

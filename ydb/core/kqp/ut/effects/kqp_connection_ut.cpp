@@ -274,3 +274,4 @@ Y_UNIT_TEST_SUITE(KqpFail) {
 }
 }
 }
+// ci: widen increment graph, 2026-10-05

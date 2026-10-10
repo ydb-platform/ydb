@@ -168,3 +168,4 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
 
 } // namspace NKqp
 } // namespace NKikimr
+// ci: widen increment graph, 2026-10-05

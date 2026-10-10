@@ -193,3 +193,4 @@ class TestCompactionConfig(object):
 
         self.init(config)
         self.check("test_constructor_still_overrides_preset")
+# ci: widen increment graph, 2026-10-05

@@ -491,3 +491,4 @@ class TestPgSelect(TestPgBase, TestSelectBase):
 
     def test_as_table(self):
         self.do_test_as_table({**pk_pg_types_mixed, **non_pk_pg_types_mixed})
+# ci: widen increment graph, 2026-10-05

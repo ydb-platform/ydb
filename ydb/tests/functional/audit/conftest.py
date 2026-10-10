@@ -3,3 +3,4 @@
 #
 # for ydb_{cluster, database, ...} fixture family
 pytest_plugins = 'ydb.tests.library.fixtures'
+# ci: widen increment graph, 2026-10-05

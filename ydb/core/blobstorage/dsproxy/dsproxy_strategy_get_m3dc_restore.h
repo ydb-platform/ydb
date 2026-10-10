@@ -154,6 +154,7 @@ namespace NKikimr {
                         break;
 
                     case TBlobState::ESituation::Error:
+                    case TBlobState::ESituation::NotReady:
                         failed |= TBlobStorageGroupInfo::TSubgroupVDisks(&info.GetTopology(), diskIdx);
                         break;
                 }

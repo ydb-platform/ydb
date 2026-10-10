@@ -987,6 +987,13 @@ public:
         }
     }
 
+    bool ShouldPostponeNotReady(ui32 type) const override {
+        // MinLatency strategies need the original status to identify an unavailable realm.
+        return Tactic != TEvBlobStorage::TEvPut::TacticMinLatency
+            || Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc
+            || (type != TEvBlobStorage::EvVPutResult && type != TEvBlobStorage::EvVMultiPutResult);
+    }
+
     STATEFN(StateWait) {
         if (ProcessEvent(ev, true)) {
             return;

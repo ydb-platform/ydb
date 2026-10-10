@@ -134,7 +134,7 @@ public:
                 }
             }
             // if anything wrong - attempt to restart the tablet
-            if (tablet->InitiateStop(SideEffects)) {
+            if (tablet->InitiateStop(SideEffects, EHiveEventReason::StartFailed)) {
                 if (tablet->IsLeader()) {
                     YDB_LOG_NOTICE("THive::TTxStartTablet::Execute jump-starting tablet after failed boot",
                         {"logPrefix", GetLogPrefix()},

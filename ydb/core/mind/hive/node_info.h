@@ -108,9 +108,8 @@ public:
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
-    static constexpr size_t EVENT_HISTORY_SIZE = 50;
-    // newest events of this node, see THive::RecordNodeEvent; capacity is reserved upfront (EVENT_HISTORY_SIZE * sizeof(THiveEvent))
-    TStaticRingBuffer<THiveEvent, EVENT_HISTORY_SIZE> EventHistory;
+    // diagnostics only: newest events of this node, constructed on the first event, see THive::RecordNodeEvent
+    TMaybe<TSimpleRingBuffer<THiveEvent>> EventHistory;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -242,7 +241,7 @@ public:
                 }
             }
             for (const auto& t : TabletsToRestart) {
-                t->BecomeStopped();
+                t->BecomeStopped(EHiveEventReason::NodeDisconnected);
             }
             Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
             Local = TActorId();

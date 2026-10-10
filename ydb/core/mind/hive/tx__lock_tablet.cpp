@@ -87,6 +87,8 @@ public:
 
         // Mark tablet locked to the new owner
         PreviousOwner = tablet->SetLockedToActor(OwnerActor, ReconnectTimeout);
+        Self->RecordTabletEvent(*tablet, EHiveEventType::Locked, EHiveEventReason::LockRequest,
+            TStringBuilder() << "owner=" << OwnerActor << " previousOwner=" << PreviousOwner << " reconnectTimeout=" << ReconnectTimeout);
 
         // Persist to database
         NIceDb::TNiceDb db(txc.DB);
@@ -103,9 +105,9 @@ public:
         if (tablet->IsLockedToActor()) {
             // Make sure running tablets will be stopped
             for (auto& follower : tablet->Followers) {
-                follower.InitiateStop(SideEffects);
+                follower.InitiateStop(SideEffects, EHiveEventReason::LockRequest);
             }
-            tablet->InitiateStop(SideEffects);
+            tablet->InitiateStop(SideEffects, EHiveEventReason::LockRequest);
             db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
             tablet->RestoreLockedTabletMetrics();
         }

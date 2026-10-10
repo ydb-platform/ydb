@@ -31,8 +31,7 @@ enum class EJwkKeyOps : ui8 {
     DERIVE_BITS /* "deriveBits" */,
 };
 
-// Use for asymmetric JWS: https://datatracker.ietf.org/doc/html/rfc7518#section-3
-// TODO(vlad-serikov): Also implement for JWE: https://datatracker.ietf.org/doc/html/rfc7518#section-4
+// Asymmetric JWS and JWE algorithms https://datatracker.ietf.org/doc/html/rfc7518 (Sections 3 and 4).
 enum class EJwkAlg : ui8 {
     RS256,
     RS384,
@@ -43,26 +42,52 @@ enum class EJwkAlg : ui8 {
     PS256,
     PS384,
     PS512,
+    RSA1_5,
+    RSA_OAEP /* "RSA-OAEP" */,
+    RSA_OAEP_256 /* "RSA-OAEP-256" */,
+    ECDH_ES /* "ECDH-ES" */,
+    ECDH_ES_A128KW /* "ECDH-ES+A128KW" */,
+    ECDH_ES_A192KW /* "ECDH-ES+A192KW" */,
+    ECDH_ES_A256KW /* "ECDH-ES+A256KW" */,
 };
 
 // {kty, kid} - Unique identifier
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
 struct TJwk {
+    struct TRsaParameters {
+        std::string Modulus; // decoded `n` (unsigned, big endian)
+        std::string Exponent; // decoded `e` (unsigned, big endian)
+    };
+
+    struct TEcParameters {
+        std::string Curve; // `crv`
+        std::string X; // decoded `x` (unsigned, big endian)
+        std::string Y; // decoded `y` (unsigned, big endian)
+    };
+
     EJwkKeyType Type; // `kty`
     std::optional<EJwkUsage> Usage; // `use`
-    std::vector<EJwkKeyOps> KeyOperations; // `key_ops`
+    std::optional<std::vector<EJwkKeyOps>> KeyOperations; // `key_ops`; absent differs from empty
     std::optional<EJwkAlg> Algorithm; // `alg`
     std::string KeyId; // `kid`
     std::string X509Url; // `x5u`
     std::vector<std::string> X509Chain; // decoded `x5c` (in DER format)
     std::string X509CertificateSha1ThumbprintBytes; // decoded `x5t`
     std::string X509CertificateSha256ThumbprintBytes; // decoded `x5t#S256`
+    std::optional<TRsaParameters> RsaParameters;
+    std::optional<TEcParameters> EcParameters;
 
     explicit TJwk(EJwkKeyType type);
 
     // Returns std::nullopt if parameters are missing or if validation/parsing failed.
-    // Otherwise, returns the extracted public key.
-    std::optional<std::string> CalculatePublicKey() const;
+    // Otherwise, returns the public key in PEM format. If both x5c and key
+    // parameters are present, they must represent the same key.
+    // Validates the supplied certificate path, including validity periods and
+    // signatures for which an issuer is available. The last certificate need
+    // not be a root: trust in the JWK must come from its authenticated source,
+    // not from this consistency check. Does not fetch x5u or check revocation.
+    // Sets a diagnostic on failure; clears error on success.
+    std::optional<std::string> CalculatePublicKey(std::string& error) const;
 };
 
 // https://datatracker.ietf.org/doc/html/rfc7517#section-5

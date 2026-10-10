@@ -30,6 +30,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
@@ -13954,11 +13956,156 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             const auto result = executeQuery(R"(
                 --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (max_active_partitions = 0)
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetPartitioningSettings().GetMaxActivePartitions(), 3);
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
                 ALTER TOPIC `/Root/table/feed` RESET (retention_period)
             )");
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetRetentionPeriod(), TDuration::Days(1));
         }
+    }
+
+    Y_UNIT_TEST(ShowCreateChangefeedSettingsAsIndependentQueries) {
+        using namespace NTopic;
+
+        struct TTopicSnapshot {
+            TDuration RetentionPeriod;
+            ui64 MinActivePartitions;
+            ui64 MaxActivePartitions;
+            EAutoPartitioningStrategy AutoPartitioningStrategy;
+            TDuration AutoPartitioningStabilizationWindow;
+            ui32 AutoPartitioningUpUtilizationPercent;
+            ui32 AutoPartitioningDownUtilizationPercent;
+            size_t PartitionCount;
+        };
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto topicClient = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&querySession](const TString& query) {
+            auto result = querySession.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                result.GetIssues().ToString() << "\nQuery:\n" << query);
+        };
+
+        auto describeTable = [&tableSession]() {
+            auto result = tableSession.DescribeTable("/Root/show_create_changefeed").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto description = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+            description.mutable_self()->clear_created_at();
+            return description;
+        };
+
+        auto describeTopic = [&topicClient]() {
+            const auto description = DescribeTopic(topicClient, "/Root/show_create_changefeed/feed");
+            const auto& partitioningSettings = description.GetPartitioningSettings();
+            const auto& autoPartitioningSettings = partitioningSettings.GetAutoPartitioningSettings();
+
+            return TTopicSnapshot{
+                .RetentionPeriod = description.GetRetentionPeriod(),
+                .MinActivePartitions = partitioningSettings.GetMinActivePartitions(),
+                .MaxActivePartitions = partitioningSettings.GetMaxActivePartitions(),
+                .AutoPartitioningStrategy = autoPartitioningSettings.GetStrategy(),
+                .AutoPartitioningStabilizationWindow = autoPartitioningSettings.GetStabilizationWindow(),
+                .AutoPartitioningUpUtilizationPercent = autoPartitioningSettings.GetUpUtilizationPercent(),
+                .AutoPartitioningDownUtilizationPercent = autoPartitioningSettings.GetDownUtilizationPercent(),
+                .PartitionCount = description.GetPartitions().size(),
+            };
+        };
+
+        executeQuery(R"(
+            CREATE TABLE `/Root/show_create_changefeed` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )");
+        executeQuery(R"(
+            ALTER TABLE `/Root/show_create_changefeed` ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+        )");
+        executeQuery(R"(
+            ALTER TOPIC `/Root/show_create_changefeed/feed` SET (
+                retention_period = INTERVAL('PT6H'),
+                min_active_partitions = 3,
+                max_active_partitions = 8,
+                auto_partitioning_strategy = 'paused',
+                auto_partitioning_stabilization_window = INTERVAL('PT15M'),
+                auto_partitioning_up_utilization_percent = 70,
+                auto_partitioning_down_utilization_percent = 25
+            );
+        )");
+
+        const auto originalTableDescription = describeTable();
+        const auto originalTopicDescription = describeTopic();
+
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.RetentionPeriod, TDuration::Hours(6));
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, 3);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, 8);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, EAutoPartitioningStrategy::Paused);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStabilizationWindow, TDuration::Minutes(15));
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningUpUtilizationPercent, 70);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningDownUtilizationPercent, 25);
+
+        auto showCreateResult = querySession.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/show_create_changefeed`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(showCreateResult.GetStatus(), EStatus::SUCCESS, showCreateResult.GetIssues().ToString());
+        UNIT_ASSERT(!showCreateResult.GetResultSets().empty());
+
+        TResultSetParser parser(showCreateResult.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto showCreateQuery = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
+        UNIT_ASSERT_C(showCreateQuery.has_value(), "SHOW CREATE TABLE returned an empty CreateQuery");
+
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        TVector<TString> statements;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NSQLTranslationV1::SplitQueryToStatements(
+            TString(*showCreateQuery), NSQLTranslationV1::MakeLexer(lexers, false), statements, issues),
+            issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(statements.size(), 3, *showCreateQuery);
+
+        executeQuery("DROP TABLE `/Root/show_create_changefeed`;");
+        for (const auto& statement : statements) {
+            executeQuery(statement);
+        }
+
+        const auto recreatedTableDescription = describeTable();
+        const auto recreatedTopicDescription = describeTopic();
+        google::protobuf::util::MessageDifferencer differencer;
+        TString descriptionDiff;
+        differencer.ReportDifferencesToString(&descriptionDiff);
+        UNIT_ASSERT_C(differencer.Compare(originalTableDescription, recreatedTableDescription),
+            "Table descriptions differ after SHOW CREATE TABLE replay:\n" << descriptionDiff
+            << "\nDDL:\n" << *showCreateQuery);
+
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.RetentionPeriod, recreatedTopicDescription.RetentionPeriod);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, recreatedTopicDescription.MinActivePartitions);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, recreatedTopicDescription.MaxActivePartitions);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, recreatedTopicDescription.AutoPartitioningStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStabilizationWindow, recreatedTopicDescription.AutoPartitioningStabilizationWindow);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningUpUtilizationPercent, recreatedTopicDescription.AutoPartitioningUpUtilizationPercent);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningDownUtilizationPercent, recreatedTopicDescription.AutoPartitioningDownUtilizationPercent);
+
+        // Altering the minimum partition count may repartition asynchronously, so compare only the stable settings.
+        UNIT_ASSERT_VALUES_EQUAL(recreatedTopicDescription.PartitionCount, 3);
     }
 
     Y_UNIT_TEST_TWIN(CreateTopicMeteringModeRequestUnits, UseQueryService) {

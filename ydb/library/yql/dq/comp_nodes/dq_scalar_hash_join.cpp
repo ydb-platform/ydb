@@ -135,8 +135,14 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
         , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
     {
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
-            const int nullWidth = std::ssize(meta->InputTypes.SelectSide(Join.NullSupplying()));
-            TMKQLVector<NUdf::TUnboxedValue> nulls(nullWidth);
+            const auto& nullTypes = meta->UserTypes.SelectSide(Join.NullSupplying());
+            for (int i = 0; i < std::ssize(nullTypes); ++i) {
+                auto* type = nullTypes[i];
+                MKQL_ENSURE(type->IsOptional(),
+                            Sprintf("expected every type of the null-supplying side to be optional when join type is Left, got type #%i: %s",
+                                    i + 1, type->GetKindAsStr().data()));
+            }
+            TMKQLVector<NUdf::TUnboxedValue> nulls(std::ssize(nullTypes));
             this->Converters_.SelectSide(Join.NullSupplying())->Pack(nulls.data(), this->Nulls_);
         }
     }

@@ -24,6 +24,41 @@ using TTestResponse = TResultOrError<int>;
 
 Y_UNIT_TEST_SUITE(TExecutorTest)
 {
+    Y_UNIT_TEST(ShouldReleaseTasksEnqueuedAfterStop)
+    {
+        auto alive = std::make_shared<int>(0);
+        std::weak_ptr<int> weak = alive;
+        bool ran = false;
+        {
+            auto executor = TExecutor::Create("TEST");
+            executor->Start();
+            executor->Stop();
+
+            executor->ExecuteSimple([alive = std::move(alive), &ran] { ran = true; });
+        }
+        UNIT_ASSERT_C(weak.expired(), "a task enqueued after Stop was leaked");
+        UNIT_ASSERT_C(!ran, "a task enqueued after Stop was executed");
+    }
+
+    Y_UNIT_TEST(ShouldReleaseFutureTasksEnqueuedAfterStop)
+    {
+        auto alive = std::make_shared<int>(0);
+        std::weak_ptr<int> weak = alive;
+        bool ran = false;
+        TFuture<int> future;
+        {
+            auto executor = TExecutor::Create("TEST");
+            executor->Start();
+            executor->Stop();
+
+            future = executor->Execute([alive = std::move(alive), &ran] { ran = true; return 42; });
+        }
+        // The captures are released; the future is not completed.
+        UNIT_ASSERT_C(weak.expired(), "a future task enqueued after Stop was leaked");
+        UNIT_ASSERT_C(!ran, "a future task enqueued after Stop was executed");
+        UNIT_ASSERT(!future.HasValue() && !future.HasException());
+    }
+
     Y_UNIT_TEST(ShouldHandleRequests)
     {
         auto executor = TExecutor::Create("TEST");

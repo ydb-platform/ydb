@@ -60,7 +60,7 @@ DEPENDS(
     ydb/tests/tools/nemesis/driver
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 PEERDIR(
     ydb/tests/tools/nemesis/library
     ydb/tests/library

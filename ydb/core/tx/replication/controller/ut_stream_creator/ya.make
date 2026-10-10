@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/tx/replication/controller)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ENDIF()

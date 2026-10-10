@@ -2,7 +2,7 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/nbs/suite.inc)
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 PEERDIR(
     contrib/python/grpcio
     ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos

@@ -8,7 +8,7 @@ FORK_TEST_FILES()
 # and therefore some tests may affect neighbouring ones
 SPLIT_FACTOR(100)
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_DSTOOL_BINARY="ydb/apps/dstool/ydb-dstool")

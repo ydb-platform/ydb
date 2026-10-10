@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 SIZE(SMALL)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_tli_ut.cpp

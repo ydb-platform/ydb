@@ -19,7 +19,7 @@ PY_SRCS(
     conftest.py
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

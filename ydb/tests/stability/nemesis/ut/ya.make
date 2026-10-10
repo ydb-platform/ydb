@@ -1,7 +1,7 @@
 PY3TEST()
 
 SIZE(SMALL)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 TEST_SRCS(
     test_chaos_target.py

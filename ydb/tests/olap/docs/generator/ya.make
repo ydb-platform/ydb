@@ -5,7 +5,7 @@ PY_SRCS(
     __main__.py
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 PEERDIR(
     ydb/tests/olap/scenario/helpers
     contrib/python/PyYAML

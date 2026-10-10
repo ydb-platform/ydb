@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/services/distributed_storage)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     distributed_storage_ut.cpp

@@ -22,7 +22,7 @@ PY_SRCS(
     helpers.py
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 PEERDIR(
     ydb/tools/mnc/cli
     ydb/tools/mnc/lib

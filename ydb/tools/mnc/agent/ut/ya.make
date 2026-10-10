@@ -13,7 +13,7 @@ TEST_SRCS(
     test_tasks.py
 )
 
-REQUIREMENTS(cpu:1)
+REQUIREMENTS(cpu:2)
 PEERDIR(
     ydb/tools/mnc/agent
     ydb/tools/mnc/lib

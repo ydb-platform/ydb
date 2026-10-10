@@ -1,0 +1,20 @@
+auth_config:
+  external_idp_authentication_domain: ${OIDC_AUTH_DOMAIN}
+  external_idp_config:
+    issuer: ${OIDC_ISSUER}
+    audience: ydb
+    subject_claim_name: preferred_username
+
+domains_config:
+  security_config:
+    enforce_user_token_requirement: true
+    administration_allowed_sids:
+      - ${YDB_CLUSTER_ADMIN}@${OIDC_AUTH_DOMAIN}
+    database_allowed_sids:
+      - ${YDB_CLUSTER_ADMIN}@${OIDC_AUTH_DOMAIN}
+      - ${OIDC_CLIENT_SID}@${OIDC_AUTH_DOMAIN}
+      - ${OIDC_DEVICE_SID}@${OIDC_AUTH_DOMAIN}
+    default_access:
+      - +F:${YDB_CLUSTER_ADMIN}@${OIDC_AUTH_DOMAIN}
+      - +F:${OIDC_CLIENT_SID}@${OIDC_AUTH_DOMAIN}
+      - +F:${OIDC_DEVICE_SID}@${OIDC_AUTH_DOMAIN}

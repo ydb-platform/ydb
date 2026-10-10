@@ -1043,6 +1043,7 @@ public:
     }
 
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
+        Y_ABORT_UNLESS(!settings.Unsafe);
         CHECK_PREPARED_DDL(TruncateTable);
 
         try {

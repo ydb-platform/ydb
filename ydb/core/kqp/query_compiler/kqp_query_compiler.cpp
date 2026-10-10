@@ -758,8 +758,18 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        queryProto.SetForceImmediateEffectsExecution(
-            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
+        bool hasUnsafeTruncate = false;
+        for (const auto& tx : query.Transactions()) {
+            if (!TKqpPhyTxSettings::Parse(tx).UnsafeTruncatePath.empty()) {
+                hasUnsafeTruncate = true;
+                break;
+            }
+        }
+
+        queryProto.SetForceImmediateEffectsExecution(hasUnsafeTruncate
+            || Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
         queryProto.SetDisablePessimisticLocks(
             Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
@@ -1204,6 +1214,14 @@ private:
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
+
+        // Nothing else to compile: the transaction is the table path, and the executer discovers
+        // everything else from the live schema.
+        if (!txSettings.UnsafeTruncatePath.empty()) {
+            YQL_ENSURE(*txSettings.Type == EPhysicalTxType::Generic);
+            txProto.MutableUnsafeTruncate()->SetTablePath(txSettings.UnsafeTruncatePath);
+            return;
+        }
 
         bool hasEffectStage = false;
         bool hasPqSources = false;

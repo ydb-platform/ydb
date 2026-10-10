@@ -2268,12 +2268,11 @@ void TTableInfo::CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Y_ABORT_UNLESS(Stats.Aggregated.RowCount == 0 && Stats.Aggregated.DataSize == 0);
     Stats.PartitionStats.clear();
     Stats.UpdatedStats.clear();
-    // New physical shard IDs: any history copied from the source table is keyed by stale
-    // shard idxs and must be dropped to keep PartitionSplitMergeStates keys subset of PartitionStats keys.
-    // NOTE: the corresponding pathId may still sit in TSchemeShard::TablesWithDeferredSplitMerge
-    // and in SplitMergeRevisitQueue with QueuedForRevisit=true. That cross-object cleanup is
-    // intentionally deferred and self-healing: UpdateSplitMergeCounters prunes stale membership
-    // entries, and the revisit wave clears QueuedForRevisit when DeferredShards is empty.
+    // New physical shard IDs: drop any copied history (stale shard idxs) to keep
+    // PartitionSplitMergeStates keys a subset of PartitionStats keys. The pathId may
+    // linger in TSchemeShard::TablesWithDeferredSplitMerge / SplitMergeRevisitQueue --
+    // that cross-object cleanup is self-healing (UpdateSplitMergeCounters prunes
+    // membership; the revisit wave clears QueuedForRevisit when DeferredShards is empty).
     PartitionSplitMergeStates.clear();
     TableSplitMergeState = TTableSplitMergeState{};
     Stats.Aggregated.PartCount = newPartitioning.size();
@@ -2374,17 +2373,13 @@ void TTableInfo::ApplySplitMerge(
         Partitions[i]->Position = i;
     }
 
-    // Split/merge history: subdivide/merge along the partition lineage. The history is kept
-    // in a SEPARATE map (not folded into TPartitionStats) precisely so it survives this
-    // transition -- Stats.PartitionStats was just zeroed for the dst shards above, which would
-    // otherwise wipe the lineage / hysteresis / fairness signal here. Children inherit the
-    // parent range's history. The empty() guard skips the O(removed+added) lookups entirely
-    // when no state was ever recorded -- except for a by-load split, where the persisted
-    // op signal (loadSplitLineage) must seed child state even with an empty map (restart
-    // case). Cleanup of removed shards' entries is deliberately NOT
-    // gated by trackSplitMergeDemand: after a flag toggle-off the map stays populated, and
-    // skipping cleanup would break the keys-subset-of-PartitionStats invariant. Only the
-    // parent-scan propagation is flag-gated.
+    // Split/merge history lives in a separate map so it survives this transition
+    // (Stats.PartitionStats was just zeroed for the dst shards). Children inherit the
+    // parent range's history. The empty() guard skips the lookups when no state was
+    // ever recorded -- except a by-load split, where the persisted op signal
+    // (loadSplitLineage) must seed child state even after a restart (empty map).
+    // Cleanup of removed shards is NOT flag-gated: skipping it after a toggle-off
+    // would break the keys-subset-of-PartitionStats invariant.
     if (!PartitionSplitMergeStates.empty() || loadSplitLineage) {
         if (trackSplitMergeDemand) {
             TInstant parentLastSplitTime;
@@ -2402,11 +2397,9 @@ void TTableInfo::ApplySplitMerge(
 
             const bool isSplit = kAdded > kRemoved;
             const bool isMerge = kAdded < kRemoved;
-            // After a SchemeShard restart PartitionSplitMergeStates is empty (in-memory
-            // only), so anyParentHistory is false even when the persisted op carries
-            // LoadSplitLineage == true (TxInFlightV2). Fire the propagation in that case
-            // too, treating the missing parent history as depth 0 -- otherwise the
-            // persisted by-load signal is dead on its intended restart path.
+            // After a restart the history map is empty, so treat the missing parent
+            // history as depth 0 when the persisted op carries LoadSplitLineage --
+            // otherwise the signal is dead on its intended restart path.
             if (anyParentHistory || (isSplit && loadSplitLineage)) {
                 for (auto* dst : dstPtrs) {
                     // Intentional insert: dst shards are brand-new IDs with no entries yet;
@@ -2458,7 +2451,7 @@ void TTableInfo::UpdateSplitMergePickCache(const TShardIdx& shardIdx) {
         if (s.CachedPickNeedsRescan) {
             // The previous winner was removed while other (possibly heavier) candidates may
             // still be deferred: only a full rescan (PickMostDeferredPartition) may install
-            // the next winner -- a fresh light deferral must not shadow them (Finding 23).
+            // the next winner -- a fresh light deferral must not shadow them.
             return;
         }
         // Genuinely empty history: the first deferral wins outright.
@@ -2481,7 +2474,7 @@ void TTableInfo::InvalidateSplitMergePickCache(const TShardIdx& shardIdx) {
         TableSplitMergeState.CachedPickShardIdx = InvalidShardIdx;
         // Other (possibly heavier) candidates may still be deferred: the next
         // UpdateSplitMergePickCache call must not install a fresh winner without a
-        // full rescan (Finding 23).
+        // full rescan.
         TableSplitMergeState.CachedPickNeedsRescan = !TableSplitMergeState.DeferredShards.empty();
     }
 }
@@ -2562,13 +2555,11 @@ void TTableInfo::DropFromSplitMergeState(const TShardIdx& shardIdx) {
     if (tableState.DeferredShards.empty()) {
         tableState.OldestPendingCandidateAt = TInstant();
         tableState.OldestPendingCandidateAtDirty = false;
-        // The set drained: no candidates remain to shadow a fresh deferral, so the next
-        // UpdateSplitMergePickCache call may install a winner normally again (Finding 23
-        // residual -- without this the flag lingers until a pick rescan runs).
+        // Set drained: nothing left to shadow a fresh deferral (clears the rescan flag).
         tableState.CachedPickNeedsRescan = false;
     } else {
         // Removals only increase the true minimum: mark dirty and recompute lazily on
-        // read -- draining N deferred shards must stay O(N), not O(N^2) (Finding 22).
+        // read -- draining N deferred shards must stay O(N), not O(N^2).
         tableState.OldestPendingCandidateAtDirty = true;
     }
 }

@@ -1173,18 +1173,18 @@ public:
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats, TInstant now);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
 
-    // --- Split/merge candidacy memory (EnableSplitMergeDemandTracking). All no-ops when the flag is off. ---
+    // --- Split/merge candidacy memory (EnableSplitMergeDemandTracking). ---
     // The Record* family is per-direction: each entry point names the direction explicitly
     // instead of taking a boolean, so a call site where the direction is not (yet) known
-    // is visible as such. All take (pathId, table, shardIdx, ...).
+    // is visible as such. Each also increments its always-on cumulative counter
+    // (Note*Detected / NoteSplitMergeDeferral) and gates only the structured recording
+    // on the flag -- call them unconditionally.
     // Record that a partition became a split/merge candidate this stats cycle.
     void RecordSplitDemand(TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now, bool demandTracking);
     void RecordMergeDemand(TTableInfo& table, const TShardIdx& shardIdx, bool byLoad, TInstant now, bool demandTracking);
     // Record that a wanted split/merge was deferred (blocked); enqueues the table for fair re-eval.
-    // `demandTracking` must be the caller's tx-level snapshot of EnableSplitMergeDemandTracking
-    // (not re-read here): the flag is reloadable at runtime, and re-reading it inside this
-    // function could disagree with the snapshot the caller used to decide whether to call at
-    // all, desyncing the deferral counters from the fair-revisit enqueue decision.
+    // `demandTracking` is the caller's tx-level flag snapshot: re-reading the reloadable
+    // flag here could desync the deferral counters from the caller's enqueue decision.
     void RecordSplitDeferral(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,
         TPartitionSplitMergeState::EDeferralReason reason, TInstant now, bool demandTracking);
     void RecordMergeDeferral(const TPathId& pathId, TTableInfo& table, const TShardIdx& shardIdx,

@@ -346,13 +346,11 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     const auto& shardIdx = shardIt->second;
 
-    // Live-partition check: the revisit route (TTxRevisitSplitMerge) re-requests stats for a
-    // shard picked from cached DeferredShards, and this response can arrive after the table
-    // was reshaped (split/merge/drop). TabletIdToShardIdx still resolves the tablet until
-    // shard teardown, so a dead shardIdx would otherwise flow into the propose and into
-    // RecordSplitApplied. The main stats path is guarded at its sender
-    // (VerifySplitAndRequestStats); the revisit sender has no such guard, so the check
-    // must live here, at the point of mutation.
+    // Live-partition check: a revisit re-request can arrive after the table was reshaped
+    // (split/merge/drop), and TabletIdToShardIdx still resolves the tablet until shard
+    // teardown -- a dead shardIdx would flow into the propose and RecordSplitApplied.
+    // The revisit sender has no sender-side guard (unlike VerifySplitAndRequestStats),
+    // so the check lives here, at the point of mutation.
     if (!tableInfo->GetPartitionStore().contains(shardIdx)) {
         YDB_LOG_DEBUG_CTX(ctx, "TTxPartitionHistogram Shard is not a live partition of the table",
             {"datashard", datashardId},
@@ -363,19 +361,13 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     }
 
     if (!trySplitBySize && !trySplitByLoad) {
-        // The response carries no split evidence (e.g. a revisit re-request answered by a
-        // cooled-down shard). A previously recorded deferral is stale now: expire it,
-        // otherwise the gauges freeze at stale nonzero values forever (Finding 26). The
-        // inline counter refresh is required because nothing else runs after this point
-        // when periodic stats are blocked and the revisit queue is drained.
-        //
-        // Expiry requires authoritative evidence (Review B regression (b)): only a leader's
-        // FullStatsReady response proves the shard produced its full stats and they show no
-        // split demand. A not-ready response (heavy load -- precisely the split-by-load
-        // scenario) or a follower sample must NOT drop a previously recorded deferral and
-        // the shard's queue seniority; the next periodic cycle re-records demand if it
-        // returns. And only split-wanting deferrals are expired (regression (a)): this
-        // response says nothing about merge demand, so a merge deferral must survive it.
+        // No split evidence in the response (e.g. a revisit re-request answered by a
+        // cooled-down shard): a previously recorded split deferral is stale -- expire it
+        // and refresh the gauges inline (nothing else runs here when periodic stats are
+        // blocked and the revisit queue is drained). Expiry needs authoritative evidence:
+        // only a leader's FullStatsReady response proves no split demand; a not-ready
+        // response or a follower sample must keep the deferral and its queue seniority.
+        // Only split-wanting deferrals: the response says nothing about merge demand.
         const auto* deferred = tableInfo->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx);
         if (deferred
                 && deferred->WantsSplit
@@ -507,10 +499,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             {"reason", splitReasonMsg},
         );
         // Fresh split evidence says the shard no longer wants to split: a previously
-        // recorded deferral is stale -- expire it and refresh the gauges inline
-        // (Finding 26). Only split-wanting deferrals: this branch evaluates split
-        // criteria only and carries no information about merge demand, so a merge
-        // deferral must survive it (Review B regression (a)).
+        // recorded deferral is stale -- expire it and refresh the gauges inline.
+        // Only split-wanting deferrals: this branch evaluates split criteria only
+        // and carries no information about merge demand, so a merge deferral
+        // must survive it.
         const auto* deferred = tableInfo->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx);
         if (deferred && deferred->WantsSplit) {
             Self->RemoveDeferredPartition(tableId, *tableInfo, shardIdx);

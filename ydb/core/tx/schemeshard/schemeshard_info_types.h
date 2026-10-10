@@ -604,9 +604,7 @@ struct TPartitionSplitMergeState {
         }
     }
 
-    // Direction-indexed accessors: internal use only (the Record* family and its impl).
-    // A wrong `wantsSplit` silently corrupts the opposite counter, so these must not
-    // leak beyond that code; the public API names the direction in the method instead.
+    // Internal, direction-indexed: a wrong wantsSplit corrupts the opposite counter.
     ui32& DeferredCount(bool wantsSplit) {
         return wantsSplit ? SplitDeferredCount : MergeDeferredCount;
     }
@@ -639,23 +637,17 @@ struct TPartitionSplitMergeState {
 // incrementally (never recomputed on the hot path). In-memory only.
 struct TTableSplitMergeState {
     TInstant LastSplitMergeTime;        // when this table last got a slot
-    // Timestamp of the oldest candidate among *currently* deferred shards; reset when the
-    // deferred set drains, so it never reflects candidates that are no longer waiting.
-    // Maintained incrementally on the insert path; removals only mark it dirty (they can
-    // only increase the true minimum) and the exact value is recomputed lazily by
-    // TTableInfo::GetOldestPendingCandidateAt -- draining N deferred shards must stay
-    // O(N), not O(N^2) (Finding 22).
+    // Oldest candidate timestamp among currently deferred shards. Insert-maintained;
+    // removals only mark it dirty (they can only raise the minimum) and it is
+    // recomputed lazily by GetOldestPendingCandidateAt -- draining N shards stays O(N).
     TInstant OldestPendingCandidateAt;
     bool OldestPendingCandidateAtDirty = false;
     ui32 SplitDemandCount = 0;
     ui32 MergeDemandCount = 0;
-    // Currently-stuck partitions only -> inner weighted pick is O(stuck-in-table), not O(all).
-    // Value carries the direction (true = split, false = merge) of the deferral that inserted
-    // the shard (removal paths decrement exactly the count that was incremented on insert)
-    // and the last deferral reason. The reason drives the revisit path: only slot-related
-    // deferrals (InFlightLimit) are re-driven by a fresh stats request; reasons with their
-    // own recovery edge (Borrowed -> compaction-done, PathLocked -> drop-lock, ShardLimit* ->
-    // quota change) wait for that edge instead of re-requesting stats in a spin loop.
+    // Currently-stuck partitions only -> the inner weighted pick is O(stuck), not O(all).
+    // Value carries the deferral direction and reason. The revisit path re-drives
+    // slot-related reasons with a fresh stats request; other reasons are re-checked
+    // against current state (lock dropped, compaction done, txIds replenished).
     struct TDeferredShardInfo {
         bool WantsSplit = true;
         TPartitionSplitMergeState::EDeferralReason Reason = TPartitionSplitMergeState::EDeferralReason::InFlightLimit;
@@ -705,19 +697,15 @@ struct TTableSplitMergeState {
         return wantsSplit ? SplitDemandCount : MergeDemandCount;
     }
 
-    // Incrementally maintained cache of PickMostDeferredPartition's result. While a shard
-    // stays deferred its weight only grows (counter resets are paired with removal from
-    // DeferredShards) and candidate timestamps only move forward, so the winner changes only
-    // via RecordSplitDeferral/RecordMergeDeferral (UpdateSplitMergePickCache) or removal
-    // (InvalidateSplitMergePickCache). Gives the revisit turn an O(1) fast path; a failed
-    // validation falls back to the O(deferred-in-table) rescan.
+    // Incrementally maintained cache of PickMostDeferredPartition's result. A deferred
+    // shard's weight only grows and candidates only move forward, so the winner changes
+    // only via UpdateSplitMergePickCache (deferral) or removal (invalidation). O(1) fast
+    // path; a failed validation falls back to the O(deferred-in-table) rescan.
     TShardIdx CachedPickShardIdx = InvalidShardIdx;
     ui32 CachedPickWeight = 0;
     TInstant CachedPickCandidate;
-    // Distinguishes "no winner was ever cached" (a fresh deferral may install itself
-    // outright) from "the cached winner was removed while other candidates may remain
-    // deferred" (only a full rescan may install the next winner; otherwise a light newly
-    // deferred shard would shadow heavier existing candidates -- Finding 23).
+    // Set when the cached winner was removed but other candidates may remain: a fresh
+    // light deferral must not shadow them without a full rescan.
     bool CachedPickNeedsRescan = false;
 };
 

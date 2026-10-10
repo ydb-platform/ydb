@@ -63,8 +63,6 @@ NNodes::TExprBase DqBuildHashJoin(
     bool useBlockHashJoin = false,
     bool blockHashJoinBuildSideLeft = false);
 
-// Settings shared by block and scalar hash join: optional BuildSide=Left and
-// EqualNulls Uint32 key indexes. The legacy optimizer only emits BuildSide.
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     TPositionHandle pos,
     EJoinAlgoType joinAlgo,

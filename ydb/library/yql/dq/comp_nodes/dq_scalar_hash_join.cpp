@@ -327,8 +327,6 @@ private:
 
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const ui32 inputCount = callable.GetInputsCount();
-    // Filters are either absent or a fixed block of JoinFilterInputs. Settings, when present,
-    // occupy the slot just before that block. Missing settings are the map-join callable.
     const bool hasSettings = inputCount == InputsWithSettings || inputCount == InputsWithSettings + JoinFilterInputs;
     const ui32 filterStart = hasSettings ? InputsWithSettings : InputsWithoutSettings;
     MKQL_ENSURE(inputCount == filterStart || inputCount == filterStart + JoinFilterInputs,

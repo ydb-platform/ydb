@@ -37,7 +37,6 @@ public:
 
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 
-    // Join-key input columns that compare with IS NOT DISTINCT FROM (NULL matches NULL).
     virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
 };
 

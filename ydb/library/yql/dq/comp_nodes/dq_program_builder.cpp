@@ -236,8 +236,6 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-    // Default settings match the historical callable, which had no settings argument.
-    // Map join relies on that shape: filters, when present, stay at the same position.
     if (settings.BuildSide != EBuildSide::Right || !settings.EqualNullsKeys.empty()) {
         TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
         if (!settings.EqualNullsKeys.empty()) {

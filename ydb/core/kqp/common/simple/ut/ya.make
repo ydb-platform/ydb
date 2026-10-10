@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     session_id_ut.cpp
 )

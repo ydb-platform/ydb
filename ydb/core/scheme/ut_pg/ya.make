@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/scheme)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     scheme_tablecell_pg_ut.cpp
 )

@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     ut_table_metrics_settings.cpp

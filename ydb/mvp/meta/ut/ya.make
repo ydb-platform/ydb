@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/mvp/meta)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     meta_cache_ut.cpp

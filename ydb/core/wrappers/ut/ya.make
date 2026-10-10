@@ -1,4 +1,5 @@
 UNITTEST_FOR(ydb/core/wrappers)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

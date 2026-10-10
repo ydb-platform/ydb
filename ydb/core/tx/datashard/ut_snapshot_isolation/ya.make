@@ -4,6 +4,7 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 
 #SPLIT_FACTOR(2)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

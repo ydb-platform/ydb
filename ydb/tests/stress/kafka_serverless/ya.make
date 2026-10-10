@@ -4,6 +4,7 @@ PY_SRCS(
     __main__.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/stress/kafka_serverless/workload
     ydb/public/sdk/python

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/persqueue/topic_parser)
 FORK_SUBTESTS()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt

@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/fq/libs/control_plane_proxy)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/testing/unittest
     yql/essentials/sql/pg_dummy

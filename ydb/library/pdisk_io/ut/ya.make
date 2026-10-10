@@ -6,6 +6,7 @@ IF (OS_LINUX)
     )
 ENDIF(OS_LINUX)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/pdisk_io
 )

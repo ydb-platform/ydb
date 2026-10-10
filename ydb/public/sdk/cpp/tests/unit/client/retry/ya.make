@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     retry_ut.cpp
     retry_async_ut.cpp

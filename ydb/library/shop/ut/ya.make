@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/threading/future
     ydb/library/shop

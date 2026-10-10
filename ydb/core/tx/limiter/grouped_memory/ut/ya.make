@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/limiter/grouped_memory)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/tx/limiter/grouped_memory/usage

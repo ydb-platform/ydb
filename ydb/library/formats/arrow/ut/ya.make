@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/formats/arrow)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     contrib/libs/apache/arrow

@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/resource_pools)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/testing/unittest
 

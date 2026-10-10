@@ -7,6 +7,7 @@ PY_SRCS(
     tstool.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/protos
 )

@@ -1,4 +1,5 @@
 GTEST()
+REQUIREMENTS(cpu:1)
 SRCS(message_stream_ut.cpp)
 PEERDIR(
     ydb/library/yql/providers/common/message_stream

@@ -1,6 +1,7 @@
 UNITTEST()
 
 FORK_SUBTESTS()
+REQUIREMENTS(cpu:1)
 SRCS(
     main.cpp
 )

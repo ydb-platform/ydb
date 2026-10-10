@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/storage/indexes/bits_storage)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     bits_storage_ut.cpp
 )

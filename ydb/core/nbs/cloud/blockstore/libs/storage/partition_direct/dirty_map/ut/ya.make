@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     block_field_serializer_ut.cpp
     ddisk_state_ut.cpp

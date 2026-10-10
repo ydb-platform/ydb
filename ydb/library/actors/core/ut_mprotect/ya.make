@@ -1,6 +1,8 @@
 IF (NOT SANITIZER_TYPE)
     UNITTEST_FOR(ydb/library/actors/core)
 
+    REQUIREMENTS(cpu:1)
+
     SIZE(SMALL)
 
     IF (OS_WINDOWS)

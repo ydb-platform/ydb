@@ -18,6 +18,7 @@ TEST_SRCS(
     test_retry_high_rate.py
 )
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

@@ -2,6 +2,7 @@ UNITTEST()
 
 YQL_LAST_ABI_VERSION()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/json
     library/cpp/resource

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     flat_executor_ut_large.cpp

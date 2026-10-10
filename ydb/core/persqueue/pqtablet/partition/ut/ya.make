@@ -1,6 +1,7 @@
 GTEST()
 
 
+REQUIREMENTS(cpu:1)
 SRCS(
     consumer_offset_tracker_ut.cpp
     message_id_deduplicator_ut.cpp

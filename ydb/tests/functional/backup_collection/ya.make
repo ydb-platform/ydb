@@ -10,6 +10,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

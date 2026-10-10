@@ -2,6 +2,7 @@ IF (NOT OS_WINDOWS)
 
 UNITTEST_FOR(ydb/library/yql/providers/s3/actors)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     yql_arrow_push_down_ut.cpp
 )

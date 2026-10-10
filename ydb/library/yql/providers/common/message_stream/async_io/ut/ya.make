@@ -1,4 +1,5 @@
 UNITTEST()
+REQUIREMENTS(cpu:1)
 SRCS(read_actor_ut.cpp)
 PEERDIR(
     ydb/library/yql/providers/common/message_stream/async_io/testlib

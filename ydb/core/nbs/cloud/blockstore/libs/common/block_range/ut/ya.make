@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/common/block_range)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/common
 )

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/pq/gateway)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     composite_client_ut.cpp

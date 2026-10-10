@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/actors/dnsresolver)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/actors/testlib
 )

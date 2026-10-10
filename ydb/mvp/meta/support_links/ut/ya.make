@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/mvp/meta/support_links)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     url_template_ut.cpp

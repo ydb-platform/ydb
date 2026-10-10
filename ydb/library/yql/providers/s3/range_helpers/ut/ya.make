@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/s3/range_helpers)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     file_tree_builder_ut.cpp
     path_list_reader_ut.cpp

@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

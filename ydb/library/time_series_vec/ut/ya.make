@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/time_series_vec)
 
 FORK_SUBTESTS()
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt

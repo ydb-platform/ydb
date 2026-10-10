@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/persqueue/public/reset_offset)
 YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     reset_offset_sim_ut.cpp

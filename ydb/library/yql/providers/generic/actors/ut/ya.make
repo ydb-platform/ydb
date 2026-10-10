@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/generic/actors)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/ut/federated_query/common

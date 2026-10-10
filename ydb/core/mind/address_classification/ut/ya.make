@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/mind/address_classification)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     SPLIT_FACTOR(20)

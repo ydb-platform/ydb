@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/dwarf_backtrace/registry
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     TIMEOUT(1800)
     SIZE(LARGE)

@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/aclib)
 
+REQUIREMENTS(cpu:1)
 PEERDIR()
 
 SRCS(

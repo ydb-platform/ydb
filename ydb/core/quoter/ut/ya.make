@@ -2,6 +2,8 @@
 IF (NOT OS_WINDOWS)
     UNITTEST_FOR(ydb/core/quoter)
 
+    REQUIREMENTS(cpu:2)
+
     PEERDIR(
         library/cpp/testing/gmock_in_unittest
         ydb/core/testlib/default

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/json_value)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

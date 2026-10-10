@@ -2,6 +2,8 @@ IF (OS_LINUX AND NOT SANITIZER_TYPE)
 
 PY3TEST()
 
+REQUIREMENTS(cpu:4)
+
 TEST_SRCS(
     test_break.py
 )

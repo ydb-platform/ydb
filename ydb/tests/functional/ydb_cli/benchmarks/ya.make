@@ -4,6 +4,7 @@ PY_SRCS(
     MAIN main.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/functional/ydb_cli/benchmarks/impl
 )

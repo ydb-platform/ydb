@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/driver_lib/run)
 FORK_SUBTESTS()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/testlib/default

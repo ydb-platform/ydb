@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     credentials_ut.cpp
     jwt_token_source_ut.cpp

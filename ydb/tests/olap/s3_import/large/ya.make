@@ -5,6 +5,7 @@ TIMEOUT(21600)
 TAG(ya:manual)
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:1)
 
 TEST_SRCS (
     test_large_import.py

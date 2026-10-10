@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/utils/plan)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     plan_utils_ut.cpp
 )

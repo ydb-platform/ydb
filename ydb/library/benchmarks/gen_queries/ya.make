@@ -276,6 +276,7 @@ RESOURCE(
     ${ARCADIA_ROOT}/ydb/library/benchmarks/queries/tpcds/pg/q99.sql ds/pg/q99.sql
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/benchmarks/template
 )

@@ -4,6 +4,7 @@ PY_SRCS(
     MAIN main.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/python/grpcio
     ydb/public/api/grpc

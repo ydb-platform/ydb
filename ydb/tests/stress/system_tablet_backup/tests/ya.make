@@ -6,9 +6,9 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:8)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/tests/stress/system_tablet_backup

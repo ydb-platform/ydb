@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/client/metadata)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     functions_metadata_ut.cpp
 )

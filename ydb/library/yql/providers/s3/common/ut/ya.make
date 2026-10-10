@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/s3/common)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     util_ut.cpp
 )

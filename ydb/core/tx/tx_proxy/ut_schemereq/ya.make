@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/tx/tx_proxy)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)

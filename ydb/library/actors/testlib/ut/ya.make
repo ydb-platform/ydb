@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/library/actors/testlib)
 
 FORK_SUBTESTS()
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 
 PEERDIR(

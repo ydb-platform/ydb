@@ -301,6 +301,32 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
             BuildPredicate(ComparisonPredicate("col1", "EQ", "INT64", "int64_value: 1"))));
     }
 
+    Y_UNIT_TEST(UuidRfc4122StatsKeepGroupsForOrderingComparisons) {
+        TString matchingYqlUuid(16, '\x00');
+        matchingYqlUuid.begin()[0] = '\x40';
+        matchingYqlUuid.begin()[3] = '\x10';
+        TString matchingRfcUuid = matchingYqlUuid;
+        std::swap(matchingRfcUuid.begin()[0], matchingRfcUuid.begin()[3]);
+        std::swap(matchingRfcUuid.begin()[1], matchingRfcUuid.begin()[2]);
+        std::swap(matchingRfcUuid.begin()[4], matchingRfcUuid.begin()[5]);
+        std::swap(matchingRfcUuid.begin()[6], matchingRfcUuid.begin()[7]);
+
+        TString constantYqlUuid(16, '\x00');
+        constantYqlUuid.begin()[0] = '\x30';
+        constantYqlUuid.begin()[3] = '\x20';
+        const auto constant = UuidHalves(constantYqlUuid);
+        auto stats = BuildUuidStats(matchingRfcUuid, matchingRfcUuid);
+        stats.UuidStats->IsRfc4122 = true;
+        const auto predicate = BuildPredicate(ComparisonPredicate(
+            "col1", "G", "UUID",
+            TStringBuilder() << "low_128: " << constant.first << " high_128: " << constant.second));
+
+        // The row is greater than the literal in YQL byte order, but its RFC
+        // representation is smaller. RFC min/max cannot prune this row group.
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate));
+    }
+
     Y_UNIT_TEST(UuidBetweenInvalidStatsKeepsGroup) {
         const auto bound = UuidHalves(TString(16, '\x30'));
         const auto predicate = BuildPredicate(TStringBuilder()

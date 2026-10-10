@@ -3127,10 +3127,10 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
             appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
 
-            TStringStream rboLog;
+            TCapturedLog rboLog;
             auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
             if (enableNewRbo) {
-                kikimrSettings.SetLogStream(&rboLog);
+                kikimrSettings.SetLogCapture(rboLog);
                 kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(
                     NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
                 kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
@@ -3173,7 +3173,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             }
 
             if (enableNewRbo) {
-                const TString logStorage = rboLog.Str();
+                const TString logStorage = rboLog.Snapshot();
                 const TStringBuf log = logStorage;
                 const TStringBuf marker = "Applied rule:";
                 size_t position = 0;

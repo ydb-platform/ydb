@@ -82,14 +82,6 @@ std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
             counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val()};
 }
 
-// Keeps every log record on its own line.
-class TLineLogStream : public TStringStream {
-    void DoWrite(const void* data, size_t size) override {
-        TStringStream::DoWrite(data, size);
-        TStringStream::DoWrite("\n", 1);
-    }
-};
-
 // Returns the `request` object of the [REQ_JSON] completed record whose query text contains `marker`.
 std::optional<NJson::TJsonValue> FindReqJsonCompleted(TStringBuf logs, TStringBuf marker) {
     constexpr TStringBuf fieldPrefix = "requestJson=";
@@ -2381,10 +2373,8 @@ FROM (
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
-        TLineLogStream logs;
-        auto logsMutex = std::make_shared<TMutex>();
-        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogStream(&logs);
-        settings.LogStreamMutex = logsMutex;
+        TCapturedLog logs(/* appendNewline */ true);
+        auto settings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false).SetLogCapture(logs);
         // Successful queries are logged to [REQ_JSON] at DEBUG.
         settings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_REQUEST, NActors::NLog::PRI_DEBUG);
         settings.LogSettings->DefaultLogPriority = NActors::NLog::PRI_CRIT;
@@ -2406,11 +2396,7 @@ FROM (
         const auto getCompletedRequest = [&](TStringBuf marker) -> NJson::TJsonValue {
             const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
             while (true) {
-                TString text;
-                {
-                    TGuard<TMutex> guard(*logsMutex);
-                    text = logs.Str();
-                }
+                const TString text = logs.Snapshot();
 
                 if (auto request = FindReqJsonCompleted(text, marker)) {
                     UNIT_ASSERT_C(request->Has("used_new_rbo"), request->GetStringRobust());

@@ -21,7 +21,6 @@
 #include <library/cpp/logger/record.h>
 #include <library/cpp/testing/common/env.h>
 
-#include <util/stream/output.h>
 #include <util/system/mutex.h>
 
 #include <memory>
@@ -29,30 +28,52 @@
 namespace NKikimr {
 namespace NKqp {
 
-namespace {
+struct TCapturedLog::TState {
+    explicit TState(bool appendNewline)
+        : AppendNewline(appendNewline)
+    {
+    }
 
-class TSynchronizedStreamLogBackend : public TLogBackend {
+    TMutex Mutex;
+    TString Buffer;
+    const bool AppendNewline;
+};
+
+class TCapturedLog::TSynchronizedStreamLogBackend final : public TLogBackend {
 public:
-    TSynchronizedStreamLogBackend(IOutputStream* slave, std::shared_ptr<TMutex> mutex)
-        : Slave_(slave)
-        , Mutex_(std::move(mutex))
+    explicit TSynchronizedStreamLogBackend(std::shared_ptr<TState> state)
+        : State_(std::move(state))
     {
     }
 
     void WriteData(const TLogRecord& rec) override {
-        TGuard<TMutex> guard(*Mutex_);
-        Slave_->Write(rec.Data, rec.Len);
+        TGuard<TMutex> guard(State_->Mutex);
+        State_->Buffer.append(rec.Data, rec.Len);
+        if (State_->AppendNewline) {
+            State_->Buffer.push_back('\n');
+        }
     }
 
     void ReopenLog() override {
     }
 
 private:
-    IOutputStream* Slave_;
-    std::shared_ptr<TMutex> Mutex_;
+    const std::shared_ptr<TState> State_;
 };
 
-} // namespace
+TCapturedLog::TCapturedLog(bool appendNewline)
+    : State_(std::make_shared<TState>(appendNewline))
+{
+}
+
+TString TCapturedLog::Snapshot() const {
+    TGuard<TMutex> guard(State_->Mutex);
+    return State_->Buffer;
+}
+
+THolder<TLogBackend> TCapturedLog::CreateBackend() const {
+    return MakeHolder<TSynchronizedStreamLogBackend>(State_);
+}
 
 using namespace NYdb::NTable;
 
@@ -188,11 +209,9 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream) {
-        auto* logStream = settings.LogStream;
-        auto mutex = settings.LogStreamMutex ? settings.LogStreamMutex : std::make_shared<TMutex>();
-        auto makeBackend = [logStream, mutex]() {
-            return new TSynchronizedStreamLogBackend(logStream, mutex);
+    if (settings.LogCapture) {
+        auto makeBackend = [capture = *settings.LogCapture]() {
+            return capture.CreateBackend().Release();
         };
         if (settings.NodeCount > 1) {
             ServerSettings->SetLoggerInitializer([makeBackend](NActors::TTestActorRuntime& runtime) {

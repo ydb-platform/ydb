@@ -15,6 +15,8 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
+#include <util/system/mutex.h>
+
 namespace NKikimr {
 namespace NKqp {
 

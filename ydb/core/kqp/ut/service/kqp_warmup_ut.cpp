@@ -28,13 +28,6 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
-    class TTestLogStream : public TStringStream {
-        void DoWrite(const void* data, size_t size) override {
-            TStringStream::DoWrite(data, size);
-            TStringStream::DoWrite("\n", 1);
-        }
-    };
-
     Ydb::StatusIds::StatusCode ExecuteQueryWithToken(TTestActorRuntime& runtime, ui32 nodeIndex,
         const NACLib::TUserToken& token, const TString& query, Ydb::ResultSet* result = nullptr)
     {
@@ -578,9 +571,9 @@ namespace {
             params.UseRealThreads = false;
             params.FillCache = false;
             params.FillImplicitParams = false;
-            TTestLogStream logs;
+            TCapturedLog logs(/* appendNewline */ true);
             auto settings = MakeWarmupTestSettings(params);
-            settings.SetLogStream(&logs);
+            settings.SetLogCapture(logs);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpSysViewSourceRead(SysViewSource);
             TKikimrRunner kikimr(settings);
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
@@ -722,7 +715,8 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, LegacyMetadata ? 1 : 2);
             UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, LegacyMetadata ? 1 : 0);
             bool sawCompilationLog = false;
-            for (TStringBuf line : StringSplitter(logs.Str()).Split('\n')) {
+            const TString logSnapshot = logs.Snapshot();
+            for (TStringBuf line : StringSplitter(logSnapshot).Split('\n')) {
                 if (line.Contains("Query compiled successfully") || line.Contains("Query compilation failed")) {
                     sawCompilationLog = true;
                     UNIT_ASSERT(!line.Contains("warmup-sql-secret"));
@@ -1119,14 +1113,14 @@ namespace {
                     TString("{invalid json broken!!!}}}"),
                     TString(R"({"user_group_sids":42})"),
                     TString(R"({"user_group_sids":["discard-me",42,"also-discard-me"]})")}) {
-                TStringStream logs;
+                TCapturedLog logs;
                 {
                     TWarmupTestParams params;
                     params.UseRealThreads = false;
                     params.UserSids = {"user0"};
                     params.FillImplicitParams = false;
 
-                    TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogStream(&logs));
+                    TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogCapture(logs));
                     TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
                     env.Runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_WARN);
 
@@ -1158,7 +1152,7 @@ namespace {
                     UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesLoaded, 0);
                     UNIT_ASSERT_VALUES_EQUAL(complete->Get()->EntriesFailed, env.ExpectedUniqueCount);
                 }
-                UNIT_ASSERT_STRING_CONTAINS(logs.Str(), "Invalid or oversized warmup group metadata; skipping query");
+                UNIT_ASSERT_STRING_CONTAINS(logs.Snapshot(), "Invalid or oversized warmup group metadata; skipping query");
             }
         }
 
@@ -1233,8 +1227,8 @@ namespace {
             params.UserSids = {"user0"};
             params.FillImplicitParams = false;
 
-            TTestLogStream logs;
-            TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogStream(&logs));
+            TCapturedLog logs(/* appendNewline */ true);
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params).SetLogCapture(logs));
             TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
             env.Runtime.SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_WARN);
 
@@ -1275,7 +1269,8 @@ namespace {
                 "All compilations should be counted as failed. Failed: " << warmupComplete->Get()->EntriesFailed);
             UNIT_ASSERT(responses > 2);
             ui32 warnings = 0;
-            for (TStringBuf line : StringSplitter(logs.Str()).Split('\n')) {
+            const TString logSnapshot = logs.Snapshot();
+            for (TStringBuf line : StringSplitter(logSnapshot).Split('\n')) {
                 if (line.Contains("Query compilation failed")) {
                     UNIT_ASSERT(line.Contains(warnings == 0 ? "SCHEME_ERROR" : "UNAUTHORIZED"));
                     ++warnings;

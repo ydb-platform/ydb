@@ -12,6 +12,14 @@ PEERDIR(
     contrib/libs/llvm18/lib/Transforms/ObjCARC
 )
 
+IF (ARCH_AARCH64)
+    PEERDIR(
+        contrib/libs/llvm18/lib/Target/AArch64
+        contrib/libs/llvm18/lib/Target/AArch64/AsmParser
+        contrib/libs/llvm18/lib/Target/AArch64/Disassembler
+    )
+ENDIF()
+
 IF (OS_LINUX)
     PEERDIR(
         contrib/libs/llvm18/lib/ExecutionEngine/PerfJITEvents

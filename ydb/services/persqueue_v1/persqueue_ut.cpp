@@ -1623,16 +1623,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(5, startOffset);
         UNIT_ASSERT_VALUES_EQUAL(8 + 1, endOffset);
 
-        // Reaching max_offset terminates the partition session on the control
-        // stream. Consume the event before expecting the post-restart update.
-        {
-            Topic::StreamReadMessage::FromServer endResp;
-            UNIT_ASSERT(setup.ControlStream->Read(&endResp));
-            Cerr << (TStringBuilder() << "GOT SERVER MESSAGE (expect end partition session): " << endResp.DebugString() << "\n");
-            UNIT_ASSERT(endResp.server_message_case() == Topic::StreamReadMessage::FromServer::kEndPartitionSession);
-            UNIT_ASSERT_VALUES_EQUAL(endResp.end_partition_session().partition_session_id(), assignId);
-        }
-
+        // The end_partition_session event for the exhausted max_offset window
+        // is deferred by the server until all in-flight direct reads are
+        // acked. This test deliberately leaves direct read 1 un-acked so the
+        // batch is re-delivered after the tablet restart, so no EOF arrives
+        // here and none must be expected.
         Cerr << "XXXXX Kill tablet\n";
         auto pathDescr = server.Server->AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
         auto tabletId = pathDescr.GetPartitions(0).GetTabletId();

@@ -81,6 +81,9 @@ struct TDDiskStubState: public TThrRefBase
         ui64 Cookie = 0;
         TRope Payload;
         TPayloadKey Key;
+        // Requested read size. Successful reads attach one zero checksum per
+        // 4 KiB of this size, matching DDisk with checksums enabled.
+        ui32 SizeInBytes = 0;
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> PersistentBufferIds;
     };
 
@@ -167,6 +170,7 @@ private:
         NActors::TActorId sender,
         ui64 cookie,
         const TDDiskStubState::TPayloadKey& key,
+        ui32 sizeInBytes,
         bool pbuffer);
     void ReplyWrite(
         const NActors::TActorContext& ctx,

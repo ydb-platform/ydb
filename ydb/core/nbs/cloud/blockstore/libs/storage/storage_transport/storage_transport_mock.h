@@ -50,6 +50,11 @@ public:
     TReplyStatusE SyncWithPBufferStatus = TReplyStatus::OK;
     TReplyStatusE DeleteTabletChunksStatus = TReplyStatus::OK;
 
+    // Checksums attached to a successful ReadFromDDisk or ReadFromPBuffer.
+    // Unset: one zero per ChecksumUnitSize bytes, as DDisk does with
+    // checksums on. Set: these values, including a wrong or empty count.
+    std::optional<TVector<ui64>> ReadChecksums;
+
     // When set, WriteToManyPBuffers replies only for the first (coordinator)
     // DDisk in the request with the given status, emulating the node
     // disconnection / undelivery path where the actor answers only for the

@@ -44,8 +44,21 @@ public:
     [[nodiscard]] NThreading::TFuture<TResponse> GetFuture() const override;
 
 private:
+    // Checksum-unit span of one sub-request inside the parent read.
+    struct TSubRequestChecksumPlace
+    {
+        size_t Offset = 0;
+        size_t Count = 0;
+    };
+
     void OnSubRequestComplete(const TResponse& response, size_t index);
-    void Reply(NProto::TError error, size_t index);
+    // Copies a complete piece into AssembledChecksums. An empty piece means
+    // checksums are disabled and is skipped. Any other length aborts: the
+    // DBG never returns a partial vector on success.
+    void AcceptSubRequestChecksums(
+        const TBlockChecksums& checksums,
+        size_t index);
+    void Reply(NProto::TError error, TBlockChecksums checksums, size_t index);
 
     NActors::TActorSystem const* ActorSystem;
     const TChildLogTitle LogTitle;
@@ -57,6 +70,16 @@ private:
 
     TGuardedSgList SgList;
     TVector<TReadSingleLocationRequestExecutorPtr> SubRequestExecutors;
+    // Parallel to SubRequestExecutors. Offsets are hint.RequestRelativeRange
+    // converted to checksum units.
+    TVector<TSubRequestChecksumPlace> SubRequestChecksumPlaces;
+    // Parent read length in checksum units. Allocated into
+    // AssembledChecksums on the first complete piece.
+    size_t ParentChecksumCount = 0;
+    TBlockChecksums AssembledChecksums;
+    // How many checksum units have been copied. Zero means every piece was
+    // empty. Equal to ParentChecksumCount means the join is complete.
+    size_t AssembledChecksumCount = 0;
     size_t CompletedCount{0};
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

@@ -16,8 +16,6 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 
-#include <functional>
-
 namespace NKikimr::NOlap::NReader {
 class IApplyAction;
 }
@@ -124,7 +122,7 @@ struct TEvPrivate {
 
     class TEvMetadataAccessorsInfo: public NActors::TEventLocal<TEvMetadataAccessorsInfo, EvMetadataAccessorsInfo> {
     public:
-        using TOnApplied = std::function<void(TColumnShard&, const NActors::TActorContext&)>;
+        using TOnApplied = void (*)(TColumnShard&, const NActors::TActorContext&);
 
     private:
         const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
@@ -155,11 +153,11 @@ struct TEvPrivate {
         }
 
         TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
-            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result, TOnApplied onApplied = {})
+            NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result, TOnApplied onApplied = nullptr)
             : Processor(processor)
             , Generation(gen)
             , Result(std::move(result))
-            , OnApplied(std::move(onApplied))
+            , OnApplied(onApplied)
         {
         }
     };

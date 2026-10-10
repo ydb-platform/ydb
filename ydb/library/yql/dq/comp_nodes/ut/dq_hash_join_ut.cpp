@@ -1086,6 +1086,18 @@ TJoinTestData InnerJoinEqualNullsSecondKeyOnlyTestData() {
     return td;
 }
 
+TJoinTestData InnerJoinEqualNullsSecondKeyOnlyLeftIsBuildTestData() {
+    auto td = InnerJoinEqualNullsSecondKeyOnlyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData() {
+    auto td = InnerJoinEqualNullsAfterTupleKeyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 // Without EqualNullsKeys, NULL keys are allowed in the input but never match.
 TJoinTestData InnerJoinNullKeysDoNotMatchByDefaultTestData() {
     TJoinTestData td;
@@ -2646,6 +2658,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(InnerJoinEqualNullsAfterTupleKeyTestData(), /*blockJoin=*/false);
     }
 
+    Y_UNIT_TEST(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild) {
+        Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), /*blockJoin=*/false);
+    }
+
     // arrow builders zero null slotsPoison
     // poison leftover so hash/equality cannot
     // rely on that and must canonicalize EqualNulls NULLs
@@ -2681,6 +2697,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnly, BlockJoin) {
         Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsSecondKeyOnlyLeftIsBuild, BlockJoin) {
+        Test(InnerJoinEqualNullsSecondKeyOnlyLeftIsBuildTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
@@ -2819,8 +2839,8 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LeftOnlyTestDataLeftIsBuild(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftSemiDuplicateKeys) {
-        Test(LeftSemiDuplicateKeysTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeys, BlockJoin) {
+        Test(LeftSemiDuplicateKeysTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestLeftSemiDuplicateKeysLeftIsBuild, BlockJoin) {

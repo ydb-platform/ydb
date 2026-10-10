@@ -19,7 +19,18 @@ done
 if ! grep -qw cpu "$dir/cgroup.subtree_control"; then
   echo '+cpu' > "$dir/cgroup.subtree_control"
 fi
-chown "$target_uid:$target_gid" "$dir" "$dir/ya-runtime"
+# Directory ownership is not enough. cgroup v2 only allows a migration when the
+# writer can also write cgroup.procs of the common ancestor, and those files
+# stay root-owned after chown of the directory itself.
+for node in \
+  "$dir" "$dir/ya-runtime" \
+  "$dir/cgroup.procs" "$dir/cgroup.subtree_control" "$dir/cgroup.threads" \
+  "$dir/ya-runtime/cgroup.procs" "$dir/ya-runtime/cgroup.threads"
+do
+  if [ -e "$node" ]; then
+    chown "$target_uid:$target_gid" "$node"
+  fi
+done
 export YA_CPU_CGROUP_ROOT="$dir"
 echo "YA_CPU_CGROUP_ROOT=$dir"
 exec setpriv --reuid="$target_uid" --regid="$target_gid" --init-groups -- "$@"

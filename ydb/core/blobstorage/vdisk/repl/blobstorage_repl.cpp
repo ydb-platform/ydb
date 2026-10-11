@@ -327,6 +327,8 @@ namespace NKikimr {
                 BlobsToReplicatePtr.reset();
                 UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
                 UnreplicatedBlobRecords.clear();
+                ReplCtx->MonGroup.ReplTotalBlobsWithProblems() = 0;
+                ReplCtx->MonGroup.ReplPhantomBlobsWithProblems() = 0;
                 MilestoneQueue = TMilestoneQueue();
                 if (DonorQueue.empty()) {
                     DonorQueue.emplace_back(std::nullopt);

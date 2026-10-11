@@ -1,0 +1,195 @@
+// -*- C++ -*-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef _LIBCPP___MEMORY_ATOMIC_SHARED_PTR_H
+#define _LIBCPP___MEMORY_ATOMIC_SHARED_PTR_H
+
+#include <__config>
+
+#if _LIBCPP_STD_VER >= 20 && _LIBCPP_HAS_ATOMIC_HEADER
+
+#  include <__atomic/atomic.h>
+#  include <__atomic/atomic_flag.h>
+#  include <__atomic/atomic_sync.h>
+#  include <__atomic/check_memory_order.h>
+#  include <__atomic/memory_order.h>
+#  include <__cstddef/nullptr_t.h>
+#  include <__memory/addressof.h>
+#  include <__memory/shared_ptr.h>
+#  include <__thread/support.h>
+#  include <__utility/move.h>
+
+#  if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+#    pragma GCC system_header
+#  endif
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+// Use seq_cst locking to preserve the total order with ordinary atomic operations,
+// even when a weaker memory order is requested.
+template <class _SmartPtr>
+class __atomic_smart_ptr {
+  _SmartPtr __value_;
+  mutable atomic_flag __lock_;
+
+  _LIBCPP_HIDE_FROM_ABI void __lock() const noexcept {
+    while (__lock_.test_and_set(memory_order_seq_cst)) {
+      while (__lock_.test(memory_order_relaxed)) {
+#  if _LIBCPP_HAS_THREADS
+        std::__libcpp_thread_yield();
+#  endif
+      }
+    }
+  }
+
+  _LIBCPP_HIDE_FROM_ABI void __unlock() const noexcept { __lock_.clear(memory_order_seq_cst); }
+
+  _LIBCPP_HIDE_FROM_ABI static bool __equivalent(const _SmartPtr& __lhs, const _SmartPtr& __rhs) noexcept {
+    // weak_ptr::lock() loses both the stored pointer and the ownership identity after expiration.
+    return __lhs.__ptr_ == __rhs.__ptr_ && __lhs.__cntrl_ == __rhs.__cntrl_;
+  }
+
+protected:
+  _LIBCPP_HIDE_FROM_ABI constexpr __atomic_smart_ptr() noexcept : __value_(), __lock_() {}
+  _LIBCPP_HIDE_FROM_ABI explicit __atomic_smart_ptr(_SmartPtr __desired) noexcept
+      : __value_(std::move(__desired)), __lock_() {}
+
+public:
+  using value_type = _SmartPtr;
+  static constexpr bool is_always_lock_free = false;
+
+  __atomic_smart_ptr(const __atomic_smart_ptr&) = delete;
+  __atomic_smart_ptr& operator=(const __atomic_smart_ptr&) = delete;
+
+  _LIBCPP_HIDE_FROM_ABI bool is_lock_free() const noexcept { return false; }
+
+  _LIBCPP_HIDE_FROM_ABI void store(_SmartPtr __desired, memory_order __order = memory_order_seq_cst) noexcept
+      _LIBCPP_CHECK_STORE_MEMORY_ORDER(__order) {
+    (void)__order;
+    __lock();
+    __value_.swap(__desired);
+    __unlock();
+    // Destroy the old value after unlocking: a deleter may access this same atomic object.
+  }
+
+  _LIBCPP_HIDE_FROM_ABI _SmartPtr load(memory_order __order = memory_order_seq_cst) const noexcept
+      _LIBCPP_CHECK_LOAD_MEMORY_ORDER(__order) {
+    (void)__order;
+    __lock();
+    _SmartPtr __result = __value_;
+    __unlock();
+    return __result;
+  }
+
+  _LIBCPP_HIDE_FROM_ABI operator _SmartPtr() const noexcept { return load(); }
+
+  _LIBCPP_HIDE_FROM_ABI _SmartPtr exchange(_SmartPtr __desired, memory_order __order = memory_order_seq_cst) noexcept {
+    (void)__order;
+    __lock();
+    __value_.swap(__desired);
+    __unlock();
+    return __desired;
+  }
+
+  _LIBCPP_HIDE_FROM_ABI bool compare_exchange_strong(
+      _SmartPtr& __expected, _SmartPtr __desired, memory_order __success, memory_order __failure) noexcept
+      _LIBCPP_CHECK_EXCHANGE_MEMORY_ORDER(__success, __failure) {
+    (void)__success;
+    (void)__failure;
+    _SmartPtr __old_expected;
+    __lock();
+    if (__equivalent(__value_, __expected)) {
+      __value_.swap(__desired);
+      __unlock();
+      // Do not access expected after a successful update; it may belong to the replaced object.
+      return true;
+    }
+    __old_expected = __value_;
+    __unlock();
+    __expected.swap(__old_expected);
+    return false;
+  }
+
+  _LIBCPP_HIDE_FROM_ABI bool compare_exchange_weak(
+      _SmartPtr& __expected, _SmartPtr __desired, memory_order __success, memory_order __failure) noexcept
+      _LIBCPP_CHECK_EXCHANGE_MEMORY_ORDER(__success, __failure) {
+    return compare_exchange_strong(__expected, std::move(__desired), __success, __failure);
+  }
+
+  _LIBCPP_HIDE_FROM_ABI bool compare_exchange_strong(
+      _SmartPtr& __expected, _SmartPtr __desired, memory_order __order = memory_order_seq_cst) noexcept {
+    memory_order __failure = __order == memory_order_acq_rel ? memory_order_acquire
+                           : __order == memory_order_release ? memory_order_relaxed
+                                                             : __order;
+    return compare_exchange_strong(__expected, std::move(__desired), __order, __failure);
+  }
+
+  _LIBCPP_HIDE_FROM_ABI bool compare_exchange_weak(
+      _SmartPtr& __expected, _SmartPtr __desired, memory_order __order = memory_order_seq_cst) noexcept {
+    return compare_exchange_strong(__expected, std::move(__desired), __order);
+  }
+
+  _LIBCPP_AVAILABILITY_SYNC _LIBCPP_HIDE_FROM_ABI void
+  wait(_SmartPtr __old, memory_order __order = memory_order_seq_cst) const noexcept
+      _LIBCPP_CHECK_WAIT_MEMORY_ORDER(__order) {
+    // Use libc++'s contention monitor, which observes notifications before checking the value again.
+    // Waiting on just the stored pointer would miss changes to ownership (and vice versa).
+    std::__atomic_wait_unless(*this, __order, [&](const _SmartPtr& __current) {
+      return !__equivalent(__current, __old);
+    });
+  }
+
+  _LIBCPP_AVAILABILITY_SYNC _LIBCPP_HIDE_FROM_ABI void notify_one() noexcept { std::__atomic_notify_one(*this); }
+  _LIBCPP_AVAILABILITY_SYNC _LIBCPP_HIDE_FROM_ABI void notify_all() noexcept { std::__atomic_notify_all(*this); }
+};
+
+template <class _SmartPtr>
+struct __atomic_waitable_traits<__atomic_smart_ptr<_SmartPtr>> {
+  _LIBCPP_HIDE_FROM_ABI static _SmartPtr
+  __atomic_load(const __atomic_smart_ptr<_SmartPtr>& __a, memory_order __order) noexcept {
+    return __a.load(__order);
+  }
+
+  _LIBCPP_HIDE_FROM_ABI static const void*
+  __atomic_contention_address(const __atomic_smart_ptr<_SmartPtr>& __a) noexcept {
+    return std::addressof(__a);
+  }
+};
+
+template <class _Tp>
+struct atomic<shared_ptr<_Tp>> : __atomic_smart_ptr<shared_ptr<_Tp>> {
+  using __base = __atomic_smart_ptr<shared_ptr<_Tp>>;
+
+  _LIBCPP_HIDE_FROM_ABI constexpr atomic() noexcept = default;
+  _LIBCPP_HIDE_FROM_ABI constexpr atomic(nullptr_t) noexcept : atomic() {}
+  _LIBCPP_HIDE_FROM_ABI atomic(shared_ptr<_Tp> __desired) noexcept : __base(std::move(__desired)) {}
+  atomic(const atomic&) = delete;
+  void operator=(const atomic&) = delete;
+
+  _LIBCPP_HIDE_FROM_ABI void operator=(shared_ptr<_Tp> __desired) noexcept { this->store(std::move(__desired)); }
+  _LIBCPP_HIDE_FROM_ABI void operator=(nullptr_t) noexcept { this->store(nullptr); }
+};
+
+template <class _Tp>
+struct atomic<weak_ptr<_Tp>> : __atomic_smart_ptr<weak_ptr<_Tp>> {
+  using __base = __atomic_smart_ptr<weak_ptr<_Tp>>;
+
+  _LIBCPP_HIDE_FROM_ABI constexpr atomic() noexcept = default;
+  _LIBCPP_HIDE_FROM_ABI atomic(weak_ptr<_Tp> __desired) noexcept : __base(std::move(__desired)) {}
+  atomic(const atomic&) = delete;
+  void operator=(const atomic&) = delete;
+
+  _LIBCPP_HIDE_FROM_ABI void operator=(weak_ptr<_Tp> __desired) noexcept { this->store(std::move(__desired)); }
+};
+
+_LIBCPP_END_NAMESPACE_STD
+
+#endif // _LIBCPP_STD_VER >= 20 && _LIBCPP_HAS_ATOMIC_HEADER
+
+#endif // _LIBCPP___MEMORY_ATOMIC_SHARED_PTR_H

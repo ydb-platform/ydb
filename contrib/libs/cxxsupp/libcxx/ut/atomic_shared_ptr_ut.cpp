@@ -1,8 +1,8 @@
 // Exercise the opposite header order to memory_header_ut.cpp.
 #include <atomic>
 
-#if !defined(__cpp_lib_atomic_shared_ptr) || __cpp_lib_atomic_shared_ptr != 201711L
-#error atomic smart pointers must be advertised by <atomic>
+#ifdef __cpp_lib_atomic_shared_ptr
+#error atomic smart pointers must not be advertised by <atomic> yet
 #endif
 
 #include <memory>

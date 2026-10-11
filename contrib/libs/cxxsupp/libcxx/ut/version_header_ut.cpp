@@ -1,7 +1,7 @@
 #include <version>
 
-#if !defined(__cpp_lib_atomic_shared_ptr) || __cpp_lib_atomic_shared_ptr != 201711L
-#error atomic smart pointers must be advertised by <version>
+#ifdef __cpp_lib_atomic_shared_ptr
+#error atomic smart pointers must not be advertised by <version> yet
 #endif
 
 #include <atomic>

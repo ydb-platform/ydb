@@ -63,21 +63,6 @@ index 993b3bbdf96..9b0b34f884d 100644
  #    include <__memory/concepts.h>
  #    include <__memory/ranges_construct_at.h>
  #    include <__memory/ranges_destroy.h>
-diff --git a/include/version b/include/version
-index 0ea2c3a9820..678e9c59535 100644
---- a/include/version
-+++ b/include/version
-@@ -387,7 +387,9 @@ __cpp_lib_void_t                                        201411L <type_traits>
- # define __cpp_lib_atomic_float                         201711L
- # define __cpp_lib_atomic_lock_free_type_aliases        201907L
- # define __cpp_lib_atomic_ref                           201806L
--// # define __cpp_lib_atomic_shared_ptr                    201711L
-+# if _LIBCPP_HAS_ATOMIC_HEADER
-+#   define __cpp_lib_atomic_shared_ptr                  201711L
-+# endif
- # define __cpp_lib_atomic_value_initialization          201911L
- # if _LIBCPP_AVAILABILITY_HAS_SYNC
- #   define __cpp_lib_atomic_wait                        201907L
 diff --git a/include/__memory/atomic_shared_ptr.h b/include/__memory/atomic_shared_ptr.h
 new file mode 100644
 index 00000000000..021625cf3c6

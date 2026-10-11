@@ -1,8 +1,8 @@
 // <memory> must provide the specializations without relying on transitive includes from <atomic>.
 #include <memory>
 
-#if !defined(__cpp_lib_atomic_shared_ptr) || __cpp_lib_atomic_shared_ptr != 201711L
-#error atomic smart pointers must be advertised by <memory>
+#ifdef __cpp_lib_atomic_shared_ptr
+#error atomic smart pointers must not be advertised by <memory> yet
 #endif
 
 namespace {

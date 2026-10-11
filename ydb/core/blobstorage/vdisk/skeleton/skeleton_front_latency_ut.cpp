@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_histograms.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -112,7 +113,8 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskConfig>& config,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             const TString& handleClass) {
-            auto group = GetServiceCounters(counters, "vdisks");
+            const bool async = NVDiskMon::THistograms::IsAsyncHandleClass(handleClass);
+            auto group = GetServiceCounters(counters, async ? "vdisks_async" : "vdisks");
             group = FindSubgroup(group, "storagePool", config->BaseInfo.StoragePoolName);
             group = FindSubgroup(group, "group", Sprintf("%09" PRIu32, info->GroupID.GetRawId()));
             group = FindSubgroup(group, "orderNumber", Sprintf("%02" PRIu32, info->GetOrderNumber(config->BaseInfo.VDiskIdShort)));
@@ -344,6 +346,23 @@ namespace NKikimr {
     } // namespace
 
     Y_UNIT_TEST_SUITE(TSkeletonFrontLatency) {
+
+        Y_UNIT_TEST(AsyncCountersAreRemovedWhenSkeletonFrontStops) {
+            TTestEnv env(0);
+            for (const TString& handleClass : {"GetAsync", "GetDiscover", "GetLow", "PutAsyncBlob",
+                    "GetFast", "PutTabletLog", "PutUserData"}) {
+                UNIT_ASSERT(GetLatencyGroup(env.Counters, env.Config, env.GroupInfo, handleClass));
+            }
+            auto counters = env.Counters->FindSubgroup("counters", "vdisks");
+            auto asyncCounters = env.Counters->FindSubgroup("counters", "vdisks_async");
+            UNIT_ASSERT(counters);
+            UNIT_ASSERT(asyncCounters);
+            SendToSkeletonFront(env.Runtime, env.SkeletonFrontId, env.EdgeActor,
+                new TEvents::TEvPoisonPill(), TEvents::TSystem::PoisonPill);
+            UNIT_ASSERT(!env.Runtime.FindActor(env.SkeletonFrontId, NodeId - 1));
+            UNIT_ASSERT(!counters->FindSubgroup("storagePool", StoragePoolName));
+            UNIT_ASSERT(!asyncCounters->FindSubgroup("storagePool", StoragePoolName));
+        }
 
         Y_UNIT_TEST(DroppedDelayedPutUserDataRemovesInFlightLatency) {
             TTestEnv env(0);

@@ -804,6 +804,16 @@ public:
         return TupleLayout_.get();
     }
 
+    void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
+        TVector<ui32> flattened;
+        for (ui32 inputColumn : equalNullsJoinKeys) {
+            Y_ENSURE(inputColumn < InnerMapping_.size(), "EqualNulls column index is out of range");
+            const auto& mapping = InnerMapping_[inputColumn];
+            flattened.insert(flattened.end(), mapping.begin(), mapping.end());
+        }
+        TupleLayout_->ApplyEqualNulls(flattened);
+    }
+
 private:
     void UnpackImpl(const TPackResult& packed, const ui8* packedData, ui32 count,
                     NYql::NUdf::TUnboxedValue* values) {

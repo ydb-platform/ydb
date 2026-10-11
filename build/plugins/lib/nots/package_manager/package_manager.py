@@ -24,14 +24,12 @@ class PackageManager(object):
         sources_path,
         module_path=None,
         sources_root=None,
-        inject_peers=False,
     ):
         self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
         self.build_path = build_path
         self.sources_path = sources_path
         self.build_root = build_root
         self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
-        self.inject_peers = inject_peers
 
     @classmethod
     def load_package_json(cls, path):

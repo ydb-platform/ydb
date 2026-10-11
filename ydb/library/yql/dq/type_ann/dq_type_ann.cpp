@@ -635,7 +635,7 @@ bool EnsureHashJoinCoreKindAndKeys(const TExprNode& joinTypeNode, TExprNode& lef
 
 TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
     // leftFlow, rightFlow, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames
-    if (!EnsureArgsCount(*node, 7, ctx)) {
+    if (!EnsureMinMaxArgsCount(*node, 7, 8, ctx)) {
         return TStatus::Error;
     }
 

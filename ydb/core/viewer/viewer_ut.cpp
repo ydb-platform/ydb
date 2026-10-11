@@ -1922,6 +1922,214 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckVDiskReplicationStatus(true);
     }
 
+    Y_UNIT_TEST(StorageGroupsStateInfo) {
+        using TStatus = NKikimrBlobStorage::EVDiskStatus;
+        struct TCase {
+            TErasureType::EErasureSpecies Erasure;
+            std::vector<std::pair<ui8, TStatus>> Disks;
+            TString State;
+            TString Status;
+            std::optional<ui32> Count;
+            std::vector<ui32> FailedDomains;
+        };
+        const TCase cases[] = {
+            {TErasureType::ErasureNone, {{0, TStatus::READY}}, "ok", "ok", {}, {}},
+            {TErasureType::ErasureNone, {{0, TStatus::INIT_PENDING}}, "starting:1", "starting", 1, {}},
+            {TErasureType::ErasureNone, {{0, TStatus::ERROR}}, "dead:1", "dead", 1, {}},
+            {TErasureType::Erasure4Plus2Block, {{0, TStatus::INIT_PENDING}}, "starting:1", "starting", 1, {}},
+            {TErasureType::Erasure4Plus2Block, {{0, TStatus::REPLICATING}}, "replicating:1", "replicating", 1, {}},
+            {TErasureType::Erasure4Plus2Block, {{0, TStatus::ERROR}}, "degraded:1", "degraded", 1, {}},
+            {TErasureType::Erasure4Plus2Block, {{0, TStatus::ERROR}, {0, TStatus::ERROR}}, "degraded:2", "degraded", 2, {}},
+            {TErasureType::Erasure4Plus2Block, {{0, TStatus::ERROR}, {0, TStatus::ERROR}, {0, TStatus::ERROR}}, "dead:3", "dead", 3, {}},
+            {TErasureType::ErasureMirror3dc, {{0, TStatus::REPLICATING}, {0, TStatus::REPLICATING}}, "replicating:1(2)", "replicating", 1, {2}},
+            {TErasureType::ErasureMirror3dc, {{0, TStatus::INIT_PENDING}, {0, TStatus::REPLICATING}}, "starting:1(2)", "starting", 1, {2}},
+            {TErasureType::ErasureMirror3dc, {{2, TStatus::ERROR}}, "degraded:1(1)", "degraded", 1, {1}},
+            {TErasureType::ErasureMirror3dc, {{0, TStatus::ERROR}, {0, TStatus::ERROR}, {0, TStatus::ERROR}, {2, TStatus::ERROR}}, "degraded:2(3,1)", "degraded", 2, {3, 1}},
+            {TErasureType::ErasureMirror3dc, {{0, TStatus::ERROR}, {0, TStatus::ERROR}, {1, TStatus::ERROR}, {1, TStatus::ERROR}}, "dead:2(2,2)", "dead", 2, {2, 2}},
+            {TErasureType::ErasureMirror3dc, {{0, TStatus::ERROR}, {1, TStatus::ERROR}, {2, TStatus::ERROR}}, "dead:3(1,1,1)", "dead", 3, {1, 1, 1}},
+            {TErasureType::ErasureMirror3dc, {{0, TStatus::READY}}, "ok", "ok", {}, {}},
+        };
+        TStorageGroups::TGroup group;
+        for (const auto& test : cases) {
+            group.ErasureSpecies = test.Erasure;
+            group.VDisks.clear();
+            for (const auto& [realm, status] : test.Disks) {
+                auto& disk = group.VDisks.emplace_back();
+                disk.VDiskId.FailRealm = realm;
+                disk.VDiskStatus = status;
+                disk.Present = true;
+            }
+            group.CalcState();
+            UNIT_ASSERT_VALUES_EQUAL(group.State, test.State);
+            UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.GetStatus(), test.Status);
+            UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.HasCount(), test.Count.has_value());
+            if (test.Count) {
+                UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.GetCount(), *test.Count);
+            }
+            const auto& domains = group.StateInfo.GetFailedDomainsPerRealm();
+            UNIT_ASSERT_VALUES_EQUAL(std::vector<ui32>(domains.begin(), domains.end()), test.FailedDomains);
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsStateInfoUnknownState) {
+        for (auto erasure : {TErasureType::ErasureMirror3dc, TErasureType::ErasureMirror3of4}) {
+            TStorageGroups::TGroup group;
+            group.ErasureSpecies = erasure;
+            auto& disk = group.VDisks.emplace_back();
+            disk.VDiskId.FailRealm = 1;
+            // Preserve legacy behavior when a pre-created disk has no Whiteboard status.
+            group.CalcState();
+            UNIT_ASSERT_VALUES_EQUAL(group.MissingDisks, 1);
+            UNIT_ASSERT_VALUES_EQUAL(group.State, erasure == TErasureType::ErasureMirror3dc ? ":0()" : "");
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(group.Overall), static_cast<int>(NKikimrViewer::Grey));
+            UNIT_ASSERT(group.StateInfo.GetStatus().empty());
+            UNIT_ASSERT(!group.StateInfo.HasCount());
+            UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.FailedDomainsPerRealmSize(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsStateInfoSwagger) {
+        const auto swagger = TStorageGroups::GetSwagger()["get"];
+        const auto schema = swagger["responses"]["200"]["content"]["application/json"]["schema"];
+        const auto stateInfo = schema["properties"]["StorageGroups"]["items"]["properties"]["StateInfo"];
+        UNIT_ASSERT(stateInfo["description"].as<std::string>().find("Can be omitted") != std::string::npos);
+        const auto countDescription = stateInfo["properties"]["Count"]["description"].as<std::string>();
+        UNIT_ASSERT(countDescription.find("none/block-4-2") != std::string::npos);
+        UNIT_ASSERT(countDescription.find("mirror-3-dc") != std::string::npos);
+        ui32 checkedParameters = 0;
+        for (const auto& parameter : swagger["parameters"]) {
+            const auto name = parameter["name"].as<std::string>();
+            if (name == "sort" || name == "group" || name == "filter_group_by" || name == "fields_required") {
+                UNIT_ASSERT(parameter["description"].as<std::string>().find("`StateInfo`") != std::string::npos);
+                ++checkedParameters;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(checkedParameters, 4);
+    }
+
+    void CheckStorageGroupsStateInfoFieldsRequired(bool whiteboard, bool missingStatuses = false) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto* event = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                auto& record = (*event)->Get()->Record;
+                record.ClearEntries();
+                for (ui32 id : {1, 2}) {
+                    auto* group = record.AddEntries();
+                    group->MutableKey()->SetGroupId(id);
+                    group->MutableInfo()->SetGeneration(1);
+                    group->MutableInfo()->SetErasureSpeciesV2("mirror-3-dc");
+                }
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
+                auto* event = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                auto& record = (*event)->Get()->Record;
+                record.ClearEntries();
+                for (ui32 id : {1, 2}) {
+                    for (ui32 slot = 0; slot < 5; ++slot) {
+                        AddSysViewVDisk(event, runtime.GetNodeId(0), id, slot + 1, slot == 4 ? "READY" : "ERROR");
+                        auto* info = record.MutableEntries(record.EntriesSize() - 1)->MutableInfo();
+                        info->SetGroupId(id);
+                        info->SetFailRealm(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                        info->SetFailDomain(slot < 3 ? slot : 0);
+                    }
+                }
+            } else if (whiteboard && ev->GetTypeRewrite() == TEvWhiteboard::EvBSGroupStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                auto& record = (*event)->Get()->Record;
+                record.ClearBSGroupStateInfo();
+                for (ui32 id : {1, 2}) {
+                    auto* group = record.AddBSGroupStateInfo();
+                    group->SetGroupID(id);
+                    group->SetGroupGeneration(1);
+                    group->SetErasureSpecies("mirror-3-dc");
+                    group->SetStoragePoolName("state-info-pool");
+                    group->AddVDiskNodeIds(runtime.GetNodeId(0));
+                    for (ui32 slot = 0; slot < 5; ++slot) {
+                        auto* disk = group->AddVDiskIds();
+                        disk->SetGroupID(id);
+                        disk->SetGroupGeneration(1);
+                        disk->SetRing(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                        disk->SetDomain(slot < 3 ? slot : 0);
+                        disk->SetVDisk(0);
+                    }
+                }
+            } else if (whiteboard && ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
+                auto* event = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                auto& record = (*event)->Get()->Record;
+                record.ClearVDiskStateInfo();
+                for (ui32 id : {1, 2}) {
+                    for (ui32 slot = 0; slot < 5; ++slot) {
+                        if (missingStatuses && slot != 4) {
+                            continue;
+                        }
+                        auto* disk = record.AddVDiskStateInfo();
+                        disk->MutableVDiskId()->SetGroupID(id);
+                        disk->MutableVDiskId()->SetGroupGeneration(1);
+                        disk->MutableVDiskId()->SetRing(slot < 3 ? 0 : (slot == 3 ? 2 : 1));
+                        disk->MutableVDiskId()->SetDomain(slot < 3 ? slot : 0);
+                        disk->MutableVDiskId()->SetVDisk(0);
+                        disk->SetPDiskId(id);
+                        disk->SetVDiskSlotId(slot + 1);
+                        disk->SetVDiskState(slot == 4 ? EVDiskState::OK : EVDiskState::LocalRecoveryError);
+                        disk->SetReplicated(true);
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        for (TString fields : {"State", "StateInfo", "GroupId"}) {
+            const TActorId sender = runtime.AllocateEdgeActor();
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /storage/groups?group_id=2&fields_required=" << fields
+                    << (whiteboard ? "&whiteboard_only=true" : "") << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(response->Response->Body, &json, true);
+            const auto& groups = json.GetMap().at("StorageGroups").GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("Version").GetUInteger(), 13);
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            const auto& group = groups[0].GetMap();
+            UNIT_ASSERT_VALUES_EQUAL(group.at("GroupId").GetString(), "2");
+            UNIT_ASSERT_VALUES_EQUAL(group.contains("StateInfo"), fields != "GroupId" && !missingStatuses);
+            UNIT_ASSERT_VALUES_EQUAL(group.contains("State"), fields != "GroupId");
+            if (fields != "GroupId") {
+                UNIT_ASSERT_VALUES_EQUAL(group.at("State").GetString(), missingStatuses ? ":0()" : "degraded:2(3,1)");
+            }
+            if (fields != "GroupId" && !missingStatuses) {
+                const auto& state = group.at("StateInfo").GetMap();
+                UNIT_ASSERT_VALUES_EQUAL(state.at("Status").GetString(), "degraded");
+                UNIT_ASSERT_VALUES_EQUAL(state.at("Count").GetUInteger(), 2);
+                const auto& domains = state.at("FailedDomainsPerRealm").GetArray();
+                UNIT_ASSERT_VALUES_EQUAL(domains.size(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(domains[0].GetUInteger(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(domains[1].GetUInteger(), 1);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StorageGroupsStateInfoFieldsRequired) {
+        CheckStorageGroupsStateInfoFieldsRequired(false);
+    }
+
+    Y_UNIT_TEST(StorageGroupsStateInfoWhiteboardFieldsRequired) {
+        CheckStorageGroupsStateInfoFieldsRequired(true);
+    }
+
+    Y_UNIT_TEST(StorageGroupsStateInfoWhiteboardMissingStatus) {
+        CheckStorageGroupsStateInfoFieldsRequired(true, true);
+    }
+
     void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.

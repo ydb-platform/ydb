@@ -304,6 +304,7 @@ public:
         TString Erasure;
         TErasureType::EErasureSpecies ErasureSpecies = TErasureType::ErasureNone;
         TString State;
+        NKikimrViewer::TStorageGroupStateInfo StateInfo;
         ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
         ui32 GroupSizeInUnits = 0;
@@ -393,6 +394,7 @@ public:
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
 
         void CalcState() {
+            StateInfo.Clear();
             MissingDisks = 0;
             ui32 startingDisks = 0;
             ui32 replicatingDisks = 0;
@@ -422,6 +424,7 @@ public:
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
+                StateInfo.SetStatus("ok");
                 StateSortKey = 0;
             } else {
                 if (ErasureSpecies == TErasureType::ErasureNone) {
@@ -435,6 +438,8 @@ public:
                         StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
+                    StateInfo.SetStatus(state);
+                    StateInfo.SetCount(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
@@ -462,6 +467,8 @@ public:
                         }
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
+                    StateInfo.SetStatus(state);
+                    StateInfo.SetCount(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                     std::sort(failedDomainsPerRealm.begin(), failedDomainsPerRealm.end(), std::greater<ui8>());
                     while (!failedDomainsPerRealm.empty() && failedDomainsPerRealm.back() == 0) {
@@ -493,6 +500,13 @@ public:
                         }
                     }
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
+                    if (!state.empty()) {
+                        StateInfo.SetStatus(state);
+                        StateInfo.SetCount(static_cast<ui32>(failedDomainsPerRealm.size()));
+                        for (ui8 failedDomains : failedDomainsPerRealm) {
+                            StateInfo.AddFailedDomainsPerRealm(failedDomains);
+                        }
+                    }
                 }
             }
         }
@@ -798,7 +812,7 @@ public:
             result = EGroupFields::Erasure;
         } else if (field == "Degraded" || field == "MissingDisks") {
             result = EGroupFields::MissingDisks;
-        } else if (field == "State") {
+        } else if (field == "State" || field == "StateInfo") {
             result = EGroupFields::State;
         } else if (field == "Usage") {
             result = EGroupFields::Usage;
@@ -1134,6 +1148,9 @@ public:
         }
         // group id pre-filter, affects TotalGroups count
         if (!FilterGroupIds.ToApply.empty()) {
+            if (!FieldsAvailable.test(+EGroupFields::GroupId)) {
+                return;
+            }
             TGroupView groupView;
             for (TGroup* group : GroupView) {
                 if (FilterGroupIds.ToApply.count(group->GroupId)) {
@@ -2516,6 +2533,9 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);
+                    if (!group->StateInfo.GetStatus().empty()) {
+                        jsonGroup.MutableStateInfo()->CopyFrom(group->StateInfo);
+                    }
                     if (group->GroupGeneration) {
                         jsonGroup.SetGroupGeneration(group->GroupGeneration);
                     }
@@ -2665,6 +2685,7 @@ public:
                           * `Erasure`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Usage`
                           * `GroupId`
                           * `Used`
@@ -2699,6 +2720,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2718,6 +2740,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2737,7 +2760,8 @@ public:
                           * `MediaType`
                           * `Erasure`
                           * `MissingDisks`
-                          * `State`
+                          * `State` (also returns structured `StateInfo`)
+                          * `StateInfo` (alias for `State`)
                           * `Usage`
                           * `Used`
                           * `Limit`
@@ -2801,13 +2825,28 @@ public:
         properties["NeedLimit"]["description"] = "true if limit couldn't be applied";
         properties["Problems"]["description"] = "list of problems collecting the data";
         YAML::Node storageGroupProperties(properties["StorageGroups"]["items"]["properties"]);
+        YAML::Node stateInfo(storageGroupProperties["StateInfo"]);
+        stateInfo["description"] =
+            "Structured group state. Can be omitted even when State is present if CalcState cannot determine a known status.";
+        stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
+        stateInfo["properties"]["Count"]["description"] =
+            "Number after the colon in State: missing or not-ready disks for none/block-4-2, "
+            "affected fail realms for mirror-3-dc. Mirror-3-dc counts include only disks with a known non-READY status. "
+            "Omitted for ok.";
+        stateInfo["properties"]["FailedDomainsPerRealm"]["description"] =
+            "For mirror-3-dc, non-zero failed-domain counts per affected fail realm, sorted in descending order. "
+            "Only disks with a known non-READY status contribute; disks without status data are excluded, "
+            "so the sum can differ from MissingDisks. "
+            "Matches the values in parentheses in State. Omitted for other erasure schemes and ok.";
         storageGroupProperties["State"]["description"] =
             "could be one of: \n"
             " * `ok` - group is okay\n"
             " * `starting:n` - group is okay, but n disks are starting\n"
             " * `replicating:n` - group is okay, all disks are available, but n disks are replicating\n"
             " * `degraded:n(m, m...)` - group is okay, but n data centers / racks are not available (with m devices)\n"
-            " * `dead:n` - group is not okay, n data centers / racks are not available\n";
+            " * `dead:n` - group is not okay, n data centers / racks are not available\n"
+            "When a known state cannot be determined, the legacy value can be `:0()` "
+            "(mirror-3-dc with missing disk status data), or State can be omitted.";
         storageGroupProperties["Kind"]["description"] = "kind of the disks in this group (specified by the user)";
         storageGroupProperties["MediaType"]["description"] = "actual physical media type of the disks in this group";
         storageGroupProperties["MissingDisks"]["description"] = "number of disks missing";

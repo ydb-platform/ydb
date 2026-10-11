@@ -7,13 +7,14 @@ TEST_SRCS(
     test_scheme_board_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:16)
+REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

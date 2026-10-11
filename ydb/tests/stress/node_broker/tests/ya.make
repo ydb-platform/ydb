@@ -6,9 +6,10 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:8)
+REQUIREMENTS(ram:32 cpu:4)
 
 SIZE(LARGE)
+TAG(ya:fat)
 
 DEPENDS(
     ydb/tests/stress/node_broker

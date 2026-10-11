@@ -7,7 +7,8 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(LARGE)
-    REQUIREMENTS(cpu:32)
+    TAG(ya:fat)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 PEERDIR(

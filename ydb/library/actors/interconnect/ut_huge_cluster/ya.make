@@ -1,12 +1,13 @@
 UNITTEST()
 
-REQUIREMENTS(cpu:8)
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32)
 ELSE()
     SIZE(LARGE)
+    TAG(ya:fat)
     REQUIREMENTS(ram:32)
 ENDIF()
 

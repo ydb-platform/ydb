@@ -1,6 +1,7 @@
 PY3TEST()
 SIZE(LARGE)
-REQUIREMENTS(cpu:8)
+TAG(ya:fat)
+REQUIREMENTS(cpu:4)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_SQS_MIGRATION_STAGE=topic_creation)

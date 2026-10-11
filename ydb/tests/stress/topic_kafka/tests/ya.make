@@ -8,7 +8,8 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
-REQUIREMENTS(ram:32 cpu:8)
+TAG(ya:fat)
+REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(
     ydb/apps/ydb

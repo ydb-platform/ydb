@@ -5,7 +5,8 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
 SIZE(LARGE)
-REQUIREMENTS(cpu:8)
+TAG(ya:fat)
+REQUIREMENTS(cpu:4)
 
 SRCS(
     defaults.h

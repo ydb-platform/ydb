@@ -2,12 +2,13 @@ UNITTEST()
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(8)
-REQUIREMENTS(cpu:16)
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 SRCS(

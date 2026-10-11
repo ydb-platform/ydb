@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/library/actors/core)
 
 FORK_SUBTESTS()
-REQUIREMENTS(cpu:16)
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -9,6 +9,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32)
 ELSE()
     SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 PEERDIR(

@@ -717,6 +717,7 @@ namespace NKikimr {
         TVDiskContextPtr VCtx;
         TPDiskErrorState PDiskErrorState;
         TIntrusivePtr<TVDiskConfig> Config;
+        bool LostDataRecoveryStarted = false;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         TVDiskID SelfVDiskId;
@@ -941,6 +942,9 @@ namespace NKikimr {
                         Become(&TThis::StateFunc);
                         HandleWakeup(ctx);
                         SendNotifications(ctx);
+                        break;
+                    case TEvFrontRecoveryStatus::LostDataRecoveryStarted:
+                        LostDataRecoveryStarted = true;
                         break;
                     default: Y_ABORT("Unexpected case");
                 }
@@ -1686,6 +1690,14 @@ namespace NKikimr {
             ctx.Send(ev->Forward(SkeletonId));
         }
 
+        void HandleRecoveryFullSync(TEvBlobStorage::TEvVSyncFull::TPtr& ev, const TActorContext& ctx) {
+            if (Config->EmergencyRecoveryMode && LostDataRecoveryStarted) {
+                HandleRequestWithoutQoS(ev, ctx);
+            } else {
+                DatabaseNotReadyHandle(ev, ctx);
+            }
+        }
+
         void HandleCheckReadiness(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
             if (GInfo->CheckScope(TKikimrScopeId(ev->OriginScopeId), ctx, true)) {
                 const auto& record = ev->Get()->Record;
@@ -2107,9 +2119,7 @@ namespace NKikimr {
             HFunc(TEvGetVDiskSpaceReportRequest, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseNotReadyHandle)
-            // NOTE: Below is the only diff from StateLocalRecoveryInProgress --
-            //       we handle TEvBlobStorage::TEvVSyncGuid
+            HFunc(TEvBlobStorage::TEvVSyncFull, HandleRecoveryFullSync)
             HFunc(TEvBlobStorage::TEvVSyncGuid, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)

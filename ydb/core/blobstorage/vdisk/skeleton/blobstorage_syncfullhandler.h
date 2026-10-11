@@ -23,6 +23,7 @@ namespace NKikimr {
                                       const std::shared_ptr<THull> &hull,
                                       const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
                                       const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
-                                      ui64 dbBirthLsn);
+                                      ui64 dbBirthLsn,
+                                      bool recoveringLostData = false);
 
 } // NKikimr

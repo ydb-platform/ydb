@@ -180,6 +180,7 @@ namespace NKikimr {
         TActorId SchedulerId;
         TActorId GuidRecoveryId;
         TActorId RecoverLostDataId;
+        bool LostDataFullSyncStarted = false;
         TVector<TActorId> PropagatorIds;
         EStartupDataSyncTokenState StartupDataSyncTokenState = EStartupDataSyncTokenState::None;
         EPhase Phase = TPhaseVal::PhaseNone;
@@ -387,6 +388,11 @@ namespace NKikimr {
             if (IsStartupDataSyncBlockedByCut()) {
                 AskForRecoveryLogCut(ctx);
                 return;
+            }
+
+            if (SyncerCtx->Config->EmergencyRecoveryMode && !LostDataFullSyncStarted) {
+                ctx.Send(SyncerCtx->SkeletonId, new TEvSyncerLostDataRecoveryStarted);
+                LostDataFullSyncStarted = true;
             }
 
             if (SyncerCtx->Config->EnableVDiskCooldownTimeout) {

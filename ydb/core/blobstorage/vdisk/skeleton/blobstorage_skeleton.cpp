@@ -44,6 +44,7 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h>
@@ -2229,6 +2230,12 @@ namespace NKikimr {
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
 
+            if (Config->EmergencyRecoveryMode && msg->IsAnubis()) {
+                ctx.Send(ev->Sender, new TEvAnubisOsirisPutResult(NKikimrProto::OK,
+                    TAppData::TimeProvider->Now(), IFaceMonGroup->AnubisPutResMsgsPtr(), nullptr), 0, ev->Cookie);
+                return;
+            }
+
             // update basic counters
             TInstant now = TAppData::TimeProvider->Now();
             (msg->IsAnubis() ? IFaceMonGroup->AnubisPutMsgs() : IFaceMonGroup->OsirisPutMsgs())++;
@@ -2370,6 +2377,12 @@ namespace NKikimr {
         void Handle(TEvDetectedPhantomBlob::TPtr& ev, const TActorContext& ctx) {
             TEvDetectedPhantomBlob *msg = ev->Get();
 
+            if (Config->EmergencyRecoveryMode) {
+                ctx.Send(new IEventHandle(TEvBlobStorage::EvDetectedPhantomBlobCommitted, 0, ev->Sender,
+                    ctx.SelfID, nullptr, ev->Cookie));
+                return;
+            }
+
             for (const TLogoBlobID& logoBlobId : msg->Phantoms) {
                 YDB_LOG_INFO_CTX(ctx, "Adding DoNotKeep to phantom",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
@@ -2425,15 +2438,43 @@ namespace NKikimr {
             resultStream << str.Str();
         }
 
+        void StartFullSyncHandler(const TActorContext& ctx, ui64 dbBirthLsn, bool recoveringLostData = false) {
+            if (Db->SyncFullHandlerID) {
+                ctx.Send(Db->SyncFullHandlerID, new TEvents::TEvPoisonPill);
+                ActiveActors.Erase(Db->SyncFullHandlerID);
+            }
+            Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
+                SelfVDiskId, ctx.SelfID, Db->SyncLogID, Hull, IFaceMonGroup, FullSyncGroup,
+                dbBirthLsn, recoveringLostData)));
+            ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+        }
+
+        void Handle(TEvSyncerLostDataRecoveryStarted::TPtr&, const TActorContext& ctx) {
+            if (Config->EmergencyRecoveryMode && !Db->SyncFullHandlerID) {
+                // A peer that reads a partial index must full sync again after DbBirthLsn is established.
+                StartFullSyncHandler(ctx, 0, true);
+                ctx.Send(*SkeletonFrontIDPtr, new TEvFrontRecoveryStatus(
+                    TEvFrontRecoveryStatus::LostDataRecoveryStarted, NKikimrProto::OK,
+                    PDiskCtx->Dsk, MinHugeBlobInBytes, Db->GetVDiskIncarnationGuid()));
+            }
+        }
+
+        void HandleRecoveryFullSync(TEvBlobStorage::TEvVSyncFull::TPtr& ev, const TActorContext& ctx) {
+            if (Config->EmergencyRecoveryMode && Db->SyncFullHandlerID) {
+                Handle(ev, ctx);
+            } else {
+                ReplyError(NKikimrProto::NOTREADY, "lost-data recovery full sync is not enabled",
+                    ev, ctx, TAppData::TimeProvider->Now());
+            }
+        }
+
         void SkeletonIsUpAndRunning(const TActorContext &ctx, bool runRepl = false) {
             // Now, if we obtained DbBirthLsn, we can create full sync handler actor
             // run handler in the same mailbox
             // We start Skeleton without DbBirthLsn only in DonorMode,
             // which makes VDisk unable to sync with at all
             if (DbBirthLsn) {
-                Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
-                    SelfVDiskId, ctx.SelfID, Db->SyncLogID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
-                ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+                StartFullSyncHandler(ctx, *DbBirthLsn);
             }
 
             Y_ABORT_UNLESS(!VDiskSpaceReportManagerId);
@@ -3613,7 +3654,8 @@ namespace NKikimr {
             // TEvBlobStorage::TEvVCollectGarbage
             // TEvBlobStorage::TEvVGetBarrier
             // TEvBlobStorage::TEvVSync
-            // TEvBlobStorage::TEvVSyncFull
+            HFunc(TEvBlobStorage::TEvVSyncFull, HandleRecoveryFullSync)
+            HFunc(TEvSyncerLostDataRecoveryStarted, Handle)
             HFunc(TEvCallOsiris, Handle)
             HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)

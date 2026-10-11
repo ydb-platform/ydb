@@ -97,15 +97,23 @@ namespace NKafka {
             return;
         }
 
+        size_t groupIndex = labels.size() - 2;
+        while (groupIndex > 0 && labels[groupIndex].second.empty()) {
+            --groupIndex;
+        }
+
         auto parent = Settings.Counters;
-        for (size_t i = 0; i + 2 < labels.size(); ++i) {
+        for (size_t i = 0; i < groupIndex; ++i) {
+            if (i != 0 && labels[i].second.empty()) {
+                continue;
+            }
             parent = parent->FindSubgroup(labels[i].first, labels[i].second);
             if (!parent) {
                 return;
             }
         }
 
-        const auto& [name, value] = labels[labels.size() - 2];
+        const auto& [name, value] = labels[groupIndex];
         auto group = parent->FindSubgroup(name, value);
         if (group && group->ReadSnapshot().empty()) {
             parent->RemoveSubgroup(name, value);

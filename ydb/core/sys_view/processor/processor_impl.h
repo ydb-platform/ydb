@@ -443,6 +443,8 @@ private:
     TDbCountersServiceMap AggregatedLabeledState;
 
     std::unordered_map<NKikimrSysView::EDbCountersService, TIntrusivePtr<IDbCounters>> Counters;
+    // TABLETS_FOLLOWERS aggregates, read by the TABLETS ydb mapping; not exported
+    ::NMonitoring::TDynamicCounterPtr FollowerTabletsGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 };
 
 } // NSysView

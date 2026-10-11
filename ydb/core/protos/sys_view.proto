@@ -664,6 +664,9 @@ message TEvSendDbCountersRequest {
     optional uint64 NodeId = 2;
     optional uint64 Generation = 3;
     repeated TDetailedCounters DetailedCounters = 4;
+    // TABLETS_FOLLOWERS. In ServiceCounters a processor without enum 8 reads it as KQP
+    // (closed enum) and overwrites KQP counters; such a processor skips this field
+    repeated TServiceCounters FollowerServiceCounters = 5;
 }
 
 message TEvSendDbCountersResponse {

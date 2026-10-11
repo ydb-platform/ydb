@@ -37,6 +37,41 @@ Y_UNIT_TEST_SUITE(TExecutorTest)
         executor->Stop();
     }
 
+    Y_UNIT_TEST(ShouldStopTwice)
+    {
+        auto executor = TExecutor::Create("TEST");
+        executor->Start();
+
+        auto future = executor->Execute([] { return 42; });
+
+        auto result = future.GetValue(WaitTimeout);
+        UNIT_ASSERT(result == 42);
+
+        executor->Stop();
+        executor->Stop();
+    }
+
+    // Dropping the last reference from a running coroutine must not join
+    // the worker from itself.
+    Y_UNIT_TEST(ShouldDestroyWhenDroppedOnWorker)
+    {
+        auto done = NewPromise<void>();
+        auto executor = TExecutor::Create("TEST");
+        executor->Start();
+
+        TExecutor* raw = executor.get();
+        raw->ExecuteSimple(
+            [worker = std::move(executor), done]() mutable
+            {
+                worker.reset();
+                done.SetValue();
+            });
+
+        done.GetFuture().GetValue(WaitTimeout);
+        // ThreadProc destroys the thread only after this coroutine returns.
+        Sleep(TDuration::MilliSeconds(100));
+    }
+
     Y_UNIT_TEST(ShouldWaitForFuture)
     {
         auto executor = TExecutor::Create("TEST");

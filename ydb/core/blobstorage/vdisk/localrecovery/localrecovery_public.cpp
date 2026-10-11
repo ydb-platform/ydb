@@ -80,6 +80,7 @@ namespace NKikimr {
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         std::shared_ptr<TRopeArena> Arena;
+        const std::optional<ui32> SurvivingRealm;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
         bool LocalRecoveryTokenRequested = false;
         bool HullLogoBlobsDBInitialized = false;
@@ -621,7 +622,7 @@ namespace NKikimr {
                         AppData(ctx)->FeatureFlags.GetEnableVDiskFreshSpaceProjection()
                             && Config->FreshCompaction && !Config->BaseInfo.ReadOnly,
                         LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
-                        AppData(ctx)->FeatureFlags.GetEnableCollectByCompleteDeletionBlock());
+                        AppData(ctx)->FeatureFlags.GetEnableCollectByCompleteDeletionBlock(), SurvivingRealm);
 
                 // create THullDbRecovery, which creates THullDs
                 LocRecCtx->HullDbRecovery = std::make_shared<THullDbRecovery>(hullCtx);
@@ -825,7 +826,7 @@ namespace NKikimr {
                 const TVDiskID &selfVDiskId,
                 const TActorId &skeletonId,
                 const TActorId skeletonFrontId,
-                std::shared_ptr<TRopeArena> arena)
+                std::shared_ptr<TRopeArena> arena, std::optional<ui32> survivingRealm)
             : TActorBootstrapped<TDatabaseLocalRecovery>()
             , Config(config)
             , SelfVDiskId(selfVDiskId)
@@ -833,6 +834,7 @@ namespace NKikimr {
             , SkeletonFrontId(skeletonFrontId)
             , LocRecCtx(std::make_shared<TLocalRecoveryContext>(vctx))
             , Arena(std::move(arena))
+            , SurvivingRealm(survivingRealm)
             , VDiskMonGroup(vctx->VDiskCounters, "subsystem", "state")
         {}
     };
@@ -844,8 +846,8 @@ namespace NKikimr {
             const TVDiskID &selfVDiskId,
             const TActorId &skeletonId,
             const TActorId skeletonFrontId,
-            std::shared_ptr<TRopeArena> arena) {
-        return new TDatabaseLocalRecovery(vctx, config, selfVDiskId, skeletonId, skeletonFrontId, std::move(arena));
+            std::shared_ptr<TRopeArena> arena, std::optional<ui32> survivingRealm) {
+        return new TDatabaseLocalRecovery(vctx, config, selfVDiskId, skeletonId, skeletonFrontId, std::move(arena), survivingRealm);
     }
 
 } // NKikimr

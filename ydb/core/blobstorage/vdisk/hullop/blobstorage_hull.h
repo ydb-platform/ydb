@@ -103,6 +103,9 @@ namespace NKikimr {
                 TActorId logCutterId,
                 const TActorContext &ctx);
 
+        // The caller must pause all three level-index actors and await their acknowledgements.
+        void ReconfigureBarrierQuorum(std::optional<ui32> survivingRealm);
+
         // Request from PDisk to cut the recovery log
         void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg);
 

@@ -1,4 +1,5 @@
 #include "guid_firstrun.h"
+
 #include "guid_proxywrite.h"
 #include "blobstorage_syncer_committer.h"
 #include "blobstorage_syncquorum.h"
@@ -6,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <library/cpp/random_provider/random_provider.h>
+
+#include <util/generic/hash_set.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 
@@ -109,10 +112,11 @@ namespace NKikimr {
                                 const TVDiskIdShort &self,
                                 const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                 EFirstRunStep step,
-                                TVDiskEternalGuid guid)
+                                TVDiskEternalGuid guid,
+                                std::optional<ui32> survivingRealm = std::nullopt)
             : VDiskLogPrefix(logPrefix)
             , Neighbors(self, top)
-            , QuorumTracker(self, top, true)
+            , QuorumTracker(self, top, true, survivingRealm)
             , Step(step)
             , Guid(guid)
         {
@@ -191,7 +195,7 @@ namespace NKikimr {
         unsigned NotifyAliveProxies(TAliveProxyNotifier func) {
             unsigned counter = 0;
             for (auto &x : Neighbors) {
-                if (!x.Get().GotResponse) {
+                if (!x.Get().GotResponse && x.Get().ProxyId) {
                     // do 'func' with the proxy
                     func(x.Get());
                     ++counter;
@@ -222,7 +226,9 @@ namespace NKikimr {
                     "Step# " << EFirstRunStepToStr(Step) << " curStep# " << EFirstRunStepToStr(curStep));
             CleareNeighborsAndQuorumTracker();
             for (auto &x : Neighbors) {
-                func(x, Guid, syncState);
+                if (QuorumTracker.IsParticipant(x.VDiskIdShort)) {
+                    func(x, Guid, syncState);
+                }
             }
             Step = nextStep;
         }
@@ -274,7 +280,9 @@ namespace NKikimr {
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         const TActorId CommitterId;
         const TActorId NotifyId;
-        TVDiskGuidFirstRunState FirstRunState;
+        std::unique_ptr<TVDiskGuidFirstRunState> FirstRunState;
+        THashSet<TActorId> WriteProxies;
+        bool PolicyChangedDuringCommit = false;
         EWaitFor WaitFor = WaitNotSet;
 
         ////////////////////////////////////////////////////////////////////////
@@ -282,7 +290,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         void Bootstrap(const TActorContext &ctx) {
             // depending on our progress
-            auto startStep = FirstRunState.GetStep();
+            auto startStep = FirstRunState->GetStep();
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: START; step# %s", EFirstRunStepToStr(startStep)));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: START; step# " << startStep; });
 
@@ -310,11 +318,11 @@ namespace NKikimr {
         // GENERATE GUID
         ////////////////////////////////////////////////////////////////////////
         void GenerateGuid(const TActorContext &ctx) {
-            FirstRunState.GenerateGuid();
+            FirstRunState->GenerateGuid();
 
-            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: GenerateGuid; guid# %s", FirstRunState.GetGuid().ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: GenerateGuid; guid# %s", FirstRunState->GetGuid().ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
-                stream << "FirstRun: GenerateGuid; guid# " << FirstRunState.GetGuid();
+                stream << "FirstRun: GenerateGuid; guid# " << FirstRunState->GetGuid();
             });
 
             WriteGuidInProgressToQuorum(ctx);
@@ -337,14 +345,18 @@ namespace NKikimr {
                 auto proxyActor = CreateProxyForWritingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID, state, guid);
                 auto actorId = ctx.Register(proxyActor);
                 x.Get().SetActorID(actorId);
+                WriteProxies.insert(actorId);
             };
 
-            FirstRunState.RunWritesInProgressToQuorum(runProxyForVDisk);
+            FirstRunState->RunWritesInProgressToQuorum(runProxyForVDisk);
             Become(&TThis::WriteGuidInProgressStateFunc);
             WaitFor = WaitForProxies;
         }
 
         void HandleInProgressWritten(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
+            if (!WriteProxies.erase(ev->Sender)) {
+                return;
+            }
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleInProgressWritten: msg# %s", ev->Get()->ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: InProgressGuidWritten; msg# " << ev->Get()->ToString();
@@ -358,7 +370,7 @@ namespace NKikimr {
             };
 
             auto msg = ev->Get();
-            bool enough = FirstRunState.SetResultForWriteInProgress(msg->VDiskId, abandonProxy);
+            bool enough = FirstRunState->SetResultForWriteInProgress(msg->VDiskId, abandonProxy);
             if (enough) {
                 WriteSelectedLocally(ctx);
             }
@@ -377,8 +389,8 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteSelectedLocally"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: WriteSelectedLocally"; });
 
-            FirstRunState.RunWriteSelectedLocally();
-            auto guid = FirstRunState.GetGuid();
+            FirstRunState->RunWriteSelectedLocally();
+            auto guid = FirstRunState->GetGuid();
             auto msg = TEvSyncerCommit::Local(TLocalVal::Selected, guid);
             ctx.Send(CommitterId, msg.release());
             Become(&TThis::WriteSelectedLocallyStateFunc);
@@ -387,8 +399,12 @@ namespace NKikimr {
 
         void HandleSelectedLocally(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            FirstRunState.SetResultForWriteSelectedLocally();
-            WriteFinalGuidToQuorum(ctx);
+            FirstRunState->SetResultForWriteSelectedLocally();
+            if (PolicyChangedDuringCommit) {
+                RestartQuorumWrite(EFirstRunStep::ACTION_WriteFinalToQuorum, ctx);
+            } else {
+                WriteFinalGuidToQuorum(ctx);
+            }
         }
 
         STRICT_STFUNC(WriteSelectedLocallyStateFunc,
@@ -417,14 +433,18 @@ namespace NKikimr {
                 auto proxyActor = CreateProxyForWritingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID, state, guid);
                 auto actorId = ctx.Register(proxyActor);
                 x.Get().SetActorID(actorId);
+                WriteProxies.insert(actorId);
             };
 
-            FirstRunState.RunWritesFinalToQuorum(runProxyForVDisk);
+            FirstRunState->RunWritesFinalToQuorum(runProxyForVDisk);
             Become(&TThis::WriteFinalGuidStateFunc);
             WaitFor = WaitForProxies;
         }
 
         void HandleFinalWritten(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
+            if (!WriteProxies.erase(ev->Sender)) {
+                return;
+            }
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleFinalWritten: msg# %s", ev->Get()->ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: FinalGuidWritten; msg# " << ev->Get()->ToString();
@@ -438,7 +458,7 @@ namespace NKikimr {
             };
 
             auto msg = ev->Get();
-            bool enough = FirstRunState.SetResultForWriteFinal(msg->VDiskId, abandonProxy);
+            bool enough = FirstRunState->SetResultForWriteFinal(msg->VDiskId, abandonProxy);
             if (enough) {
                 WriteFinalLocally(ctx);
             }
@@ -457,8 +477,8 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteFinalLocally"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: WriteFinalLocally"; });
 
-            FirstRunState.RunWriteFinalLocally();
-            auto guid = FirstRunState.GetGuid();
+            FirstRunState->RunWriteFinalLocally();
+            auto guid = FirstRunState->GetGuid();
             Y_VERIFY_S(guid, VCtx->VDiskLogPrefix);
             ui64 dbBirthLsn = 0;
             auto msg = TEvSyncerCommit::LocalFinal(guid, dbBirthLsn);
@@ -469,8 +489,12 @@ namespace NKikimr {
 
         void HandleFinalLocally(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            FirstRunState.SetResultForWriteFinalLocally();
-            Finish(ctx);
+            FirstRunState->SetResultForWriteFinalLocally();
+            if (PolicyChangedDuringCommit) {
+                RestartQuorumWrite(EFirstRunStep::ACTION_WriteFinalToQuorum, ctx);
+            } else {
+                Finish(ctx);
+            }
         }
 
         STRICT_STFUNC(WriteFinalLocallyStateFunc,
@@ -486,7 +510,7 @@ namespace NKikimr {
         // FINISH
         ////////////////////////////////////////////////////////////////////////
         void Finish(const TActorContext &ctx) {
-            auto guid = FirstRunState.GetGuid();
+            auto guid = FirstRunState->GetGuid();
             Y_VERIFY_S(guid, VCtx->VDiskLogPrefix);
             ctx.Send(NotifyId, new TEvSyncerGuidFirstRunDone(guid));
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: FINISH"));
@@ -509,7 +533,7 @@ namespace NKikimr {
                         // cancel proxy
                         ctx.Send(x.ProxyId, new NActors::TEvents::TEvPoisonPill());
                     };
-                    FirstRunState.NotifyAliveProxies(abandonProxy);
+                    FirstRunState->NotifyAliveProxies(abandonProxy);
                     break;
                 }
                 case WaitForCommitter:
@@ -521,23 +545,46 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // BlobStorage Group reconfiguration
         ////////////////////////////////////////////////////////////////////////
+        void RestartQuorumWrite(EFirstRunStep step, const TActorContext& ctx) {
+            const auto guid = FirstRunState->GetGuid();
+            for (const auto& aid : WriteProxies) {
+                ctx.Send(aid, new TEvents::TEvPoisonPill);
+            }
+            WriteProxies.clear();
+            FirstRunState = std::make_unique<TVDiskGuidFirstRunState>(VCtx->VDiskLogPrefix,
+                VCtx->ShortSelfVDisk, GInfo->PickTopology(), step, guid,
+                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt);
+            PolicyChangedDuringCommit = false;
+            Bootstrap(ctx);
+        }
+
         void HandleNoProxies(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
-            // save new Group Info
-            GInfo = ev->Get()->NewInfo;
+            const auto& info = ev->Get()->NewInfo;
+            PolicyChangedDuringCommit |= GInfo->EnableSingleDcMode != info->EnableSingleDcMode
+                || GInfo->SurvivingDc != info->SurvivingDc;
+            GInfo = info;
         }
 
         void HandleWhileProxiesRunning(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            // save new Group Info
-            GInfo = ev->Get()->NewInfo;
-            // reconfigure alive proxies
+            const auto& info = ev->Get()->NewInfo;
+            const bool policyChanged = GInfo->EnableSingleDcMode != info->EnableSingleDcMode
+                || GInfo->SurvivingDc != info->SurvivingDc;
+            GInfo = info;
+            if (policyChanged) {
+                const auto step = FirstRunState->GetStep()
+                    == EFirstRunStep::STATE__WaitProgressWrittenToQuorum
+                    ? EFirstRunStep::ACTION_WriteInProgressToQuorum
+                    : EFirstRunStep::ACTION_WriteFinalToQuorum;
+                RestartQuorumWrite(step, ctx);
+                return;
+            }
             const TString& logPrefix = VCtx->VDiskLogPrefix;
             auto reconfigureProxy = [&ctx, &ev, &logPrefix] (TVDiskState& x) {
                 Y_VERIFY_S(!x.GotResponse, logPrefix);
-                // cancel proxy
                 ctx.Send(x.ProxyId, ev->Get()->Clone());
             };
-            FirstRunState.NotifyAliveProxies(reconfigureProxy);
+            FirstRunState->NotifyAliveProxies(reconfigureProxy);
         }
 
     public:
@@ -556,7 +603,9 @@ namespace NKikimr {
             , GInfo(std::move(info))
             , CommitterId(committerId)
             , NotifyId(notifyId)
-            , FirstRunState(VCtx->VDiskLogPrefix, VCtx->ShortSelfVDisk, GInfo->PickTopology(), startStep, guid)
+            , FirstRunState(std::make_unique<TVDiskGuidFirstRunState>(VCtx->VDiskLogPrefix,
+                VCtx->ShortSelfVDisk, GInfo->PickTopology(), startStep, guid,
+                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt))
         {}
     };
 

@@ -491,6 +491,11 @@ public:
     ui32 GroupSizeInUnits;
     bool EnableSingleDcMode = false;
     std::optional<ui32> SurvivingDc;
+
+    bool IsVDiskInActiveRealm(const TVDiskIdShort& vdisk) const {
+        return !EnableSingleDcMode || (Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            && SurvivingDc && *SurvivingDc < 3 && vdisk.FailRealm == *SurvivingDc);
+    }
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id

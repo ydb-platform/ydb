@@ -124,7 +124,10 @@ namespace NKikimr {
     struct THullCtx : public TThrRefBase {
         TVDiskContextPtr VCtx;
         const TIntrusivePtr<TVDiskConfig> VCfg;
-        const TIntrusivePtr<TIngressCache> IngressCache;
+        // Replaced in the shared Hull mailbox only after compactions have drained.
+        TIntrusivePtr<TIngressCache> IngressCache;
+        // Accessed by Hull and its level-index actors in their shared mailbox.
+        bool CompactionsPaused = false;
         const ui32 ChunkSize;
         // Granularity PDisk appends in; the SST writer pads to it (see TFreshOutputGeometry).
         const ui32 AppendBlockSize;
@@ -170,7 +173,8 @@ namespace NKikimr {
                 ui32 hullCompSortedPartsNum,
                 bool freshChunkReservation = false,
                 ui32 appendBlockSize = 4096,
-                bool collectByCompleteDeletionBlock = false
+                bool collectByCompleteDeletionBlock = false,
+                std::optional<ui32> survivingRealm = std::nullopt
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

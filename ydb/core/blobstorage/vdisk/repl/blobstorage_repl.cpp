@@ -282,7 +282,60 @@ namespace NKikimr {
             NextMinHugeBlobInBytes = ev->Get()->MinHugeBlobInBytes;
         }
 
+        bool ReplanRequested = false;
+        bool ReplWakeupScheduled = false;
+        ui64 ReplWakeupGeneration = 0;
+
+        void ScheduleReplicationWakeup() {
+            if (!ReplWakeupScheduled) {
+                ReplWakeupScheduled = true;
+                Schedule(ReplCtx->VDiskCfg->ReplTimeInterval,
+                    new TEvents::TEvWakeup(++ReplWakeupGeneration));
+            }
+        }
+
+        void HandleReplicationWakeup(TEvents::TEvWakeup::TPtr ev) {
+            if (ev->Get()->Tag != ReplWakeupGeneration || !ReplWakeupScheduled) {
+                return;
+            }
+            ReplWakeupScheduled = false;
+            if (State == Relaxation || State == Finished) {
+                StartReplication();
+            }
+        }
+
+
+        void HandleCommenceReplication(TAutoPtr<IEventHandle>& ev) {
+            if (!ev->Cookie) {
+                StartReplication();
+            } else if (!ReplanRequested) {
+                ReplanRequested = true;
+                ScheduleReplicationWakeup();
+            }
+        }
+
+        void HandleReplicationIndexUpdate(TAutoPtr<IEventHandle>& ev) {
+            if (ev->Cookie) {
+                ReplanRequested = true;
+            }
+        }
+
         void StartReplication() {
+            ReplWakeupScheduled = false;
+            ++ReplWakeupGeneration;
+            if (ReplanRequested) {
+                BlobsToReplicatePtr.reset();
+                UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+                UnreplicatedBlobRecords.clear();
+                MilestoneQueue = TMilestoneQueue();
+                if (DonorQueue.empty()) {
+                    DonorQueue.emplace_back(std::nullopt);
+                }
+            }
+            if (State == Finished) {
+                Transition(Finished, Relaxation);
+            }
+            ReplanRequested = false;
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL START"),
                 {"marker", "BSVR14"});
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
@@ -495,10 +548,10 @@ namespace NKikimr {
                 ResetReplProgressTimer(true);
 
                 Become(&TThis::StateRelax);
-                if (!BlobsToReplicatePtr->IsEmpty()) {
+                if (!BlobsToReplicatePtr->IsEmpty() || ReplanRequested) {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
-                    Schedule(ReplCtx->VDiskCfg->ReplTimeInterval, new TEvents::TEvWakeup);
+                    ScheduleReplicationWakeup();
                     if (!UnrecoveredNonphantomBlobs) {
                         // semi-finished replication -- we have only phantom-like unreplicated blobs
                         TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
@@ -702,7 +755,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateRelax,
-            cFunc(TEvents::TSystem::Wakeup, StartReplication)
+            hFunc(TEvents::TEvWakeup, HandleReplicationWakeup)
             hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
             hFunc(TEvProxyQueueState, Handle)
@@ -710,7 +763,7 @@ namespace NKikimr {
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
             hFunc(TEvents::TEvGone, Handle)
-            cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
+            fFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceReplication)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)
@@ -755,6 +808,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateRepl,
+            hFunc(TEvents::TEvWakeup, HandleReplicationWakeup)
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(TEvReplStarted, Handle)
             hFunc(TEvReplFinished, Handle)
@@ -765,7 +819,7 @@ namespace NKikimr {
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
             hFunc(TEvents::TEvGone, Handle)
-            cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
+            fFunc(TEvBlobStorage::EvCommenceRepl, HandleReplicationIndexUpdate)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
             hFunc(TEvMinHugeBlobSizeUpdate, Handle)

@@ -6,6 +6,12 @@
 
 namespace NKikimr {
 
+    struct TEvHullPauseCompactions : TEventLocal<TEvHullPauseCompactions, TEvBlobStorage::EvHullPauseCompactions> {};
+    struct TEvHullCompactionsPaused : TEventLocal<TEvHullCompactionsPaused, TEvBlobStorage::EvHullCompactionsPaused> {};
+    struct TEvHullCheckCompactionsPaused : TEventLocal<TEvHullCheckCompactionsPaused,
+        TEvBlobStorage::EvHullCheckCompactionsPaused> {};
+    struct TEvHullResumeCompactions : TEventLocal<TEvHullResumeCompactions, TEvBlobStorage::EvHullResumeCompactions> {};
+
     struct THullLogCtx;
     namespace NSyncLog {
         class TSyncLogFirstLsnToKeep;
@@ -107,6 +113,9 @@ namespace NKikimr {
             bool force,
             bool allowGarbageCollection)
     {
+        if (hullDs->HullCtx->CompactionsPaused) {
+            return false;
+        }
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired",

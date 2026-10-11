@@ -884,6 +884,17 @@ namespace NKikimr {
 
             UpdateStats(ctx);
 
+            if (!GInfo->IsVDiskInActiveRealm(TVDiskIdShort(SelfVDiskId))) {
+                SetupMonitoring(ctx);
+                Become(&TThis::StateDatabaseError);
+                VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                const auto& base = Config->BaseInfo;
+                ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                    new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId,
+                        NKikimrBlobStorage::EVDiskStatus::ERROR, false));
+                return;
+            }
+
             // create and run skeleton
             SkeletonId = ctx.Register(CreateVDiskSkeleton(Config, GInfo, ctx.SelfID, VCtx));
             ActiveActors.Insert(SkeletonId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -1906,6 +1917,20 @@ namespace NKikimr {
             // update GroupInfo-related fields
             GInfo = info;
             const auto& prevVDiskId = std::exchange(SelfVDiskId, vdiskId);
+
+            if (!GInfo->IsVDiskInActiveRealm(TVDiskIdShort(SelfVDiskId))) {
+                if (SkeletonId) {
+                    ctx.Send(SkeletonId, new TEvents::TEvPoisonPill());
+                    SkeletonId = {};
+                }
+                Become(&TThis::StateDatabaseError);
+                VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                const auto& base = Config->BaseInfo;
+                ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                    new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId,
+                        NKikimrBlobStorage::EVDiskStatus::ERROR, false));
+                return;
+            }
 
             // forward message to Skeleton
             ctx.Send(SkeletonId, new TEvVGenerationChange(vdiskId, info));

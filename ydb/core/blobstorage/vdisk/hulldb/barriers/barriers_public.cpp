@@ -32,7 +32,7 @@ namespace NKikimr {
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
             , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
-                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
+                settings.HullCtx->IngressCache,
                 settings.HullCtx->VCtx->VDiskLogPrefix,
                 settings.HullCtx->GCOnlySynced))
         {}
@@ -46,7 +46,7 @@ namespace NKikimr {
             , VDiskLogPrefix(settings.HullCtx->VCtx->VDiskLogPrefix)
             , CollectByCompleteDeletionBlock(settings.HullCtx->CollectByCompleteDeletionBlock)
             , MemView(std::make_unique<TMemView>(
-                TIngressCache::Create(settings.HullCtx->VCtx->Top, settings.HullCtx->VCtx->ShortSelfVDisk),
+                settings.HullCtx->IngressCache,
                 settings.HullCtx->VCtx->VDiskLogPrefix,
                 settings.HullCtx->GCOnlySynced))
         {}
@@ -73,7 +73,7 @@ namespace NKikimr {
 
         void TBarriersDs::LoadCompleted() {
             TBase::LoadCompleted();
-            BuildMemView();
+            BuildMemView(*MemView);
         }
 
         void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
@@ -104,14 +104,24 @@ namespace NKikimr {
             return TBarriersDsSnapshot(TBase::GetIndexSnapshot(), MemView->GetSnapshot());
         }
 
-        void TBarriersDs::BuildMemView() {
+        void TBarriersDs::RebuildMemView(TIngressCachePtr ingressCache, const THashSet<ui64>& deletedTablets) {
+            auto next = std::make_unique<TMemView>(std::move(ingressCache), VDiskLogPrefix,
+                Settings.HullCtx->GCOnlySynced);
+            BuildMemView(*next);
+            if (CollectByCompleteDeletionBlock) {
+                next->MarkTabletsDeleted(deletedTablets);
+            }
+            MemView = std::move(next);
+        }
+
+        void TBarriersDs::BuildMemView(TMemView& target) {
             TBase::TLevelIndexSnapshot snap = TBase::GetIndexSnapshot();
             TBase::TLevelIndexSnapshot::TForwardIterator it(Settings.HullCtx, &snap);
             THeapIterator<TKeyBarrier, TMemRecBarrier, true> heapIt(&it);
             TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(Settings.HullCtx->VCtx->Top->GType);
             auto callback = [&] (TKeyBarrier key, auto* merger) -> bool {
                 const TMemRecBarrier& memRec = merger->GetMemRec();
-                MemView->Update(key, memRec);
+                target.Update(key, memRec);
                 return true;
             };
             heapIt.Walk(TKeyBarrier::First(), &merger, callback);

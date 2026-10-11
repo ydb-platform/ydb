@@ -41,10 +41,11 @@ namespace NKikimr {
         const ui32 Handoff;
         const ui32 BarrierIngressValueMask;
         const ui32 BarrierIngressDomainMask;
+        const ui32 SurvivingRealmMask;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
 
         static TIngressCachePtr Create(std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                       const TVDiskIdShort &vdisk);
+                                       const TVDiskIdShort &vdisk, std::optional<ui32> survivingRealm = std::nullopt);
 
     private:
         TIngressCache(ui32 vdiskOrderNum,
@@ -54,6 +55,7 @@ namespace NKikimr {
                       ui32 handoff,
                       ui32 barrierIngressValueMask,
                       ui32 barrierIngressDomainMask,
+                      ui32 survivingRealmMask,
                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> topology);
     };
 
@@ -91,7 +93,8 @@ namespace NKikimr {
         // written locally or recovered after crash
         NMatrix::TVectorType PartsWeMustHaveLocally(const TBlobStorageGroupInfo::TTopology *top,
                                                 const TVDiskIdShort &vdisk,
-                                                const TLogoBlobID &id) const;
+                                                const TLogoBlobID &id,
+                                                bool restoreMirror3dcPlacement = false) const;
         // returns a pair <VectorOfPartsToMove, VectorOfPartsToDelete>
         TPairOfVectors HandoffParts(const TBlobStorageGroupInfo::TTopology *top,
                                     const TVDiskIdShort &vdisk,

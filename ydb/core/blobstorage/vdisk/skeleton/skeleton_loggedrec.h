@@ -157,7 +157,7 @@ namespace NKikimr {
     class TLoggedRecLocalSyncData : public ILoggedRec {
     public:
         TLoggedRecLocalSyncData(TLsnSeg seg, bool confirmSyncLogAlso, std::unique_ptr<TEvLocalSyncDataResult> result,
-                TEvLocalSyncData::TPtr origEv, TActorId syncLogActorId);
+                TEvLocalSyncData::TPtr origEv, TActorId syncLogActorId, TActorId replActorId = {});
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
@@ -165,6 +165,7 @@ namespace NKikimr {
         TEvLocalSyncData::TPtr OrigEv;
         NWilson::TSpan Span;
         const TActorId SyncLogActorId;
+        const TActorId ReplActorId;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

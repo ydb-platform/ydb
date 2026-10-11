@@ -1,5 +1,7 @@
 #include "barriers_tree.h"
 #include "barriers_essence.h"
+#include "barriers_public.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h>
 #include <util/random/fast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -79,6 +81,73 @@ namespace NKikimr {
             writer.Write(tree, TKeyBarrier(tabletId, channel, 15, 3, true), Max<ui32>(), Max<ui32>());
             tree.GetBarrier(tabletId, channel, soft, hard);
             UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+        }
+
+        Y_UNIT_TEST(SingleDcRebuildBarrierView) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+            const TVDiskID self(0, 1, 0, 0, 0);
+            auto config = MakeIntrusive<TVDiskConfig>(TVDiskConfig::TBaseInfo::SampleForTests());
+            auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info.PickTopology(),
+                new ::NMonitoring::TDynamicCounters(), self, nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
+            auto hull = MakeIntrusive<THullCtx>(vctx, config, 135249920u, 2u << 20u,
+                true, true, true, true, 1u, 1u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1),
+                8u, 8u, false, 4096u, true);
+            TLevelIndexSettings settings(hull, 8, 64u << 20u, 0, TDuration::Minutes(10), 10, false, false);
+            auto arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate);
+            NBarriers::TBarriersDs barriers(settings, arena);
+            barriers.LoadCompleted();
+            const TKeyBarrier key(893475, 4, 15, 1, false);
+            for (ui32 domain = 0; domain < 2; ++domain) {
+                auto peer = TIngressCache::Create(info.PickTopology(), TVDiskID(0, 1, 0, domain, 0));
+                barriers.PutToFresh(domain + 1, key, TMemRecBarrier(14, 100, TBarrierIngress(peer.Get())));
+            }
+            auto ordinary = barriers.GetIndexSnapshot();
+            TMaybe<NBarriers::TCurrentBarrier> soft, hard;
+            ordinary.GetMemViewSnap().GetBarrier(893475, 4, soft, hard);
+            UNIT_ASSERT(!soft && !hard);
+            barriers.RebuildMemView(TIngressCache::Create(info.PickTopology(), self, 0), {});
+            auto emergency = barriers.GetIndexSnapshot();
+            emergency.GetMemViewSnap().GetBarrier(893475, 4, soft, hard);
+            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
+            ordinary.GetMemViewSnap().GetBarrier(893475, 4, soft, hard);
+            UNIT_ASSERT(!soft && !hard);
+            barriers.RebuildMemView(TIngressCache::Create(info.PickTopology(), self), {893475});
+            auto rebuilt = barriers.GetIndexSnapshot();
+            UNIT_ASSERT(rebuilt.GetMemViewSnap().IsTabletDeleted(893475));
+            UNIT_ASSERT(!emergency.GetMemViewSnap().IsTabletDeleted(893475));
+            emergency.GetMemViewSnap().GetBarrier(893475, 4, soft, hard);
+            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
+        }
+
+        Y_UNIT_TEST(SingleDcSoftBarrierSnapshots) {
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+                const TVDiskID self(0, 1, realm, 0, 0);
+                auto cache = TIngressCache::Create(info.PickTopology(), self, realm);
+                NBarriers::TMemView emergency(cache, VDiskLogPrefix, true);
+                NBarriers::TMemView ordinary(TIngressCache::Create(info.PickTopology(), self),
+                    VDiskLogPrefix, true);
+                const TKeyBarrier key(893475, 4, 15, 1, false);
+                TMaybe<NBarriers::TCurrentBarrier> soft, hard;
+                auto write = [&](ui32 domain) {
+                    auto peer = TIngressCache::Create(info.PickTopology(), TVDiskID(0, 1, realm, domain, 0));
+                    const TMemRecBarrier record(14, 100, TBarrierIngress(peer.Get()));
+                    emergency.Update(key, record);
+                    ordinary.Update(key, record);
+                };
+                write(0);
+                auto beforeQuorum = emergency.GetSnapshot();
+                beforeQuorum.GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(!soft && !hard);
+                write(1);
+                emergency.GetSnapshot().GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
+                UNIT_ASSERT(!hard);
+                ordinary.GetSnapshot().GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(!soft && !hard);
+                beforeQuorum.GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(!soft && !hard);
+            }
         }
 
         Y_UNIT_TEST(MemViewSnapshots) {

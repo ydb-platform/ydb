@@ -1,6 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.h>
@@ -9,6 +11,648 @@
 #include <utility>
 
 Y_UNIT_TEST_SUITE(BlobStorageSync) {
+
+    Y_UNIT_TEST(SingleDcReplicationReplanCoalescesUpdates) {
+        TEnvironmentSetup env{{.NodeCount = 9, .Erasure = TBlobStorageGroupType::ErasureMirror3dc}};
+        TActorId scheduler;
+        bool armed = false;
+        bool holdFinish = false;
+        ui32 scans = 0;
+        ui64 oldWakeupTag = 0;
+        std::unique_ptr<IEventHandle> finish;
+        TActorId heldFinishSender;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvReplFinished::EventType
+                    && event->GetRecipientRewrite().NodeId() == 2) {
+                if (!armed) {
+                    scheduler = event->GetRecipientRewrite();
+                } else if (event->GetRecipientRewrite() == scheduler
+                        && event->Sender != heldFinishSender) {
+                    ++scans;
+                }
+            }
+            if (armed && event->GetRecipientRewrite() == scheduler) {
+                if (event->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+                    oldWakeupTag = event->Get<TEvents::TEvWakeup>()->Tag;
+                }
+                if (holdFinish && event->GetTypeRewrite() == TEvReplFinished::EventType) {
+                    UNIT_ASSERT(!finish);
+                    heldFinishSender = event->Sender;
+                    finish = std::move(event);
+                    return false;
+                }
+            }
+            return true;
+        };
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT(scheduler);
+        armed = true;
+        holdFinish = true;
+        const auto edge = env.Runtime->AllocateEdgeActor(2);
+        auto update = [&] {
+            env.Runtime->Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0,
+                scheduler, edge, nullptr, 1), 2);
+        };
+        for (ui32 i = 0; i < 100; ++i) {
+            update();
+        }
+        env.Sim(TDuration::Seconds(59));
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        env.Sim(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(scans, 1);
+        UNIT_ASSERT(finish);
+        UNIT_ASSERT(oldWakeupTag);
+        for (ui32 i = 0; i < 100; ++i) {
+            update();
+        }
+        env.Runtime->Send(new IEventHandle(scheduler, edge,
+            new TEvents::TEvWakeup(oldWakeupTag)), 2);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(scans, 1);
+        holdFinish = false;
+        env.Runtime->Send(finish.release(), 2);
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT_VALUES_EQUAL(scans, 2);
+        env.Runtime->FilterFunction = {};
+    }
+
+
+    Y_UNIT_TEST(SingleDcModeRejectsLiveOtherRealms) {
+        TEnvironmentSetup env{{.NodeCount = 9, .Erasure = TBlobStorageGroupType::ErasureMirror3dc}};
+        env.CreateBoxAndPool(1, 1);
+        const ui32 groupId = env.GetGroups().front();
+        auto info = env.GetGroupInfo(groupId);
+        env.Sim(TDuration::Minutes(2));
+        auto checkStatus = [&](bool singleDc) {
+            for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                const auto edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+                env.Runtime->Send(new IEventHandle(info->GetActorId(i), edge,
+                    new TEvBlobStorage::TEvVStatus(info->GetVDiskId(i))), env.Settings.ControllerNodeId);
+                const auto reply = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge, true,
+                    env.Runtime->GetClock() + TDuration::Seconds(30));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(),
+                    singleDc && info->GetVDiskId(i).FailRealm != 0
+                        ? NKikimrProto::VDISK_ERROR_STATE : NKikimrProto::OK);
+            }
+        };
+        checkStatus(false);
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* command = request.AddCommand()->MutableSetGroupSingleDcMode();
+        command->SetGroupId(groupId);
+        command->SetGroupGeneration(info->GroupGeneration);
+        command->SetEnableSingleDcMode(true);
+        command->SetSurvivingDc(0);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        info = env.GetGroupInfo(groupId);
+        env.Sim(TDuration::Seconds(10));
+        checkStatus(true);
+        ui32 observedSyncRequests = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            auto checkPeer = [&](const auto& record) {
+                const auto source = VDiskIDFromVDiskID(record.GetSourceVDiskID());
+                const auto target = VDiskIDFromVDiskID(record.GetTargetVDiskID());
+                if (source.GroupID.GetRawId() == groupId) {
+                    ++observedSyncRequests;
+                    UNIT_ASSERT_VALUES_EQUAL(source.FailRealm, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(target.FailRealm, 0);
+                }
+            };
+            switch (event->GetTypeRewrite()) {
+                case TEvBlobStorage::TEvVSync::EventType:
+                    checkPeer(event->Get<TEvBlobStorage::TEvVSync>()->Record);
+                    break;
+                case TEvBlobStorage::TEvVSyncFull::EventType:
+                    checkPeer(event->Get<TEvBlobStorage::TEvVSyncFull>()->Record);
+                    break;
+                case TEvBlobStorage::TEvVSyncGuid::EventType:
+                    checkPeer(event->Get<TEvBlobStorage::TEvVSyncGuid>()->Record);
+                    break;
+            }
+            return true;
+        };
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT_C(observedSyncRequests, "No sync traffic after the live mode change");
+        env.Runtime->FilterFunction = {};
+    }
+
+    Y_UNIT_TEST(SingleDcModeAfterTwoRealmsLost) {
+        TEnvironmentSetup env{{
+            .NodeCount = 9,
+            .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        }};
+        env.CreateBoxAndPool(1, 1);
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+        auto info = env.GetGroupInfo(groupId);
+        ui32 survivingRealm = 0;
+        const ui32 clientNode = env.Settings.ControllerNodeId;
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            if (info->GetActorId(i).NodeId() == clientNode) {
+                survivingRealm = info->GetVDiskId(i).FailRealm;
+                break;
+            }
+        }
+        const TString data = "single-dc recovery payload";
+        const TLogoBlobID blobId(5000, 1, 1, 0, data.size(), 0);
+        const auto edge = env.Runtime->AllocateEdgeActor(clientNode);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(blobId, data,
+                env.Runtime->GetClock() + TDuration::Seconds(30)));
+        });
+        const auto put = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, true,
+            env.Runtime->GetClock() + TDuration::Seconds(30));
+        UNIT_ASSERT(put);
+        UNIT_ASSERT_VALUES_EQUAL(put->Get()->Status, NKikimrProto::OK);
+        env.Sim(TDuration::Minutes(2));
+
+        auto statusActor = [&] {
+            ui32 index = 0;
+            while (info->GetVDiskId(index).FailRealm != survivingRealm) {
+                ++index;
+            }
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            env.Runtime->Send(new IEventHandle(info->GetActorId(index), sender,
+                new TEvBlobStorage::TEvVStatus(info->GetVDiskId(index))), clientNode);
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(sender, true,
+                env.Runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            return result->Sender;
+        };
+        const auto ordinaryActor = statusActor();
+        std::set<ui32> lostNodes;
+        std::set<ui32> survivingNodes;
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            (info->GetVDiskId(i).FailRealm == survivingRealm ? survivingNodes : lostNodes)
+                .insert(info->GetActorId(i).NodeId());
+        }
+        // Keep the controller alive: its static group is outside the group under test.
+        UNIT_ASSERT(!lostNodes.contains(env.Settings.ControllerNodeId));
+        for (ui32 node : lostNodes) {
+            env.StopNode(node);
+        }
+        // The ordinary group is unavailable before the emergency flag is enabled.
+        const auto unavailableEdge = env.Runtime->AllocateEdgeActor(clientNode);
+        const TLogoBlobID unavailableBlob(5001, 1, 1, 0, data.size(), 0);
+        env.Runtime->WrapInActorContext(unavailableEdge, [&] {
+            SendToBSProxy(unavailableEdge, groupId, new TEvBlobStorage::TEvPut(unavailableBlob, data,
+                env.Runtime->GetClock() + TDuration::Seconds(5)));
+        });
+        const auto unavailablePut = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(unavailableEdge, true,
+            env.Runtime->GetClock() + TDuration::Seconds(30));
+        UNIT_ASSERT(unavailablePut);
+        UNIT_ASSERT(unavailablePut->Get()->Status != NKikimrProto::OK);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* command = request.AddCommand()->MutableSetGroupSingleDcMode();
+        command->SetGroupId(groupId);
+        command->SetGroupGeneration(info->GroupGeneration);
+        command->SetEnableSingleDcMode(true);
+        command->SetSurvivingDc(survivingRealm);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        info = env.GetGroupInfo(groupId);
+        env.Sim(TDuration::Seconds(10)); // Drain requests from the previous generation.
+
+        ui32 observedGuidRequests = 0;
+        TActorId rejectedLocalSyncEdge;
+        bool injectRejectedLocalSync = false;
+        std::optional<NKikimrProto::EReplyStatus> rejectedLocalSyncStatus;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvLocalSyncDataResult::EventType
+                    && rejectedLocalSyncEdge && event->GetRecipientRewrite() == rejectedLocalSyncEdge) {
+                rejectedLocalSyncStatus = event->Get<TEvLocalSyncDataResult>()->Status;
+                return false;
+            }
+            if (event->GetTypeRewrite() == TEvLocalSyncData::EventType) {
+                const auto& source = event->Get<TEvLocalSyncData>()->VDiskID;
+                if (source.GroupID.GetRawId() == groupId && source.FailRealm == survivingRealm) {
+                    if (injectRejectedLocalSync && !rejectedLocalSyncEdge) {
+                        const auto recipient = event->GetRecipientRewrite();
+                        rejectedLocalSyncEdge = env.Runtime->AllocateEdgeActor(recipient.NodeId());
+                        ui32 sourceIndex = 0;
+                        while (info->GetVDiskId(sourceIndex).FailRealm == survivingRealm) {
+                            ++sourceIndex;
+                        }
+                        env.Runtime->Send(new IEventHandle(recipient, rejectedLocalSyncEdge,
+                            new TEvLocalSyncData(info->GetVDiskId(sourceIndex), TSyncState(), TString())),
+                            recipient.NodeId());
+                    }
+                }
+            }
+            if (event->GetTypeRewrite() == TEvBlobStorage::TEvVSyncGuid::EventType) {
+                const auto& record = event->Get<TEvBlobStorage::TEvVSyncGuid>()->Record;
+                const auto source = VDiskIDFromVDiskID(record.GetSourceVDiskID());
+                const auto target = VDiskIDFromVDiskID(record.GetTargetVDiskID());
+                if (source.GroupID.GetRawId() == groupId) {
+                    ++observedGuidRequests;
+                    UNIT_ASSERT_VALUES_EQUAL(source.FailRealm, survivingRealm);
+                    UNIT_ASSERT_VALUES_EQUAL(target.FailRealm, survivingRealm);
+                }
+            }
+            return true;
+        };
+        // NodeWarden recreates surviving VDisks; no manual node restart is needed.
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT(statusActor() != ordinaryActor);
+        UNIT_ASSERT(observedGuidRequests);
+        {
+            auto savedFilter = std::move(env.Runtime->FilterFunction);
+            env.Runtime->FilterFunction = {};
+            ui32 targetIndex = 0;
+            ui32 sourceIndex = 0;
+            for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                if (info->GetVDiskId(i).FailRealm == survivingRealm) {
+                    targetIndex = i;
+                } else {
+                    sourceIndex = i;
+                }
+            }
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            env.Runtime->Send(new IEventHandle(info->GetActorId(targetIndex), sender,
+                new TEvBlobStorage::TEvVSyncGuid(info->GetVDiskId(sourceIndex), info->GetVDiskId(targetIndex))), clientNode);
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVSyncGuidResult>(sender, true,
+                env.Runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::ERROR);
+            auto checkRejectedSync = [&]<typename TRequest, typename TResult>() {
+                const auto edge = env.Runtime->AllocateEdgeActor(clientNode);
+                auto request = std::make_unique<TRequest>();
+                VDiskIDFromVDiskID(info->GetVDiskId(sourceIndex), request->Record.MutableSourceVDiskID());
+                VDiskIDFromVDiskID(info->GetVDiskId(targetIndex), request->Record.MutableTargetVDiskID());
+                env.Runtime->Send(new IEventHandle(info->GetActorId(targetIndex), edge, request.release()), clientNode);
+                const auto reply = env.WaitForEdgeActorEvent<TResult>(edge, true,
+                    env.Runtime->GetClock() + TDuration::Seconds(30));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrProto::ERROR);
+            };
+            checkRejectedSync.template operator()<TEvBlobStorage::TEvVSync, TEvBlobStorage::TEvVSyncResult>();
+            checkRejectedSync.template operator()<TEvBlobStorage::TEvVSyncFull, TEvBlobStorage::TEvVSyncFullResult>();
+            env.Runtime->FilterFunction = std::move(savedFilter);
+        }
+        auto readSurvivingCopies = [&] {
+            ui32 copies = 0;
+            for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                const auto vdisk = info->GetVDiskId(i);
+                if (vdisk.FailRealm != survivingRealm) {
+                    continue;
+                }
+                const auto actor = info->GetActorId(i);
+                const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+                env.Runtime->Send(new IEventHandle(actor, sender,
+                    TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdisk,
+                        env.Runtime->GetClock() + TDuration::Seconds(30),
+                        NKikimrBlobStorage::EGetHandleClass::FastRead,
+                        TEvBlobStorage::TEvVGet::EFlags::None, {}, {{blobId}}).release()), clientNode);
+                const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender, true,
+                    env.Runtime->GetClock() + TDuration::Seconds(30));
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+                for (const auto& item : result->Get()->Record.GetResult()) {
+                    if (item.GetStatus() == NKikimrProto::OK) {
+                        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(item).ConvertToString(), data);
+                        ++copies;
+                    }
+                }
+            }
+            UNIT_ASSERT_C(copies, "No surviving copy of the pre-disaster blob");
+        };
+        readSurvivingCopies();
+        // Returning excluded VDisks must not become usable or join GUID recovery.
+        for (ui32 node : lostNodes) {
+            env.StartNode(node);
+        }
+        env.Sim(TDuration::Minutes(1));
+        for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+            if (info->GetVDiskId(i).FailRealm == survivingRealm) {
+                continue;
+            }
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            env.Runtime->Send(new IEventHandle(info->GetActorId(i), sender,
+                new TEvBlobStorage::TEvVStatus(info->GetVDiskId(i))), clientNode);
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(sender, true,
+                env.Runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::VDISK_ERROR_STATE);
+        }
+        readSurvivingCopies();
+        auto proxyGet = [&](const TLogoBlobID& id, bool restore = false) {
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, deadline,
+                    NKikimrBlobStorage::EGetHandleClass::FastRead, restore));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, true, deadline);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
+        };
+        auto proxyRange = [&](const TLogoBlobID& id, bool indexOnly, bool restore, bool expectSuccess, bool empty = false) {
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvRange(id.TabletID(), id, id,
+                    restore, deadline, indexOnly));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender, true,
+                deadline + TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status == NKikimrProto::OK, expectSuccess);
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.size(), empty ? 0 : 1);
+                if (empty) {
+                    return;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.front().Id, id);
+                if (!indexOnly) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.front().Buffer, data);
+                }
+            }
+        };
+        auto proxyDiscover = [&](const TLogoBlobID& id, bool readBody, NKikimrProto::EReplyStatus expected, ui32 blockedGeneration = 0) {
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvDiscover(id.TabletID(), 1,
+                    readBody, true, deadline, 0, true));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(sender, true,
+                deadline + TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expected);
+            if (blockedGeneration) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->BlockedGeneration, blockedGeneration);
+            }
+            if (expected == NKikimrProto::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id, id);
+                if (readBody) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Buffer, data);
+                }
+            }
+        };
+        proxyDiscover(blobId, false, NKikimrProto::OK);
+        proxyDiscover(blobId, true, NKikimrProto::OK);
+        proxyRange(blobId, true, false, true);
+        proxyRange(blobId, false, false, true);
+        proxyRange(blobId, false, true, true);
+        const TLogoBlobID emptyRangeId(5003, 1, 1, 0, data.size(), 0);
+        proxyRange(emptyRangeId, true, false, true, true);
+        proxyRange(emptyRangeId, false, false, true, true);
+        proxyDiscover(emptyRangeId, true, NKikimrProto::NODATA);
+
+        const TLogoBlobID singleCopyId(5002, 1, 1, 0, data.size(), 0);
+        ui32 singleCopyIndex = 0;
+        while (info->GetVDiskId(singleCopyIndex).FailRealm != survivingRealm) {
+            ++singleCopyIndex;
+        }
+        const auto singleCopyVDisk = info->GetVDiskId(singleCopyIndex);
+        const ui32 singleCopyPart = info->GetIdxInSubgroup(singleCopyVDisk, singleCopyId.Hash()) % 3 + 1;
+        const auto singleCopyEdge = env.Runtime->AllocateEdgeActor(clientNode);
+        env.Runtime->Send(new IEventHandle(info->GetActorId(singleCopyIndex), singleCopyEdge,
+            new TEvBlobStorage::TEvVPut(TLogoBlobID(singleCopyId, singleCopyPart), TRope(data), singleCopyVDisk,
+                false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog, false)), clientNode);
+        const auto singleCopyPut = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(singleCopyEdge, true,
+            env.Runtime->GetClock() + TDuration::Seconds(30));
+        UNIT_ASSERT(singleCopyPut);
+        UNIT_ASSERT_VALUES_EQUAL(singleCopyPut->Get()->Record.GetStatus(), NKikimrProto::OK);
+        proxyRange(singleCopyId, true, false, true);
+        proxyRange(singleCopyId, false, false, true);
+        proxyDiscover(singleCopyId, true, NKikimrProto::OK);
+
+        auto proxyPut = [&](ui32 step, bool expectSuccess) {
+            const TLogoBlobID id(5000, 1, step, 0, data.size(), 0);
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(id, data, deadline));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, true,
+                deadline + TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+                proxyGet(id);
+            } else {
+                UNIT_ASSERT_C(result->Get()->Status != NKikimrProto::OK,
+                    "A single remaining VDisk must not acknowledge a write");
+            }
+        };
+        auto proxyBlockAndCollect = [&](ui32 counter, bool expectSuccess, ui32 stoppedNode = 0) {
+            const TLogoBlobID collectedId(7000, 1, counter, 0, data.size(), 0);
+            if (expectSuccess) {
+                const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+                const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+                env.Runtime->WrapInActorContext(sender, [&] {
+                    SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(collectedId, data, deadline));
+                });
+                const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, true, deadline);
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+                proxyGet(collectedId);
+            }
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            const auto blockSender = env.Runtime->AllocateEdgeActor(clientNode);
+            env.Runtime->WrapInActorContext(blockSender, [&] {
+                SendToBSProxy(blockSender, groupId,
+                    new TEvBlobStorage::TEvBlock(6000, counter, deadline));
+            });
+            const auto blockResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(blockSender, true,
+                deadline + TDuration::Seconds(1));
+            UNIT_ASSERT(blockResult);
+            UNIT_ASSERT_VALUES_EQUAL(blockResult->Get()->Status == NKikimrProto::OK, expectSuccess);
+            if (expectSuccess && !stoppedNode) {
+                proxyDiscover(TLogoBlobID(6000, 1, 1, 0, data.size(), 0), false, NKikimrProto::NODATA, counter);
+            }
+
+            const auto collectSender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto collectDeadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(collectSender, [&] {
+                SendToBSProxy(collectSender, groupId, new TEvBlobStorage::TEvCollectGarbage(
+                    7000, 1, counter, 0, true, 1, counter, nullptr, nullptr, collectDeadline, false));
+            });
+            const auto collectResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(
+                collectSender, true, collectDeadline + TDuration::Seconds(1));
+            UNIT_ASSERT(collectResult);
+            UNIT_ASSERT_VALUES_EQUAL(collectResult->Get()->Status == NKikimrProto::OK, expectSuccess);
+            if (expectSuccess) {
+                env.Sim(TDuration::Minutes(2));
+                const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+                const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+                env.Runtime->WrapInActorContext(sender, [&] {
+                    SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvGet(collectedId, 0, 0, deadline,
+                        NKikimrBlobStorage::EGetHandleClass::FastRead));
+                });
+                const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, true, deadline);
+                UNIT_ASSERT(result);
+                if (counter == 1) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::NODATA);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+                    for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                        const auto vdisk = info->GetVDiskId(i);
+                        const auto node = info->GetActorId(i).NodeId();
+                        if (vdisk.FailRealm != survivingRealm || node == stoppedNode) {
+                            continue;
+                        }
+                        const auto edge = env.Runtime->AllocateEdgeActor(clientNode);
+                        const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+                        env.Runtime->Send(new IEventHandle(info->GetActorId(i), edge,
+                            TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdisk, deadline,
+                                NKikimrBlobStorage::EGetHandleClass::FastRead,
+                                TEvBlobStorage::TEvVGet::EFlags::ShowInternals, {}, {{collectedId}}).release()), clientNode);
+                        const auto reply = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, true, deadline);
+                        UNIT_ASSERT(reply);
+                        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrProto::OK);
+                        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.ResultSize(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResult(0).GetStatus(), NKikimrProto::NODATA);
+                    }
+                }
+            }
+        };
+        // Absence in the active realm must never authorize phantom deletion.
+        {
+            const TLogoBlobID absentId(5000, 1, 100, 0, data.size(), 0);
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            auto* query = new TEvBlobStorage::TEvGet(absentId, 0, 0, deadline,
+                NKikimrBlobStorage::EGetHandleClass::FastRead);
+            query->PhantomCheck = true;
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, query);
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, true, deadline);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::NODATA);
+            UNIT_ASSERT(result->Get()->Responses[0].LooksLikePhantom.has_value());
+            UNIT_ASSERT(!*result->Get()->Responses[0].LooksLikePhantom);
+        }
+        proxyGet(blobId);
+        proxyGet(blobId, true);
+        injectRejectedLocalSync = true;
+        proxyPut(2, true);
+        proxyDiscover(TLogoBlobID(5000, 1, 2, 0, data.size(), 0), true, NKikimrProto::OK);
+        proxyBlockAndCollect(1, true);
+        env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT_C(rejectedLocalSyncEdge, "No local sync data observed in the surviving realm");
+        UNIT_ASSERT_C(rejectedLocalSyncStatus, "No reply to local sync from an inactive realm");
+        UNIT_ASSERT_VALUES_EQUAL(*rejectedLocalSyncStatus, NKikimrProto::ERROR);
+        std::vector<ui32> faultNodes;
+        for (ui32 node : survivingNodes) {
+            if (node != clientNode) {
+                faultNodes.push_back(node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(faultNodes.size(), 2);
+        env.StopNode(faultNodes[0]);
+        proxyRange(blobId, true, false, false);
+        proxyRange(blobId, false, false, false);
+        proxyDiscover(blobId, true, NKikimrProto::ERROR);
+        proxyPut(3, true);
+        proxyBlockAndCollect(2, true, faultNodes[0]);
+        env.StopNode(faultNodes[1]);
+        proxyPut(4, false);
+        proxyBlockAndCollect(3, false);
+        env.Runtime->FilterFunction = {};
+
+        // Restore the ordinary group and replicate writes made in single-DC mode.
+        for (ui32 node : faultNodes) {
+            env.StartNode(node);
+        }
+        const auto singleDcActor = statusActor();
+        auto ordinaryInfo = env.GetGroupInfo(groupId);
+        NKikimrBlobStorage::TConfigRequest disableRequest;
+        auto* disable = disableRequest.AddCommand()->MutableSetGroupSingleDcMode();
+        disable->SetGroupId(groupId);
+        disable->SetGroupGeneration(ordinaryInfo->GroupGeneration);
+        disable->SetEnableSingleDcMode(false);
+        const auto disableResponse = env.Invoke(disableRequest);
+        UNIT_ASSERT_C(disableResponse.GetSuccess(), disableResponse.GetErrorDescription());
+        ordinaryInfo = env.GetGroupInfo(groupId);
+        env.Sim(TDuration::Minutes(2));
+        info = ordinaryInfo;
+        UNIT_ASSERT(statusActor() != singleDcActor);
+        const TLogoBlobID emergencyBlob(5000, 1, 2, 0, data.size(), 0);
+        proxyGet(emergencyBlob);
+        bool restored = false;
+        for (ui32 attempt = 0; attempt < 30 && !restored; ++attempt) {
+            env.Sim(TDuration::Seconds(10));
+            std::array<ui32, 3> copies{};
+            for (ui32 i = 0; i < ordinaryInfo->GetTotalVDisksNum(); ++i) {
+                const auto vdisk = ordinaryInfo->GetVDiskId(i);
+                const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+                const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+                env.Runtime->Send(new IEventHandle(ordinaryInfo->GetActorId(i), sender,
+                    TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdisk, deadline,
+                        NKikimrBlobStorage::EGetHandleClass::FastRead,
+                        TEvBlobStorage::TEvVGet::EFlags::ShowInternals, {}, {{emergencyBlob}}).release()), clientNode);
+                const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(sender, true, deadline);
+                UNIT_ASSERT(result);
+                if (result->Get()->Record.GetStatus() != NKikimrProto::OK) {
+                    continue;
+                }
+                for (const auto& item : result->Get()->Record.GetResult()) {
+                    if (item.GetStatus() == NKikimrProto::OK) {
+                        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetBlobData(item).ConvertToString(), data);
+                        ++copies[vdisk.FailRealm];
+                        break;
+                    }
+                }
+            }
+            restored = true;
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                if (realm != survivingRealm && copies[realm] < 1) {
+                    restored = false;
+                }
+            }
+        }
+        UNIT_ASSERT_C(restored, "Emergency write was not replicated to both returned realms");
+        proxyGet(emergencyBlob);
+        const ui32 restoredClient = *lostNodes.begin();
+        auto readRestored = [&] {
+            const auto sender = env.Runtime->AllocateEdgeActor(restoredClient);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvGet(emergencyBlob, 0, 0, deadline,
+                    NKikimrBlobStorage::EGetHandleClass::FastRead));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, true, deadline);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
+        };
+        // Configure the reader before taking down the realm hosting BSC.
+        readRestored();
+        for (ui32 node : survivingNodes) {
+            env.StopNode(node);
+        }
+        readRestored();
+        for (ui32 node : survivingNodes) {
+            env.StartNode(node);
+        }
+        for (ui32 node : lostNodes) {
+            env.StopNode(node);
+            env.StartNode(node);
+        }
+        env.Sim(TDuration::Minutes(1));
+        readRestored();
+        for (ui32 node : survivingNodes) {
+            env.StopNode(node);
+        }
+        readRestored();
+    }
 
     void TestCutting(TBlobStorageGroupType groupType) {
         const ui32 groupSize = groupType.BlobSubgroupSize();

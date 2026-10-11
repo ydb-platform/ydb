@@ -82,7 +82,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
                 FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-                if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
+                if (Info->EnableSingleDcMode || !Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
                     ErrorReason = "Failed disks check fails on non-OK event status";
                     return ReplyAndDie(NKikimrProto::ERROR);
                 }
@@ -94,7 +94,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                     DSP_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
                             " TEvVGetResult# " << ev->Get()->ToString());
                     FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-                    if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
+                    if (Info->EnableSingleDcMode || !Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
                         ErrorReason = "Failed disks check fails on OK event status";
                         return ReplyAndDie(NKikimrProto::ERROR);
                     }
@@ -368,7 +368,10 @@ public:
 
         // issue queries to all VDisks
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendQueryToVDisk(Info->GetVDiskId(vdisk.OrderNumber), From, To);
+            const auto id = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->IsVDiskInActiveRealm(id)) {
+                SendQueryToVDisk(id, From, To);
+            }
         }
 
         Become(&TBlobStorageGroupRangeRequest::StateWait);

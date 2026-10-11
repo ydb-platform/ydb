@@ -2020,7 +2020,22 @@ namespace NKikimr {
             SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie, VCtx, {});
         }
 
+        template <typename TEventPtr>
+        bool RejectInactiveSyncRealm(TEventPtr& ev, const TActorContext& ctx) {
+            if (GInfo->EnableSingleDcMode &&
+                    (!GInfo->IsVDiskInActiveRealm(TVDiskIdShort(SelfVDiskId)) ||
+                     !GInfo->IsVDiskInActiveRealm(TVDiskIdShort(VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID()))))) {
+                ReplyError(NKikimrProto::ERROR, "sync peer is outside the surviving realm", ev, ctx,
+                    TAppData::TimeProvider->Now());
+                return true;
+            }
+            return false;
+        }
+
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
+            if (RejectInactiveSyncRealm(ev, ctx)) {
+                return;
+            }
             if (!Config->BaseInfo.DonorMode) {
                 ctx.Send(ev->Forward(Db->SyncLogID));
             }
@@ -2040,6 +2055,9 @@ namespace NKikimr {
         // FIXME: check for RACE in other handlers!!!
 
         void Handle(TEvBlobStorage::TEvVSyncGuid::TPtr &ev, const TActorContext &ctx) {
+            if (RejectInactiveSyncRealm(ev, ctx)) {
+                return;
+            }
             const NKikimrBlobStorage::TEvVSyncGuid &record = ev->Get()->Record;
             TInstant now = TAppData::TimeProvider->Now();
             if (!SelfVDiskId.SameGroupAndGeneration(record.GetSourceVDiskID())) {
@@ -2076,7 +2094,21 @@ namespace NKikimr {
             SendReply(ctx, std::move(result), ev, BS_VDISK_OTHER);
         }
 
+        bool RejectInactiveLocalSyncData(TEvLocalSyncData::TPtr& ev, const TActorContext& ctx) {
+            if (GInfo->EnableSingleDcMode
+                    && (!GInfo->IsVDiskInActiveRealm(VCtx->ShortSelfVDisk)
+                        || !GInfo->IsVDiskInActiveRealm(TVDiskIdShort(ev->Get()->VDiskID)))) {
+                ReplyError(NKikimrProto::ERROR, "local sync source outside surviving realm", ev, ctx,
+                    TAppData::TimeProvider->Now());
+                return true;
+            }
+            return false;
+        }
+
         void Handle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
+            if (RejectInactiveLocalSyncData(ev, ctx)) {
+                return;
+            }
 #ifdef UNPACK_LOCALSYNCDATA
             Y_VERIFY_S(ev->Get()->Extracted.IsReady(), VCtx->VDiskLogPrefix);
 #else
@@ -2135,6 +2167,10 @@ namespace NKikimr {
         }
 
         void ProcessLocalSyncData(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
+            // The active realm may have changed while this event was throttled.
+            if (RejectInactiveLocalSyncData(ev, ctx)) {
+                return;
+            }
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
@@ -2161,7 +2197,8 @@ namespace NKikimr {
             TString data = ev->Get()->Serialize();
             Y_ABORT_UNLESS(Db->SyncLogID);
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev,
-                    Db->SyncLogID));
+                    Db->SyncLogID, GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+                        ? TActorId(Db->ReplID) : TActorId()));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
             auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,
@@ -2291,6 +2328,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
+            if (RejectInactiveSyncRealm(ev, ctx)) {
+                return;
+            }
             if (Config->BaseInfo.DonorMode) {
                 return; // this is a race; donor disk can't answer TEvVSyncFull queries
             }
@@ -2368,6 +2408,11 @@ namespace NKikimr {
         }
 
         void Handle(TEvDetectedPhantomBlob::TPtr& ev, const TActorContext& ctx) {
+            if (GInfo->EnableSingleDcMode) {
+                ctx.Send(new IEventHandle(TEvBlobStorage::EvDetectedPhantomBlobCommitted, 0, ev->Sender, {},
+                    nullptr, ev->Cookie));
+                return;
+            }
             TEvDetectedPhantomBlob *msg = ev->Get();
 
             for (const TLogoBlobID& logoBlobId : msg->Phantoms) {
@@ -3224,7 +3269,7 @@ namespace NKikimr {
             auto genIndSelfVDiskId = SelfVDiskId;
             genIndSelfVDiskId.GroupGeneration = -1;
             LocalDbRecoveryID = ctx.Register(CreateDatabaseLocalRecoveryActor(VCtx, Config, genIndSelfVDiskId, SelfId(),
-                *SkeletonFrontIDPtr, Arena));
+                *SkeletonFrontIDPtr, Arena, GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt));
             ActiveActors.Insert(LocalDbRecoveryID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             UpdateWhiteboard(ctx);
         }

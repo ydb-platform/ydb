@@ -1,5 +1,7 @@
 #include "barriers_tree.h"
 #include "barriers_essence.h"
+#include "barriers_public.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h>
 #include <util/random/fast.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -79,6 +81,37 @@ namespace NKikimr {
             writer.Write(tree, TKeyBarrier(tabletId, channel, 15, 3, true), Max<ui32>(), Max<ui32>());
             tree.GetBarrier(tabletId, channel, soft, hard);
             UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+        }
+
+        Y_UNIT_TEST(SingleDcSoftBarrierSnapshots) {
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+                const TVDiskID self(0, 1, realm, 0, 0);
+                auto cache = TIngressCache::Create(info.PickTopology(), self, realm);
+                NBarriers::TMemView emergency(cache, VDiskLogPrefix, true);
+                NBarriers::TMemView ordinary(TIngressCache::Create(info.PickTopology(), self),
+                    VDiskLogPrefix, true);
+                const TKeyBarrier key(893475, 4, 15, 1, false);
+                TMaybe<NBarriers::TCurrentBarrier> soft, hard;
+                auto write = [&](ui32 domain) {
+                    auto peer = TIngressCache::Create(info.PickTopology(), TVDiskID(0, 1, realm, domain, 0));
+                    const TMemRecBarrier record(14, 100, TBarrierIngress(peer.Get()));
+                    emergency.Update(key, record);
+                    ordinary.Update(key, record);
+                };
+                write(0);
+                auto beforeQuorum = emergency.GetSnapshot();
+                beforeQuorum.GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(!soft && !hard);
+                write(1);
+                emergency.GetSnapshot().GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
+                UNIT_ASSERT(!hard);
+                ordinary.GetSnapshot().GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(!soft && !hard);
+                beforeQuorum.GetBarrier(893475, 4, soft, hard);
+                UNIT_ASSERT(!soft && !hard);
+            }
         }
 
         Y_UNIT_TEST(MemViewSnapshots) {

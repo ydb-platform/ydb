@@ -5,9 +5,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/driver
     contrib/libs/grpc
-    ydb/public/lib/ydb_cli/commands/sqs_workload/sqs_json
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-sqs
     contrib/libs/librdkafka/src-cpp
 )
 
@@ -28,8 +25,6 @@ SRCS(
     federation_tests.cpp
     common_functions.cpp
     cluster_write_close_test.cpp
-    sqs_xml_compatibility_tests.cpp
-    sqs_json_compatibility_tests.cpp
     ../kafka/test_common/helpers.cpp
     kafka_compatibility_tests.cpp
 )
@@ -41,3 +36,7 @@ SIZE(MEDIUM)
 REQUIREMENTS(ram:16)
 
 END()
+
+RECURSE_FOR_TESTS(
+    sqs_federation_tests
+)

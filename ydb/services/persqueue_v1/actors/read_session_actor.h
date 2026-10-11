@@ -54,6 +54,13 @@ struct TPartitionActorInfo {
     bool ReadingFinished;
     ui64 EndOffset;
 
+    // True when the client's max_offset window is exhausted and the
+    // end_partition_session to the client is deferred until all in-flight
+    // direct reads are acked (data goes to StreamDirectRead, the EOF goes to
+    // the control StreamRead, so the client could otherwise drop the last
+    // batch when it stops the partition session on EOF).
+    bool WindowExhausted = false;
+
 
     struct TDirectReadInfo {
         ui64 DirectReadId = 0;
@@ -266,6 +273,7 @@ private:
             HFunc(TEvPQProxy::TEvUpdateSession, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingStarted, Handle); // from partitionActor
             HFunc(TEvPQProxy::TEvReadingFinished, Handle); // from partitionActor
+            HFunc(TEvPQProxy::TEvReadWindowExhausted, Handle); // from partitionActor
 
 
             // Balancer events
@@ -319,6 +327,7 @@ private:
     void Handle(TEvPQProxy::TEvUpdateSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQProxy::TEvReadWindowExhausted::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
     void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
@@ -355,6 +364,9 @@ private:
         TPartitionsMap::iterator it,
         const TActorContext& ctx
     );
+    // Sends the deferred (window-exhausted) end_partition_session to the client
+    // once all in-flight direct reads of the partition have been acked.
+    void SendWindowExhaustedIfNeeded(TPartitionsMap::iterator it, const TActorContext& ctx);
 
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);

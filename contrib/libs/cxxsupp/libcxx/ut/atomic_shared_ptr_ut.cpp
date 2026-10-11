@@ -88,15 +88,18 @@ namespace {
             EXPECT_EQ(Lock(value.load()), second);
             value.store(TPtr(first), order);
         }
+
         for (auto order : {std::memory_order_relaxed, std::memory_order_consume,
                            std::memory_order_acquire, std::memory_order_seq_cst}) {
             EXPECT_EQ(Lock(value.load(order)), first);
         }
+
         for (auto order : {std::memory_order_relaxed, std::memory_order_consume, std::memory_order_acquire,
                            std::memory_order_release, std::memory_order_acq_rel, std::memory_order_seq_cst}) {
             EXPECT_EQ(Lock(value.exchange(TPtr(second), order)), first);
             EXPECT_EQ(Lock(value.exchange(TPtr(first), order)), second);
         }
+
         value.store(TPtr());
         EXPECT_FALSE(Lock(value.load()));
     }
@@ -116,6 +119,7 @@ namespace {
             expected = TPtr(second);
             while (!value.compare_exchange_weak(expected, TPtr(first), order)) {}
         }
+
         for (auto failure : {std::memory_order_relaxed, std::memory_order_consume,
                              std::memory_order_acquire, std::memory_order_seq_cst}) {
             auto expected = TPtr(second);
@@ -172,12 +176,14 @@ namespace {
         EXPECT_TRUE(std::atomic_compare_exchange_strong(&value, &expected, TPtr()));
         expected = TPtr();
         while (!std::atomic_compare_exchange_weak(&value, &expected, TPtr(owner))) {}
+
         expected = TPtr(owner);
         EXPECT_TRUE(std::atomic_compare_exchange_strong_explicit(
             &value, &expected, TPtr(), std::memory_order_release, std::memory_order_relaxed));
         expected = TPtr();
         while (!std::atomic_compare_exchange_weak_explicit(
             &value, &expected, TPtr(owner), std::memory_order_acq_rel, std::memory_order_acquire)) {}
+
         std::atomic_wait(&value, TPtr());
         std::atomic_wait_explicit(&value, TPtr(), std::memory_order_acquire);
         std::atomic_notify_one(&value);
@@ -198,9 +204,11 @@ namespace {
                 finished.fetch_add(1);
             });
         }
+
         while (entered.load() != count) {
             std::this_thread::yield();
         }
+
         // Exercise the blocking path, including notifications that do not change the value.
         value.notify_all();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -215,6 +223,7 @@ namespace {
         for (auto& thread : threads) {
             thread.join();
         }
+
         EXPECT_EQ(finished.load(), count);
         // Also exercise a notification preceding the wait and every valid load order.
         for (auto order : {std::memory_order_relaxed, std::memory_order_consume,
@@ -264,6 +273,7 @@ namespace {
                 }
             }
         });
+
         for (int i = 1; i <= iterations; ++i) {
             value.wait(TPtr(), std::memory_order_acquire);
             auto owner = Lock(value.load(std::memory_order_acquire));
@@ -274,6 +284,7 @@ namespace {
 
             value.store(TPtr(), std::memory_order_release);
         }
+
         producer.join();
     }
 
@@ -341,6 +352,7 @@ namespace {
                 delete ptr;
             });
         };
+
         value.store(make());
         EXPECT_EQ(value.load().use_count(), 2);
         auto loaded = value.load();
@@ -408,9 +420,11 @@ namespace {
                 }
             });
         }
+
         for (auto& thread : threads) {
             thread.join();
         }
+
         EXPECT_EQ(*value.load(), count * iterations);
         EXPECT_EQ(value.load().use_count(), 2);
     }
@@ -432,6 +446,7 @@ namespace {
                 phase.arrive_and_wait();
             }
         });
+
         std::thread second([&] {
             for (int i = 0; i < iterations; ++i) {
                 phase.arrive_and_wait();
@@ -440,6 +455,7 @@ namespace {
                 phase.arrive_and_wait();
             }
         });
+
         for (int i = 0; i < iterations; ++i) {
             pointer.store(TPtr());
             number.store(0);
@@ -447,6 +463,7 @@ namespace {
             phase.arrive_and_wait();
             EXPECT_TRUE(observedNumber != 0 || observedPointer);
         }
+
         first.join();
         second.join();
     }
@@ -486,6 +503,7 @@ namespace {
             auto owner = std::allocate_shared<int>(TReentrantAllocator<int>(&value, &deallocated), 42);
             return std::weak_ptr<int>(owner);
         };
+
         value.store(makeExpired());
         EXPECT_TRUE(value.load().expired());
         EXPECT_EQ(deallocated, 0);
@@ -532,6 +550,7 @@ namespace {
                 }
             });
         }
+
         for (int i = 0; i < 2; ++i) {
             threads.emplace_back([&] {
                 start.arrive_and_wait();
@@ -549,9 +568,11 @@ namespace {
                 }
             });
         }
+
         for (auto& thread : threads) {
             thread.join();
         }
+
         shared.store(nullptr);
         weak.store({});
         EXPECT_EQ(destroyed.load(), 2 * iterations);

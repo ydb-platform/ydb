@@ -4,8 +4,8 @@
 #include "sector_map.h"
 #include "spdk_state.h"
 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_request_id.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
+#include "request_id.h"
+#include "device_mode.h"
 
 #include <ydb/library/actors/wilson/wilson_event.h>
 

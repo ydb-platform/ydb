@@ -1,6 +1,6 @@
 #include "aio.h"
 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_countedqueueoneone.h>
+#include "counted_queue_one_one.h"
 
 #include <util/random/random.h>
 #include <util/system/spinlock.h>

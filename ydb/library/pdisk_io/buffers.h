@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion.h>
+#include "completion.h"
 #include <ydb/core/debug/valgrind_check.h>
 
 #include <ydb/library/pdisk_io/spdk_state.h>

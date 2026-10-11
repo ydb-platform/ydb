@@ -9,7 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
 )
 
 END()

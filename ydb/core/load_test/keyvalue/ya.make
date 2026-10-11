@@ -10,7 +10,7 @@ PEERDIR(
     library/cpp/time_provider
     ydb/core/base
     ydb/core/blobstorage/base
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/control/lib
     ydb/core/keyvalue
     ydb/core/load_test/common

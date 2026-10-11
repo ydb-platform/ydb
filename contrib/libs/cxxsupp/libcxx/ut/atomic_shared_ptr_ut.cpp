@@ -12,6 +12,8 @@
 #include <array>
 #include <barrier>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -36,7 +38,7 @@ namespace {
     template <class T>
     class TAtomicSmartPtr: public testing::Test {};
 
-    using TSmartPointers = testing::Types<std::shared_ptr<int>, std::weak_ptr<int>>;
+    using TSmartPointers = testing::Types<std::shared_ptr<std::int32_t>, std::weak_ptr<std::int32_t>>;
     TYPED_TEST_SUITE(TAtomicSmartPtr, TSmartPointers);
 
     TYPED_TEST(TAtomicSmartPtr, ConstructionAndAssignment) {
@@ -64,7 +66,7 @@ namespace {
         EXPECT_FALSE(empty.is_lock_free());
         EXPECT_FALSE(TAtomic::is_always_lock_free);
 
-        auto owner = std::make_shared<int>(42);
+        auto owner = std::make_shared<std::int32_t>(42);
         TPtr initial(owner);
         const TAtomic value(initial);
         EXPECT_EQ(Lock(value.load()), owner);
@@ -80,8 +82,8 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, StoreLoadAndExchangeOrders) {
         using TPtr = TypeParam;
-        auto first = std::make_shared<int>(1);
-        auto second = std::make_shared<int>(2);
+        auto first = std::make_shared<std::int32_t>(1);
+        auto second = std::make_shared<std::int32_t>(2);
         std::atomic<TPtr> value{TPtr(first)};
         for (auto order : {std::memory_order_relaxed, std::memory_order_release, std::memory_order_seq_cst}) {
             value.store(TPtr(second), order);
@@ -106,8 +108,8 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, CompareExchangeOrders) {
         using TPtr = TypeParam;
-        auto first = std::make_shared<int>(1);
-        auto second = std::make_shared<int>(2);
+        auto first = std::make_shared<std::int32_t>(1);
+        auto second = std::make_shared<std::int32_t>(2);
         std::atomic<TPtr> value{TPtr(first)};
         for (auto order : {std::memory_order_relaxed, std::memory_order_consume, std::memory_order_acquire,
                            std::memory_order_release, std::memory_order_acq_rel, std::memory_order_seq_cst}) {
@@ -133,11 +135,11 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, CompareExchangeUsesPointerAndOwner) {
         using TPtr = TypeParam;
-        auto owner = std::make_shared<std::array<int, 2>>();
-        auto first = std::shared_ptr<int>(owner, &(*owner)[0]);
-        auto second = std::shared_ptr<int>(owner, &(*owner)[1]);
-        auto otherOwner = std::shared_ptr<int>(first.get(), [](int*) {});
-        auto desired = std::make_shared<int>(7);
+        auto owner = std::make_shared<std::array<std::int32_t, 2>>();
+        auto first = std::shared_ptr<std::int32_t>(owner, &(*owner)[0]);
+        auto second = std::shared_ptr<std::int32_t>(owner, &(*owner)[1]);
+        auto otherOwner = std::shared_ptr<std::int32_t>(first.get(), [](std::int32_t*) {});
+        auto desired = std::make_shared<std::int32_t>(7);
         std::atomic<TPtr> value{TPtr(first)};
 
         auto expected = TPtr(second);
@@ -149,7 +151,7 @@ namespace {
         EXPECT_TRUE(value.compare_exchange_strong(expected, TPtr(desired)));
         EXPECT_EQ(Lock(value.load()), desired);
 
-        auto nullAlias = std::shared_ptr<int>(owner, nullptr);
+        auto nullAlias = std::shared_ptr<std::int32_t>(owner, nullptr);
         value.store(TPtr(nullAlias));
         expected = TPtr();
         EXPECT_FALSE(value.compare_exchange_strong(expected, TPtr()));
@@ -159,7 +161,7 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, FreeFunctions) {
         using TPtr = TypeParam;
-        auto owner = std::make_shared<int>(4);
+        auto owner = std::make_shared<std::int32_t>(4);
         std::atomic<TPtr> value;
         EXPECT_FALSE(std::atomic_is_lock_free(&value));
         std::atomic_init(&value, TPtr(owner));
@@ -193,11 +195,11 @@ namespace {
     template <class TPtr>
     void CheckWait(const TPtr& before, const TPtr& after, bool all) {
         std::atomic<TPtr> value(before);
-        std::atomic<int> entered{0};
-        std::atomic<int> finished{0};
-        const int count = all ? 4 : 1;
+        std::atomic<std::int32_t> entered{0};
+        std::atomic<std::int32_t> finished{0};
+        const std::int32_t count = all ? 4 : 1;
         std::vector<std::thread> threads;
-        for (int i = 0; i < count; ++i) {
+        for (std::int32_t i = 0; i < count; ++i) {
             threads.emplace_back([&] {
                 entered.fetch_add(1);
                 value.wait(before, std::memory_order_acquire);
@@ -234,24 +236,24 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, WaitNotify) {
         using TPtr = TypeParam;
-        auto owner = std::make_shared<std::array<int, 2>>();
-        auto first = std::shared_ptr<int>(owner, &(*owner)[0]);
-        auto alias = std::shared_ptr<int>(owner, &(*owner)[1]);
-        auto otherOwner = std::shared_ptr<int>(first.get(), [](int*) {});
+        auto owner = std::make_shared<std::array<std::int32_t, 2>>();
+        auto first = std::shared_ptr<std::int32_t>(owner, &(*owner)[0]);
+        auto alias = std::shared_ptr<std::int32_t>(owner, &(*owner)[1]);
+        auto otherOwner = std::shared_ptr<std::int32_t>(first.get(), [](std::int32_t*) {});
         for (bool all : {false, true}) {
             CheckWait(TPtr(), TPtr(first), all);
             CheckWait(TPtr(first), TPtr(alias), all);
             CheckWait(TPtr(first), TPtr(otherOwner), all);
             CheckWait(TPtr(first), TPtr(), all);
-            auto borrowed = std::shared_ptr<int>(std::shared_ptr<int>(), first.get());
+            auto borrowed = std::shared_ptr<std::int32_t>(std::shared_ptr<std::int32_t>(), first.get());
             CheckWait(TPtr(), TPtr(borrowed), all);
         }
     }
 
     TYPED_TEST(TAtomicSmartPtr, OwnerlessAliasing) {
         using TPtr = TypeParam;
-        int payload = 42;
-        auto borrowed = std::shared_ptr<int>(std::shared_ptr<int>(), &payload);
+        std::int32_t payload = 42;
+        auto borrowed = std::shared_ptr<std::int32_t>(std::shared_ptr<std::int32_t>(), &payload);
         std::atomic<TPtr> value{TPtr(borrowed)};
         TPtr expected;
         EXPECT_FALSE(value.compare_exchange_strong(expected, TPtr()));
@@ -261,11 +263,11 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, ConcurrentPublication) {
         using TPtr = TypeParam;
-        constexpr int iterations = 2000;
+        constexpr std::int32_t iterations = 2000;
         std::atomic<TPtr> value;
         std::thread producer([&] {
-            for (int i = 1; i <= iterations; ++i) {
-                auto owner = std::make_shared<int>(i);
+            for (std::int32_t i = 1; i <= iterations; ++i) {
+                auto owner = std::make_shared<std::int32_t>(i);
                 value.store(TPtr(owner), std::memory_order_release);
                 value.notify_one();
                 while (Lock(value.load(std::memory_order_acquire))) {
@@ -274,7 +276,7 @@ namespace {
             }
         });
 
-        for (int i = 1; i <= iterations; ++i) {
+        for (std::int32_t i = 1; i <= iterations; ++i) {
             value.wait(TPtr(), std::memory_order_acquire);
             auto owner = Lock(value.load(std::memory_order_acquire));
             EXPECT_TRUE(owner);
@@ -289,10 +291,10 @@ namespace {
     }
 
     TEST(TAtomicSharedPtr, EmptyAliasingAndTypes) {
-        int payload = 1;
-        auto alias = std::shared_ptr<int>(std::shared_ptr<int>(), &payload);
-        std::atomic<std::shared_ptr<int>> value(alias);
-        auto expected = std::shared_ptr<int>();
+        std::int32_t payload = 1;
+        auto alias = std::shared_ptr<std::int32_t>(std::shared_ptr<std::int32_t>(), &payload);
+        std::atomic<std::shared_ptr<std::int32_t>> value(alias);
+        auto expected = std::shared_ptr<std::int32_t>();
         EXPECT_FALSE(value.compare_exchange_strong(expected, nullptr));
         EXPECT_EQ(expected.get(), &payload);
         EXPECT_EQ(expected.use_count(), 0);
@@ -300,26 +302,26 @@ namespace {
         value = nullptr;
         EXPECT_FALSE(value.load());
 
-        std::atomic<std::shared_ptr<int[]>> array(std::make_shared<int[]>(3));
+        std::atomic<std::shared_ptr<std::int32_t[]>> array(std::make_shared<std::int32_t[]>(3));
         EXPECT_EQ(array.load()[2], 0);
-        std::atomic<std::shared_ptr<int[2]>> bounded(std::make_shared<int[2]>());
+        std::atomic<std::shared_ptr<std::int32_t[2]>> bounded(std::make_shared<std::int32_t[2]>());
         EXPECT_EQ(bounded.load()[1], 0);
-        std::atomic<std::shared_ptr<const int>> constant(std::make_shared<const int>(7));
+        std::atomic<std::shared_ptr<const std::int32_t>> constant(std::make_shared<const std::int32_t>(7));
         EXPECT_EQ(*constant.load(), 7);
         std::atomic<std::shared_ptr<const void>> erased(constant.load());
         EXPECT_EQ(erased.load().get(), constant.load().get());
-        std::atomic<std::weak_ptr<int[]>> weakArray(array.load());
+        std::atomic<std::weak_ptr<std::int32_t[]>> weakArray(array.load());
         EXPECT_EQ(weakArray.load().lock()[2], 0);
     }
 
     TEST(TAtomicWeakPtr, ExpiredIdentity) {
-        auto owner = std::make_shared<std::array<int, 2>>();
-        auto first = std::shared_ptr<int>(owner, &(*owner)[0]);
-        auto second = std::shared_ptr<int>(owner, &(*owner)[1]);
-        auto otherOwner = std::make_shared<int>(9);
-        auto weakFirst = std::weak_ptr<int>(first);
-        auto weakSecond = std::weak_ptr<int>(second);
-        auto weakOther = std::weak_ptr<int>(otherOwner);
+        auto owner = std::make_shared<std::array<std::int32_t, 2>>();
+        auto first = std::shared_ptr<std::int32_t>(owner, &(*owner)[0]);
+        auto second = std::shared_ptr<std::int32_t>(owner, &(*owner)[1]);
+        auto otherOwner = std::make_shared<std::int32_t>(9);
+        auto weakFirst = std::weak_ptr<std::int32_t>(first);
+        auto weakSecond = std::weak_ptr<std::int32_t>(second);
+        auto weakOther = std::weak_ptr<std::int32_t>(otherOwner);
         owner.reset();
         first.reset();
         second.reset();
@@ -328,7 +330,7 @@ namespace {
         ASSERT_TRUE(weakSecond.expired());
         ASSERT_TRUE(weakOther.expired());
 
-        std::atomic<std::weak_ptr<int>> value(weakFirst);
+        std::atomic<std::weak_ptr<std::int32_t>> value(weakFirst);
         auto expected = weakSecond;
         EXPECT_FALSE(value.compare_exchange_strong(expected, {}));
         EXPECT_TRUE(value.compare_exchange_strong(expected, weakFirst));
@@ -339,14 +341,14 @@ namespace {
         EXPECT_FALSE(value.compare_exchange_strong(expected, {}));
         CheckWait(weakFirst, weakSecond, false);
         CheckWait(weakFirst, weakOther, true);
-        CheckWait(weakFirst, std::weak_ptr<int>(), true);
+        CheckWait(weakFirst, std::weak_ptr<std::int32_t>(), true);
     }
 
     TEST(TAtomicSharedPtr, ReferenceCountsAndReentrantDeleters) {
-        std::atomic<std::shared_ptr<int>> value;
-        int destroyed = 0;
+        std::atomic<std::shared_ptr<std::int32_t>> value;
+        std::int32_t destroyed = 0;
         auto make = [&] {
-            return std::shared_ptr<int>(new int(3), [&](int* ptr) {
+            return std::shared_ptr<std::int32_t>(new std::int32_t(3), [&](std::int32_t* ptr) {
                 value.load();
                 ++destroyed;
                 delete ptr;
@@ -388,34 +390,34 @@ namespace {
     }
 
     TEST(TAtomicSharedPtr, AtomicInitAndLegacyFunctions) {
-        std::atomic<int> value;
+        std::atomic<std::int32_t> value;
         std::atomic_init(&value, 42);
         EXPECT_EQ(value.load(), 42);
-        volatile std::atomic<int> volatileValue;
+        volatile std::atomic<std::int32_t> volatileValue;
         std::atomic_init(&volatileValue, 7);
         EXPECT_EQ(volatileValue.load(), 7);
 
-        auto owner = std::make_shared<int>(9);
-        std::shared_ptr<int> legacy;
+        auto owner = std::make_shared<std::int32_t>(9);
+        std::shared_ptr<std::int32_t> legacy;
         std::atomic_store(&legacy, owner);
         EXPECT_EQ(std::atomic_load(&legacy), owner);
         auto expected = owner;
-        EXPECT_TRUE(std::atomic_compare_exchange_strong(&legacy, &expected, std::shared_ptr<int>()));
+        EXPECT_TRUE(std::atomic_compare_exchange_strong(&legacy, &expected, std::shared_ptr<std::int32_t>()));
         EXPECT_FALSE(std::atomic_load(&legacy));
     }
 
     TEST(TAtomicSharedPtr, ConcurrentCompareExchange) {
-        std::atomic<std::shared_ptr<int>> value(std::make_shared<int>(0));
-        constexpr int count = 4;
-        constexpr int iterations = 3000;
+        std::atomic<std::shared_ptr<std::int32_t>> value(std::make_shared<std::int32_t>(0));
+        constexpr std::int32_t count = 4;
+        constexpr std::int32_t iterations = 3000;
         std::barrier start(count);
         std::vector<std::thread> threads;
-        for (int i = 0; i < count; ++i) {
+        for (std::int32_t i = 0; i < count; ++i) {
             threads.emplace_back([&] {
                 start.arrive_and_wait();
-                for (int j = 0; j < iterations; ++j) {
+                for (std::int32_t j = 0; j < iterations; ++j) {
                     auto expected = value.load(std::memory_order_relaxed);
-                    while (!value.compare_exchange_weak(expected, std::make_shared<int>(*expected + 1),
+                    while (!value.compare_exchange_weak(expected, std::make_shared<std::int32_t>(*expected + 1),
                                                         std::memory_order_acq_rel, std::memory_order_acquire)) {}
                 }
             });
@@ -431,15 +433,15 @@ namespace {
 
     TYPED_TEST(TAtomicSmartPtr, SequentialConsistencyWithOrdinaryAtomics) {
         using TPtr = TypeParam;
-        auto owner = std::make_shared<int>(1);
+        auto owner = std::make_shared<std::int32_t>(1);
         std::atomic<TPtr> pointer;
-        std::atomic<int> number{0};
-        int observedNumber = 0;
+        std::atomic<std::int32_t> number{0};
+        std::int32_t observedNumber = 0;
         bool observedPointer = false;
-        constexpr int iterations = 2000;
+        constexpr std::int32_t iterations = 2000;
         std::barrier phase(3);
         std::thread first([&] {
-            for (int i = 0; i < iterations; ++i) {
+            for (std::int32_t i = 0; i < iterations; ++i) {
                 phase.arrive_and_wait();
                 pointer.store(TPtr(owner));
                 observedNumber = number.load();
@@ -448,7 +450,7 @@ namespace {
         });
 
         std::thread second([&] {
-            for (int i = 0; i < iterations; ++i) {
+            for (std::int32_t i = 0; i < iterations; ++i) {
                 phase.arrive_and_wait();
                 number.store(1);
                 observedPointer = bool(Lock(pointer.load()));
@@ -456,7 +458,7 @@ namespace {
             }
         });
 
-        for (int i = 0; i < iterations; ++i) {
+        for (std::int32_t i = 0; i < iterations; ++i) {
             pointer.store(TPtr());
             number.store(0);
             phase.arrive_and_wait();
@@ -471,10 +473,10 @@ namespace {
     template <class T>
     struct TReentrantAllocator {
         using value_type = T;
-        std::atomic<std::weak_ptr<int>>* Atomic;
-        int* Deallocated;
+        std::atomic<std::weak_ptr<std::int32_t>>* Atomic;
+        std::int32_t* Deallocated;
 
-        TReentrantAllocator(std::atomic<std::weak_ptr<int>>* atomic, int* deallocated)
+        TReentrantAllocator(std::atomic<std::weak_ptr<std::int32_t>>* atomic, std::int32_t* deallocated)
             : Atomic(atomic)
             , Deallocated(deallocated)
         {}
@@ -485,11 +487,11 @@ namespace {
             , Deallocated(other.Deallocated)
         {}
 
-        T* allocate(size_t count) {
+        T* allocate(std::size_t count) {
             return std::allocator<T>().allocate(count);
         }
 
-        void deallocate(T* ptr, size_t count) {
+        void deallocate(T* ptr, std::size_t count) {
             Atomic->load();
             ++*Deallocated;
             std::allocator<T>().deallocate(ptr, count);
@@ -497,11 +499,11 @@ namespace {
     };
 
     TEST(TAtomicWeakPtr, ReentrantControlBlockDeallocation) {
-        std::atomic<std::weak_ptr<int>> value;
-        int deallocated = 0;
+        std::atomic<std::weak_ptr<std::int32_t>> value;
+        std::int32_t deallocated = 0;
         auto makeExpired = [&] {
-            auto owner = std::allocate_shared<int>(TReentrantAllocator<int>(&value, &deallocated), 42);
-            return std::weak_ptr<int>(owner);
+            auto owner = std::allocate_shared<std::int32_t>(TReentrantAllocator<std::int32_t>(&value, &deallocated), 42);
+            return std::weak_ptr<std::int32_t>(owner);
         };
 
         value.store(makeExpired());
@@ -520,10 +522,10 @@ namespace {
     }
 
     struct TTracked {
-        std::atomic<int>& Destroyed;
-        const int Value = 42;
+        std::atomic<std::int32_t>& Destroyed;
+        const std::int32_t Value = 42;
 
-        explicit TTracked(std::atomic<int>& destroyed)
+        explicit TTracked(std::atomic<std::int32_t>& destroyed)
             : Destroyed(destroyed)
         {}
 
@@ -533,16 +535,16 @@ namespace {
     };
 
     TEST(TAtomicSharedPtr, ConcurrentLifetime) {
-        std::atomic<int> destroyed{0};
+        std::atomic<std::int32_t> destroyed{0};
         std::atomic<std::shared_ptr<TTracked>> shared;
         std::atomic<std::weak_ptr<TTracked>> weak;
-        constexpr int iterations = 5000;
+        constexpr std::int32_t iterations = 5000;
         std::barrier start(4);
         std::vector<std::thread> threads;
-        for (int i = 0; i < 2; ++i) {
+        for (std::int32_t i = 0; i < 2; ++i) {
             threads.emplace_back([&] {
                 start.arrive_and_wait();
-                for (int j = 0; j < iterations; ++j) {
+                for (std::int32_t j = 0; j < iterations; ++j) {
                     auto owner = std::make_shared<TTracked>(destroyed);
                     shared.store(owner);
                     weak.store(owner);
@@ -551,10 +553,10 @@ namespace {
             });
         }
 
-        for (int i = 0; i < 2; ++i) {
+        for (std::int32_t i = 0; i < 2; ++i) {
             threads.emplace_back([&] {
                 start.arrive_and_wait();
-                for (int j = 0; j < iterations; ++j) {
+                for (std::int32_t j = 0; j < iterations; ++j) {
                     if (auto ptr = shared.load()) {
                         EXPECT_EQ(ptr->Value, 42);
                     }

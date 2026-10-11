@@ -5,6 +5,8 @@
 #error atomic smart pointers must not be advertised by <memory> yet
 #endif
 
+#include <cstdint>
+
 namespace {
     struct TIncomplete;
 
@@ -14,6 +16,6 @@ namespace {
 
     static_assert(noexcept(Shared.load()));
     static_assert(noexcept(Weak.load()));
-    static_assert(sizeof(std::shared_ptr<int>) == 2 * sizeof(void*));
-    static_assert(sizeof(std::weak_ptr<int>) == 2 * sizeof(void*));
+    static_assert(sizeof(std::shared_ptr<std::int32_t>) == 2 * sizeof(void*));
+    static_assert(sizeof(std::weak_ptr<std::int32_t>) == 2 * sizeof(void*));
 }

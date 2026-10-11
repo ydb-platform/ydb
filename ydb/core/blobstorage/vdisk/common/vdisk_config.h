@@ -3,7 +3,6 @@
 
 #include "vdisk_performance_params.h"
 #include "blob_header_mode.h"
-#include "emergency_recovery_pools.h"
 #include "vdisk_events_quoter.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
@@ -160,8 +159,8 @@ namespace NKikimr {
         TDuration AnubisTimeout;
         bool RunSyncer;
         bool RunAnubis;
-        // Selected locally by the existing storage pool name when this VDisk starts.
-        bool EmergencyRecoveryMode = IsEmergencyRecoveryPool(BaseInfo.StoragePoolName);
+        // Selected by TBlobStorageGroupSelector before this VDisk starts recovery.
+        bool EmergencyRecoveryMode = false;
         bool RunDefrag;
         bool RunScrubber;
 

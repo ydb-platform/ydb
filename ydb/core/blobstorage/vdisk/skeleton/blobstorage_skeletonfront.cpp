@@ -2,6 +2,7 @@
 #include "blobstorage_skeletonfront.h"
 #include "blobstorage_skeletonerr.h"
 #include "blobstorage_skeleton.h"
+#include <ydb/core/blobstorage/group_selector/group_selector.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/html.h>
@@ -780,6 +781,9 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            if (const auto* selector = ctx.ActorSystem()->GetSubSystem<TBlobStorageGroupSelector>()) {
+                Config->EmergencyRecoveryMode = selector->Matches(GInfo->GroupID.GetRawId(), Config->BaseInfo.StoragePoolName);
+            }
             const auto& baseInfo = Config->BaseInfo;
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
                         TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.PDiskId, baseInfo.DonorMode,

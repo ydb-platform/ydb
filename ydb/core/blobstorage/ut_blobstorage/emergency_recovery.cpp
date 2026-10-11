@@ -1,3 +1,7 @@
+#include <ydb/core/blobstorage/group_selector/group_selector.h>
+
+#include <util/folder/tempdir.h>
+#include <util/stream/file.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
@@ -19,8 +23,15 @@ void TestLostDataRecovery(bool emergencyMode, bool unorderedData = false,
     TEnvironmentSetup env({
         .NodeCount = 9,
         .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
+        .PrepareRuntime = [=](TTestActorSystem& runtime) {
+            runtime.SetupNodeSubSystems = [=](ui32, TActorSystemSetup* setup) {
+                auto selector = std::make_unique<TBlobStorageGroupSelector>("");
+                TString error;
+                UNIT_ASSERT(selector->AddRules(emergencyMode ? "ptest" : "pother", &error));
+                setup->RegisterSubSystem(std::move(selector));
+            };
+        },
         .VDiskConfigPreprocessor = [=](TVDiskConfig& config) {
-            config.EmergencyRecoveryMode = emergencyMode;
             config.EnableVDiskCooldownTimeout = false;
             config.RunAnubis = false;
             config.SyncJobTimeout = scenario == ERecoveryScenario::DelayedUnorderedSession
@@ -187,8 +198,13 @@ void TestAutomaticDoNotKeep(bool emergencyMode) {
     TEnvironmentSetup env({
         .NodeCount = 1,
         .Erasure = TBlobStorageGroupType::ErasureNone,
-        .VDiskConfigPreprocessor = [=](TVDiskConfig& config) {
-            config.EmergencyRecoveryMode = emergencyMode;
+        .PrepareRuntime = [=](TTestActorSystem& runtime) {
+            runtime.SetupNodeSubSystems = [=](ui32, TActorSystemSetup* setup) {
+                auto selector = std::make_unique<TBlobStorageGroupSelector>("");
+                TString error;
+                UNIT_ASSERT(selector->AddRules(emergencyMode ? "*" : "", &error));
+                setup->RegisterSubSystem(std::move(selector));
+            };
         },
     });
     std::vector<std::unique_ptr<IEventHandle>> recoveryDone;
@@ -264,6 +280,63 @@ void TestAutomaticDoNotKeep(bool emergencyMode) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(EmergencyRecovery) {
+    Y_UNIT_TEST(GroupSelectionAppliesOnlyAfterVDiskRestart) {
+        TTempDir dir;
+        const TString path = dir.Path().Child("rules.conf").GetPath();
+        std::vector<TIntrusivePtr<TVDiskConfig>> configs;
+        TEnvironmentSetup env({
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .PrepareRuntime = [&](TTestActorSystem& runtime) {
+                runtime.SetupNodeSubSystems = [&](ui32, TActorSystemSetup* setup) {
+                    setup->RegisterSubSystem(std::make_unique<TBlobStorageGroupSelector>(path));
+                };
+            },
+            .VDiskConfigPreprocessor = [&](TVDiskConfig& config) {
+                configs.emplace_back(&config);
+            },
+        });
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(configs.size(), 1);
+        UNIT_ASSERT(!configs.front()->EmergencyRecoveryMode);
+        const auto groups = env.GetGroups();
+        const auto info = env.GetGroupInfo(groups.front());
+        auto* selector = env.Runtime->GetNode(1)->ActorSystem->GetSubSystem<TBlobStorageGroupSelector>();
+        TString error;
+        UNIT_ASSERT(selector->AddRules(TStringBuilder() << 'g' << groups.front(), &error));
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(!configs.front()->EmergencyRecoveryMode);
+
+        const auto edge = env.Runtime->AllocateEdgeActor(1);
+        auto restartVDisk = [&] {
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), edge,
+                new TEvBlobStorage::TEvAskRestartVDisk(configs.back()->BaseInfo.PDiskId, info->GetVDiskId(0))), 1);
+            env.Sim(TDuration::Seconds(30));
+        };
+        restartVDisk();
+        UNIT_ASSERT_VALUES_EQUAL(configs.size(), 2);
+        UNIT_ASSERT(configs.back()->EmergencyRecoveryMode);
+        UNIT_ASSERT(!configs.front()->EmergencyRecoveryMode);
+        UNIT_ASSERT_VALUES_EQUAL(selector,
+            env.Runtime->GetNode(1)->ActorSystem->GetSubSystem<TBlobStorageGroupSelector>());
+        {
+            TFileOutput file(path);
+            file << "pother\n";
+        }
+        UNIT_ASSERT(selector->ReloadRules(&error));
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(configs.back()->EmergencyRecoveryMode);
+        restartVDisk();
+        UNIT_ASSERT_VALUES_EQUAL(configs.size(), 3);
+        UNIT_ASSERT(!configs.back()->EmergencyRecoveryMode);
+        UNIT_ASSERT(configs[1]->EmergencyRecoveryMode);
+        const TString data(128, 'R');
+        const TLogoBlobID id(5000, 1, 1, 0, data.size(), 0);
+        env.PutBlob(groups.front(), id, data);
+        env.CheckBlob(info->GetActorId(0), info->GetVDiskId(0), TLogoBlobID(id, 1), data);
+    }
+
     Y_UNIT_TEST(RecoverLostDataWithOfflineRealm) {
         TestLostDataRecovery(true);
     }

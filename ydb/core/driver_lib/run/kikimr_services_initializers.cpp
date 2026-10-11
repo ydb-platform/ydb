@@ -26,6 +26,7 @@
 #include <ydb/core/base/user_registry.h>
 
 #include <ydb/core/blobstorage/backpressure/unisched.h>
+#include <ydb/core/blobstorage/group_selector/group_selector.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/ddisk/persistent_buffer_mon.h>
@@ -1140,6 +1141,8 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
+    setup->RegisterSubSystem(std::make_unique<TBlobStorageGroupSelector>(
+        TString(BlobStorageGroupSelectorRulesPath), appData->Mon, appData->IOPoolId));
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();

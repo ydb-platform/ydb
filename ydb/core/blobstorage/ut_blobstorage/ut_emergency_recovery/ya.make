@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/blobstorage/group_selector
     ydb/core/blobstorage/ut_blobstorage/lib
 )
 

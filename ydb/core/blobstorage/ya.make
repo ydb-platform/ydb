@@ -36,6 +36,7 @@ RECURSE(
     ddisk
     dsproxy
     groupinfo
+    group_selector
     incrhuge
     lwtrace_probes
     nodewarden

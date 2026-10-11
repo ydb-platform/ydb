@@ -23,7 +23,6 @@ SRCS(
     blobstorage_vdisk_guids.h
     defs.h
     disk_part.h
-    emergency_recovery_pools.h
     sublog.h
     vdisk_config.cpp
     vdisk_config.h

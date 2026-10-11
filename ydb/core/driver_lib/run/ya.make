@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/blob_depot
     ydb/core/blobstorage
     ydb/core/blobstorage/backpressure
+    ydb/core/blobstorage/group_selector
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/other
     ydb/core/blobstorage/pdisk

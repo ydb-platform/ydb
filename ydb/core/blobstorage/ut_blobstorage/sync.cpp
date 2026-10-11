@@ -467,6 +467,17 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                 deadline + TDuration::Seconds(1));
             UNIT_ASSERT(blockResult);
             UNIT_ASSERT_VALUES_EQUAL(blockResult->Get()->Status == NKikimrProto::OK, expectSuccess);
+            const auto getBlockSender = env.Runtime->AllocateEdgeActor(clientNode);
+            env.Runtime->WrapInActorContext(getBlockSender, [&] {
+                SendToBSProxy(getBlockSender, groupId, new TEvBlobStorage::TEvGetBlock(6000, deadline));
+            });
+            const auto getBlockResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetBlockResult>(getBlockSender,
+                true, deadline + TDuration::Seconds(1));
+            UNIT_ASSERT(getBlockResult);
+            UNIT_ASSERT_VALUES_EQUAL(getBlockResult->Get()->Status == NKikimrProto::OK, expectSuccess);
+            if (expectSuccess) {
+                UNIT_ASSERT_VALUES_EQUAL(getBlockResult->Get()->BlockedGeneration, counter);
+            }
             if (expectSuccess && !stoppedNode) {
                 proxyDiscover(TLogoBlobID(6000, 1, 1, 0, data.size(), 0), false, NKikimrProto::NODATA, counter);
             }

@@ -13,6 +13,28 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(cfg.FreshBufSizeLogoBlobs, 64 << 20);
         }
 
+        Y_UNIT_TEST(EmergencyRecoveryPoolPrefixMatches) {
+            UNIT_ASSERT(IsEmergencyRecoveryPool("recovery-", {"recovery-"}));
+            UNIT_ASSERT(IsEmergencyRecoveryPool("recovery-ssd", {"recovery-"}));
+            UNIT_ASSERT(IsEmergencyRecoveryPool("recovery-hdd", {"other-", "recovery-"}));
+        }
+
+        Y_UNIT_TEST(EmergencyRecoveryPoolPrefixMismatches) {
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("other-ssd", {"recovery-"}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("tenant-recovery-ssd", {"recovery-"}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("Recovery-ssd", {"recovery-"}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("recovery", {"recovery-"}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("", {"recovery-"}));
+        }
+
+        Y_UNIT_TEST(EmergencyRecoveryPoolEmptyPrefixes) {
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("recovery-ssd", {}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("recovery-ssd", {""}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("", {""}));
+            UNIT_ASSERT(!IsEmergencyRecoveryPool("other-ssd", {"", "recovery-"}));
+            UNIT_ASSERT(IsEmergencyRecoveryPool("recovery-ssd", {"", "recovery-"}));
+        }
+
         TVDiskConfig::TBaseInfo GetDefaultBaseInfo(NKikimrBlobStorage::TVDiskKind::EVDiskKind kind) {
             return TVDiskConfig::TBaseInfo(TVDiskID(), TActorId(), 0x1234, 0x5678,
                     NPDisk::DEVICE_TYPE_ROT, 0x01, kind, 1, {});

@@ -6,13 +6,14 @@
 
 namespace NKikimr {
 
-// Fill with exact StoragePoolName values to enable full sync during lost-data
-// recovery and suppress automatic DoNotKeep in these pools.
-inline constexpr std::initializer_list<TStringBuf> EmergencyRecoveryPools = {};
+// Fill with StoragePoolName prefixes to enable full sync during lost-data
+// recovery and suppress automatic DoNotKeep in matching pools. Empty prefixes are ignored.
+inline constexpr std::initializer_list<TStringBuf> EmergencyRecoveryPoolPrefixes = {};
 
-inline bool IsEmergencyRecoveryPool(TStringBuf storagePoolName) {
-    for (const TStringBuf pool : EmergencyRecoveryPools) {
-        if (pool == storagePoolName) {
+inline bool IsEmergencyRecoveryPool(TStringBuf storagePoolName,
+        std::initializer_list<TStringBuf> prefixes = EmergencyRecoveryPoolPrefixes) {
+    for (const TStringBuf prefix : prefixes) {
+        if (!prefix.empty() && storagePoolName.StartsWith(prefix)) {
             return true;
         }
     }

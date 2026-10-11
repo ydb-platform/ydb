@@ -51,6 +51,9 @@ ydb:
     # If unspecified, will be used for both targets
     # type: <static|dynamic>
     #
+    # Scrape interval; if unspecified, the Prometheus default is used.
+    # scrapeInterval: 120s
+    #
     # Metrics path
     # If unspecified, will be used /counters/counters=%s/prometheus
     # metricsPath: <url to prometheus metrics>
@@ -89,6 +92,9 @@ ydb:
     - counter: interconnect
     - counter: vdisks
       type: static
+    - counter: vdisks_async
+      type: static
+      scrapeInterval: 120s
     - counter: healthcheck
       type: static
       metricsPath: /healthcheck

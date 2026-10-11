@@ -73,7 +73,7 @@ namespace NKikimr {
 
         void TBarriersDs::LoadCompleted() {
             TBase::LoadCompleted();
-            BuildMemView(*MemView);
+            BuildMemView();
         }
 
         void TBarriersDs::MarkTabletDeleted(ui64 tabletId) {
@@ -104,24 +104,14 @@ namespace NKikimr {
             return TBarriersDsSnapshot(TBase::GetIndexSnapshot(), MemView->GetSnapshot());
         }
 
-        void TBarriersDs::RebuildMemView(TIngressCachePtr ingressCache, const THashSet<ui64>& deletedTablets) {
-            auto next = std::make_unique<TMemView>(std::move(ingressCache), VDiskLogPrefix,
-                Settings.HullCtx->GCOnlySynced);
-            BuildMemView(*next);
-            if (CollectByCompleteDeletionBlock) {
-                next->MarkTabletsDeleted(deletedTablets);
-            }
-            MemView = std::move(next);
-        }
-
-        void TBarriersDs::BuildMemView(TMemView& target) {
+        void TBarriersDs::BuildMemView() {
             TBase::TLevelIndexSnapshot snap = TBase::GetIndexSnapshot();
             TBase::TLevelIndexSnapshot::TForwardIterator it(Settings.HullCtx, &snap);
             THeapIterator<TKeyBarrier, TMemRecBarrier, true> heapIt(&it);
             TIndexRecordMerger<TKeyBarrier, TMemRecBarrier> merger(Settings.HullCtx->VCtx->Top->GType);
             auto callback = [&] (TKeyBarrier key, auto* merger) -> bool {
                 const TMemRecBarrier& memRec = merger->GetMemRec();
-                target.Update(key, memRec);
+                MemView->Update(key, memRec);
                 return true;
             };
             heapIt.Walk(TKeyBarrier::First(), &merger, callback);

@@ -1,8 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
-#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
@@ -61,130 +59,6 @@ void CheckLostDataPayload(TEnvironmentSetup& env, const TIntrusivePtr<TBlobStora
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(BlobStorageSync) {
-
-    Y_UNIT_TEST(SingleDcHullCompactionPauseAndResume) {
-        TEnvironmentSetup env{{.NodeCount = 9, .Erasure = TBlobStorageGroupType::ErasureMirror3dc}};
-        env.CreateBoxAndPool(1, 1);
-        env.Sim(TDuration::Minutes(2));
-        const auto info = env.GetGroupInfo(env.GetGroups().front());
-        const ui32 node = 2;
-        ui32 index = 0;
-        while (info->GetActorId(index).NodeId() != node) {
-            ++index;
-        }
-        TActorId hullActor;
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == THullCommitFinished::EventType
-                    && event->GetRecipientRewrite().NodeId() == node
-                    && event->Get<THullCommitFinished>()->Type == THullCommitFinished::CommitFresh) {
-                hullActor = event->GetRecipientRewrite();
-            }
-            return true;
-        };
-        const TString data = "compaction pause payload";
-        auto write = [&](ui32 step) {
-            WriteLostDataCopies(env, info, node, info->GetVDiskId(index).FailRealm,
-                TLogoBlobID(893476, 1, step, 0, data.size(), 0), data);
-        };
-        auto compact = [&] {
-            const auto edge = env.Runtime->AllocateEdgeActor(node);
-            auto event = std::make_unique<IEventHandle>(info->GetActorId(index), edge,
-                TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
-            event->Rewrite(TEvBlobStorage::EvForwardToSkeleton, info->GetActorId(index));
-            env.Runtime->Send(event.release(), node);
-            return edge;
-        };
-        write(1);
-        const auto first = compact();
-        UNIT_ASSERT(env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(first, true,
-            env.Runtime->GetClock() + TDuration::Minutes(1)));
-        UNIT_ASSERT(hullActor);
-        env.Runtime->FilterFunction = {};
-        const auto pauseEdge = env.Runtime->AllocateEdgeActor(node);
-        env.Runtime->Send(new IEventHandle(hullActor, pauseEdge, new TEvHullPauseCompactions), node);
-        UNIT_ASSERT(env.WaitForEdgeActorEvent<TEvHullCompactionsPaused>(pauseEdge, true,
-            env.Runtime->GetClock() + TDuration::Seconds(30)));
-        write(2);
-        const auto second = compact();
-        bool completed = false;
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == TEvCompactVDiskResult::EventType
-                    && event->GetRecipientRewrite() == second) {
-                completed = true;
-                return false;
-            }
-            return true;
-        };
-        env.Sim(TDuration::Seconds(30));
-        UNIT_ASSERT(!completed);
-        env.Runtime->Send(new IEventHandle(hullActor, pauseEdge, new TEvHullResumeCompactions), node);
-        env.Sim(TDuration::Minutes(1));
-        UNIT_ASSERT(completed);
-        env.Runtime->FilterFunction = {};
-
-        // A fresh compaction stays in flight until its durable log response is processed.
-        write(3);
-        THashSet<TActorId> committers;
-        std::vector<std::unique_ptr<IEventHandle>> logReplies;
-        bool holdLogReplies = true;
-        bool paused = false;
-        completed = false;
-        TActorId third;
-        TActorId policyCoordinator;
-        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == NPDisk::TEvLog::EventType
-                    && event->Sender.NodeId() == node) {
-                const auto* log = event->Get<NPDisk::TEvLog>();
-                if (log->WriteSource == TWriteSource::HullDbCommit && !log->CommitRecord.CommitChunks.empty()) {
-                    committers.insert(event->Sender);
-                }
-            }
-            if (holdLogReplies && event->GetTypeRewrite() == NPDisk::TEvLogResult::EventType
-                    && committers.contains(event->GetRecipientRewrite())) {
-                logReplies.push_back(std::move(event));
-                return false;
-            }
-            if (event->GetTypeRewrite() == TEvHullPauseCompactions::EventType
-                    && event->GetRecipientRewrite() == hullActor) {
-                policyCoordinator = event->Sender;
-            }
-            if (event->GetTypeRewrite() == TEvHullCompactionsPaused::EventType
-                    && event->Sender == hullActor && event->GetRecipientRewrite() == policyCoordinator) {
-                paused = true;
-            }
-            if (event->GetTypeRewrite() == TEvCompactVDiskResult::EventType
-                    && event->GetRecipientRewrite() == third) {
-                completed = true;
-                return false;
-            }
-            return true;
-        };
-        third = compact();
-        env.Sim(TDuration::Seconds(10));
-        UNIT_ASSERT(!logReplies.empty());
-        UNIT_ASSERT(!completed);
-        NKikimrBlobStorage::TConfigRequest request;
-        auto* command = request.AddCommand()->MutableSetGroupSingleDcMode();
-        command->SetGroupId(info->GroupID.GetRawId());
-        command->SetGroupGeneration(info->GroupGeneration);
-        command->SetEnableSingleDcMode(true);
-        command->SetSurvivingDc(info->GetVDiskId(index).FailRealm);
-        const auto response = env.Invoke(request);
-        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        env.Sim(TDuration::Seconds(10));
-        UNIT_ASSERT(policyCoordinator);
-        UNIT_ASSERT(!paused);
-        holdLogReplies = false;
-        for (auto& reply : logReplies) {
-            env.Runtime->Send(reply.release(), node);
-        }
-        env.Sim(TDuration::Seconds(10));
-        UNIT_ASSERT(paused);
-        // Skeleton resumes all three actors after applying the new quorum policy.
-        env.Sim(TDuration::Minutes(1));
-        UNIT_ASSERT(completed);
-        env.Runtime->FilterFunction = {};
-    }
 
     Y_UNIT_TEST(SingleDcReplicationReplanCoalescesUpdates) {
         TEnvironmentSetup env{{.NodeCount = 9, .Erasure = TBlobStorageGroupType::ErasureMirror3dc}};
@@ -801,6 +675,21 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         UNIT_ASSERT_VALUES_EQUAL(put->Get()->Status, NKikimrProto::OK);
         env.Sim(TDuration::Minutes(2));
 
+        auto statusActor = [&] {
+            ui32 index = 0;
+            while (info->GetVDiskId(index).FailRealm != survivingRealm) {
+                ++index;
+            }
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            env.Runtime->Send(new IEventHandle(info->GetActorId(index), sender,
+                new TEvBlobStorage::TEvVStatus(info->GetVDiskId(index))), clientNode);
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(sender, true,
+                env.Runtime->GetClock() + TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            return result->Sender;
+        };
+        const auto ordinaryActor = statusActor();
         std::set<ui32> lostNodes;
         std::set<ui32> survivingNodes;
         for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
@@ -873,8 +762,9 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             }
             return true;
         };
-        // Surviving VDisks must apply the new policy without a restart.
+        // NodeWarden recreates surviving VDisks; no manual node restart is needed.
         env.Sim(TDuration::Minutes(2));
+        UNIT_ASSERT(statusActor() != ordinaryActor);
         UNIT_ASSERT(observedGuidRequests);
         {
             auto savedFilter = std::move(env.Runtime->FilterFunction);
@@ -970,11 +860,11 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
         };
-        auto proxyRange = [&](bool indexOnly, bool restore, bool expectSuccess) {
+        auto proxyRange = [&](const TLogoBlobID& id, bool indexOnly, bool restore, bool expectSuccess, bool empty = false) {
             const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
             const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
             env.Runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvRange(blobId.TabletID(), blobId, blobId,
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvRange(id.TabletID(), id, id,
                     restore, deadline, indexOnly));
             });
             const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender, true,
@@ -982,16 +872,40 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
             UNIT_ASSERT(result);
             UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status == NKikimrProto::OK, expectSuccess);
             if (expectSuccess) {
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.front().Id, blobId);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.size(), empty ? 0 : 1);
+                if (empty) {
+                    return;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.front().Id, id);
                 if (!indexOnly) {
                     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses.front().Buffer, data);
                 }
             }
         };
-        proxyRange(true, false, true);
-        proxyRange(false, false, true);
-        proxyRange(false, true, true);
+        proxyRange(blobId, true, false, true);
+        proxyRange(blobId, false, false, true);
+        proxyRange(blobId, false, true, true);
+        const TLogoBlobID emptyRangeId(5003, 1, 1, 0, data.size(), 0);
+        proxyRange(emptyRangeId, true, false, true, true);
+        proxyRange(emptyRangeId, false, false, true, true);
+
+        const TLogoBlobID singleCopyId(5002, 1, 1, 0, data.size(), 0);
+        ui32 singleCopyIndex = 0;
+        while (info->GetVDiskId(singleCopyIndex).FailRealm != survivingRealm) {
+            ++singleCopyIndex;
+        }
+        const auto singleCopyVDisk = info->GetVDiskId(singleCopyIndex);
+        const ui32 singleCopyPart = info->GetIdxInSubgroup(singleCopyVDisk, singleCopyId.Hash()) % 3 + 1;
+        const auto singleCopyEdge = env.Runtime->AllocateEdgeActor(clientNode);
+        env.Runtime->Send(new IEventHandle(info->GetActorId(singleCopyIndex), singleCopyEdge,
+            new TEvBlobStorage::TEvVPut(TLogoBlobID(singleCopyId, singleCopyPart), TRope(data), singleCopyVDisk,
+                false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog, false)), clientNode);
+        const auto singleCopyPut = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(singleCopyEdge, true,
+            env.Runtime->GetClock() + TDuration::Seconds(30));
+        UNIT_ASSERT(singleCopyPut);
+        UNIT_ASSERT_VALUES_EQUAL(singleCopyPut->Get()->Record.GetStatus(), NKikimrProto::OK);
+        proxyRange(singleCopyId, true, false, true);
+        proxyRange(singleCopyId, false, false, true);
 
         auto proxyPut = [&](ui32 step, bool expectSuccess) {
             const TLogoBlobID id(5000, 1, step, 0, data.size(), 0);
@@ -1118,6 +1032,8 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         }
         UNIT_ASSERT_VALUES_EQUAL(faultNodes.size(), 2);
         env.StopNode(faultNodes[0]);
+        proxyRange(blobId, true, false, false);
+        proxyRange(blobId, false, false, false);
         proxyPut(3, true);
         proxyBlockAndCollect(2, true, faultNodes[0]);
         env.StopNode(faultNodes[1]);

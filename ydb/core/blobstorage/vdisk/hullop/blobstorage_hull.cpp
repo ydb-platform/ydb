@@ -152,19 +152,6 @@ namespace NKikimr {
         return activeActors;
     }
 
-    void THull::ReconfigureBarrierQuorum(std::optional<ui32> survivingRealm) {
-        const auto& hullCtx = HullDs->HullCtx;
-        Y_ABORT_UNLESS(hullCtx->CompactionsPaused);
-        auto ingressCache = TIngressCache::Create(hullCtx->VCtx->Top,
-            hullCtx->VCtx->ShortSelfVDisk, survivingRealm);
-        THashSet<ui64> deletedTablets;
-        BlocksCache.ForEachDeletedTablet([&](ui64 tabletId) {
-            deletedTablets.insert(tabletId);
-        });
-        HullDs->Barriers->RebuildMemView(ingressCache, deletedTablets);
-        hullCtx->IngressCache = std::move(ingressCache);
-    }
-
     void THull::CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg) {
         Fields->CutRecoveryLog(ctx, std::move(msg));
     }
@@ -678,9 +665,6 @@ namespace NKikimr {
             TLevelIndex<TKey, TMemRec> &levelIndex,
             bool allowGarbageCollection)
     {
-        if (hullDs->HullCtx->CompactionsPaused) {
-            return;
-        }
         // try to start fresh compaction
         bool freshSegmentCompaction = CompactFreshSegmentIfRequired<TKey, TMemRec>(hullDs, nullptr, 0, rtCtx, ctx, false,
             allowGarbageCollection);

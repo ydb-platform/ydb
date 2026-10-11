@@ -124,10 +124,7 @@ namespace NKikimr {
     struct THullCtx : public TThrRefBase {
         TVDiskContextPtr VCtx;
         const TIntrusivePtr<TVDiskConfig> VCfg;
-        // Replaced in the shared Hull mailbox only after compactions have drained.
-        TIntrusivePtr<TIngressCache> IngressCache;
-        // Accessed by Hull and its level-index actors in their shared mailbox.
-        bool CompactionsPaused = false;
+        const TIntrusivePtr<TIngressCache> IngressCache;
         const ui32 ChunkSize;
         // Granularity PDisk appends in; the SST writer pads to it (see TFreshOutputGeometry).
         const ui32 AppendBlockSize;

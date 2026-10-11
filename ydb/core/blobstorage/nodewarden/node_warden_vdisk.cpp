@@ -741,10 +741,18 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        // update generation and send update message
+        const bool modeChanged = currentInfo->EnableSingleDcMode != newInfo->EnableSingleDcMode
+            || (newInfo->EnableSingleDcMode && currentInfo->SurvivingDc != newInfo->SurvivingDc);
+
+        // Store the new policy before recreating the VDisk. Startup rebuilds all Hull and Syncer state.
         currentInfo = newInfo;
         const TVDiskID newVDiskId = currentInfo->GetVDiskId(orderNumber);
         vdisk.WhiteboardVDiskId.emplace(newVDiskId);
+        if (modeChanged) {
+            PoisonLocalVDisk(vdisk);
+            StartLocalVDiskActor(vdisk);
+            return;
+        }
         Send(vdiskServiceId, new TEvVGenerationChange(newVDiskId, currentInfo));
     }
 

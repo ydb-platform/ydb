@@ -205,8 +205,6 @@ namespace NKikimr {
         bool CompactionScheduled = false;
         TMonotonic NextCompactionWakeup;
         bool AllowGarbageCollection = false;
-        std::vector<std::pair<TActorId, ui64>> CompactionPauseWaiters;
-        bool CompactionPauseCheckScheduled = false;
         THugeBlobCtxPtr HugeBlobCtx;
         ui32 MinHugeBlobInBytes;
 
@@ -400,8 +398,7 @@ namespace NKikimr {
         // returns true, if selector has been started, false otherwise
         bool RunLevelCompactionSelector(const TActorContext &ctx) {
             // if compaction is in progress or disabled, return
-            if (HullDs->HullCtx->CompactionsPaused ||
-                    RTCtx->LevelIndex->GetCompState() != TLevelIndexBase::StateNoComp || !Config->LevelCompaction ||
+            if (RTCtx->LevelIndex->GetCompState() != TLevelIndexBase::StateNoComp || !Config->LevelCompaction ||
                     Config->BaseInfo.DonorMode) {
                 return false;
             }
@@ -1314,38 +1311,6 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        void CheckCompactionsPaused(const TActorContext& ctx) {
-            CompactionPauseCheckScheduled = false;
-            if (CompactionPauseWaiters.empty()) {
-                return;
-            }
-            if (RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateNoComp &&
-                    !RTCtx->LevelIndex->FreshCompactionInProgress() && !AdvanceCommitInProgress &&
-                    PreCompactCallbacks.empty()) {
-                for (const auto& [recipient, cookie] : CompactionPauseWaiters) {
-                    ctx.Send(recipient, new TEvHullCompactionsPaused, 0, cookie);
-                }
-                CompactionPauseWaiters.clear();
-            } else {
-                CompactionPauseCheckScheduled = true;
-                ctx.Schedule(TDuration::MilliSeconds(10), new TEvHullCheckCompactionsPaused);
-            }
-        }
-
-        void Handle(TEvHullPauseCompactions::TPtr& ev, const TActorContext& ctx) {
-            HullDs->HullCtx->CompactionsPaused = true;
-            CompactionPauseWaiters.emplace_back(ev->Sender, ev->Cookie);
-            if (!CompactionPauseCheckScheduled) {
-                CheckCompactionsPaused(ctx);
-            }
-        }
-
-        void HandleResumeCompactions(const TActorContext& ctx) {
-            Y_ABORT_UNLESS(CompactionPauseWaiters.empty());
-            HullDs->HullCtx->CompactionsPaused = false;
-            ScheduleCompaction(ctx);
-        }
-
         void HandlePermitGarbageCollection(const TActorContext& ctx) {
             AllowGarbageCollection = true;
             NotifyDirty(ctx);
@@ -1356,9 +1321,6 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateFunc,
-            HFunc(TEvHullPauseCompactions, Handle)
-            CFunc(TEvBlobStorage::EvHullCheckCompactionsPaused, CheckCompactionsPaused)
-            CFunc(TEvBlobStorage::EvHullResumeCompactions, HandleResumeCompactions)
             HFunc(THullCommitFinished, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvHullCompact, Handle)

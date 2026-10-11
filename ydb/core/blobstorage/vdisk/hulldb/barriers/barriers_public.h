@@ -71,8 +71,6 @@ namespace NKikimr {
             // Apply the records of an SST that was inserted into the level index directly (bulk/full
             // sync) -- those do not go through PutToFresh and would otherwise miss the mem view.
             void UpdateMemView(const TBarriersSst &sst);
-            // The caller must drain garbage-collecting compactions before changing the policy.
-            void RebuildMemView(TIngressCachePtr ingressCache, const THashSet<ui64>& deletedTablets);
             TBarriersDsSnapshot GetSnapshot(TActorSystem *as);
             TBarriersDsSnapshot GetIndexSnapshot();
 
@@ -81,7 +79,7 @@ namespace NKikimr {
             const bool CollectByCompleteDeletionBlock;
             std::unique_ptr<TMemView> MemView;
 
-            void BuildMemView(TMemView& target);
+            void BuildMemView();
         };
 
     } // NBarriers

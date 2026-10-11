@@ -880,20 +880,17 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
 
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
-    from lib.nots.package_manager.common_config import load_common_config
-    from lib.nots.package_manager.utils import s_rooted
+    from lib.nots.package_manager.common_config import common_config_inputs
+    from lib.nots.package_manager.utils import b_rooted, build_ws_config_path, s_rooted
 
-    common_config_path, _ = load_common_config(pj, pm.sources_root)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
-    if common_config_path:
-        ins.append(s_rooted(common_config_path))
+    ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
     outs = [out for out in outs if os.path.basename(out) not in ("package.json", "pnpm-workspace.yaml")]
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
-        from lib.nots.package_manager.utils import b_rooted, s_rooted
 
         _configure_hermetic_node_modules(unit)
         if pj.get_use_prebuilder():
@@ -908,6 +905,8 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
     if has_deps:
         local_peers = pm.get_local_peers_from_package_json()
         unit.onpeerdir(local_peers)
+        # build_workspace imports catalogs from prepared direct peer workspaces.
+        ins.extend(b_rooted(build_ws_config_path(peer)) for peer in local_peers)
         if use_hermetic_node_modules:
             # The cached injected snapshot must contain built workspace peers,
             # not their source/pre-build state.
@@ -1163,6 +1162,9 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         ins = [path for path in ins if path not in source_manifests]
 
         if not _use_hermetic_node_modules(unit) or prod_bundle:
+            from lib.nots.package_manager.common_config import common_config_inputs
+
+            ins.extend(s_rooted(p) for p in common_config_inputs(pj, pm.sources_root))
             # Legacy and production-bundle builders materialize node_modules in the build action and
             # copy pnpm patches from the source tree there. Declare those files
             # explicitly so they are available in a distbuild sandbox.
@@ -1203,7 +1205,12 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
                     )
             else:
                 requires_build_packages = lf.get_requires_build_packages()
-                is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
+                from lib.nots.package_manager.common_config import load_common_config
+
+                _, _, settings = load_common_config(pj, pm.sources_root, include_settings=True)
+                is_valid, validation_messages = pj.validate_prebuilds(
+                    requires_build_packages, settings.get("overrides", {})
+                )
 
                 if not is_valid:
                     ymake.report_configure_error(

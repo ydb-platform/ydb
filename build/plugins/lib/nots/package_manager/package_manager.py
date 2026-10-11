@@ -77,7 +77,25 @@ class PackageManager(object):
         Returns paths of direct workspace dependencies (source root related).
         :rtype: list of str
         """
-        return self.load_package_json_from_dir(self.sources_path).get_workspace_dep_paths(base_path=self.module_path)
+        from .common_config import (
+            load_common_config,
+            workspace_settings_paths,
+            rebase_pnpm_settings,
+            join_pnpm_settings,
+            select_pnpm_settings,
+        )
+
+        pj = self.load_package_json_from_dir(self.sources_path)
+        local_settings = select_pnpm_settings(pj.data.get("pnpm"))
+        peers = pj.get_workspace_dep_paths(base_path=self.module_path)
+        config_path, _, settings = load_common_config(pj, self.sources_root, include_settings=True)
+        if config_path:
+            settings = rebase_pnpm_settings(
+                settings, os.path.join(self.sources_root, os.path.dirname(config_path)), self.sources_path
+            )
+        settings = join_pnpm_settings(settings, local_settings)
+        peers.extend(os.path.normpath(os.path.join(self.module_path, p)) for p in workspace_settings_paths(settings))
+        return sorted(set(peers))
 
     def _tarballs_store_path(self, pkg, store_path):
         return os.path.join(self.module_path, store_path, pkg.tarball_path)
@@ -89,15 +107,10 @@ class PackageManager(object):
         has_deps: bool,
         local_cli: bool,
     ) -> tuple[list[str], list[str], list[str]]:
-        ins = [
-            s_rooted(build_pj_path(self.module_path)),
-        ]
+        ins = [s_rooted(build_pj_path(self.module_path))]
         if has_deps or os.path.exists(build_lockfile_path(self.sources_path)):
             ins.append(s_rooted(build_lockfile_path(self.module_path)))
-        outs = [
-            b_rooted(build_pj_path(self.module_path)),
-            b_rooted(build_ws_config_path(self.module_path)),
-        ]
+        outs = [b_rooted(build_pj_path(self.module_path)), b_rooted(build_ws_config_path(self.module_path))]
         resources = []
 
         if has_deps and not local_cli:

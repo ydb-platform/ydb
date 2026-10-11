@@ -233,8 +233,9 @@ class PackageJson(object):
         ws_map = self.get_workspace_map()
         return {pj.get_name(): path for path, (pj, _) in ws_map.items()}
 
-    def validate_prebuilds(self, requires_build_packages: list[str]):
-        pnpm_overrides: dict[str, str] = self.data.get("pnpm", {}).get("overrides", {})
+    def validate_prebuilds(self, requires_build_packages: list[str], common_overrides=None):
+        pnpm_overrides = dict(common_overrides or {})
+        pnpm_overrides.update(self.data.get("pnpm", {}).get("overrides", {}))
         use_prebuild_flags: dict[str, bool] = self.data.get("@yatool/prebuilder", {}).get("usePrebuild", {})
 
         def covered(k: str) -> bool:

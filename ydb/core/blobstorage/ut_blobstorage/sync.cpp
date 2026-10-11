@@ -376,12 +376,36 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                 }
             }
         };
+        auto proxyDiscover = [&](const TLogoBlobID& id, bool readBody, NKikimrProto::EReplyStatus expected, ui32 blockedGeneration = 0) {
+            const auto sender = env.Runtime->AllocateEdgeActor(clientNode);
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvDiscover(id.TabletID(), 1,
+                    readBody, true, deadline, 0, true));
+            });
+            const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvDiscoverResult>(sender, true,
+                deadline + TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expected);
+            if (blockedGeneration) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->BlockedGeneration, blockedGeneration);
+            }
+            if (expected == NKikimrProto::OK) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Id, id);
+                if (readBody) {
+                    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Buffer, data);
+                }
+            }
+        };
+        proxyDiscover(blobId, false, NKikimrProto::OK);
+        proxyDiscover(blobId, true, NKikimrProto::OK);
         proxyRange(blobId, true, false, true);
         proxyRange(blobId, false, false, true);
         proxyRange(blobId, false, true, true);
         const TLogoBlobID emptyRangeId(5003, 1, 1, 0, data.size(), 0);
         proxyRange(emptyRangeId, true, false, true, true);
         proxyRange(emptyRangeId, false, false, true, true);
+        proxyDiscover(emptyRangeId, true, NKikimrProto::NODATA);
 
         const TLogoBlobID singleCopyId(5002, 1, 1, 0, data.size(), 0);
         ui32 singleCopyIndex = 0;
@@ -400,6 +424,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         UNIT_ASSERT_VALUES_EQUAL(singleCopyPut->Get()->Record.GetStatus(), NKikimrProto::OK);
         proxyRange(singleCopyId, true, false, true);
         proxyRange(singleCopyId, false, false, true);
+        proxyDiscover(singleCopyId, true, NKikimrProto::OK);
 
         auto proxyPut = [&](ui32 step, bool expectSuccess) {
             const TLogoBlobID id(5000, 1, step, 0, data.size(), 0);
@@ -442,6 +467,9 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                 deadline + TDuration::Seconds(1));
             UNIT_ASSERT(blockResult);
             UNIT_ASSERT_VALUES_EQUAL(blockResult->Get()->Status == NKikimrProto::OK, expectSuccess);
+            if (expectSuccess && !stoppedNode) {
+                proxyDiscover(TLogoBlobID(6000, 1, 1, 0, data.size(), 0), false, NKikimrProto::NODATA, counter);
+            }
 
             const auto collectSender = env.Runtime->AllocateEdgeActor(clientNode);
             const auto collectDeadline = env.Runtime->GetClock() + TDuration::Seconds(30);
@@ -513,6 +541,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         proxyGet(blobId, true);
         injectRejectedLocalSync = true;
         proxyPut(2, true);
+        proxyDiscover(TLogoBlobID(5000, 1, 2, 0, data.size(), 0), true, NKikimrProto::OK);
         proxyBlockAndCollect(1, true);
         env.Sim(TDuration::Minutes(2));
         UNIT_ASSERT_C(rejectedLocalSyncEdge, "No local sync data observed in the surviving realm");
@@ -528,6 +557,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         env.StopNode(faultNodes[0]);
         proxyRange(blobId, true, false, false);
         proxyRange(blobId, false, false, false);
+        proxyDiscover(blobId, true, NKikimrProto::ERROR);
         proxyPut(3, true);
         proxyBlockAndCollect(2, true, faultNodes[0]);
         env.StopNode(faultNodes[1]);

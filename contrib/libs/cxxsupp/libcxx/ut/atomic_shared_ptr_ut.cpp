@@ -211,6 +211,7 @@ namespace {
         } else {
             value.notify_one();
         }
+
         for (auto& thread : threads) {
             thread.join();
         }
@@ -270,6 +271,7 @@ namespace {
             if (owner) {
                 EXPECT_EQ(*owner, i);
             }
+
             value.store(TPtr(), std::memory_order_release);
         }
         producer.join();
@@ -537,10 +539,12 @@ namespace {
                     if (auto ptr = shared.load()) {
                         EXPECT_EQ(ptr->Value, 42);
                     }
+
                     auto expected = weak.load();
                     if (auto ptr = expected.lock()) {
                         EXPECT_EQ(ptr->Value, 42);
                     }
+
                     weak.compare_exchange_weak(expected, {});
                 }
             });

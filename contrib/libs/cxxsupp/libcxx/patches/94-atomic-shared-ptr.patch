@@ -65,10 +65,10 @@ index 993b3bbdf96..9b0b34f884d 100644
  #    include <__memory/ranges_destroy.h>
 diff --git a/include/__memory/atomic_shared_ptr.h b/include/__memory/atomic_shared_ptr.h
 new file mode 100644
-index 00000000000..021625cf3c6
+index 00000000000..b18d48b11c1
 --- /dev/null
 +++ b/include/__memory/atomic_shared_ptr.h
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,196 @@
 +// -*- C++ -*-
 +//===----------------------------------------------------------------------===//
 +//
@@ -181,6 +181,7 @@ index 00000000000..021625cf3c6
 +      // Do not access expected after a successful update; it may belong to the replaced object.
 +      return true;
 +    }
++
 +    __old_expected = __value_;
 +    __unlock();
 +    __expected.swap(__old_expected);

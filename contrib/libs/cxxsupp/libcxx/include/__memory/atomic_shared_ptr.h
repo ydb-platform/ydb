@@ -110,6 +110,7 @@ public:
       // Do not access expected after a successful update; it may belong to the replaced object.
       return true;
     }
+
     __old_expected = __value_;
     __unlock();
     __expected.swap(__old_expected);

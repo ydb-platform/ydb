@@ -306,6 +306,17 @@ long double    truncl(long double x);
 #      include_next <math.h>
 #    endif
 
+#    if defined(__APPLE__)
+// The macOS 27 SDK delegates these macros to float.h using __need_infinity_nan,
+// which older Clang headers do not support.
+#      ifndef INFINITY
+#        define INFINITY __builtin_inff()
+#      endif
+#      ifndef NAN
+#        define NAN __builtin_nanf("")
+#      endif
+#    endif
+
 #    ifdef __cplusplus
 
 // We support including .h headers inside 'extern "C"' contexts, so switch

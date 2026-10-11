@@ -1833,6 +1833,11 @@ class Linker(object):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
 
+        if self.build.host.is_macos and self.build.target.is_macos and self.tc.os_sdk_local:
+            # Local SDK stubs can use architectures unknown to the bundled LLD.
+            # Use the system linker that accompanies the local Apple SDK.
+            return None
+
         if self.tc.is_gcc and (self.build.target.is_freertos or self.build.target.is_zephyr):
             return Linker.BFD
 

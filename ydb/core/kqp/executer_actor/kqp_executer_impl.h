@@ -1095,7 +1095,7 @@ protected:
         HTML(str) {
             PRE() {
                 str << "KQP Executer, SelfId=" << SelfId() << ' ';
-                HREF(TStringBuilder() << "../../../../node/" << SelfId().NodeId() << "/actors/kqp_node?ex=" << SelfId() << "&view=plan")  {
+                HREF(TStringBuilder() << "../../../node/" << SelfId().NodeId() << "/actors/kqp_node?ex=" << SelfId() << "&view=plan")  {
                     str << "Plan";
                 }
                 str << Endl;

@@ -722,7 +722,6 @@ namespace NKikimr {
         NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncerGroup SyncerMonGroup;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
-        NMonGroup::TCostGroup CostGroup;
         NMonGroup::TTimerGroup TimerGroup;
         NMonGroup::TCounterGroup CounterGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
@@ -1375,12 +1374,10 @@ namespace NKikimr {
                     // TEvVPatchXorDiff's cost is included in cost of other Patch operations
                 } else {
                     if (clientId.GetType() == NBackpressure::EQueueClientType::DSProxy) {
-                        CostGroup.SkeletonFrontUserCostNs() += cost;
                         if (VCtx->CostTracker) {
                             VCtx->CostTracker->CountUserCost(advancedCost);
                         }
                     } else {
-                        CostGroup.SkeletonFrontInternalCostNs() += cost;
                         if (VCtx->CostTracker) {
                             VCtx->CostTracker->CountInternalCost(advancedCost);
                         }
@@ -2385,7 +2382,6 @@ namespace NKikimr {
             , ReplMonGroup(VDiskCounters, "subsystem", "repl")
             , SyncerMonGroup(VDiskCounters, "subsystem", "syncer")
             , VDiskMonGroup(VDiskCounters, "subsystem", "state")
-            , CostGroup(VDiskCounters, "subsystem", "cost")
             , TimerGroup(VDiskCounters, "subsystem", "timer")
             , CounterGroup(VDiskCounters, "subsystem", "counter")
         {

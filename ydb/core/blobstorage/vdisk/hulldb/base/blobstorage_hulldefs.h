@@ -124,6 +124,7 @@ namespace NKikimr {
     struct THullCtx : public TThrRefBase {
         TVDiskContextPtr VCtx;
         const TIntrusivePtr<TVDiskConfig> VCfg;
+        const std::optional<ui32> SurvivingRealm;
         const TIntrusivePtr<TIngressCache> IngressCache;
         const ui32 ChunkSize;
         // Granularity PDisk appends in; the SST writer pads to it (see TFreshOutputGeometry).

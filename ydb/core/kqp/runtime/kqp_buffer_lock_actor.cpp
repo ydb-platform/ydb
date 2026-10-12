@@ -66,7 +66,7 @@ private:
 public:
     TKqpBufferLockActor(TKqpBufferLockSettings&& settings)
         : Settings(std::move(settings))
-        , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
+        , Partitioning(Settings.TxManager->GetTableMeta(Settings.TableId).InitialPartitioning)
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId) {
     }
@@ -223,7 +223,7 @@ public:
 
     void StartLockTask(ui64 cookie, TLockState& state) {
         auto& worker = state.Worker;
-        worker->BuildLockRequests(Partitioning, LockRequestId);
+        worker->BuildLockRequests(Partitioning.GetPartitioning(), LockRequestId);
 
         while (true) {
             auto [shardId, lockRequest] = worker->PopNextLockRequest();
@@ -275,8 +275,6 @@ public:
             {"requestId", record.GetRequestId()},
             {"shardId", shardId});
 
-        Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
-
         auto& shardState = ShardToState[shardId];
         const bool needToCreatePipe = !shardState.HasPipe;
 
@@ -318,13 +316,14 @@ public:
             return;
         }
 
-        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
-
         auto& requestState = requestIt->second;
         const auto shardId = requestState.ShardId;
         const auto cookie = requestState.LockCookie;
 
-        Y_UNUSED(shardId);
+        // TODO: Add Action Lock?
+        Settings.TxManager->AddShard(shardId, false, Settings.TablePath,
+            MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size()));
+        Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& lockState = CookieToLockState.at(cookie);
         AFL_ENSURE(lockState.Worker);
@@ -578,7 +577,7 @@ public:
             {"table", Settings.TablePath});
         ResolveShardsInProgress = true;
 
-        Partitioning.reset();
+        Partitioning.Reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Settings.Database;
@@ -614,7 +613,7 @@ public:
 
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-        Partitioning = resultSet[0].KeyDescription->Partitioning;
+        Partitioning = TShardPartitionIndex(resultSet[0].KeyDescription->Partitioning);
 
         ProcessResolveResult();
     }
@@ -679,7 +678,7 @@ public:
 
 private:
     TKqpBufferLockSettings Settings;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

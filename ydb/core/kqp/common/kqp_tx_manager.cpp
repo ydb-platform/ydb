@@ -8,6 +8,40 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool SameBorders(const TTableRange& lhs, const TTableRange& rhs) {
+    if (lhs.Point != rhs.Point
+            || lhs.InclusiveFrom != rhs.InclusiveFrom
+            || lhs.InclusiveTo != rhs.InclusiveTo) {
+        return false;
+    }
+
+    if (lhs.From.size() != rhs.From.size() || lhs.To.size() != rhs.To.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < lhs.From.size(); ++i) {
+        const TCell& a = lhs.From[i];
+        const TCell& b = rhs.From[i];
+        if (a.IsNull() != b.IsNull()
+                || a.Size() != b.Size()
+                || (a.Size() != 0 && memcmp(a.Data(), b.Data(), a.Size()) != 0)) {
+            return false;
+        }
+    }
+
+    for (size_t i = 0; i < lhs.To.size(); ++i) {
+        const TCell& a = lhs.To[i];
+        const TCell& b = rhs.To[i];
+        if (a.IsNull() != b.IsNull()
+                || a.Size() != b.Size()
+                || (a.Size() != 0 && memcmp(a.Data(), b.Data(), a.Size()) != 0)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 namespace {
 
 struct TKqpLock {
@@ -59,7 +93,7 @@ public:
     TKqpTransactionManager(bool collectOnly)
         : CollectOnly(collectOnly) {}
 
-    void AddShard(ui64 shardId, bool isOlap, const TString& path) override {
+    void AddShard(ui64 shardId, bool isOlap, const TString& path, const TShardMeta& meta) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(shardId);
         auto& shardInfo = ShardsInfo[shardId];
@@ -69,6 +103,39 @@ public:
         const auto [stringsIter, _] = TablePathes.insert(path);
         const TStringBuf pathBuf = *stringsIter;
         shardInfo.Pathes.insert(pathBuf);
+
+        // Keep the freshest known metadata: a shard discovered through several
+        // paths (write batch, lock echo) may arrive with the same borders from
+        // different partitioning snapshots; only the version moves forward.
+        if (meta.IsKnown()) {
+            auto& stored = shardInfo.Meta;
+            if (stored.IsKnown()) {
+                AFL_ENSURE(stored.TableId == meta.TableId)
+                    ("stored", stored.TableId)("incoming", meta.TableId);
+                // Metadata may arrive as borders-with-version or version-only (the
+                // caller had no resolved partitioning at hand). Compare borders only
+                // when both sides carry them; a version-only update just bumps the
+                // version and keeps the stored borders.
+                const bool bordersKnown = stored.Borders.From.size() > 0 || stored.Borders.To.size() > 0;
+                const bool incomingBorders = meta.Borders.From.size() > 0 || meta.Borders.To.size() > 0;
+                if (bordersKnown && incomingBorders) {
+                    AFL_ENSURE(SameBorders(stored.Borders, meta.Borders))
+                        ("shardId", shardId)
+                        ("storedFrom", stored.Borders.From.size())
+                        ("storedTo", stored.Borders.To.size())
+                        ("storedVersion", stored.PartitioningVersion)
+                        ("incomingFrom", meta.Borders.From.size())
+                        ("incomingTo", meta.Borders.To.size())
+                        ("incomingVersion", meta.PartitioningVersion);
+                }
+                stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
+                if (incomingBorders && !bordersKnown) {
+                    stored.Borders = meta.Borders;
+                }
+            } else {
+                stored = meta;
+            }
+        }
     }
 
     void AddAction(ui64 shardId, ui8 action) override {
@@ -196,6 +263,7 @@ public:
     bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(!toShardIds.empty());
+
         // The removed shard's tablet id is gone: GetDeletedShards only returns shards
         // absent from the new partitioning, so the targets cannot contain it. A target
         // equal to the removed shard would corrupt the participant state on the erase
@@ -209,12 +277,43 @@ public:
         AFL_ENSURE(from.State == EShardState::PROCESSING);
         AFL_ENSURE(!from.IsOlap);
 
+        // The moved table's key schema, used below to compare shard key borders.
+        // The table metadata is stored by the executer for every resolved table.
+        const auto& keyColumnTypes = TableMetas.at(from.Meta.TableId).KeyColumnTypes;
+
         bool locksConsistent = true;
         for (const ui64 toShardId : toShardIds) {
             AFL_ENSURE(toShardId != fromShardId);
             // MoveShard to may be called for toShardIds several times in case of merge.
             auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
             auto& to = toIt->second;
+            // Verify the partitioning meta when both sides carry it (unknown or
+            // borders-less metadata — e.g. a fresh EnsureShards-only target — is
+            // safely skipped): the target must be a shard of a strictly newer
+            // partitioning whose range intersects the removed shard's range. The
+            // border comparison uses the moved table's key schema (SetTableMeta).
+            const bool fromMetaUsable = from.Meta.IsKnown() && !from.Meta.Borders.From.empty();
+            const bool toMetaUsable = to.Meta.IsKnown() && !to.Meta.Borders.From.empty();
+            if (fromMetaUsable && toMetaUsable) {
+                AFL_ENSURE(from.Meta.TableId.HasSamePath(to.Meta.TableId))
+                    ("fromShardId", fromShardId)
+                    ("toShardId", toShardId)
+                    ("fromTableId", from.Meta.TableId)
+                    ("toTableId", to.Meta.TableId);
+                AFL_ENSURE(from.Meta.PartitioningVersion < to.Meta.PartitioningVersion)
+                    ("fromShardId", fromShardId)
+                    ("toShardId", toShardId)
+                    ("fromVersion", from.Meta.PartitioningVersion)
+                    ("toVersion", to.Meta.PartitioningVersion);
+                AFL_ENSURE(!Intersect(keyColumnTypes, from.Meta.Borders, to.Meta.Borders).IsEmptyRange(keyColumnTypes))
+                    ("fromShardId", fromShardId)
+                    ("toShardId", toShardId)
+                    ("keyColumnsCount", keyColumnTypes.size());
+            }
+            // Metadata is not inherited from the removed shard: after a split/merge
+            // the target covers a different key range, and the targets that receive
+            // the transferred writes learn their exact borders from their own
+            // UpdateShards pass (AddShard with the new partitioning).
             to.IsOlap = from.IsOlap;
             // A merge may transfer several removed shards onto the same target:
             // merge the flags instead of overwriting, or an earlier shard's
@@ -270,6 +369,10 @@ public:
         };
     }
 
+    const TShardMeta& GetShardMeta(ui64 shardId) const override {
+        return ShardsInfo.at(shardId).Meta;
+    }
+
     EShardState GetState(ui64 shardId) const override {
         return ShardsInfo.at(shardId).State;
     }
@@ -279,24 +382,26 @@ public:
     }
 
     void SetError(ui64 shardId) override {
-        auto& shardInfo = ShardsInfo.at(shardId);
-        shardInfo.State = EShardState::ERROR;
+        auto shardIter = ShardsInfo.find(shardId);
+        if (shardIter != std::end(ShardsInfo)) {
+            shardIter->second.State = EShardState::ERROR;
+        }
     }
 
     void SetError() override {
         State = ETransactionState::ERROR;
     }
 
-    void SetPartitioning(const TTableId tableId, const TPartitioning::TCPtr& partitioning) override {
-        TablePartitioning[tableId] = partitioning;
+    void SetTableMeta(const TTableId tableId, TTableMeta tableMeta) override {
+        TableMetas[tableId] = std::move(tableMeta);
     }
 
-    TPartitioning::TCPtr GetPartitioning(const TTableId tableId) const override {
-        auto iterator = TablePartitioning.find(tableId);
-        if (iterator != std::end(TablePartitioning)) {
+    TTableMeta GetTableMeta(const TTableId tableId) const override {
+        auto iterator = TableMetas.find(tableId);
+        if (iterator != std::end(TableMetas)) {
             return iterator->second;
         }
-        return nullptr;
+        return {};
     }
 
     void AddParticipantNode(const ui32 nodeId) override {
@@ -762,6 +867,8 @@ private:
         EShardState State = EShardState::PROCESSING;
         TActionFlags Flags = 0;
 
+        TShardMeta Meta;
+
         struct TLockInfo {
             TKqpLock Lock;
             bool Invalidated = false;
@@ -842,7 +949,7 @@ private:
 
     THashSet<ui32> ParticipantNodes;
 
-    THashMap<TTableId, TPartitioning::TCPtr> TablePartitioning;
+    THashMap<TTableId, TTableMeta> TableMetas;
 
     bool AllowVolatile = false;
     bool ReadOnly = true;

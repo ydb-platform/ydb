@@ -8,6 +8,7 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
@@ -568,8 +569,14 @@ private:
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
+        auto info = LockInfo.GetExtraData();
+        for (const auto& [shardId, meta] : ShardMetas) {
+            if (meta.IsKnown()) {
+                FillShardPartitioningInfo(*info.AddShardPartitioningInfo(), shardId, meta);
+            }
+        }
         google::protobuf::Any result;
-        result.PackFrom(LockInfo.GetExtraData());
+        result.PackFrom(info);
         return result;
     }
 
@@ -627,7 +634,7 @@ private:
 
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-        Partitioning = resultSet[0].KeyDescription->Partitioning;
+        Partitioning = TShardPartitionIndex(resultSet[0].KeyDescription->Partitioning);
 
         ProcessInputRows();
 
@@ -948,7 +955,7 @@ private:
 
         auto guard = BindAllocator();
 
-        StreamLookupWorker->BuildRequests(Partitioning, OperationId);
+        StreamLookupWorker->BuildRequests(Partitioning.GetPartitioning(), OperationId);
         ScheduleNextReads();
     }
 
@@ -967,7 +974,7 @@ private:
                 && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
                 && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
-            StreamLockWorker->BuildLockRequests(Partitioning, OperationId);
+            StreamLockWorker->BuildLockRequests(Partitioning.GetPartitioning(), OperationId);
             DrainPendingLocks();
         }
     }
@@ -1003,6 +1010,12 @@ private:
             {"logPrefix", this->LogPrefix},
             {"shard", shardId});
         Counters->SentLocks->Inc();
+
+        // Remember the partitioning metadata of every shard that received a lock
+        // request: it is shipped to the executer together with the collected locks.
+        ShardMetas[shardId] = MakeShardMeta(
+            StreamLookupWorker->GetTableId(), Partitioning, shardId,
+            StreamLookupWorker->GetKeyColumnTypes().size());
 
         ui64 requestId = request->Record.GetRequestId();
 
@@ -1364,7 +1377,7 @@ private:
             {"table", StreamLookupWorker->GetTablePath()});
         ResolveShardsInProgress = true;
 
-        Partitioning.reset();
+        Partitioning.Reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
         request->DatabaseName = Database;
@@ -1437,10 +1450,13 @@ private:
     THashMap<ui64, TString> CacheKeys;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     NYql::NDq::TDqComputeActorWatermarks* WatermarksTracker;
-    TPartitioning::TCPtr Partitioning;
+    TShardPartitionIndex Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TReadLockInfo LockInfo;
+    // Partitioning metadata of every shard that received a lock request, shipped
+    // to the executer together with the collected locks via ExtraData().
+    THashMap<ui64, TShardMeta> ShardMetas;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;

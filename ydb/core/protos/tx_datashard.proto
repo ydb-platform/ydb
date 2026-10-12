@@ -265,6 +265,19 @@ message TKqpTransaction {
     optional bool UseGenericReadSets = 7 [default = false];
 }
 
+message TShardPartitioningInfo {
+    message TBorders {
+        optional bytes From = 1; // TSerializedCellVec of the From border cells
+        optional bytes To = 2; // TSerializedCellVec of the To border cells
+        optional bool FromInclusive = 3 [default = false];
+        optional bool ToInclusive = 4 [default = false];
+    }
+    optional uint64 ShardId = 1;
+    optional uint64 PartitioningVersion = 2;
+    // Absent when the shard has no representable key range (e.g. column tables).
+    optional TBorders Borders = 3;
+}
+
 message TEvKqpInputActorResultInfo {
     repeated NKikimrDataEvents.TLock Locks = 1;
     optional string BatchOperationMaxKey = 2;
@@ -272,6 +285,9 @@ message TEvKqpInputActorResultInfo {
     repeated uint64 DeferredBreakerQuerySpanIds = 4; // QuerySpanIds of transactions that broke locks in deferred scenarios
     repeated uint32 DeferredBreakerNodeIds = 5; // Node IDs where breaker query texts are cached (parallel to DeferredBreakerQuerySpanIds)
     optional uint64 DeferredVictimQuerySpanId = 6; // Victim query SpanId as determined by the shard (see TReadResultBase.DeferredVictimQuerySpanId)
+    // Partitioning metadata of the shards the input actor interacted with, so the
+    // executer can register them in the transaction manager with borders/version.
+    repeated TShardPartitioningInfo ShardPartitioningInfo = 7;
 }
 
 message TKqpReadRangesSourceSettings {

@@ -75,6 +75,37 @@ void TGraph::RemoveNode(const ui32 idenitifier) {
     Nodes.erase(it);
 }
 
+void TGraph::ForgetProducer(TGraphNode* node) {
+    for (auto it = Producers.begin(); it != Producers.end();) {
+        if (it->second == node) {
+            auto stale = it++;
+            Producers.erase(stale);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TGraph::DropNodeIfUnused(TGraphNode* node) {
+    if (!node || !node->GetOutputEdges().empty()) {
+        return;
+    }
+    const auto type = node->GetProcessor()->GetProcessorType();
+    if (type == EProcessorType::Filter || type == EProcessorType::Projection || type == EProcessorType::DistinctMarker) {
+        return;
+    }
+    std::vector<TGraphNode*> inputs;
+    inputs.reserve(node->GetInputEdges().size());
+    for (auto&& edge : node->GetInputEdges()) {
+        inputs.push_back(edge.second);
+    }
+    ForgetProducer(node);
+    RemoveNode(node->GetIdentifier());
+    for (auto* input : inputs) {
+        DropNodeIfUnused(input);
+    }
+}
+
 TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory)
     : ReserveIndexMemory(reserveIndexMemory)
     , Resolver(resolver) {
@@ -623,6 +654,25 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
     AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
     AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
+
+    if (calc->GetIndexOnly()) {
+        // The original LIKE/ILIKE stays in the program, so the substring kernel is redundant.
+        // A bloom deny is all-false and AND short-circuit skips the rest of the portion.
+        // No usable index makes the checker allow-all.
+        dest->GetProcessor()->ExchangeInput(destResourceId, resourceIdIndexToAnd);
+        AddEdge(indexProcNode.get(), dest, resourceIdIndexToAnd);
+        std::vector<TGraphNode*> inputs;
+        inputs.reserve(condNode->GetInputEdges().size());
+        for (auto&& edge : condNode->GetInputEdges()) {
+            inputs.push_back(edge.second);
+        }
+        ForgetProducer(condNode);
+        RemoveNode(condNode->GetIdentifier());
+        for (auto* input : inputs) {
+            DropNodeIfUnused(input);
+        }
+        return true;
+    }
 
     const ui32 resourceIdEqToAnd = BuildNextResourceId();
     RegisterProducer(resourceIdEqToAnd, condNode);

@@ -43,6 +43,12 @@ struct TFilterOpsLevels {
 
 std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, bool allowApply);
 TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& pushdownOptions);
+
+// When `options.PushdownComplexLike` is set, splice index-only substring hints next to a positive
+// `Re2.Match(PatternFromLike(literal))` as direct conjuncts. Hint compare nodes are recorded in
+// `options.IndexOnlyHints`. The predicate is returned unchanged when the flag is off or nothing matches.
+TExprNode::TPtr RewriteComplexLikeForIndex(const TExprNode::TPtr& predicate, const TExprNode* lambdaArg, TExprContext& ctx,
+                                           TPushdownOptions& options);
 TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TOLAPPredicateNode>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd,
                                                bool trueForEmpty);
 bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& arg, const THashSet<TString>& predicateMembers,

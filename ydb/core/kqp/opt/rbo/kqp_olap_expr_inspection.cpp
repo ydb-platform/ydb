@@ -49,7 +49,10 @@ const THashMap<TString, TString>& SubstringFormats() {
     static const THashMap<TString, TString> formats = {
         {"string_contains", "%s LIKE \"%%%s%%\""},
         {"starts_with", "%s LIKE \"%s%%\""},
-        {"ends_with", "%s LIKE \"%%%s\""}
+        {"ends_with", "%s LIKE \"%%%s\""},
+        {"string_contains_index_only", "%s LIKE \"%%%s%%\""},
+        {"starts_with_index_only", "%s LIKE \"%s%%\""},
+        {"ends_with_index_only", "%s LIKE \"%%%s\""}
     };
     return formats;
 }
@@ -214,7 +217,12 @@ TString FormatOlapUdf(const TKqpOlapUdf& udf) {
     for (const auto& argument : udf.Args()) {
         args.emplace_back(FormatOlapUdfArgument(TExprBase(argument)));
     }
-    return TStringBuilder() << "Udf(" << udf.KernelName().StringValue() << ")(" << JoinStrings(args, ", ") << ')';
+    TStringBuilder formatted;
+    formatted << "Udf(" << udf.KernelName().StringValue() << ")(" << JoinStrings(args, ", ") << ')';
+    if (udf.IndexOnly()) {
+        formatted << " index_only";
+    }
+    return formatted;
 }
 
 TString FormatOlapFilterExpr(const TExprNode::TPtr& node) {

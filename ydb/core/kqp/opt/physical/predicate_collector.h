@@ -20,12 +20,14 @@ struct TOLAPPredicateNode {
 
 struct TPushdownOptions {
     TPushdownOptions(bool allowOlapApply, bool pushdownSubstring, bool stripAliasPrefixFromColName = false,
-                     bool pushdownRegexp = false, bool fastAsciiIgnoreCaseContains = false)
+                     bool pushdownRegexp = false, bool fastAsciiIgnoreCaseContains = false,
+                     bool pushdownComplexLike = false)
         : AllowOlapApply(allowOlapApply)
         , PushdownSubstring(pushdownSubstring)
         , StripAliasPrefixFromColName(stripAliasPrefixFromColName)
         , PushdownRegexp(pushdownRegexp)
-        , FastAsciiIgnoreCaseContains(fastAsciiIgnoreCaseContains) {
+        , FastAsciiIgnoreCaseContains(fastAsciiIgnoreCaseContains)
+        , PushdownComplexLike(pushdownComplexLike) {
     }
 
     TPushdownOptions WithAllowOlapApply(bool allow) const {
@@ -58,6 +60,10 @@ struct TPushdownOptions {
     bool StripAliasPrefixFromColName{false};
     bool PushdownRegexp{false};
     bool FastAsciiIgnoreCaseContains{false};
+    bool PushdownComplexLike{false};
+    // Compare nodes emitted as index-only LIKE/ILIKE hints. Identity, not the literal:
+    // the same StringContains text can also be a real user predicate.
+    TNodeSet IndexOnlyHints;
     const TNodeOnNodeOwnedMap* ExternalArgs{nullptr};
 };
 

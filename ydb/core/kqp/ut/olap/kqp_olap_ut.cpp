@@ -1708,6 +1708,193 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PredicatePushdown_ComplexLike) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/likeidx` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/likeidx` (id, str, u_str) VALUES
+                    (1, "xxaaabbbxx", "xxaaabbbxx"),
+                    (2, "xxbbbaaaxx", "xxbbbaaaxx"),
+                    (3, "abcdefzz", "abcdefzz"),
+                    (4, "abcXXdefYY", "abcXXdefYY"),
+                    (5, "nomatch", "nomatch"),
+                    (6, "xxaaa%bbbxx", "xxaaa%bbbxx"),
+                    (7, "xxaaaXbbbxx", "xxaaaXbbbxx"),
+                    (8, "xxааабббxx", "xxааабббxx"),
+                    (9, "xxkakbbbyy", "xxkakbbbyy")
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        auto run = [&](const TString& query) {
+            const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString() << " Query: " << query);
+            return res;
+        };
+
+        // Flag off: complex LIKE/ILIKE stay one Re2 apply. Regexp pushdown does not split them.
+        {
+            const auto res = run(R"(SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa%bbb%' ORDER BY id)");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT(ast.contains("KqpOlapFilter"));
+            UNIT_ASSERT(ast.contains("KqpOlapApply"));
+            UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+            UNIT_ASSERT(!ast.contains("StringContains"));
+            UNIT_ASSERT(!ast.contains("string_contains_index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(R"(
+                PRAGMA OptimizeSimpleILike;
+                SELECT id FROM `/Root/likeidx` WHERE str ILIKE '%aaa%bbb%' ORDER BY id
+            )");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT(ast.contains("KqpOlapApply"));
+            UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+            UNIT_ASSERT(!ast.contains("StringContainsIgnoreCase"));
+            UNIT_ASSERT(!ast.contains("index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(R"(
+                PRAGMA kikimr.OptEnableOlapPushdownRegexp = "true";
+                SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa%bbb%' ORDER BY id
+            )");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT(ast.contains("KqpOlapApply"));
+            UNIT_ASSERT(!ast.contains("string_contains_index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(R"(SELECT id FROM `/Root/likeidx` WHERE str LIKE 'abc%def%' AND id > 0 ORDER BY id)");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT(ast.contains("starts_with"));
+            UNIT_ASSERT(ast.contains("KqpOlapApply"));
+            UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+            UNIT_ASSERT(!ast.contains("starts_with_index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[3];[4]]");
+        }
+        {
+            const auto res = run(R"(
+                PRAGMA AnsiLike;
+                SELECT id FROM `/Root/likeidx` WHERE str LIKE '%nomatch%' ORDER BY id
+            )");
+            UNIT_ASSERT_C(res.GetStats()->GetAst()->contains("string_contains"), *res.GetStats()->GetAst());
+            UNIT_ASSERT(!res.GetStats()->GetAst()->contains("KqpOlapApply"));
+        }
+        {
+            const auto res = run(R"(
+                PRAGMA OptimizeSimpleILike;
+                PRAGMA AnsiLike;
+                SELECT id FROM `/Root/likeidx` WHERE str ILIKE '%nomatch%' ORDER BY id
+            )");
+            UNIT_ASSERT_C(res.GetStats()->GetAst()->contains("AsciiContainsIgnoreCase"), *res.GetStats()->GetAst());
+        }
+
+        const TString enable = "PRAGMA kikimr.OptEnableOlapPushdownComplexLike = \"true\";\n";
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa%bbb%' ORDER BY id");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.contains("string_contains_index_only"), ast);
+            UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+            UNIT_ASSERT(ast.contains("KqpOlapApply"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str ILIKE '%aaa%bbb%' ORDER BY id");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.contains("String._yql_AsciiContainsIgnoreCase"), ast);
+            UNIT_ASSERT(ast.contains("index_only"));
+            UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE 'abc%def%' AND id > 0 ORDER BY id");
+            const auto ast = *res.GetStats()->GetAst();
+            UNIT_ASSERT(ast.contains("starts_with"));
+            UNIT_ASSERT(ast.contains("string_contains_index_only"));
+            UNIT_ASSERT(!ast.contains("starts_with_index_only"));
+            UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[3];[4]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str NOT LIKE '%aaa%bbb%' ORDER BY id");
+            UNIT_ASSERT(!res.GetStats()->GetAst()->contains("index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[2];[3];[4];[5];[8];[9]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa%bbb%' OR str LIKE '%ccc%ddd%' ORDER BY id");
+            UNIT_ASSERT(!res.GetStats()->GetAst()->contains("index_only"));
+            UNIT_ASSERT(res.GetStats()->GetAst()->contains("KqpOlapApply"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa!%bbb%' ESCAPE '!' ORDER BY id");
+            UNIT_ASSERT(res.GetStats()->GetAst()->contains("string_contains_index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[6]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa_bbb%' ORDER BY id");
+            UNIT_ASSERT(res.GetStats()->GetAst()->contains("string_contains_index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[6];[7]]");
+        }
+        {
+            auto params = NYdb::TParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
+            const auto query = enable + R"(
+                DECLARE $p AS String;
+                SELECT id FROM `/Root/likeidx` WHERE str LIKE $p ORDER BY id
+            )";
+            const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                params, NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+            UNIT_ASSERT(!res.GetStats()->GetAst()->contains("index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[1];[6];[7]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE '%ab%cd%' ORDER BY id");
+            UNIT_ASSERT(!res.GetStats()->GetAst()->contains("index_only"));
+            UNIT_ASSERT(res.GetStats()->GetAst()->contains("KqpOlapApply"));
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str LIKE '%ааа%ббб%' ORDER BY id");
+            UNIT_ASSERT(res.GetStats()->GetAst()->contains("string_contains_index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[8]]");
+        }
+        {
+            // Non-ASCII ILIKE is not rewritten: ignore-case kernels are ASCII-only.
+            // ASCII ILIKE hints that contain 'k' or 's' are still emitted. They do not match
+            // Re2 Unicode simple case folding (U+212A / U+017F); same as OptimizeSimpleILIKE.
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str ILIKE '%ааа%ббб%' ORDER BY id");
+            UNIT_ASSERT(!res.GetStats()->GetAst()->contains("index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[8]]");
+        }
+        {
+            const auto res = run(enable + "SELECT id FROM `/Root/likeidx` WHERE str ILIKE '%kak%bbb%' ORDER BY id");
+            UNIT_ASSERT(res.GetStats()->GetAst()->contains("index_only"));
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), "[[9]]");
+        }
+    }
+
     Y_UNIT_TEST(PredicatePushdown_FastAsciiContainsIgnoreCase) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

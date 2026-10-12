@@ -4152,6 +4152,84 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             "idx_bloom should not exist after DROP TABLE, but got status: "
                 << static_cast<int>(bloomDesc->Record.GetSchemeStatus()));
     }
+
+    Y_UNIT_TEST(ComplexLikeBloomNgram) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+
+        ExecQuery(kikimr, true, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/complexLikeNgram` (
+                id Int32 NOT NULL,
+                message Utf8,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1)
+        )");
+        ExecQuery(kikimr, true, R"(
+            ALTER OBJECT `/Root/complexLikeNgram` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_message_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
+        )");
+        {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                UPSERT INTO `/Root/complexLikeNgram` (id, message) VALUES
+                    (1, "xxaaabbbxx"),
+                    (2, "xxbbbaaaxx"),
+                    (3, "nomatch")
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, true, R"(
+            ALTER OBJECT `/Root/complexLikeNgram` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        auto query = [&](const bool flag, const TString& predicate) {
+            return TStringBuilder()
+                << (flag ? "PRAGMA kikimr.OptEnableOlapPushdownComplexLike = \"true\";\n" : "")
+                << "SELECT id FROM `/Root/complexLikeNgram` WHERE " << predicate << " ORDER BY id";
+        };
+        auto run = [&](const TString& sql) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(sql).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+
+        CompareYson(run(query(false, "message LIKE '%aaa%bbb%'")), "[[1]]");
+        CompareYson(run(query(true, "message LIKE '%aaa%bbb%'")), "[[1]]");
+        CompareYson(run(query(true, "message ILIKE '%aaa%bbb%'")), "[[1]]");
+        CompareYson(run(query(true, "message LIKE '%zzz%qqq%'")), "[]");
+
+        const intptr_t skippedOff = csController->GetIndexesSkippingOnSelect().Val();
+        run(query(false, "message LIKE '%zzz%qqq%'"));
+        const intptr_t skippedAfterOff = csController->GetIndexesSkippingOnSelect().Val();
+        run(query(true, "message LIKE '%zzz%qqq%'"));
+        UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > skippedAfterOff,
+            "flag on should skip portions the bloom can deny");
+        UNIT_ASSERT_GE(skippedAfterOff, skippedOff);
+
+        const intptr_t beforeIlike = csController->GetIndexesSkippingOnSelect().Val();
+        run(query(true, "message ILIKE '%zzz%qqq%'"));
+        UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > beforeIlike,
+            "case-insensitive ngram index should skip ILIKE hints");
+
+        ExecQuery(kikimr, true, R"(
+            ALTER OBJECT `/Root/complexLikeNgram` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_message_ngram_cs, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : true}`);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+        CompareYson(run(query(true, "message LIKE '%aaa%bbb%'")), "[[1]]");
+        CompareYson(run(query(true, "message ILIKE '%AAA%BBB%'")), "[[1]]");
+    }
 }
 
 }   // namespace NKikimr::NKqp

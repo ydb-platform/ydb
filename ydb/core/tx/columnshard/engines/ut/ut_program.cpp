@@ -849,4 +849,76 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         JsonValueImpl(true, NYql::EDataSlot::Float);
         JsonValueImpl(true, NYql::EDataSlot::Double);
     }
+
+    // IndexOnly drops the substring kernel and keeps the bloom check. With no index the check allows
+    // every row. Clearing the field is what an older shard does with an unknown protobuf field: the
+    // contains kernel still runs and the rows are filtered.
+    Y_UNIT_TEST(IndexOnlyStringContains) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        NReader::NCommon::TIndexColumnResolver columnResolver(indexInfo);
+
+        auto makeProgram = [&](const bool indexOnly) {
+            NKikimrSSA::TProgram programProto;
+            {
+                auto* command = programProto.AddCommand();
+                command->MutableAssign()->MutableConstant()->SetBytes("aaa");
+                command->MutableAssign()->MutableColumn()->SetId(15);
+            }
+            {
+                auto* command = programProto.AddCommand();
+                auto* functionProto = command->MutableAssign()->MutableFunction();
+                functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+                functionProto->SetYqlOperationId(static_cast<ui32>(NYql::TKernelRequestBuilder::EBinaryOp::StringContains));
+                functionProto->SetKernelIdx(0);
+                functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("binary"));
+                functionProto->AddArguments()->SetId(15);
+                functionProto->SetIndexOnly(indexOnly);
+                command->MutableAssign()->MutableColumn()->SetId(16);
+            }
+            {
+                auto* command = programProto.AddCommand();
+                command->MutableProjection()->AddColumns()->SetId(16);
+            }
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StringContains, true);
+            programProto.SetKernels(kernels.Serialize());
+            return programProto;
+        };
+
+        auto apply = [&](NKikimrSSA::TProgram programProto) {
+            TProgramContainer program;
+            program
+                .Init(
+                    columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, SerializeProgram(programProto))
+                .Validate();
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({ { "binary", TTypeInfo(NTypeIds::Bytes) } }));
+            updates.AddRow().Add<std::string>("aaabbb");
+            updates.AddRow().Add<std::string>("zzzz");
+            auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
+            return std::make_pair(program.GetChainVerified()->DebugDOT(), batch);
+        };
+
+        auto uint8Pair = [](const std::shared_ptr<arrow::RecordBatch>& batch) {
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
+            auto column = std::static_pointer_cast<arrow::UInt8Array>(batch->column(0));
+            UNIT_ASSERT(column);
+            return std::make_pair(column->Value(0), column->Value(1));
+        };
+
+        const auto withFlag = apply(makeProgram(true));
+        UNIT_ASSERT_C(withFlag.first.Contains("CheckIndex"), withFlag.first);
+        // The checker replaces the kernel output id, so the projected column id is not 16.
+        // No index means allow-all: both rows stay.
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(withFlag.second), (std::pair<ui8, ui8>(1, 1)));
+
+        auto cleared = makeProgram(true);
+        TString bytes;
+        Y_PROTOBUF_SUPPRESS_NODISCARD cleared.SerializeToString(&bytes);
+        NKikimrSSA::TProgram parsed;
+        UNIT_ASSERT(parsed.ParseFromString(bytes));
+        parsed.MutableCommand(1)->MutableAssign()->MutableFunction()->ClearIndexOnly();
+        const auto withoutFlag = apply(std::move(parsed));
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(withoutFlag.second), (std::pair<ui8, ui8>(1, 0)));
+    }
 }

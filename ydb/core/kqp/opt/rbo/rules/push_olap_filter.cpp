@@ -97,9 +97,10 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
 
     // Input expressions and their row schemas must already use IU IDs. Keep
     // those spellings when constructing OLAP, including its embedded schemas.
-    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
-                                           /*StripAliasPrefixForColumnName=*/false, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp(),
-                                           ctx.KqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase());
+    TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
+                                     /*StripAliasPrefixForColumnName=*/false, ctx.KqpCtx.Config->GetEnableOlapPushdownRegexp(),
+                                     ctx.KqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase(),
+                                     ctx.KqpCtx.Config->GetEnableOlapPushdownComplexLike());
     if (!IsSuitableToPushPredicateToColumnTables(input.get())) {
         return input;
     }
@@ -123,6 +124,8 @@ TIntrusivePtr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const TIntrusi
     auto lambdaAfterRewrite = TExprBase(ApplyPeephole(predicate.Ptr(), lambda.Args().Arg(0).Ptr(), ctx)).Cast<TCoLambda>();
     lambdaArg = lambdaAfterRewrite.Args().Arg(0).Ptr();
     predicate = lambdaAfterRewrite.Body();
+    // After peephole the nodes are annotated and the argument is stable, so hint identity survives until pushdown.
+    predicate = TExprBase(RewriteComplexLikeForIndex(predicate.Ptr(), lambdaArg.Get(), ctx.ExprCtx, pushdownOptions));
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();

@@ -46,6 +46,9 @@ NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     result.InsertValue("kernel", KernelLogic->DebugJson());
     result.InsertValue("function", Function->DebugJson());
+    if (GetIndexOnly()) {
+        result.InsertValue("index_only", true);
+    }
     return result;
 }
 

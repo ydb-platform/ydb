@@ -636,4 +636,8 @@ message TTableServiceConfig {
 
     // Allows to collect point predicates for each valid index and use them for index lookup join if applicable.
     optional bool EnableLookupJoinPointPrefixes = 154 [default = false, (InvalidateCompileCache) = true];
+
+    // Split a complex LIKE/ILIKE (`%a%b%`) into index-only substring hints AND the original match,
+    // so a bloom-ngram index can skip portions. Default off.
+    optional bool EnableOlapPushdownComplexLike = 155 [default = false, (InvalidateCompileCache) = true];
 };

@@ -1,6 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/mind/local.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <util/generic/size_literals.h>
 #include "tablet_metrics.h"
 
@@ -182,6 +184,74 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 11_MB);
         UNIT_ASSERT(!message.HasMemoryDemand());
         UNIT_ASSERT(!message.HasMemoryReclaimable());
+    }
+
+    Y_UNIT_TEST(OwnerOnlyUpdatesDoNotSuppressHiveRefresh) {
+        for (bool ownerUpdates : {false, true}) {
+            TTestBasicRuntime runtime;
+            runtime.Initialize(TTestActorRuntime::TEgg{});
+            const auto launcher = runtime.AllocateEdgeActor();
+            TResourceMetrics metrics(1, 0, launcher);
+            metrics.Memory.Set(20_MB);
+            const auto start = runtime.GetCurrentTime() + TDuration::Seconds(1);
+            ui32 hiveRefreshes = 0;
+
+            for (ui32 step = 0; step <= 60; ++step) {
+                runtime.UpdateCurrentTime(start + TDuration::Seconds(15 * step));
+                const ui64 ownerUsed = (10 + step) * 1_MB;
+                if (ownerUpdates) {
+                    metrics.SetMemoryReport(ownerUsed, ownerUsed, 0);
+                }
+                const bool updated = runtime.RunCall([&] {
+                    return metrics.TryUpdate(TActivationContext::AsActorContext());
+                });
+                // The legacy forced refresh is due after more than 60 seconds.
+                const bool hiveRefresh = step % 5 == 0;
+                UNIT_ASSERT_VALUES_EQUAL(updated, ownerUpdates || hiveRefresh);
+                if (!updated) {
+                    continue;
+                }
+                auto event = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetrics>(launcher);
+                const auto& message = event->Get()->ResourceValues;
+                UNIT_ASSERT_VALUES_EQUAL(message.HasMemory(), hiveRefresh);
+                if (message.HasMemory()) {
+                    UNIT_ASSERT_VALUES_EQUAL(message.GetMemory(), 20_MB);
+                    ++hiveRefreshes;
+                }
+                if (ownerUpdates) {
+                    AssertMemoryReport(message, ownerUsed, ownerUsed, 0);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(hiveRefreshes, 13);
+        }
+    }
+
+    Y_UNIT_TEST(OwnerOnlyUpdatesRetainSendThrottling) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TTestActorRuntime::TEgg{});
+        const auto launcher = runtime.AllocateEdgeActor();
+        TResourceMetrics metrics(1, 0, launcher);
+        metrics.Memory.Set(20_MB);
+        metrics.SetMemoryReport(10_MB, 10_MB, 0);
+        const auto start = runtime.GetCurrentTime() + TDuration::Seconds(1);
+        runtime.UpdateCurrentTime(start);
+        const auto update = [&] {
+            return runtime.RunCall([&] {
+                return metrics.TryUpdate(TActivationContext::AsActorContext());
+            });
+        };
+        UNIT_ASSERT(update());
+        runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetrics>(launcher);
+
+        metrics.SetMemoryReport(11_MB, 11_MB, 0);
+        runtime.UpdateCurrentTime(start + TDuration::MilliSeconds(500));
+        UNIT_ASSERT(!update());
+        runtime.UpdateCurrentTime(start + TDuration::Seconds(1));
+        UNIT_ASSERT(update());
+        auto event = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetrics>(launcher);
+        const auto& message = event->Get()->ResourceValues;
+        UNIT_ASSERT(!message.HasMemory());
+        AssertMemoryReport(message, 11_MB, 11_MB, 0);
     }
 
     Y_UNIT_TEST(TimeSeriesAvg4) {

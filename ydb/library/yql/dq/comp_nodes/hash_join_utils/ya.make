@@ -23,15 +23,6 @@ SRCS(
     print_unboxed_value.cpp
 )
 
-IF (ARCH_X86_64 AND OS_LINUX)
-
-CFLAGS(
-    -mprfchw
-    -mavx2
-)
-
-ENDIF()
-
 END()
 
 RECURSE(

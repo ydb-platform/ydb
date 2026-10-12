@@ -186,7 +186,9 @@ bool IssuesLookLikeMissingTable(TStringBuf issues) {
         || issues.Contains("Path does not exist")
         || issues.Contains("path does not exist")
         || issues.Contains("Unable to find table")
-        || issues.Contains("does not exist");
+        || issues.Contains("does not exist")
+        || ((issues.Contains("Table") || issues.Contains("table"))
+            && (issues.Contains("not exists") || issues.Contains("Not exists")));
 }
 
 bool IssuesLookLikeMissingColumn(TStringBuf issues) {

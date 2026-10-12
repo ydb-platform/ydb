@@ -1,5 +1,3 @@
-ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.RestartSessionIfQueryStopped
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.TwoSessionsWithDifferentColumnTypes
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
@@ -12,12 +10,6 @@ ydb/core/kqp/ut/sysview KqpSystemView.CompileCacheUserIsolation
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
-ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
-ydb/core/persqueue/ut TPQTest.TestPQPartialRead
-ydb/core/persqueue/ut TPQTest.TestPQRead
-ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
-ydb/core/persqueue/ut TPQTest.TestReadSessions
-ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
@@ -26,26 +18,11 @@ ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPa
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialRdmaRead
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialRdmaReadOnPeerSocketClose
 ydb/library/actors/interconnect/ut Interconnect.SetupRdmaSession
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownUnderLoad
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ClosePeerSocketAndReconnect
-ydb/library/actors/interconnect/ut InterconnectSessionV2.DeadPeerTimeout
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ForcedSessionTeardownAndReconnect
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripFallback
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripMultiChannel
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripSharedShardFallbackManyPeers
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripSharedShardManyPeers
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBackpressure
-ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPayload
-ydb/library/actors/interconnect/ut InterconnectSessionV2.RepeatedDisconnectChurnUnderLoad
-ydb/library/actors/interconnect/ut InterconnectSessionV2.ValidatingLoadVariedPayloads
-ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
-ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestLoadFromSeveralStates
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
-ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
@@ -60,6 +37,7 @@ ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_3
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[old_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[old_sdk]

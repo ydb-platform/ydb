@@ -84,6 +84,88 @@ To run command without side effect add ```--dry-run``` to global options:
 user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
+### Heal a failed mirror-3-dc realm
+
+`cluster heal-2x2` heals dynamic `mirror-3-dc` groups from the
+`dead:2(3,3)` incident. Each iteration reads fresh state and selects a group
+from the requested storage pools. A live VDisk has `Status=READY`:
+
+- Six or more live VDisks: the group is already healed; no eviction.
+- Four or five live VDisks: evict the two or one non-ready VDisks in the realm being healed.
+- Three live VDisks: evict all three VDisks of that realm.
+
+The healthy realm and the other failed realm are preserved. Initially, the three
+selected VDisks must reside on hosts matching the nonempty `--from` prefix.
+After relocation, non-ready VDisks are also recognized by donors on `--from`
+hosts, allowing healing to resume after restarting the command. READY disks
+may have already dropped their donors. BSC chooses destination PDisks without
+a destination hostname filter. Groups with other failure patterns are skipped.
+
+Provide storage pool names in a UTF-8 file, one name per line. Empty lines
+are ignored; an empty file or an unknown pool name is an error. Pools are visited
+in file order, with duplicate names ignored after their first occurrence.
+Groups within each pool are visited in ascending `GroupId` order.
+
+```bash
+ydb-dstool --dry-run -e ydbd.endpoint cluster heal-2x2 \
+    --from old-dc- --storage_pools_file pools.txt
+```
+
+The command prints each protobuf `TConfigRequest`, containing one, two or three
+`ReassignGroupDisk` commands with the current generation and VDisk coordinates.
+`TargetPDiskId` is unset: BSC selects placement using its normal allocator.
+BSC validates each request with rollback before applying it. Remove `--dry-run`
+to apply requests. Rollback and apply may choose different destinations; response
+validation checks the source disks. Each group gets one attempt per iteration. A missing
+destination, rejected request or request transport error is logged with the group
+and pool, then the traversal continues with the next group. Applied moves are
+not rolled back if a later request fails; an apply error can leave changes in place.
+
+Recovery sets `IgnoreGroupFailModelChecks` because the group is already
+disintegrated. Layout, quota and sanity checks remain enabled, and donor mode
+is not suppressed. As with `vdisk evict`, `AllowUnusableDisks` and
+`SettleOnlyOnOperationalDisks` are unset by default; enable them explicitly
+with `--allow-unusable-pdisks` and `--move-only-to-operational-pdisks`, respectively.
+
+`--max-iterations N` limits iterations (default `0`: unlimited). Each iteration
+reads fresh state and scans from the first pool and first group, without a cursor.
+Healed groups, young groups and failed attempts are skipped within that scan.
+After one successful reassignment, the next iteration starts from the beginning,
+so a repeat eviction can happen before reaching the untouched tail of groups.
+If the scan finds no group to reassign, it waits for deferred groups or the
+replication limit; if neither applies, the run ends. Waiting iterations also count.
+Reaching the limit stops without claiming that submitted moves have healed their
+groups; a later invocation can continue from current state.
+
+`--time-between-reassignings SECONDS` adds a delay after each successful request
+(default `0`: no delay), including successful dry-run validation, as in
+`cluster balance`. Failed attempts do not incur this delay.
+
+`--min-vdisk-uptime SECONDS` skips a group if any of its current VDisks,
+including READY disks, has an uptime below the threshold (default `0`: disabled).
+Uptime comes from the `SkeletonFrontUptimeSeconds` monitoring counter, fetched
+without caching for each candidate group. Disconnected nodes and ERROR disks
+without a counter are excluded; missing counters for other disks defer the group.
+A counter request error skips the group with a diagnostic. No list of processed
+groups or fixed delay since the previous eviction is used.
+Other groups are checked immediately in the same iteration. Deferred groups are
+rechecked from the beginning on the next iteration. Only if no group can be
+reassigned does the command sleep for up to 15 seconds, or less if the uptime
+threshold is closer. Dry-run skips young groups without waiting for them to age.
+
+`--max-replicating-pdisks N` gates initial triple evictions from `--from` while
+the cluster has more than N distinct PDisks with VSlots whose status is neither
+`READY` nor `ERROR`. State is polled every 15 seconds, and waiting counts towards
+`--max-iterations`, as in `cluster balance`. The option is unset by default;
+`0` waits until no such PDisks remain. Recovery of partially healed groups and
+realms with donors on `--from` bypasses this gate so stalled replication cannot
+block its own recovery.
+
+Dry-run uses the same three branches, validating each eligible group once against
+its current state. Only dry-run keeps a set of successfully validated groups to
+avoid repeated validation of unchanged state. It does not simulate subsequent
+replication or reserve capacity for other groups.
+
 ### Handle errors
 
 By convention ```ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status

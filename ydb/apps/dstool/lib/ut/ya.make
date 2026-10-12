@@ -7,6 +7,7 @@ TEST_SRCS(
     test_connection_tokens.py
     test_nbs_dbg_like_load.py
     test_cluster_balance.py
+    test_cluster_heal_2x2.py
     test_cluster_workload_config.py
     test_cluster_workload_runtime.py
 )

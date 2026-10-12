@@ -10,8 +10,8 @@ private:
     virtual void DoAbort() override {
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override;
-    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const override;
+    virtual ESourceAction OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& reader) override;
+    virtual bool IsSourcePrepared(const NCommon::IDataSource& source) const override;
 
 public:
     TSyncPointResult(

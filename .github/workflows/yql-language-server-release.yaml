@@ -191,6 +191,9 @@ jobs:
             exit /b 1
           )
 
+          call .\ya.bat make -vvvv tools/py3cc/slow/bin
+          exit /b 1
+
           call .\ya.bat make ^
             --build=release ^
             -DUSE_IDN=static ^

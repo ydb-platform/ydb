@@ -5865,9 +5865,6 @@ public:
                 << " | <a href='/node/" << NodeId << "/tablets'>Tablets</a>"
                 << " | <a href='/node/" << NodeId << "/actors/nodewarden'>Node warden</a>"
                 << " | <a href='/node/" << NodeId << "/counters'>Counters</a>";
-            if (const TString host = GetHost()) {
-                out << " | <a href='http://" << EncodeHtmlPcdata(host) << ":8765'>Direct</a>";
-            }
             out << "</p>";
             out << GetHivePagesLine(Self->TabletID(), TStringBuilder()
                 << "<a href='?TabletID=" << Self->TabletID() << "&page=Events&kind=node'>All recent node events</a>"

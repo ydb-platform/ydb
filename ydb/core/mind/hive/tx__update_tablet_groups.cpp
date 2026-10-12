@@ -322,7 +322,7 @@ public:
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
         Self->RecordTabletEvent(*tablet, EHiveEventType::GroupsReassigned, EHiveEventReason::StorageReassign,
             TStringBuilder() << "reassignReason=" << NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(tablet->ChannelProfileReassignReason)
-                << " changed=" << changed << " from=" << ETabletStateName(tablet->State) << " to=" << ETabletStateName(newTabletState));
+                << " changed=" << changed << " from=" << ETabletStateName(tablet->State) << " to=" << ETabletStateName(newTabletState), true);
         tablet->State = newTabletState;
         if (changed && newTabletState == ETabletState::ReadyToWork) {
             // initial group assignment is considered automatically confirmed

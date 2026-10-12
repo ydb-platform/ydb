@@ -5690,24 +5690,6 @@ public:
         MaxTablets = FromStringWithDefault(params.Get("tablets"), MaxTablets);
     }
 
-    // tablets of the node grouped by tablet type, types and tablets in a stable order
-    static std::vector<std::pair<TTabletTypes::EType, std::vector<const TTabletInfo*>>> CollectTablets(const TNodeInfo& node) {
-        std::map<TTabletTypes::EType, std::vector<const TTabletInfo*>> byType;
-        for (const auto& [state, tablets] : node.Tablets) {
-            for (const TTabletInfo* tablet : tablets) {
-                byType[tablet->GetTabletType()].push_back(tablet);
-            }
-        }
-        std::vector<std::pair<TTabletTypes::EType, std::vector<const TTabletInfo*>>> result;
-        for (auto& [type, tablets] : byType) {
-            std::sort(tablets.begin(), tablets.end(), [](const TTabletInfo* a, const TTabletInfo* b) {
-                return a->GetFullTabletId() < b->GetFullTabletId();
-            });
-            result.emplace_back(type, std::move(tablets));
-        }
-        return result;
-    }
-
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_NODE_INFO; }
 
     TString GetHost() const {
@@ -5821,16 +5803,22 @@ public:
                     jsonInfo[name] = value;
                 }
                 NJson::TJsonValue& jsonTablets = json["Tablets"];
-                for (const auto& [type, tablets] : CollectTablets(*node)) {
+                for (const auto& [type, tablets] : node->TabletsRunningByType) {
+                    if (tablets.empty()) {
+                        continue;
+                    }
                     NJson::TJsonValue& jsonType = jsonTablets[TTabletTypes::TypeToStr(type)];
                     jsonType["Count"] = tablets.size();
                     NJson::TJsonValue& ids = jsonType["Tablets"];
                     ids.SetType(NJson::JSON_ARRAY);
-                    for (size_t i = 0; i < tablets.size() && i < MaxTablets; ++i) {
+                    size_t listed = 0;
+                    for (const TTabletInfo* tablet : tablets) {
+                        if (listed++ == MaxTablets) {
+                            break;
+                        }
                         NJson::TJsonValue& jsonTablet = ids.AppendValue(NJson::TJsonValue());
-                        jsonTablet["TabletId"] = tablets[i]->GetFullTabletId().first;
-                        jsonTablet["FollowerId"] = tablets[i]->GetFullTabletId().second;
-                        jsonTablet["VolatileState"] = TTabletInfo::EVolatileStateName(tablets[i]->GetVolatileState());
+                        jsonTablet["TabletId"] = tablet->GetFullTabletId().first;
+                        jsonTablet["FollowerId"] = tablet->GetFullTabletId().second;
                     }
                 }
                 NJson::TJsonValue& events = json["Events"];
@@ -5874,21 +5862,22 @@ public:
             out << "</tbody>";
             out << "</table>";
             out << "<h4>Tablets</h4>";
-            out << "<p>Tablets of this node by type, at most " << MaxTablets << " per type are listed (use &tablets=N to change). "
-                << "A tablet that is not running has its volatile state in parentheses.</p>";
+            out << "<p>Running tablets of this node by type, at most " << MaxTablets << " per type are listed in no particular order (use &tablets=N to change).</p>";
             out << "<table class='table simple-table2'>";
             out << "<thead><tr><th>Type</th><th>Count</th><th>Tablets</th></tr></thead>";
             out << "<tbody>";
-            for (const auto& [type, tablets] : CollectTablets(*node)) {
-                out << "<tr><td>" << TTabletTypes::TypeToStr(type) << "</td><td>" << tablets.size() << "</td><td style='white-space: normal'>";
-                for (size_t i = 0; i < tablets.size() && i < MaxTablets; ++i) {
-                    out << (i ? ", " : "") << GetTabletInfoLink(Self->TabletID(), tablets[i]->GetFullTabletId());
-                    if (!tablets[i]->IsRunning()) {
-                        out << " (" << TTabletInfo::EVolatileStateName(tablets[i]->GetVolatileState()) << ")";
-                    }
+            for (const auto& [type, tablets] : node->TabletsRunningByType) {
+                if (tablets.empty()) {
+                    continue;
                 }
-                if (tablets.size() > MaxTablets) {
-                    out << ", ... " << (tablets.size() - MaxTablets) << " more";
+                out << "<tr><td>" << TTabletTypes::TypeToStr(type) << "</td><td>" << tablets.size() << "</td><td style='white-space: normal'>";
+                size_t listed = 0;
+                for (const TTabletInfo* tablet : tablets) {
+                    if (listed == MaxTablets) {
+                        out << ", ... " << (tablets.size() - MaxTablets) << " more";
+                        break;
+                    }
+                    out << (listed++ ? ", " : "") << GetTabletInfoLink(Self->TabletID(), tablet->GetFullTabletId());
                 }
                 out << "</td></tr>";
             }

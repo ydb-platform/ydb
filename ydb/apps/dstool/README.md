@@ -84,6 +84,41 @@ To run command without side effect add ```--dry-run``` to global options:
 user@host:~$ ydb-dstool --dry-run -e ydbd.endpoint vdisk evict --vdisk-ids ${vdisk_id}
 ```
 
+### Reanimate a storage pool
+
+`cluster reanimate` relocates current ERROR VDisks of an exact storage pool in
+the specified DC. Groups are processed in ascending ID order. Within each group,
+matching disks are sorted by `(FailRealmIdx, FailDomainIdx, VDiskIdx)`.
+The first three disks are evicted in order, then the first and second are evicted
+again. Each remaining matching disk is then evicted once in order, starting with
+the fourth.
+Groups with fewer than three matching disks are skipped.
+Donors are excluded from selection and remain available after relocation.
+
+```bash
+ydb-dstool --endpoint grpc://ydbd.endpoint:2135 --token-file token \
+    cluster reanimate --pool /global/database:ssdencrypted --dc sas \
+    --ignore-failure-model-group-check
+```
+
+Before every eviction, the command reads a fresh snapshot and resolves the current
+VDisk generation and slot. It waits for the slot to change before proceeding;
+it does not wait for READY. The first two disks are evicted again even if their
+status or DC has changed. `--timeout` (default 300 seconds) limits placement
+waiting, and `--poll-interval` (default 5 seconds) sets the polling interval.
+Network calls use the standard dstool connection settings; the standalone
+script's `--dstool` and subprocess `--request-timeout` options are not used.
+
+Global `--dry-run` prints the plan without eviction requests, waiting, or file
+writes. `--state-dir` creates a new directory containing each group's `plan.json`
+and per-step `N-before.json` / `N-after.json` evidence. An existing directory is
+an error. `--ignore-degraded-group-check` and
+`--ignore-failure-model-group-check` are passed to the controller.
+
+Any failed step stops the command. Previously accepted evictions may still be
+in progress. The old reporting options `--from` and `--storage-pools-file` have
+been removed.
+
 ### Handle errors
 
 By convention ```ydb-dstool``` returns 0 on success, and non-zero on failure. You can check exit status

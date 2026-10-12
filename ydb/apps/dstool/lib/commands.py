@@ -40,6 +40,7 @@ import ydb.apps.dstool.lib.dstool_cmd_box_list as box_list
 import ydb.apps.dstool.lib.dstool_cmd_node_list as node_list
 
 import ydb.apps.dstool.lib.dstool_cmd_cluster_balance as cluster_balance
+import ydb.apps.dstool.lib.dstool_cmd_cluster_reanimate as cluster_reanimate
 import ydb.apps.dstool.lib.dstool_cmd_cluster_list as cluster_list
 import ydb.apps.dstool.lib.dstool_cmd_cluster_get as cluster_get
 import ydb.apps.dstool.lib.dstool_cmd_cluster_set as cluster_set
@@ -70,7 +71,7 @@ MODULE_PREFIX = 'dstool_cmd_'
 
 modules = [
     cluster_workload_nbs_dbg_like,
-    cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
+    cluster_balance, cluster_reanimate, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
     pool_list, pool_set, pool_create_virtual,
@@ -90,7 +91,7 @@ default_structure = [
     ('pool', ['list', 'set', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
-    ('cluster', ['balance', 'get', 'set', ('workload', ['run', 'nbs-dbg-like']), 'list']),
+    ('cluster', ['balance', 'reanimate', 'get', 'set', ('workload', ['run', 'nbs-dbg-like']), 'list']),
 ]
 
 # Only expose the `nbs partition ...` subcommand tree when the modules are

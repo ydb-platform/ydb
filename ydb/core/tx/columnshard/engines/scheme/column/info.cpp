@@ -23,6 +23,7 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
         AFL_VERIFY(DataAccessorConstructor.DeserializeFromProto(columnInfo.GetDataAccessorConstructor()));
     }
     IsNullable = columnInfo.HasNotNull() ? !columnInfo.GetNotNull() : true;
+    SetNotNullInProgress = columnInfo.GetSetNotNullInProgress();
     AFL_VERIFY(Serializer);
     Loader = std::make_shared<TColumnLoader>(Serializer, DataAccessorConstructor, ArrowField, DefaultValue.GetValue(), ColumnId);
     return TConclusionStatus::Success();

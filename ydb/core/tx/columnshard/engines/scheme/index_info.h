@@ -101,6 +101,8 @@ private:
     THashMap<ui32, TNameTypeInfo> Columns;
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
+    std::vector<ui32> RequiredWriteColumnIds;
+    std::vector<ui32> SetNotNullColumnIds;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
     std::shared_ptr<std::set<TString>> UsedStorageIds;
 
@@ -468,6 +470,28 @@ public:
 
     const THashMap<ui32, TNameTypeInfo>& GetColumns() const {
         return Columns;
+    }
+
+    bool IsCompatibleForWrite(const TIndexInfo& requestSchema) const {
+        if (this == &requestSchema) {
+            return true;
+        }
+        for (const auto columnId : RequiredWriteColumnIds) {
+            const auto& previous = requestSchema.GetColumnFeaturesOptional(columnId);
+            if (!previous || (previous->GetIsNullable() && !previous->GetSetNotNullInProgress())) {
+                return false;
+            }
+            // Validation requires unconditional values even if an older schema
+            // had NOT NULL before a DROP/SET cycle.
+            if (GetColumnFeaturesVerified(columnId).GetSetNotNullInProgress() && !previous->GetSetNotNullInProgress()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const std::vector<ui32>& GetSetNotNullColumnIds() const {
+        return SetNotNullColumnIds;
     }
 
     /// Returns id of the first column of the primary key.

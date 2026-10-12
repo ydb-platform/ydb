@@ -22,7 +22,15 @@
 namespace NKikimr::NOlap {
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
-    if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
+    // Tightening nullability preserves key ordering and representation.
+    bool compatible = PrimaryKey->num_fields() == other.PrimaryKey->num_fields();
+    for (int i = 0; compatible && i < PrimaryKey->num_fields(); ++i) {
+        const auto& before = PrimaryKey->field(i);
+        const auto& after = other.PrimaryKey->field(i);
+        compatible = (before->nullable() || !after->nullable()) &&
+            before->Equals(after->WithNullable(before->nullable()));
+    }
+    if (!compatible) {
         return TConclusionStatus::Fail(
             TStringBuilder() << "PK mismatch: this=" << PrimaryKey->ToString() << " other=" << other.GetPrimaryKey()->ToString());
     }
@@ -691,7 +699,12 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 
     DeserializeOptionsFromProto(diff.GetSchemaOptions());
     Version = diff.GetVersion();
-    PrimaryKey = original.PrimaryKey;
+    std::vector<std::shared_ptr<arrow::Field>> keyFields;
+    keyFields.reserve(PKColumnIds.size());
+    for (const ui32 columnId : PKColumnIds) {
+        keyFields.emplace_back(GetColumnFieldVerified(columnId));
+    }
+    PrimaryKey = std::make_shared<arrow::Schema>(std::move(keyFields));
     if (diff.GetCompressionOptions()) {
         DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());
     }
@@ -702,8 +715,18 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 void TIndexInfo::Precalculate() {
     BuildColumnIndexByName();
     UsedStorageIds = std::make_shared<std::set<TString>>();
+    RequiredWriteColumnIds.clear();
+    SetNotNullColumnIds.clear();
     for (auto&& i : ColumnFeatures) {
         UsedStorageIds->emplace(i->GetOperator()->GetStorageId());
+        if (!IsSpecialColumn(i->GetColumnId())) {
+            if (i->GetSetNotNullInProgress()) {
+                SetNotNullColumnIds.emplace_back(i->GetColumnId());
+            }
+            if (i->GetSetNotNullInProgress() || !i->GetIsNullable()) {
+                RequiredWriteColumnIds.emplace_back(i->GetColumnId());
+            }
+        }
     }
 }
 

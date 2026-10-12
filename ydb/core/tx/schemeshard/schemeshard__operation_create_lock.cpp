@@ -138,9 +138,13 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .NotUnderOperation()
-                .IsTable()
-                .NotAsyncReplicaTable();
+                .NotUnderOperation();
+
+            if (tablePath->IsColumnTable()) {
+                checks.NotReadOnlyColumnTable();
+            } else {
+                checks.IsTable().NotAsyncReplicaTable();
+            }
 
             if (checks && !parentPath.IsTableIndex()) {
                 checks.IsCommonSensePath();
@@ -187,11 +191,11 @@ public:
         tablePath.Base()->LastTxId = OperationId.GetTxId();
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
-        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-        auto table = context.SS->Tables.at(pathId);
-
-        for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
-            context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
+        if (tablePath->IsTable()) {
+            auto table = context.SS->Tables.at(pathId);
+            for (const auto& splitOpId : table->GetSplitOpsInFlight()) {
+                context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
+            }
         }
 
         context.SS->LockedPaths[pathId] = lockTxId;

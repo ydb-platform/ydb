@@ -17,6 +17,7 @@ SRCS(
     aggregations_ut.cpp
     clickbench_ut.cpp
     locks_ut.cpp
+    not_null_ut.cpp
     scan_cleanup_ut.cpp
     optimizer_ut.cpp
     peephole_ut.cpp

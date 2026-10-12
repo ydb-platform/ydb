@@ -90,10 +90,14 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsTable()
-                .NotAsyncReplicaTable()
                 .IsCommonSensePath()
                 .IsTheSameDomain(domainPath);
+
+            if (tablePath->IsColumnTable()) {
+                checks.NotReadOnlyColumnTable();
+            } else {
+                checks.IsTable().NotAsyncReplicaTable();
+            }
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());
@@ -114,7 +118,21 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, std::move(error));
         }
 
-        {
+        if (tablePath->IsColumnTable()) {
+            if (!AppData()->FeatureFlags.GetEnableColumnTableSetNotNull()) {
+                return Reply(Ydb::StatusIds::UNSUPPORTED, "SET NOT NULL for column tables is disabled");
+            }
+            const auto table = Self->ColumnTables.GetVerifiedPtr(tablePath.Base()->PathId);
+            if (!table->IsStandalone()) {
+                return Reply(Ydb::StatusIds::UNSUPPORTED, "Cannot modify schema for a table in a column store");
+            }
+            for (const auto& name : sortedSetNotNullColumns) {
+                const auto& columns = table->Description.GetSchema().GetColumns();
+                if (std::none_of(columns.begin(), columns.end(), [&](const auto& column) { return column.GetName() == name; })) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Column '" << name << "' does not exist");
+                }
+            }
+        } else {
             Y_ABORT_UNLESS(Self->Tables.contains(tablePath.Base()->PathId));
             const auto& tableInfo = Self->Tables.at(tablePath.Base()->PathId);
             Y_ABORT_UNLESS(tableInfo);

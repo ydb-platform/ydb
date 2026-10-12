@@ -14,7 +14,9 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
     if (alterCS.HasAlterSchema()) {
         TSimpleErrorCollector collector;
         TOlapSchemaUpdate schemaUpdate;
-        if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector)) {
+        const auto& modification = *context.GetModification();
+        const bool allowConstraintChanges = modification.GetInternal() && modification.GetLockGuard().GetOwnerTxId();
+        if (!schemaUpdate.Parse(alterCS.GetAlterSchema(), collector, allowConstraintChanges)) {
             return TConclusionStatus::Fail("update parse error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
         AlterSchema = std::move(schemaUpdate);

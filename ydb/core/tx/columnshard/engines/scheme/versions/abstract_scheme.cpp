@@ -98,6 +98,23 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
 #endif
 
     NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
+    if (mType != NEvWrite::EModificationType::Delete) {
+        for (const auto columnId : GetIndexInfo().GetSetNotNullColumnIds()) {
+            const auto& column = GetIndexInfo().GetColumnFeaturesVerified(columnId);
+            const auto values = incomingBatch->GetColumnByName(column.GetColumnName());
+            // Missing values, including $$EXISTS=false, can preserve an old NULL.
+            if (!values || NArrow::HasNulls(values)) {
+                return TConclusionStatus::Fail("SET NOT NULL is in progress for column '" + column.GetColumnName() + "'");
+            }
+            if (const auto exists = incomingBatch->GetColumnByName("$$EXISTS::" + column.GetColumnName())) {
+                if (exists->type_id() != arrow::Type::BOOL ||
+                    static_cast<const arrow::BooleanArray&>(*exists).true_count() != incomingBatch->num_rows()) {
+                    return TConclusionStatus::Fail("SET NOT NULL requires an unconditional value for column '" +
+                        column.GetColumnName() + "'");
+                }
+            }
+        }
+    }
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;

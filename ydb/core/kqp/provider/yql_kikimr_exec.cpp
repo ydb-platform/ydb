@@ -2346,6 +2346,11 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
+                                if (table.Metadata->IsOlap() && !SessionCtx->Config().FeatureFlags.GetEnableColumnTableSetNotNull()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()),
+                                        "SET NOT NULL for column tables is disabled"));
+                                    return SyncError();
+                                }
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                         << "SET NOT NULL is currently not supported."));

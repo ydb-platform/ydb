@@ -54,7 +54,7 @@ For **7 days** after a branch first appears in [stable_tests_branches.json](./st
 
 ### Automatic muted_ya.txt Updates
 The `.github/workflows/update_muted_ya.yml` workflow automatically:
-- Runs once a day at 03:00 UTC
+- Runs every hour at :00 UTC
 - Analyzes test data for the last 4-7 days
 - Creates a PR with updated `muted_ya.txt` based on the rules above
 - The PR should be approved to merge by CI Team @ydb-platform/ci
@@ -176,7 +176,7 @@ This table shows all files created by the mute logic script, with descriptions o
 
 ```mermaid
 graph TB
-    Start([Schedule: Daily 03:00 UTC<br/>or Manual]) --> Prereq[🔧 Prereq jobs<br/>Branch matrix setup<br/>upload_testowners.py<br/>export_issues_to_ydb.py<br/>mute/manual_unmute.py sync]
+    Start([Schedule: Hourly UTC<br/>or Manual]) --> Prereq[🔧 Prereq jobs<br/>Branch matrix setup<br/>upload_testowners.py<br/>export_issues_to_ydb.py<br/>mute/manual_unmute.py sync]
     
     Prereq --> UpdateAnalytics[📊 Per branch: analytics<br/>flaky_tests_history<br/>upload_muted_tests<br/>tests_monitor]
     
@@ -224,9 +224,9 @@ graph TB
 
 ### What runs where (sequence)
 
-There are **three pieces**: (1) once a day **`update_muted_ya.yml`** refreshes data and may open a mute PR; (2) after that PR merges, **`create_issues_for_muted_tests.yml`** creates GitHub issues and **enqueues `digest_queue`**; (3) on its own schedule, **`telegram_scheduled_notifications.yml`** (GitHub name *Telegram scheduled notifications*, job **Mute digest to Telegram**) runs **`send_digest.py`** and sends **Telegram** from that queue. Diagrams **1–2** are the mute repo path; **3** is the digest mailing path.
+There are **three pieces**: (1) every hour **`update_muted_ya.yml`** refreshes data and may open a mute PR; (2) after that PR merges, **`create_issues_for_muted_tests.yml`** creates GitHub issues and **enqueues `digest_queue`**; (3) on its own schedule, **`telegram_scheduled_notifications.yml`** (GitHub name *Telegram scheduled notifications*, job **Mute digest to Telegram**) runs **`send_digest.py`** and sends **Telegram** from that queue. Diagrams **1–2** are the mute repo path; **3** is the digest mailing path.
 
-#### 1) Daily: `update_muted_ya.yml` (one workflow run)
+#### 1) Hourly: `update_muted_ya.yml` (one workflow run)
 
 ```mermaid
 sequenceDiagram

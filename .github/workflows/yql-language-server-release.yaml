@@ -191,13 +191,11 @@ jobs:
             exit /b 1
           )
 
-          call .\ya.bat make -vvvv --keep-temps  -DUSE_MSVC_LINKER=yes tools/py3cc/slow/bin
-          exit /b 1
-
           call .\ya.bat make ^
             --build=release ^
             -DUSE_IDN=static ^
             -DUSE_ICONV=static ^
+            -DUSE_MSVC_LINKER=yes ^
             -DYQL_LANGUAGE_SERVER_VERSION=%VERSION% ^
             --output="%RUNNER_TEMP%\yql-language-server-%PLATFORM%" ^
             --stat ^
@@ -206,16 +204,6 @@ jobs:
             --cxx-compiler "%COMPILER%" ^
             yql/essentials/tools/yql_language_server
           if errorlevel 1 exit /b 1
-
-      - name: Upload linker arguments
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: linker-arguments
-          path: ~/.ya/build/build_root/**/ya_command_file_*.args
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 3
 
       - name: Package
         shell: pwsh

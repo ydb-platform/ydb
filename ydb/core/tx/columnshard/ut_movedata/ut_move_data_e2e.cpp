@@ -4,15 +4,23 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/columnshard/blobs_action/events/delete_blobs.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/data_sharing/modification/events/change_owning.h>
+#include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
@@ -228,6 +236,181 @@ private:
     }
 };
 
+// Reconstruct a legacy copy through the same link tasks and persisted portion APIs.
+// Current source cursors intentionally supply no portions; this fixture does not enable that path.
+class TLegacyCopyController: public NYDBTest::NColumnShard::TController {
+    THashMap<ui64, TColumnShard*> Shards;
+
+protected:
+    void DoOnTabletInitCompleted(const TColumnShard& shard) override {
+        NYDBTest::NColumnShard::TController::DoOnTabletInitCompleted(shard);
+        Shards[shard.TabletID()] = const_cast<TColumnShard*>(&shard);
+    }
+
+    void DoOnTabletStopped(const TColumnShard& shard) override {
+        Shards.erase(shard.TabletID());
+        NYDBTest::NColumnShard::TController::DoOnTabletStopped(shard);
+    }
+
+public:
+    TColumnShard* GetShard(const ui64 id) const {
+        return Shards.at(id);
+    }
+};
+
+class TMoveDataTestTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
+    std::function<void(NTabletFlatExecutor::TTransactionContext&)> OnExecute;
+    std::function<void(const TActorContext&)> OnComplete;
+
+public:
+    TMoveDataTestTransaction(TColumnShard* shard, std::function<void(NTabletFlatExecutor::TTransactionContext&)> execute,
+        std::function<void(const TActorContext&)> complete)
+        : TTransactionBase(shard)
+        , OnExecute(std::move(execute))
+        , OnComplete(std::move(complete))
+    {
+    }
+
+    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
+        OnExecute(txc);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        OnComplete(ctx);
+    }
+
+    TTxType GetTxType() const override {
+        return TXTYPE_DATA_SHARING_DATA_FROM_SOURCE;
+    }
+};
+
+void RunOnShard(TTestBasicRuntime& runtime, TColumnShard* shard, std::function<void(NTabletFlatExecutor::TTransactionContext&)> execute,
+    std::function<void(const TActorContext&)> complete) {
+    auto done = std::make_shared<bool>(false);
+    runtime.Send(new IEventHandle(shard->SelfId(), {},
+        new NOlap::NBackground::TEvExecuteGeneralLocalTransaction(
+            std::make_unique<TMoveDataTestTransaction>(shard, std::move(execute), [done, complete](const TActorContext& ctx) {
+                complete(ctx);
+                *done = true;
+            }))));
+    for (ui32 i = 0; i < 100 && !*done; ++i) {
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(*done);
+}
+
+class TLegacyCopyAccessors: public NOlap::IDataAccessorRequestsSubscriber {
+    std::shared_ptr<std::optional<NOlap::TDataAccessorsResult>> Result;
+
+    void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
+        *Result = std::move(result);
+    }
+
+    const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
+
+public:
+    explicit TLegacyCopyAccessors(std::shared_ptr<std::optional<NOlap::TDataAccessorsResult>> result)
+        : Result(std::move(result))
+    {
+    }
+};
+
+void SetupOtherShard(TTestBasicRuntime& runtime, TActorId sender, const ui64 tablet) {
+    TestTableDescription table;
+    const TString body =
+        TTestSchema::CreateStandaloneTableTxBody(TableId, table.Schema, table.Pk, TTestSchema::TTableSpecials().WithCodec("none"));
+    runtime.SendToPipe(tablet, sender, new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, 10, body, 0,
+                                           0), 0, GetPipeConfigWithRetries());
+    auto proposed = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(proposed->Get()->Record.GetStatus()), static_cast<int>(NKikimrTxColumnShard::PREPARED));
+    const auto step = proposed->Get()->Record.GetMinStep();
+    runtime.SendToPipe(tablet, sender, new TEvColumnShard::TEvNotifyTxCompletion(10), 0, GetPipeConfigWithRetries());
+    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(step, 0, tablet);
+    auto* tx = plan->Record.AddTransactions();
+    tx->SetTxId(10);
+    ActorIdToProto(sender, tx->MutableAckTo());
+    runtime.SendToPipe(tablet, sender, plan.release(), 0, GetPipeConfigWithRetries());
+    UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
+    UNIT_ASSERT(runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender));
+}
+
+void CopyLegacyPortions(TTestBasicRuntime& runtime, TColumnShard* source, TColumnShard* dest) {
+    using namespace NOlap;
+    auto loaded = std::make_shared<std::optional<TDataAccessorsResult>>();
+    RunOnShard(
+        runtime, source,
+        [](auto&) {
+        },
+        [&](const auto&) {
+            auto request = std::make_shared<TDataAccessorsRequest>(NOlap::NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
+            const auto& engine = source->GetIndexAs<TColumnEngineForLogs>();
+            for (const auto& [_, granule] : engine.GetTables()) {
+                for (const auto& [_, portion] : granule->GetPortions()) {
+                    if (!portion->HasRemoveSnapshot()) {
+                        request->AddPortion(portion);
+                    }
+                }
+            }
+            UNIT_ASSERT_C(!request->IsEmpty(), "legacy copy must include real persisted portions");
+            request->RegisterSubscriber(std::make_shared<TLegacyCopyAccessors>(loaded));
+            engine.FetchDataAccessors(request);
+        });
+    for (ui32 i = 0; i < 100 && !*loaded; ++i) {
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(*loaded && !(*loaded)->HasErrors());
+    std::vector<std::shared_ptr<TPortionDataAccessor>> copies;
+    for (const auto& [_, accessor] : (*loaded)->GetPortions()) {
+        copies.push_back(std::make_shared<TPortionDataAccessor>(accessor->SwitchPortionInfo(accessor->GetPortionInfo().MakeCopy())));
+    }
+    THashMap<TTabletId, NDataSharing::TTaskForTablet> tasks;
+    RunOnShard(
+        runtime, source,
+        [](auto&) {
+        },
+        [&](const auto&) {
+            NDataSharing::NEvents::TPathIdData data(TInternalPathId::FromRawValue(TableId), copies);
+            NDataSharing::TTransferContext context(
+                static_cast<TTabletId>(dest->TabletID()), { static_cast<TTabletId>(source->TabletID()) }, TSnapshot(Max<ui64>() - 1, 1), false);
+            tasks = data.BuildLinkTabletTasks(source->GetStoragesManager(), static_cast<TTabletId>(source->TabletID()), context,
+                source->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex());
+        });
+    ui32 acknowledgements = 0;
+    auto observer = runtime.AddObserver<NDataSharing::NEvents::TEvApplyLinksModificationFinished>([&](auto&) {
+        ++acknowledgements;
+    });
+    for (const auto& [tablet, task] : tasks) {
+        runtime.SendToPipe(static_cast<ui64>(tablet), {},
+            new NDataSharing::NEvents::TEvApplyLinksModification(static_cast<TTabletId>(source->TabletID()), "legacy-copy", 1, task), 0,
+            GetPipeConfigWithRetries());
+    }
+    for (ui32 i = 0; i < 100 && acknowledgements < tasks.size(); ++i) {
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(acknowledgements, tasks.size());
+    RunOnShard(
+        runtime, dest,
+        [&](auto& txc) {
+            auto& engine = dest->MutableIndexAs<TColumnEngineForLogs>();
+            TDbWrapper db(txc.DB, nullptr);
+            for (auto& accessor : copies) {
+                accessor->MutablePortionInfo().SetPortionId(++*engine.GetLastPortionPointer());
+                UNIT_ASSERT_VALUES_EQUAL(engine.GetTables().size(), 1u);
+                accessor->MutablePortionInfo().SetPathId(engine.GetTables().begin()->first);
+                accessor->SaveToDatabase(db, engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetPKFirstColumnId(), false);
+            }
+            db.WriteCounter(TColumnEngineForLogs::LAST_PORTION, *engine.GetLastPortionPointer());
+        },
+        [&](const auto&) {
+            for (auto& accessor : copies) {
+                dest->MutableIndexAs<TColumnEngineForLogs>().AppendPortion(accessor);
+            }
+        });
+}
+
 // InitShard with tier "warm" and a MAX index kept in __DEFAULT storage, so the index blob stays in BlobStorage after tiering.
 TString TieredSchemaTxBody(const TTestSchema::TTableSpecials& specials) {
     static constexpr ui32 kBsIndexId = 3000;
@@ -276,6 +459,61 @@ void RunMoveDataToCompletion(const bool moveDataEnabled) {
 
 // Whole chain: TEvMoveData -> selection -> accessor metadata -> rewrite -> response.
 Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
+    Y_UNIT_TEST(LegacyCopyBorrowerWithoutTargetHistoryMustDrainBeforeOwnerCompletes) {
+        constexpr ui64 BorrowerId = TabletId + 1;
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<TLegacyCopyController>();
+        controller->DisableBackground(EBackground::Compaction);
+        controller->DisableBackground(EBackground::TTL);
+        controller->SetOverrideGuaranteeIndexationStartBytesLimit(1);
+        TMoveDataFixture f;
+        f.Write(20, 0, 1000);
+        for (ui32 i = 0; i < 20; ++i) {
+            Wakeup(f.Runtime, f.Sender, TabletId);
+            f.Runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
+        const auto borrower = BootTablet(f.Runtime, MakeTabletInfo(BorrowerId, { { 0, NewGroup } }));
+        auto sender = f.Runtime.AllocateEdgeActor();
+        SetupOtherShard(f.Runtime, sender, BorrowerId);
+        CopyLegacyPortions(f.Runtime, controller->GetShard(TabletId), controller->GetShard(BorrowerId));
+        // Reload both the copied portion and its borrowed links from the database.
+        f.Runtime.Send(new IEventHandle(borrower, borrower, new TKikimrEvents::TEvPoisonPill));
+        BootTablet(f.Runtime, MakeTabletInfo(BorrowerId, { { 0, NewGroup } }));
+        const auto links = controller->GetShard(BorrowerId)->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+        UNIT_ASSERT(links->HasBlobsForGroups({ OldGroup }));
+        // Hive would never schedule B: its own history contains only NewGroup.
+        f.ReassignPastWrittenData();
+        f.StartMove();
+        ui64 writeId = 100;
+        auto response = f.DriveGate(250, [&](const ui32 step) {
+            Wakeup(f.Runtime, sender, BorrowerId);
+            if (step % 25 == 24) {
+                // The fixture has no mediator; a committed write advances its cleanup snapshot.
+                TestTableDescription table;
+                std::vector<ui64> ids;
+                UNIT_ASSERT(
+                    WriteData(f.Runtime, sender, BorrowerId, writeId, TableId, MakeTestBlob({ 1000, 1001 }, table.Schema), table.Schema, &ids));
+                auto planned = ProposeCommit(f.Runtime, sender, BorrowerId, writeId, ids);
+                PlanCommit(f.Runtime, sender, BorrowerId, planned, TSet<ui64>{ writeId++ });
+                f.Write(1000 + step, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(response, "owner waited for a borrower Hive cannot schedule");
+        f.AssertDrainedSuccess(response);
+        UNIT_ASSERT(!links->HasBlobsForGroups({ OldGroup }));
+        UNIT_ASSERT(LivePortionBlobs(*f.NewGroupProxy, BorrowerId).size());
+        std::vector<ui32> fields;
+        TestTableDescription table;
+        for (ui32 i = 1; i <= table.Schema.size(); ++i) {
+            fields.push_back(i);
+        }
+        TShardReader reader(f.Runtime, BorrowerId, TableId,
+            NOlap::TSnapshot(controller->GetShard(BorrowerId)->GetLastPlannedSnapshot().GetPlanStep(), Max<ui64>()));
+        reader.SetReplyColumnIds(fields);
+        auto batch = reader.ReadAll();
+        UNIT_ASSERT(batch);
+        UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1001);
+    }
+
     Y_UNIT_TEST(MoveDataRewritesPortionsAndAnswersHive) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/true);
     }

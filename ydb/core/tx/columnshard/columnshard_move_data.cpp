@@ -3,7 +3,10 @@
 
 #include "engines/column_engine_logs.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/sessions.h>
+#include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 
 #include <util/generic/size_literals.h>
 
@@ -89,9 +92,104 @@ void TMoveDataDriver::AcceptRequest(const TActorId& sender, const THashSet<ui32>
     ctx.Send(SelfId(), new TEvPrivate::TEvMoveDataPoke());
 }
 
+void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDrainBorrowedBlobs::TPtr& ev, const TActorContext& ctx) {
+    if (AppData()->FeatureFlags.GetEnableColumnshardMoveData()) {
+        TMoveDataDriver::RequestBorrowed(*this, ev->Get()->Record, ctx);
+    }
+}
+
+void TMoveDataDriver::RequestBorrowed(
+    TColumnShard& owner, const NKikimrColumnShardBlobOperationsProto::TEvDrainBorrowedBlobs& request, const TActorContext& ctx) {
+    if (static_cast<size_t>(request.BlobIdsSize()) > BorrowerBatchSize || request.GetOwnerTabletId() == owner.TabletID()) {
+        return;
+    }
+    if (!owner.MoveDataDriver) {
+        owner.MoveDataDriver = new TMoveDataDriver(&owner, owner.TabletActivityImpl);
+        owner.MoveDataDriverId = ctx.RegisterWithSameMailbox(owner.MoveDataDriver);
+    }
+    owner.MoveDataDriver->AcceptBorrowedRequest(request, ctx);
+}
+
+void TMoveDataDriver::AcceptBorrowedRequest(
+    const NKikimrColumnShardBlobOperationsProto::TEvDrainBorrowedBlobs& request, const TActorContext& ctx) {
+    const auto& links = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+    if (!links) {
+        return;
+    }
+    bool changed = false;
+    for (const auto& encoded : request.GetBlobIds()) {
+        auto blob = NOlap::TUnifiedBlobId::BuildFromString(encoded, nullptr);
+        if (!blob) {
+            continue;
+        }
+        // The logical owner can differ from LogoBlobID.TabletID after an ownership transfer.
+        if (links->GetBorrowedOwner(blob.GetResult()) == static_cast<NOlap::TTabletId>(request.GetOwnerTabletId())) {
+            changed |= BorrowedBlobs.emplace(blob.DetachResult()).second;
+        }
+    }
+    YDB_LOG_DEBUG("MoveData borrower request", {"tabletId", Self->TabletID()}, {"owner", request.GetOwnerTabletId()},
+        {"requested", request.BlobIdsSize()}, {"accepted", BorrowedBlobs.size()}, {"changed", changed});
+    RewriteScopesChanged |= changed;
+    ctx.Send(SelfId(), new TEvPrivate::TEvMoveDataPoke());
+}
+
+void TMoveDataDriver::PruneBorrowedBlobs() {
+    if (BorrowedBlobs.empty()) {
+        return;
+    }
+    const auto& links = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+    const auto before = BorrowedBlobs.size();
+    EraseNodesIf(BorrowedBlobs, [&](const auto& blob) {
+        return !links || !links->GetBorrowedOwner(blob);
+    });
+    RewriteScopesChanged |= before != BorrowedBlobs.size();
+}
+
+void TMoveDataDriver::RequestBorrowerDrain(const TActorContext& ctx) {
+    if (ctx.Now() - LastBorrowerRequest < Cadence) {
+        return;
+    }
+    const auto& links = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+    if (!links) {
+        return;
+    }
+    // Rotate by tablet id so a quiet borrower cannot starve the other borrowers.
+    ui64 next = Max<ui64>();
+    ui64 first = Max<ui64>();
+    const auto selected = [&](const auto& blob) {
+        return (State.Active && State.TargetGroups.contains(blob.GetDsGroup())) || BorrowedBlobs.contains(blob);
+    };
+    links->VisitSharedBlobs([&](const auto& blob, const auto peer) {
+        const ui64 tablet = static_cast<ui64>(peer);
+        if (tablet != Self->TabletID() && selected(blob)) {
+            first = Min(first, tablet);
+            if (tablet > LastBorrower) {
+                next = Min(next, tablet);
+            }
+        }
+        return true;
+    });
+    if (first == Max<ui64>()) {
+        return;
+    }
+    LastBorrower = next == Max<ui64>() ? first : next;
+    THashSet<NOlap::TUnifiedBlobId> batch;
+    links->VisitSharedBlobs([&](const auto& blob, const auto peer) {
+        if (static_cast<ui64>(peer) == LastBorrower && selected(blob)) {
+            batch.emplace(blob);
+        }
+        return batch.size() < BorrowerBatchSize;
+    });
+    LastBorrowerRequest = ctx.Now();
+    YDB_LOG_DEBUG("MoveData requests borrower drain", {"tabletId", Self->TabletID()}, {"borrower", LastBorrower}, {"blobs", batch.size()});
+    ctx.Send(MakePipePerNodeCacheID(false),
+        new TEvPipeCache::TEvForward(new NOlap::NBlobOperations::NEvents::TEvDrainBorrowedBlobs(Self->TabletID(), batch), LastBorrower, false));
+}
+
 void TMoveDataDriver::RestartActualizer() {
-    AFL_VERIFY(State.Active);
+    AFL_VERIFY(HasWork());
     State.TargetsChanged = false;
+    RewriteScopesChanged = false;
     // A fresh actualizer counts rejections from zero again.
     State.ReportedRejections = 0;
     if (!Self->HasIndex()) {
@@ -100,8 +198,8 @@ void TMoveDataDriver::RestartActualizer() {
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     // A changed target set replaces the actualizers and seeds fresh queues.
     index.StopMoveData();
-    if (!State.TargetGroups.empty()) {
-        index.StartMoveData(State.TargetGroups);
+    if (!State.TargetGroups.empty() || !BorrowedBlobs.empty()) {
+        index.StartMoveData(State.TargetGroups, BorrowedBlobs);
     }
 }
 
@@ -112,6 +210,7 @@ void TMoveDataDriver::Stop(TColumnShard& owner, const TActorContext& ctx) {
     AFL_VERIFY(owner.MoveDataDriver);
     // Cleanup can precede queued pokes while the owner is still alive.
     owner.MoveDataDriver->State.Active = false;
+    owner.MoveDataDriver->BorrowedBlobs.clear();
     ctx.Send(owner.MoveDataDriverId, new TEvents::TEvPoison());
     owner.MoveDataDriver = nullptr;
     owner.MoveDataDriverId = {};
@@ -197,11 +296,15 @@ void TMoveDataDriver::CheckGate(const TActorContext& ctx, const NOlap::NActualiz
     ctx.Send(State.HiveSender, new TEvTablet::TEvMoveDataResponse(Self->TabletID(), NKikimrTabletBase::TEvMoveDataResponse::Success));
     Self->Counters.GetCSCounters().OnMoveDataFinished();
     State = {};
-    Stop(*Self, ctx);
+    if (BorrowedBlobs.empty()) {
+        Stop(*Self, ctx);
+    } else {
+        RewriteScopesChanged = true;
+    }
 }
 
 void TMoveDataDriver::SetupMetadata() {
-    if (!State.Active || !Self->HasIndex() || MetadataRequestsInFlight->Val()) {
+    if (!HasWork() || !Self->HasIndex() || MetadataRequestsInFlight->Val()) {
         return;
     }
     Self->StartMetadataRequests(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MetadataTaskSubscription,
@@ -213,7 +316,7 @@ void TMoveDataDriver::SetupMetadata() {
 }
 
 void TMoveDataDriver::SetupRewrites() {
-    if (!State.Active || !Self->HasIndex()) {
+    if (!HasWork() || !Self->HasIndex()) {
         return;
     }
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : 512_MB;
@@ -226,10 +329,26 @@ void TMoveDataDriver::SetupRewrites() {
 }
 
 void TMoveDataDriver::StartAndCheckGate(const TActorContext& ctx) {
-    if (!State.Active) {
+    // Stop clears the owner's pointer before its poison is delivered; an old poke must not stop a new driver.
+    if (Self->MoveDataDriver != this) {
         return;
     }
-    if (State.TargetsChanged) {
+    PruneBorrowedBlobs();
+    if (!HasWork()) {
+        if (Self->HasIndex()) {
+            Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().StopMoveData();
+        }
+        Stop(*Self, ctx);
+        return;
+    }
+    // Sharing can add portions and change ownership while we hold a fixed portion snapshot.
+    // Let the sharing transaction finish, then seed the completed state.
+    if (Self->SharingSessionsManager->IsSharingInProgress() || Self->GetStoragesManager()->GetSharedBlobsManager()->HasExternalModifications()) {
+        RewriteScopesChanged = true;
+        return;
+    }
+    RequestBorrowerDrain(ctx);
+    if (State.TargetsChanged || RewriteScopesChanged) {
         RestartActualizer();
     }
     // One index walk per turn: prune retired ids and use the sizes to select work and check the gate.

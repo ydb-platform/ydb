@@ -124,6 +124,7 @@ void TStorageSharedBlobsManager::CASBorrowedBlobs(
             AFL_VERIFY(it->second == tabletIdFrom || it->second == tabletIdTo);
             it->second = tabletIdTo;
         }
+        RefreshForeignGroup(i);
     }
 }
 
@@ -148,6 +149,7 @@ void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobs
             {"tabletIdShare", i.GetTabletId()},
             {"blobId", i.GetBlobId().ToStringNew()});
         SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId());
+        RefreshForeignGroup(i.GetBlobId());
     }
     for (auto i = removeTask.GetBorrowed().GetIterator(); i.IsValid(); ++i) {
         YDB_LOG_DEBUG("",
@@ -157,6 +159,7 @@ void TStorageSharedBlobsManager::OnTransactionCompleteAfterCleaning(const TBlobs
         auto it = BorrowedBlobIds.find(i.GetBlobId());
         AFL_VERIFY(it != BorrowedBlobIds.end());
         BorrowedBlobIds.erase(it);
+        RefreshForeignGroup(i.GetBlobId());
     }
 }
 

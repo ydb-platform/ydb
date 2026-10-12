@@ -328,6 +328,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void SubscribeToColumnShardConfig();
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&);
 
+    void Handle(NOlap::NBlobOperations::NEvents::TEvDrainBorrowedBlobs::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NBackground::TEvExecuteGeneralLocalTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx);

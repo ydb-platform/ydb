@@ -20,8 +20,9 @@ namespace NKikimr::NOlap::NActualizer {
 class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
+    const std::shared_ptr<const THashSet<TUnifiedBlobId>> BorrowedBlobs;
     const TVersionedIndex& VersionedIndex;
-    // Fixed when seeded: Handle(TEvMoveData) rejects live groups, so a portion created afterwards cannot hold a target blob.
+    // Fixed when seeded: public requests reject live groups; borrower requests name immutable foreign blob ids.
     THashSet<ui64> InitialPortionIds;
     // Portions waiting for accessor-load so we can check their DsGroup.
     THashSet<ui64> PendingPortionIds;
@@ -70,8 +71,10 @@ public:
     // Once, right after construction: a new target set gets a new actualizer.
     void Seed(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
 
-    TMoveDataActualizer(const THashSet<ui32>& targetGroups, const TVersionedIndex& versionedIndex)
+    TMoveDataActualizer(const THashSet<ui32>& targetGroups, const TVersionedIndex& versionedIndex,
+        const std::shared_ptr<const THashSet<TUnifiedBlobId>>& borrowedBlobs = {})
         : TargetGroups(targetGroups)
+        , BorrowedBlobs(borrowedBlobs)
         , VersionedIndex(versionedIndex)
     {
     }

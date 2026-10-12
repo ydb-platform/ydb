@@ -154,6 +154,59 @@ struct TBlobManagerFixture {
 };
 
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
+    Y_UNIT_TEST(ForeignGroupLookupTracksBorrowedAndSharedLinks) {
+        using NOlap::TTabletId;
+        const auto foreign = MakeDsBlobId(OldGroup, 46, 1, 1, 2);
+        NOlap::NDataSharing::TStorageSharedBlobsManager links(NOlap::IStoragesManager::DefaultStorageId, static_cast<TTabletId>(47));
+        UNIT_ASSERT(links.UpsertBorrowedBlobOnLoad(foreign, static_cast<TTabletId>(48)));
+        UNIT_ASSERT(links.GetBorrowedOwner(foreign) == static_cast<TTabletId>(48));
+        NColumnShard::TBlobGroupSelector selector(MakeTabletInfo(47, { { 0, NewGroup } }), [&links](const TLogoBlobID& blob) {
+            return links.GetForeignGroup(blob);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(selector.GetGroup(foreign.GetLogoBlobId()), OldGroup);
+        UNIT_ASSERT_VALUES_EQUAL(selector.GetGroup(MakeDsBlobId(NewGroup, 47, 1, 1, 2).GetLogoBlobId()), NewGroup);
+
+        NOlap::TTabletsByBlob shared;
+        UNIT_ASSERT(shared.Add(static_cast<TTabletId>(49), foreign));
+        UNIT_ASSERT(links.AddSharedBlobs(shared));
+        links.CASBorrowedBlobs(static_cast<TTabletId>(48), static_cast<TTabletId>(47), { foreign });
+        UNIT_ASSERT(!links.GetBorrowedOwner(foreign));
+        UNIT_ASSERT_VALUES_EQUAL(selector.GetGroup(foreign.GetLogoBlobId()), OldGroup);
+
+        NOlap::TTabletsByBlob second;
+        UNIT_ASSERT(second.Add(static_cast<TTabletId>(50), foreign));
+        UNIT_ASSERT(links.AddSharedBlobs(second));
+        links.RemoveSharedBlobs(shared);
+        UNIT_ASSERT_VALUES_EQUAL(selector.GetGroup(foreign.GetLogoBlobId()), OldGroup);
+        links.RemoveSharedBlobs(second);
+        UNIT_ASSERT(!links.GetForeignGroup(foreign.GetLogoBlobId()));
+
+        UNIT_ASSERT(links.UpsertBorrowedBlobOnLoad(foreign, static_cast<TTabletId>(48)));
+        links.Clear();
+        UNIT_ASSERT(!links.GetForeignGroup(foreign.GetLogoBlobId()));
+    }
+
+    Y_UNIT_TEST(BorrowerDrainSelectsExactForeignBlobWithoutMovingOwnedDataInTheSameGroup) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        const auto foreign = MakeDsBlobId(OldGroup, 46, 1, 1, 2);
+        const auto owned = MakeDsBlobId(OldGroup, 47, 1, 1, 2);
+        auto foreignPortion = MakeDefaultTierPortion(1);
+        auto ownedPortion = MakeDefaultTierPortion(2);
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, foreignPortion }, { 2, ownedPortion } };
+        const auto borrowed = std::make_shared<const THashSet<NOlap::TUnifiedBlobId>>(THashSet<NOlap::TUnifiedBlobId>{ foreign });
+        NOlap::NActualizer::TMoveDataActualizer actualizer({}, schema.Index, borrowed);
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Zero(), portions), {});
+        for (const auto& [id, portion] : portions) {
+            NOlap::TPortionDataAccessor accessor(portion, std::vector<NOlap::TUnifiedBlobId>{ id == 1 ? foreign : owned },
+                std::vector<NOlap::TColumnRecord>{}, std::vector<NOlap::TIndexChunk>{}, false);
+            actualizer.ActualizePortionInfo(accessor);
+        }
+        const auto queues = actualizer.GetMoveDataQueueSizes();
+        UNIT_ASSERT_VALUES_EQUAL(queues.Pending, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(queues.ConfirmedToMove, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(queues.Rejected, 1u);
+    }
+
     // BlobsToDelete leg: the group comes straight off TUnifiedBlobId (keep leg: TestMoveDataKeepQueue).
     Y_UNIT_TEST(TestMoveDataDeleteQueue) {
         static constexpr ui64 TabletId = 42;

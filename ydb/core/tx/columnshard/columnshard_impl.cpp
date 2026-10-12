@@ -1695,7 +1695,10 @@ public:
         TInstant startTransactionTime = TInstant::Now();
         NIceDb::TNiceDb db(txc.DB);
 
-        TBlobGroupSelector selector(Self->Info());
+        const auto sharing = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+        TBlobGroupSelector selector(Self->Info(), [sharing](const TLogoBlobID& blob) {
+            return sharing->GetForeignGroup(blob);
+        });
         bool reask = false;
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
@@ -2040,6 +2043,7 @@ STFUNC(TColumnShard::StateWork) {
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
 
+        HFunc(NOlap::NBlobOperations::NEvents::TEvDrainBorrowedBlobs, Handle);
         HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
         HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
         HFunc(NOlap::NBackground::TEvRemoveSession, Handle);

@@ -187,7 +187,10 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
     if (!PendingPortionIds.erase(portionId)) {
         return;
     }
-    if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups)) {
+    if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups) &&
+        (!BorrowedBlobs || BorrowedBlobs->empty() || !AnyOf(accessor.GetBlobIds(), [this](const TUnifiedBlobId& blob) {
+            return BorrowedBlobs->contains(blob);
+        }))) {
         RejectedPortionIds.emplace(portionId);
         RetiredPortionIds.erase(portionId);
         ++RejectedPortions;

@@ -51,7 +51,8 @@ public:
     void RefreshScheme(const TAddExternalContext& context);
 
     void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context,
-        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
+        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted,
+        const std::shared_ptr<const THashSet<TUnifiedBlobId>>& borrowedBlobs = {});
     void StopMoveData();
     void OnUncommittedPortionAborted(const ui64 portionId);
     TMoveDataQueueSizes UpdateMoveDataQueueSizes(

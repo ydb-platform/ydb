@@ -178,9 +178,11 @@ public:
         return GranulesStorage->ReturnToIndexes(portions);
     }
 
-    void StartMoveData(const THashSet<ui32>& targetGroups) {
+    void StartMoveData(const THashSet<ui32>& targetGroups, const THashSet<TUnifiedBlobId>& borrowedBlobs = {}) {
+        // One immutable selector per operation, shared by all granules.
+        const auto borrowedSnapshot = std::make_shared<const THashSet<TUnifiedBlobId>>(borrowedBlobs);
         for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
-            granule->StartMoveData(targetGroups);
+            granule->StartMoveData(targetGroups, borrowedSnapshot);
         }
     }
 

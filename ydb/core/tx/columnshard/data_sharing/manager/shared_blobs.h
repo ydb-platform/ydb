@@ -9,6 +9,8 @@
 
 #include <util/generic/algorithm.h>
 
+#include <optional>
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TStorageSharedBlobsManager {
@@ -17,6 +19,19 @@ private:
     const TTabletId SelfTabletId;
     THashMap<TUnifiedBlobId, TTabletId> BorrowedBlobIds;   // blobId -> owned by tabletId
     TTabletsByBlob SharedBlobIds;   // blobId -> shared with tabletIds
+    THashMap<TLogoBlobID, ui32> ForeignGroups;
+
+    void RefreshForeignGroup(const TUnifiedBlobId& blob) {
+        if (blob.GetLogoBlobId().TabletID() == static_cast<ui64>(SelfTabletId)) {
+            return;
+        }
+        if (BorrowedBlobIds.contains(blob) || SharedBlobIds.Find(blob)) {
+            const auto [it, inserted] = ForeignGroups.emplace(blob.GetLogoBlobId(), blob.GetDsGroup());
+            AFL_VERIFY(inserted || it->second == blob.GetDsGroup());
+        } else {
+            ForeignGroups.erase(blob.GetLogoBlobId());
+        }
+    }
 
     bool CheckRemoveBlobId(const TTabletId tabletId, const TUnifiedBlobId& blobId, TBlobsCategories& blobs) const {
         const THashSet<TTabletId>* shared = SharedBlobIds.Find(blobId);
@@ -68,6 +83,27 @@ public:
             return groups.contains(blob.first.GetDsGroup());
         };
         return AnyOf(BorrowedBlobIds, inGroups) || AnyOf(SharedBlobIds, inGroups);
+    }
+
+    // Portion metadata stores bare LogoBlobIDs. Foreign IDs must not use our channel history.
+    // Update this index with sharing links, so metadata loads only perform a hash lookup.
+    std::optional<ui32> GetForeignGroup(const TLogoBlobID& blob) const {
+        const auto it = ForeignGroups.find(blob);
+        return it == ForeignGroups.end() ? std::nullopt : std::optional<ui32>(it->second);
+    }
+
+    std::optional<TTabletId> GetBorrowedOwner(const TUnifiedBlobId& blob) const {
+        const auto it = BorrowedBlobIds.find(blob);
+        return it == BorrowedBlobIds.end() ? std::nullopt : std::optional<TTabletId>(it->second);
+    }
+
+    template <class TVisitor>
+    void VisitSharedBlobs(TVisitor&& visitor) const {
+        for (auto it = SharedBlobIds.GetIterator(); it.IsValid(); ++it) {
+            if (!visitor(it.GetBlobId(), it.GetTabletId())) {
+                return;
+            }
+        }
     }
 
     TTabletId GetSelfTabletId() const {
@@ -124,6 +160,7 @@ public:
     void RemoveSharedBlobs(const TTabletsByBlob& blobIds) {
         for (auto i = blobIds.GetIterator(); i.IsValid(); ++i) {
             AFL_VERIFY(SharedBlobIds.Remove(i.GetTabletId(), i.GetBlobId()));
+            RefreshForeignGroup(i.GetBlobId());
         }
     }
 
@@ -135,6 +172,7 @@ public:
             if (!SharedBlobIds.Add(i.GetTabletId(), i.GetBlobId())) {
                 result = false;
             }
+            RefreshForeignGroup(i.GetBlobId());
         }
         return result;
     }
@@ -150,6 +188,7 @@ public:
             if (!infoInsert.second) {
                 AFL_VERIFY(infoInsert.first->second == i.second)("before", infoInsert.first->second)("after", i.second);
             }
+            RefreshForeignGroup(i.first);
         }
     }
 
@@ -159,15 +198,20 @@ public:
     void CASBorrowedBlobs(const TTabletId tabletIdFrom, const TTabletId tabletIdTo, const THashSet<TUnifiedBlobId>& blobIds);
 
     [[nodiscard]] bool UpsertSharedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId tabletId) {
-        return SharedBlobIds.Add(tabletId, blobId);
+        const bool inserted = SharedBlobIds.Add(tabletId, blobId);
+        RefreshForeignGroup(blobId);
+        return inserted;
     }
 
     [[nodiscard]] bool UpsertBorrowedBlobOnLoad(const TUnifiedBlobId& blobId, const TTabletId ownerTabletId) {
         AFL_VERIFY(ownerTabletId != SelfTabletId);
-        return BorrowedBlobIds.emplace(blobId, ownerTabletId).second;
+        const bool inserted = BorrowedBlobIds.emplace(blobId, ownerTabletId).second;
+        RefreshForeignGroup(blobId);
+        return inserted;
     }
 
     void Clear() {
+        ForeignGroups.clear();
         SharedBlobIds.Clear();
         BorrowedBlobIds.clear();
     }

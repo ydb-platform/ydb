@@ -19,3 +19,10 @@ message TEvDeleteSharedBlobsFinished {
 
     optional EStatus Status = 2;
 }
+
+
+// Retried by the owner until normal shared-blob GC removes its references.
+message TEvDrainBorrowedBlobs {
+    optional uint64 OwnerTabletId = 1;
+    repeated string BlobIds = 2;
+}

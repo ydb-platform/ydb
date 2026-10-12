@@ -274,9 +274,9 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
-    void StartMoveData(const THashSet<ui32>& targetGroups) {
+    void StartMoveData(const THashSet<ui32>& targetGroups, const std::shared_ptr<const THashSet<TUnifiedBlobId>>& borrowedBlobs = {}) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->StartMoveData(targetGroups, context, InsertedPortionsById);
+        ActualizationIndex->StartMoveData(targetGroups, context, InsertedPortionsById, borrowedBlobs);
     }
 
     void StopMoveData() {

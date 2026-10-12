@@ -63,9 +63,10 @@ void TGranuleActualizationIndex::Start() {
 }
 
 void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context,
-    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
+    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted,
+    const std::shared_ptr<const THashSet<TUnifiedBlobId>>& borrowedBlobs) {
     AFL_VERIFY(!MoveDataActualizer);
-    MoveDataActualizer = std::make_shared<TMoveDataActualizer>(targetGroups, VersionedIndex);
+    MoveDataActualizer = std::make_shared<TMoveDataActualizer>(targetGroups, VersionedIndex, borrowedBlobs);
     Actualizers.emplace_back(MoveDataActualizer);
     MoveDataActualizer->Seed(context, uncommitted);
 }

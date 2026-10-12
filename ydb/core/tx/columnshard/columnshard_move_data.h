@@ -2,6 +2,7 @@
 
 #include "columnshard_private_events.h"
 
+#include "blobs_action/events/delete_blobs.h"
 #include "resource_subscriber/task.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
@@ -34,6 +35,19 @@ private:
     // Dropped before the tablet stops the driver, so queued events cannot touch a dead owner.
     const std::shared_ptr<TAtomicCounter> TabletActivity;
     TSession State;
+    THashSet<NOlap::TUnifiedBlobId> BorrowedBlobs;
+    bool RewriteScopesChanged = false;
+    ui64 LastBorrower = 0;
+    TInstant LastBorrowerRequest;
+    static constexpr size_t BorrowerBatchSize = 256;
+
+    bool HasWork() const {
+        return State.Active || !BorrowedBlobs.empty();
+    }
+
+    void RequestBorrowerDrain(const TActorContext& ctx);
+    void PruneBorrowedBlobs();
+    void AcceptBorrowedRequest(const NKikimrColumnShardBlobOperationsProto::TEvDrainBorrowedBlobs& request, const TActorContext& ctx);
     const NOlap::NResourceBroker::NSubscribe::TTaskContext MetadataTaskSubscription;
     const std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
     static constexpr TDuration Cadence = TDuration::Seconds(5);
@@ -62,6 +76,8 @@ public:
 
     // Called on the owner's mailbox, before another queued driver turn can pass the gate.
     static void Request(TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx);
+    static void RequestBorrowed(
+        TColumnShard& owner, const NKikimrColumnShardBlobOperationsProto::TEvDrainBorrowedBlobs& request, const TActorContext& ctx);
     static void Stop(TColumnShard& owner, const TActorContext& ctx);
     void OnVacuumCompleted(const TActorContext& ctx);
 

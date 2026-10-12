@@ -518,17 +518,11 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                 }
 
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-                rboCtx.EmptyPreamble = emptyPreamble;
+                if (emptyPreamble) {
+                    rboCtx.QuerySettings = TKqlQuery(node).Settings().Ptr();
+                }
                 TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(Roots, rboCtx);
-                if (emptyPreamble) {
-                    // RBO replaces the whole effect query; retain its original settings.
-                    output = Build<TKqlQuery>(ctx, node->Pos())
-                        .Results(output->ChildPtr(TKqlQuery::idx_Results))
-                        .Effects(output->ChildPtr(TKqlQuery::idx_Effects))
-                        .Settings(TKqlQuery(node).Settings())
-                        .Done().Ptr();
-                }
                 traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
                 return output;

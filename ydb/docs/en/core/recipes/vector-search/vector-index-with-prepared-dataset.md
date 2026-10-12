@@ -49,7 +49,7 @@ Download the [dataset](https://huggingface.co/datasets/timescale/wikipedia-22-12
 
 {% note info %}
 
-In the fork, the column schema differs from the table in [Step 1](#step1): the script below maps the data to that schema.
+In the fork, the column schema differs from the table in [Step 1](#step1): the paragraph text is in `contents`, while `title`, `url`, `wiki_id`, and other fields are inside the JSON `meta` column. The script below maps the data to that table schema.
 
 {% endnote %}
 

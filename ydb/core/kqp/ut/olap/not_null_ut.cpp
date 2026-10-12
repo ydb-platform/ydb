@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -114,15 +115,22 @@ const TString SetNotNull = "ALTER TABLE `/Root/t` ALTER COLUMN v SET NOT NULL;";
 
 Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
     Y_UNIT_TEST(TallTable, ENullPosition) {
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         TFixture f(ETableKind::Column, true, 1);
+        constexpr ui64 rowCount = 100000;
+        constexpr ui64 rowsPerWrite = 10000;
         const auto position = Arg<0>();
-        const i64 nullKey = position == ENullPosition::None ? -1 : position == ENullPosition::First ? 0 : 99999;
-        f.Success(TStringBuilder() << R"(
-            $rows = ListMap(ListFromRange(0ul, 100000ul), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/t` (k, v)
-            SELECT item, IF(item = )" << nullKey << R"(, CAST(NULL AS Utf8),
-                CAST(')" << TString(128, 'x') << R"(' AS Utf8)) FROM AS_TABLE($rows);
-        )");
+        const ui64 nullKey = position == ENullPosition::None ? rowCount : position == ENullPosition::First ? 0 : rowCount - 1;
+        for (ui64 begin = 0; begin < rowCount; begin += rowsPerWrite) {
+            f.Success(TStringBuilder() << R"(
+                $rows = ListMap(ListFromRange()" << begin << "ul, " << begin + rowsPerWrite << R"(ul),
+                    ($x) -> { RETURN AsStruct($x AS item); });
+                UPSERT INTO `/Root/t` (k, v)
+                SELECT item, IF(item = )" << nullKey << R"(ul, CAST(NULL AS Utf8),
+                    CAST(')" << TString(128, 'x') << R"(' AS Utf8)) FROM AS_TABLE($rows);
+            )");
+        }
 
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         TActorId validator;
@@ -147,10 +155,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             position == ENullPosition::None ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, alter.GetIssues().ToString());
         if (position == ENullPosition::First) {
             UNIT_ASSERT_VALUES_EQUAL(batches, 1);
-            UNIT_ASSERT_LT(scannedRows, 100000);
+            UNIT_ASSERT_LT(scannedRows, rowCount);
         } else {
             UNIT_ASSERT_GT(batches, 1);
-            UNIT_ASSERT_VALUES_EQUAL(scannedRows, 100000);
+            UNIT_ASSERT_VALUES_EQUAL(scannedRows, rowCount);
         }
         auto result = f.Execute("SELECT COUNT(*), COUNT(v) FROM `/Root/t`;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -231,6 +239,10 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         checkWrite(2, EWriteValue::Filled, true);
         checkWrite(3, EWriteValue::Null, false);
         checkWrite(4, EWriteValue::Missing, false);
+        if (mode != EWriteMode::BulkUpsert) {
+            f.Failure(TStringBuilder() << ToString(mode)
+                << " INTO `/Root/t` (k, v) VALUES (4u, Just('filled'u));");
+        }
         capture = false;
         for (auto& request : requests) {
             runtime.Send(request.Release());

@@ -13,8 +13,29 @@ enum class EFeatureFlag {
 };
 
 enum class EReboot {
-    No,
-    Yes,
+    None,
+    SchemeShard,
+    TableShard,
+    Both,
+};
+
+enum class EWriteMode {
+    Upsert,
+    Insert,
+    Replace,
+    BulkUpsert,
+};
+
+enum class EShardCount {
+    One = 1,
+    Four = 4,
+    Twelve = 12,
+};
+
+enum class ENullPosition {
+    None,
+    First,
+    Last,
 };
 
 } // namespace NKikimr::NKqp::NSetNotNull

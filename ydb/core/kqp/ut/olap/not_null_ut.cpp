@@ -1,5 +1,6 @@
 #include "not_null_test_enums.h"
 
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -9,17 +10,26 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <arrow/record_batch.h>
+
 namespace NKikimr::NKqp {
 using namespace NYdb;
 using namespace NSetNotNull;
 
 namespace {
 
+enum class EWriteValue {
+    Filled,
+    Null,
+    Missing,
+};
+
 TKikimrSettings MakeSettings(bool enabled = true) {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
     settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     settings.AppConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
     settings.AppConfig.MutableFeatureFlags()->SetEnableColumnTableSetNotNull(enabled);
+    settings.AppConfig.MutableColumnShardConfig()->SetBulkUpsertRequireAllColumns(false);
     return settings;
 }
 
@@ -27,7 +37,7 @@ struct TFixture {
     TKikimrRunner Kikimr;
     NQuery::TQueryClient Client;
 
-    explicit TFixture(ETableKind tableKind = ETableKind::Column, bool enabled = true)
+    explicit TFixture(ETableKind tableKind = ETableKind::Column, bool enabled = true, ui32 shardCount = 4)
         : Kikimr(MakeSettings(enabled))
         , Client(Kikimr.RunCall([&] { return Kikimr.GetQueryClient(); }))
     {
@@ -38,9 +48,9 @@ struct TFixture {
             )
         )";
         if (tableKind == ETableKind::Column) {
-            create << "PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = 4);";
+            create << "PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = " << shardCount << ");";
         } else {
-            create << "WITH (STORE = ROW, UNIFORM_PARTITIONS = 4);";
+            create << "WITH (STORE = ROW, UNIFORM_PARTITIONS = " << shardCount << ");";
         }
         Success(create, true);
     }
@@ -62,6 +72,35 @@ struct TFixture {
         UNIT_ASSERT_C(!result.IsSuccess(), sql);
     }
 
+    TStatus Write(EWriteMode mode, ui64 key, EWriteValue value) {
+        if (mode == EWriteMode::BulkUpsert) {
+            TValueBuilder rows;
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("k").Uint64(key)
+                .AddMember("w").Uint64(7);
+            if (value == EWriteValue::Filled) {
+                rows.AddMember("v").Utf8("filled");
+            } else if (value == EWriteValue::Null) {
+                rows.AddMember("v").EmptyOptional(EPrimitiveType::Utf8);
+            }
+            rows.EndStruct().EndList();
+            return Kikimr.RunCall([&] {
+                return Kikimr.GetTableClient().BulkUpsert("/Root/t", rows.Build()).GetValueSync();
+            });
+        }
+        TStringBuilder query;
+        query << ToString(mode) << " INTO `/Root/t` (k, w";
+        if (value != EWriteValue::Missing) {
+            query << ", v";
+        }
+        query << ") VALUES (" << key << "u, 7u";
+        if (value != EWriteValue::Missing) {
+            query << (value == EWriteValue::Filled ? ", 'filled'" : ", NULL");
+        }
+        query << ");";
+        return Execute(query);
+    }
+
     void CheckRows(const TString& expected) {
         auto result = Execute("SELECT k, v FROM `/Root/t` ORDER BY k;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -74,17 +113,139 @@ const TString SetNotNull = "ALTER TABLE `/Root/t` ALTER COLUMN v SET NOT NULL;";
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
-    Y_UNIT_TEST(TallTable) {
-        TFixture f;
-        f.Success(R"(
+    Y_UNIT_TEST(TallTable, ENullPosition) {
+        TFixture f(ETableKind::Column, true, 1);
+        const auto position = Arg<0>();
+        const i64 nullKey = position == ENullPosition::None ? -1 : position == ENullPosition::First ? 0 : 99999;
+        f.Success(TStringBuilder() << R"(
             $rows = ListMap(ListFromRange(0, 100000), ($x) -> { RETURN AsStruct($x AS item); });
             UPSERT INTO `/Root/t` (k, v)
-            SELECT CAST(item AS Uint64), CAST(item AS Utf8) FROM AS_TABLE($rows);
+            SELECT CAST(item AS Uint64), IF(item = )" << nullKey << R"(, CAST(NULL AS Utf8),
+                CAST(')" << TString(128, 'x') << R"(' AS Utf8)) FROM AS_TABLE($rows);
         )");
-        f.Success(SetNotNull, true);
+
+        auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
+        TActorId validator;
+        ui64 scannedRows = 0;
+        ui32 batches = 0;
+        const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType) {
+                validator = ev->Sender;
+                // Make the boundary keys deterministic despite asynchronous portion reads.
+                ev->Get<TEvDataShard::TEvKqpScan>()->Record.SetReverse(false);
+            } else if (ev->GetTypeRewrite() == TEvKqpCompute::TEvScanData::EventType && ev->Recipient == validator) {
+                if (const auto& batch = ev->Get<TEvKqpCompute::TEvScanData>()->ArrowBatch) {
+                    scannedRows += batch->num_rows();
+                    ++batches;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        const auto alter = f.Execute(SetNotNull, true);
+        runtime.SetObserverFunc(previous);
+        UNIT_ASSERT_VALUES_EQUAL_C(alter.GetStatus(),
+            position == ENullPosition::None ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED, alter.GetIssues().ToString());
+        if (position == ENullPosition::First) {
+            UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+            UNIT_ASSERT_LT(scannedRows, 100000);
+        } else {
+            UNIT_ASSERT_GT(batches, 1);
+            UNIT_ASSERT_VALUES_EQUAL(scannedRows, 100000);
+        }
         auto result = f.Execute("SELECT COUNT(*), COUNT(v) FROM `/Root/t`;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson("[[100000u;100000u]]", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(position == ENullPosition::None ? "[[100000u;100000u]]" : "[[100000u;99999u]]",
+            FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(ValidationAcrossShards, ETableKind, EShardCount) {
+        const ui32 shardCount = static_cast<ui32>(Arg<1>());
+        TFixture f(Arg<0>(), true, shardCount);
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one');");
+        auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> requests;
+        THashSet<ui64> shards;
+        ui32 inFlight = 0;
+        ui32 peakInFlight = 0;
+        bool capture = true;
+        const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                if (shards.insert(ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record.GetTabletId()).second) {
+                    peakInFlight = Max(peakInFlight, ++inFlight);
+                    UNIT_ASSERT_LE(inFlight, 10);
+                }
+                if (capture) {
+                    requests.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionResponse::EventType) {
+                UNIT_ASSERT_GT(inFlight, 0);
+                --inFlight;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto alter = f.Kikimr.RunInThreadPool([&] {
+            return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
+        });
+        runtime.WaitFor("first validation wave", [&] { return requests.size() == Min(shardCount, 10u); });
+        UNIT_ASSERT(!alter.HasValue());
+        capture = false;
+        for (auto& request : requests) {
+            runtime.Send(request.Release());
+        }
+        const auto result = runtime.WaitFuture(alter);
+        runtime.SetObserverFunc(previous);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), shardCount);
+        UNIT_ASSERT_VALUES_EQUAL(peakInFlight, Min(shardCount, 10u));
+        UNIT_ASSERT_VALUES_EQUAL(inFlight, 0);
+        f.CheckRows(R"([[1u;"one"]])");
+    }
+
+    Y_UNIT_TEST(WritePathsRespectConstraint, ETableKind, EWriteMode) {
+        TFixture f(Arg<0>());
+        const auto mode = Arg<1>();
+        const auto checkWrite = [&](ui64 key, EWriteValue value, bool success) {
+            const auto result = f.Write(mode, key, value);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), success, result.GetIssues().ToString());
+        };
+        checkWrite(1, EWriteValue::Filled, true);
+        checkWrite(2, EWriteValue::Null, true);
+        checkWrite(3, EWriteValue::Missing, true);
+        f.Success("DELETE FROM `/Root/t` WHERE k >= 2u;");
+
+        auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> requests;
+        bool capture = true;
+        const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (capture && ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                requests.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto alter = f.Kikimr.RunInThreadPool([&] {
+            return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
+        });
+        runtime.WaitFor("validation started", [&] { return !requests.empty(); });
+        checkWrite(2, EWriteValue::Filled, true);
+        checkWrite(3, EWriteValue::Null, false);
+        checkWrite(4, EWriteValue::Missing, false);
+        capture = false;
+        for (auto& request : requests) {
+            runtime.Send(request.Release());
+        }
+        const auto result = runtime.WaitFuture(alter);
+        runtime.SetObserverFunc(previous);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        checkWrite(5, EWriteValue::Filled, true);
+        checkWrite(6, EWriteValue::Null, false);
+        checkWrite(7, EWriteValue::Missing, false);
+        f.CheckRows(R"([[1u;"filled"];[2u;"filled"];[5u;"filled"]])");
+        f.Success("ALTER TABLE `/Root/t` ALTER COLUMN v DROP NOT NULL;", true);
+        checkWrite(6, EWriteValue::Null, true);
+        checkWrite(7, EWriteValue::Missing, true);
     }
 
     Y_UNIT_TEST(WideTableProjectsOnlyCheckedColumn) {
@@ -304,14 +465,19 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows(R"([[1u;["one"]];[2u;["two"]]])");
         f.Failure("ALTER TABLE `/Root/t` DROP COLUMN v;", true);
         f.Failure("DROP TABLE `/Root/t`;", true);
-        if (Arg<1>() == EReboot::Yes) {
+        const auto reboot = Arg<1>();
+        if (reboot != EReboot::None) {
             const auto& record = requests.front()->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
             const ui64 schemeShardId = record.GetOwnerId();
             const ui64 shardId = record.GetTabletId();
             // Recovery must finish even when admission is disabled.
             runtime.GetAppData().FeatureFlags.SetEnableColumnTableSetNotNull(false);
-            RebootTablet(runtime, schemeShardId, runtime.AllocateEdgeActor());
-            RebootTablet(runtime, shardId, runtime.AllocateEdgeActor());
+            if (reboot == EReboot::SchemeShard || reboot == EReboot::Both) {
+                RebootTablet(runtime, schemeShardId, runtime.AllocateEdgeActor());
+            }
+            if (reboot == EReboot::TableShard || reboot == EReboot::Both) {
+                RebootTablet(runtime, shardId, runtime.AllocateEdgeActor());
+            }
         }
         capture = false;
         for (auto& request : requests) {

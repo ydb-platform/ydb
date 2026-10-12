@@ -532,6 +532,7 @@ RECURSE_FOR_TESTS(
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows
+    ut_erase_rows_proxy
     ut_export
     ut_external_blobs
     ut_followers

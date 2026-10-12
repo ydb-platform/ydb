@@ -278,7 +278,8 @@ Y_UNIT_TEST_SUITE(AnalyzeSampling) {
             runtime.WaitFor("second statistics pass", [&] { return !secondPass.empty(); }, TDuration::Seconds(30));
             if (deleteRows) {
                 env.RunInThreadPool([&] {
-                    NYdb::NQuery::TQueryClient client(env.GetDriver());
+                    NYdb::NQuery::TQueryClient client(env.GetDriver(), NYdb::NQuery::TClientSettings()
+                        .Database("/Root/Database").DiscoveryMode(NYdb::EDiscoveryMode::Off));
                     const auto deleted = client.ExecuteQuery(TStringBuilder() << "DELETE FROM `" << table.Path << "`;",
                         NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
                     UNIT_ASSERT_C(deleted.IsSuccess(), deleted.GetIssues().ToString());

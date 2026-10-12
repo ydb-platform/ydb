@@ -171,3 +171,76 @@ UPDATE Orders SET Status = 'done' WHERE OrderId = 42
 Утилита корректно обрабатывает несортированные и смешанные лог-файлы: фильтрация основана на значениях временных меток, а не на позициях строк.
 
 {% endnote %}
+
+## Выгрузка в локальную базу данных {#to-database}
+
+{% include [log_sink_columnshard](../../../_includes/log_sink_columnshard.md) %}
+
+Возможна выгрузка логов TLI в локальную базу данных или какое-либо другое хранилище информации (см. [настройки логирования](../../../reference/configuration/log_config.md#events) ). Логи TLI формируются двумя источниками событий:
+
+- Нарушение блокировки данных на уровне data shard;
+- Нарушение блокировки данных на уровне сессии.
+
+Соответственно, для выгрузки логов TLI в таблицы БД конфигурационный файл должен содержать примерно следующее:
+
+```yaml
+log_config:
+  sink:
+    - source: tli-datashard
+      destination: local-db
+      database: ...
+    - source: local-db
+      destination: ...
+      database: tli-session
+      ...
+    ...
+```
+
+Для каждого источника событий создаётся отдельная таблица.
+
+### Нарушение блокировки данных на уровне data shard
+
+Таблица содержит информацию, связанную с блокировкой данных на уровне отдельных data shard.
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `tablet_id` | `ui64` | Идентификатор таблетки DataShard |
+| `message` | `utf8` | Причина записи (см. далее) |
+| `breaker_query_span_id` | `ui64` | Идентификатор запроса-нарушителя |
+| `victim_query_span_id` | `ui64` | Идентификатор запроса-жертвы |
+
+Кроме того, таблица имеет [набор стандартных полей](../../../reference/configuration/log_config.md#event-local-database-columns).
+
+Возможные значения поля `message`:
+
+- `Write transaction broke other locks`
+- `Write transaction aborted, broke other transaction locks during cleanup`
+- `Write transaction broke other locks (deferred)`
+- `Write transaction was a victim of broken locks`
+- `Read transaction was a victim of broken locks`
+- `Tablet split operation invalidated locks`
+- `Schema change: table removed invalidated locks`
+- `Replication apply broke locks on replicated rows`
+
+### Нарушение блокировки данных на уровне сессии
+
+Таблица содержит информацию, связанную с блокировкой данных на уровне сессии.
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `message` | `utf8` | Причина записи (см. далее). |
+| `trace_id` | `ui64` | Идентификатор трассировки. |
+| `breaker_tx_span_id` | `ui64` | Идентификатор транзакции, которая сломала чужие блокировки. |
+| `victim_tx_span_id` | `ui64` | Идентификатор транзакции, чьи блокировки были сломаны. |
+| `query_span_id` | `ui64` | Идентификатор запроса. |
+| `query_text` | `utf8` | Текст запроса. |
+
+Кроме того, таблица имеет [набор стандартных полей](../../../reference/configuration/log_config.md#event-local-database-columns).
+
+Возможные значения поля `message`:
+- Commit had broken other locks
+- Query had broken other locks
+- Commit had broken other locks (deferred)
+- Query had broken other locks (deferred)
+- Commit was a victim of broken locks
+- Query was a victim of broken locks

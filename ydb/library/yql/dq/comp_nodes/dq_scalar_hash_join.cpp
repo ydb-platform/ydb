@@ -131,9 +131,16 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
         : TBase(&meta->Renames, converters)
-        , BuildWidth_(std::ssize(meta->InputTypes.Build))
-        , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
+        , Widths_({.Build = static_cast<int>(std::ssize(meta->InputTypes.Build)),
+                   .Probe = static_cast<int>(std::ssize(meta->InputTypes.Probe))})
     {
+        if constexpr (LeftSemiOrOnly(Join.Kind)) {
+            for (auto rename : *this->Renames_) {
+                MKQL_ENSURE(rename.Side == Join.Preserved,
+                            "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
+            }
+        }
+
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
             const auto& nullTypes = meta->UserTypes.SelectSide(Join.NullSupplying());
             for (int i = 0; i < std::ssize(nullTypes); ++i) {
@@ -156,30 +163,26 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
         res.Buffer.reserve(nItems * this->Columns());
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
-            const int preservedWidth = Join.Preserved == ESide::Probe ? ProbeWidth_ : BuildWidth_;
-            auto& preservedValues = Join.Preserved == ESide::Probe ? ProbeValues_ : BuildValues_;
+            const int preservedWidth = Widths_.SelectSide(Join.Preserved);
+            auto& preservedValues = Values_.SelectSide(Join.Preserved);
             preservedValues.resize(nItems * preservedWidth);
             this->Converters_.SelectSide(Join.Preserved)
                 ->UnpackBatch(res.Packs.SelectSide(Join.Preserved), preservedValues.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
-                    MKQL_ENSURE(rename.Side == Join.Preserved,
-                                "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
                     res.Buffer.push_back(preservedValues[tupleIndex * preservedWidth + rename.Index]);
                 }
             }
         } else {
-            BuildValues_.resize(nItems * BuildWidth_);
-            ProbeValues_.resize(nItems * ProbeWidth_);
-            this->Converters_.Build->UnpackBatch(res.Packs.Build, BuildValues_.data());
-            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
+            for (ESide side : EachSide) {
+                auto& values = Values_.SelectSide(side);
+                values.resize(nItems * Widths_.SelectSide(side));
+                this->Converters_.SelectSide(side)->UnpackBatch(res.Packs.SelectSide(side), values.data());
+            }
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
-                    if (rename.Side == ESide::Build) {
-                        res.Buffer.push_back(BuildValues_[tupleIndex * BuildWidth_ + rename.Index]);
-                    } else {
-                        res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
-                    }
+                    const auto& values = Values_.SelectSide(rename.Side);
+                    res.Buffer.push_back(values[tupleIndex * Widths_.SelectSide(rename.Side) + rename.Index]);
                 }
             }
         }
@@ -188,10 +191,8 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
     }
 
 private:
-    const int BuildWidth_;
-    const int ProbeWidth_;
-    TMKQLVector<NUdf::TUnboxedValue> BuildValues_;
-    TMKQLVector<NUdf::TUnboxedValue> ProbeValues_;
+    const TSides<int> Widths_;
+    TSides<TMKQLVector<NUdf::TUnboxedValue>> Values_;
 };
 
 template <TPhysicalJoin Join>

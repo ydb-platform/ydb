@@ -285,6 +285,30 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
 
+    Y_UNIT_TEST(CompletedSessionCanStartAnotherWithoutReboot) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        f.StartMove();
+        const auto first = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        UNIT_ASSERT_C(first, "the first session must complete");
+        f.AssertDrainedSuccess(first);
+
+        f.StartMove({ NewGroup });
+        const auto refused = f.DriveGate(20);
+        UNIT_ASSERT(refused);
+        UNIT_ASSERT_VALUES_EQUAL((int)refused->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch);
+
+        f.StartMove();
+        const auto next = f.DriveGateWithWrite(150, 3, 1001, 1002);
+        UNIT_ASSERT_C(next, "a completed or refused request must not prevent another session in the same incarnation");
+        f.AssertDrainedSuccess(next);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1001u);
+    }
+
     // A group still holding the latest history entry keeps taking writes and can never converge, so refuse it like keyvalue does.
     Y_UNIT_TEST(MoveDataRejectsAGroupStillTakingWrites) {
         TMoveDataFixture f;

@@ -2,35 +2,40 @@
 
 #include "columnshard_private_events.h"
 
+#include "resource_subscriber/task.h"
+
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+namespace NKikimrTabletBase {
+class TEvMoveData;
+}
+
 namespace NKikimr::NColumnShard {
 
 class TColumnShard;
 
-// Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
-struct TMoveDataState {
-    TActorId HiveSender;
-    THashSet<ui32> TargetGroups;
-    bool Active = false;
-    // Set by the executor's MoveDataCompleted(): vacuum done, the blob gates still pending.
-    bool VacuumCompleted = false;
-    // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
-    ui64 ReportedRejections = 0;
-    // The driver restarts the actualizer for the new set before any gate check may pass.
-    bool TargetsChanged = false;
-};
-
-// Owns the move loop (relaunch, metadata re-arm, rewrites, gate) on its own cadence; same mailbox as the tablet, so not CPU offload.
+// The driver and tablet share a mailbox; synchronous admission precedes queued gate checks.
 class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
 private:
-    TColumnShard* Self;
-    // Dropped to zero by TColumnShard::Die before it poisons us; an event queued in between must not touch Self.
+    // On restart Hive resends the request; session progress is not persisted.
+    struct TSession {
+        TActorId HiveSender;
+        THashSet<ui32> TargetGroups;
+        bool Active = false;
+        bool VacuumCompleted = false;
+        ui64 ReportedRejections = 0;
+        bool TargetsChanged = false;
+    };
+
+    TColumnShard* const Self;
+    // Dropped before the tablet stops the driver, so queued events cannot touch a dead owner.
     const std::shared_ptr<TAtomicCounter> TabletActivity;
-    // Periodic fallback interval; pokes run a turn sooner.
+    TSession State;
+    const NOlap::NResourceBroker::NSubscribe::TTaskContext MetadataTaskSubscription;
+    const std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
     static constexpr TDuration Cadence = TDuration::Seconds(5);
 
     void ScheduleWakeup(const TActorContext& ctx) {
@@ -41,21 +46,27 @@ private:
         return TabletActivity->Val() != 0;
     }
 
+    void AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx);
+    void RestartActualizer();
+    NOlap::NActualizer::TMoveDataQueueSizes UpdateQueueSizes();
+    void CheckGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues);
+    void SetupMetadata();
+    void SetupRewrites();
     void StartAndCheckGate(const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx);
 
 public:
-    TMoveDataDriver(TColumnShard* self, const std::shared_ptr<TAtomicCounter>& tabletActivity)
-        : Self(self)
-        , TabletActivity(tabletActivity)
-    {
-    }
+    TMoveDataDriver(TColumnShard* self, const std::shared_ptr<TAtomicCounter>& tabletActivity);
+
+    // Called on the owner's mailbox, before another queued driver turn can pass the gate.
+    static void Request(TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx);
+    static void Stop(TColumnShard& owner, const TActorContext& ctx);
+    void OnVacuumCompleted(const TActorContext& ctx);
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
-        // The tablet pokes after registering; this is the periodic fallback.
         ScheduleWakeup(ctx);
     }
 

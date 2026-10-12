@@ -1203,22 +1203,18 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         const TString queueUrl = CreateQueueForAuthMatrix(fixture, ESqsProtocol::Json, true);
 
-        const auto setupAccessServiceMock = [](auto& mock) {
-            // The service account belongs to folder A, but may send only to folder B (folder4).
-            auto* serviceAccount = mock.AuthenticateData["cross-folder-sa"].Response.mutable_subject()->mutable_service_account();
-            serviceAccount->set_id("cross-folder-sa-id");
-            serviceAccount->set_folder_id("folderA");
-            mock.AuthorizeData["cross-folder-sa-ymq.messages.send-folder4"]
-                .Response.mutable_subject()->mutable_service_account()->set_id("cross-folder-sa-id");
+        // The service account belongs to folder A, but may send only to folder B (folder4).
+        auto* serviceAccount = fixture.AccessServiceMock.AuthenticateData["cross-folder-sa"].Response.mutable_subject()->mutable_service_account();
+        serviceAccount->set_id("cross-folder-sa-id");
+        serviceAccount->set_folder_id("folderA");
+        fixture.AccessServiceMock.AuthorizeData["cross-folder-sa-ymq.messages.send-folder4"]
+            .Response.mutable_subject()->mutable_service_account()->set_id("cross-folder-sa-id");
 
-            auto* ownFolderServiceAccount = mock.AuthenticateData["own-folder-sa"].Response.mutable_subject()->mutable_service_account();
-            ownFolderServiceAccount->set_id("own-folder-sa-id");
-            ownFolderServiceAccount->set_folder_id("folderA");
-            mock.AuthorizeData["own-folder-sa-ymq.messages.send-folderA"]
-                .Response.mutable_subject()->mutable_service_account()->set_id("own-folder-sa-id");
-        };
-        setupAccessServiceMock(fixture.AccessServiceMock);
-        setupAccessServiceMock(fixture.AccessServiceMockV2);
+        auto* ownFolderServiceAccount = fixture.AccessServiceMock.AuthenticateData["own-folder-sa"].Response.mutable_subject()->mutable_service_account();
+        ownFolderServiceAccount->set_id("own-folder-sa-id");
+        ownFolderServiceAccount->set_folder_id("folderA");
+        fixture.AccessServiceMock.AuthorizeData["own-folder-sa-ymq.messages.send-folderA"]
+            .Response.mutable_subject()->mutable_service_account()->set_id("own-folder-sa-id");
 
         // A nonempty address disables the unconditional authorization mock in the SQS actor.
         // The folder service actor installed by the fixture still resolves folders to cloud4.

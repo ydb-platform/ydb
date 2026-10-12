@@ -59,7 +59,7 @@ public:
     NOpt::TKqpProviderContext CBOCtx;
     std::optional<NJson::TJsonValue> ExecutionJson;
     std::optional<NJson::TJsonValue> ExplainJson;
-    bool EmptyPreamble = false;
+    NYql::TExprNode::TPtr QuerySettings;
 
     TRBOTraceLog TraceLog;
 };

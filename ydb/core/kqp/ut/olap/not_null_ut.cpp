@@ -1,3 +1,5 @@
+#include "not_null_test_enums.h"
+
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
@@ -9,6 +11,7 @@
 
 namespace NKikimr::NKqp {
 using namespace NYdb;
+using namespace NSetNotNull;
 
 namespace {
 
@@ -24,15 +27,22 @@ struct TFixture {
     TKikimrRunner Kikimr;
     NQuery::TQueryClient Client;
 
-    explicit TFixture(bool enabled = true)
+    explicit TFixture(ETableKind tableKind = ETableKind::Column, bool enabled = true)
         : Kikimr(MakeSettings(enabled))
         , Client(Kikimr.RunCall([&] { return Kikimr.GetQueryClient(); }))
     {
-        Success(R"(
+        TStringBuilder create;
+        create << R"(
             CREATE TABLE `/Root/t` (
                 k Uint64 NOT NULL, v Utf8, w Uint64, PRIMARY KEY(k)
-            ) PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = 4);
-        )", true);
+            )
+        )";
+        if (tableKind == ETableKind::Column) {
+            create << "PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = 4);";
+        } else {
+            create << "WITH (STORE = ROW, UNIFORM_PARTITIONS = 4);";
+        }
+        Success(create, true);
     }
 
     auto Execute(const TString& sql, bool ddl = false) {
@@ -105,16 +115,24 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.Failure("UPSERT INTO `/Root/wide` (k, v199) VALUES (3u, NULL);");
     }
 
-    Y_UNIT_TEST(FeatureFlag) {
-        TFixture f(false);
+    Y_UNIT_TEST(FeatureFlag, ETableKind, EFeatureFlag) {
+        const auto tableKind = Arg<0>();
+        const bool enabled = Arg<1>() == EFeatureFlag::Enabled;
+        TFixture f(tableKind, enabled);
         const auto result = f.Execute(SetNotNull, true);
-        UNIT_ASSERT(!result.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "SET NOT NULL for column tables is disabled");
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);");
+        if (tableKind == ETableKind::Column && !enabled) {
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "SET NOT NULL for column tables is disabled");
+            f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);");
+        } else {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);");
+        }
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two');");
     }
 
-    Y_UNIT_TEST(EmptyTableAndRepeatedRequest) {
-        TFixture f;
+    Y_UNIT_TEST(EmptyTableAndRepeatedRequest, ETableKind) {
+        TFixture f(Arg<0>());
         f.Success(SetNotNull, true);
         f.Success(SetNotNull, true);
         f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);");
@@ -123,8 +141,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows(R"([[1u;"value"]])");
     }
 
-    Y_UNIT_TEST(ValidateExistingDataAndDropConstraint) {
-        TFixture f;
+    Y_UNIT_TEST(ValidateExistingDataAndDropConstraint, ETableKind) {
+        TFixture f(Arg<0>());
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'), (2u, 'two');");
         f.Success(SetNotNull, true);
         f.CheckRows(R"([[1u;"one"];[2u;"two"]])");
@@ -134,8 +152,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows(R"([[1u;["one"]];[2u;["two"]];[3u;#]])");
     }
 
-    Y_UNIT_TEST(RejectNullAndRetryAfterOverwriteAndDelete) {
-        TFixture f;
+    Y_UNIT_TEST(RejectNullAndRetryAfterOverwriteAndDelete, ETableKind) {
+        TFixture f(Arg<0>());
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'), (2u, NULL), (3u, NULL);");
         auto result = f.Execute(SetNotNull, true);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
@@ -146,8 +164,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows(R"([[1u;"one"];[2u;"two"]])");
     }
 
-    Y_UNIT_TEST(ColumnMissingInOldPortions) {
-        TFixture f;
+    Y_UNIT_TEST(ColumnAddedAfterData, ETableKind) {
+        TFixture f(Arg<0>());
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one');");
         f.Success("ALTER TABLE `/Root/t` ADD COLUMN added Uint64;", true);
         f.Failure("ALTER TABLE `/Root/t` ALTER COLUMN added SET NOT NULL;", true);
@@ -158,8 +176,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         CompareYson("[[42u]]", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(MultipleColumnsAreAtomic) {
-        TFixture f;
+    Y_UNIT_TEST(MultipleColumnsAreAtomic, ETableKind) {
+        TFixture f(Arg<0>());
         f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'one', NULL);");
         const TString alter = "ALTER TABLE `/Root/t` ALTER COLUMN v SET NOT NULL, ALTER COLUMN w SET NOT NULL;";
         f.Failure(alter, true);
@@ -170,8 +188,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.Failure("UPSERT INTO `/Root/t` (k, v, w) VALUES (2u, 'two', NULL);");
     }
 
-    Y_UNIT_TEST(DelayedWriteCannotUseOldNullableSchema) {
-        TFixture f;
+    Y_UNIT_TEST(DelayedWriteCannotUseOldNullableSchema, ETableKind) {
+        TFixture f(Arg<0>());
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         TAutoPtr<IEventHandle> delayed;
         bool capture = true;
@@ -233,8 +251,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows("[[1u;#]]");
     }
 
-    Y_UNIT_TEST(CancelValidationRestoresNullableWrites) {
-        TFixture f;
+    Y_UNIT_TEST(CancelValidationRestoresNullableWrites, ETableKind) {
+        TFixture f(Arg<0>());
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         ui64 schemeShardId = 0;
         ui64 operationId = 0;
@@ -263,8 +281,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.Success("DROP TABLE `/Root/t`;", true);
     }
 
-    Y_UNIT_TEST_TWIN(WritesAndSchemaChangesDuringValidation, Reboot) {
-        TFixture f;
+    Y_UNIT_TEST(WritesAndSchemaChangesDuringValidation, ETableKind, EReboot) {
+        TFixture f(Arg<0>());
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one');");
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         TVector<TAutoPtr<IEventHandle>> requests;
@@ -286,14 +304,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows(R"([[1u;["one"]];[2u;["two"]]])");
         f.Failure("ALTER TABLE `/Root/t` DROP COLUMN v;", true);
         f.Failure("DROP TABLE `/Root/t`;", true);
-        if constexpr (Reboot) {
+        if (Arg<1>() == EReboot::Yes) {
             const auto& record = requests.front()->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
             const ui64 schemeShardId = record.GetOwnerId();
-            const ui64 columnShardId = record.GetTabletId();
+            const ui64 shardId = record.GetTabletId();
             // Recovery must finish even when admission is disabled.
             runtime.GetAppData().FeatureFlags.SetEnableColumnTableSetNotNull(false);
             RebootTablet(runtime, schemeShardId, runtime.AllocateEdgeActor());
-            RebootTablet(runtime, columnShardId, runtime.AllocateEdgeActor());
+            RebootTablet(runtime, shardId, runtime.AllocateEdgeActor());
         }
         capture = false;
         for (auto& request : requests) {

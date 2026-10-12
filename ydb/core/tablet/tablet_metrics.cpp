@@ -305,8 +305,15 @@ bool TResourceMetricsSendState::TryUpdate(TResourceMetricsValues& src, const TAc
         return false; // too soon
     }
     NKikimrTabletBase::TMetrics values;
-    bool updated = FillChanged(src, values, now, past > TDuration::Seconds(60));
+    // Owner-only sends must not postpone Hive's periodic placement refresh.
+    bool updated = FillChanged(src, values, now, now - LastHiveUpdate > TDuration::Seconds(60));
     if (updated) {
+        const bool hiveMetrics = values.HasCPU() || values.HasMemory() || values.HasNetwork() ||
+            values.HasStorage() || values.GroupReadThroughputSize() || values.GroupWriteThroughputSize() ||
+            values.GroupReadIopsSize() || values.GroupWriteIopsSize();
+        if (hiveMetrics) {
+            LastHiveUpdate = now;
+        }
         ctx.Send(Launcher, new TEvLocal::TEvTabletMetrics(TabletId, FollowerId, values, Executor,
             src.TabletMemoryReport, SystemTablet));
         // Other metrics may also carry a fresh owner snapshot. Remember what was sent.

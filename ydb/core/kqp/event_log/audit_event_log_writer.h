@@ -84,7 +84,7 @@ public:
             std::make_shared<TDBLogMessageStringValueColumn>("login_member"),
             std::make_shared<TDBLogMessageStringValueColumn>("login_user_change"),
             std::make_shared<TDBLogMessageStringValueColumn>("login_user_level"),
-            std::make_shared<TDBLogMessageStringValueColumn>("id"),
+            std::make_shared<TDBLogMessageStringValueColumn>("audit_event_id"),
             std::make_shared<TDBLogMessageStringValueColumn>("uid"),
             std::make_shared<TDBLogMessageStringValueColumn>("start_time"),
             std::make_shared<TDBLogMessageStringValueColumn>("end_time"),

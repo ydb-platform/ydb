@@ -65,8 +65,20 @@ public:
             } else {
                 return value > static_cast<TSrc>(-1) && value < upper;
             }
+        } else if constexpr (std::is_integral_v<TSrc> && std::is_integral_v<TDst>) {
+            if constexpr (std::is_signed_v<TSrc> == std::is_signed_v<TDst>) {
+                return (value >= std::numeric_limits<TDst>::min()) && (value <= std::numeric_limits<TDst>::max());
+            } else {
+                if (t < TSrc(0)) {
+                    // Unable cast negative to unsigned
+                    return false;
+                }
+
+                auto unsignedValue = static_cast<std::make_unsigned_t<TSrc>>(value);
+                return unsignedValue <= std::numeric_limits<TDst>::max();
+            }
         } else {
-            return true;
+            static_assert(false, "Value type is not supported (castable to to numeric)");
         }
     }
 

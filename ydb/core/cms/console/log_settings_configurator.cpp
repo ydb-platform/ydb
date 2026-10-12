@@ -259,9 +259,7 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     if (sink.HasMaxBatchSize()) {
         settings.MaxBatchSize = sink.GetMaxBatchSize();
     }
-    if (sink.HasFlushTimeout()) {
-        settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
-    }
+settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
     if (sink.HasStoreShardsCount()) {
         settings.StoreShardsCount = sink.GetStoreShardsCount();
     }

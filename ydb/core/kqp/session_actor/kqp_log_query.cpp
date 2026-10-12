@@ -264,7 +264,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
     }
     if (fields.StartedAt) {
         YDB_LOG_UPDATE_MESSAGE(message,
-            {"startedAtUs", fields.StartedAt});
+            {"startedAtUs", fields.StartedAt.MicroSeconds()});
     }
     if (!fields.Status.empty()) {
         YDB_LOG_UPDATE_MESSAGE(message,

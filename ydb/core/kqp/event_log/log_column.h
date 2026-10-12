@@ -201,15 +201,15 @@ public:
 };
 
 // Write message priority to column
-class TDBLogMessageNodeIdColumn : public TTypedDBLogColumn<ui16> {
+class TDBLogMessageNodeIdColumn : public TTypedDBLogColumn<ui32> {
 public:
-    using TBase = TTypedDBLogColumn<ui16>;
+    using TBase = TTypedDBLogColumn<ui32>;
 
     TDBLogMessageNodeIdColumn() : TBase("node_id", TDatabaseSettings::PK().SetNotNull(true)) {
     }
 
     TWriteResult Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        return AppendValue(static_cast<ui16>(message.NodeId)) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
+        return AppendValue(message.NodeId) ? TWriteResultKind::Success : TWriteResultKind::ArrowError;
     }
 };
 

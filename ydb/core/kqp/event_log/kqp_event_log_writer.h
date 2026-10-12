@@ -27,7 +27,8 @@ public:
             std::make_shared<TDBLogMessageStringValueColumn>("issues", std::vector<TKeyName>{"issues"}, notNull),
             std::make_shared<TDBLogMessageStringValueColumn>("is_streaming_query", std::vector<TKeyName>{"isStreamingQuery"}, notNullDict),
             std::make_shared<TDBLogMessageStringValueColumn>("duration_us", std::vector<TKeyName>{"durationUs"}, notNull),
-            std::make_shared<TDBLogMessageStringValueColumn>("database", std::vector<TKeyName>{"database"}, dict),
+            std::make_shared<TDBLogMessageStringValueColumn>("results_size", std::vector<TKeyName>{"resultsSize"}, notNull),
+            std::make_shared<TDBLogMessageStringValueColumn>("database", std::vector<TKeyName>{"database"}, dict)
             std::make_shared<TDBLogMessageStringValueColumn>("database_id", std::vector<TKeyName>{"databaseId"}, dict),
             std::make_shared<TDBLogMessageStringValueColumn>("trace_id", std::vector<TKeyName>{"traceId"}),
             std::make_shared<TDBLogMessageStringValueColumn>("query_id", std::vector<TKeyName>{"queryId"}),

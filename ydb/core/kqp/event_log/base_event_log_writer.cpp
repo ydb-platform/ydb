@@ -115,8 +115,7 @@ void TBaseEventLogWriter::Flush() {
     TState newState = oldState;
     oldState.Kind = TStateKind::Started;
     newState.Kind = TStateKind::StorageCreating;
-    if (State.compare_exchange_strong(oldState, TState(TStateKind::StorageCreating))) {
-        CreateOrUpdateStorage();
+    if (State.compare_exchange_strong(oldState, newState)) {
         return ;
     }
 

@@ -73,14 +73,14 @@ public:
 
     static std::set<std::string> GetMessages() {
         return std::set<std::string>{
-            "Write transaction broke other locks"
-            "Write transaction aborted, broke other transaction locks during cleanup"
-            "Write transaction broke other locks (deferred)"
-            "Write transaction was a victim of broken locks"
-            "Read transaction was a victim of broken locks"
-            "Tablet split operation invalidated locks"
-            "Schema change: table removed invalidated locks"
-            "Replication apply broke locks on replicated rows"};
+            "Write transaction broke other locks",
+            "Write transaction aborted, broke other transaction locks during cleanup",
+            "Write transaction broke other locks (deferred)",
+            "Write transaction was a victim of broken locks",
+            "Read transaction was a victim of broken locks",
+            "Tablet split operation invalidated locks",
+            "Schema change: table removed invalidated locks",
+            "Replication apply broke locks on replicated rows"
     }
 };
 

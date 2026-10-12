@@ -116,7 +116,8 @@ void TBaseEventLogWriter::Flush() {
     oldState.Kind = TStateKind::Started;
     newState.Kind = TStateKind::StorageCreating;
     if (State.compare_exchange_strong(oldState, newState)) {
-        return ;
+        CreateOrUpdateStorage();
+        return;
     }
 
     // If storage should be created

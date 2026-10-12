@@ -346,7 +346,7 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
     NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
 
     auto oldSinksPtr = logSettings->Sinks;
-    if (oldSinksPtr == nullptr) {
+    if (oldSinksPtr != nullptr) {
         oldSinks = *oldSinksPtr;
     }
 

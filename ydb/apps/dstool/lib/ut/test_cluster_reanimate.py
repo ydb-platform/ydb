@@ -196,17 +196,22 @@ class TestReanimate(unittest.TestCase):
         self.assertIn('Completed: 0; skipped: 1; total: 1', self.stdout.getvalue())
 
     def test_command_registration_and_options(self):
-        parser = ArgumentParser()
-        parser.add_argument('--dry-run', action='store_true')
-        command_map = commands.make_command_map_by_structure(
-            parser.add_subparsers(dest='global_command', required=True),
-        )
-        args = parser.parse_args(['--dry-run', 'cluster', 'reanimate', '--pool', POOL,
-                                  '--dc', 'sas', '--ignore-failure-model-group-check'])
-        command_map['cluster'](args)
-        self.assertTrue(args.dry_run)
-        self.assertTrue(args.ignore_failure_model_group_check)
+        for before, after in ((['--dry-run'], []), ([], ['--dry-run']),
+                              (['--dry-run'], ['--dry-run']), (['-n'], []), ([], ['-n'])):
+            with self.subTest(before=before, after=after):
+                parser = ArgumentParser()
+                parser.add_argument('--dry-run', '-n', action='store_true')
+                command_map = commands.make_command_map_by_structure(
+                    parser.add_subparsers(dest='global_command', required=True),
+                )
+                command_args = ['cluster', 'reanimate', '--pool', POOL,
+                                '--dc', 'sas', '--ignore-failure-model-group-check']
+                args = parser.parse_args(before + command_args + after)
+                command_map['cluster'](args)
+                self.assertTrue(args.dry_run)
+                self.assertTrue(args.ignore_failure_model_group_check)
         self.invoke.assert_not_called()
+        self.sleep.assert_not_called()
 
     def test_positive_intervals(self):
         for value in ('0', '-1', 'invalid'):

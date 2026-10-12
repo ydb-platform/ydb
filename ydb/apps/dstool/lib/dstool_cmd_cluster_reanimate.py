@@ -12,7 +12,7 @@ three disks, then evict the first and second again, then evict each remaining
 disk once in order, starting with the fourth.
 Skip groups with fewer than three matching disks.
 Refresh the generation before each eviction and wait for the slot to change.
-Global --dry-run only prints the plan.
+--dry-run only prints the plan and can be passed before or after the subcommand.
 '''
 
 
@@ -24,6 +24,8 @@ def positive(value):
 
 
 def add_options(p):
+    p.add_argument('--dry-run', '-n', dest='reanimate_dry_run', action='store_true',
+                   help='Print the plan without evicting VDisks')
     p.add_argument('--pool', required=True, help='Exact storage pool name, including :media suffix')
     p.add_argument('--dc', required=True, help='Source data center')
     p.add_argument('--timeout', type=positive, default=300, help='Seconds to wait for each relocation')
@@ -180,6 +182,7 @@ def run(args):
 
 
 def do(args):
+    args.dry_run = args.dry_run or getattr(args, 'reanimate_dry_run', False)
     try:
         run(args)
     except KeyboardInterrupt:

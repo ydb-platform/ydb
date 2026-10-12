@@ -109,8 +109,9 @@ waiting, and `--poll-interval` (default 5 seconds) sets the polling interval.
 Network calls use the standard dstool connection settings; the standalone
 script's `--dstool` and subprocess `--request-timeout` options are not used.
 
-Global `--dry-run` prints the plan without eviction requests, waiting, or file
-writes. `--state-dir` creates a new directory containing each group's `plan.json`
+`--dry-run` (or `-n`) can be passed before or after `cluster reanimate`. It prints
+the plan without eviction requests, waiting, or file writes.
+`--state-dir` creates a new directory containing each group's `plan.json`
 and per-step `N-before.json` / `N-after.json` evidence. An existing directory is
 an error. `--ignore-degraded-group-check` and
 `--ignore-failure-model-group-check` are passed to the controller.

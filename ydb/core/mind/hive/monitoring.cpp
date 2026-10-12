@@ -2487,6 +2487,11 @@ function kickNode(element, nodeId) {
     $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode'), success: function(){ $(element).addClass('glyphicon-transfer'); }});
 }
 
+// node monitoring through the mon proxy, it needs neither the node's host nor its port
+function nodeMonitoringLink(node) {
+    return '<a href="/node/' + node.Id + '/">' + node.Name + '</a>';
+}
+
 function drainNode(element, nodeId) {
     $(element).removeClass('glyphicon-transfer');
     $.ajax({type: 'POST', url: ('?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode'), success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
@@ -2698,7 +2703,7 @@ function onFreshDataLong(result) {
                         + '<td style="text-align:center"><span title="Kick tablets on this node" onclick="kickNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-transfer"></span></td>'
                         + '<td style="text-align:center"><span title="Drain this node" onclick="drainNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-log-out"></span></td>'
                         + '</tr>').appendTo('#node_table > tbody').get(0);
-                    nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
+                    nodeElement.cells[1].innerHTML = nodeMonitoringLink(node);
                     nodeElement.cells[2].innerHTML = node.DataCenter;
                     was_append = true;
                 }
@@ -2745,7 +2750,7 @@ function onFreshDataLong(result) {
                     }
                 }
                 if (!old_node || old_node.Name != node.Name) {
-                    nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
+                    nodeElement.cells[1].innerHTML = nodeMonitoringLink(node);
                 }
                 if (!old_node || old_node.DataCenter != node.DataCenter) {
                     nodeElement.cells[2].innerHTML = node.DataCenter;

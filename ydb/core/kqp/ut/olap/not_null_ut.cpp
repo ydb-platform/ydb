@@ -56,10 +56,10 @@ struct TFixture {
         Success(create, true);
     }
 
-    auto Execute(const TString& sql, bool ddl = false) {
+    auto Execute(const TString& sql, bool ddl = false, const NQuery::TExecuteQuerySettings& settings = {}) {
         return Kikimr.RunCall([&] {
             return Client.ExecuteQuery(sql,
-                ddl ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                ddl ? NQuery::TTxControl::NoTx() : NQuery::TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         });
     }
 
@@ -68,9 +68,11 @@ struct TFixture {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    void Failure(const TString& sql, bool ddl = false) {
-        const auto result = Execute(sql, ddl);
+    auto Failure(const TString& sql, bool ddl = false) {
+        const auto result = Execute(sql, ddl,
+            NQuery::TExecuteQuerySettings().RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0)));
         UNIT_ASSERT_C(!result.IsSuccess(), sql);
+        return result;
     }
 
     TStatus Write(EWriteMode mode, ui64 key, EWriteValue value) {
@@ -520,8 +522,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (3u, NULL);");
         f.Failure("UPSERT INTO `/Root/t` (k, w) VALUES (1u, 7u);");
         f.CheckRows(R"([[1u;["one"]];[2u;["two"]]])");
-        f.Failure("ALTER TABLE `/Root/t` DROP COLUMN v;", true);
-        f.Failure("DROP TABLE `/Root/t`;", true);
+        for (const auto* query : {"ALTER TABLE `/Root/t` DROP COLUMN v;", "DROP TABLE `/Root/t`;"}) {
+            const auto result = f.Failure(query, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "locked by tx");
+        }
         const auto reboot = Arg<1>();
         if (reboot != EReboot::None) {
             const auto& record = requests.front()->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;

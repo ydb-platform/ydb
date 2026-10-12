@@ -140,14 +140,7 @@ void THive::RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReas
         {"reason", EHiveEventReasonName(reason)},
         {"details", event.Details});
     RecentNodeEvents.PushBack(TRecentNodeEvent{.NodeId = node.Id, .Event = event});
-    if (!node.EventHistory) {
-        const ui64 historySize = GetNodeEventHistorySize();
-        if (historySize == 0) {
-            return;
-        }
-        node.EventHistory.ConstructInPlace(historySize);
-    }
-    node.EventHistory->PushBack(event);
+    node.EventHistory.Push(GetNodeEventHistorySize(), event);
 }
 
 void THive::RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EHiveEventReason reason, TString details, bool skipIfRepeated) {
@@ -156,9 +149,9 @@ void THive::RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EH
         // Recording them would also allocate a history for every tablet at once.
         return;
     }
-    if (skipIfRepeated && tablet.EventHistory && tablet.EventHistory->AvailSize() > 0) {
-        const THiveEvent& last = (*tablet.EventHistory)[tablet.EventHistory->TotalSize() - 1];
-        if (last.Type == type && last.Reason == reason && last.Details == details) {
+    if (skipIfRepeated) {
+        if (const THiveEvent* last = tablet.EventHistory.GetNewest();
+                last && last->Type == type && last->Reason == reason && last->Details == details) {
             return;
         }
     }
@@ -181,25 +174,19 @@ void THive::RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EH
         {"reason", EHiveEventReasonName(reason)},
         {"details", event.Details});
     RecentTabletEvents.PushBack(TRecentTabletEvent{.TabletId = tablet.GetFullTabletId(), .Event = event});
-    if (!tablet.EventHistory) {
-        const ui64 historySize = GetTabletEventHistorySize();
-        if (historySize == 0) {
-            return;
-        }
-        tablet.EventHistory.ConstructInPlace(historySize);
-    }
-    tablet.EventHistory->PushBack(event);
+    tablet.EventHistory.Push(GetTabletEventHistorySize(), event);
 }
 
-void ResizeEventHistory(TMaybe<TSimpleRingBuffer<THiveEvent>>& history, ui64 newSize) {
-    if (!history) {
+void TEventHistory::Resize(ui64 newSize) {
+    if (!Buffer) {
         return;
     }
     if (newSize == 0) {
-        history.Clear();
+        Buffer.Clear();
+        Capacity = 0;
         return;
     }
-    const TSimpleRingBuffer<THiveEvent>& old = *history;
+    const TSimpleRingBuffer<THiveEvent>& old = *Buffer;
     TSimpleRingBuffer<THiveEvent> resized(newSize);
     size_t first = old.FirstIndex();
     if (old.TotalSize() - first > newSize) {
@@ -208,22 +195,24 @@ void ResizeEventHistory(TMaybe<TSimpleRingBuffer<THiveEvent>>& history, ui64 new
     for (size_t i = first; i < old.TotalSize(); ++i) {
         resized.PushBack(old[i]);
     }
-    history = std::move(resized);
+    Buffer = std::move(resized);
+    Capacity = newSize;
 }
 
-void THive::ResizeTabletEventHistory(ui64 newSize) {
-    for (auto& [_, leader] : Tablets) {
-        ResizeEventHistory(leader.EventHistory, newSize);
-        for (const TFollowerTabletInfo& follower : leader.Followers) {
-            ResizeEventHistory(follower.EventHistory, newSize);
+void TEventHistory::Push(ui64 configuredSize, const THiveEvent& event) {
+    if (!Buffer) {
+        if (configuredSize == 0) {
+            return;
+        }
+        Buffer.ConstructInPlace(configuredSize);
+        Capacity = configuredSize;
+    } else if (Capacity != configuredSize) {
+        Resize(configuredSize);
+        if (!Buffer) {
+            return;
         }
     }
-}
-
-void THive::ResizeNodeEventHistory(ui64 newSize) {
-    for (auto& [_, node] : Nodes) {
-        ResizeEventHistory(node.EventHistory, newSize);
-    }
+    Buffer->PushBack(event);
 }
 
 void THive::RecordTabletBootFailure(const TTabletInfo& tablet, EHiveEventReason reason, TString details) {

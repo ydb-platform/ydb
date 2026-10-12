@@ -109,7 +109,7 @@ public:
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
     // diagnostics only: newest events of this node, constructed on the first event, see THive::RecordNodeEvent
-    TMaybe<TSimpleRingBuffer<THiveEvent>> EventHistory;
+    TEventHistory EventHistory;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;

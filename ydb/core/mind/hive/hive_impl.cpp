@@ -838,8 +838,6 @@ void THive::BuildLocalConfig() {
 
 void THive::BuildCurrentConfig() {
     const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
-    const ui64 previousTabletEventHistorySize = GetTabletEventHistorySize();
-    const ui64 previousNodeEventHistorySize = GetNodeEventHistorySize();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
@@ -909,13 +907,6 @@ void THive::BuildCurrentConfig() {
         ObjectDistributions.Disable();
     }
     BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
-
-    if (GetTabletEventHistorySize() != previousTabletEventHistorySize) {
-        ResizeTabletEventHistory(GetTabletEventHistorySize());
-    }
-    if (GetNodeEventHistorySize() != previousNodeEventHistorySize) {
-        ResizeNodeEventHistory(GetNodeEventHistorySize());
-    }
 
     const bool lockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     if (previousLockedTabletsSendMetrics != lockedTabletsSendMetrics) {

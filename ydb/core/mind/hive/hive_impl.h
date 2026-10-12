@@ -754,10 +754,6 @@ public:
     // skipIfRepeated drops the event when the tablet's last event has the same type, reason and details
     void RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EHiveEventReason reason, TString details = {}, bool skipIfRepeated = false);
     void RecordTabletBootFailure(const TTabletInfo& tablet, EHiveEventReason reason, TString details = {});
-    // applied when TabletEventHistorySize / NodeEventHistorySize change: subjects without a history are left as is,
-    // existing histories are rebuilt with the new capacity keeping the newest events
-    void ResizeTabletEventHistory(ui64 newSize);
-    void ResizeNodeEventHistory(ui64 newSize);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
     void ProcessWaitQueue();

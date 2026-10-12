@@ -165,7 +165,7 @@ public:
     double Weight;
     mutable TString BootState;
     // diagnostics only: newest events of this tablet, constructed on the first event, see THive::RecordTabletEvent
-    mutable TMaybe<TSimpleRingBuffer<THiveEvent>> EventHistory;
+    mutable TEventHistory EventHistory;
     TInstant PostponedStart;
     EBalancerPolicy BalancerPolicy;
     bool IsBackup = false;

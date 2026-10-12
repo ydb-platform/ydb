@@ -121,14 +121,6 @@ static TString GetTabletInfoIcon(ui64 hiveId, TTabletId tabletId) {
     return TStringBuilder() << " <a href='" << GetTabletInfoUrl(hiveId, tabletId) << "' title='Tablet info and event history in Hive'>&#9432;</a>";
 }
 
-// events of a tablet or a node, newest first, if any were recorded
-template <typename TCallback>
-static void ForEachEventNewestFirst(const TMaybe<TSimpleRingBuffer<THiveEvent>>& history, TCallback&& callback) {
-    if (history) {
-        ForEachNewestFirst(*history, Max<size_t>(), std::forward<TCallback>(callback));
-    }
-}
-
 static void RenderEventsTable(IOutputStream& out, const NJson::TJsonValue& events) {
     out << "<table class='table simple-table2'>";
     out << "<thead><tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr></thead>";
@@ -4612,7 +4604,7 @@ public:
         result["PinnedToNode"] = tablet.IsPinnedToNode();
         NJson::TJsonValue& events = result["Events"];
         events.SetType(NJson::JSON_ARRAY);
-        ForEachEventNewestFirst(tablet.EventHistory, [&events](const THiveEvent& event) {
+        tablet.EventHistory.ForEachNewestFirst([&events](const THiveEvent& event) {
             events.AppendValue(EventToJson(event));
         });
         return result;
@@ -5843,7 +5835,7 @@ public:
                 }
                 NJson::TJsonValue& events = json["Events"];
                 events.SetType(NJson::JSON_ARRAY);
-                ForEachEventNewestFirst(node->EventHistory, [&events](const THiveEvent& event) {
+                node->EventHistory.ForEachNewestFirst([&events](const THiveEvent& event) {
                     events.AppendValue(EventToJson(event));
                 });
             }
@@ -5909,7 +5901,7 @@ public:
             out << "<tr><th>Timestamp</th><th>Event</th><th>Reason</th><th>Details</th></tr>";
             out << "</thead>";
             out << "<tbody>";
-            ForEachEventNewestFirst(node->EventHistory, [&out](const THiveEvent& event) {
+            node->EventHistory.ForEachNewestFirst([&out](const THiveEvent& event) {
                 out << "<tr>";
                 RenderEventCells(out, event);
                 out << "</tr>";

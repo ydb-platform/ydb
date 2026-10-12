@@ -151,9 +151,45 @@ struct THiveEvent {
 
 static_assert(sizeof(THiveEvent) <= 16, "THiveEvent is expected to stay compact");
 
-// Rebuilds an existing history with the new capacity, keeping the newest events that fit; 0 drops the history.
-// An undefined history (no events recorded yet) is left as is.
-void ResizeEventHistory(TMaybe<TSimpleRingBuffer<THiveEvent>>& history, ui64 newSize);
+class TEventHistory {
+public:
+    bool IsEmpty() const {
+        return !Buffer.Defined();
+    }
+
+    size_t GetCapacity() const {
+        return Capacity;
+    }
+
+    size_t GetSize() const {
+        return Buffer ? Buffer->AvailSize() : 0;
+    }
+
+    const THiveEvent* GetNewest() const {
+        return GetSize() > 0 ? &(*Buffer)[Buffer->TotalSize() - 1] : nullptr;
+    }
+
+    // Appends an event, creating the buffer on the first event and resizing it first if the configured
+    // size changed; size 0 drops the buffer and records nothing.
+    void Push(ui64 configuredSize, const THiveEvent& event);
+
+    // Rebuilds the buffer with the new capacity keeping the newest events that fit; 0 drops the buffer.
+    // An empty history (no events recorded yet) is left as is.
+    void Resize(ui64 newSize);
+
+    template <typename TCallback>
+    void ForEachNewestFirst(TCallback&& callback) const {
+        if (Buffer) {
+            for (size_t i = Buffer->TotalSize(); i > Buffer->FirstIndex(); --i) {
+                callback((*Buffer)[i - 1]);
+            }
+        }
+    }
+
+private:
+    TMaybe<TSimpleRingBuffer<THiveEvent>> Buffer;
+    size_t Capacity = 0; // of Buffer, 0 when there is no buffer; TSimpleRingBuffer does not expose it
+};
 
 struct TRecentNodeEvent {
     TNodeId NodeId = 0;

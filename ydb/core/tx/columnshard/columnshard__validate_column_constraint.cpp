@@ -8,8 +8,6 @@
 namespace NKikimr::NColumnShard {
 namespace {
 
-// The normal scan reader merges versions, applies deletions and restores columns
-// absent in old portions. Looking at physical null counts would be incorrect here.
 class TColumnConstraintValidator : public TActorBootstrapped<TColumnConstraintValidator> {
     const TActorId Shard;
     const TActorId ReplyTo;
@@ -67,7 +65,7 @@ class TColumnConstraintValidator : public TActorBootstrapped<TColumnConstraintVa
 
     void PassAway() override {
         if (Scanner) {
-            Send(Scanner, new TEvents::TEvPoisonPill);
+            Send(Scanner, new TEvents::TEvPoison);
         }
         Send(Shard, new TEvPrivate::TEvColumnConstraintValidationFinished(OperationId));
         TActorBootstrapped::PassAway();
@@ -122,7 +120,7 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
     auto scan = std::make_unique<TEvDataShard::TEvKqpScan>();
     for (const auto& name : request.GetNotNullColumns()) {
         const auto columnIndex = schema->GetIndexInfo().GetColumnIndexOptional(name);
-        if (!columnIndex || !schema->GetIndexInfo().GetColumnFeaturesVerifiedByIndex(*columnIndex).GetSetNotNullInProgress()) {
+        if (!columnIndex || !schema->GetIndexInfo().GetColumnFeaturesVerifiedByIndex(*columnIndex).GetIsSetNotNullInProgress()) {
             fail("Column constraint write barrier is not installed");
             return;
         }
@@ -135,6 +133,7 @@ void TColumnShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev
         return;
     }
     const auto snapshot = GetMaxReadVersion();
+    // The scan must apply MVCC and deletions before checking NULL values.
     scan->Record.SetLocalPathId(request.GetPathId());
     scan->Record.SetTxId(request.GetId());
     scan->Record.MutableSnapshot()->SetStep(snapshot.GetPlanStep());

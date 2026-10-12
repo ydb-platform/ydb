@@ -2586,6 +2586,10 @@ public:
     {
         YQL_ENSURE(SessionCtx->Query().PreparingQuery);
 
+        if (req.set_not_null_size()) {
+            return PrepareAlterTable(cluster, std::move(req), Nothing(), 0, {});
+        }
+
         const auto ops = GetAlterOperationKinds(&req);
         if (ops.size() != 1) {
             IKqpGateway::TGenericResult errResult;

@@ -65,8 +65,8 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& ctx) const {
     }
 
     const auto& currentSchema = owner->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema();
-    if (!currentSchema->GetIndexInfo().IsCompatibleForWrite(Schema->GetIndexInfo())) {
-        Abort(owner, "column nullability changed", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
+    if (const auto compatibility = currentSchema->GetIndexInfo().CheckWriteCompatibility(Schema->GetIndexInfo()); compatibility.IsFail()) {
+        Abort(owner, compatibility.GetErrorMessage(), ctx, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
         return true;
     }
 

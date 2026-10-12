@@ -89,15 +89,19 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsTheSameDomain(domainPath);
+                .NotUnderDeleting();
+
+            if (!checks) {
+                return Reply(checks.GetStatus(), checks.GetError());
+            }
 
             if (tablePath->IsColumnTable()) {
                 checks.NotReadOnlyColumnTable();
             } else {
                 checks.IsTable().NotAsyncReplicaTable();
             }
+
+            checks.IsCommonSensePath().IsTheSameDomain(domainPath);
 
             if (!checks) {
                 return Reply(checks.GetStatus(), checks.GetError());

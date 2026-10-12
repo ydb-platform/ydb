@@ -95,7 +95,7 @@ struct TFixture {
         }
         query << ") VALUES (" << key << "u, 7u";
         if (value != EWriteValue::Missing) {
-            query << (value == EWriteValue::Filled ? ", 'filled'" : ", NULL");
+            query << (value == EWriteValue::Filled ? ", 'filled'u" : ", NULL");
         }
         query << ");";
         return Execute(query);
@@ -118,9 +118,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         const auto position = Arg<0>();
         const i64 nullKey = position == ENullPosition::None ? -1 : position == ENullPosition::First ? 0 : 99999;
         f.Success(TStringBuilder() << R"(
-            $rows = ListMap(ListFromRange(0, 100000), ($x) -> { RETURN AsStruct($x AS item); });
+            $rows = ListMap(ListFromRange(0ul, 100000ul), ($x) -> { RETURN AsStruct($x AS item); });
             UPSERT INTO `/Root/t` (k, v)
-            SELECT CAST(item AS Uint64), IF(item = )" << nullKey << R"(, CAST(NULL AS Utf8),
+            SELECT item, IF(item = )" << nullKey << R"(, CAST(NULL AS Utf8),
                 CAST(')" << TString(128, 'x') << R"(' AS Utf8)) FROM AS_TABLE($rows);
         )");
 
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
     Y_UNIT_TEST(ValidationAcrossShards, ETableKind, EShardCount) {
         const ui32 shardCount = static_cast<ui32>(Arg<1>());
         TFixture f(Arg<0>(), true, shardCount);
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u);");
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         TVector<TAutoPtr<IEventHandle>> requests;
         THashSet<ui64> shards;
@@ -249,15 +249,16 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
     }
 
     Y_UNIT_TEST(WideTableProjectsOnlyCheckedColumn) {
-        TFixture f;
+        constexpr ui32 shardCount = 4;
+        TFixture f(ETableKind::Column, true, shardCount);
         TStringBuilder create;
         create << "CREATE TABLE `/Root/wide` (k Uint64 NOT NULL, ";
         for (ui32 i = 0; i < 200; ++i) {
             create << "v" << i << " Utf8, ";
         }
-        create << "PRIMARY KEY(k)) PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = 4);";
+        create << "PRIMARY KEY(k)) PARTITION BY HASH(k) WITH (STORE = COLUMN, PARTITION_COUNT = " << shardCount << ");";
         f.Success(create, true);
-        f.Success("UPSERT INTO `/Root/wide` (k, v199) VALUES (1u, 'filled');");
+        f.Success("UPSERT INTO `/Root/wide` (k, v199) VALUES (1u, 'filled'u);");
 
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         ui32 scans = 0;
@@ -271,8 +272,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         });
         f.Success("ALTER TABLE `/Root/wide` ALTER COLUMN v199 SET NOT NULL;", true);
         runtime.SetObserverFunc(previous);
-        UNIT_ASSERT_VALUES_EQUAL(scans, 4);
-        f.Success("UPSERT INTO `/Root/wide` (k, v199) VALUES (2u, 'next');");
+        UNIT_ASSERT_VALUES_EQUAL(scans, shardCount);
+        f.Success("UPSERT INTO `/Root/wide` (k, v199) VALUES (2u, 'next'u);");
         f.Failure("UPSERT INTO `/Root/wide` (k, v199) VALUES (3u, NULL);");
     }
 
@@ -289,7 +290,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL);");
         }
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two'u);");
     }
 
     Y_UNIT_TEST(EmptyTableAndRepeatedRequest, ETableKind) {
@@ -304,7 +305,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
 
     Y_UNIT_TEST(ValidateExistingDataAndDropConstraint, ETableKind) {
         TFixture f(Arg<0>());
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'), (2u, 'two');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u), (2u, 'two'u);");
         f.Success(SetNotNull, true);
         f.CheckRows(R"([[1u;"one"];[2u;"two"]])");
         f.Failure("UPDATE `/Root/t` SET v = NULL WHERE k = 1u;");
@@ -315,11 +316,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
 
     Y_UNIT_TEST(RejectNullAndRetryAfterOverwriteAndDelete, ETableKind) {
         TFixture f(Arg<0>());
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'), (2u, NULL), (3u, NULL);");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u), (2u, NULL), (3u, NULL);");
         auto result = f.Execute(SetNotNull, true);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (4u, NULL);");
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two'u);");
         f.Success("DELETE FROM `/Root/t` WHERE k >= 3u;");
         f.Success(SetNotNull, true);
         f.CheckRows(R"([[1u;"one"];[2u;"two"]])");
@@ -327,7 +328,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
 
     Y_UNIT_TEST(ColumnAddedAfterData, ETableKind) {
         TFixture f(Arg<0>());
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u);");
         f.Success("ALTER TABLE `/Root/t` ADD COLUMN added Uint64;", true);
         f.Failure("ALTER TABLE `/Root/t` ALTER COLUMN added SET NOT NULL;", true);
         f.Success("UPSERT INTO `/Root/t` (k, added) VALUES (1u, 42u);");
@@ -339,14 +340,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
 
     Y_UNIT_TEST(MultipleColumnsAreAtomic, ETableKind) {
         TFixture f(Arg<0>());
-        f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'one', NULL);");
+        f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'one'u, NULL);");
         const TString alter = "ALTER TABLE `/Root/t` ALTER COLUMN v SET NOT NULL, ALTER COLUMN w SET NOT NULL;";
         f.Failure(alter, true);
         f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, NULL, NULL);");
-        f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'one', 1u);");
+        f.Success("UPSERT INTO `/Root/t` (k, v, w) VALUES (1u, 'one'u, 1u);");
         f.Success(alter, true);
         f.Failure("UPSERT INTO `/Root/t` (k, v, w) VALUES (2u, NULL, 2u);");
-        f.Failure("UPSERT INTO `/Root/t` (k, v, w) VALUES (2u, 'two', NULL);");
+        f.Failure("UPSERT INTO `/Root/t` (k, v, w) VALUES (2u, 'two'u, NULL);");
     }
 
     Y_UNIT_TEST(DelayedWriteCannotUseOldNullableSchema, ETableKind) {
@@ -442,9 +443,53 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.Success("DROP TABLE `/Root/t`;", true);
     }
 
+    Y_UNIT_TEST(CancelValidationStopsActiveScanner) {
+        TFixture f(ETableKind::Column, true, 1);
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u);");
+        auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
+        ui64 schemeShardId = 0;
+        ui64 operationId = 0;
+        TActorId validator;
+        TActorId scanner;
+        bool validatorStopped = false;
+        bool scannerStopped = false;
+        const auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvValidateRowConditionRequest::EventType) {
+                const auto& record = ev->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+                schemeShardId = record.GetOwnerId();
+                operationId = record.GetId();
+            } else if (ev->GetTypeRewrite() == TEvDataShard::TEvKqpScan::EventType) {
+                validator = ev->Sender;
+            } else if (ev->GetTypeRewrite() == TEvKqpCompute::TEvScanDataAck::EventType && ev->Sender == validator) {
+                scanner = ev->Recipient;
+                return TTestActorRuntime::EEventAction::DROP;
+            } else if (ev->GetTypeRewrite() == TEvents::TEvPoisonPill::EventType && ev->Recipient == validator) {
+                validatorStopped = true;
+            } else if (ev->GetTypeRewrite() == TEvents::TEvPoison::EventType && ev->Recipient == scanner) {
+                scannerStopped = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto alter = f.Kikimr.RunInThreadPool([&] {
+            return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
+        });
+        runtime.WaitFor("active validation scanner", [&] { return !!scanner || alter.HasValue(); });
+        UNIT_ASSERT(scanner);
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(schemeShardId, edge,
+            new NSchemeShard::TEvSetColumnConstraint::TEvCancelRequest(0, "/Root", operationId));
+        auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSetColumnConstraint::TEvCancelResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(!runtime.WaitFuture(alter).IsSuccess());
+        runtime.WaitFor("validation actors stopped", [&] { return validatorStopped && scannerStopped; });
+        runtime.SetObserverFunc(previous);
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, NULL);");
+        f.Success("DROP TABLE `/Root/t`;", true);
+    }
+
     Y_UNIT_TEST(WritesAndSchemaChangesDuringValidation, ETableKind, EReboot) {
         TFixture f(Arg<0>());
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u);");
         auto& runtime = *f.Kikimr.GetTestServer().GetRuntime();
         TVector<TAutoPtr<IEventHandle>> requests;
         bool capture = true;
@@ -459,7 +504,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
         });
         runtime.WaitFor("validation requests", [&] { return !requests.empty(); });
-        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two');");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two'u);");
         f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (3u, NULL);");
         f.Failure("UPSERT INTO `/Root/t` (k, w) VALUES (1u, 7u);");
         f.CheckRows(R"([[1u;["one"]];[2u;["two"]]])");

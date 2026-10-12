@@ -472,22 +472,23 @@ public:
         return Columns;
     }
 
-    bool IsCompatibleForWrite(const TIndexInfo& requestSchema) const {
+    TConclusionStatus CheckWriteCompatibility(const TIndexInfo& requestSchema) const {
         if (this == &requestSchema) {
-            return true;
+            return TConclusionStatus::Success();
         }
         for (const auto columnId : RequiredWriteColumnIds) {
+            const auto& column = GetColumnFeaturesVerified(columnId);
             const auto& previous = requestSchema.GetColumnFeaturesOptional(columnId);
-            if (!previous || (previous->GetIsNullable() && !previous->GetSetNotNullInProgress())) {
-                return false;
+            if (!previous || (previous->GetIsNullable() && !previous->GetIsSetNotNullInProgress())) {
+                return TConclusionStatus::Fail("Write schema does not enforce NOT NULL for column '" + column.GetColumnName() + "'");
             }
             // Validation requires unconditional values even if an older schema
             // had NOT NULL before a DROP/SET cycle.
-            if (GetColumnFeaturesVerified(columnId).GetSetNotNullInProgress() && !previous->GetSetNotNullInProgress()) {
-                return false;
+            if (column.GetIsSetNotNullInProgress() && !previous->GetIsSetNotNullInProgress()) {
+                return TConclusionStatus::Fail("Write schema predates SET NOT NULL validation for column '" + column.GetColumnName() + "'");
             }
         }
-        return true;
+        return TConclusionStatus::Success();
     }
 
     const std::vector<ui32>& GetSetNotNullColumnIds() const {

@@ -720,10 +720,10 @@ void TIndexInfo::Precalculate() {
     for (auto&& i : ColumnFeatures) {
         UsedStorageIds->emplace(i->GetOperator()->GetStorageId());
         if (!IsSpecialColumn(i->GetColumnId())) {
-            if (i->GetSetNotNullInProgress()) {
+            if (i->GetIsSetNotNullInProgress()) {
                 SetNotNullColumnIds.emplace_back(i->GetColumnId());
             }
-            if (i->GetSetNotNullInProgress() || !i->GetIsNullable()) {
+            if (i->GetIsSetNotNullInProgress() || !i->GetIsNullable()) {
                 RequiredWriteColumnIds.emplace_back(i->GetColumnId());
             }
         }

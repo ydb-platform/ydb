@@ -102,8 +102,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         for (const auto columnId : GetIndexInfo().GetSetNotNullColumnIds()) {
             const auto& column = GetIndexInfo().GetColumnFeaturesVerified(columnId);
             const auto values = incomingBatch->GetColumnByName(column.GetColumnName());
-            // Missing values, including $$EXISTS=false, can preserve an old NULL.
-            if (!values || NArrow::HasNulls(values)) {
+            if (!values || values->null_count()) {
                 return TConclusionStatus::Fail("SET NOT NULL is in progress for column '" + column.GetColumnName() + "'");
             }
             if (const auto exists = incomingBatch->GetColumnByName("$$EXISTS::" + column.GetColumnName())) {
@@ -123,7 +122,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             return TConclusionStatus::Success();
         }
         const auto& incomingColumn = incomingBatch->column(incomingIdx);
-        const auto hasNull = NArrow::HasNulls(incomingColumn);
+        const bool hasNull = incomingColumn->null_count() != 0;
         const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
         const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {

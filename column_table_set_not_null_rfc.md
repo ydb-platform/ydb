@@ -15,11 +15,6 @@
 на MVCC-снимках и опубликовать `NotNull=true`. На время проверки блокируются
 конкурирующие изменения схемы, но не все записи в таблицу.
 
-Оформление опирается на [правила YDB RFC](https://github.com/ydb-platform/ydb-rfc/blob/main/README.md),
-[пример ALTER TABLE](https://github.com/ydb-platform/ydb-rfc/blob/main/alter_table_set_drop_default.md)
-и [пример для Column Tables](https://github.com/ydb-platform/ydb-rfc/blob/main/cs_column_low_cardinality.md).
-Документ пока находится в рабочем дереве YDB; номер RFC и публикация не назначены.
-
 ## Мотивация
 
 При развитии схемы приложения nullable-колонка часто становится обязательной:

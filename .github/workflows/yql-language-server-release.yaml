@@ -191,7 +191,7 @@ jobs:
             exit /b 1
           )
 
-          call .\ya.bat make -vvvv --keep-temps tools/py3cc/slow/bin
+          call .\ya.bat make -vvvv --keep-temps  -DUSE_MSVC_LINKER=yes tools/py3cc/slow/bin
           exit /b 1
 
           call .\ya.bat make ^

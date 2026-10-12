@@ -17,6 +17,10 @@ NO_PYTHON_COVERAGE()
 
 NO_IMPORT_TRACING()
 
+IF (OS_WINDOWS)
+    LDFLAGS(/INCLUDE:wmain)
+ENDIF()
+
 SRCDIR(
     tools/py3cc/slow
 )

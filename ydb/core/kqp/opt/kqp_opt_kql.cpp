@@ -1655,6 +1655,15 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
     queryBlocks.reserve(dataQueryBlocks.ArgCount());
     for (const auto& block : dataQueryBlocks) {
         TVector<TExprBase> kqlEffects;
+        const auto settings = TKiDataQueryBlockSettings::Parse(block);
+        if (!settings.UnsafeTruncatePath.empty()) {
+            YQL_ENSURE(block.Results().Empty() && block.Effects().ArgCount() == 0,
+                "Unsafe truncate must occupy a separate query block");
+            kqlEffects.emplace_back(Build<TKqlUnsafeTruncate>(ctx, block.Pos())
+                .TablePath().Build(settings.UnsafeTruncatePath)
+                .Done());
+        }
+
         TNodeOnNodeOwnedMap effectsMap;
         for (const auto& effect : block.Effects()) {
             if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
@@ -1698,8 +1707,6 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                     .Done());
         }
 
-        // Carried verbatim from the Ki block: an unsafe truncate has no results and no effects, so
-        // the settings are the only thing that tells the tx builder this block is anything at all.
         auto query = Build<TKqlQuery>(ctx, dataQueryBlocks.Pos())
             .Results()
                 .Add(kqlResults)
@@ -1707,7 +1714,6 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
              .Effects()
                 .Add(kqlEffects)
                 .Build()
-             .Settings(block.Settings())
              .Done();
 
         TOptimizeExprSettings optSettings(nullptr);

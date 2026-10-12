@@ -657,15 +657,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
         // clang-format on
     }
 
-    if (phyTxSettings.WithEffects) {
-        YQL_ENSURE(RBOCtx.QuerySettings, "Missing settings for the KQL effect query");
-        return Build<TKqlQuery>(ctx, pos)
-            .Results().Build()
-            .Effects().Add(phyQuery).Build()
-            .Settings(RBOCtx.QuerySettings)
-            .Done().Ptr();
-    }
-
     TVector<TCoAtom> queryColumnAtomList;
 
     for (const auto& name : Roots.back()->GetQueryColumns()) {
@@ -673,7 +664,18 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     }
     auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
 
-    return ctx.NewList(pos, {ctx.NewList(pos, {phyQuery, queryColumns})});
+    TVector<TExprNode::TPtr> listElements;
+    if (RBOCtx.EmptyPreamble) {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {}));
+    }
+
+    if (!phyTxSettings.WithEffects) {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns}));
+    } else {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery}));
+    }
+
+    return ctx.NewList(Roots[0]->Pos, std::move(listElements));
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {

@@ -270,6 +270,14 @@
             "Builder": {"Generate": "None"}
         },
         {
+            "Name": "TKqlUnsafeTruncate",
+            "Base": "TKqlEffectBase",
+            "Match": {"Type": "Callable", "Name": "KqlUnsafeTruncate"},
+            "Children": [
+                {"Index": 0, "Name": "TablePath", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqlReturningList",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqlReturningList"},
@@ -485,8 +493,7 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "Results", "Type": "TKqlQueryResultList"},
-                {"Index": 1, "Name": "Effects", "Type": "TExprList"},
-                {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+                {"Index": 1, "Name": "Effects", "Type": "TExprList"}
             ]
         },
         {

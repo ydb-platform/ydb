@@ -577,14 +577,10 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     return result;
 }
 
-// The Ki block settings ride through BuildKqlQuery untouched, so this is where an unsafe truncate
-// is recognised: it is the only block with neither results nor effects.
 std::optional<TString> GetUnsafeTruncatePath(const TKqlQuery& query) {
-    for (const auto& tuple : query.Settings()) {
-        // The Ki block and the physical tx spell this setting the same way on purpose, so the value
-        // travels from one to the other unchanged.
-        if (tuple.Name().Value() == TKqpPhyTxSettings::UnsafeTruncatePathSettingName) {
-            return TString(tuple.Value().Cast<TCoAtom>().Value());
+    for (const auto& effect : query.Effects()) {
+        if (auto truncate = effect.Maybe<TKqlUnsafeTruncate>()) {
+            return TString(truncate.Cast().TablePath().Value());
         }
     }
     return std::nullopt;
@@ -666,11 +662,9 @@ public:
         // is bypassed - it asserts on empty stage lists - and the transaction is assembled here.
         // Appending it now is what puts it at its statement position among the data transactions.
         if (auto truncatePath = GetUnsafeTruncatePath(query)) {
-            // Nothing below reads the results or the effects of this block, so anything left in
-            // them would be dropped without a trace. ExploreNode gives the truncate a block of its
-            // own precisely so that cannot happen; fail loudly rather than lose a write silently.
-            YQL_ENSURE(query.Results().Empty() && query.Effects().Empty(),
-                "Unsafe truncate block must hold nothing else, got "
+            // The truncate must be the only effect so that no other operations are discarded.
+            YQL_ENSURE(query.Results().Empty() && query.Effects().Size() == 1,
+                "Unsafe truncate block must contain only the truncate effect, got "
                     << query.Results().Size() << " results and " << query.Effects().Size() << " effects");
 
             TKqpPhyTxSettings txSettings;
@@ -743,8 +737,6 @@ public:
                             .Build()
                         .Effects()
                             .Build()
-                        .Settings()
-                            .Build()
                         .Done();
 
                     auto tx = BuildTx(resultsQuery.Ptr(), ctx, false);
@@ -770,8 +762,6 @@ public:
                         .Add(effectsResults)
                         .Build()
                     .Effects(effects)
-                    .Settings()
-                        .Build()
                     .Done();
 
                 auto tx = BuildTx(effectsQuery.Ptr(), ctx, /* isPrecompute */ false);
@@ -1256,8 +1246,6 @@ private:
                     .Add(phaseResults)
                     .Build()
                 .Effects()
-                    .Build()
-                .Settings()
                     .Build()
                 .Done().Ptr()
             : Build<TKqlQueryResultList>(ctx, query.Pos())

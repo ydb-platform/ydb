@@ -518,9 +518,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                 }
 
                 TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-                if (emptyPreamble) {
-                    rboCtx.QuerySettings = TKqlQuery(node).Settings().Ptr();
-                }
+                rboCtx.EmptyPreamble = emptyPreamble;
                 TRBOTraceOutput traceOutput(rboCtx);
                 auto output = RBO.Optimize(Roots, rboCtx);
                 traceOutput.Flush();

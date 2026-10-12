@@ -3,6 +3,7 @@
 #include "labeled_counters_merger.h"
 #include "detailed_metrics/memory_tags.h"
 #include "detailed_metrics/node_database_metrics_aggregator.h"
+#include "detailed_metrics/ydb_metrics_aggregator.h"
 #include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
 #include "private/aggregated_tablet_counters.h"
@@ -172,7 +173,11 @@ public:
         , DetailedMetricsEnabled(detailedMetricsEnabled)
     {
         if (!IsFollower) {
-            YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"), Counters);
+            // Only the leader actor writes "ydb"; it maps the follower actor's group too
+            YdbCounters = MakeIntrusive<TYdbTabletCounters>(
+                GetServiceCounters(counters, "ydb"),         // target
+                GetServiceCounters(counters, "tablets"),     // source: leaders, same group as Counters
+                GetServiceCounters(counters, "followers"));  // source: followers
         }
 
         if (DetailedMetricsEnabled) {
@@ -395,22 +400,22 @@ public:
         }
     }
 
-    void Apply(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId,
+    void Apply(ui64 tabletId, ui32 followerId, TTabletTypes::EType tabletType, TPathId tenantPathId,
         const TTabletCountersBase* executorCounters, const TTabletCountersBase* appCounters,
         const TActorContext& ctx)
     {
-        AllTypes->Apply(tabletId, executorCounters, nullptr, tabletType);
+        AllTypes->Apply(tabletId, followerId, executorCounters, nullptr, tabletType);
         //
         auto typeCounters = GetOrAddCountersByTabletType(tabletType, CountersByTabletType, Counters);
         if (typeCounters) {
-            typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
+            typeCounters->Apply(tabletId, followerId, executorCounters, appCounters, tabletType);
         }
         //
         if (!IsFollower && DbCountersEnabled && tenantPathId) {
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
-                dbCounters->Apply(tabletId, executorCounters, appCounters, tabletType, limitedAppCounters);
+                dbCounters->Apply(tabletId, followerId, executorCounters, appCounters, tabletType, limitedAppCounters);
             }
         }
 
@@ -478,15 +483,15 @@ public:
     }
 
     void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, ui32 followerId) {
-        AllTypes->Forget(tabletId);
+        AllTypes->Forget(tabletId, followerId);
         // and now erase from every other path
         auto iterTabletType = CountersByTabletType.find(tabletType);
         if (iterTabletType != CountersByTabletType.end()) {
-            iterTabletType->second->Forget(tabletId);
+            iterTabletType->second->Forget(tabletId, followerId);
         }
         // from db counters
         if (auto itPath = CountersByPathId.find(tenantPathId); itPath != CountersByPathId.end()) {
-            itPath->second->Forget(tabletId, tabletType);
+            itPath->second->Forget(tabletId, followerId, tabletType);
         }
         ForgetTabletDetailedMetrics(tabletId, followerId, tenantPathId);
 
@@ -667,7 +672,7 @@ private:
             , TabletAppCounters(TabletAppCountersSection)
         {}
 
-        void Apply(ui64 tabletId,
+        void Apply(ui64 tabletId, ui32 followerId,
             const TTabletCountersBase* executorCounters,
             const TTabletCountersBase* appCounters,
             TTabletTypes::EType tabletType,
@@ -681,23 +686,23 @@ private:
                 if (!TabletExecutorCounters.IsInitialized) {
                     TabletExecutorCounters.Initialize(executorCounters);
                 }
-                TabletExecutorCounters.Apply(tabletId, executorCounters, tabletType, now);
+                TabletExecutorCounters.Apply(tabletId, executorCounters, tabletType, now, followerId);
             }
 
             if (appCounters) {
                 if (!TabletAppCounters.IsInitialized) {
                     TabletAppCounters.Initialize(limitedAppCounters ? limitedAppCounters : appCounters);
                 }
-                TabletAppCounters.Apply(tabletId, appCounters, tabletType, now);
+                TabletAppCounters.Apply(tabletId, appCounters, tabletType, now, followerId);
             }
         }
 
-        void Forget(ui64 tabletId) {
+        void Forget(ui64 tabletId, ui32 followerId) {
             if (TabletExecutorCounters.IsInitialized) {
-                TabletExecutorCounters.Forget(tabletId);
+                TabletExecutorCounters.Forget(tabletId, followerId);
             }
             if (TabletAppCounters.IsInitialized) {
-                TabletAppCounters.Forget(tabletId);
+                TabletAppCounters.Forget(tabletId, followerId);
             }
         }
 
@@ -811,10 +816,11 @@ private:
 
     private:
         /**
-         * The mapper from internal DataShard metrics to the corresponding
-         * public metrics (table.datashard.*).
+         * The mappers from internal DataShard metrics, one per role, each into a detached group;
+         * the aggregator sums them into the public metrics (table.datashard.*).
          */
-        TYdbMetricsMapperPtr DatashardYdbMetricsMapper;
+        TVector<TYdbMetricsMapperPtr> DatashardYdbMetricsMappers;
+        TYdbMetricsAggregatorPtr DatashardYdbMetricsAggregator;
 
         TCounterPtr ColumnShardScanRows_;
         TCounterPtr ColumnShardScanBytes_;
@@ -868,16 +874,28 @@ private:
     public:
         TYdbTabletCounters(
             ::NMonitoring::TDynamicCounterPtr ydbGroup,
-            ::NMonitoring::TDynamicCounterPtr tabletGroup
+            ::NMonitoring::TDynamicCounterPtr tabletGroup,
+            ::NMonitoring::TDynamicCounterPtr followerGroup = {}
         )
-            : DatashardYdbMetricsMapper(
-                CreateYdbMetricsMapperByTabletType(
+            : DatashardYdbMetricsAggregator(
+                CreateYdbMetricsAggregatorByTabletType(
                     TTabletTypes::DataShard,
-                    ydbGroup,
-                    tabletGroup
+                    ydbGroup
                 )
             )
         {
+            // A mapper assigns its targets, so two roles cannot share one group
+            auto addRole = [&](const TString& id, ::NMonitoring::TDynamicCounterPtr source, bool isFollower) {
+                auto mapped = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+                DatashardYdbMetricsMappers.push_back(CreateYdbMetricsMapperByTabletType(
+                    TTabletTypes::DataShard, mapped, source, EYdbMetricNameScope::Aggregate, isFollower));
+                DatashardYdbMetricsAggregator->AddSourceCountersGroup(id, mapped, isFollower);
+            };
+            addRole("leaders", tabletGroup, false);
+            if (followerGroup) {
+                addRole("followers", followerGroup, true);
+            }
+
             ColumnShardScanRows_ = ydbGroup->GetNamedCounter("name",
                 "table.columnshard.scan.rows", true);
             ColumnShardScanBytes_ = ydbGroup->GetNamedCounter("name",
@@ -970,7 +988,10 @@ private:
         }
 
         void Transform() {
-            DatashardYdbMetricsMapper->TransferCounterValues();
+            for (auto& mapper : DatashardYdbMetricsMappers) {
+                mapper->TransferCounterValues();
+            }
+            DatashardYdbMetricsAggregator->RecalculateAllTargetCounters();
 
             if (ColumnShardScannedBytes_) {
                 ColumnShardScanRows_->Set(ColumnShardScannedRows_->Val());
@@ -1067,32 +1088,32 @@ public:
             }
         }
 
-        void Apply(ui64 tabletId, const TTabletCountersBase* executorCounters,
+        void Apply(ui64 tabletId, ui32 followerId, const TTabletCountersBase* executorCounters,
             const TTabletCountersBase* appCounters, TTabletTypes::EType type,
             const TTabletCountersBase* limitedAppCounters)
         {
             auto allTypes = GetOrAddCounters(TTabletTypes::Unknown);
             {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
-                allTypes->Apply(tabletId, executorCounters, nullptr, type);
+                allTypes->Apply(tabletId, followerId, executorCounters, nullptr, type);
             }
             auto typeCounters = GetOrAddCounters(type);
             {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
-                typeCounters->Apply(tabletId, executorCounters, appCounters, type, limitedAppCounters);
+                typeCounters->Apply(tabletId, followerId, executorCounters, appCounters, type, limitedAppCounters);
             }
         }
 
-        void Forget(ui64 tabletId, TTabletTypes::EType type) {
+        void Forget(ui64 tabletId, ui32 followerId, TTabletTypes::EType type) {
             auto allTypes = GetCounters(TTabletTypes::Unknown);
             if (allTypes) {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(TTabletTypes::Unknown).GetLock());
-                allTypes->Forget(tabletId);
+                allTypes->Forget(tabletId, followerId);
             }
             auto typeCounters = GetCounters(type);
             if (typeCounters) {
                 TWriteGuard guard(CountersByTabletType.GetBucketForKey(type).GetLock());
-                typeCounters->Forget(tabletId);
+                typeCounters->Forget(tabletId, followerId);
             }
         }
 
@@ -1517,7 +1538,7 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev, const TActorContext &ctx) {
     TEvTabletCounters::TEvTabletAddCounters* msg = ev->Get();
-    TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
+    TabletMon->Apply(msg->TabletID, msg->FollowerId, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
     TabletMon->ApplyDetailedMetrics(msg->TabletID, msg->FollowerId, msg->TabletType,
         msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
 }

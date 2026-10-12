@@ -60,6 +60,9 @@ struct IColumnDataExtractor {
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
+    virtual bool IsFloatingPoint() {
+        return false;
+    }
     virtual std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
@@ -122,6 +125,10 @@ public:
 
     NPackedTuple::EColumnSizeType GetElementSizeType() override {
         return NPackedTuple::EColumnSizeType::Fixed;
+    }
+
+    bool IsFloatingPoint() override {
+        return std::is_floating_point_v<TLayout>;
     }
 
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
@@ -536,6 +543,10 @@ public:
         return Inner_->GetElementSizeType();
     }
 
+    bool IsFloatingPoint() override {
+        return Inner_->IsFloatingPoint();
+    }
+
     std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) override {
         std::shared_ptr<arrow::Buffer> nullBitmap;
         if (!isBitmapNull) {
@@ -721,6 +732,7 @@ public:
             auto& descr = columnDescrs[i];
             descr.DataSize = InnerExtractors_[i]->GetElementSize();
             descr.SizeType = InnerExtractors_[i]->GetElementSizeType();
+            descr.FloatingPoint = InnerExtractors_[i]->IsFloatingPoint();
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);

@@ -113,8 +113,9 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
 Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
 
     struct TTabletWithHist {
-        TTabletWithHist(ui64 tabletId, const TTabletTypes::EType tabletType)
+        TTabletWithHist(ui64 tabletId, const TTabletTypes::EType tabletType, ui32 followerId = 0)
             : TabletId(tabletId)
+            , FollowerId(followerId)
             , TenantPathId(1113, 1001)
             , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
             , TabletType(tabletType)
@@ -148,7 +149,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             AppCounters->RememberCurrentStateAsBaseline(*AppCountersBaseline);
 
             runtime.Send(new IEventHandle(aggregatorId, sender, new TEvTabletCounters::TEvTabletAddCounters(
-                CounterEventsInFlight, TabletId, TabletType, TenantPathId, executorCounters, appCounters)));
+                CounterEventsInFlight, TabletId, TabletType, TenantPathId, executorCounters, appCounters, FollowerId)));
 
             // force recalc
             runtime.Send(new IEventHandle(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
@@ -158,7 +159,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime.Send(new IEventHandle(
                 aggregatorId,
                 sender,
-                new TEvTabletCounters::TEvTabletCountersForgetTablet(TabletId, TabletType, TenantPathId)));
+                new TEvTabletCounters::TEvTabletCountersForgetTablet(TabletId, TabletType, TenantPathId, FollowerId)));
 
             // force recalc
             runtime.Send(new IEventHandle(aggregatorId, sender, new NActors::TEvents::TEvWakeup()));
@@ -180,12 +181,14 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
     public:
-        static ::NMonitoring::TDynamicCounterPtr GetAppCounters(TTestBasicRuntime& runtime, const TTabletTypes::EType tabletType) {
+        static ::NMonitoring::TDynamicCounterPtr GetAppCounters(TTestBasicRuntime& runtime, const TTabletTypes::EType tabletType,
+            const char* service = "tablets")
+        {
             ::NMonitoring::TDynamicCounterPtr counters = runtime.GetAppData(0).Counters;
             UNIT_ASSERT(counters);
 
             TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
-            auto dsCounters = counters->GetSubgroup("counters", "tablets")->GetSubgroup("type", tabletTypeStr);
+            auto dsCounters = counters->GetSubgroup("counters", service)->GetSubgroup("type", tabletTypeStr);
             return dsCounters->GetSubgroup("category", "app");
         }
 
@@ -208,19 +211,22 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             return StringToIndex(name, PercentileCountersMetaInfo);
         }
 
-        static NMonitoring::THistogramPtr GetHistogram(TTestBasicRuntime& runtime, const char* name, const TTabletTypes::EType tabletType) {
+        static NMonitoring::THistogramPtr GetHistogram(TTestBasicRuntime& runtime, const char* name, const TTabletTypes::EType tabletType,
+            const char* service = "tablets")
+        {
             size_t index = PercentileNameToIndex(name);
-           return GetAppCounters(runtime, tabletType)->FindHistogram(PercentileCountersMetaInfo[index]);
+           return GetAppCounters(runtime, tabletType, service)->FindHistogram(PercentileCountersMetaInfo[index]);
         }
 
         static void CheckHistogram(
             TTestBasicRuntime& runtime,
             const char* name,
             const std::vector<ui64>& goldValues,
-            const TTabletTypes::EType tabletType
+            const TTabletTypes::EType tabletType,
+            const char* service = "tablets"
         )
         {
-            auto histogram = TTabletWithHist::GetHistogram(runtime, name, tabletType);
+            auto histogram = TTabletWithHist::GetHistogram(runtime, name, tabletType, service);
             UNIT_ASSERT(histogram);
             auto snapshot = histogram->Snapshot();
             UNIT_ASSERT(snapshot);
@@ -238,6 +244,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
 
     public:
         ui64 TabletId;
+        ui32 FollowerId;
         TPathId TenantPathId;
         TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight;
         const TTabletTypes::EType TabletType;
@@ -596,6 +603,44 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             {2, 0},
             TTabletTypes::Dummy
         );
+    }
+
+    Y_UNIT_TEST(FollowersOfOneTabletKeepIndependentCounters) {
+        TTestBasicRuntime runtime(1);
+
+        runtime.Initialize(TAppPrepare().Unwrap());
+        TActorId edge = runtime.AllocateEdgeActor();
+
+        auto aggregatorId = runtime.Register(CreateTabletCountersAggregator(true /* follower */));
+        runtime.EnableScheduleForActor(aggregatorId);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(options);
+
+        // Two followers of one tablet on one node (#35417)
+        TTabletWithHist follower1(1, TTabletTypes::Dummy, 1);
+        follower1.SetSimpleCount("Count", 1);
+        follower1.UpdatePercentile("MyHist", 1);
+        follower1.SendUpdate(runtime, aggregatorId, edge);
+
+        TTabletWithHist follower2(1, TTabletTypes::Dummy, 2);
+        follower2.SetSimpleCount("Count", 13);
+        follower2.UpdatePercentile("MyHist", 13);
+        follower2.SendUpdate(runtime, aggregatorId, edge);
+
+        auto appCounters = TTabletWithHist::GetAppCounters(runtime, TTabletTypes::Dummy, "followers");
+        UNIT_ASSERT_VALUES_EQUAL(appCounters->GetCounter("SUM(Count)")->Val(), 14);
+        UNIT_ASSERT_VALUES_EQUAL(appCounters->GetCounter("MAX(Count)")->Val(), 13);
+        TTabletWithHist::CheckHistogram(runtime, "MyHist", {0, 1, 1, 0, 0}, TTabletTypes::Dummy, "followers");
+
+        // Forgetting one follower, even twice, keeps the other
+        follower1.ForgetTablet(runtime, aggregatorId, edge);
+        follower1.ForgetTablet(runtime, aggregatorId, edge);
+
+        UNIT_ASSERT_VALUES_EQUAL(appCounters->GetCounter("SUM(Count)")->Val(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(appCounters->GetCounter("MAX(Count)")->Val(), 13);
+        TTabletWithHist::CheckHistogram(runtime, "MyHist", {0, 0, 1, 0, 0}, TTabletTypes::Dummy, "followers");
     }
 
     Y_UNIT_TEST(IntegralPercentileAggregationRegularNoOverflowCheck) {
@@ -1647,8 +1692,14 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT(PackRole(env, true /* follower */).Exists(Leaf(1000, 1)));
         UNIT_ASSERT(PackRole(env, true /* follower */).Exists(Leaf(1000, 2)));
 
+        // Classic aggregates keep both followers apart too (#35417)
+        auto classic = [&] { return FindExecutorCounters(GetServiceCounters(env.GetCountersRoot(), "followers")); };
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(classic(), "SUM", ALLOWED_EXECUTOR_COUNTER), 1u + 2u);
+
         follower1.SendForget(env);
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(classic(), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
 
         const auto& followers = PackRole(env, true /* follower */);
         UNIT_ASSERT(!followers.Exists(Leaf(1000, 1)));

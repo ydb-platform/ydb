@@ -325,7 +325,6 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
         module_path=module_path,
-        inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )
 
 
@@ -333,13 +332,10 @@ def _use_hermetic_node_modules(unit: ymake.Unit) -> bool:
     # Only supported TS module and check macros set the capability flag.
     # Deprecated builders keep their legacy node_modules installation flow.
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-    injects_peers = unit.get("_INJECT_PEERS") == "yes"
     module_supports_hermetic_node_modules = unit.get("_SUPPORTS_HERMETIC_NODE_MODULES") == "yes"
     hermetic_node_modules_disabled = unit.get("TS_DISABLE_HERMETIC_NODE_MODULES") == "yes"
 
-    return (
-        not local_cli and injects_peers and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
-    )
+    return not local_cli and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
 
 
 def _configure_hermetic_node_modules(unit: ymake.Unit) -> None:
@@ -887,7 +883,7 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
     from lib.nots.package_manager.common_config import load_common_config
     from lib.nots.package_manager.utils import s_rooted
 
-    common_config_path, _ = load_common_config(pj, pm.sources_root, pm.inject_peers)
+    common_config_path, _ = load_common_config(pj, pm.sources_root)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
@@ -1143,9 +1139,6 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     prod_bundle = unit.get("_WITH_NODE_MODULES_PROD") == "yes"
-    if prod_bundle and unit.get("_INJECT_PEERS") != "yes":
-        ymake.report_configure_error("WITH_NODE_MODULES(PROD) requires injected workspace dependencies")
-        return
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
 

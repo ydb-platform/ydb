@@ -5507,29 +5507,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 queriesCount = 1000;
         constexpr ui64 inflightLimit = 250;
 
-        std::vector<TAsyncStatus> results;
-        std::vector<NThreading::TFuture<void>> futures;
-        for (ui64 i = 0; i < queriesCount; ++i) {
-            // The SDK may replay a batch after a committed scheme transaction loses its reply.
-            const auto query = fmt::format(R"(
-                CREATE STREAMING QUERY IF NOT EXISTS `query_{i}` WITH (RUN = FALSE) AS
-                DO BEGIN
-                    INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
-                END DO;
-
-                ALTER STREAMING QUERY IF EXISTS `query_{i}` SET (RUN = FALSE);
-
-                DROP STREAMING QUERY IF EXISTS `query_{i}`;)",
-                "i"_a = i,
-                "source"_a = pqSourceName,
-                "output_topic"_a = outputTopicName,
-                "input_topic"_a = inputTopicName
-            );
-            results.emplace_back(GetQueryClient()->RetryQuery([query](TQueryClient& client) {
-                return client.ExecuteQuery(query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(0)))
+        const auto executeQuery = [queryClient = GetQueryClient()](const std::string& query) {
+            // Retry each DDL separately if a committed scheme transaction loses its reply.
+            return queryClient->RetryQuery([query](TQueryClient& client) {
+                return client.ExecuteQuery(query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(/* value */ 0)))
                     .Apply([](const TAsyncExecuteQueryResult& future) -> TStatus {
                         const auto& result = future.GetValue();
                         const TString issues(result.GetIssues().ToOneLineString());
+
                         if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                             if (issues.Contains("Streaming query already under operation")
                                 || issues.Contains("path version mistmach")
@@ -5543,10 +5528,43 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                                 return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
                             }
                         }
+
                         return result;
                     });
-            }, TRetryOperationSettings().Idempotent(true).MaxRetries(100).MaxTimeout(TDuration::Minutes(2))));
+            }, TRetryOperationSettings().Idempotent(/* value */ true).MaxRetries(/* value */ 100).MaxTimeout(TDuration::Minutes(/* m */ 2)));
+        };
 
+        std::vector<TAsyncStatus> results;
+        results.reserve(queriesCount);
+        std::vector<NThreading::TFuture<void>> futures;
+        futures.reserve(inflightLimit);
+        for (ui64 i = 0; i < queriesCount; ++i) {
+            const auto createQuery = fmt::format(R"(
+                CREATE STREAMING QUERY IF NOT EXISTS `query_{i}` WITH (RUN = FALSE) AS
+                DO BEGIN
+                    INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
+                END DO;)",
+                "i"_a = i,
+                "source"_a = pqSourceName,
+                "output_topic"_a = outputTopicName,
+                "input_topic"_a = inputTopicName
+            );
+            const auto alterQuery = fmt::format("ALTER STREAMING QUERY IF EXISTS `query_{i}` SET (RUN = FALSE);", "i"_a = i);
+            const auto dropQuery = fmt::format("DROP STREAMING QUERY IF EXISTS `query_{i}`;", "i"_a = i);
+
+            auto result = executeQuery(createQuery);
+
+            for (const auto& query : {alterQuery, dropQuery}) {
+                result = result.Apply([executeQuery, query](const TAsyncStatus& future) -> TAsyncStatus {
+                    if (!future.GetValue().IsSuccess()) {
+                        return future;
+                    }
+
+                    return executeQuery(query);
+                });
+            }
+
+            results.emplace_back(std::move(result));
             futures.emplace_back(results.back().IgnoreResult());
 
             if (futures.size() >= inflightLimit) {
@@ -5560,6 +5578,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         newFutures.emplace_back(future);
                     }
                 }
+
                 futures = std::move(newFutures);
             }
         }

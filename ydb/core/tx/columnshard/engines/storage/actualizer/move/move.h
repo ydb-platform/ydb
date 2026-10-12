@@ -25,6 +25,9 @@ private:
     THashSet<ui64> InitialPortionIds;
     // Portions waiting for accessor-load so we can check their DsGroup.
     THashSet<ui64> PendingPortionIds;
+    // Blob identities are immutable for a portion id, including across retirement and level moves.
+    THashSet<ui64> RejectedPortionIds;
+    THashSet<ui64> TargetPortionIds;
     // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
     THashMap<TRWAddress, THashSet<ui64>> PortionsToMove;
     THashMap<ui64, TRWAddress> PortionAddress;

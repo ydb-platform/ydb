@@ -88,8 +88,8 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     InFlightPortionIds.erase(portionId);
     // An aborted move re-adds the portion, so it is live again rather than awaiting cleanup.
     RetiredPortionIds.erase(portionId);
-    if (!InitialPortionIds.contains(portionId)) {
-        // Not ours: the session set is fixed at Seed and a later portion cannot hold a target blob.
+    if (!InitialPortionIds.contains(portionId) || RejectedPortionIds.contains(portionId)) {
+        // New portions are outside the fixed session set; rejected portions stay outside the target groups.
         return;
     }
     if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
@@ -102,12 +102,19 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
 }
 
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
-    // Bookkeeping only: a seeded portion leaving the index (moved, compacted, cleaned up) leaves every queue, or the gate never drains.
+    // Retirement drops rewrite work, but an unclassified candidate still needs its accessor before cleanup can be ignored.
     // InitialPortionIds is kept: a level move removes and re-adds the same portion, which stays ours.
-    if (InitialPortionIds.contains(portionId)) {
+    if (InitialPortionIds.contains(portionId) && !RejectedPortionIds.contains(portionId)) {
         RetiredPortionIds.emplace(portionId);
+        if (!TargetPortionIds.contains(portionId)) {
+            // Retirement can race an accessor request. Classify unknown candidates before dropping the request.
+            PendingPortionIds.emplace(portionId);
+        } else {
+            PendingPortionIds.erase(portionId);
+        }
+    } else {
+        PendingPortionIds.erase(portionId);
     }
-    PendingPortionIds.erase(portionId);
     InFlightPortionIds.erase(portionId);
     UncommittedPortionIds.erase(portionId);
     UncommittedOnTarget.erase(portionId);
@@ -181,12 +188,19 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
         return;
     }
     if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups)) {
+        RejectedPortionIds.emplace(portionId);
+        RetiredPortionIds.erase(portionId);
         ++RejectedPortions;
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
             {"event", "move_data_portion_rejected"},
             {"portionId", portionId},
             {"blobs", JoinSeq(",", GetBlobGroupsForLog(accessor.GetBlobIds()))},
             {"targets", JoinSeq(",", TargetGroups)});
+        return;
+    }
+    TargetPortionIds.emplace(portionId);
+    if (RetiredPortionIds.contains(portionId)) {
+        // Its data is already retired: classification only determines whether cleanup blocks completion.
         return;
     }
     // An uncommitted write cannot be rewritten, so the gate holds until it commits or aborts.
@@ -246,7 +260,11 @@ void TMoveDataActualizer::PruneRetiredPortions(
     // An empty THashSet can retain buckets; avoid walking them on every driver turn.
     if (!RetiredPortionIds.empty()) {
         EraseNodesIf(RetiredPortionIds, [&](const ui64 portionId) {
-            return !portions.contains(portionId) && !uncommitted.contains(portionId);
+            if (portions.contains(portionId) || uncommitted.contains(portionId)) {
+                return false;
+            }
+            PendingPortionIds.erase(portionId);
+            return true;
         });
     }
 }
@@ -267,13 +285,12 @@ void TMoveDataActualizer::Seed(
             continue;
         }
         InitialPortionIds.emplace(portionId);
-        // Already retired: its blobs may sit in a target group until cleanup erases it, so the gate must wait for that.
+        PendingPortionIds.emplace(portionId);
+        // Retired candidates still need their blob groups classified; only target data blocks cleanup.
         if (portion->HasRemoveSnapshot()) {
             RetiredPortionIds.emplace(portionId);
             continue;
         }
-        // Straight to Pending like the uncommitted loop below: on a fresh actualizer every check DoAddPortion makes is already known here.
-        PendingPortionIds.emplace(portionId);
     }
     // Initial membership lets a write that commits after the session started still move.
     for (const auto& [portionId, portion] : uncommitted) {
@@ -281,13 +298,13 @@ void TMoveDataActualizer::Seed(
             continue;
         }
         InitialPortionIds.emplace(portionId);
-        // Aborted before the session started: nothing to move, but its cleanup still gates the answer.
+        PendingPortionIds.emplace(portionId);
+        // An aborted write is classified too: only target-group data must wait for its cleanup.
         if (portion->HasRemoveSnapshot()) {
             RetiredPortionIds.emplace(portionId);
             continue;
         }
         UncommittedPortionIds.emplace(portionId);
-        PendingPortionIds.emplace(portionId);
     }
 }
 

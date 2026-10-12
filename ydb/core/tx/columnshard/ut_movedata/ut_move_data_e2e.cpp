@@ -285,6 +285,26 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
 
+    Y_UNIT_TEST(DrainedGroupMustNotWaitForUnrelatedRetiredPortions) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+        f.StartMove();
+        const auto first = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        UNIT_ASSERT_C(first, "the first evacuation must complete");
+        f.AssertDrainedSuccess(first);
+
+        // No new plan step: retired new-group portions cannot be cleaned up yet.
+        // The old group is already drained, so these unrelated retirees must not delay another request.
+        f.StartMove();
+        const auto next = f.DriveGate(150);
+        UNIT_ASSERT_C(next, "unrelated new-group retirees blocked an already-drained group");
+        f.AssertDrainedSuccess(next);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
+    }
+
     Y_UNIT_TEST(CompletedSessionCanStartAnotherWithoutReboot) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
@@ -303,10 +323,10 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         UNIT_ASSERT_VALUES_EQUAL((int)refused->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch);
 
         f.StartMove();
-        const auto next = f.DriveGateWithWrite(150, 3, 1001, 1002);
+        const auto next = f.DriveGate(150);
         UNIT_ASSERT_C(next, "a completed or refused request must not prevent another session in the same incarnation");
         f.AssertDrainedSuccess(next);
-        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1001u);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000u);
     }
 
     // A group still holding the latest history entry keeps taking writes and can never converge, so refuse it like keyvalue does.

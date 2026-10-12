@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/events.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -515,9 +516,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         auto future = f.Kikimr.RunInThreadPool([&] {
-            return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx()).GetValueSync();
+            return f.Client.ExecuteQuery(SetNotNull, NQuery::TTxControl::NoTx(),
+                NQuery::TExecuteQuerySettings().RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).GetValueSync();
         });
         runtime.WaitFor("validation requests", [&] { return !requests.empty(); });
+        const auto& record = requests.front()->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
+        const ui64 schemeShardId = record.GetOwnerId();
+        const ui64 shardId = record.GetTabletId();
+        const ui64 operationId = record.GetId();
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (2u, 'two'u);");
         f.Failure("UPSERT INTO `/Root/t` (k, v) VALUES (3u, NULL);");
         f.Failure("UPSERT INTO `/Root/t` (k, w) VALUES (1u, 7u);");
@@ -529,9 +535,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         }
         const auto reboot = Arg<1>();
         if (reboot != EReboot::None) {
-            const auto& record = requests.front()->Get<TEvDataShard::TEvValidateRowConditionRequest>()->Record;
-            const ui64 schemeShardId = record.GetOwnerId();
-            const ui64 shardId = record.GetTabletId();
             // Recovery must finish even when admission is disabled.
             runtime.GetAppData().FeatureFlags.SetEnableColumnTableSetNotNull(false);
             if (reboot == EReboot::SchemeShard || reboot == EReboot::Both) {
@@ -546,7 +549,24 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
             runtime.Send(request.Release());
         }
         const auto result = runtime.WaitFuture(future);
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        if (reboot == EReboot::SchemeShard || reboot == EReboot::Both) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Connection to tablet was lost");
+        } else {
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // SchemeShard recovery must complete the original operation even if its SQL connection was lost.
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(schemeShardId, edge,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(operationId));
+        runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(edge);
+        runtime.SendToPipe(schemeShardId, edge,
+            new NSchemeShard::TEvSetColumnConstraint::TEvGetRequest("/Root", operationId));
+        const auto response = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSetColumnConstraint::TEvGetResponse>(edge);
+        const auto& status = response->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), Ydb::StatusIds::SUCCESS, status.ShortDebugString());
+        UNIT_ASSERT_C(status.GetSetColumnConstraint().GetState() == Ydb::Table::SetNotNullState::STATE_DONE,
+            status.ShortDebugString());
         runtime.SetObserverFunc(previous);
         f.CheckRows(R"([[1u;"one"];[2u;"two"]])");
     }

@@ -27,7 +27,9 @@ public:
         TStringValueExtractor extractor;
         const auto& componentName = extractor.ExtractValue(
             message.StructuredMessage, std::vector<TKeyName>{"component"});
-        return componentName.has_value() && componentName.value() == ComponentName;
+        const auto& messageText = extractor.ExtractValue(
+            message.StructuredMessage, std::vector<TKeyName>{"message"});
+        return componentName.has_value() && componentName.value() == ComponentName && Messages.contains(messageText);
     }
 
 protected:

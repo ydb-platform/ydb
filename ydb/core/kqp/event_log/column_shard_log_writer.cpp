@@ -60,7 +60,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
 
 TString TColumnShardLogWriter::GetCreateStoreQuery() {
     TStringBuilder sb;
-    sb << " CREATE TABLESTORE `" << Settings.Path << "/" << Settings.StoreName << "` (";
+    sb << " CREATE TABLESTORE IF NOT EXISTS `" << Settings.Path << "/" << Settings.StoreName << "` (";
 
     for (const auto& column : Columns) {
         sb << column->Name << " " << column->Type;
@@ -94,7 +94,7 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
 
     TStringBuilder sb;
 
-    sb << " CREATE TABLE `" << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
+    sb << " CREATE TABLE IF NOT EXISTS `" << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
     for (const auto& column : Columns) {
         sb << column->Name << " " << column->Type;
 

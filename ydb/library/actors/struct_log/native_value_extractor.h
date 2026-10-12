@@ -58,8 +58,13 @@ public:
             if (!std::isfinite(value)) {
                 return false;
             }
-            return value >= static_cast<TSrc>(std::numeric_limits<TDst>::min()) &&
-                   value <= static_cast<TSrc>(std::numeric_limits<TDst>::max());
+            // signed: [-2^digits, 2^digits); unsigned: (-1, 2^digits)
+            const TSrc upper = std::ldexp(static_cast<TSrc>(1), std::numeric_limits<TDst>::digits);
+            if constexpr (std::is_signed_v<TDst>) {
+                return value >= -upper && value < upper;
+            } else {
+                return value > static_cast<TSrc>(-1) && value < upper;
+            }
         } else {
             return true;
         }

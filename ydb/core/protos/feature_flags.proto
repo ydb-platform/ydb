@@ -44,7 +44,7 @@ message TFeatureFlags {
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
     optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
     optional bool EnablePersistentQueryStats = 25 [default = true, (RequireRestart) = true];
-    optional bool DisableDataShardBarrier = 26 [default = false];
+    reserved 26; // DisableDataShardBarrier
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
     optional bool EnableKqpWideFlow = 28 [default = true]; // deprecated: always true
     optional bool EnableKqpScanQueries = 29 [default = true]; // deprecated: always true

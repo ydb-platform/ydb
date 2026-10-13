@@ -25,7 +25,7 @@ using namespace NDetail;
 
 namespace {
 
-#ifndef MKQL_DISABLE_CODEGEN
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_) && !defined(_darwin_)
 constexpr ui64 TotalFunctionsLimit = 1000;
 constexpr ui64 TotalInstructionsLimit = 100000;
 constexpr ui64 MaxFunctionInstructionsLimit = 50000;
@@ -877,7 +877,8 @@ public:
             return;
         }
 
-#ifndef MKQL_DISABLE_CODEGEN
+        // Background compilation must respect the same platform restrictions as IsCodegenEnabled.
+#if !defined(MKQL_DISABLE_CODEGEN) && !defined(__aarch64__) && !defined(_win_) && !defined(_darwin_)
         // Everything is built in a local codegen and published at the very end,
         // so that concurrent readers either see the previous state or the fully
         // compiled one, and never an intermediate one.

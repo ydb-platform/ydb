@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/testing/unittest
     library/cpp/lwtrace/protos
     ydb/core/fq/libs/wasm_services
+    ydb/core/fq/libs/wasm_services/mock
     ydb/core/fq/libs/wasm_services/query
     ydb/core/fq/libs/wasm_services/ut/protos
     ydb/core/security/certificate_check/test_utils

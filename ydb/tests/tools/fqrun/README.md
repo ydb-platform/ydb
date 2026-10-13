@@ -201,6 +201,18 @@ sending any request to the external service. For local end-to-end testing,
 to mint a real ticket. Without this explicit option, the default provider
 remains unavailable.
 
+The mock delays each ticket by 100 ms by default. Use
+`--tvm-mock --tvm-mock-delay-ms=2000` to simulate a two-second wait, or set the
+delay to `0` for immediate tickets. It returns `Pending` until a monotonic clock
+reaches the ready time; it never sleeps or starts a thread per ticket. Other
+requests continue through the same transport while a ticket is pending, and the
+wait remains subject to the operation's deadline and cancellation.
+
+`DelayedMockTvmAcquisitionDoesNotBlockOtherRequests` tests this using the same
+mock provider as fqrun and a controlled clock. For both HTTP and gRPC it freezes
+the first ticket in `Pending`, completes a second request (with no TVM or an
+immediately ready TVM ticket), then advances the clock and completes the first.
+
 ```sql
 CREATE EXTERNAL DATA SOURCE profiles_http WITH (
     SOURCE_TYPE = 'ExternalService',

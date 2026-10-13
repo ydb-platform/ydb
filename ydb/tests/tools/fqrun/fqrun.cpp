@@ -349,6 +349,10 @@ protected:
             .NoArgument()
             .SetFlag(&RunnerOptions.FqSettings.MockTvm);
 
+        options.AddLongOption("tvm-mock-delay-ms", "Delay each mock TVM ticket in milliseconds (requires --tvm-mock; default: 100)")
+            .RequiredArgument("milliseconds")
+            .StoreResult(&RunnerOptions.FqSettings.MockTvmDelayMs);
+
         options.AddLongOption('s', "sql", "Query SQL text to execute")
             .RequiredArgument("str")
             .AppendTo(&ExecutionOptions.Queries);

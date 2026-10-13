@@ -1,4 +1,5 @@
 #include <ydb/core/fq/libs/wasm_services/transport.h>
+#include <ydb/core/fq/libs/wasm_services/mock/tvm.h>
 #include <ydb/udfs/wasm/profile/profile.h>
 #include <ydb/udfs/wasm/profile/contract/service_methods.h>
 #include <ydb/udfs/wasm/echo/contract/service_methods.h>
@@ -1627,6 +1628,53 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         grpc.State->Reply(0, "answer", 0);
         UNIT_ASSERT(env.Resume(waiting).Status == ECallStatus::Completed);
         env.Clean(waiting);
+    }
+
+    Y_UNIT_TEST(DelayedMockTvmAcquisitionDoesNotBlockOtherRequests) {
+        for (auto slowBinding : {0u, 1u}) {
+            for (bool otherUsesTvm : {false, true}) {
+                THttpMock http;
+                TGrpcMock grpc;
+                std::atomic<ui64> clockMs{0};
+                std::atomic<ui32> clockReads{0};
+                auto provider = CreateMockTvmTicketProvider(TDuration::Seconds(30), [&] {
+                    ++clockReads;
+                    return std::chrono::steady_clock::time_point(std::chrono::milliseconds(clockMs.load()));
+                });
+                auto bindings = Bindings(http, grpc);
+                const auto fastBinding = 1u - slowBinding;
+                SetTvm(bindings[slowBinding], provider);
+                if (otherUsesTvm)
+                    SetTvm(bindings[fastBinding], CreateMockTvmTicketProvider(TDuration::Zero()));
+                TEnv env(std::move(bindings));
+                const auto waiting = env.Start(0, slowBinding);
+                UNIT_ASSERT(env.Runtime->Poll(waiting).Status == ECallStatus::Waiting);
+                // The real fqrun mock has started acquisition and polled Pending.
+                // Freeze its clock so readiness cannot race the progress assertion.
+                Eventually([&] { return clockReads.load() >= 2; });
+
+                const auto ready = env.Start(0, fastBinding);
+                UNIT_ASSERT(env.Runtime->Poll(ready).Status == ECallStatus::Waiting);
+                auto fastState = fastBinding ? grpc.State : http.State;
+                const auto request = fastState->Wait();
+                if (otherUsesTvm)
+                    UNIT_ASSERT(HasHeader(*request, fastBinding ? "x-ya-service-ticket" : "X-Ya-Service-Ticket",
+                                          "fqrun-mock-tvm-service-ticket"));
+                fastState->Reply(0, fastBinding ? TString("answer") : Proto("answer"), fastBinding ? 0 : 200);
+                UNIT_ASSERT(env.Resume(ready).Status == ECallStatus::Completed);
+                env.Runtime->Drop(ready);
+                auto slowState = slowBinding ? grpc.State : http.State;
+                UNIT_ASSERT_VALUES_EQUAL(slowState->Count(), 0);
+                UNIT_ASSERT(env.Runtime->Poll(waiting).Status == ECallStatus::Waiting);
+
+                clockMs = 30000;
+                UNIT_ASSERT(HasHeader(*slowState->Wait(), slowBinding ? "x-ya-service-ticket" : "X-Ya-Service-Ticket",
+                                      "fqrun-mock-tvm-service-ticket"));
+                slowState->Reply(0, slowBinding ? TString("answer") : Proto("answer"), slowBinding ? 0 : 200);
+                UNIT_ASSERT(env.Resume(waiting).Status == ECallStatus::Completed);
+                env.Clean(waiting);
+            }
+        }
     }
 
     Y_UNIT_TEST(TvmAcquisitionFailureAndInvalidTicketsNeverReachService) {

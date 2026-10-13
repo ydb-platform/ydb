@@ -368,6 +368,16 @@ def test_tvm_mock_protobuf_connection_and_echo(service, tmp_path):
     assert service.tvm_tickets == [('http', 'fqrun-mock-tvm-service-ticket')]
 
 
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_tvm_mock_delay_exceeds_call_timeout(service, tmp_path, protocol):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service, timeout_ms=200)
+    process = runner.start('profiles_' + protocol, extra=('--tvm-mock', '--tvm-mock-delay-ms=30000'))
+    assert runner.wait(process) != 0, runner.output()
+    assert not service.requests
+    assert not service.tvm_tickets
+
+
 @pytest.mark.parametrize('old,new,error', [
     ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '0'", 'TVM_SOURCE_ID must'),
     ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '4294967296'", 'TVM_SOURCE_ID must'),

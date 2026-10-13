@@ -47,6 +47,7 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     };
 
     bool EmulateS3 = false;
+    bool MockTvm = false;
     bool EnableTraceOpt = false;
 
     bool EnableQuotas = false;

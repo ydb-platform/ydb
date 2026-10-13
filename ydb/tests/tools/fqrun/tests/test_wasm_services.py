@@ -326,6 +326,48 @@ def test_tvm_stub_fails_explicitly_before_network(service, tmp_path):
     assert 'test-tvm-source-secret' not in runner.output()
 
 
+@pytest.mark.parametrize('service', [False, True], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+@pytest.mark.parametrize('batch_rows', [1, 2])
+def test_tvm_mock_ticket_reaches_service(service, tmp_path, protocol, batch_rows):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service, batch_rows)
+    process = runner.start(alias=None, sql=profile_query('profiles_' + protocol), extra=(
+        '--tvm-mock', '--init-query=' + str(tmp_path / 'connections.sql'),
+        '--secrets-file=' + str(tmp_path / 'secrets.json'), '--verbosity=3',
+    ))
+    assert runner.wait(process) == 0, runner.output()
+    assert [int(row['id']) for row in runner.rows()] == [42, 43]
+    assert all(row['name'] == 'Ada' and int(row['score']) == 97 for row in runner.rows())
+    assert service.tvm_tickets
+    assert all(kind == protocol and ticket == 'fqrun-mock-tvm-service-ticket'
+               for kind, ticket in service.tvm_tickets)
+    assert all(auth is None for _, _, auth in service.requests)
+    assert 'fqrun-example-tvm-secret' not in runner.output()
+    assert 'fqrun-mock-tvm-service-ticket' not in runner.output()
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_tvm_mock_server_rejects_missing_ticket(service, tmp_path, protocol):
+    runner = Runner(tmp_path, service)
+    # Retain TOKEN connections but require a service ticket on the server.
+    service.require_tvm_ticket = True
+    assert runner.wait(runner.start('profiles_' + protocol, extra=('--tvm-mock',))) != 0, runner.output()
+    assert service.tvm_tickets
+    assert all(kind == protocol and ticket is None for kind, ticket in service.tvm_tickets)
+    assert not service.requests
+
+
+def test_tvm_mock_protobuf_connection_and_echo(service, tmp_path):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service)
+    process = runner.start('echo_http', (tmp_path / 'echo.sql').read_text(), extra=('--tvm-mock',))
+    assert runner.wait(process) == 0, runner.output()
+    row, = runner.rows()
+    assert row['value'] == 'hello' and int(row['length']) == 5
+    assert service.tvm_tickets == [('http', 'fqrun-mock-tvm-service-ticket')]
+
+
 @pytest.mark.parametrize('old,new,error', [
     ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '0'", 'TVM_SOURCE_ID must'),
     ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '4294967296'", 'TVM_SOURCE_ID must'),

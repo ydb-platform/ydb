@@ -195,8 +195,11 @@ TVM connection metadata and transport integration are implemented. The default
 provider is **unavailable**: actual ticket acquisition will be added when the TVM
 client/API contract is supplied. Creating a connection succeeds; executing a
 query that uses it fails with `TVM ticket provider is not implemented`, before
-sending any request to the external service. No synthetic tickets or fallback
-unauthenticated calls are made.
+sending any request to the external service. For local end-to-end testing,
+`fqrun --tvm-mock` selects a test provider that returns the fixed fake ticket
+`fqrun-mock-tvm-service-ticket`. It does not contact TVM or use the source secret
+to mint a real ticket. Without this explicit option, the default provider
+remains unavailable.
 
 ```sql
 CREATE EXTERNAL DATA SOURCE profiles_http WITH (
@@ -232,8 +235,37 @@ The host obtains credentials for each network operation and adds
 towards the operation's deadline and memory/concurrency limits. Cancellation and
 shutdown detach pending waiters. Reserved TVM headers cannot be supplied through
 connection headers. Tickets and source secrets never enter WASM memory.
-Transport/DQ tests use an explicitly injected test provider; these are not a
-validation of a real TVM server or issuance protocol.
+Transport/DQ tests use an explicitly injected test provider. fqrun end-to-end
+tests also exercise `--tvm-mock`; neither validates a real TVM server or issuance
+protocol.
+
+To run the complete local TVM example, build the runner and mock server, then
+start the server in one terminal from the repository root:
+
+```bash
+./ya make --build relwithdebinfo ydb/tests/tools/fqrun ydb/tests/tools/fqrun/examples/server
+ydb/tests/tools/fqrun/examples/server/fqrun-wasm-mock \
+  --output-dir /tmp/fqrun-tvm-example --tvm-mock
+```
+
+This generates TVM connections, a dummy source secret and the WASM configuration.
+The mock checks only that the service-ticket header is nonempty: HTTP requests
+without it receive 401, gRPC calls receive UNAUTHENTICATED. It does not check
+ticket signatures, source/destination IDs, paths or methods for authorization.
+
+In another terminal, run:
+
+```bash
+ydb/tests/tools/fqrun/fqrun -C analytics --compute=in-place --tvm-mock \
+  --cfg=/tmp/fqrun-tvm-example/app.conf \
+  --init-query=/tmp/fqrun-tvm-example/connections.sql \
+  --secrets-file=/tmp/fqrun-tvm-example/secrets.json \
+  --query=/tmp/fqrun-tvm-example/profiles_http.sql
+```
+
+The query returns IDs 42 and 43, name `Ada`, score 97. Replace the query file with
+`profiles_grpc.sql` to test gRPC or `echo.sql` for the Echo module. Existing TVM
+DDL and secret files work with the same runner option.
 
 ### Reproducible HTTP/gRPC example
 

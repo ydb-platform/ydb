@@ -14,11 +14,12 @@ def main():
     parser.add_argument('--http-port', type=int, default=0)
     parser.add_argument('--grpc-port', type=int, default=0)
     parser.add_argument('--batch-rows', type=int, default=1, choices=range(1, 65))
+    parser.add_argument('--tvm-mock', action='store_true', help='Generate TVM connections and require a service-ticket header')
     args = parser.parse_args()
     stopped = threading.Event()
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
-    service = MockServices(args.http_port, args.grpc_port)
+    service = MockServices(args.http_port, args.grpc_port, require_tvm_ticket=args.tvm_mock)
     try:
         write_setup(args.source_root.resolve(), args.output_dir, service, args.batch_rows)
         print('Local services ready; configuration and SQL: %s' % args.output_dir.resolve(), flush=True)

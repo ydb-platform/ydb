@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_proxy/events
     ydb/core/fq/libs/init
     ydb/core/fq/libs/mock
+    ydb/core/fq/libs/wasm_services
     ydb/core/testlib
     ydb/library/actors/core
     ydb/library/folder_service/mock

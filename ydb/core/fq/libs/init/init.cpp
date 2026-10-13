@@ -71,7 +71,8 @@ void Init(
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
+    std::shared_ptr<NWasmServices::ITvmTicketProvider> tvmProvider
     )
 {
     Y_ABORT_UNLESS(iyqSharedResources, "No YQ shared resources created");
@@ -190,7 +191,7 @@ void Init(
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     if (protoConfig.GetWasmServices().GetEnabled()) {
-        NWasmServices::RegisterServiceTransforms(*asyncIoFactory, protoConfig.GetWasmServices());
+        NWasmServices::RegisterServiceTransforms(*asyncIoFactory, protoConfig.GetWasmServices(), std::move(tvmProvider));
     }
 
     const auto httpGateway = NYql::IHTTPGateway::Make(

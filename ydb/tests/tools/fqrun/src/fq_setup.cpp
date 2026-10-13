@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/fq/libs/wasm_services/tvm.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
@@ -23,6 +24,23 @@ using namespace NKikimrRun;
 namespace NFqRun {
 
 namespace {
+
+// Only selected by fqrun --tvm-mock. This ticket is not valid for real TVM services.
+class TMockTvmRequest final : public NFq::NWasmServices::ITvmTicketRequest {
+public:
+    NFq::NWasmServices::TTvmTicketResult Poll() override {
+        return {.Status = NFq::NWasmServices::ETvmTicketStatus::Ready, .Ticket = "fqrun-mock-tvm-service-ticket"};
+    }
+    void Cancel() noexcept override {}
+};
+
+class TMockTvmProvider final : public NFq::NWasmServices::ITvmTicketProvider {
+public:
+    std::shared_ptr<NFq::NWasmServices::ITvmTicketRequest> Request(
+        const NFq::NWasmServices::TTvmCredentials&, TInstant) override {
+        return std::make_shared<TMockTvmRequest>();
+    }
+};
 
 TRequestResult GetStatus(const NYql::TIssues& issues) {
     return TRequestResult(issues ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS, issues);
@@ -171,7 +189,8 @@ private:
 
         NFq::Init(
             fqConfig, GetRuntime()->GetNodeId(), actorRegistrator, &GetRuntime()->GetAppData(),
-            Settings.DomainName, nullptr, YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory
+            Settings.DomainName, nullptr, YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory,
+            Settings.MockTvm ? std::make_shared<TMockTvmProvider>() : nullptr
         );
         YqSharedResources->Init(GetRuntime()->GetActorSystem(0));
     }

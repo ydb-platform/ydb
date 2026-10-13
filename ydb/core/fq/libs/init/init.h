@@ -15,8 +15,13 @@
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
 #include <util/generic/ptr.h>
+#include <memory>
 
 namespace NFq {
+
+namespace NWasmServices {
+class ITvmTicketProvider;
+}
 
 using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>;
 
@@ -36,7 +41,8 @@ void Init(
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     ui32 icPort,
     const std::vector<NKikimr::NMiniKQL::TComputationNodeFactory>& additionalCompNodeFactories,
-    NYql::IPqGatewayFactory::TPtr pqGatewayFactory = nullptr
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory = nullptr,
+    std::shared_ptr<NWasmServices::ITvmTicketProvider> tvmProvider = {}
 );
 
 } // NFq

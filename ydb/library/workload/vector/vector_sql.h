@@ -5,6 +5,10 @@
 namespace NYdbWorkload {
 
 
+// Validate replica settings and produce one ALTER per index implementation table.
+// Empty settings preserve the server defaults and produce no statements.
+TVector<TString> MakeIndexReadReplicasQueries(const TVectorWorkloadParams& params, const TString& settings);
+
 // Utility function to get metric info for SQL query
 // Returns a tuple of (function_name, is_ascending)
 std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::EMetric metric);

@@ -35,6 +35,7 @@ struct TQueryInfo {
     NYdb::TParams Params;
     bool UseReadRows = false;
     bool UseStaleRO = false;
+    bool UseSnapshotRO = false;
     TString TablePath;
     std::optional<NYdb::TValue> KeyToRead;
     std::optional<NYdb::NTable::TAlterTableSettings> AlterTable;

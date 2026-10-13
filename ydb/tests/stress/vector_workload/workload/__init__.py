@@ -17,11 +17,12 @@ QUERY_TABLE_NAME = "vector_query_table"
 
 class YdbVectorWorkload(WorkloadBase):
     def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10, index_type=None, clusters=None, levels=None,
-                 s3_endpoint=None, s3_bucket=None, s3_source=None, s3_destination=None, s3_query_source=None, s3_query_destination=None):
+                 s3_endpoint=None, s3_bucket=None, s3_source=None, s3_destination=None, s3_query_source=None, s3_query_destination=None, min_rows=None, client_timeout="30s"):
         super().__init__(None, '', 'vector_workload', None)
         self.endpoint = endpoint
         self.database = database
         self.duration = str(duration)
+        self.client_timeout = client_timeout
         self.mode = mode
         self.data_dir = data_dir
         self.targets = str(targets)
@@ -29,6 +30,7 @@ class YdbVectorWorkload(WorkloadBase):
         self.rows = str(rows)
         self.threads = str(threads)
         self.index_type = index_type
+        self.min_rows = str(min_rows) if min_rows is not None else None
         self.clusters = str(clusters) if clusters is not None else None
         self.levels = str(levels) if levels is not None else None
         self.s3_endpoint = s3_endpoint
@@ -109,56 +111,41 @@ class YdbVectorWorkload(WorkloadBase):
                 print(f"Attempt {attempt}/{retries} failed, retrying in {delay}s...")
                 time.sleep(delay)
 
-    def _wait_for_table_stats(self, timeout=90, interval=3):
-        """Poll until the table's row-count statistic is non-zero.
+    def _wait_for_table_stats(self, timeout=180, interval=3, expected_rows=1):
+        """Wait for SchemeShard statistics used by automatic index sizing.
 
-        After an index build the row-count estimate is computed asynchronously.
-        The vector workload's Init() reads it via DescribeTable().GetTableRows()
-        and aborts ("statistics is not calculated yet") if it starts too early.
-        We poll the same underlying datashard stat through the .sys/partition_stats
-        system view and return as soon as it lands — usually far quicker than a
-        fixed sleep. This is best-effort: if the view is not queryable we fall
-        back to a short fixed wait, and on timeout we proceed anyway (the select's
-        own cmd_run_with_retry is the backstop)."""
+        A positive but partial row count is insufficient for generated data.
+        Building before all imported rows are reflected can select a tiny tree
+        whose searches scan most of the dataset and time out under load.
+        """
         full_path = f"{self.database.rstrip('/')}/{self.table_name}"
-        query = (
-            "SELECT COALESCE(SUM(RowCount), 0u) AS rows "
-            f"FROM `.sys/partition_stats` WHERE Path = '{full_path}';"
-        )
-        cmd = self.get_cli_prefix() + ['yql', '-s', query, '--format', 'json-unicode']
-        print(f"Waiting for table statistics on {full_path}...")
-        deadline = time.time() + timeout
-        query_ok = False
-        while time.time() < deadline:
-            rows = None
-            try:
-                proc = subprocess.run(cmd, check=True, text=True, capture_output=True)
-                query_ok = True
-                for line in proc.stdout.splitlines():
-                    line = line.strip()
-                    if line:
-                        val = json.loads(line).get('rows')
-                        if val is not None:
-                            rows = int(val)
-            except (subprocess.CalledProcessError, ValueError) as e:
-                if not query_ok:
-                    # System view not queryable here: don't spin, fall back to a
-                    # brief fixed wait and let the select's retry cover the rest.
-                    print(f"Cannot query table statistics ({e}); falling back to fixed wait")
-                    time.sleep(30)
-                    return
-                print("Stats poll query failed, retrying...")
-            if rows:
+        cmd = self.get_cli_prefix() + [
+            'scheme', 'describe', full_path, '--stats', '--format', 'proto-json-base64',
+        ]
+        print(f"Waiting for table statistics on {full_path}: at least {expected_rows} rows...")
+        deadline = time.monotonic() + timeout
+        rows = 0
+        while time.monotonic() < deadline:
+            proc = subprocess.run(cmd, check=True, text=True, capture_output=True,
+                                  timeout=max(1, deadline - time.monotonic()))
+            description = json.loads(proc.stdout)
+            stats = description.get('table_stats', description.get('tableStats', {}))
+            rows = int(stats.get('rows_estimate', stats.get('rowsEstimate', 0)))
+            if rows >= expected_rows:
                 print(f"Table statistics ready: {full_path} has ~{rows} rows")
                 return
             time.sleep(interval)
-        print(f"Timed out after {timeout}s waiting for statistics on {full_path}; proceeding")
+        raise TimeoutError(
+            f"Table statistics for {full_path} contain {rows} rows; expected at least {expected_rows}. "
+            "Refusing to build an automatically sized index with stale statistics.")
 
     def _build_index_subcmds(self):
         """Subcommands to build the index on the workload table."""
         subcmds = ['build-index', '--distance', 'cosine', '--table', self.table_name]
         if self.index_type is not None:
             subcmds += ['--index-type', self.index_type]
+        if self.min_rows is not None:
+            subcmds += ["--min-rows", self.min_rows]
         if self.mode == "s3":
             # An imported dataset has a fixed, externally-defined vector dimension
             # and type. Pass 0 so the CLI omits them from the DDL and the server
@@ -224,13 +211,12 @@ class YdbVectorWorkload(WorkloadBase):
                 '--index-type', 'None',
             ])
         )
+        # Automatic tree sizing reads SchemeShard statistics at creation time.
+        self._wait_for_table_stats(expected_rows=int(self.rows))
         # Build index explicitly and wait for completion
         self.cmd_run_with_retry(
             self.get_command_prefix(subcmds=self._build_index_subcmds())
         )
-        # Wait until table statistics (row-count estimate) are computed after the
-        # index build; the select workload aborts if it starts before they land.
-        self._wait_for_table_stats()
 
     def _get_select_subcmds(self, seconds):
         subcmds = [
@@ -238,6 +224,7 @@ class YdbVectorWorkload(WorkloadBase):
             '--seconds', str(seconds),
             '--threads', self.threads,
             '--targets', self.targets,
+            '--client-timeout', self.client_timeout,
             '--table', self.table_name,
         ]
         if self.mode in ('generate', 'load', 's3'):
@@ -297,13 +284,11 @@ class YdbVectorWorkload(WorkloadBase):
             cmd += ["--item", item_query]
             print(f"Importing queries table from S3: {self.s3_query_source} -> {query_dest}")
         self.cmd_run(cmd)
+        self._wait_for_table_stats()
         # Build index explicitly and wait for completion
         self.cmd_run_with_retry(
             self.get_command_prefix(subcmds=self._build_index_subcmds())
         )
-        # Wait until table statistics (row-count estimate) are computed after the
-        # index build; the select workload aborts if it starts before they land.
-        self._wait_for_table_stats()
 
     def __loop_s3(self):
         """S3 mode: import data from S3, optionally import queries table, build index, run select, clean."""

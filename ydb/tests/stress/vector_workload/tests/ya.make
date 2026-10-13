@@ -7,6 +7,7 @@ ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/vector_workload/workload_vector")
 
 TEST_SRCS(
     test_workload.py
+    test_setup.py
 )
 
 REQUIREMENTS(ram:32 cpu:4)
@@ -24,6 +25,7 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
+    ydb/tests/stress/vector_workload/workload
 )
 
 END()

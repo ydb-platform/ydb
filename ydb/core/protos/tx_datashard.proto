@@ -430,6 +430,10 @@ message TKqpVectorSearchSettings {
 
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
+
+    // Search all posting partitions without k-means cluster-range pruning.
+    optional bool FullRangeHnsw = 29;
+    optional uint32 HnswEfSearch = 30 [default = 15];
 }
 
 message TKqpTaskInfo {
@@ -1016,6 +1020,11 @@ message TEvGetTableStats {
     optional uint64 RowCountResolution = 3;
     optional bool CollectKeySample = 4;
     optional uint32 HistogramBucketsCount = 5;
+    // Correlates index-build readiness probes independently of split statistics.
+    optional uint64 HnswIndexBuildId = 6;
+    optional uint64 HnswProbeRound = 7;
+    optional NActorsProto.TActorId HnswReplyTo = 8;
+    optional uint64 HnswTableOwnerId = 9;
 }
 
 message TEvGetTableStatsResult {
@@ -1029,6 +1038,12 @@ message TEvGetTableStatsResult {
     optional bool FullStatsReady = 8;
     optional uint64 TableOwnerId = 9;
     optional uint32 FollowerId = 10;
+    optional uint64 HnswIndexBuildId = 11;
+    optional uint64 HnswProbeRound = 12;
+    optional bool HnswBuildInProgress = 13;
+    optional bool HnswStatsFresh = 14;
+    optional uint32 HnswFollowersCount = 15;
+    optional bool HnswStatisticsDisabled = 16;
 }
 
 message TEvPeriodicTableStats {

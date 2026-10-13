@@ -31,6 +31,8 @@ public:
 
     TVector<TString> GetColumns() const;
     TString GetDistanceDDL() const;
+    TString GetIndexTypeDDL() const;
+    TString GetHnswSettingsDDL() const;
 
     NVector::TTableOpts TableOpts;
     NVector::TTablePartitioningOpts TablePartitioningOpts;
@@ -39,6 +41,11 @@ public:
     TString IndexName = "index";
 
     TString IndexType = "KmeansTree";
+    ui64 MinRows = 10000;
+    ui32 M = 16;
+    ui32 EfConstruction = 200;
+    ui32 HnswEfSearch = 15;
+    ui64 DeltaRows = 10000;
     bool KmeansTreeCovering = false;
     bool KmeansTreePrefixed = false;
 
@@ -67,6 +74,7 @@ public:
     bool Recall = false;
     bool NonIndexedSearch = false;
     bool StaleRO = false;
+    bool Hnsw = false;
     bool KeyIsInt = false;
 };
 

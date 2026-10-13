@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NKMeans {
 
@@ -87,6 +88,16 @@ namespace {
 
     ui32 ParseUInt32(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
         ui32 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
+    ui64 ParseUInt64(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
+        ui64 result = 0;
         if (!TryFromString(value, result)) {
             error = TStringBuilder() << "Invalid " << name << ": " << value;
             return result;
@@ -737,6 +748,15 @@ namespace {
             return false;
         }
 
+        if (settings.has_m()
+            && !ValidateSettingInRange("M", settings.m(), 1, MaxHnswM, error)) {
+            return false;
+        }
+        if (settings.has_ef_construction()
+            && !ValidateSettingInRange("ef_construction", settings.ef_construction(), 1, MaxHnswEfConstruction, error)) {
+            return false;
+        }
+
         if (partial) {
             if (settings.has_vector_type()) {
                 if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
@@ -782,8 +802,9 @@ namespace {
         return true;
     }
 
-    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error) {
+    bool ValidateSettingsImpl(const Ydb::Table::KMeansTreeSettings& settings, bool partial, TString& error, bool hnsw = false) {
         error = "";
+        const ui64 minClusters = hnsw ? 1 : MinClusters;
 
         if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
             error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
@@ -813,7 +834,7 @@ namespace {
             if (settings.has_clusters()) {
                 if (!ValidateSettingInRange("clusters",
                     std::optional<ui64>(settings.clusters()),
-                    MinClusters, MaxClusters,
+                    minClusters, MaxClusters,
                     error))
                 {
                     return false;
@@ -830,7 +851,7 @@ namespace {
 
             if (!ValidateSettingInRange("clusters",
                 settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
-                MinClusters, MaxClusters,
+                minClusters, MaxClusters,
                 error))
             {
                 return false;
@@ -887,6 +908,40 @@ bool ValidateSettingsPartial(const Ydb::Table::VectorIndexSettings& settings, TS
 
 bool ValidateSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
     return ValidateSettingsImpl(settings, true, error);
+}
+
+bool ValidateHnswSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, false, error, true);
+}
+
+bool ValidateHnswSettingsPartial(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
+    return ValidateSettingsImpl(settings, true, error, true);
+}
+
+bool AutoSelectHnswSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 dataSizeBytes, TString& error) {
+    if (!settings.has_levels() || !settings.levels()) {
+        settings.set_levels(1);
+    }
+    if (!settings.has_clusters() || !settings.clusters()) {
+        const ui64 clusters = dataSizeBytes / 1_GB + 1;
+        // Validate before narrowing to the protobuf's uint32 field. Keep the
+        // routing-table bounds enforced for explicit settings as well.
+        if (!ValidateSettingInRange("clusters", clusters, 1, MaxClusters, error)) {
+            return false;
+        }
+        settings.set_clusters(clusters);
+    }
+    return ValidateHnswSettingsPartial(settings, error);
+}
+
+bool FillHnswSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLower,
+        const TString& value, TString& error) {
+    if (nameLower == "clusters") {
+        error = "";
+        settings.set_clusters(ParseUInt32(nameLower, value, 1, MaxClusters, error));
+        return error.empty();
+    }
+    return FillSetting(settings, nameLower, value, error);
 }
 
 ui64 ComputeOptimalClusters(ui64 levels, ui64 searchWidth, ui64 rowCount, double avgClustersPerVector) {
@@ -1150,6 +1205,18 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
+    } else if (nameLower == "min_rows") {
+        settings.mutable_settings()->set_min_rows(
+            ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+    } else if (nameLower == "m") {
+        settings.mutable_settings()->set_m(
+            ParseUInt32(nameLower, value, 1, MaxHnswM, error));
+    } else if (nameLower == "ef_construction") {
+        settings.mutable_settings()->set_ef_construction(
+            ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error));
+    } else if (nameLower == "delta_rows") {
+        settings.mutable_settings()->set_delta_rows(
+            ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

@@ -166,18 +166,19 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
 }
 
 TQueryInfoList TVectorWorkloadGenerator::Select() {
-    CurrentIndex = (CurrentIndex + 1) % VectorSampler->GetTargetCount();
+    const size_t currentIndex = CurrentIndex.fetch_add(1, std::memory_order_relaxed)
+        % VectorSampler->GetTargetCount();
 
     // Create the query string
     std::string query = MakeSelect(Params, Params.IndexName);
 
     // Get the embedding for the specified target
-    const auto& targetEmbedding = VectorSampler->GetTargetEmbedding(CurrentIndex);
+    const auto& targetEmbedding = VectorSampler->GetTargetEmbedding(currentIndex);
 
     // Get the prefix value if needed
     std::optional<NYdb::TValue> prefixValue;
     if (Params.PrefixColumn.has_value()) {
-        prefixValue = VectorSampler->GetPrefixValue(CurrentIndex);
+        prefixValue = VectorSampler->GetPrefixValue(currentIndex);
     }
 
     NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
@@ -185,6 +186,8 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
     queryInfo.UseStaleRO = Params.StaleRO;
+    // Lock-taking reads bypass HNSW; use a consistent read-only snapshot by default.
+    queryInfo.UseSnapshotRO = Params.Hnsw && !Params.StaleRO;
 
     return TQueryInfoList(1, queryInfo);
 }

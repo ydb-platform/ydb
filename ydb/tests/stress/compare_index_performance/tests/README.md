@@ -50,6 +50,26 @@ Supplying both `compare_ref` and `compare_current_ref` (or explicit paths) lets
 you compare two arbitrary prebuilt binaries — e.g. `main` vs `main` (a noise
 sanity check) or two different refs — **without a local build**.
 
+The GitHub workflow defaults vector comparisons to **baseline `vector_kmeans_tree`
+versus current `hnsw`**. Set `baseline_index_type=hnsw` and select a baseline ref
+that supports HNSW to compare HNSW on both versions. Fulltext keeps its workload
+default. Index types are included in the report.
+
+For HNSW, the comparison passes `--min-rows 1` so small generated partitions use
+the graph cache; query search breadth remains 15. This applies to generated,
+reloaded, and S3 datasets on either side. Warmup precedes each measured run.
+
+Generated-data runs wait for SchemeShard statistics to include all imported rows
+before building the index. Automatic k-means sizing uses these statistics;
+building immediately after import can select a two-cluster tree from stale
+estimates. S3 imports wait for nonzero statistics. A statistics timeout fails
+the run instead of continuing with an undersized index.
+
+Both sides use a 30-second client query timeout (configurable with
+`compare_vector_client_timeout`). A measured run with errors, no successful
+transactions, or a missing/invalid summary fails the test and is not included
+in a performance comparison.
+
 ## Parameters (`--test-param compare_*=...`)
 
 | param | default | meaning |
@@ -58,10 +78,12 @@ sanity check) or two different refs — **without a local build**.
 | `compare_iterations` | `3` | iterations per workload (median reported; ≥ 2 for significance) |
 | `compare_duration` | `60` | measured seconds per workload run |
 | `compare_warmup` | `30` | vector warmup seconds before the measured select |
+| `compare_vector_client_timeout` | `30s` | per-query client timeout for both vector runs, including warmup |
 | `compare_rows` | `10000` | rows in the generated database |
 | `compare_threads` | `10` | client threads |
 | `compare_targets` | `1000` | number of query targets |
-| `compare_index_type` | `` | value passed to the selected workload as `--index-type`; empty uses its default |
+| `compare_index_type` | `` | current-side index type; also used by the baseline unless overridden |
+| `compare_baseline_index_type` | `` | baseline index type; empty inherits `compare_index_type` |
 | `compare_ref` | `main` | baseline S3 ref (download URL + report label) |
 | `compare_current_ref` | `` | current S3 ref; empty → use the locally built `ydbd` |
 | `compare_build_preset` | `release` | S3 preset for downloads + report label (e.g. `release`, `relwithdebinfo`, `profile`) |

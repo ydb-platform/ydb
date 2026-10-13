@@ -435,14 +435,16 @@ TWorkloadVectorDataInitializerBase::TWorkloadVectorDataInitializerBase(const TSt
 { }
 
 int TWorkloadVectorDataInitializerBase::PostImport() {
-    if (VectorParams.IndexType == "None") {
+    const auto indexType = VectorParams.GetIndexTypeDDL();
+    const auto hnswSettings = VectorParams.GetHnswSettingsDDL();
+    if (indexType.empty()) {
         return EXIT_SUCCESS;
     }
 
     TStringBuilder ddlQuery;
     ddlQuery << "ALTER TABLE `" << VectorParams.GetFullTableName(VectorParams.TableOpts.Name.c_str()) << "`\n";
     ddlQuery << "ADD INDEX `" << VectorParams.IndexName << "`\n";
-    ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
+    ddlQuery << "GLOBAL USING " << indexType << "\n";
     if (VectorParams.KmeansTreePrefixed) {
         ddlQuery << "ON (prefix, embedding)\n";
     } else {
@@ -461,6 +463,7 @@ int TWorkloadVectorDataInitializerBase::PostImport() {
     if (VectorParams.KmeansTreeClusters) {
         ddlQuery << ",\n    clusters=" << VectorParams.KmeansTreeClusters;
     }
+    ddlQuery << hnswSettings;
     ddlQuery << "\n);";
 
     Cout << "Building vector index ..." << Endl;
@@ -532,6 +535,7 @@ static bool MatchesFormat(const TString& filename, const TString& format) {
 }
 
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
+    VectorParams.GetHnswSettingsDDL(); // Validate index options before loading data.
     const TFsPath inputPath(DataFiles);
 
     if (!Format.empty() && inputPath.IsDirectory()) {
@@ -599,6 +603,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 }
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
+    VectorParams.GetHnswSettingsDDL(); // Validate index options before loading data.
     Cout << "Using random seed: " << RandomSeed << Endl;
     return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed, StateProcessor.Get())};
 }

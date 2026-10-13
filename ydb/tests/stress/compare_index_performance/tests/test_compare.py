@@ -34,6 +34,7 @@
 # Txs/Sec are perturbed when on.
 
 import contextlib
+import math
 import os
 import signal
 import statistics
@@ -174,6 +175,8 @@ def calc_significance(main_mean, current_mean, main_stddev, current_stddev, main
     # Returns (verdict_str, n_sigmas_or_None, is_significant_or_None).
     if main_mean in ("N/A", None) or current_mean in ("N/A", None):
         return "N/A", None, None
+    if main_mean == 0:
+        return "N/A (zero base)", None, None
     if main_n < 2 or current_n < 2:
         return "N/A (need >= 2 iterations)", None, None
 
@@ -220,19 +223,60 @@ def collect_value(values, val):
 
 
 def extract_total_txs_sec(log_file):
-    # Mirror the original `grep -A1 "^Total" | tail -1 | awk '{print $3}'`:
-    # take the line after the LAST "Total" header, 3rd whitespace field.
-    if not os.path.isfile(log_file):
-        return None
+    # Warmup and measurement both print a Total row. Validate the final row;
+    # CLI workloads can exit successfully even when every query has failed.
     with open(log_file, errors="replace") as f:
         lines = f.read().splitlines()
-    val = None
+    total = None
     for i, line in enumerate(lines):
-        if line.startswith("Total") and i + 1 < len(lines):
-            fields = lines[i + 1].split()
-            if len(fields) >= 3:
-                val = fields[2]
-    return val
+        if line.startswith("Total"):
+            total = dict(zip(line.split(), lines[i + 1].split())) if i + 1 < len(lines) else {}
+    try:
+        transactions = int(total["Txs"])
+        errors = int(total["Errors"])
+        rate_text = total["Txs/Sec"]
+        rate = float(rate_text)
+    except (TypeError, KeyError, ValueError) as exc:
+        raise ValueError(f"Missing or invalid measured Total row in {log_file}") from exc
+    if transactions <= 0 or errors != 0 or not math.isfinite(rate) or rate <= 0:
+        raise ValueError(
+            f"Invalid performance measurement: {transactions} successful transactions, "
+            f"{errors} errors, {rate_text} Txs/Sec. See {log_file} and {log_file}.err")
+    return rate_text
+
+
+def test_extract_total_txs_sec_uses_measurement(tmp_path):
+    log = tmp_path / "workload.log"
+    log.write_text("Total Txs Txs/Sec Retries Errors\n10 0 0 0 50\n"
+                   "Total Txs Txs/Sec Retries Errors\n20 200 10.0 0 0\n")
+    assert extract_total_txs_sec(log) == "10.0"
+
+
+@pytest.mark.parametrize("summary", [
+    "100 0 0 0 4400",  # All queries timed out, as in the failed baseline.
+    "100 100 1 0 2",  # Partial failures must not bias the comparison either.
+    "100 0 0 0 0",
+    "100 100 nan 0 0",
+    "100 100 inf 0 0",
+    "100 100 -1 0 0",
+    "",
+])
+def test_extract_total_txs_sec_rejects_invalid_measurement(tmp_path, summary):
+    log = tmp_path / "workload.log"
+    log.write_text("Total Txs Txs/Sec Retries Errors\n" + summary + "\n")
+    with pytest.raises(ValueError):
+        extract_total_txs_sec(log)
+
+
+def test_extract_total_txs_sec_rejects_missing_measurement(tmp_path):
+    log = tmp_path / "workload.log"
+    log.write_text("workload terminated before printing results\n")
+    with pytest.raises(ValueError, match="Total row"):
+        extract_total_txs_sec(log)
+
+
+def test_zero_baseline_is_not_significant():
+    assert calc_significance(0, 2304.9, 0, 7, 3, 3) == ("N/A (zero base)", None, None)
 
 
 class TestCompareIndexPerformance:
@@ -251,10 +295,13 @@ class TestCompareIndexPerformance:
         self.iterations = int(yatest.common.get_param('compare_iterations', default='3'))
         self.duration = yatest.common.get_param('compare_duration', default='60')
         self.warmup = yatest.common.get_param('compare_warmup', default='30')
+        self.vector_client_timeout = yatest.common.get_param('compare_vector_client_timeout', default='30s')
         self.rows = yatest.common.get_param('compare_rows', default='10000')
         self.threads = yatest.common.get_param('compare_threads', default='10')
         self.targets = yatest.common.get_param('compare_targets', default='1000')
         self.index_type = yatest.common.get_param('compare_index_type', default='')
+        self.baseline_index_type = yatest.common.get_param(
+            'compare_baseline_index_type', default='') or self.index_type
         # Vector index structure params; None → server auto-detects
         _clusters = yatest.common.get_param('compare_vector_clusters', default='')
         _levels = yatest.common.get_param('compare_vector_levels', default='')
@@ -680,6 +727,10 @@ class TestCompareIndexPerformance:
             f.write(f"#### Performance Comparison: {baseline_heading} vs {current_heading} ({workload_name})\n\n")
             f.write(f"**Build preset:** `{self.build_preset}` | **Duration:** {self.duration}s "
                     f"per workload | **Iterations:** {self.iterations} (median reported)\n\n")
+            if slug == "vector":
+                f.write(f"**Index types:** baseline `{self.baseline_index_type or 'KmeansTree'}` | "
+                        f"current `{self.index_type or 'KmeansTree'}`. "
+                        "HNSW uses min_rows=1 and ef_search=15.\n\n")
             n_sigmas = res["n_sigmas"]
             sigmas_cell = ("%.2fσ" % n_sigmas) if n_sigmas is not None else "N/A"
             f.write(f"| Workload | {self.ref} (Txs/Sec) | {current_label} (Txs/Sec)"
@@ -708,13 +759,24 @@ class TestCompareIndexPerformance:
         main_values = []
         current_values = []
 
-        vector_index_args = []
-        if self.index_type:
-            vector_index_args += ["--index-type", self.index_type]
+        vector_index_args = ["--client-timeout", self.vector_client_timeout]
         if self.vector_clusters is not None:
             vector_index_args += ["--clusters", self.vector_clusters]
         if self.vector_levels is not None:
             vector_index_args += ["--levels", self.vector_levels]
+
+        def index_args(index_type):
+            args = list(vector_index_args)
+            if index_type:
+                args += ["--index-type", index_type]
+            if index_type.lower() == "hnsw":
+                # Exercise HNSW even when the generated dataset has fewer than
+                # the production default of 10000 rows in each partition.
+                args += ["--min-rows", "1"]
+            return args
+
+        baseline_index_args = index_args(self.baseline_index_type)
+        current_index_args = index_args(self.index_type)
 
         if self.dataset_source == "s3":
             # S3 mode: import the same fixed dataset from S3 on every iteration
@@ -737,14 +799,14 @@ class TestCompareIndexPerformance:
                         "--mode", "s3",
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args + s3_args)
+                    ] + baseline_index_args + s3_args)
 
                 def s3_current_workload(endpoint, out, err):
                     self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
                         "--mode", "s3",
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args + s3_args)
+                    ] + current_index_args + s3_args)
 
                 collect_value(main_values, self._run_one(
                     self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
@@ -769,14 +831,14 @@ class TestCompareIndexPerformance:
                         "--mode", mode, "--data-dir", data_dir,
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args)
+                    ] + baseline_index_args)
 
                 def current_workload(endpoint, out, err):
                     self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
                         "--mode", "load", "--data-dir", data_dir,
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args)
+                    ] + current_index_args)
 
                 collect_value(main_values, self._run_one(
                     self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
@@ -801,23 +863,25 @@ class TestCompareIndexPerformance:
         for i in range(1, self.iterations + 1):
             print(f"=== Fulltext iteration {i}/{self.iterations} ===")
 
-            def fulltext_workload(endpoint, out, err):
+            def fulltext_workload(endpoint, out, err, index_type):
                 workload_args = [
                     "--rows", self.rows, "--targets", self.targets,
                     "--threads", self.threads,
                 ]
-                if self.index_type:
-                    workload_args += ["--index-type", self.index_type]
+                if index_type:
+                    workload_args += ["--index-type", index_type]
                 self._exec_workload(
                     "YDB_FULLTEXT_WORKLOAD_PATH", endpoint, out, err, workload_args)
 
             collect_value(main_values, self._run_one(
                 self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
-                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg",
+                lambda endpoint, out, err: fulltext_workload(endpoint, out, err, self.baseline_index_type),
+                f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg",
                 required_feature_flags=("enable_fulltext_index",)))
             collect_value(current_values, self._run_one(
                 "current", current_ydbd, self.current_tsc, self.current_config,
-                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg",
+                lambda endpoint, out, err: fulltext_workload(endpoint, out, err, self.index_type),
+                f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg",
                 required_feature_flags=("enable_fulltext_index",)))
             if self.flamegraph:
                 self._flamegraph_diff("fulltext", i)

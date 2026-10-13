@@ -1992,7 +1992,7 @@ private:
             }
             auto* part = Plan.AddParts();
             part->SetObjectKey(lastKey);
-            part->SetETag(object.GetETag());
+            part->SetETag(object.GetETag().data(), object.GetETag().size());
             part->SetContentLength(object.GetSize());
             part->SetStartRow(range.Start);
             part->SetEndRow(range.End);

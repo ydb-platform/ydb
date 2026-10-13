@@ -85,7 +85,7 @@ namespace NYdb::inline Dev::NImport {
 
             const auto check = [&](const TImportFromS3Settings& settings, auto expected) {
                 const auto result = client.ImportFromS3(settings).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.Status().IsSuccess(), result.Status().GetIssues().ToString());
                 const auto request = server.Service.GetRequest();
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().source_format(), expected);
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items_size(), 1);

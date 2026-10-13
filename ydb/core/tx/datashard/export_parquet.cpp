@@ -198,15 +198,12 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         return false;
     }
 
-    if (RowGroupBytes) {
+    // Cut the row group before the row that does not fit into it. A row wider than
+    // the limit forms a row group of its own: a reader has to hold a whole row anyway.
+    if (RowGroupBytes && BatchBuilder->Rows()) {
         ui64 rowBytes = 0;
         for (const auto& cell : *row) {
             rowBytes += cell.Size();
-        }
-        if (rowBytes > RowGroupBytes) {
-            ErrorString = TStringBuilder() << "Row size " << rowBytes
-                << " exceeds the limit on the row group size " << RowGroupBytes;
-            return false;
         }
         if (BatchBuilder->Bytes() + rowBytes > RowGroupBytes) {
             if (!FlushRowGroup(false)) {

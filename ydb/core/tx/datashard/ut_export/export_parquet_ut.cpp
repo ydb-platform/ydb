@@ -4,6 +4,7 @@
 #include <ydb/core/tx/datashard/export_scan.h>
 
 #include <ydb/core/protos/data_format_settings.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -333,17 +334,18 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         CheckRows(data, rows);
     }
 
-    // A row that is wider than the limit fits into no row group.
-    Y_UNIT_TEST(ShouldFailOnARowWiderThanTheLimit) {
+    // A row that is wider than the limit is a row group of its own.
+    Y_UNIT_TEST(ShouldWriteARowWiderThanTheLimitAsARowGroup) {
         const TVector<std::pair<ui32, TString>> rows = {
             {1, "narrow"},
             {2, TString(100_KB, 'w')},
             {3, "narrow"},
         };
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            ExportRowsToParquet(rows, /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB),
-            yexception, "Row size 102404 exceeds the limit on the row group size 65536");
+        const TString data = ExportRowsToParquet(rows, /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB);
+
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "1,1,1");
+        CheckRows(data, rows);
     }
 
     // A row of exactly the limit is a row group.
@@ -372,6 +374,15 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "9");
         CheckRows(data, rows);
+    }
+
+    // The default limit on the bytes of a row group is the default export batch
+    // (BackupBytesBatchSize): a scan holds a pending row group in memory much as
+    // it holds a part, and a reader decodes at most that much per row group.
+    Y_UNIT_TEST(DefaultRowGroupBytesIsTheExportBatch) {
+        UNIT_ASSERT_VALUES_EQUAL(TParquetExportSettings().RowGroupBytes, 32_MB);
+        UNIT_ASSERT_VALUES_EQUAL(TParquetExportSettings().RowGroupBytes,
+            NKikimrConfig::TDataShardConfig().GetBackupBytesBatchSize());
     }
 
     Y_UNIT_TEST(ShouldProduceValidParquetWithIntervalUuidDyNumber, EParquetExportSettings) {

@@ -10,6 +10,8 @@ try:
 except ImportError:
     import yaml
 
+T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
+
 logger = logging.getLogger(__name__)
 _reported_ignored_fields = set()
 
@@ -163,7 +165,8 @@ def load_tier0_settings():
     if content is None:
         policy_path = os.path.join(
             os.path.dirname(__file__),
-            "../../../../../devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml",
+            "../../../../../",
+            T0_SETTINGS_PATH,
         )
         with open(policy_path) as policy_file:
             return yaml.load(policy_file, Loader=yaml.CSafeLoader)

@@ -526,6 +526,39 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateExternalServiceWithCurrentIam) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", PROTOCOL="HTTP", LOCATION="https://example.test/profile",
+            AUTH_METHOD="CURRENT_IAM", USE_TLS=TRUE
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithCurrentIamRejectsCredentials) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="CURRENT_IAM", TOKEN_SECRET_NAME="secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "not supported");
+}
+
+Y_UNIT_TEST(CreateExternalDataSourceCurrentIamRequiresExternalService) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE source WITH (
+            SOURCE_TYPE="ObjectStorage", AUTH_METHOD="CURRENT_IAM"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unknown AUTH_METHOD");
+}
+
 Y_UNIT_TEST(CreateExternalDataSourceWithToken) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                     USE plato;

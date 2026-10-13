@@ -255,6 +255,18 @@ public:
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest, NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse>(request, options);
     }
 
+    NFq::TEvControlPlaneProxy::TEvListConnectionsResponse::TPtr ListConnections(
+        const TString& name, const TString& pageToken, const TFqOptions& options) const {
+        FederatedQuery::ListConnectionsRequest request;
+        request.set_limit(100);
+        request.set_page_token(pageToken);
+        request.mutable_filter()->set_name(name);
+        request.mutable_filter()->set_created_by_me(true);
+        request.mutable_filter()->set_visibility(FederatedQuery::Acl::PRIVATE);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvListConnectionsRequest,
+            NFq::TEvControlPlaneProxy::TEvListConnectionsResponse>(request, options);
+    }
+
     NFq::TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const {
         FederatedQuery::CreateBindingRequest request;
         *request.mutable_content() = binding;
@@ -406,6 +418,28 @@ TRequestResult TFqSetup::CreateConnection(const FederatedQuery::ConnectionConten
     connectionId = response->Get()->Result.connection_id();
 
     return GetStatus(response->Get()->Issues);
+}
+
+TRequestResult TFqSetup::FindConnection(const TString& name, const TFqOptions& options, TString& connectionId) const {
+    connectionId.clear();
+    TString pageToken;
+    do {
+        const auto response = Impl->ListConnections(name, pageToken, options);
+        const auto status = GetStatus(response->Get()->Issues);
+        if (!status.IsSuccess()) {
+            return status;
+        }
+        for (const auto& connection : response->Get()->Result.connection()) {
+            if (connection.content().name() == name) {
+                Y_ENSURE(connection.content().setting().has_external_service(),
+                    "Existing connection is not an ExternalService: " << name);
+                connectionId = connection.meta().id();
+                return status;
+            }
+        }
+        pageToken = response->Get()->Result.next_page_token();
+    } while (!pageToken.empty());
+    return GetStatus({});
 }
 
 TRequestResult TFqSetup::CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const {

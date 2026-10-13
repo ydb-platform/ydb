@@ -32,6 +32,18 @@ setting { external_service {
        'false' if certificate else 'true', json.dumps(token), json.dumps(certificate))
 
 
+def connection_ddl(name, endpoint, protocol='HTTP', method='POST', certificate='', auth='TOKEN'):
+    properties = dict(SOURCE_TYPE='ExternalService', PROTOCOL=protocol, LOCATION=endpoint,
+                      METHOD=method, AUTH_METHOD=auth)
+    if auth == 'TOKEN':
+        properties['TOKEN_SECRET_NAME'] = 'example_token'
+    if certificate:
+        properties['CA_CERTIFICATE'] = certificate
+    entries = ['    %s = %s' % (key, json.dumps(value)) for key, value in properties.items()]
+    entries.append('    USE_TLS = %s' % ('TRUE' if certificate else 'FALSE'))
+    return 'CREATE EXTERNAL DATA SOURCE `%s` WITH (\n%s\n);\n' % (name, ',\n'.join(entries))
+
+
 def profile_query(alias, ids=(42, 43)):
     source = ' UNION ALL '.join('SELECT %dul AS id' % value for value in ids)
     return '''$input = %s;
@@ -64,9 +76,14 @@ def write_setup(source_root, output_dir, service, batch_rows=1, timeout_ms=30000
          '/NFq.NWasmServices.NTest.MockService/' + ('LookupBatch' if batch else 'Lookup')),
         ('echo_http', http + '/echo', 'HTTP', 'POST'),
     )
+    ddl = []
     for name, endpoint, protocol, method in specs:
+        ddl.append(connection_ddl(name, endpoint, protocol, method, service.ca_certificate))
         (output / (name + '.pb.txt')).write_text(connection(
             name, endpoint, protocol, method, service.ca_certificate))
     for alias in ('profiles_http', 'profiles_grpc'):
         (output / (alias + '.sql')).write_text(profile_query(alias))
     (output / 'echo.sql').write_text(echo_query())
+    (output / 'connections.sql').write_text('\n'.join(ddl))
+    (output / 'secrets.json').write_text(json.dumps({'example_token': 'fqrun-example-token'}))
+    (output / 'secrets.json').chmod(0o600)

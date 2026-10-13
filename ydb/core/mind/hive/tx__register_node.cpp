@@ -96,7 +96,7 @@ public:
                 << " location=" << GetLocationString(node.Location)
                 << " tabletTypesAvailable=" << node.TabletAvailability.size();
             Self->RecordNodeEvent(node, EHiveEventType::Registered,
-                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, details);
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, std::move(details));
         }
         return true;
     }

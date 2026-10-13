@@ -107,6 +107,7 @@ enum class EResourceToBalance {
 };
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
+TString EResourceToBalanceName(EResourceToBalance value);
 
 struct ISubActor {
     const TInstant StartTime;

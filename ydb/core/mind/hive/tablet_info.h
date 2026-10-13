@@ -2,6 +2,7 @@
 
 #include "hive.h"
 #include "metrics.h"
+#include "event_history.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -159,6 +160,8 @@ public:
     TVector<TActorId> ActorsToNotifyOnRestart; // volatile
     double Weight;
     mutable TString BootState;
+    // diagnostics only: newest events of this tablet, constructed on the first event, see THive::RecordTabletEvent
+    mutable TEventHistory EventHistory;
     TInstant PostponedStart;
     EBalancerPolicy BalancerPolicy;
     TNodeId FailedNodeId = 0; // last time we tried to start the tablet, we failed on this node
@@ -216,15 +219,16 @@ public:
     bool IsAliveOnLocal(const TActorId& local) const;
     bool IsStopped() const;
     bool InitiateBoot(TNodeId node = 0);
-    bool BecomeStarting(TNodeId nodeId);
-    bool BecomeRunning(TNodeId nodeId);
-    bool BecomeStopped();
+    // reason describes who/what initiated the transition, see THive::RecordTabletEvent
+    bool BecomeStarting(TNodeId nodeId, EHiveEventReason reason);
+    bool BecomeRunning(TNodeId nodeId, EHiveEventReason reason);
+    bool BecomeStopped(EHiveEventReason reason);
 
     TNodeInfo* GetNode() const;
     TActorId GetLocal() const;
     void SendStopTablet(TSideEffects& sideEffects);
     void SendStopTablet(const TActorId& local, TSideEffects& sideEffects);
-    bool InitiateStop(TSideEffects& sideEffects, bool forMove = false);
+    bool InitiateStop(TSideEffects& sideEffects, EHiveEventReason reason, bool forMove = false);
 
     void BecomeUnknown(TNodeInfo* node);
     bool Kick();

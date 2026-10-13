@@ -61,7 +61,7 @@ public:
                 BLOG_TRACE("THive::TTxSyncTablets(" << Local << ") confirmed " << state << " tablet " << tabletId << ", but it's not allowed to run on this node");
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
-                tablet->InitiateStop(SideEffects);
+                tablet->InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                 // persist zeroed NodeId so it survives a hive restart
                 if (tablet->IsLeader()) {
                     db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id)
@@ -80,7 +80,7 @@ public:
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
-                    tablet->BecomeStarting(node.Id);
+                    tablet->BecomeStarting(node.Id, EHiveEventReason::SyncTablets);
                     foundTablet(tablet, "starting");
                     continue;
                 }
@@ -98,7 +98,7 @@ public:
                     if (tablet->IsLeader()) {
                         tablet->GetLeader().KnownGeneration = ti.GetGeneration();
                     }
-                    if (tablet->BecomeRunning(node.Id)) {
+                    if (tablet->BecomeRunning(node.Id, EHiveEventReason::SyncTablets)) {
                         if (tablet->IsLeader()) {
                             db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
                                                                                           NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet->GetLeader().KnownGeneration));

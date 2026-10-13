@@ -13,14 +13,15 @@ namespace NSchemeShard {
 
 namespace {
 
-    void FillIssues(NKikimrImport::TImport& import, const TImportInfo& importInfo) {
+    void FillIssues(NKikimrImport::TImport& import, const TImportInfo& importInfo,
+        NYql::TSeverityIds::ESeverityId severity = NYql::TSeverityIds::S_ERROR) {
         if (importInfo.Issue) {
-            AddIssue(import, importInfo.Issue);
+            AddIssue(import, importInfo.Issue, severity);
         }
 
         for (const auto& item : importInfo.Items) {
             if (item.Issue) {
-                AddIssue(import, item.Issue);
+                AddIssue(import, item.Issue, severity);
             }
         }
     }
@@ -203,6 +204,7 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
         }
         import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
+        FillIssues(import, importInfo, NYql::TSeverityIds::S_WARNING);
         break;
 
     case TImportInfo::EState::Cancellation:

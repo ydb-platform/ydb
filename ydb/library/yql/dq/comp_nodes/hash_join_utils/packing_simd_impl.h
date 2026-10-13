@@ -1,12 +1,28 @@
-struct SIMD_PACK_CLASS {
-    using TTraits = SIMD_PACK_TRAITS;
+#pragma once
+
+#include "packing.h"
+
+// This implementation is instantiated only by the ISA-specific libraries.
+
+namespace NKikimr {
+namespace NMiniKQL {
+namespace NPackedTuple {
+
+template <class TTraits> struct TSimdPackImpl {
     template <class T> using TSimd = typename TTraits::template TSimd8<T>;
 
     /// [8,16,32,64]-bits iters
     static const ui8 BaseIters = 4;
 
     /// 128-bit lane iters
-    static const ui8 LaneIters = SIMD_PACK_LANE_ITERS;
+    static const ui8 LaneIters = [] {
+#ifdef USE_X86_SIMD
+        if constexpr (std::is_same_v<TTraits, NSimd::TSimdAVX2Traits>) {
+            return 1;
+        }
+#endif
+        return 0;
+    }();
 
     static const ui8 TransposeIters = BaseIters + LaneIters;
 
@@ -90,8 +106,7 @@ struct SIMD_PACK_CLASS {
 
 #undef TRANSPOSE_ITER
 
-#if SIMD_PACK_LANE_ITERS
-        {
+        if constexpr (LaneIters == 1) {
             constexpr auto iter = BaseIters;
 
             constexpr bool from = iter % 2;
@@ -116,8 +131,9 @@ struct SIMD_PACK_CLASS {
                 }
                 }
             }
+        } else if constexpr (LaneIters) {
+            static_assert(!LaneIters, "Not implemented");
         }
-#endif
     }
 
     template <ui8 ColSize>
@@ -447,3 +463,85 @@ struct SIMD_PACK_CLASS {
                                    col_sizes, offsets, padded_size);
     }
 };
+
+template <class TTraits>
+void SIMDPack<TTraits>::PackColSize(
+    const ui8 *const src_cols[], ui8 *dst_rows, size_t size, size_t col_size,
+    size_t cols_num, size_t padded_size, size_t start) {
+    TSimdPackImpl<TTraits>::PackColSize(
+        src_cols, dst_rows, size, col_size, cols_num, padded_size, start);
+}
+
+template <class TTraits>
+void SIMDPack<TTraits>::UnpackColSize(
+    const ui8 *src_rows, ui8 *const dst_cols[], size_t size, size_t col_size,
+    size_t cols_num, size_t padded_size, size_t start) {
+    TSimdPackImpl<TTraits>::UnpackColSize(
+        src_rows, dst_cols, size, col_size, cols_num, padded_size, start);
+}
+
+template <class TTraits>
+auto SIMDPack<TTraits>::BuildTuplePerm(
+    size_t col_size, size_t col_pad, size_t tuple_size, ui8 offset, ui8 index,
+    bool packing) -> TSimd<ui8> {
+    return TSimdPackImpl<TTraits>::BuildTuplePerm(
+        col_size, col_pad, tuple_size, offset, index, packing);
+}
+
+template <class TTraits>
+void SIMDPack<TTraits>::PackTupleOr(
+    ui8 stores_per_load, ui8 cols, const ui8 *const src_cols[], ui8 *dst_rows,
+    size_t size, const size_t col_sizes[], const size_t offsets[],
+    size_t tuple_size, size_t padded_size, const TSimd<ui8> perms[],
+    size_t start) {
+#define CASE(i, j)                                                             \
+    case i * 4 + j:                                                            \
+        TSimdPackImpl<TTraits>::template PackTupleOr<i + 1, j + 1>(            \
+            src_cols, dst_rows, size, col_sizes, offsets, tuple_size,          \
+            padded_size, perms, start);                                        \
+        return;
+
+#define MULTI_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
+#define MULTI(C) MULTI_I(C, 0) MULTI_I(C, 1) MULTI_I(C, 2) MULTI_I(C, 3)
+
+    switch ((stores_per_load - 1) * 4 + cols - 1) {
+        MULTI(CASE)
+        default:
+            std::abort();
+    }
+
+#undef MULTI
+#undef MULTI_I
+#undef CASE
+}
+
+template <class TTraits>
+void SIMDPack<TTraits>::UnpackTupleOr(
+    ui8 loads_per_store, ui8 cols, const ui8 *src_rows,
+    ui8 *const dst_cols[], size_t size, const size_t col_sizes[],
+    const size_t offsets[], size_t tuple_size, size_t padded_size,
+    const TSimd<ui8> perms[], size_t start) {
+#define CASE(i, j)                                                             \
+    case i * 4 + j:                                                            \
+        TSimdPackImpl<TTraits>::template UnpackTupleOr<i + 1, j + 1>(          \
+            src_rows, dst_cols, size, col_sizes, offsets, tuple_size,          \
+            padded_size, perms, start);                                        \
+        return;
+
+#define MULTI_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
+#define MULTI(C) MULTI_I(C, 0) MULTI_I(C, 1) MULTI_I(C, 2) MULTI_I(C, 3)
+
+    switch ((loads_per_store - 1) * 4 + cols - 1) {
+        MULTI(CASE)
+        default:
+            std::abort();
+    }
+
+#undef MULTI
+#undef MULTI_I
+#undef CASE
+}
+
+} // namespace NPackedTuple
+} // namespace NMiniKQL
+} // namespace NKikimr

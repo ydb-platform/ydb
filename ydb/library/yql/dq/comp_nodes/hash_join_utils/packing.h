@@ -278,46 +278,37 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
 }
 
 template <class TTraits>
-struct TSimdPackSelector;
+struct SIMDPack {
+    template <class T>
+    using TSimd = typename TTraits::template TSimd8<T>;
+
+    static void PackColSize(const ui8 *const src_cols[], ui8 *dst_rows,
+        size_t size, size_t col_size, size_t cols_num, size_t padded_size,
+        size_t start = 0);
+
+    static void UnpackColSize(const ui8 *src_rows, ui8 *const dst_cols[],
+        size_t size, size_t col_size, size_t cols_num, size_t padded_size,
+        size_t start = 0);
+
+    static TSimd<ui8> BuildTuplePerm(size_t col_size, size_t col_pad,
+        size_t tuple_size, ui8 offset, ui8 index, bool packing);
+
+    static void PackTupleOr(ui8 stores_per_load, ui8 cols,
+        const ui8 *const src_cols[], ui8 *dst_rows, size_t size,
+        const size_t col_sizes[], const size_t offsets[], size_t tuple_size,
+        size_t padded_size, const TSimd<ui8> perms[], size_t start = 0);
+
+    static void UnpackTupleOr(ui8 loads_per_store, ui8 cols,
+        const ui8 *src_rows, ui8 *const dst_cols[], size_t size,
+        const size_t col_sizes[], const size_t offsets[], size_t tuple_size,
+        size_t padded_size,
+        const TSimd<ui8> perms[], size_t start = 0);
+};
 
 #ifdef USE_X86_SIMD
-
-// Compile the shared packing implementation with the ISA required by each
-// runtime-selected SIMD type. The included file intentionally has no guard.
-#define SIMD_PACK_CLASS TSimdPackAVX2
-#define SIMD_PACK_TRAITS NSimd::TSimdAVX2Traits
-#define SIMD_PACK_LANE_ITERS 1
-#pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
-#include "packing_simd_impl.inc"
-#pragma clang attribute pop
-#undef SIMD_PACK_LANE_ITERS
-#undef SIMD_PACK_TRAITS
-#undef SIMD_PACK_CLASS
-
-#define SIMD_PACK_CLASS TSimdPackSSE42
-#define SIMD_PACK_TRAITS NSimd::TSimdSSE42Traits
-#define SIMD_PACK_LANE_ITERS 0
-#pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to=function)
-#include "packing_simd_impl.inc"
-#pragma clang attribute pop
-#undef SIMD_PACK_LANE_ITERS
-#undef SIMD_PACK_TRAITS
-#undef SIMD_PACK_CLASS
-
-template <>
-struct TSimdPackSelector<NSimd::TSimdAVX2Traits> {
-    using TType = TSimdPackAVX2;
-};
-
-template <>
-struct TSimdPackSelector<NSimd::TSimdSSE42Traits> {
-    using TType = TSimdPackSSE42;
-};
-
+extern template struct SIMDPack<NSimd::TSimdAVX2Traits>;
+extern template struct SIMDPack<NSimd::TSimdSSE42Traits>;
 #endif
-
-template <class TTraits>
-using SIMDPack = typename TSimdPackSelector<TTraits>::TType;
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

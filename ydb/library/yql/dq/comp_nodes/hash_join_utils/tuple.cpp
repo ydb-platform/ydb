@@ -1144,9 +1144,6 @@ void TTupleLayoutFallback::BucketPack(
     }
 }
 
-#define MULTI_8_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
-#define MULTI_8(C, A) C(A, 0) C(A, 1) C(A, 2) C(A, 3)
-
 template <typename TTraits>
 void TTupleLayoutSIMD<TTraits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
@@ -1162,26 +1159,14 @@ void TTupleLayoutSIMD<TTraits>::Pack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
-            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data(), start);                                     \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::PackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                block_columns.data() + cols_past,
+                res + SIMDSmallTuple_.RowOffset, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data(), start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1354,26 +1339,16 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template UnpackTupleOr<i + 1, j + 1>(               \
-            res + SIMDSmallTuple_.RowOffset, block_columns.data() + cols_past, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data() + (i + 1) * (j + 1), start);                 \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::UnpackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                res + SIMDSmallTuple_.RowOffset,
+                block_columns.data() + cols_past, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data() + SIMDSmallTuple_.InnerLoopIters *
+                    SIMDSmallTuple_.Cols,
+                start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1551,26 +1526,14 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
-            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data(), start);                                     \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::PackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                block_columns.data() + cols_past,
+                res + SIMDSmallTuple_.RowOffset, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data(), start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }

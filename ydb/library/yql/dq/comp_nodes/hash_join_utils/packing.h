@@ -286,17 +286,21 @@ struct TSimdPackSelector;
 // runtime-selected SIMD type. The included file intentionally has no guard.
 #define SIMD_PACK_CLASS TSimdPackAVX2
 #define SIMD_PACK_TRAITS NSimd::TSimdAVX2Traits
+#define SIMD_PACK_LANE_ITERS 1
 #pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
 #include "packing_simd_impl.inc"
 #pragma clang attribute pop
+#undef SIMD_PACK_LANE_ITERS
 #undef SIMD_PACK_TRAITS
 #undef SIMD_PACK_CLASS
 
 #define SIMD_PACK_CLASS TSimdPackSSE42
 #define SIMD_PACK_TRAITS NSimd::TSimdSSE42Traits
+#define SIMD_PACK_LANE_ITERS 0
 #pragma clang attribute push(__attribute__((target("sse4.2"))), apply_to=function)
 #include "packing_simd_impl.inc"
 #pragma clang attribute pop
+#undef SIMD_PACK_LANE_ITERS
 #undef SIMD_PACK_TRAITS
 #undef SIMD_PACK_CLASS
 

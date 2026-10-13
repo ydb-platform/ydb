@@ -6,14 +6,7 @@ struct SIMD_PACK_CLASS {
     static const ui8 BaseIters = 4;
 
     /// 128-bit lane iters
-    static const ui8 LaneIters = [] {
-#ifdef USE_X86_SIMD
-        if constexpr (std::is_same_v<TTraits, NSimd::TSimdAVX2Traits>) {
-            return 1;
-        }
-#endif
-        return 0;
-    }();
+    static const ui8 LaneIters = SIMD_PACK_LANE_ITERS;
 
     static const ui8 TransposeIters = BaseIters + LaneIters;
 
@@ -97,7 +90,8 @@ struct SIMD_PACK_CLASS {
 
 #undef TRANSPOSE_ITER
 
-        if constexpr (LaneIters == 1) {
+#if SIMD_PACK_LANE_ITERS
+        {
             constexpr auto iter = BaseIters;
 
             constexpr bool from = iter % 2;
@@ -122,9 +116,8 @@ struct SIMD_PACK_CLASS {
                 }
                 }
             }
-        } else if constexpr (LaneIters) {
-            static_assert(!LaneIters, "Not implemented");
         }
+#endif
     }
 
     template <ui8 ColSize>

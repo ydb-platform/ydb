@@ -10,6 +10,7 @@ namespace NFqRun {
 namespace {
 
 class TRunQueryActor : public NActors::TActorBootstrapped<TRunQueryActor> {
+    struct TEvCancelTimeout : NActors::TEventLocal<TEvCancelTimeout, NActors::TEvents::ES_PRIVATE> {};
 public:
     TRunQueryActor(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise)
         : Scope(request.Event->Scope)
@@ -21,6 +22,10 @@ public:
     {}
 
     void Bootstrap() {
+        if (IsInterrupted()) {
+            Fail(FederatedQuery::QueryMeta::ABORTED_BY_USER, {NYql::TIssue("Execution interrupted")});
+            return;
+        }
         Send(NFq::ControlPlaneProxyActorId(), std::move(Request));
 
         Become(&TRunQueryActor::StateFunc);
@@ -29,6 +34,8 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(NFq::TEvControlPlaneProxy::TEvCreateQueryResponse, Handle);
         hFunc(NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse, Handle);
+        hFunc(NFq::TEvControlPlaneProxy::TEvControlQueryResponse, Handle);
+        hFunc(TEvCancelTimeout, Handle);
         sFunc(NActors::TEvents::TEvWakeup, DescribeQuery);
     )
 
@@ -51,7 +58,7 @@ public:
         const auto& result = ev->Get()->Result.query();
         const auto status = result.meta().status();
         if (!IsFinalStatus(status)) {
-            Schedule(PingPeriod, new NActors::TEvents::TEvWakeup());
+            Schedule(std::min(PingPeriod, TDuration::MilliSeconds(100)), new NActors::TEvents::TEvWakeup());
             return;
         }
 
@@ -63,11 +70,29 @@ public:
         PassAway();
     }
 
-    void DescribeQuery() const {
+    void DescribeQuery() {
+        if (IsInterrupted() && !Cancelling) {
+            Cancelling = true;
+            FederatedQuery::ControlQueryRequest cancel;
+            cancel.set_query_id(QueryId);
+            cancel.set_action(FederatedQuery::ABORT);
+            Send(NFq::ControlPlaneProxyActorId(), new NFq::TEvControlPlaneProxy::TEvControlQueryRequest(Scope, cancel, UserSid, Token, TVector<TString>{}));
+            Schedule(CancellationTimeout(), new TEvCancelTimeout);
+        }
         FederatedQuery::DescribeQueryRequest request;
         request.set_query_id(QueryId);
 
         Send(NFq::ControlPlaneProxyActorId(), new NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest(Scope, request, UserSid, Token, TVector<TString>{}));
+    }
+
+    void Handle(NFq::TEvControlPlaneProxy::TEvControlQueryResponse::TPtr& ev) {
+        if (ev->Get()->Issues) {
+            Fail(FederatedQuery::QueryMeta::FAILED, ev->Get()->Issues);
+        }
+    }
+
+    void Handle(TEvCancelTimeout::TPtr&) {
+        Fail(FederatedQuery::QueryMeta::FAILED, {NYql::TIssue("Timed out waiting for query cancellation")});
     }
 
 private:
@@ -88,6 +113,7 @@ private:
     std::unique_ptr<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest> Request;
     NThreading::TPromise<TQueryResponse> Promise;
     TString QueryId;
+    bool Cancelling = false;
 };
 
 class TAsyncQueryRunnerActor : public TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse> {

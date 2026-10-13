@@ -13,6 +13,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -60,6 +61,13 @@ private:
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
         fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
 
+        if (fqConfig.GetWasmServices().GetEnabled()) {
+            auto* storage = fqConfig.MutableControlPlaneStorage();
+            if (Find(storage->GetAvailableConnection(), "EXTERNAL_SERVICE") == storage->GetAvailableConnection().end()) {
+                storage->AddAvailableConnection("EXTERNAL_SERVICE");
+            }
+        }
+
         const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;
         const TString database = NKikimr::CanonizePath(Settings.DomainName);
         const auto fillStorageConfig = [endpoint, database](NFq::NConfig::TYdbStorageConfig* config, std::optional<TExternalDatabase> externalDatabase = std::nullopt) {
@@ -83,7 +91,9 @@ private:
         }
 
         auto& cpStorage = *fqConfig.MutableControlPlaneStorage();
-        cpStorage.SetUseInMemory(!Settings.EnableCpStorage);
+        // The in-memory implementation acknowledges ControlQuery without
+        // applying it. Service calls need real cancellation via the pinger.
+        cpStorage.SetUseInMemory(!Settings.EnableCpStorage && !fqConfig.GetWasmServices().GetEnabled());
         fillStorageConfig(cpStorage.MutableStorage(), Settings.CpStorageDatabase);
         fillStorageConfig(fqConfig.MutableDbPool()->MutableStorage(), Settings.CpStorageDatabase);
 
@@ -144,7 +154,7 @@ private:
     void InitializeFqProxy(ui32 grpcPort) {
         const auto& fqConfig = GetFqProxyConfig(grpcPort);
         if (Settings.VerbosityLevel >= EVerbosity::InitLogs) {
-            Cout << "FQ config:\n" << fqConfig.DebugString() << Endl;
+            Cout << "FQ config:\n" << NKikimr::SecureDebugStringMultiline(fqConfig) << Endl;
         }
 
         const auto counters = GetRuntime()->GetAppData().Counters->GetSubgroup("counters", "yq");
@@ -219,6 +229,14 @@ public:
         request.set_query_id(queryId);
 
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest, NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse>(request, options);
+    }
+
+    NFq::TEvControlPlaneProxy::TEvControlQueryResponse::TPtr AbortQuery(const TString& queryId, const TFqOptions& options) const {
+        FederatedQuery::ControlQueryRequest request;
+        request.set_query_id(queryId);
+        request.set_action(FederatedQuery::ABORT);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvControlQueryRequest,
+                                          NFq::TEvControlPlaneProxy::TEvControlQueryResponse>(request, options);
     }
 
     NFq::TEvControlPlaneProxy::TEvGetResultDataResponse::TPtr FetchQueryResults(const TString& queryId, i32 resultSetId, const TFqOptions& options) const {
@@ -320,7 +338,10 @@ private:
 
         GetRuntime()->Send(controlPlaneProxy, edgeActor, event.release());
 
-        return GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor);
+        auto response = GetRuntime()->GrabEdgeEvent<TResponse>(edgeActor,
+            IsInterrupted() ? CancellationTimeout() : TDuration::Seconds(30));
+        Y_ENSURE(response, "Timed out waiting for FQ control plane response");
+        return response;
     }
 
 private:
@@ -338,6 +359,10 @@ private:
 TFqSetup::TFqSetup(const TFqSetupSettings& settings)
     : Impl(new TImpl(settings))
 {}
+
+TRequestResult TFqSetup::AbortQuery(const TString& queryId, const TFqOptions& options) const {
+    return GetStatus(Impl->AbortQuery(queryId, options)->Get()->Issues);
+}
 
 TRequestResult TFqSetup::QueryRequest(const TRequestOptions& query, TString& queryId) const {
     const auto response = Impl->QueryRequest(query);

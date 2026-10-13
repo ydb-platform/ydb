@@ -177,7 +177,8 @@ public:
         }
     };
 
-    TTieringContext GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const;
+    TTieringContext GetTierToMove(
+        const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const;
 
     const TSet<TTierRef>& GetOrderedTiers() const {
         return OrderedTiers;

@@ -1,9 +1,9 @@
 #include "tier_info.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
-#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/string/cast.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 namespace NKikimr::NOlap {
 
@@ -43,7 +43,7 @@ std::optional<TInstant> DyNumberToInstant(TStringBuf binary, ui64 unitsInSecond)
     return TInstant::MicroSeconds(micros);
 }
 
-} // namespace
+}   // namespace
 
 std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar, NScheme::TTypeId columnType) const {
     const ui64 unitsInSeconds = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
@@ -77,7 +77,8 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
     }
 }
 
-TTiering::TTieringContext TTiering::GetTierToMove(const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const {
+TTiering::TTieringContext TTiering::GetTierToMove(
+    const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const {
     AFL_VERIFY(OrderedTiers.size());
     std::optional<TString> nextTierName;
     std::optional<TDuration> nextTierDuration;

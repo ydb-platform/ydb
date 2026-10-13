@@ -47,6 +47,7 @@ namespace {
         static_assert(std::is_same_v<typename TAtomic::value_type, TPtr>);
         static_assert(std::is_nothrow_default_constructible_v<TAtomic>);
         static_assert(std::is_nothrow_constructible_v<TAtomic, TPtr>);
+        static_assert(std::is_nothrow_convertible_v<const TAtomic&, TPtr>);
         static_assert(!std::is_copy_constructible_v<TAtomic>);
         static_assert(!std::is_move_constructible_v<TAtomic>);
         static_assert(!std::is_copy_assignable_v<TAtomic>);
@@ -54,6 +55,7 @@ namespace {
         static_assert(std::is_same_v<decltype(std::declval<TAtomic&>() = std::declval<TPtr>()), void>);
         static_assert(noexcept(std::declval<TAtomic&>().store(TPtr())));
         static_assert(noexcept(std::declval<const TAtomic&>().load()));
+        static_assert(noexcept(std::declval<const TAtomic&>().operator TPtr()));
         static_assert(noexcept(std::declval<TAtomic&>().exchange(TPtr())));
         static_assert(noexcept(std::declval<TAtomic&>().compare_exchange_weak(std::declval<TPtr&>(), TPtr())));
         static_assert(noexcept(std::declval<TAtomic&>().compare_exchange_strong(std::declval<TPtr&>(), TPtr())));
@@ -71,6 +73,7 @@ namespace {
         const TAtomic value(initial);
         EXPECT_EQ(Lock(value.load()), owner);
         TPtr converted = value;
+        EXPECT_EQ(Lock(converted), owner);
         EXPECT_TRUE(SameOwner(converted, initial));
         empty = initial;
         EXPECT_EQ(Lock(empty.load()), owner);

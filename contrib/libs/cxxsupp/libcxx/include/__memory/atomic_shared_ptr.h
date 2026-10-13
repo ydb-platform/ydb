@@ -71,11 +71,7 @@ public:
 
   _LIBCPP_HIDE_FROM_ABI void store(_SmartPtr __desired, memory_order __order = memory_order_seq_cst) noexcept
       _LIBCPP_CHECK_STORE_MEMORY_ORDER(__order) {
-    (void)__order;
-    __lock();
-    __value_.swap(__desired);
-    __unlock();
-    // Destroy the old value after unlocking: a deleter may access this same atomic object.
+    exchange(std::move(__desired), __order);
   }
 
   _LIBCPP_HIDE_FROM_ABI _SmartPtr load(memory_order __order = memory_order_seq_cst) const noexcept
@@ -86,8 +82,6 @@ public:
     __unlock();
     return __result;
   }
-
-  _LIBCPP_HIDE_FROM_ABI operator _SmartPtr() const noexcept { return load(); }
 
   _LIBCPP_HIDE_FROM_ABI _SmartPtr exchange(_SmartPtr __desired, memory_order __order = memory_order_seq_cst) noexcept {
     (void)__order;
@@ -175,6 +169,7 @@ struct atomic<shared_ptr<_Tp>> : __atomic_smart_ptr<shared_ptr<_Tp>> {
 
   _LIBCPP_HIDE_FROM_ABI void operator=(shared_ptr<_Tp> __desired) noexcept { this->store(std::move(__desired)); }
   _LIBCPP_HIDE_FROM_ABI void operator=(nullptr_t) noexcept { this->store(nullptr); }
+  _LIBCPP_HIDE_FROM_ABI operator shared_ptr<_Tp>() const noexcept { return this->load(); }
 };
 
 template <class _Tp>
@@ -187,6 +182,7 @@ struct atomic<weak_ptr<_Tp>> : __atomic_smart_ptr<weak_ptr<_Tp>> {
   void operator=(const atomic&) = delete;
 
   _LIBCPP_HIDE_FROM_ABI void operator=(weak_ptr<_Tp> __desired) noexcept { this->store(std::move(__desired)); }
+  _LIBCPP_HIDE_FROM_ABI operator weak_ptr<_Tp>() const noexcept { return this->load(); }
 };
 
 _LIBCPP_END_NAMESPACE_STD

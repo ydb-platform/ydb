@@ -137,7 +137,8 @@ def make_command_map_by_structure(subparsers, modules=modules, structure=default
                             help = module.help
                         else:
                             help = module.description
-                        module.add_options(subparsers.add_parser(el, help=help, description=module.description))
+                        module.add_options(subparsers.add_parser(
+                            el, help=help, description=module.description, hidden=getattr(module, 'hidden', False)))
                         command_map[key] = module.do
                     else:
                         subparsers.add_parser(el, help='UNIMPLEMETED')
@@ -146,7 +147,8 @@ def make_command_map_by_structure(subparsers, modules=modules, structure=default
 
     for cmd_name in sorted(set(module_map) - already_added):
         module = module_map[cmd_name]
-        module.add_options(subparsers.add_parser(cmd_name, help=module.description))
+        module.add_options(subparsers.add_parser(
+            cmd_name, help=module.description, hidden=getattr(module, 'hidden', False)))
         command_map[cmd_name] = module.do
 
     return command_map

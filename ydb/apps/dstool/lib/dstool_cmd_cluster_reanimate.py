@@ -8,6 +8,8 @@ import time
 from ydb.apps.dstool.lib import common
 
 
+hidden = True
+
 description = '''Evict ERROR VDisks of a storage pool in a DC, group by group.
 For each group, sort matching current VDisks by logical position. Evict the first
 three disks as a batch, repeat that batch, then evict each remaining disk once

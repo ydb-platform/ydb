@@ -54,10 +54,19 @@ public:
     // Rejects NaN/Inf and values whose truncation would not fit in TDst (UB on float→int).
     template <typename TDst, typename TSrc>
     static bool IsSafeNumericCast(const TSrc& value) {
-        if constexpr (std::is_floating_point_v<TSrc> && std::is_integral_v<TDst> && !std::is_same_v<TDst, bool>) {
+        if constexpr (std::is_same_v<TDst, TSrc>) {
+            return true;
+        } else if constexpr (std::is_floating_point_v<TSrc> && std::numeric_limits<TDst>::is_integer) {
             if (!std::isfinite(value)) {
                 return false;
             }
+
+            TSrc intValue;
+            std::modf(value, &intValue);
+            if (value != intValue) {
+                return false;
+            }
+
             // signed: [-2^digits, 2^digits); unsigned: (-1, 2^digits)
             const TSrc upper = std::ldexp(static_cast<TSrc>(1), std::numeric_limits<TDst>::digits);
             if constexpr (std::is_signed_v<TDst>) {
@@ -65,11 +74,11 @@ public:
             } else {
                 return value > static_cast<TSrc>(-1) && value < upper;
             }
-        } else if constexpr (std::is_integral_v<TSrc> && std::is_integral_v<TDst>) {
+        } else if constexpr (std::numeric_limits<TSrc>::is_integer && std::numeric_limits<TDst>::is_integer && !std::is_same_v<TSrc, bool>) {
             if constexpr (std::is_signed_v<TSrc> == std::is_signed_v<TDst>) {
                 return (value >= std::numeric_limits<TDst>::min()) && (value <= std::numeric_limits<TDst>::max());
             } else {
-                if (t < TSrc(0)) {
+                if (value < TSrc(0)) {
                     // Unable cast negative to unsigned
                     return false;
                 }
@@ -78,7 +87,7 @@ public:
                 return unsignedValue <= std::numeric_limits<TDst>::max();
             }
         } else {
-            static_assert(false, "Value type is not supported (castable to to numeric)");
+            return true;
         }
     }
 

@@ -29,7 +29,10 @@ public:
             message.StructuredMessage, std::vector<TKeyName>{"component"});
         const auto& messageText = extractor.ExtractValue(
             message.StructuredMessage, std::vector<TKeyName>{"message"});
-        return componentName.has_value() && componentName.value() == ComponentName && Messages.contains(messageText);
+        if (!messageText.has_value()) {
+            return false;
+        }
+        return componentName.has_value() && componentName.value() == ComponentName && Messages.find(messageText.value()) != end(Messages);
     }
 
 protected:
@@ -82,7 +85,7 @@ public:
             "Read transaction was a victim of broken locks",
             "Tablet split operation invalidated locks",
             "Schema change: table removed invalidated locks",
-            "Replication apply broke locks on replicated rows"
+            "Replication apply broke locks on replicated rows"};
     }
 };
 

@@ -130,12 +130,12 @@ Y_UNIT_TEST_SUITE(StructLog) {
         CheckNativeExtraction<ui8, TString, false>(1);
         CheckNativeExtraction<TString, ui8, false>("1");
 
-        CheckNativeExtraction<float, i32, true>(1.5f);
+        CheckNativeExtraction<float, i32, false>(1.5f);
         CheckNativeExtraction<float, i32, true>(-128.0f);
         CheckNativeExtraction<float, ui32, false>(-128.0f);
         CheckNativeExtraction<double, ui8, false>(255.9);
         CheckNativeExtraction<double, ui8, false>(-1.5);
-        CheckNativeExtraction<double, i8, true>(-1.5);
+        CheckNativeExtraction<double, i8, false>(-1.5);
         CheckNativeExtraction<float, i32, false>(std::numeric_limits<float>::infinity());
         CheckNativeExtraction<float, i32, false>(-std::numeric_limits<float>::infinity());
         CheckNativeExtraction<float, i32, false>(std::numeric_limits<float>::quiet_NaN());
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         CheckNativeExtraction<double, ui8, false>(-1.0);
         CheckNativeExtraction<float, i32, true>(-1.0f);
         CheckNativeExtraction<float, ui32, false>(-1.0f);
-        CheckNativeExtraction<float, i64, true>(std::ldexp(1.0f, 63));
+        CheckNativeExtraction<float, i64, false>(std::ldexp(1.0f, 63));
     }
 
     Y_UNIT_TEST(TestKeyName) {

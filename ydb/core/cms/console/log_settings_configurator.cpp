@@ -256,16 +256,15 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     if (sink.HasTableName()) {
         settings.TableName = sink.GetTableName();
     }
-    if (sink.HasMaxBatchSize()) {
-        settings.MaxBatchSize = sink.GetMaxBatchSize();
-    }
-settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
-    if (sink.HasStoreShardsCount()) {
-        settings.StoreShardsCount = sink.GetStoreShardsCount();
-    }
-    if (sink.HasTableShardsCount()) {
-        settings.TableShardsCount = sink.GetTableShardsCount();
-    }
+    settings.MaxBatchSize = sink.GetMaxBatchSize();
+    settings.FlushBatchSize = sink.GetFlushBatchSize();
+    settings.FlushTimeout = TDuration::MilliSeconds(sink.GetFlushTimeout());
+
+    settings.StoreShardsCount = sink.GetStoreShardsCount();
+    settings.TableShardsCount = sink.GetTableShardsCount();
+
+    settings.MaxWriteAttempts = sink.GetMaxWriteAttempts();
+    settings.MaxActiveWrites = sink.GetMaxActiveWrites();
     return settings;
 }
 
@@ -332,7 +331,7 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKiki
 
     const TString destination = sink.HasDestination() ? sink.GetDestination() : TString();
 
-    if (destination == "local_db") {
+    if (destination == "local-db") {
         return CreateColumnShardLogSink(sink);
     }
     return nullptr;

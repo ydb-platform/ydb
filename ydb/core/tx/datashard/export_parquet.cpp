@@ -99,6 +99,9 @@ bool FlushRowGroup(bool last) {
     if (BatchBuilder->Rows() != 0) {
         std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
         auto batch = BatchBuilder->FlushBatch(true, false);
+        // The builder keeps the batch it flushed. Release it, so that the scan does not
+        // hold the row group it has written as well as the one it is collecting.
+        BatchBuilder->ReleaseBatch();
         batches.push_back(batch);
         auto tableResult = arrow::Table::FromRecordBatches(batches);
         if (!tableResult.ok()) {
@@ -198,15 +201,12 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
         return false;
     }
 
-    if (RowGroupBytes) {
+    // Cut the row group before the row that does not fit into it. A row wider than
+    // the limit forms a row group of its own: a reader has to hold a whole row anyway.
+    if (RowGroupBytes && BatchBuilder->Rows()) {
         ui64 rowBytes = 0;
         for (const auto& cell : *row) {
             rowBytes += cell.Size();
-        }
-        if (rowBytes > RowGroupBytes) {
-            ErrorString = TStringBuilder() << "Row size " << rowBytes
-                << " exceeds the limit on the row group size " << RowGroupBytes;
-            return false;
         }
         if (BatchBuilder->Bytes() + rowBytes > RowGroupBytes) {
             if (!FlushRowGroup(false)) {
@@ -235,6 +235,11 @@ TMaybe<TBuffer> Flush(bool last) override {
         return Nothing();
     }
 
+    // The buffer is filled, and the part is sent, once the encoded output reaches the
+    // minimum part size and, with the pending rows, the part size, so the rows pending
+    // by then stay for the next row group: written now, they would be a small row group
+    // of their own. The pending rows are written when the file is finished, and when the
+    // part has no row group yet (a part cut by its rows, with MinBytes 0).
     if (last || !OutStream->GetBufferSize()) {
         if (!FlushRowGroup(last)) {
             return Nothing();
@@ -255,6 +260,10 @@ void Clear() override {
 size_t GetReadyOutputBytes() const override {
     // Encoded row groups accumulate in the output stream until the buffer flushes them.
     return OutStream->GetBufferSize();
+}
+
+size_t GetPendingInputBytes() const override {
+    return BatchBuilder ? BatchBuilder->Bytes() : 0;
 }
 
 TString GetError() const override {

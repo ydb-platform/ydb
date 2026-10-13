@@ -28,6 +28,8 @@
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 
+#include <functional>
+
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "export_parquet_ut_enums.h"
@@ -36,7 +38,11 @@ namespace NKikimr::NDataShard {
 
 namespace {
 
-    void ConfigureParquetBackupTask(NKikimrSchemeOp::TBackupTask& task, EParquetExportSettings settings, ui32 rowGroupSize) {
+    // A bytesBatchSize of 0 leaves the export batch to the config (BackupBytesBatchSize).
+    void ConfigureParquetBackupTask(NKikimrSchemeOp::TBackupTask& task, EParquetExportSettings settings, ui32 rowGroupSize, ui64 bytesBatchSize = 0) {
+        if (bytesBatchSize) {
+            task.MutableScanSettings()->SetBytesBatchSize(bytesBatchSize);
+        }
         switch (settings) {
         case EParquetExportSettings::FS: {
             auto& fs = *task.MutableFSSettings();
@@ -84,9 +90,11 @@ namespace {
     }
 
     // Feeds the rows to the buffer the way the export scan does, sending a part every time
-    // the buffer is filled, and returns the produced data file bytes.
-    TString CollectRows(NExportScan::IBuffer& buffer, const TVector<std::pair<ui32, TString>>& rows) {
-        TString fileData;
+    // the buffer is filled, and returns the parts of the produced data file. The callback
+    // sees the buffer after every row, told whether the buffer is filled.
+    TVector<TString> CollectParts(NExportScan::IBuffer& buffer, const TVector<std::pair<ui32, TString>>& rows,
+            const std::function<void(bool filled)>& onCollected = {}) {
+        TVector<TString> parts;
 
         auto sendBuffer = [&](bool last) {
             NExportScan::IBuffer::TStats stats;
@@ -95,7 +103,7 @@ namespace {
 
             auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
             Y_ENSURE(evBuffer, "Unexpected event type");
-            fileData.append(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+            parts.emplace_back(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
         };
 
         buffer.ColumnsOrder({0, 1});
@@ -107,19 +115,28 @@ namespace {
             row.Set(1, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(value.data(), value.size()));
             Y_ENSURE(buffer.Collect(row), "Collect failed: " << buffer.GetError());
 
-            if (buffer.IsFilled()) {
+            const bool filled = buffer.IsFilled();
+            if (onCollected) {
+                onCollected(filled);
+            }
+            if (filled) {
                 sendBuffer(false);
             }
         }
 
         sendBuffer(true);
 
-        return fileData;
+        return parts;
+    }
+
+    // The produced data file bytes.
+    TString CollectRows(NExportScan::IBuffer& buffer, const TVector<std::pair<ui32, TString>>& rows) {
+        return JoinSeq("", CollectParts(buffer, rows));
     }
 
     // Builds a Parquet backup task (FS or S3), runs TS3Export::CreateBuffer(), feeds the rows
     // and returns the produced data file bytes.
-    TString ExportRowsToParquet(EParquetExportSettings settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize) {
+    TString ExportRowsToParquet(EParquetExportSettings settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize, ui64 bytesBatchSize = 0) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
 
@@ -127,7 +144,7 @@ namespace {
 
         auto produce = [&]() {
             NKikimrSchemeOp::TBackupTask task;
-            ConfigureParquetBackupTask(task, settings, rowGroupSize);
+            ConfigureParquetBackupTask(task, settings, rowGroupSize, bytesBatchSize);
 
             TS3Export exportTask(task, KeyValueColumns());
             THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
@@ -143,26 +160,31 @@ namespace {
         return fileData;
     }
 
-    // Feeds the rows to a Parquet buffer with the given limits of a row group and returns
-    // the produced data file bytes. The buffer is filled, and its part is sent, as soon as
-    // a row group is written.
-    TString ExportRowsToParquet(const TVector<std::pair<ui32, TString>>& rows, ui64 rowGroupSize, ui64 rowGroupBytes) {
+    // A Parquet buffer with the given limits of a row group.
+    THolder<NExportScan::IBuffer> CreateParquetBuffer(TS3ExportBufferSettings bufferSettings, ui64 rowGroupSize, ui64 rowGroupBytes) {
         TParquetExportSettings parquetSettings;
         parquetSettings
             .WithColumns(KeyValueColumns())
             .WithRowGroupSize(rowGroupSize)
             .WithRowGroupBytes(rowGroupBytes);
+        bufferSettings.WithColumns(KeyValueColumns());
 
+        return THolder<NExportScan::IBuffer>(CreateS3ExportBuffer(
+            std::move(bufferSettings), CreateExportDataFormat(std::move(parquetSettings))));
+    }
+
+    // Feeds the rows to a Parquet buffer with the given limits of a row group and returns
+    // the produced data file bytes. The buffer is filled, and its part is sent, as soon as
+    // a row group is written: MinBytes of 1 asks for some encoded output, and MaxBytes of 1
+    // is reached by any.
+    TString ExportRowsToParquet(const TVector<std::pair<ui32, TString>>& rows, ui64 rowGroupSize, ui64 rowGroupBytes) {
         TS3ExportBufferSettings bufferSettings;
         bufferSettings
-            .WithColumns(KeyValueColumns())
             .WithMaxRows(Max<ui64>())
             .WithMinBytes(1)
             .WithMaxBytes(1);
 
-        THolder<NExportScan::IBuffer> buffer(CreateS3ExportBuffer(
-            std::move(bufferSettings), CreateExportDataFormat(std::move(parquetSettings))));
-
+        const auto buffer = CreateParquetBuffer(std::move(bufferSettings), rowGroupSize, rowGroupBytes);
         return CollectRows(*buffer, rows);
     }
 
@@ -308,7 +330,8 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
     }
 
     // A row group is cut by the bytes of its cells as well as by the number of its rows.
-    // The row that does not fit into a row group begins the next one.
+    // The row that does not fit into a row group begins the next one: it is kept across
+    // the part that is sent after the row group, not written as a row group of its own.
     Y_UNIT_TEST(ShouldCutRowGroupsByBytes) {
         // A row is a key of 4 bytes and a value of 24 KB: two rows fit into
         // 64 KB, the third one does not.
@@ -336,31 +359,36 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         CheckRows(data, rows);
     }
 
-    // A row that is wider than the limit fits into no row group.
-    Y_UNIT_TEST(ShouldFailOnARowWiderThanTheLimit) {
+    // A row that is wider than the limit is a row group of its own.
+    Y_UNIT_TEST(ShouldWriteARowWiderThanTheLimitAsARowGroup) {
         const TVector<std::pair<ui32, TString>> rows = {
             {1, "narrow"},
             {2, TString(100_KB, 'w')},
             {3, "narrow"},
         };
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            ExportRowsToParquet(rows, /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB),
-            yexception, "Row size 102404 exceeds the limit on the row group size 65536");
+        const TString data = ExportRowsToParquet(rows, /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB);
+
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "1,1,1");
+        CheckRows(data, rows);
     }
 
-    // A row of exactly the limit is a row group.
-    Y_UNIT_TEST(ShouldWriteARowOfTheLimitAsARowGroup) {
+    // A row group is filled up to the limit inclusive: rows whose cells sum up to exactly
+    // the limit share a row group, and a row of exactly the limit is a row group.
+    Y_UNIT_TEST(ShouldFillARowGroupUpToTheLimit) {
         // A key takes 4 bytes of the limit.
+        const TString half(32_KB - 4, 'h');
         const TVector<std::pair<ui32, TString>> rows = {
-            {1, "narrow"},
-            {2, TString(64_KB - 4, 'w')},
-            {3, "narrow"},
+            {1, half},
+            {2, half},
+            {3, TString(64_KB - 4, 'w')},
+            {4, half},
+            {5, half},
         };
 
         const TString data = ExportRowsToParquet(rows, /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB);
 
-        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "1,1,1");
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "2,1,2");
         CheckRows(data, rows);
     }
 
@@ -374,6 +402,86 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
         const TString data = ExportRowsToParquet(rows, /* rowGroupSize */ 1000, /* rowGroupBytes */ 0);
 
         UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "9");
+        CheckRows(data, rows);
+    }
+
+    // A part that is cut by its rows before a row group is written (the part has no output
+    // yet) takes the pending rows as a row group, so that it is not empty.
+    Y_UNIT_TEST(ShouldWritePendingRowsIntoAPartWithoutARowGroup) {
+        TVector<std::pair<ui32, TString>> rows;
+        for (ui32 i = 0; i < 7; ++i) {
+            rows.emplace_back(i, TStringBuilder() << "value_" << i);
+        }
+
+        TS3ExportBufferSettings bufferSettings;
+        bufferSettings
+            .WithMaxRows(3)
+            .WithMinBytes(0) // a part is sent without encoded output
+            .WithMaxBytes(Max<ui64>());
+        const auto buffer = CreateParquetBuffer(std::move(bufferSettings), /* rowGroupSize */ 1000, /* rowGroupBytes */ 64_KB);
+
+        const TString data = CollectRows(*buffer, rows);
+
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "3,3,1");
+        CheckRows(data, rows);
+    }
+
+    // The export cuts row groups by its batch size (BytesBatchSize of the scan settings,
+    // BackupBytesBatchSize of the config by default): a scan holds about a part of pending
+    // rows, and a reader decodes about a part per row group.
+    Y_UNIT_TEST(ShouldCutRowGroupsByTheExportBatchSize, EParquetExportSettings) {
+        const auto settings = Arg<0>();
+
+        TVector<std::pair<ui32, TString>> rows;
+        for (ui32 i = 0; i < 9; ++i) {
+            rows.emplace_back(i, TString(24_KB, static_cast<char>('a' + i)));
+        }
+
+        const TString data = ExportRowsToParquet(settings, rows, /* rowGroupSize */ 1000, /* bytesBatchSize */ 64_KB);
+
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "2,2,2,2,1");
+        CheckRows(data, rows);
+    }
+
+    // The pending rows count towards the memory of the buffer, so the part is sent once the
+    // encoded output (any, with MinBytes 1) and the pending rows reach the part size
+    // (MaxBytes): a scan holds about a part, and a part is about MaxBytes, not a row group more.
+    Y_UNIT_TEST(ShouldCountPendingRowsTowardsThePart) {
+        // Rows of 24 KB: a row group is two rows, 48 KB. The part is sent when the pending
+        // row after a row group brings the memory to 64 KB, before a second row group
+        // would make the part 96 KB.
+        TVector<std::pair<ui32, TString>> rows;
+        for (ui32 i = 0; i < 9; ++i) {
+            rows.emplace_back(i, TString(24_KB, static_cast<char>('a' + i)));
+        }
+
+        const ui64 maxBytes = 64_KB;
+        TS3ExportBufferSettings bufferSettings;
+        bufferSettings
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(1)
+            .WithMaxBytes(maxBytes);
+        const auto buffer = CreateParquetBuffer(std::move(bufferSettings), /* rowGroupSize */ 1000, /* rowGroupBytes */ maxBytes);
+
+        ui64 maxMemoryBytes = 0;
+        const TVector<TString> parts = CollectParts(*buffer, rows, [&](bool filled) {
+            maxMemoryBytes = Max(maxMemoryBytes, buffer->GetMemoryBytes());
+            if (!filled) {
+                UNIT_ASSERT_LT_C(buffer->GetMemoryBytes(), maxBytes,
+                    "Buffer is not filled but holds " << buffer->GetMemoryBytes() << " bytes in memory");
+            }
+        });
+
+        // A part per row group, and the last row with the footer.
+        UNIT_ASSERT_VALUES_EQUAL(parts.size(), 5);
+        for (const auto& part : parts) {
+            UNIT_ASSERT_LE_C(part.size(), maxBytes, "part of " << part.size() << " bytes");
+        }
+        // The memory peaks at the part size and the row that fills it.
+        UNIT_ASSERT_LT(maxMemoryBytes, maxBytes + 32_KB);
+
+        const TString data = JoinSeq("", parts);
+        UNIT_ASSERT_VALUES_EQUAL(RowGroupRows(data), "2,2,2,2,1");
         CheckRows(data, rows);
     }
 

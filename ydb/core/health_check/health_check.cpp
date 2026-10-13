@@ -2700,6 +2700,10 @@ public:
             }
             case NKikimrBlobStorage::INIT_PENDING:
             case NKikimrBlobStorage::READY: { // the disk is fully operational and does not affect group fault tolerance
+                // VDisk with only phantom blobs remaining may be reported as ready one
+                if (ReturnStorageHints && IsPhantomOnly(vSlot)) {
+                    ReportPhantomOnlyHint(context);
+                }
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
             }
         }
@@ -2867,6 +2871,12 @@ public:
                                          {ETags::PDiskSpace});
                     break;
             }
+        }
+
+        // VDisk with only phantom blobs remaining may be reported as replicated one; the hint is reported after the
+        // status is evaluated as it must not affect it
+        if (ReturnStorageHints && IsPhantomOnly(vDiskInfo)) {
+            ReportPhantomOnlyHint(context);
         }
 
         storageVDiskStatus.set_overall(context.GetOverallStatus());

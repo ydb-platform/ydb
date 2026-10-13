@@ -80,6 +80,7 @@ struct TBlobState {
     TLogoBlobID Id;
     TWholeState Whole;
     ESituation WholeSituation = ESituation::Unknown;  // TODO(cthulhu): Use a specially tailored enum here
+    std::optional<bool> LooksLikePhantom; // phantom check verdict when strategy evaluates it apart from WholeSituation
     TStackVec<TState, TypicalPartsInBlob> Parts;
     TStackVec<TDisk, TypicalDisksInSubring> Disks;
     TVector<TEvBlobStorage::TEvGetResult::TPartMapItem> PartMap;

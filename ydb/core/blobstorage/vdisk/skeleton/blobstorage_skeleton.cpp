@@ -3190,10 +3190,19 @@ namespace NKikimr {
         }
 
         void HandleReplDone(STFUNC_SIG) {
-            if (ev->Cookie) { // semi-finished replication, only phantom blobs
-                ReplOnlyPhantomsRemain = true;
-            } else {
-                ReplDone = true;
+            switch (static_cast<EReplDone>(ev->Cookie)) {
+                case EReplDone::Finished:
+                    ReplDone = true;
+                    ReplOnlyPhantomsRemain = false;
+                    break;
+
+                case EReplDone::OnlyPhantomsRemain: // semi-finished replication, only phantom blobs
+                    ReplOnlyPhantomsRemain = true;
+                    break;
+
+                case EReplDone::NonPhantomsRemain:
+                    ReplOnlyPhantomsRemain = false;
+                    break;
             }
             UpdateReplState();
         }
@@ -3203,8 +3212,14 @@ namespace NKikimr {
 
         void UpdateVDiskStatus(NKikimrBlobStorage::EVDiskStatus status) {
             const auto& base = Db->Config->BaseInfo;
+            // unreadable blobs found by scrubbing are not phantoms, so they also keep the disk replicating
+            const bool onlyPhantomsRemain = status == NKikimrBlobStorage::REPLICATING && ReplOnlyPhantomsRemain &&
+                !HasUnreadableBlobs;
             Send(NodeWardenServiceId, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
-                ReplOnlyPhantomsRemain));
+                onlyPhantomsRemain));
+            // Skeleton Front reports the same state to Whiteboard
+            Send(*SkeletonFrontIDPtr, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
+                onlyPhantomsRemain));
         }
 
         ////////////////////////////////////////////////////////////////////////

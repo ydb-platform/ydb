@@ -23,7 +23,7 @@ namespace {
 Y_UNIT_TEST_SUITE(YtBackupFormat) {
     Y_UNIT_TEST(TypeV3HasPrecedence) {
         auto schema = Schema("{name=k;type=int64;required=%false;type_v3=int8;sort_order=ascending};{name=v;type=any;required=%true;type_v3={type_name=optional;item=utf8}}");
-        UNIT_ASSERT_VALUES_EQUAL(schema.Columns[0].Type, Ydb::Type::INT8);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(schema.Columns[0].Type), static_cast<int>(Ydb::Type::INT8));
         UNIT_ASSERT(!schema.Columns[0].Nullable);
         UNIT_ASSERT(schema.Columns[1].Nullable);
         UNIT_ASSERT_VALUES_EQUAL(schema.Table.primary_key(0), "k");
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(YtBackupFormat) {
         TSchema restored;
         TString error;
         UNIT_ASSERT_C(BuildSchema(description, restored, error), error);
-        UNIT_ASSERT_VALUES_EQUAL(restored.Columns[0].Type, Ydb::Type::INT64);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored.Columns[0].Type), static_cast<int>(Ydb::Type::INT64));
         UNIT_ASSERT(restored.Columns[1].Nullable);
     }
     Y_UNIT_TEST(PartSuffixGrammar) {

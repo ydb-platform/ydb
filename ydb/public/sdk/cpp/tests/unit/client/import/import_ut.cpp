@@ -87,7 +87,7 @@ namespace NYdb::inline Dev::NImport {
                 const auto result = client.ImportFromS3(settings).GetValueSync();
                 UNIT_ASSERT_C(result.Status().IsSuccess(), result.Status().GetIssues().ToString());
                 const auto request = server.Service.GetRequest();
-                UNIT_ASSERT_VALUES_EQUAL(request.settings().source_format(), expected);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(request.settings().source_format()), static_cast<int>(expected));
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items_size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items(0).source_prefix(), "backup/with_underscores");
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items(0).destination_path(), "/Root/restored");

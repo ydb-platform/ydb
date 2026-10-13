@@ -4167,7 +4167,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}}, YtImportRequest(), false);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
         const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson("[]", content);
+        NKqp::CompareYson(EmptyYsonStr, content);
     }
 
     Y_UNIT_TEST(YtTwoPartsUseActualKeys) {
@@ -4178,8 +4178,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {"/table_2_3", YtPart({100, 200})}
         }, YtImportRequest(), false);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
-        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(R"([[10u;["10"]];[20u;["20"]];[100u;["100"]];[200u;["200"]]])", content);
+        const auto shards = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        NKqp::CompareYson(R"([[[[["10";["10"]];["20";["20"]]];%false]]])", shards[0]);
+        NKqp::CompareYson(R"([[[[["100";["100"]];["200";["200"]]];%false]]])", shards[1]);
     }
 
     Y_UNIT_TEST(YtRejectInvalidRanges) {
@@ -4223,11 +4225,27 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock({{"/table_metadata.yson", YtMetadata()},
             {"/table_0_0", YtPart({10})}, {"/table_1_1", YtPart({100})}}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> restoreBlocker(runtime, [](auto& ev) {
-            return ev->Get()->Record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+        ui64 creationTx = 0;
+        TString creationError;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> restoreBlocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable) {
+                creationTx = record.GetTxId();
+            }
+            return record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+        });
+        auto creationResults = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxId() == creationTx && record.GetStatus() != NKikimrScheme::StatusAccepted &&
+                record.GetStatus() != NKikimrScheme::StatusSuccess)
+            {
+                creationError = record.DebugString();
+            }
         });
         TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
-        runtime.WaitFor("YT restore proposal", [&] { return !restoreBlocker.empty(); });
+        runtime.WaitFor("YT restore proposal", [&] { return !restoreBlocker.empty() || !creationError.empty(); });
+        UNIT_ASSERT_C(!restoreBlocker.empty(), creationError);
+        creationResults.Remove();
         const auto& task = restoreBlocker.front()->Get()->Record.GetTransaction(0).GetRestore();
         UNIT_ASSERT(task.HasYtImportPlan());
         UNIT_ASSERT_VALUES_EQUAL(task.GetYtImportPlan().PartsSize(), 2);
@@ -4237,8 +4255,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         env.TestWaitNotification(runtime, 100);
         TestGetImport(runtime, 100, "/MyRoot");
-        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(R"([[10u;["10"]];[100u;["100"]]])", content);
+        const auto shards = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        NKqp::CompareYson(R"([[[[["10";["10"]]];%false]]])", shards[0]);
+        NKqp::CompareYson(R"([[[[["100";["100"]]];%false]]])", shards[1]);
     }
 
     void YtRebootAfterDurableUpload(bool finalCheckpoint) {
@@ -4281,7 +4301,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, 100);
         TestGetImport(runtime, 100, "/MyRoot");
         const auto content = ReadTable(runtime, tablet, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(R"([[10u;["10"]];[20u;["20"]];[30u;["30"]]])", content);
+        NKqp::CompareYson(R"([[[[["10";["10"]];["20";["20"]];["30";["30"]]];%false]]])", content);
     }
 
     Y_UNIT_TEST(YtDataShardRebootBeforeUploadAck) {
@@ -4325,7 +4345,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {"/table_2026_0_0", "invalid numeric neighboring part"}
         }, YtImportRequest(), false);
         const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(R"([[10u;["10"]]])", content);
+        NKqp::CompareYson(R"([[[[["10";["10"]]];%false]]])", content);
     }
 
     Y_UNIT_TEST(YtWrongRowCount) {

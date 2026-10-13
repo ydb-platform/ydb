@@ -1405,7 +1405,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT(finalCursor.GetYsonGzip().GetFinished());
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
         auto corrupt = source;
-        corrupt[corrupt.size() - 8] ^= 1;
+        corrupt.Detach()[corrupt.size() - 8] ^= 1;
         auto corruptReplay = MakeYtEngine(fixture, corrupt, 2, 1);
         AssertSuccess(corruptReplay->RestoreFromState(0, cursor));
         UNIT_ASSERT(!ConsumeYt(*corruptReplay, corrupt, rows));
@@ -1422,7 +1422,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             valid.substr(0, valid.size() - 1), valid + "x"
         };
         auto corrupt = valid;
-        corrupt[corrupt.size() - 8] ^= 1;
+        corrupt.Detach()[corrupt.size() - 8] ^= 1;
         bad.push_back(corrupt);
         for (const auto& source : bad) {
             auto engine = MakeYtEngine(fixture, source, 2);

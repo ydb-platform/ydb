@@ -1908,7 +1908,7 @@ private:
                     const auto& cell = row.Cells[columnIdx];
                     cells.push_back(cell);
                     const auto type = Schema.Columns[columnIdx].Type;
-                    tuple->add_elements()->set_type_id(type);
+                    tuple->add_elements()->mutable_optional_type()->mutable_item()->set_type_id(type);
                     auto* item = value->add_items();
                     switch (type) {
                     case Ydb::Type::BOOL: item->set_bool_value(cell.AsValue<bool>()); break;

@@ -78,7 +78,6 @@ jobs:
           retention-days: 1
 
   build-unix:
-    if: false # Temporarily skip Linux and macOS while debugging the Windows build.
     needs:
       - prepare
     strategy:
@@ -239,7 +238,6 @@ jobs:
           retention-days: 1
 
   release:
-    if: false # Re-enable after validating the Windows archive in a manual workflow run.
     needs:
       - prepare
       - build-unix

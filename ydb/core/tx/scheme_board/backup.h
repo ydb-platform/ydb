@@ -11,13 +11,6 @@ struct TEvCommonResult;
 
 namespace NKikimr::NSchemeBoard {
 
-#define SBB_LOG_T(stream) SB_LOG_T(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
-#define SBB_LOG_D(stream) SB_LOG_D(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
-#define SBB_LOG_I(stream) SB_LOG_I(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
-#define SBB_LOG_N(stream) SB_LOG_N(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
-#define SBB_LOG_W(stream) SB_LOG_W(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
-#define SBB_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_BACKUP, "[" << LogPrefix() << "]" << this->SelfId() << " " << stream)
-
 struct TCommonProgress {
     enum class EStatus {
         Idle,

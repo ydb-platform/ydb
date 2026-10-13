@@ -1738,42 +1738,42 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 }
 
 #ifdef USE_X86_SIMD
-template __attribute__((target("avx2"), flatten))
+template __attribute__((target("avx2")))
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::TTupleLayoutSIMD(
     const std::vector<TColumnDesc> &columns);
-template __attribute__((target("sse4.2"), flatten))
+template __attribute__((target("sse4.2")))
 TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::TTupleLayoutSIMD(
     const std::vector<TColumnDesc> &columns);
 
-template __attribute__((target("avx2"), flatten)) void
+template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
     std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
-template __attribute__((target("sse4.2"), flatten)) void
+template __attribute__((target("sse4.2"))) void
 TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
     std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
-template __attribute__((target("avx2"), flatten)) void
+template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
-template __attribute__((target("sse4.2"), flatten)) void
+template __attribute__((target("sse4.2"))) void
 TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const;
 
-template __attribute__((target("avx2"), flatten)) void
+template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
-template __attribute__((target("sse4.2"), flatten)) void
+template __attribute__((target("sse4.2"))) void
 TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
     const ui8 **columns, const ui8 **isValidBitmask,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,

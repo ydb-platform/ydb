@@ -291,6 +291,9 @@ public:
         }
 
         db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(newTabletState);
+        Self->RecordTabletEvent(*tablet, EHiveEventType::GroupsReassigned, EHiveEventReason::StorageReassign,
+            TStringBuilder() << "reassignReason=" << NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(tablet->ChannelProfileReassignReason)
+                << " changed=" << changed << " from=" << ETabletStateName(tablet->State) << " to=" << ETabletStateName(newTabletState), true);
         tablet->State = newTabletState;
 
         if (!tabletBootState.empty()) {
@@ -307,7 +310,7 @@ public:
                             " - InitiateBlockStorage was not successfull");
                 }
             } else if (tablet->IsReadyToWork()) {
-                if (!tablet->InitiateStop(SideEffects)) {
+                if (!tablet->InitiateStop(SideEffects, EHiveEventReason::GroupsChanged)) {
                     BLOG_W("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Execute"
                             " - InitiateStop was not successfull");
                 }

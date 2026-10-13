@@ -105,7 +105,7 @@ public:
                 }
             }
             // if anything wrong - attempt to restart the tablet
-            if (tablet->InitiateStop(SideEffects)) {
+            if (tablet->InitiateStop(SideEffects, EHiveEventReason::StartFailed)) {
                 if (tablet->IsLeader()) {
                     BLOG_NOTICE("THive::TTxStartTablet::Execute, jump-starting tablet " << tablet->ToString());
                     tablet->AsLeader().TryToBoot();

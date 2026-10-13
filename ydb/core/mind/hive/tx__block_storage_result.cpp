@@ -34,7 +34,7 @@ public:
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
                     for (TFollowerTabletInfo& follower : tablet->Followers) {
-                        follower.InitiateStop(SideEffects);
+                        follower.InitiateStop(SideEffects, EHiveEventReason::Deleting);
                     }
                     SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {

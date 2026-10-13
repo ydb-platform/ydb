@@ -37,6 +37,7 @@ public:
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
         Self->RecentNodeEvents.Clear();
+        Self->RecentTabletEvents.Clear();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -508,14 +509,14 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
-                    tablet.BecomeStopped();
+                    tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
                     if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                         tablet.BecomeUnknown(&it->second);
                     } else {
                         tablet.NodeId = 0;
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 }
                 tablet.InitTabletMetrics();
@@ -684,13 +685,13 @@ public:
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
-                        follower.BecomeStopped();
+                        follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     } else {
                         auto it = Self->Nodes.find(nodeId);
                         if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                             follower.BecomeUnknown(&it->second);
                         } else {
-                            follower.BecomeStopped();
+                            follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                         }
                     }
                     follower.InitTabletMetrics();

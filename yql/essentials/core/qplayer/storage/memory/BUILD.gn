@@ -1,0 +1,7 @@
+library("memory") {
+  public_deps = [
+    # "//yql/essentials/core/qplayer/storage/interface",
+  ]
+
+  sources = [ "yql_qstorage_memory.cpp" ]
+}

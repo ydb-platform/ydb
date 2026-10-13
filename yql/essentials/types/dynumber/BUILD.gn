@@ -1,0 +1,7 @@
+library("dynumber") {
+  deps = [
+    # "//library/cpp/containers/stack_vector",
+  ]
+
+  sources = [ "dynumber.cpp" ]
+}

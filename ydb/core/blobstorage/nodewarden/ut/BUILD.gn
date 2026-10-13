@@ -1,0 +1,39 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/localrecovery",
+    "//ydb/core/cms/console",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/util",
+    "//ydb/core/util/actorsys_test",
+    "//ydb/library/actors/core",
+    "//ydb/library/pdisk_io",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/nodewarden/bind_queue_ut.cpp",
+    "//ydb/core/blobstorage/nodewarden/blobstorage_node_warden_ut.cpp",
+    "//ydb/core/blobstorage/nodewarden/distconf_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/nodewarden" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

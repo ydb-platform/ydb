@@ -1,0 +1,25 @@
+library("task_runner") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/dq/proto",
+    "//ydb/library/yql/dq/runtime",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    "//ydb/library/services",
+    "//ydb/library/yql/dq/actors",
+    "//ydb/library/yql/dq/actors/spilling",
+    # "//ydb/library/yql/utils/actors",  # peerdir only
+    "//yql/essentials/core/issue",
+    "//yql/essentials/core/issue/protos",
+  ]
+
+  sources = [
+    "events.cpp",
+    "task_runner_actor_local.cpp",
+  ]
+}

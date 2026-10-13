@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("algorithm") {
+    public_deps = [
+        "//contrib/restricted/boost/range",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

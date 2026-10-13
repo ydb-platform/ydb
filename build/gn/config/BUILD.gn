@@ -1,0 +1,188 @@
+config("_avx_config") {
+    cflags = [
+        "-mavx",
+        "-mpclmul",
+    ]
+}
+
+config("_avx2_config") {
+    cflags = [
+        "-mavx2",
+        "-mfma",
+        "-mbmi",
+        "-mbmi2",
+    ]
+}
+
+config("_avx512_config") {
+    cflags = [
+        "-mavx512bw",
+        "-mavx512cd",
+        "-mavx512dq",
+        "-mavx512f",
+        "-mavx512vl",
+        "-mvpclmulqdq",
+    ]
+}
+
+_src_root = string_replace(string_replace(rebase_path("//.", root_build_dir) + "/", "/./", "/"), "//", "/")
+_gen_root = string_replace(rebase_path(root_gen_dir, root_build_dir) + "/", "//", "/")
+
+config("macro_prefix_map") {
+    cflags = [
+        "-fmacro-prefix-map=${_src_root}=",
+        "-fmacro-prefix-map=${_gen_root}=",
+    ]
+}
+
+config("cpu_baseline") {
+    cflags = [
+        "-msse2",
+        "-msse3",
+        "-mssse3",
+        "-msse4.1",
+        "-msse4.2",
+        "-mpopcnt",
+        "-mcx16",
+    ]
+}
+
+config("base") {
+    cflags = [
+        "-pipe",
+        "-Wall",
+        "-Werror",
+        "-Wsign-compare",
+        "-Wno-unknown-warning-option",
+
+        # some disrespected common warnings
+        "-Wno-format",
+        "-Wno-format-security",
+        "-Wno-logical-op-parentheses",
+        "-Wno-parentheses",
+        "-Wno-vla-cxx-extension",
+
+        # every function and object in its own section, for --gc-sections
+        "-ffunction-sections",
+        "-fdata-sections",
+    ]
+
+    cflags_cc = [
+        "-std=c++20",
+        "-fsized-deallocation",
+
+        # don't export inline functions from every shared library:
+        # shrinks .dynsym/.dynstr, PLT and dynamic relocations
+        "-fvisibility-inlines-hidden",
+    ]
+
+    include_dirs = [
+        "//",
+        "$root_gen_dir",
+    ]
+}
+
+config("no_stdlibs") {
+    cflags_cc = [ "-nostdinc++" ]
+
+    ldflags = [ "-nodefaultlibs" ]
+
+    libs = [
+        "c",
+        "dl",
+        "m",
+        "pthread",
+        "rt",
+    ]
+}
+
+config("debug_info") {
+    cflags = [
+        "-g",
+        # keep DWARF in .dwo files next to objects instead of linking it into .so
+        "-gsplit-dwarf",
+        # no template arguments in DW_AT_name - debugger rebuilds them
+        "-gsimple-template-names",
+        # with -gsplit-dwarf clang writes the whole command line into .dwo, so any
+        # flag that doesn't affect codegen (-ftime-trace, -W*, ...) changes it
+        "-gno-record-command-line",
+    ]
+
+    if (debug_compression != "none") {
+        cflags += [ "-gz=$debug_compression" ]
+        ldflags = [ "-Wl,--compress-debug-sections=$debug_compression" ]
+    }
+}
+
+config("debug") {
+    cflags = [
+        "-O0",
+    ]
+
+    configs = [ ":debug_info" ]
+}
+
+config("relwithdebinfo") {
+    cflags = [
+        "-O3",
+        "-UNDEBUG",
+    ]
+
+    configs = [ ":debug_info" ]
+}
+
+config("time_trace") {
+    cflags = [
+        "-ftime-trace",
+        "-ftime-trace-granularity=$time_trace_granularity",
+    ]
+}
+
+config("pch") {
+    cflags_cc = [
+        "-fpch-instantiate-templates",
+    ]
+}
+
+config("release") {
+    cflags = [
+        "-fomit-frame-pointer",
+        "-O3",
+    ]
+
+    defines = [ "NDEBUG" ]
+}
+
+config("shared_library") {
+    cflags = [
+        "-fPIC",
+    ]
+}
+
+config("static_library") {
+}
+
+config("threads") {
+    cflags = [ "-pthread" ]
+    libs = [ "pthread" ]
+}
+
+config("std_string") {
+    defines = [ "TSTRING_IS_STD_STRING" ]
+}
+
+config("no_custom_char_ptr_std_comparator") {
+    defines = [ "NO_CUSTOM_CHAR_PTR_STD_COMPARATOR" ]
+}
+
+config("no_warnings") {
+    cflags = [ "-Wno-everything" ]
+}
+
+config("yql_abi_current") {
+    defines = [ "USE_CURRENT_UDF_ABI_VERSION" ]
+}
+
+config("no_undefined") {
+    ldflags = [ "-Wl,--no-undefined" ]
+}

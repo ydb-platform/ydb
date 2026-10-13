@@ -1,0 +1,12 @@
+library("simple_builder") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [
+    "array.cpp",
+    "batch.cpp",
+    "filler.cpp",
+  ]
+}

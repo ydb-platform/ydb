@@ -1,0 +1,11 @@
+protobuf_library("proto") {
+  public_deps = [
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    "//yql/essentials/providers/common/proto",
+  ]
+
+  sources = [
+    "partition.proto",
+    "source.proto",
+  ]
+}

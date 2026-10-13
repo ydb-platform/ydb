@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("system") {
+    public_deps = [
+        "//contrib/restricted/boost/assert",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

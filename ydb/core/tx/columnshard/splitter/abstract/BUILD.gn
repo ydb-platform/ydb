@@ -1,0 +1,18 @@
+library("abstract") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/engines/scheme/abstract",  # peerdir only
+  ]
+
+  sources = [
+    "chunk_meta.cpp",
+    "chunks.cpp",
+  ]
+}

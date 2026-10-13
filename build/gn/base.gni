@@ -1,0 +1,381 @@
+template("avx_source_set") {
+    source_set(target_name) {
+        forward_variables_from(invoker, "*")
+        configs += [ "//build/gn/config:_avx_config" ]
+    }
+}
+
+template("avx2_source_set") {
+    source_set(target_name) {
+        forward_variables_from(invoker, "*")
+        configs += [ "//build/gn/config:_avx2_config" ]
+    }
+}
+
+template("avx512_source_set") {
+    source_set(target_name) {
+        forward_variables_from(invoker, "*")
+        configs += [ "//build/gn/config:_avx512_config" ]
+    }
+}
+
+# Expands @VAR@ placeholders (and #cmakedefine lines) in the given .in files.
+#
+# `substitutions` is a list of "KEY=VALUE" strings. They are passed on the
+# action's command line (not through an intermediate file) on purpose: ninja
+# re-runs an action whenever its command line changes, while an mtime-based
+# dependency on a gn-generated file is not reliably propagated through the
+# inputdeps phony edges.
+template("expand_template") {
+    assert(defined(invoker.sources), "expand_template requires `sources`")
+
+    # By default each source is mirrored under root_gen_dir at its own repo-
+    # relative path. `output_dir` overrides that with an explicit destination,
+    # which is required when several targets configure the *same* .in file (the
+    # SQLv1 grammar is configured by v1_antlr4, v1_ansi_antlr4 and
+    # v1_proto_split_antlr4); mirroring would make them all declare the same
+    # output file. ya make has the same shape — each module configures its own
+    # copy into ${antlr_output}.
+    _output = "{{source_gen_dir}}/{{source_name_part}}"
+    if (defined(invoker.output_dir)) {
+        _output = invoker.output_dir + "/{{source_name_part}}"
+    }
+
+    action_foreach(target_name) {
+        forward_variables_from(invoker, [ "deps", "visibility" ])
+
+        script = "//build/gn/scripts/expand_template.py"
+        sources = invoker.sources
+        outputs = [ _output ]
+
+        args = [
+            "--input", "{{source}}",
+            "--output", _output,
+        ]
+
+        if (defined(invoker.substitutions)) {
+            foreach(_sub, invoker.substitutions) {
+                args += [ "--define", _sub ]
+            }
+        }
+    }
+}
+
+# GENERATE_ENUM_SERIALIZATION: <header>_serialized.cpp and .h of each of
+# `headers` by the action `<target_name>_enum`, the .cpp compiled by the
+# source_set `<target_name>_enum_objs`, which the target takes to `deps`
+# (library(), linked_executable(): `serialize_enum_headers`). Compiled with
+# the flags of the target -- its deps, public_deps, configs, public_configs,
+# defines, include_dirs, cflags*, yql_abi_version -- and the shared
+# precompiled header of the target, but for enum_serialization_pch_exclude
+# (//build/gn/pch/targets.gni): there the .cpp defines specializations of
+# Out<>, FromStringImpl<>... the PCH has instantiated already.
+template("serialize_enums") {
+    _enum = "${target_name}_enum"
+    _owner = get_label_info(":$target_name", "label_no_toolchain")
+    not_needed([ "_owner" ])
+    _output = "{{source_gen_dir}}/{{source_file_part}}_serialized.cpp"
+    _header = "{{source_gen_dir}}/{{source_file_part}}_serialized.h"
+
+    action_foreach(_enum) {
+        forward_variables_from(invoker, [ "testonly" ])
+        script = "//build/gn/scripts/run.py"
+        sources = invoker.headers
+        outputs = [ "$_output", "$_header" ]
+
+        _enum_parser = "//tools/enum_parser:enum_parser($tool_toolchain)"
+        _enum_parser_bin = rebase_path(get_label_info(_enum_parser, "root_out_dir") + "/enum_parser", root_build_dir)
+
+        args = [
+            "./$_enum_parser_bin",
+            "{{source}}",
+            "--include-path", "{{source_root_relative_dir}}/{{source_file_part}}",
+            "--output", "$_output",
+            "--header", "$_header",
+        ]
+
+        deps = [ _enum_parser ]
+    }
+
+    source_set("${target_name}_enum_objs") {
+        forward_variables_from(invoker, [ "testonly", "defines", "include_dirs", "cflags", "cflags_c", "cflags_cc" ])
+        visibility = [ ":*" ]
+        sources = filter_include(get_target_outputs(":$_enum"), [ "*.cpp" ])
+        deps += [
+            ":$_enum",
+            "//tools/enum_parser:runtime",
+        ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+        if (defined(invoker.public_deps)) {
+            deps += invoker.public_deps
+        }
+        if (defined(invoker.configs)) {
+            configs += invoker.configs
+        }
+        if (defined(invoker.public_configs)) {
+            configs += invoker.public_configs
+        }
+        if (defined(invoker.yql_abi_version)) {
+            _abi = string_split(invoker.yql_abi_version, ".")
+            configs -= [ "//build/gn/config:yql_abi_current" ]
+            if (!defined(defines)) {
+                defines = []
+            }
+            defines += [
+                "UDF_ABI_VERSION_MAJOR=${_abi[0]}",
+                "UDF_ABI_VERSION_MINOR=${_abi[1]}",
+                "UDF_ABI_VERSION_PATCH=${_abi[2]}",
+            ]
+        }
+        if (pch_mode == "global" && current_toolchain == default_toolchain) {
+            if (label_matches(_owner, contrib_pch_targets)) {
+                if (!label_matches(_owner, contrib_pch_exclude)) {
+                    deps += [ "//build/gn/pch:contrib" ]
+                }
+            } else if (!label_matches(_owner, global_pch_exclude) &&
+                       !label_matches(_owner, enum_serialization_pch_exclude)) {
+                deps += [ "//build/gn/pch:global" ]
+            }
+        }
+    }
+}
+
+template("library") {
+    _path = rebase_path(".", "//")
+    _unique_name = exec_script("//build/gn/scripts/unique_name.py", [ _path ], "trim string")
+
+    if (defined(invoker.serialize_enum_headers)) {
+        serialize_enums(target_name) {
+            forward_variables_from(invoker, [ "testonly", "deps", "public_deps", "configs", "public_configs", "defines",
+                                              "include_dirs", "cflags", "cflags_c", "cflags_cc", "yql_abi_version" ])
+            headers = invoker.serialize_enum_headers
+        }
+    }
+
+    # Translated sources among `sources` (//build/gn/source_kinds.gni)
+    _rl6 = []
+    if (defined(invoker.sources)) {
+        _rl6 = filter_include(invoker.sources, [ "*.rl6" ])
+    }
+    if (_rl6 != []) {
+        ragel6_sources("${target_name}_rl6") {
+            sources = _rl6
+            visibility = [ ":*" ]
+        }
+    }
+    _y = []
+    if (defined(invoker.sources)) {
+        _y = filter_include(invoker.sources, [ "*.y", "*.ypp" ])
+    }
+    if (_y != []) {
+        bison_sources("${target_name}_y") {
+            sources = _y
+            visibility = [ ":*" ]
+        }
+    }
+    # .proto among `sources`: protoc runs under the hood, the library compiles
+    # the generated code (//build/gn/protobuf.gni)
+    _proto = []
+    if (defined(invoker.sources)) {
+        _proto = filter_include(invoker.sources, [ "*.proto" ])
+    }
+    not_needed(invoker, [ "generate_grpc_services", "proto_imports" ])
+    if (_proto != []) {
+        _codegen_target = "${target_name}_codegen"
+        protobuf_sources("${target_name}_proto") {
+            forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "testonly" ])
+            sources = _proto
+            if (defined(invoker.proto_imports)) {
+                imports = invoker.proto_imports
+            }
+            codegen_target = _codegen_target
+            visibility = [ ":*" ]
+        }
+    }
+
+    _has_resources = defined(invoker.resources) || defined(invoker.resource_files)
+    if (_has_resources) {
+        _resources_target = "${target_name}_resources"
+
+        resources(_resources_target) {
+            forward_variables_from(invoker, [ "resources", "resource_files" ])
+            if (defined(invoker.resource_deps)) {
+                deps = invoker.resource_deps
+            }
+            visibility = [ ":*" ]
+        }
+    }
+
+    # Link slots, see //build/gn/link_slots.gni
+    _slot_provider = defined(invoker.link_slot_provides)
+    if (_slot_provider) {
+        link_slot_provider_config(target_name) {
+            provides = invoker.link_slot_provides
+        }
+    }
+    _slot_weak = defined(invoker.link_slot_interface)
+    if (_slot_weak) {
+        link_slot_weak_refs(target_name) {
+            slot = invoker.link_slot_interface
+            headers = invoker.link_slot_headers
+            if (defined(invoker.link_slot_flags_from)) {
+                flags_from = invoker.link_slot_flags_from
+            } else if (defined(invoker.sources)) {
+                flags_from = invoker.sources
+            }
+            if (defined(invoker.link_slot_codegen)) {
+                codegen = invoker.link_slot_codegen
+            }
+        }
+    }
+
+    # plugins: linked by the executables, not here, see linked_executable()
+    # in //build/gn/link_slots.gni
+    not_needed(invoker, [ "plugins" ])
+
+    target(library_type, target_name) {
+        forward_variables_from(invoker, "*", [ "configs", "deps", "extra_plugins", "generate_grpc_services", "resources", "resource_files", "resource_deps", "link_slot_provides", "link_slot_interface", "link_slot_headers", "link_slot_flags_from", "link_slot_codegen", "link_slot_module_interfaces", "plugins", "proto_imports", "yql_abi_version" ])
+
+        output_dir = "$root_out_dir/" + rebase_path(".", "//") # TODO: doesn't work for some reason
+        output_name = "${_unique_name}_${target_name}"
+
+        # Append to default deps
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        # Append to default configs
+        if (defined(invoker.configs)) {
+           configs += invoker.configs
+        }
+
+        if (_rl6 != []) {
+            sources -= _rl6
+            sources += get_target_outputs(":${target_name}_rl6")
+            deps += [ ":${target_name}_rl6" ]
+        }
+
+        if (_y != []) {
+            sources -= _y
+            sources += filter_include(get_target_outputs(":${target_name}_y"), [ "*.cpp" ])
+            deps += [ ":${target_name}_y" ]
+            configs += [ ":${target_name}_y_config" ]
+        }
+
+        if (_proto != []) {
+            sources -= _proto
+            sources += filter_include(get_target_outputs(":${target_name}_proto"), [ "*.cc" ])
+            deps += [ ":${target_name}_proto" ]
+            if (!defined(public_deps)) {
+                public_deps = []
+            }
+            public_deps += [ "//contrib/libs/protobuf" ]
+            if (defined(invoker.generate_grpc_services) && invoker.generate_grpc_services) {
+                public_deps += [ "//contrib/libs/grpc" ]
+            }
+        }
+
+        if (defined(invoker.serialize_enum_headers)) {
+            deps += [
+                ":${target_name}_enum_objs",
+                "//tools/enum_parser:runtime",
+            ]
+        }
+
+        if (_has_resources) {
+            deps += [
+                ":$_resources_target",
+                "//library/cpp/resource",
+            ]
+            if (!defined(sources)) {
+                sources = []
+            }
+            sources += filter_include(get_target_outputs(":$_resources_target"), [ "*.cpp" ])
+        }
+
+        # Link slots: a provider's definitions stay strong; an interface's
+        # dependents get weak references, the library itself does not (it
+        # defines some of the listed functions): the list is a public config,
+        # which gn applies to the target too, GN_SLOT_INTERFACE_<slot> turns
+        # it off here
+        if (_slot_provider) {
+            configs += [ ":${target_name}_slot_provider_config" ]
+        }
+        if (_slot_weak) {
+            if (!defined(defines)) {
+                defines = []
+            }
+            defines += [ "GN_SLOT_INTERFACE_" + invoker.link_slot_interface ]
+            if (!defined(public_deps)) {
+                public_deps = []
+            }
+            public_deps += [ ":${target_name}_slot_weak" ]
+            if (!defined(public_configs)) {
+                public_configs = []
+            }
+            public_configs += [ ":${target_name}_slot_weak_config" ]
+            if (!defined(metadata)) {
+                metadata = {}
+            }
+            metadata.link_slot_interfaces = [ invoker.link_slot_interface + "|" +
+                                              get_label_info(":$target_name", "label_no_toolchain") ]
+        }
+
+        # the slots whose interface is another target of the same module: its
+        # code defines some of their functions too
+        if (defined(invoker.link_slot_module_interfaces)) {
+            if (!defined(defines)) {
+                defines = []
+            }
+            foreach(_slot, invoker.link_slot_module_interfaces) {
+                defines += [ "GN_SLOT_INTERFACE_" + _slot ]
+            }
+        }
+
+        # UDF ABI: the current one by default (//build/gn/config:yql_abi_current in
+        # the default configs); YQL_ABI_VERSION(M m p) in ya.make -> "M.m.p" here.
+        if (defined(invoker.yql_abi_version)) {
+            _abi = string_split(invoker.yql_abi_version, ".")
+            configs -= [ "//build/gn/config:yql_abi_current" ]
+            if (!defined(defines)) {
+                defines = []
+            }
+            defines += [
+                "UDF_ABI_VERSION_MAJOR=${_abi[0]}",
+                "UDF_ABI_VERSION_MINOR=${_abi[1]}",
+                "UDF_ABI_VERSION_PATCH=${_abi[2]}",
+            ]
+        }
+
+        if (defined(allow_undefined) && allow_undefined == true) {
+            configs -= [ "//build/gn/config:no_undefined" ]
+        }
+
+        # a precompiled header of its own for pch_targets; with pch_mode =
+        # "global" it is chained to the shared one below (compiled with its
+        # -include-pch)
+        if ((pch_mode == "per_target" || (pch_mode == "global" && current_toolchain == default_toolchain)) &&
+            label_matches(get_label_info(":$target_name", "label_no_toolchain"), pch_targets)) {
+            precompiled_header = "pch.h"
+            precompiled_source = "//build/gn/pch/$_path/$target_name.h"
+            configs += [ "//build/gn/config:pch" ]
+        }
+
+        # the precompiled header of contrib for contrib_pch_targets, the global
+        # one for the rest (//build/gn/pch/targets.gni): C++ only, the default
+        # toolchain only (see tool_toolchain)
+        if (pch_mode == "global" && current_toolchain == default_toolchain && defined(sources) &&
+            filter_include(sources, [ "*.cpp", "*.cc", "*.cxx" ]) != []) {
+            _pch_label = get_label_info(":$target_name", "label_no_toolchain")
+            if (label_matches(_pch_label, contrib_pch_targets)) {
+                if (!label_matches(_pch_label, contrib_pch_exclude)) {
+                    deps += [ "//build/gn/pch:contrib" ]
+                }
+            } else if (!label_matches(_pch_label, global_pch_exclude)) {
+                deps += [ "//build/gn/pch:global" ]
+            }
+        }
+    }
+}

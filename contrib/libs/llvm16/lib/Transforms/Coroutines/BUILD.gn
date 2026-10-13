@@ -1,0 +1,20 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Coroutines") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/Transforms/Scalar",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "CoroCleanup.cpp",
+        "CoroConditionalWrapper.cpp",
+        "CoroEarly.cpp",
+        "CoroElide.cpp",
+        "CoroFrame.cpp",
+        "CoroSplit.cpp",
+        "Coroutines.cpp",
+    ]
+}

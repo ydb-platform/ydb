@@ -1,0 +1,44 @@
+library("external_sources") {
+  public_deps = [
+    "//library/cpp/regex/pcre",
+    # "//library/cpp/threading/future",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/common/db_id_async_resolver",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    "//library/cpp/scheme",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/external_sources/object_storage",
+    "//ydb/core/external_sources/object_storage/inference",
+    # "//ydb/core/kqp/gateway/actors",
+    "//ydb/library/actors/http",
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/s3/common",  # peerdir only
+    # "//ydb/library/yql/providers/s3/credentials",
+    "//ydb/library/yql/providers/s3/object_listers",
+    "//ydb/library/yql/providers/s3/path_generator",
+    "//ydb/library/yql/providers/s3/proto",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    # "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//yql/essentials/providers/common/gateway",  # peerdir only
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/structured_token",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "external_data_source.cpp",
+    "external_source_builder.cpp",
+    "external_source_factory.cpp",
+    "object_storage.cpp",
+    "validation_functions.cpp",
+  ]
+}

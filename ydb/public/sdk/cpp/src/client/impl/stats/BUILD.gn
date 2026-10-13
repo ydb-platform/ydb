@@ -1,0 +1,9 @@
+library("stats") {
+  public_deps = [
+    "//library/cpp/monlib/metrics",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  sources = [ "stats.cpp" ]
+}

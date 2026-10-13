@@ -1,0 +1,12 @@
+library("drr") {
+  public_deps = [ "//library/cpp/lwtrace" ]
+
+  deps = [
+    # "//library/cpp/monlib/encode/legacy_protobuf/protos",  # peerdir only
+  ]
+
+  sources = [
+    "drr.cpp",
+    "probes.cpp",
+  ]
+}

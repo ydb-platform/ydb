@@ -1,0 +1,34 @@
+unittest_executable("ut_sequence") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",  # peerdir only
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
+    "//ydb/library/ut",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "datashard_ut_sequence.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/datashard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

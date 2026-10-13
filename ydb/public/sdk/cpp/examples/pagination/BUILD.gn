@@ -1,0 +1,15 @@
+linked_executable("pagination") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "main.cpp",
+    "pagination.cpp",
+    "pagination_data.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

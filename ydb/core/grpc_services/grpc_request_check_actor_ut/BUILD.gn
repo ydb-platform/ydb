@@ -1,0 +1,28 @@
+unittest_executable("grpc_request_check_actor_ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/counters",
+    "//ydb/core/scheme",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/scheme_board",
+    "//ydb/library/cloud_permissions",
+    "//ydb/library/testlib/service_mocks",
+  ]
+
+  sources = [ "grpc_request_check_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/grpc_services" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

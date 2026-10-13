@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/containers/stack_vector",
+    "//library/cpp/lwtrace",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",  # peerdir only
+    "//ydb/library/shop",
+  ]
+
+  sources = [
+    "estimator_ut.cpp",
+    "flowctl_ut.cpp",
+    "lazy_scheduler_ut.cpp",
+    "scheduler_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

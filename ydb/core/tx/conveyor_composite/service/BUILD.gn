@@ -1,0 +1,32 @@
+library("service") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/tx/conveyor/usage",
+    "//ydb/core/tx/conveyor_composite/usage",
+    "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    "//ydb/library/signals",
+  ]
+
+  deps = [
+    "//library/cpp/lwtrace/mon",
+    "//ydb/core/kqp/query_data",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/core/tx/conveyor_composite/tracing",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "category.cpp",
+    "common.cpp",
+    "counters.cpp",
+    "events.cpp",
+    "manager.cpp",
+    "process.cpp",
+    "scope.cpp",
+    "service.cpp",
+    "worker.cpp",
+    "workers_pool.cpp",
+  ]
+}

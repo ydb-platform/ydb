@@ -1,0 +1,36 @@
+library("public") {
+  public_deps = [
+    "//ydb/core/base",
+    # "//ydb/core/scheme",
+    # "//ydb/library/aclib",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "public/events.cpp" ]
+}
+
+library("sequenceproxy") {
+  public_deps = [
+    # ":public",
+    "//ydb/core/base",
+  ]
+
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/sequenceshard/public",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+    "//ydb/library/ydb_issue",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "sequenceproxy.cpp",
+    "sequenceproxy_allocate.cpp",
+    "sequenceproxy_get_sequence.cpp",
+    "sequenceproxy_impl.cpp",
+    "sequenceproxy_resolve.cpp",
+  ]
+}

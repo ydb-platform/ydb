@@ -1,0 +1,10 @@
+library("antlr4") {
+  public_deps = [
+    "//contrib/libs/antlr4-c3",
+    "//contrib/libs/antlr4_cpp_runtime",
+    # "//yql/essentials/sql/v1/complete/core",
+    # "//yql/essentials/sql/v1/complete/text",
+  ]
+
+  sources = [ "vocabulary.cpp" ]
+}

@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//util/digest/city_ut.cpp",
+    "//util/digest/fnv_ut.cpp",
+    "//util/digest/multi_ut.cpp",
+    "//util/digest/murmur_ut.cpp",
+    "//util/digest/sequence_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

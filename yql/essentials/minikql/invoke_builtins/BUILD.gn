@@ -1,0 +1,16 @@
+slot_interface_group("invoke_builtins") {
+  public_deps = [
+    # "//yql/essentials/minikql",
+  ]
+
+  link_slot_interface = "minikql_codegen"
+
+  link_slot_headers = [ "mkql_builtins.h" ]
+
+  link_slot_flags_from = [ "mkql_builtins.cpp" ]
+
+  link_slot_codegen = [
+    "//yql/essentials/public/issue/protos",
+    "//yql/essentials/public/types",
+  ]
+}

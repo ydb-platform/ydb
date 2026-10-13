@@ -1,0 +1,29 @@
+gtest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/core/kqp/gateway",
+    "//ydb/core/kqp/provider",
+    "//ydb/services/kesus",  # peerdir only
+    "//ydb/services/metadata",  # peerdir only
+    "//ydb/services/persqueue_cluster_discovery",  # peerdir only
+    "//ydb/services/ydb",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [ "metadata_conversion.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,3 @@
+library("cppparser") {
+  sources = [ "parser.cpp" ]
+}

@@ -1,0 +1,21 @@
+config("private_config") {
+    cflags = [ "-maes" ]
+}
+
+static_library("t1ha") {
+    sources = [
+        "src/t1ha_selfcheck_all.c",
+        "src/t1ha_selfcheck.c",
+        "src/t1ha0_ia32aes_avx.c",
+        "src/t1ha0_ia32aes_avx2.c",
+        "src/t1ha0_ia32aes_noavx.c",
+        "src/t1ha0_selfcheck.c",
+        "src/t1ha0.c",
+        "src/t1ha1_selfcheck.c",
+        "src/t1ha1.c",
+        "src/t1ha2_selfcheck.c",
+        "src/t1ha2.c",
+    ]
+
+    configs += [ ":private_config" ]
+}

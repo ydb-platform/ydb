@@ -1,0 +1,71 @@
+config("public_config") {
+    include_dirs = [ "c++/include" ]
+}
+
+config("private_config") {
+    cflags = [ "-Wno-unused-result" ]
+    defines = [ "ENABLE_METRICS=0" ]
+    include_dirs = [ "c++/src" ]
+}
+
+contrib_library("orc") {
+    public_deps = [
+        "//contrib/libs/protobuf",
+    ]
+
+    deps = [
+        "//contrib/libs/apache/orc-format",
+        "//contrib/libs/lz4",
+        "//contrib/libs/snappy",
+        "//contrib/libs/zlib",
+        "//contrib/libs/zstd",
+    ]
+
+    sources = [
+        "c++/src/Adaptor.cc",
+        "c++/src/BlockBuffer.cc",
+        "c++/src/BloomFilter.cc",
+        "c++/src/BpackingDefault.cc",
+        "c++/src/ByteRLE.cc",
+        "c++/src/ColumnPrinter.cc",
+        "c++/src/ColumnReader.cc",
+        "c++/src/ColumnWriter.cc",
+        "c++/src/Common.cc",
+        "c++/src/Compression.cc",
+        "c++/src/ConvertColumnReader.cc",
+        "c++/src/CpuInfoUtil.cc",
+        "c++/src/Dictionary.cc",
+        "c++/src/Exceptions.cc",
+        "c++/src/Geospatial.cc",
+        "c++/src/Int128.cc",
+        "c++/src/io/Cache.cc",
+        "c++/src/io/InputStream.cc",
+        "c++/src/io/OutputStream.cc",
+        "c++/src/LzoDecompressor.cc",
+        "c++/src/MemoryPool.cc",
+        "c++/src/Murmur3.cc",
+        "c++/src/OrcFile.cc",
+        "c++/src/Reader.cc",
+        "c++/src/RLE.cc",
+        "c++/src/RleDecoderV2.cc",
+        "c++/src/RleEncoderV2.cc",
+        "c++/src/RLEv1.cc",
+        "c++/src/RLEV2Util.cc",
+        "c++/src/sargs/ExpressionTree.cc",
+        "c++/src/sargs/Literal.cc",
+        "c++/src/sargs/PredicateLeaf.cc",
+        "c++/src/sargs/SargsApplier.cc",
+        "c++/src/sargs/SearchArgument.cc",
+        "c++/src/sargs/TruthValue.cc",
+        "c++/src/SchemaEvolution.cc",
+        "c++/src/Statistics.cc",
+        "c++/src/StripeStream.cc",
+        "c++/src/Timezone.cc",
+        "c++/src/TypeImpl.cc",
+        "c++/src/Vector.cc",
+        "c++/src/Writer.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

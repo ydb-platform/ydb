@@ -1,0 +1,8 @@
+library("antlr3") {
+  public_deps = [
+    # "//contrib/libs/antlr3_cpp_runtime",
+    "//yql/essentials/parser/proto_ast",
+  ]
+
+  sources = [ "proto_ast_antlr3.cpp" ]
+}

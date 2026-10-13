@@ -1,0 +1,5 @@
+library("color") {
+  public_deps = [ "//contrib/restricted/patched/replxx" ]
+
+  sources = [ "schema.cpp" ]
+}

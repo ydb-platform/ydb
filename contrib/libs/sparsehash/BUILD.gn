@@ -1,0 +1,7 @@
+config("public_config") {
+    include_dirs = [ "src" ]
+}
+
+contrib_library("sparsehash") {
+    public_configs = [ ":public_config" ]
+}

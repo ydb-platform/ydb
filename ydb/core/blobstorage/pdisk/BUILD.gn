@@ -1,0 +1,76 @@
+library("pdisk") {
+  public_deps = [
+    # "//library/cpp/bucket_quoter",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/atomic",
+    # "//library/cpp/lwtrace",
+    "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/monlib/dynamic_counters/percentile",
+    # "//library/cpp/threading/queue",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/lwtrace_probes",
+    "//ydb/core/control/lib",
+    # "//ydb/core/debug",
+    # "//ydb/core/debug_tools",
+    "//ydb/core/driver_lib/version",
+    # "//ydb/core/grpc_services",
+    "//ydb/core/mon",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/util",
+    "//ydb/library/actors/wilson",
+    "//ydb/library/pdisk_io",
+    "//ydb/library/schlab/schine",
+    "//ydb/library/services",
+    # "//ydb/library/wilson_ids",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  deps = [
+    # "//contrib/libs/lz4",  # peerdir only
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/base/services",  # peerdir only
+    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/groupinfo",  # peerdir only
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/schlab",  # peerdir only
+    # "//ydb/library/schlab/mon",
+  ]
+
+  sources = [
+    "blobstorage_pdisk.cpp",
+    "blobstorage_pdisk_actor.cpp",
+    "blobstorage_pdisk_blockdevice_async.cpp",
+    "blobstorage_pdisk_completion_impl.cpp",
+    "blobstorage_pdisk_delayed_cost_loop.cpp",
+    "blobstorage_pdisk_driveestimator.cpp",
+    "blobstorage_pdisk_drivemodel_db.cpp",
+    "blobstorage_pdisk_impl.cpp",
+    "blobstorage_pdisk_impl_http.cpp",
+    "blobstorage_pdisk_impl_log.cpp",
+    "blobstorage_pdisk_impl_metadata.cpp",
+    "blobstorage_pdisk_internal_interface.cpp",
+    "blobstorage_pdisk_log_cache.cpp",
+    "blobstorage_pdisk_logreader.cpp",
+    "blobstorage_pdisk_mon.cpp",
+    "blobstorage_pdisk_params.cpp",
+    "blobstorage_pdisk_requestimpl.cpp",
+    "blobstorage_pdisk_sectorrestorator.cpp",
+    "blobstorage_pdisk_syslogreader.cpp",
+    "blobstorage_pdisk_tools.cpp",
+    "blobstorage_pdisk_util_atomicblockcounter.cpp",
+    "blobstorage_pdisk_util_flightcontrol.cpp",
+    "blobstorage_pdisk_util_signal_event.cpp",
+    "blobstorage_pdisk_writer.cpp",
+    "drivedata_serializer.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "blobstorage_pdisk_defs.h",
+    "blobstorage_pdisk_state.h",
+  ]
+}

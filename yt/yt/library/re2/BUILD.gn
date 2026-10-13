@@ -1,0 +1,8 @@
+library("re2") {
+  public_deps = [
+    "//contrib/libs/re2",
+    "//yt/yt/core",
+  ]
+
+  sources = [ "re2.cpp" ]
+}

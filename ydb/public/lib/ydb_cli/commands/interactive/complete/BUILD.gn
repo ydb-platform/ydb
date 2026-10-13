@@ -1,0 +1,29 @@
+library("complete") {
+  public_deps = [
+    # "//contrib/restricted/patched/replxx",
+    "//ydb/public/lib/ydb_cli/commands/interactive/highlight/color",
+    "//ydb/public/lib/ydb_cli/common",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    "//yql/essentials/sql/v1/complete/name/object/simple",
+  ]
+
+  deps = [
+    # "//ydb/public/lib/ydb_cli/commands",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/sql/v1/complete",
+    "//yql/essentials/sql/v1/complete/name/cache/local",
+    # "//yql/essentials/sql/v1/complete/name/object",  # peerdir only
+    "//yql/essentials/sql/v1/complete/name/object/simple/cached",
+    "//yql/essentials/sql/v1/complete/name/service/impatient",
+    "//yql/essentials/sql/v1/complete/name/service/schema",
+    "//yql/essentials/sql/v1/complete/name/service/static",
+    "//yql/essentials/sql/v1/complete/name/service/union",
+    "//yql/essentials/sql/v1/lexer/antlr4_pure",
+    "//yql/essentials/sql/v1/lexer/antlr4_pure_ansi",
+  ]
+
+  sources = [
+    "ydb_schema.cpp",
+    "yql_completer.cpp",
+  ]
+}

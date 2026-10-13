@@ -1,0 +1,51 @@
+library("lib") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blob_depot",
+    # "//ydb/core/blobstorage/backpressure",
+    # "//ydb/core/blobstorage/dsproxy",
+    "//ydb/core/blobstorage/dsproxy/mock",
+    # "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/pdisk/mock",
+    # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/cms/console",
+    # "//ydb/core/driver_lib/version",
+    "//ydb/core/mind",
+    "//ydb/core/mind/bscontroller",
+    # "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/mind/hive",
+    # "//ydb/core/mind:tenant_node_enumeration",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    # "//ydb/core/sys_view/service",
+    # "//ydb/core/tx/coordinator",
+    # "//ydb/core/tx/mediator",
+    # "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/tx_allocator",
+    "//ydb/core/util",
+    "//ydb/core/util/actorsys_test",
+    # "//ydb/library/actors/retro_tracing",
+    # "//ydb/library/actors/wilson:test_util",
+  ]
+
+  deps = [
+    # "//library/cpp/digest/md5",  # peerdir only
+    "//ydb/core/blobstorage/pdisk",  # peerdir only
+    # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+    # "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # link slot
+    # "//yt/yql/providers/yt/comp_nodes/llvm16",  # link slot
+  ]
+
+  sources = [
+    "debug_log.cpp",
+    "node_warden_mock_bsc.cpp",
+    "node_warden_mock_pipe.cpp",
+    "node_warden_mock_state.cpp",
+    "ut_helpers.cpp",
+  ]
+}

@@ -1,0 +1,7 @@
+contrib_library("system") {
+  deps = [ "//library/cpp/malloc/api" ]
+
+  sources = [ "malloc-info.cpp" ]
+
+  link_slot_provides = [ "allocator" ]
+}

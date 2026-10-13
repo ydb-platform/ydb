@@ -1,0 +1,20 @@
+library("driver") {
+  public_deps = [
+    "//library/cpp/logger",
+    "//ydb/public/sdk/cpp/src/client/common_client",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    # "//ydb/public/sdk/cpp/src/client/types/executor",
+    # "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    "//ydb/public/sdk/cpp/src/client/impl/internal/common",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
+    # "//ydb/public/sdk/cpp/src/client/resources",
+  ]
+
+  sources = [ "driver.cpp" ]
+}

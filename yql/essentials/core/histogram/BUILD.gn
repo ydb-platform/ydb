@@ -1,0 +1,3 @@
+library("histogram") {
+  sources = [ "eq_width_histogram.cpp" ]
+}

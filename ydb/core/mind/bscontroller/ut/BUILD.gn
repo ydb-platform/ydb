@@ -1,0 +1,29 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/svnversion",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/yql_testlib",  # peerdir only
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "//ydb/core/mind/bscontroller/group_mapper_ut.cpp",
+    "//ydb/core/mind/bscontroller/grouper_ut.cpp",
+    "//ydb/core/mind/bscontroller/mv_object_map_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/mind/bscontroller" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

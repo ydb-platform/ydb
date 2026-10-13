@@ -1,0 +1,5 @@
+protobuf_library("monitoring") {
+  public_deps = [ "//library/cpp/monlib/encode/legacy_protobuf/protos" ]
+
+  sources = [ "mon_proto.proto" ]
+}

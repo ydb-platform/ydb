@@ -1,0 +1,10 @@
+library("auth") {
+  public_deps = [
+    "//ydb/core/base",
+    # "//ydb/core/tx/scheme_cache",
+  ]
+
+  deps = [ "//ydb/library/aclib" ]
+
+  sources = [ "auth_helpers.cpp" ]
+}

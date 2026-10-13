@@ -1,0 +1,10 @@
+library("union") {
+  public_deps = [
+    # "//yql/essentials/sql/v1/complete/name/service",
+    "//yql/essentials/sql/v1/complete/name/service/ranking",
+  ]
+
+  deps = [ "//library/cpp/threading/future" ]
+
+  sources = [ "name_service.cpp" ]
+}

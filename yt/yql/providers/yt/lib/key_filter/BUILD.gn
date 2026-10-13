@@ -1,0 +1,11 @@
+library("key_filter") {
+  public_deps = [ "//yql/essentials/ast" ]
+
+  deps = [
+    "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_key_filter.cpp" ]
+}

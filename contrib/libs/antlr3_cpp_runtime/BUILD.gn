@@ -1,0 +1,12 @@
+config("generated_private_config") {
+    cflags = [
+        "-Wno-tautological-undefined-compare",
+        "-Wno-unused-but-set-variable",
+        "-Wno-unused-private-field",
+        "-Wno-unused-variable",
+    ]
+}
+
+contrib_library("antlr3_cpp_runtime") {
+    sources = [ "antlr3.cpp" ]
+}

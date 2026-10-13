@@ -1,0 +1,18 @@
+library("view") {
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/kqp/gateway/actors",
+    # "//ydb/core/kqp/gateway/utils",
+    "//ydb/core/kqp/provider",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/services/metadata/abstract",
+    "//ydb/services/metadata/manager",
+  ]
+
+  sources = [
+    "behaviour.cpp",
+    "manager.cpp",
+  ]
+}

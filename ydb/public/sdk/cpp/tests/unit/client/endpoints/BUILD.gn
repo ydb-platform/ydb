@@ -1,0 +1,11 @@
+unittest_executable("endpoints") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/public/sdk/cpp/src/client/impl/endpoints",
+  ]
+
+  sources = [ "endpoints_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

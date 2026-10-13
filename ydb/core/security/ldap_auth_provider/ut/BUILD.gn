@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/security/ldap_auth_provider",
+    "//ydb/core/security/ldap_auth_provider:test_utils",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/testlib/service_mocks/ldap_mock",
+  ]
+
+  sources = [
+    "//ydb/core/security/ldap_auth_provider/ldap_auth_provider_ut.cpp",
+    "//ydb/core/security/ldap_auth_provider/ldap_utils_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/security/ldap_auth_provider" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

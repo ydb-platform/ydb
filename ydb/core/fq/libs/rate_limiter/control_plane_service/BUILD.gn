@@ -1,0 +1,24 @@
+library("control_plane_service") {
+  public_deps = [
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/shared_resources",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/security",
+  ]
+
+  deps = [
+    "//ydb/core/fq/libs/events",
+    # "//ydb/core/fq/libs/quota_manager/events",
+    # "//ydb/core/fq/libs/rate_limiter/events",
+    "//ydb/core/fq/libs/rate_limiter/utils",
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/services",
+    "//ydb/public/sdk/cpp/adapters/issue",
+  ]
+
+  sources = [
+    "rate_limiter_control_plane_service.cpp",
+    "update_limit_actor.cpp",
+  ]
+}

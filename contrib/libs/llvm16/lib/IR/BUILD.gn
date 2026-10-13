@@ -1,0 +1,282 @@
+import("//contrib/libs/llvm16/llvm.gni")
+import("//contrib/libs/llvm16/utils/TableGen/gen.gni")
+
+table_gen("Attributes") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Attributes.td"
+    flags = [ "-gen-attrs" ]
+    out   = "llvm/IR/Attributes.inc"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicAArch64") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=aarch64",
+    ]
+    out = "llvm/IR/IntrinsicsAArch64.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicAMDGPU") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=amdgcn",
+    ]
+    out = "llvm/IR/IntrinsicsAMDGPU.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicARM") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=arm",
+    ]
+    out = "llvm/IR/IntrinsicsARM.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicBPF") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=bpf",
+    ]
+    out = "llvm/IR/IntrinsicsBPF.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicDirectX") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=dx",
+    ]
+    out = "llvm/IR/IntrinsicsDirectX.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicEnums") {
+    td    = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [ "-gen-intrinsic-enums" ]
+    out   = "llvm/IR/IntrinsicEnums.inc"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicHexagon") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=hexagon",
+    ]
+    out = "llvm/IR/IntrinsicsHexagon.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicImpl") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [ "-gen-intrinsic-impl" ]
+    out = "llvm/IR/IntrinsicImpl.inc"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicMips") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=mips",
+    ]
+    out = "llvm/IR/IntrinsicsMips.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicNVPTX") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=nvvm",
+    ]
+    out = "llvm/IR/IntrinsicsNVPTX.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicPowerPC") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=ppc",
+    ]
+    out = "llvm/IR/IntrinsicsPowerPC.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicR600") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=r600",
+    ]
+    out = "llvm/IR/IntrinsicsR600.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicRISCV") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=riscv",
+    ]
+    out = "llvm/IR/IntrinsicsRISCV.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicS390") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=s390",
+    ]
+    out = "llvm/IR/IntrinsicsS390.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicVE") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=ve",
+    ]
+    out = "llvm/IR/IntrinsicsVE.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicWebAssembly") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=wasm",
+    ]
+    out = "llvm/IR/IntrinsicsWebAssembly.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicX86") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=x86",
+    ]
+    out = "llvm/IR/IntrinsicsX86.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+table_gen("IntrinsicXCore") {
+    td = "//contrib/libs/llvm16/include/llvm/IR/Intrinsics.td"
+    flags = [
+        "-gen-intrinsic-enums",
+        "-intrinsic-prefix=xcore",
+    ]
+    out = "llvm/IR/IntrinsicsXCore.h"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+llvm_library("IR") {
+    public_deps = [
+        ":Attributes",
+        ":IntrinsicAArch64",
+        ":IntrinsicAMDGPU",
+        ":IntrinsicARM",
+        ":IntrinsicBPF",
+        ":IntrinsicDirectX",
+        ":IntrinsicEnums",
+        ":IntrinsicHexagon",
+        ":IntrinsicImpl",
+        ":IntrinsicMips",
+        ":IntrinsicNVPTX",
+        ":IntrinsicPowerPC",
+        ":IntrinsicR600",
+        ":IntrinsicRISCV",
+        ":IntrinsicS390",
+        ":IntrinsicVE",
+        ":IntrinsicWebAssembly",
+        ":IntrinsicX86",
+        ":IntrinsicXCore",
+    ]
+
+    deps = [
+        "//contrib/libs/llvm16/lib/BinaryFormat",
+        "//contrib/libs/llvm16/lib/Remarks",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "AbstractCallSite.cpp",
+        "AsmWriter.cpp",
+        "Assumptions.cpp",
+        "Attributes.cpp",
+        "AutoUpgrade.cpp",
+        "BasicBlock.cpp",
+        "BuiltinGCs.cpp",
+        "Comdat.cpp",
+        "ConstantFold.cpp",
+        "ConstantRange.cpp",
+        "Constants.cpp",
+        "Core.cpp",
+        "DataLayout.cpp",
+        "DebugInfo.cpp",
+        "DebugInfoMetadata.cpp",
+        "DebugLoc.cpp",
+        "DiagnosticHandler.cpp",
+        "DiagnosticInfo.cpp",
+        "DiagnosticPrinter.cpp",
+        "DIBuilder.cpp",
+        "Dominators.cpp",
+        "FPEnv.cpp",
+        "Function.cpp",
+        "GCStrategy.cpp",
+        "Globals.cpp",
+        "GVMaterializer.cpp",
+        "InlineAsm.cpp",
+        "Instruction.cpp",
+        "Instructions.cpp",
+        "IntrinsicInst.cpp",
+        "IRBuilder.cpp",
+        "IRPrintingPasses.cpp",
+        "LegacyPassManager.cpp",
+        "LLVMContext.cpp",
+        "LLVMContextImpl.cpp",
+        "LLVMRemarkStreamer.cpp",
+        "Mangler.cpp",
+        "MDBuilder.cpp",
+        "Metadata.cpp",
+        "Module.cpp",
+        "ModuleSummaryIndex.cpp",
+        "Operator.cpp",
+        "OptBisect.cpp",
+        "Pass.cpp",
+        "PassInstrumentation.cpp",
+        "PassManager.cpp",
+        "PassRegistry.cpp",
+        "PassTimingInfo.cpp",
+        "PrintPasses.cpp",
+        "ProfDataUtils.cpp",
+        "ProfileSummary.cpp",
+        "PseudoProbe.cpp",
+        "ReplaceConstant.cpp",
+        "SafepointIRVerifier.cpp",
+        "SSAContext.cpp",
+        "Statepoint.cpp",
+        "StructuralHash.cpp",
+        "Type.cpp",
+        "TypedPointerType.cpp",
+        "TypeFinder.cpp",
+        "Use.cpp",
+        "User.cpp",
+        "Value.cpp",
+        "ValueSymbolTable.cpp",
+        "VectorBuilder.cpp",
+        "Verifier.cpp",
+    ]
+}

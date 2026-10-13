@@ -1,0 +1,23 @@
+linked_executable("surg") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/blockcodecs",
+    "//library/cpp/getopt",
+    "//ydb/core/protos",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/util",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,35 @@
+library("common_opt") {
+  public_deps = [
+    # "//yql/essentials/ast",
+    "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+  ]
+
+  deps = [
+    # "//library/cpp/disjoint_sets",
+    # "//library/cpp/iterator",
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/core/sql_types",
+    "//yql/essentials/core/type_ann",
+    # "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "yql_co_blocks.cpp",
+    "yql_co_extr_members.cpp",
+    "yql_co_finalizers.cpp",
+    "yql_co_flow1.cpp",
+    "yql_co_flow2.cpp",
+    "yql_co_flowidaw1.cpp",
+    "yql_co_last.cpp",
+    "yql_co_pgselect.cpp",
+    "yql_co_simple1.cpp",
+    "yql_co_simple2.cpp",
+    "yql_co_simple3.cpp",
+    "yql_co_transformer.cpp",
+    "yql_co_yqlselect.cpp",
+    "yql_flatmap_over_join.cpp",
+  ]
+}

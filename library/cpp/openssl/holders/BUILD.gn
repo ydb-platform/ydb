@@ -1,0 +1,8 @@
+library("holders") {
+  public_deps = [ "//contrib/libs/openssl" ]
+
+  sources = [
+    "bio.cpp",
+    "x509_vfy.cpp",
+  ]
+}

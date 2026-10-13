@@ -1,0 +1,26 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/pdisk",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hullop",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactdeferredqueue_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hullop/blobstorage_readbatch_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hullop/hullop_delayedresp_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/hullop" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

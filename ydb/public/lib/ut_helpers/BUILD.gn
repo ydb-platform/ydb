@@ -1,0 +1,15 @@
+library("ut_helpers") {
+  testonly = true
+
+  public_deps = [ "//ydb/public/sdk/cpp/src/library/grpc/client" ]
+
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/public/api/grpc",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  sources = [ "ut_helpers_query.cpp" ]
+}

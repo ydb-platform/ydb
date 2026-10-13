@@ -1,0 +1,7 @@
+library("open_common") {
+  deps = [
+    # "//library/cpp/streams/bzip2",  # peerdir only
+  ]
+
+  sources = [ "factory.cpp" ]
+}

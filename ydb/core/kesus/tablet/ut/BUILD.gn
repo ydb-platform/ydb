@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/gmock_in_unittest",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/erasure",
+    "//ydb/core/kesus/tablet",
+    "//ydb/core/metering",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "//ydb/core/kesus/tablet/quoter_resource_tree_ut.cpp",
+    "//ydb/core/kesus/tablet/tablet_ut.cpp",
+    "//ydb/core/kesus/tablet/ut_helpers.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/kesus/tablet" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

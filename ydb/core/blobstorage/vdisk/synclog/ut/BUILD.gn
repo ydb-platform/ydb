@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/codecs",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/synclog",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/synclog/codecs_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/synclog" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

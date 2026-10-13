@@ -1,0 +1,12 @@
+library("common") {
+  public_deps = [ "//yql/essentials/sql/v1" ]
+
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/library/yql/providers/pq/proto",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [ "utils.cpp" ]
+}

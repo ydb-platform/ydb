@@ -1,0 +1,13 @@
+group("olap") {
+  public_deps = [
+    # "//ydb/core/tx/schemeshard",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/bg_tasks",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/columns",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/common",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/indexes",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/layout",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/options",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/schema",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/ttl",  # peerdir only
+  ]
+}

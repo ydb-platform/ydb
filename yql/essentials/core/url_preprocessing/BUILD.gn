@@ -1,0 +1,18 @@
+library("url_preprocessing") {
+  public_deps = [
+    # "//library/cpp/regex/pcre",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/url_preprocessing/interface",
+  ]
+
+  deps = [
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "pattern_group.cpp",
+    "url_mapper.cpp",
+    "url_preprocessing.cpp",
+  ]
+}

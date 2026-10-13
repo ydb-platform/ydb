@@ -1,0 +1,53 @@
+library("libcpp") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//contrib/libs/grpc",
+    # "//library/cpp/threading/future",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/public/issue",
+    "//yql/essentials/utils",
+  ]
+
+  deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/library/yql/providers/generic/connector/api/service",
+    "//ydb/library/yql/public/ydb_issue",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "client.cpp",
+    "error.cpp",
+    "utils.cpp",
+  ]
+}
+
+library("ut_helpers") {
+  testonly = true
+
+  public_deps = [
+    # ":libcpp",
+    # "//contrib/libs/apache/arrow",
+    # "//contrib/libs/protobuf",
+    "//library/cpp/testing/gmock_in_unittest",
+    # "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp/ut/common",
+    # "//ydb/library/yql/providers/common/db_id_async_resolver",
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/providers/common/structured_token",
+  ]
+
+  deps = [ "//contrib/libs/fmt" ]
+
+  sources = [
+    "ut_helpers/connector_client_mock.cpp",
+    "ut_helpers/database_resolver_mock.cpp",
+    "ut_helpers/defaults.cpp",
+  ]
+}

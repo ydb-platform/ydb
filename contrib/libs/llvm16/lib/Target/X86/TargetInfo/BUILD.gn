@@ -1,0 +1,11 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+config("private_config") {
+    include_dirs = [ "//contrib/libs/llvm16/lib/Target/X86" ]
+}
+
+llvm_library("TargetInfo") {
+    deps = [ "//contrib/libs/llvm16/lib/MC" ]
+    sources = [ "X86TargetInfo.cpp" ]
+    configs = [ ":private_config" ]
+}

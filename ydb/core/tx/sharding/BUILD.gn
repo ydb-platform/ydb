@@ -1,0 +1,36 @@
+config("sharding_private_config") {
+  cflags = [ "-Wno-implicit-const-int-float-conversion" ]
+}
+
+library("sharding") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme_types",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/accessor",
+    "//ydb/library/formats/arrow/hash",
+    # "//ydb/library/formats/arrow/validation",
+    # "//ydb/services/bg_tasks/abstract",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    # "//ydb/core/formats",  # peerdir only
+    "//ydb/core/tx/columnshard/common/protos",
+    "//yql/essentials/minikql",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "hash.cpp",
+    "hash_intervals.cpp",
+    "hash_modulo.cpp",
+    "hash_slider.cpp",
+    "random.cpp",
+    "sharding.cpp",
+    "unboxed_reader.cpp",
+  ]
+
+  configs = [ ":sharding_private_config" ]
+}

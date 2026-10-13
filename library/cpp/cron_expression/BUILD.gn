@@ -1,0 +1,5 @@
+library("cron_expression") {
+  public_deps = [ "//library/cpp/timezone_conversion" ]
+
+  sources = [ "cron_expression.cpp" ]
+}

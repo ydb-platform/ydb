@@ -1,0 +1,24 @@
+library("cloud_audit") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/grpc",
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/retry",
+    "//library/cpp/unified_agent_client",
+    # "//ydb/core/fq/libs/actors",  # peerdir only
+    # "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/audit/events",
+    "//ydb/library/actors/log_backend",
+    "//ydb/library/folder_service",
+    "//ydb/library/security",
+    # "//ydb/library/ycloud/api",  # peerdir only
+    "//ydb/public/api/client/yc_public/events",
+  ]
+
+  sources = [ "yq_cloud_audit_service.cpp" ]
+}

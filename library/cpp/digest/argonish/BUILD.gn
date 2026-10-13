@@ -1,0 +1,12 @@
+library("argonish") {
+  deps = [
+    "//library/cpp/digest/argonish/internal/proxies:avx2",  # peerdir only
+    "//library/cpp/digest/argonish/internal/proxies:ref",
+    "//library/cpp/digest/argonish/internal/proxies:sse2",  # peerdir only
+    "//library/cpp/digest/argonish/internal/proxies:sse41",  # peerdir only
+    "//library/cpp/digest/argonish/internal/proxies:ssse3",  # peerdir only
+    # "//library/cpp/threading/poor_man_openmp",  # peerdir only
+  ]
+
+  sources = [ "factory/factory.cpp" ]
+}

@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public/partition_key_range",
+  ]
+
+  sources = [ "//ydb/core/persqueue/public/partition_key_range/partition_key_range_sequence_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/partition_key_range" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

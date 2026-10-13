@@ -1,0 +1,11 @@
+library("helpers") {
+  deps = [
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  sources = [
+    "grpc_services/scripting.cpp",
+    "grpc_services/view.cpp",
+  ]
+}

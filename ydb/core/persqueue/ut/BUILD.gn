@@ -1,0 +1,162 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "resources/counters_datastreams.html"
+      key = "counters_datastreams.html"
+    },
+    {
+      path = "resources/counters_pqproxy_firstclass.html"
+      key = "counters_pqproxy_firstclass.html"
+    },
+    {
+      path = "resources/counters_topics.html"
+      key = "counters_topics.html"
+    },
+    {
+      path = "resources/counters_topics_extended.html"
+      key = "counters_topics_extended.html"
+    },
+    {
+      path = "resources/partition_counters/federation/after_write.html"
+      key = "federation_after_write.html"
+    },
+    {
+      path = "resources/partition_counters/federation/after_read.html"
+      key = "federation_after_read.html"
+    },
+    {
+      path = "resources/partition_counters/federation/turned_off.html"
+      key = "federation_turned_off.html"
+    },
+    {
+      path = "resources/partition_counters/first_class_citizen/after_write.html"
+      key = "first_class_citizen_after_write.html"
+    },
+    {
+      path = "resources/partition_counters/first_class_citizen/after_read.html"
+      key = "first_class_citizen_after_read.html"
+    },
+    {
+      path = "resources/partition_counters/first_class_citizen/turned_off.html"
+      key = "first_class_citizen_turned_off.html"
+    },
+    {
+      path = "resources/partition_counters/federation_with_monitoring_project_id/after_write.html"
+      key = "federation_with_monitoring_project_id_after_write.html"
+    },
+    {
+      path = "resources/partition_counters/federation_with_monitoring_project_id/after_read.html"
+      key = "federation_with_monitoring_project_id_after_read.html"
+    },
+    {
+      path = "resources/partition_counters/federation_with_monitoring_project_id/turned_off.html"
+      key = "federation_with_monitoring_project_id_turned_off.html"
+    },
+    {
+      path = "resources/partition_counters/first_class_citizen_with_monitoring_project_id/after_write.html"
+      key = "first_class_citizen_with_monitoring_project_id_after_write.html"
+    },
+    {
+      path = "resources/partition_counters/first_class_citizen_with_monitoring_project_id/after_read.html"
+      key = "first_class_citizen_with_monitoring_project_id_after_read.html"
+    },
+    {
+      path = "resources/partition_counters/first_class_citizen_with_monitoring_project_id/turned_off.html"
+      key = "first_class_citizen_with_monitoring_project_id_turned_off.html"
+    },
+    {
+      path = "resources/counters_pqproxy.html"
+      key = "counters_pqproxy.html"
+    },
+    {
+      path = "resources/counters_labeled.json"
+      key = "counters_labeled.json"
+    },
+  ]
+}
+
+unittest_executable("ut") {
+  public_deps = [
+    "//ydb/core/persqueue",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+  ]
+
+  deps = [
+    ":ut_resources",
+    "//contrib/libs/fmt",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/jaeger_tracing",
+    "//ydb/core/keyvalue",
+    "//ydb/core/metering",
+    "//ydb/core/mon",
+    "//ydb/core/persqueue/common",
+    "//ydb/core/persqueue/pqrb",
+    "//ydb/core/persqueue/pqtablet/blob",
+    "//ydb/core/persqueue/pqtablet/common",
+    "//ydb/core/persqueue/pqtablet/quota",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/counters",
+    "//ydb/core/persqueue/public/partition_key_range",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/persqueue/ut/common",  # peerdir only
+    "//ydb/core/persqueue/writer",
+    "//ydb/core/persqueue/writer:partition_chooser",
+    "//ydb/core/quoter/public",
+    "//ydb/core/security",
+    "//ydb/core/sys_view/service",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/base",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/services/metadata",
+    "//yql/essentials/public/decimal",
+  ]
+
+  sources = [
+    "counters_ut.cpp",
+    "inflight_limiter_ut.cpp",
+    "internals_ut.cpp",
+    "make_config.cpp",
+    "metering_sink_ut.cpp",
+    "partition_chooser_ut.cpp",
+    "partition_scale_manager_graph_cmp_ut.cpp",
+    "partition_ut.cpp",
+    "partitiongraph_ut.cpp",
+    "pq_ut.cpp",
+    "pqrb_describes_ut.cpp",
+    "pqtablet_mock.cpp",
+    "pqtablet_ut.cpp",
+    "sourceid_ut.cpp",
+    "user_info_ut.cpp",
+    "utils_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

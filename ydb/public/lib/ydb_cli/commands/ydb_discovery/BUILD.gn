@@ -1,0 +1,10 @@
+library("ydb_discovery") {
+  deps = [
+    # "//ydb/public/lib/ydb_cli/commands",
+    "//ydb/public/lib/ydb_cli/commands/command_base",  # peerdir only
+    "//ydb/public/lib/ydb_cli/common",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/discovery",  # peerdir only
+  ]
+
+  sources = [ "//ydb/public/lib/ydb_cli/commands/ydb_service_discovery.cpp" ]
+}

@@ -1,0 +1,21 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/testing/gmock_in_unittest",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/storage/core/libs/common/block_buffer_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/block_data_ref_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/context_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/sglist_iter_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/sglist_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/storage/core/libs/common" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

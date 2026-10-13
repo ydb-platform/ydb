@@ -1,0 +1,15 @@
+library("public") {
+  public_deps = [
+    "//contrib/libs/openssl",
+    "//ydb/library/actors/core",
+    "//ydb/library/fyamlcpp",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+    # "//contrib/libs/yaml-cpp",  # peerdir only
+    # "//library/cpp/protobuf/json",  # peerdir only
+  ]
+
+  sources = [ "yaml_config.cpp" ]
+}

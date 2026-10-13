@@ -1,0 +1,19 @@
+linked_executable("blobsan") {
+  deps = [
+    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/streams/bzip2",
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/vdisk/query",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

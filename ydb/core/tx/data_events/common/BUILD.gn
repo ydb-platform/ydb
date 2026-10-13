@@ -1,0 +1,19 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/library/accessor",
+    "//ydb/library/conclusion",
+    "//ydb/library/signals",
+    "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+    "//yql/essentials/core/issue/protos",
+  ]
+
+  sources = [
+    "error_codes.cpp",
+    "modification_type.cpp",
+    "signals_flow.cpp",
+  ]
+
+  serialize_enum_headers = [ "signals_flow.h" ]
+}

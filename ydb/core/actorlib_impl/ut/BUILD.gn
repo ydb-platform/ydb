@@ -1,0 +1,40 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/http/io",
+    "//library/cpp/http/server",
+    "//library/cpp/json",
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/actorlib_impl",
+    "//ydb/core/driver_lib/version",
+    "//ydb/core/testlib/actors",  # peerdir only
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/basics:default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/services",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/actorlib_impl/actor_activity_ut.cpp",
+    "//ydb/core/actorlib_impl/actor_bootstrapped_ut.cpp",
+    "//ydb/core/actorlib_impl/actor_tracker_ut.cpp",
+    "//ydb/core/actorlib_impl/test_interconnect_ut.cpp",
+    "//ydb/core/actorlib_impl/test_protocols_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/actorlib_impl" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

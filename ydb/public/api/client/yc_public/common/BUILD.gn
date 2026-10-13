@@ -1,0 +1,7 @@
+protobuf_library("common") {
+  public_deps = [ "//contrib/libs/googleapis-common-protos" ]
+
+  sources = [ "validation.proto" ]
+
+  generate_grpc_services = true
+}

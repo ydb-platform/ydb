@@ -1,0 +1,19 @@
+unittest_executable("ut_fat") {
+  deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/chunk_queue",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "actor_benchmark.cpp",
+    "waiting_benchs.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/actors/core" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

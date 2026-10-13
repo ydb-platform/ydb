@@ -1,0 +1,35 @@
+library("ai") {
+  public_deps = [
+    ":models",
+    "//ydb/public/lib/ydb_cli/commands/interactive/ai/tools",
+    "//ydb/public/lib/ydb_cli/commands/interactive/common",
+    # "//ydb/public/lib/ydb_cli/common",
+  ]
+
+  deps = [
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [ "ai_model_handler.cpp" ]
+}
+
+library("models") {
+  public_deps = [
+    # "//library/cpp/json",
+  ]
+
+  deps = [
+    # "//library/cpp/string_utils/url",
+    # "//library/cpp/threading/future",
+    # "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/lib/ydb_cli/commands/interactive/common",
+    # "//ydb/public/lib/ydb_cli/common",
+  ]
+
+  sources = [
+    "models/model_anthropic.cpp",
+    "models/model_base.cpp",
+    "models/model_openai.cpp",
+  ]
+}

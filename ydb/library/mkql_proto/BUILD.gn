@@ -1,0 +1,27 @@
+library("mkql_proto") {
+  public_deps = [
+    "//ydb/core/scheme_types",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/public/api/protos",
+    "//yql/essentials/minikql",
+    # "//yql/essentials/types/uuid",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",
+    "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/dom",
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/providers/common/codec",  # peerdir only
+    "//yql/essentials/public/decimal",
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "mkql_proto.cpp",
+    "mkql_type_ops.cpp",
+  ]
+}

@@ -1,0 +1,9 @@
+library("re2") {
+  deps = [
+    "//contrib/libs/re2",
+    "//yql/essentials/minikql/jsonpath/rewrapper",
+    "//yql/essentials/minikql/jsonpath/rewrapper:proto",
+  ]
+
+  sources = [ "re2.cpp" ]
+}

@@ -1,0 +1,47 @@
+library("manager") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/threading/future",
+    # "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme_types",
+    # "//ydb/core/tx/locks",
+    # "//ydb/library/accessor",
+    "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/scheme_types",
+    # "//ydb/services/metadata",
+    "//ydb/services/metadata/abstract",
+    "//ydb/services/metadata/request",
+    "//yql/essentials/sql/settings",
+  ]
+
+  deps = [
+    # "//library/cpp/retry",
+    "//ydb/library/services",
+    "//ydb/library/table_creator",
+    # "//ydb/services/bg_tasks/abstract",  # peerdir only
+    # "//ydb/services/metadata/initializer",  # peerdir only
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "alter.cpp",
+    "alter_impl.cpp",
+    "common.cpp",
+    "fetch_database.cpp",
+    "generic_manager.cpp",
+    "modification.cpp",
+    "modification_controller.cpp",
+    "object.cpp",
+    "preparation_controller.cpp",
+    "restore.cpp",
+    "restore_controller.cpp",
+    "table_record.cpp",
+    "ydb_value_operator.cpp",
+  ]
+
+  serialize_enum_headers = [ "abstract.h" ]
+}

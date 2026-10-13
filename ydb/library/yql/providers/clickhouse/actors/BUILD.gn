@@ -1,0 +1,22 @@
+library("actors") {
+  public_deps = [
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/clickhouse/proto",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",  # peerdir only
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "yql_ch_read_actor.cpp",
+    "yql_ch_source_factory.cpp",
+  ]
+}

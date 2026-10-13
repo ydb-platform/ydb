@@ -1,0 +1,7 @@
+group("api") {
+  public_deps = [
+    # "//ydb/core/base",
+    "//ydb/core/graph/protos",
+    # "//ydb/library/actors/core",
+  ]
+}

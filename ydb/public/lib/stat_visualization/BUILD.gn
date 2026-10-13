@@ -1,0 +1,11 @@
+library("stat_visualization") {
+  deps = [
+    # "//library/cpp/json",
+    "//ydb/public/lib/ydb_cli/common",
+  ]
+
+  sources = [
+    "flame_graph_builder.cpp",
+    "flame_graph_entry.cpp",
+  ]
+}

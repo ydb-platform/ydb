@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+  ]
+
+  sources = [
+    "//util/thread/factory_ut.cpp",
+    "//util/thread/lfqueue_ut.cpp",
+    "//util/thread/lfstack_ut.cpp",
+    "//util/thread/pool_ut.cpp",
+    "//util/thread/singleton_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

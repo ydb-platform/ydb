@@ -1,0 +1,395 @@
+# Link slots: late-bound interfaces whose implementation the final binary
+# picks -- the gn side of ya.make's PROVIDES(): a PROGRAM PEERDIRs exactly one
+# module per PROVIDES name, and libraries below only call its symbols.
+#
+# * Every caller gets weak references to the slot's functions, so libraries
+#   link with --no-undefined without depending on a provider (which would be
+#   a cycle: providers are built on top of their consumers). The interface
+#   target names the slot and its headers, `link_slot_interface = "<slot>"`
+#   and `link_slot_headers = [ ... ]` (`<header>  # gn: slot <slot>` in the
+#   SRCS of its ya.make; a header-only one is a slot_interface_group()): the
+#   functions declared there are made weak in its dependents, the sources
+#   untouched (see link_slot_weak_refs below).
+# * A provider declares `link_slot_provides = [ "<slot>" ]` (the value is the
+#   target's name) or "<slot>=<value>"; the generator writes it for
+#   PROVIDES(<slot>) in ya.make and for ALLOCATOR_IMPL() ("allocator"). It
+#   gets GN_SLOT_PROVIDER_<slot> defined, so its definitions stay strong.
+#   Every target declaring the same <slot>=<value> is a part of that provider.
+# * There is no list of slots: build/gn/scripts/link_slot_index.py gathers
+#   the declarations from the BUILD.gn files of the tree at `gn gen`.
+# * An executable declared with linked_executable() selects a provider per
+#   slot with `link_select = [ "<slot>=<value>" ]`, and links every part of
+#   it. The interfaces in its dependencies (metadata link_slot_interfaces)
+#   are checked against the selection before its link
+#   (build/gn/scripts/link_slot_check.py): forgetting a provider fails the
+#   build, not a call at run time.
+# * `link_slot_overrides` in args.gn replaces a selection for one executable:
+#   "<executable label>|<slot>=<value>".
+#
+# Every provider is built once, as a regular library; `ninja all` links each
+# executable with its own selection.
+#
+# Plugins: the targets a library needs in the process, built on top of it
+# (implementations it finds in a registry, SRCS(GLOBAL ...) of ya.make):
+# `plugins = [ ... ]` of a library() or contrib_library(), which does not
+# depend on them -- that would be a cycle. A linked_executable() depends on
+# the plugins of every target it reaches instead, the plugins' own plugins
+# included: build/gn/scripts/link_plugin_index.py finds them at `gn gen`.
+
+declare_args() {
+  link_slot_overrides = []
+
+  # The gn that link_slot_index.py parses the BUILD.gn files with
+  link_slot_gn = "gn"
+}
+
+link_slot_index = exec_script("//build/gn/scripts/link_slot_index.py",
+                              [
+                                rebase_path("//"),
+                                link_slot_gn,
+                              ],
+                              "scope")
+
+link_plugin_index = exec_script("//build/gn/scripts/link_plugin_index.py",
+                                [
+                                  rebase_path("//"),
+                                  link_slot_gn,
+                                ],
+                                "scope",
+                                [ "//build/gn/testing.gni" ])
+
+template("linked_executable") {
+  _select = []
+  if (defined(invoker.link_select)) {
+    _select = invoker.link_select
+  }
+
+  _exe = target_name
+  _label = get_label_info(":$_exe", "label_no_toolchain")
+  _slot_deps = []
+  _selected = []
+  foreach(_entry, _select) {
+    _kv = []
+    _kv = string_split(_entry, "=")
+    assert(_kv != [ _kv[0] ],
+           "$_label: link_select \"$_entry\" is not \"<slot>=<value>\"")
+    _name = _kv[0]
+    _choice = _kv[1]
+    _selected += [ _name ]
+
+    # the build tools (see tool_toolchain): the libc malloc, no allocator of
+    # their own to compile
+    if (_name == "allocator" && current_toolchain != default_toolchain) {
+      _choice = "system"
+    }
+    foreach(_override, link_slot_overrides) {
+      _ov = []
+      _ov = string_split(_override, "|")
+      if (_ov[0] == _label) {
+        _ov_kv = []
+        _ov_kv = string_split(_ov[1], "=")
+        if (_ov_kv[0] == _name) {
+          _choice = _ov_kv[1]
+        }
+      }
+    }
+
+    _values = []
+    _provider_found = false
+    foreach(_provider, link_slot_index.providers) {
+      if (_provider.slot == _name) {
+        _values += [ _provider.value ]
+        if (_provider.value == _choice) {
+          _provider_found = true
+          _slot_deps += _provider.labels
+        }
+      }
+    }
+    assert(_values != [], "$_label: unknown link slot \"$_name\"")
+    assert(_provider_found,
+           "$_label: no provider \"$_choice\" for link slot \"$_name\", " +
+               "there are: $_values")
+  }
+
+  # the plugins of what it links (see above)
+  foreach(_exe_plugins, link_plugin_index.executables) {
+    if (_exe_plugins.label == _label) {
+      _slot_deps += _exe_plugins.plugins
+    }
+  }
+
+  # every link slot interface among the dependencies has a provider selected
+  _interfaces = "$target_gen_dir/${_exe}.link_slot_interfaces.json"
+  generated_file("${_exe}_link_slot_interfaces") {
+    forward_variables_from(invoker, [ "testonly" ])
+    outputs = [ _interfaces ]
+    data_keys = [ "link_slot_interfaces" ]
+    output_conversion = "json"
+    deps = _slot_deps
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+  }
+  action("${_exe}_link_slot_check") {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//build/gn/scripts/link_slot_check.py"
+    inputs = [ _interfaces ]
+    outputs = [ "$target_gen_dir/${_exe}.link_slot_check.stamp" ]
+    args = [
+             "--executable",
+             _label,
+             "--interfaces",
+             rebase_path(_interfaces, root_build_dir),
+             "--stamp",
+             rebase_path(outputs[0], root_build_dir),
+             "--selected",
+           ] + _selected
+    deps = [ ":${_exe}_link_slot_interfaces" ]
+  }
+
+  # .proto among `sources`: as library() does (//build/gn/base.gni)
+  not_needed(invoker, [ "generate_grpc_services", "proto_imports" ])
+  _proto = []
+  if (defined(invoker.sources)) {
+    _proto = filter_include(invoker.sources, [ "*.proto" ])
+  }
+  if (_proto != []) {
+    protobuf_sources("${_exe}_proto") {
+      forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "testonly" ])
+      sources = _proto
+      if (defined(invoker.proto_imports)) {
+        imports = invoker.proto_imports
+      }
+      codegen_target = "${_exe}_codegen"
+      visibility = [ ":*" ]
+    }
+  }
+
+  if (defined(invoker.serialize_enum_headers)) {
+    serialize_enums(_exe) {
+      forward_variables_from(invoker, [ "testonly", "deps", "public_deps", "configs", "public_configs", "defines",
+                                        "include_dirs", "cflags", "cflags_c", "cflags_cc", "yql_abi_version" ])
+      headers = invoker.serialize_enum_headers
+    }
+  }
+
+  executable(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "configs",
+                             "deps",
+                             "extra_plugins",
+                             "generate_grpc_services",
+                             "link_select",
+                             "proto_imports",
+                             "serialize_enum_headers",
+                             "yql_abi_version",
+                           ])
+
+    # Append to default configs (assigning would drop them)
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+
+    deps += _slot_deps + [ ":${_exe}_link_slot_check" ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    if (_proto != []) {
+      sources -= _proto
+      sources += filter_include(get_target_outputs(":${_exe}_proto"), [ "*.cc" ])
+      deps += [
+        ":${_exe}_proto",
+        "//contrib/libs/protobuf",
+      ]
+      if (defined(invoker.generate_grpc_services) && invoker.generate_grpc_services) {
+        deps += [ "//contrib/libs/grpc" ]
+      }
+    }
+    if (defined(invoker.serialize_enum_headers)) {
+      deps += [
+        ":${_exe}_enum_objs",
+        "//tools/enum_parser:runtime",
+      ]
+    }
+    if (defined(invoker.yql_abi_version)) {
+      _abi = string_split(invoker.yql_abi_version, ".")
+      configs -= [ "//build/gn/config:yql_abi_current" ]
+      if (!defined(defines)) {
+        defines = []
+      }
+      defines += [
+        "UDF_ABI_VERSION_MAJOR=${_abi[0]}",
+        "UDF_ABI_VERSION_MINOR=${_abi[1]}",
+        "UDF_ABI_VERSION_PATCH=${_abi[2]}",
+      ]
+    }
+
+    # as library() does (//build/gn/base.gni)
+    if ((pch_mode == "per_target" || (pch_mode == "global" && current_toolchain == default_toolchain)) &&
+        label_matches(get_label_info(":$_exe", "label_no_toolchain"), pch_targets)) {
+      precompiled_header = "pch.h"
+      precompiled_source = "//build/gn/pch/" + rebase_path(".", "//") + "/$_exe.h"
+      configs += [ "//build/gn/config:pch" ]
+    }
+    if (pch_mode == "global" && current_toolchain == default_toolchain && defined(sources) &&
+        filter_include(sources, [ "*.cpp", "*.cc", "*.cxx" ]) != []) {
+      _pch_label = get_label_info(":$_exe", "label_no_toolchain")
+      if (label_matches(_pch_label, contrib_pch_targets)) {
+        if (!label_matches(_pch_label, contrib_pch_exclude)) {
+          deps += [ "//build/gn/pch:contrib" ]
+        }
+      } else if (!label_matches(_pch_label, global_pch_exclude)) {
+        deps += [ "//build/gn/pch:global" ]
+      }
+    }
+  }
+}
+
+# The config of a link slot provider (`link_slot_provides` of a library() or
+# contrib_library(), see above; a hand-written source_set() compiled into a
+# provider adds it to its configs itself), named
+# `<target_name>_slot_provider_config`:
+# GN_SLOT_PROVIDER_<slot> keeps the definitions of the slots' functions
+# strong, the weak references (see link_slot_weak_refs) are for the callers.
+#   provides: [ "<slot>" or "<slot>=<value>", ... ]
+template("link_slot_provider_config") {
+  config("${target_name}_slot_provider_config") {
+    defines = []
+    foreach(_entry, invoker.provides) {
+      _kv = []
+      _kv = string_split(_entry, "=")
+      defines += [ "GN_SLOT_PROVIDER_${_kv[0]}" ]
+    }
+  }
+}
+
+# The weak references to the link slot whose interface is target
+# `target_name` (see above): the functions its headers
+# declare are implemented by the slot's providers.
+#   slot: the slot, `link_slot_interface` of the target
+#   headers: its headers, `link_slot_headers` -- both written by yamake2gn
+#     for `<header>  # gn: slot <slot>` in the SRCS of the interface's ya.make
+#   flags_from: the interface's sources; the first C/C++ one lends its
+#     compiler flags (include dirs) to parsing the headers
+#   codegen: the protobuf_library() targets whose generated headers the
+#     headers include, `link_slot_codegen` -- written by yamake2gn; the action
+#     waits for their protoc (`<target>_codegen`), not for any compile or link
+# An action lists the functions from the headers' AST
+# (build/gn/scripts/link_slot_weak.py); it reruns only when the headers or
+# what they include change (depfile), and leaves the list untouched when it
+# comes out the same. Defines:
+#   :<target_name>_slot_weak         the action, a public dep of the
+#                                    interface: its dependents' compiles wait
+#                                    for the list
+#   :<target_name>_slot_weak_config  force-includes the list: a public config
+#                                    of the interface; gn applies it to the
+#                                    interface too, which defines some of the
+#                                    functions itself and so defines
+#                                    GN_SLOT_INTERFACE_<slot>, off the list
+template("link_slot_weak_refs") {
+  _flags_from = []
+  if (defined(invoker.flags_from)) {
+    _flags_from = filter_include(invoker.flags_from,
+                                 [
+                                   "*.cpp",
+                                   "*.cc",
+                                   "*.c",
+                                 ])
+  }
+  _compile_commands = "$root_build_dir/compile_commands.json"
+  _weak_header = "$target_gen_dir/${target_name}_slot_weak.h"
+
+  action("${target_name}_slot_weak") {
+    script = "//build/gn/scripts/link_slot_weak.py"
+
+    # TODO: rerun when the flags in compile_commands.json change; gn rejects
+    # it in inputs (a file of the build dir no target generates)
+    inputs = invoker.headers
+    outputs = [ _weak_header ]
+    depfile = "$target_gen_dir/${target_name}.d"
+    args = [
+      "--slot",
+      invoker.slot,
+      "--compile-commands",
+      rebase_path(_compile_commands, root_build_dir),
+      "--root",
+      rebase_path("//", root_build_dir),
+      "--output",
+      rebase_path(_weak_header, root_build_dir),
+      "--depfile",
+      rebase_path(depfile, root_build_dir),
+    ]
+    foreach(_h, invoker.headers) {
+      args += [
+        "--header",
+        rebase_path(_h, "//"),
+      ]
+    }
+    if (_flags_from != []) {
+      args += [
+        "--flags-from",
+        rebase_path(_flags_from[0], "//"),
+      ]
+    }
+    deps = []
+    if (defined(invoker.codegen)) {
+      foreach(_l, invoker.codegen) {
+        deps += [ get_label_info(_l, "dir") + ":" + get_label_info(_l, "name") + "_codegen" ]
+      }
+    }
+  }
+
+  config("${target_name}_slot_weak_config") {
+    # -Xclang: past the driver, which would ignore a precompiled header
+    # -include'd after it (-Werror)
+    cflags = [
+      "-Xclang",
+      "-include",
+      "-Xclang",
+      rebase_path(_weak_header, root_build_dir),
+    ]
+  }
+}
+
+# A header-only interface of a link slot: a group() with link_slot_interface,
+# link_slot_headers and link_slot_flags_from (a source that is compiled with
+# the headers' include dirs, e.g. by the slot's providers), see
+# link_slot_weak_refs.
+template("slot_interface_group") {
+  link_slot_weak_refs(target_name) {
+    slot = invoker.link_slot_interface
+    headers = invoker.link_slot_headers
+    if (defined(invoker.link_slot_flags_from)) {
+      flags_from = invoker.link_slot_flags_from
+    }
+    if (defined(invoker.link_slot_codegen)) {
+      codegen = invoker.link_slot_codegen
+    }
+  }
+
+  group(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "link_slot_interface",
+                             "link_slot_headers",
+                             "link_slot_flags_from",
+                             "link_slot_codegen",
+                           ])
+    if (!defined(public_deps)) {
+      public_deps = []
+    }
+    public_deps += [ ":${target_name}_slot_weak" ]
+    if (!defined(public_configs)) {
+      public_configs = []
+    }
+    public_configs += [ ":${target_name}_slot_weak_config" ]
+    metadata = {
+      link_slot_interfaces =
+          [ invoker.link_slot_interface + "|" +
+            get_label_info(":$target_name", "label_no_toolchain") ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+library("impl") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/gc_service/interface",
+  ]
+
+  sources = [ "yql_yt_gc_service_impl.cpp" ]
+}

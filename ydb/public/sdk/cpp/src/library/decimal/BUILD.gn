@@ -1,0 +1,3 @@
+library("decimal") {
+  sources = [ "yql_decimal.cpp" ]
+}

@@ -1,0 +1,15 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("iterator") {
+    public_deps = [
+        "//contrib/restricted/boost/config",
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/detail",
+        "//contrib/restricted/boost/fusion",
+        "//contrib/restricted/boost/mpl",
+        "//contrib/restricted/boost/type_traits",
+    ]
+    public_configs = [ ":public_config" ]
+}

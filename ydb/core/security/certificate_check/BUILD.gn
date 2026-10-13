@@ -1,0 +1,18 @@
+library("certificate_check") {
+  public_deps = [
+    "//contrib/libs/openssl",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    "//ydb/library/aclib",
+    "//ydb/public/lib/ydb_cli/common",
+  ]
+
+  sources = [
+    "cert_auth_processor.cpp",
+    "cert_auth_utils.cpp",
+    "cert_check.cpp",
+  ]
+}

@@ -1,0 +1,19 @@
+library("change_exchange") {
+  public_deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/base",
+    "//ydb/core/scheme",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "change_exchange.cpp",
+    "change_record.cpp",
+    "change_sender.cpp",
+    "change_sender_monitoring.cpp",
+    "resolve_partition.cpp",
+    "util.cpp",
+  ]
+
+  serialize_enum_headers = [ "change_record.h" ]
+}

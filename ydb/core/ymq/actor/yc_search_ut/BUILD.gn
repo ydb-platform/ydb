@@ -1,0 +1,24 @@
+unittest_executable("yc_search_ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/ymq/actor",
+  ]
+
+  sources = [
+    "index_events_processor_ut.cpp",
+    "test_events_writer.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

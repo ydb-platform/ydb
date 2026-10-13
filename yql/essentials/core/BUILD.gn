@@ -1,0 +1,102 @@
+config("core_private_config") {
+  cflags = [ "-Wno-ambiguous-reversed-operator" ]
+}
+
+library("core") {
+  public_deps = [
+    # "//library/cpp/enumbitset",
+    # "//library/cpp/json",
+    # "//library/cpp/random_provider",
+    # "//library/cpp/threading/future",
+    # "//library/cpp/time_provider",
+    # "//library/cpp/yson",
+    # "//library/cpp/yson/node",
+    "//yql/essentials/ast",
+    # "//yql/essentials/core/cbo",
+    "//yql/essentials/core/credentials",
+    # "//yql/essentials/core/expr_nodes",
+    "//yql/essentials/core/file_storage",
+    "//yql/essentials/core/histogram",
+    "//yql/essentials/core/issue",
+    "//yql/essentials/core/layers",
+    "//yql/essentials/core/minsketch",
+    # "//yql/essentials/core/qplayer/storage/interface",
+    "//yql/essentials/core/sql_types",
+    # "//yql/essentials/core/url_lister/interface",
+    # "//yql/essentials/core/url_preprocessing/interface",
+    "//yql/essentials/minikql",
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/protos",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/public/issue",
+    # "//yql/essentials/public/langver",
+    # "//yql/essentials/public/udf",
+    "//yql/essentials/sql",
+    # "//yql/essentials/utils",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",
+    "//library/cpp/disjoint_sets",
+    "//library/cpp/iterator",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/type_info/tz",
+    # "//yql/essentials/core/type_ann",
+    "//yql/essentials/minikql/dom",
+    "//yql/essentials/minikql/jsonpath/parser",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/public/decimal",
+    # "//yql/essentials/sql/settings",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "cbo/cbo_interesting_orderings.cpp",
+    "yql_aggregate_expander.cpp",
+    "yql_callable_transform.cpp",
+    "yql_cost_function.cpp",
+    "yql_default_valid_value.cpp",
+    "yql_execution.cpp",
+    "yql_expr_constraint.cpp",
+    "yql_expr_csee.cpp",
+    "yql_expr_optimize.cpp",
+    "yql_expr_type_annotation.cpp",
+    "yql_func_stack.cpp",
+    "yql_gc_transformer.cpp",
+    "yql_graph_transformer.cpp",
+    "yql_holding_file_storage.cpp",
+    "yql_join.cpp",
+    "yql_layers_helpers.cpp",
+    "yql_library_compiler.cpp",
+    "yql_linear_checker.cpp",
+    "yql_module_helpers.cpp",
+    "yql_opt_hopping.cpp",
+    "yql_opt_match_recognize.cpp",
+    "yql_opt_normalize_depends_on.cpp",
+    "yql_opt_proposed_by_data.cpp",
+    "yql_opt_range.cpp",
+    "yql_opt_rewrite_io.cpp",
+    "yql_opt_utils.cpp",
+    "yql_opt_window.cpp",
+    "yql_statistics.cpp",
+    "yql_type_annotation.cpp",
+    "yql_type_helpers.cpp",
+    "yql_udf_index.cpp",
+    "yql_udf_index_package_set.cpp",
+    "yql_udf_resolver.cpp",
+    "yql_user_data.cpp",
+    "yql_user_data_storage.cpp",
+    "yql_window_features.cpp",
+    "yql_window_frame_settings.cpp",
+    "yql_window_frames_collector_params_serializer.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "yql_cost_function.h",
+    "yql_data_provider.h",
+    "yql_type_annotation.h",
+    "yql_user_data.h",
+  ]
+
+  configs = [ ":core_private_config" ]
+}

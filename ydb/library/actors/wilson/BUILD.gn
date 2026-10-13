@@ -1,0 +1,34 @@
+group("test_util") {
+  testonly = true
+
+  public_deps = [
+    # ":wilson",
+    # "//ydb/library/actors/core",
+  ]
+}
+
+library("wilson") {
+  public_deps = [
+    # "//contrib/libs/grpc",
+    "//contrib/libs/opentelemetry-proto",
+    "//library/cpp/json",
+    "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/string_utils/base64",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/string_utils/url",
+    "//ydb/library/actors/protos",
+    # "//ydb/library/actors/wilson/protos",  # peerdir only
+  ]
+
+  sources = [
+    "wilson_event.cpp",
+    "wilson_profile_span.cpp",
+    "wilson_span.cpp",
+    "wilson_trace.cpp",
+    "wilson_uploader.cpp",
+  ]
+}

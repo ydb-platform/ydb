@@ -1,0 +1,50 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Object") {
+    deps = [
+        "//contrib/libs/llvm16/lib/BinaryFormat",
+        "//contrib/libs/llvm16/lib/Bitcode:Reader",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/IRReader",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/MC:MCParser",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/TextAPI",
+    ]
+
+    sources = [
+        "Archive.cpp",
+        "ArchiveWriter.cpp",
+        "Binary.cpp",
+        "BuildID.cpp",
+        "COFFImportFile.cpp",
+        "COFFModuleDefinition.cpp",
+        "COFFObjectFile.cpp",
+        "Decompressor.cpp",
+        "DXContainer.cpp",
+        "ELF.cpp",
+        "ELFObjectFile.cpp",
+        "Error.cpp",
+        "FaultMapParser.cpp",
+        "IRObjectFile.cpp",
+        "IRSymtab.cpp",
+        "MachOObjectFile.cpp",
+        "MachOUniversal.cpp",
+        "MachOUniversalWriter.cpp",
+        "Minidump.cpp",
+        "ModuleSymbolTable.cpp",
+        "Object.cpp",
+        "ObjectFile.cpp",
+        "OffloadBinary.cpp",
+        "RecordStreamer.cpp",
+        "RelocationResolver.cpp",
+        "SymbolicFile.cpp",
+        "SymbolSize.cpp",
+        "TapiFile.cpp",
+        "TapiUniversal.cpp",
+        "WasmObjectFile.cpp",
+        "WindowsMachineFlag.cpp",
+        "WindowsResource.cpp",
+        "XCOFFObjectFile.cpp",
+    ]
+}

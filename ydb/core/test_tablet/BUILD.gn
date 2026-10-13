@@ -1,0 +1,28 @@
+library("test_tablet") {
+  public_deps = [
+    # "//contrib/libs/t1ha",
+    # "//library/cpp/json",
+    "//ydb/core/keyvalue",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "load_actor_delete.cpp",
+    "load_actor_impl.cpp",
+    "load_actor_mon.cpp",
+    "load_actor_read_validate.cpp",
+    "load_actor_state.cpp",
+    "load_actor_write.cpp",
+    "state_server_interface.cpp",
+    "test_shard_context.cpp",
+    "test_shard_mon.cpp",
+    "test_tablet.cpp",
+    "tx_init_scheme.cpp",
+    "tx_initialize.cpp",
+    "tx_load_everything.cpp",
+  ]
+}

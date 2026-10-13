@@ -1,0 +1,5 @@
+library("user_data") {
+  sources = [ "yql_user_data.cpp" ]
+
+  serialize_enum_headers = [ "yql_user_data.h" ]
+}

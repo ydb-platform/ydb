@@ -1,0 +1,301 @@
+library("_self") {
+  public_deps = [
+    ":config",
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/getopt",
+    # "//library/cpp/messagebus",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/string_utils/parse_size",
+    "//library/cpp/svnversion",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/client/server",
+    # "//ydb/core/driver_lib/cli_config_base",
+    "//ydb/core/formats",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/shared_resources/interface",
+    # "//ydb/core/http_proxy",
+    "//ydb/core/kqp/common",
+    "//ydb/core/memory_controller",
+    "//ydb/core/mind",
+    # "//ydb/core/persqueue/common/proxy",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme_types",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx/datashard",
+    "//ydb/core/tx/replication/service",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/ymq/actor",
+    "//ydb/core/ymq/http",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/util",
+    # "//ydb/library/actors/wilson",
+    # "//ydb/library/folder_service",
+    "//ydb/library/folder_service/proto",
+    # "//ydb/library/grpc/server",
+    # "//ydb/library/pdisk_io",
+    "//ydb/library/yaml_config",
+    # "//ydb/library/yql/providers/pq/cm_client",
+    # "//ydb/public/lib/base",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/getopt/small",  # peerdir only
+    "//library/cpp/html/escape",
+    # "//library/cpp/json",
+    # "//library/cpp/logger",
+    # "//library/cpp/logger/global",
+    "//library/cpp/lwtrace/mon",
+    "//library/cpp/malloc/api",
+    # "//library/cpp/monlib/messagebus",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/protobuf/json",
+    "//library/cpp/sighandler",
+    # "//ydb/core/actorlib_impl",
+    "//ydb/core/audit",
+    "//ydb/core/audit/audit_config",
+    "//ydb/core/audit/heartbeat_actor",
+    "//ydb/core/backup/controller",
+    "//ydb/core/blob_depot",
+    # "//ydb/core/blobstorage",  # peerdir only
+    # "//ydb/core/blobstorage/backpressure",
+    # "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/other",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/client/minikql_compile",
+    # "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    "//ydb/core/cms",
+    # "//ydb/core/cms/console",
+    "//ydb/core/cms/console/validators",
+    # "//ydb/core/config/init",
+    "//ydb/core/control",
+    "//ydb/core/counters_info",
+    # "//ydb/core/discovery",
+    # "//ydb/core/driver_lib/base_utils",  # peerdir only
+    "//ydb/core/driver_lib/version",
+    # "//ydb/core/fq/libs/checkpoint_storage",
+    "//ydb/core/fq/libs/init",
+    "//ydb/core/fq/libs/logs",
+    # "//ydb/core/graph/api",
+    "//ydb/core/graph/service",  # peerdir only
+    "//ydb/core/graph/shard",  # peerdir only
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/grpc_services/base",  # peerdir only
+    # "//ydb/core/health_check",
+    # "//ydb/core/jaeger_tracing",  # peerdir only
+    "//ydb/core/kafka_proxy",
+    "//ydb/core/kesus/proxy",
+    "//ydb/core/kesus/tablet",
+    "//ydb/core/keyvalue",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/federated_query/actors",
+    "//ydb/core/kqp/finalize_script_service",
+    "//ydb/core/kqp/proxy_service",
+    "//ydb/core/kqp/rm_service",
+    "//ydb/core/load_test",
+    "//ydb/core/local_pgwire",
+    "//ydb/core/log_backend",
+    # "//ydb/core/metering",
+    "//ydb/core/mind/address_classification",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/mind/hive",
+    "//ydb/core/mind:tenant_node_enumeration",
+    # "//ydb/core/mon",
+    "//ydb/core/mon_alloc",
+    # "//ydb/core/nbs/cloud/blockstore/bootstrap",  # peerdir only
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/persqueue",
+    "//ydb/core/persqueue/pqrb",  # peerdir only
+    "//ydb/core/persqueue/pqtablet/cache",  # peerdir only
+    "//ydb/core/persqueue/public/cluster_tracker",  # peerdir only
+    # "//ydb/core/pgproxy",
+    "//ydb/core/public_http",
+    "//ydb/core/quoter",
+    # "//ydb/core/retro_tracing_impl",  # peerdir only
+    # "//ydb/core/scheme",
+    "//ydb/core/security",
+    "//ydb/core/security/ldap_auth_provider",
+    "//ydb/core/security/token_manager",
+    "//ydb/core/statistics/aggregator",
+    "//ydb/core/statistics/service",  # peerdir only
+    "//ydb/core/statistics/service:service_id",
+    "//ydb/core/sys_view/processor",
+    "//ydb/core/sys_view/service",
+    # "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/recovery",
+    "//ydb/core/test_tablet",
+    "//ydb/core/tracing",
+    "//ydb/core/transfer",
+    # "//ydb/core/tx",
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/column_fetching",
+    "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    # "//ydb/core/tx/columnshard/overload_manager",
+    # "//ydb/core/tx/conveyor/service",
+    "//ydb/core/tx/conveyor/usage",
+    "//ydb/core/tx/conveyor_composite/service",
+    "//ydb/core/tx/conveyor_composite/usage",
+    "//ydb/core/tx/coordinator",
+    # "//ydb/core/tx/general_cache",  # peerdir only
+    "//ydb/core/tx/general_cache/usage",
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/core/tx/long_tx_service",
+    # "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/mediator",
+    "//ydb/core/tx/priorities/service",  # peerdir only
+    "//ydb/core/tx/priorities/usage",
+    "//ydb/core/tx/replication/controller",
+    # "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/sequenceproxy",
+    "//ydb/core/tx/sequenceshard",
+    "//ydb/core/tx/time_cast",
+    "//ydb/core/tx/tx_allocator",
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    "//ydb/core/viewer",
+    "//ydb/library/actors/dnsresolver",
+    "//ydb/library/actors/helpers",
+    # "//ydb/library/actors/http",
+    # "//ydb/library/actors/interconnect/rdma",
+    # "//ydb/library/actors/memory_log",  # peerdir only
+    # "//ydb/library/actors/prof",
+    "//ydb/library/actors/protos",
+    # "//ydb/library/actors/retro_tracing",
+    "//ydb/library/actors/scheduler",
+    # "//ydb/library/global_plugins",  # peerdir only
+    "//ydb/library/grpc/server/actors",
+    # "//ydb/library/security",
+    "//ydb/library/services",
+    "//ydb/library/signal_backtrace",
+    "//ydb/library/slide_limiter/service",
+    # "//ydb/library/slide_limiter/usage",
+    "//ydb/library/yql/providers/s3/actors",
+    # "//ydb/library/yql/utils/actor_log",
+    # "//ydb/library/yverify_stream",
+    # "//ydb/public/lib/deprecated/client",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    "//ydb/services/auth",
+    "//ydb/services/backup",
+    "//ydb/services/bridge",
+    "//ydb/services/cms",
+    "//ydb/services/config",
+    "//ydb/services/datastreams",
+    "//ydb/services/deprecated/persqueue_v0",
+    "//ydb/services/discovery",
+    "//ydb/services/dynamic_config",
+    "//ydb/services/ext_index/common",
+    "//ydb/services/ext_index/metadata",  # peerdir only
+    "//ydb/services/ext_index/service",
+    "//ydb/services/fq",
+    "//ydb/services/kesus",
+    "//ydb/services/keyvalue",
+    "//ydb/services/local_discovery",
+    "//ydb/services/maintenance",
+    # "//ydb/services/metadata",
+    "//ydb/services/metadata/ds_table",
+    "//ydb/services/monitoring",
+    # "//ydb/services/nbs",  # peerdir only
+    "//ydb/services/persqueue_cluster_discovery",
+    "//ydb/services/persqueue_v1",
+    "//ydb/services/rate_limiter",
+    "//ydb/services/replication",
+    "//ydb/services/tablet",
+    "//ydb/services/test_shard",
+    "//ydb/services/view",
+    "//ydb/services/ydb",
+    # "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yt/yql/providers/yt/codec/codegen",  # peerdir only
+    # "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # link slot
+    # "//yt/yql/providers/yt/comp_nodes/llvm16",  # link slot
+  ]
+
+  sources = [
+    "//ydb/core/mind/configured_tablet_bootstrapper.cpp",
+    "//ydb/core/mind/configured_tablet_bootstrapper.h",
+    "//ydb/core/util/memory_tracker.cpp",
+    "auto_config_initializer.cpp",
+    "config_helpers.cpp",
+    "config_parser.cpp",
+    "factories.cpp",
+    "kikimr_services_initializers.cpp",
+    "run.cpp",
+    "service_initializer.cpp",
+  ]
+}
+
+library("config") {
+  public_deps = [
+    # ":_self",
+    # "//contrib/libs/protobuf",
+    "//ydb/core/base",
+    "//ydb/core/config/init",
+    "//ydb/core/driver_lib/cli_config_base",
+    "//ydb/core/protos",
+    "//ydb/library/global_plugins",
+  ]
+
+  sources = [ "config.cpp" ]
+}
+
+library("main") {
+  public_deps = [ ":_self" ]
+
+  deps = [
+    ":config",
+    "//library/cpp/malloc/api",
+    "//library/cpp/svnversion",
+    "//ydb/core/base",
+    "//ydb/core/driver_lib/base_utils",
+    "//ydb/core/driver_lib/cli_utils",
+    "//ydb/core/driver_lib/version",
+  ]
+
+  sources = [ "main.cpp" ]
+}
+
+group("run") {
+  public_deps = [
+    ":_self",
+    ":config",
+    ":main",
+    # "//library/cpp/getopt/small",  # peerdir only
+    # "//ydb/core/blobstorage",  # peerdir only
+    # "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    # "//ydb/core/driver_lib/base_utils",  # peerdir only
+    # "//ydb/core/driver_lib/cli_utils",  # peerdir only
+    "//ydb/core/graph/service",  # peerdir only
+    "//ydb/core/graph/shard",  # peerdir only
+    # "//ydb/core/grpc_services/base",  # peerdir only
+    # "//ydb/core/jaeger_tracing",  # peerdir only
+    "//ydb/core/kqp",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/bootstrap",  # peerdir only
+    # "//ydb/core/persqueue/pqrb",  # peerdir only
+    # "//ydb/core/persqueue/pqtablet/cache",  # peerdir only
+    # "//ydb/core/persqueue/public/cluster_tracker",  # peerdir only
+    # "//ydb/core/retro_tracing_impl",  # peerdir only
+    "//ydb/core/statistics/service",  # peerdir only
+    # "//ydb/core/tx/general_cache",  # peerdir only
+    # "//ydb/core/tx/limiter/grouped_memory/service",  # peerdir only
+    # "//ydb/core/tx/priorities/service",  # peerdir only
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    # "//ydb/library/actors/memory_log",  # peerdir only
+    # "//ydb/library/global_plugins",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    "//ydb/services/ext_index/metadata",  # peerdir only
+    # "//ydb/services/nbs",  # peerdir only
+    # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yt/yql/providers/yt/codec/codegen",  # peerdir only
+    # "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # link slot
+    # "//yt/yql/providers/yt/comp_nodes/llvm16",  # link slot
+  ]
+}

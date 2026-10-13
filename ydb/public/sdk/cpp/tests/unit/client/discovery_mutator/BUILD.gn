@@ -1,0 +1,13 @@
+unittest_executable("discovery_mutator") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/extension_common",
+    "//ydb/public/sdk/cpp/src/client/extensions/discovery_mutator",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "discovery_mutator_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

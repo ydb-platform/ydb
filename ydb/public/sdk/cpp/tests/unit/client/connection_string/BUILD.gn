@@ -1,0 +1,11 @@
+gtest_executable("connection_string") {
+  deps = [
+    "//contrib/restricted/googletest/googletest",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/common",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  sources = [ "connection_string_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

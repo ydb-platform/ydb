@@ -1,0 +1,7 @@
+library("threading") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+  ]
+
+  sources = [ "async_queue.cpp" ]
+}

@@ -1,0 +1,35 @@
+library("cluster_ordering") {
+  sources = [ "cluster_ordering/weighed_ordering.cpp" ]
+}
+
+library("persqueue_cluster_discovery") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/persqueue/public/cluster_tracker",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    # ":cluster_ordering",
+    "//ydb/core/base",
+    # "//ydb/core/client/server",  # peerdir only
+    # "//ydb/core/mind/address_classification",
+    # "//ydb/core/mon",
+    # "//ydb/core/persqueue/public",  # peerdir only
+    "//ydb/core/protos",
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  sources = [
+    "cluster_discovery_service.cpp",
+    "cluster_discovery_worker.cpp",
+    "counters.cpp",
+    "grpc_service.cpp",
+  ]
+}

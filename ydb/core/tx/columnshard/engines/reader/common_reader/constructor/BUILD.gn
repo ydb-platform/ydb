@@ -1,0 +1,27 @@
+library("_self") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/program",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines/reader/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/common",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/library/formats/arrow",
+  ]
+
+  deps = [
+    # "//ydb/core/kqp/compute_actor",  # peerdir only
+  ]
+
+  sources = [
+    "read_metadata.cpp",
+    "resolver.cpp",
+  ]
+}
+
+group("constructor") {
+  public_deps = [
+    ":_self",
+    # "//ydb/core/kqp/compute_actor",  # peerdir only
+  ]
+}

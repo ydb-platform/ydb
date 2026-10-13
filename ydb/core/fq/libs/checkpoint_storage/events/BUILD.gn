@@ -1,0 +1,13 @@
+library("events") {
+  public_deps = [
+    "//ydb/core/fq/libs/checkpoint_storage/proto",
+    "//ydb/core/fq/libs/checkpointing_common",
+    # "//ydb/core/fq/libs/events",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/yql/dq/actors/protos",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "events.cpp" ]
+}

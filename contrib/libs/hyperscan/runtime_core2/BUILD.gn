@@ -1,0 +1,5 @@
+import("//contrib/libs/hyperscan/runtime.gni")
+
+hyperscan_runtime("runtime_core2") {
+    prefix = "core2"
+}

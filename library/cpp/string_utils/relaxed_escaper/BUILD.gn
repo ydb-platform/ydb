@@ -1,0 +1,3 @@
+library("relaxed_escaper") {
+  sources = [ "relaxed_escaper.cpp" ]
+}

@@ -1,0 +1,63 @@
+library("yql_facade_run") {
+  public_deps = [
+    # "//library/cpp/getopt",
+    # "//library/cpp/logger",
+    # "//library/cpp/yson",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/credentials",
+    # "//yql/essentials/core/facade",
+    # "//yql/essentials/core/file_storage",
+    # "//yql/essentials/core/file_storage/defs",
+    # "//yql/essentials/core/layers",
+    # "//yql/essentials/core/qplayer/storage/interface",
+    # "//yql/essentials/core/url_lister/interface",
+    # "//yql/essentials/public/langver",
+    # "//yql/essentials/sql/settings",
+    # "//yql/essentials/utils/log",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/resource",
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/ast",
+    "//yql/essentials/core/file_storage/proto",
+    # "//yql/essentials/core/langver",  # peerdir only
+    # "//yql/essentials/core/peephole_opt",
+    # "//yql/essentials/core/pg_ext",
+    # "//yql/essentials/core/qplayer/storage/file",
+    # "//yql/essentials/core/services",  # peerdir only
+    # "//yql/essentials/core/services/mounts",
+    # "//yql/essentials/core/services:pipeline",
+    # "//yql/essentials/core/url_lister",
+    # "//yql/essentials/core/url_preprocessing",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/parser/pg_wrapper/interface",  # peerdir only
+    # "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator",
+    "//yql/essentials/protos",
+    # "//yql/essentials/providers/common/gateways_utils",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/common/udf_resolve",
+    # "//yql/essentials/providers/pg/provider",
+    # "//yql/essentials/public/result_format",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/sql",
+    # "//yql/essentials/sql/v1",
+    # "//yql/essentials/sql/v1/complete/check",
+    # "//yql/essentials/sql/v1/format",
+    # "//yql/essentials/sql/v1/format/check",
+    # "//yql/essentials/sql/v1/lexer/antlr4",
+    # "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+    # "//yql/essentials/sql/v1/lexer/check",
+    # "//yql/essentials/sql/v1/proto_parser/antlr4",
+    # "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/backtrace",
+    # "//yql/essentials/utils/failure_injector",
+  ]
+
+  sources = [ "yql_facade_run.cpp" ]
+}

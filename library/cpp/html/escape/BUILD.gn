@@ -1,0 +1,3 @@
+library("escape") {
+  sources = [ "escape.cpp" ]
+}

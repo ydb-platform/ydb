@@ -1,0 +1,17 @@
+library("control") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    "//ydb/core/control/lib",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/mon",
+    # "//ydb/core/node_whiteboard",  # peerdir only
+    "//ydb/library/services",
+  ]
+
+  sources = [ "immediate_control_board_actor.cpp" ]
+}

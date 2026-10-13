@@ -1,0 +1,13 @@
+library("mock") {
+  public_deps = [
+    "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/events",
+  ]
+
+  sources = [ "pdisk_mock.cpp" ]
+}

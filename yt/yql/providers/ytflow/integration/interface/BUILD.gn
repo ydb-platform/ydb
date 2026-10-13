@@ -1,0 +1,12 @@
+library("interface") {
+  public_deps = [
+    "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    "//yql/essentials/minikql",
+  ]
+
+  sources = [
+    "yql_ytflow_integration.cpp",
+    "yql_ytflow_optimization.cpp",
+  ]
+}

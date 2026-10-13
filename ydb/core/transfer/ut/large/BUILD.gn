@@ -1,0 +1,11 @@
+unittest_executable("large") {
+  deps = [ "//ydb/core/transfer/ut/common" ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "transfer_ut.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

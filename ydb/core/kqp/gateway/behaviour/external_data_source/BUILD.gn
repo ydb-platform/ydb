@@ -1,0 +1,21 @@
+library("external_data_source") {
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/external_sources",
+    "//ydb/core/kqp/federated_query/actors",
+    # "//ydb/core/kqp/gateway/actors",  # peerdir only
+    "//ydb/core/kqp/gateway/utils",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/library/conclusion",  # peerdir only
+    # "//ydb/library/conclusion:generic",
+    # "//ydb/services/metadata/abstract",
+    # "//ydb/services/metadata/initializer",  # peerdir only
+    # "//ydb/services/metadata/manager",
+    "//ydb/services/metadata/secret",  # peerdir only
+  ]
+
+  sources = [
+    "behaviour.cpp",
+    "manager.cpp",
+  ]
+}

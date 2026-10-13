@@ -1,0 +1,19 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("double-conversion") {
+    sources = [
+        "double-conversion/bignum-dtoa.cc",
+        "double-conversion/bignum.cc",
+        "double-conversion/cached-powers.cc",
+        "double-conversion/double-to-string.cc",
+        "double-conversion/fast-dtoa.cc",
+        "double-conversion/fixed-dtoa.cc",
+        "double-conversion/string-to-double.cc",
+        "double-conversion/strtod.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":public_config" ]
+}

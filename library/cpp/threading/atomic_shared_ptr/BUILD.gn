@@ -1,0 +1,2 @@
+group("atomic_shared_ptr") {
+}

@@ -1,0 +1,10 @@
+library("getopt") {
+  public_deps = [ "//library/cpp/getopt/small" ]
+
+  deps = [
+    "//library/cpp/build_info",
+    "//library/cpp/svnversion",
+  ]
+
+  sources = [ "print.cpp" ]
+}

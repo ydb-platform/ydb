@@ -1,0 +1,24 @@
+library("barriers") {
+  public_deps = [
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",
+    "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    # "//ydb/core/blobstorage/vdisk/hulldb:_self",
+    # "//ydb/core/blobstorage/vdisk/ingress",
+    "//ydb/core/blobstorage/vdisk:defs",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "barriers_chain.cpp",
+    "barriers_essence.cpp",
+    "barriers_public.cpp",
+    "barriers_tree.cpp",
+  ]
+}

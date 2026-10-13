@@ -1,0 +1,14 @@
+library("fifo") {
+  public_deps = [ "//ydb/core/ymq/base" ]
+
+  deps = [
+    "//ydb/core/ymq/actor/cfg",
+    "//ydb/core/ymq/actor/cloud_events",
+    # "//ydb/core/ymq/queues/common",
+  ]
+
+  sources = [
+    "queries.cpp",
+    "schema.cpp",
+  ]
+}

@@ -1,0 +1,11 @@
+library("helper") {
+  public_deps = [ "//yql/essentials/core/dq_integration" ]
+
+  deps = [
+    # "//ydb/library/yql/dq/expr_nodes",
+    "//ydb/library/yql/dq/opt",
+    "//ydb/library/yql/dq/type_ann",
+  ]
+
+  sources = [ "yql_dq_helper_impl.cpp" ]
+}

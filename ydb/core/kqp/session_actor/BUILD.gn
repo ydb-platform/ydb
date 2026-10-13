@@ -1,0 +1,88 @@
+library("session_actor") {
+  public_deps = [
+    ":worker_common",
+    # "//ydb/core/control/lib",
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/federated_query",
+    "//ydb/core/kqp/gateway:interface",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/dq/runtime",
+  ]
+
+  deps = [
+    # "//library/cpp/time_provider",
+    # "//ydb/core/actorlib_impl",
+    # "//ydb/core/base",
+    "//ydb/core/docapi",  # peerdir only
+    # "//ydb/core/engine",
+    "//ydb/core/kqp/common/buffer",
+    # "//ydb/core/kqp/common/compilation",
+    # "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/compile_service",
+    # "//ydb/core/kqp/executer_actor:shards_resolver",
+    "//ydb/core/kqp/gateway",
+    "//ydb/core/kqp/gateway/actors",
+    # "//ydb/core/kqp/host",
+    "//ydb/core/kqp/opt",
+    # "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/rm_service",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/topics",  # peerdir only
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/sys_view/common",
+    # "//ydb/core/sys_view/service",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    # "//ydb/core/ydb_convert",
+    # "//ydb/library/aclib",
+    "//ydb/library/actors/async",
+    # "//ydb/library/actors/wilson",
+    "//ydb/library/persqueue/topic_parser",
+    # "//ydb/library/wilson_ids",
+    "//ydb/library/ydb_issue",
+    "//ydb/library/yql/utils/actor_log",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  sources = [
+    "kqp_query_state.cpp",
+    "kqp_query_stats.cpp",
+    "kqp_session_actor.cpp",
+    "kqp_temp_tables_manager.cpp",
+    "kqp_worker_actor.cpp",
+  ]
+}
+
+library("worker_common") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//ydb/core/base",
+    # "//ydb/core/control/lib",
+    "//ydb/core/docapi",
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/counters",
+    # "//ydb/core/kqp/gateway:interface",
+    # "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    # "//yql/essentials/core/pg_settings",
+  ]
+
+  deps = [
+    # "//ydb/core/ydb_convert",
+    "//ydb/library/yql/public/ydb_issue",
+  ]
+
+  sources = [
+    "kqp_response.cpp",
+    "kqp_worker_common.cpp",
+  ]
+}

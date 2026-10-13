@@ -1,0 +1,55 @@
+library("combiner_perf") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/json",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//contrib/libs/llvm16/lib/ExecutionEngine/MCJIT",  # peerdir only
+    # "//contrib/libs/llvm16/lib/IR",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Linker",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Passes",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Target/X86",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Target/X86/AsmParser",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Target/X86/Disassembler",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Transforms/IPO",  # peerdir only
+    # "//contrib/libs/llvm16/lib/Transforms/ObjCARC",  # peerdir only
+    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    "//ydb/core/kqp/runtime",
+    "//ydb/library/yql/dq/comp_nodes",
+    # "//ydb/library/yql/dq/comp_nodes/ut/utils",
+    # "//yql/essentials/minikql/codegen/llvm16",  # link slot
+    # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot
+    # "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/minikql/invoke_builtins/llvm16",  # link slot
+    # "//yql/essentials/minikql:terminator",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",  # peerdir only
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "converters.cpp",
+    "dq_combine_vs.cpp",
+    "factories.cpp",
+    "fs_utils.cpp",
+    "printout.cpp",
+    "simple.cpp",
+    "simple_block.cpp",
+    "simple_grace_join.cpp",
+    "simple_last.cpp",
+    "streams.cpp",
+    "subprocess.cpp",
+    "tpch_last.cpp",
+  ]
+}

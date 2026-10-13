@@ -1,0 +1,10 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/lockfree_bucket",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

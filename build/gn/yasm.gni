@@ -1,0 +1,58 @@
+template("yasm_source_set") {
+    _gen_target_yasm = "${target_name}_gen_yasm"
+    _output = "{{source_gen_dir}}/{{source_name_part}}.o"
+
+    action_foreach(_gen_target_yasm) {
+        script = "//build/gn/scripts/run.py"
+        sources = invoker.sources
+        outputs = [ "$_output" ]
+
+        _yasm = "//contrib/tools/yasm:yasm($tool_toolchain)"
+        _yasm_bin = rebase_path(get_label_info(_yasm, "root_out_dir") + "/yasm", root_build_dir)
+
+        args = [
+            "./$_yasm_bin",
+            "-f", "elf64",
+            "-D", "UNIX",
+            "-D", "_x86_64_",
+            "-D", "_YASM_",
+            "-g", "dwarf2",
+        ]
+
+        if (defined(invoker.asm_include_dirs)) {
+            foreach(_dir, invoker.asm_include_dirs) {
+                args += [ "-I", rebase_path(_dir, root_build_dir) ]
+            }
+        }
+
+        if (defined(invoker.yasm_flags)) {
+            args += invoker.yasm_flags
+        }
+
+        args += [
+            "-o", "$_output",
+            "{{source}}",
+        ]
+
+        deps = [ _yasm ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+    }
+
+    source_set(target_name) {
+        forward_variables_from(invoker,
+                               "*",
+                               [
+                                 "asm_include_dirs",
+                                 "deps",
+                                 "sources",
+                                 "yasm_flags",
+                               ])
+
+        deps = []
+        deps += [ ":$_gen_target_yasm" ]
+
+        sources = get_target_outputs(":$_gen_target_yasm")
+    }
+}

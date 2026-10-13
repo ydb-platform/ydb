@@ -1,0 +1,26 @@
+library("adapter") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/bg_tasks/templates",
+    # "//ydb/core/tx/schemeshard",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/bg_tasks/abstract",  # peerdir only
+  ]
+
+  sources = [ "adapter/adapter.cpp" ]
+}
+
+group("bg_tasks") {
+  public_deps = [
+    # ":adapter",  # peerdir only
+    # "//ydb/core/tx/schemeshard",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/bg_tasks/events",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/bg_tasks/protos",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain",  # peerdir only
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/bg_tasks",  # peerdir only
+  ]
+}

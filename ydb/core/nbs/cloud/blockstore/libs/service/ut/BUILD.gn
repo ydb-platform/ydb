@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/service/blocks_info_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/device_handler_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/service" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,26 @@
+library("plain") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines/changes/compaction/common",
+    # "//ydb/core/tx/columnshard/engines/changes/compaction:abstract",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/splitter",
+    "//ydb/library/formats/arrow",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/engines/changes/counters",
+    "//ydb/library/formats/arrow/validation",
+  ]
+
+  sources = [
+    "column_cursor.cpp",
+    "column_portion_chunk.cpp",
+    "logic.cpp",
+    "merged_column.cpp",
+  ]
+}

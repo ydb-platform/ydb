@@ -1,0 +1,6 @@
+protobuf_library("protos") {
+  sources = [
+    "cursor.proto",
+    "task.proto",
+  ]
+}

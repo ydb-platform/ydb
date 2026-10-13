@@ -1,0 +1,3 @@
+library("thread_pool") {
+  sources = [ "pool.cpp" ]
+}

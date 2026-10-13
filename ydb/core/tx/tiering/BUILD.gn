@@ -1,0 +1,35 @@
+library("tiering") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/tiering/abstract",
+    "//ydb/core/tx/tiering/tier",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    # "//ydb/services/metadata",
+    "//ydb/services/metadata/secret",
+  ]
+
+  deps = [
+    # "//library/cpp/json",  # peerdir only
+    # "//library/cpp/retry",
+    # "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/protos",
+    # "//ydb/core/tablet_flat/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",  # peerdir only
+    # "//ydb/core/wrappers",  # peerdir only
+    # "//ydb/library/table_creator",
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//ydb/services/bg_tasks/abstract",  # peerdir only
+  ]
+
+  sources = [
+    "common.cpp",
+    "fetcher.cpp",
+    "manager.cpp",
+  ]
+}

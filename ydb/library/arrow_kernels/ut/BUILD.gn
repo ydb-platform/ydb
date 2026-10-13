@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/arrow_kernels",
+  ]
+
+  sources = [
+    "//ydb/library/arrow_kernels/ut_arithmetic.cpp",
+    "//ydb/library/arrow_kernels/ut_common.cpp",
+    "//ydb/library/arrow_kernels/ut_math.cpp",
+    "//ydb/library/arrow_kernels/ut_round.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/arrow_kernels" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

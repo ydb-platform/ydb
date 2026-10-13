@@ -1,0 +1,26 @@
+library("common") {
+  public_deps = [
+    # "//ydb/core/jaeger_tracing",
+    # "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/public",
+    # "//ydb/core/tablet",
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/wilson",
+    "//ydb/library/services",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/persqueue/events",
+    "//ydb/core/protos",
+    # "//ydb/library/logger",  # peerdir only
+    # "//ydb/library/wilson_ids",
+    # "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
+  ]
+
+  sources = [
+    "event_helpers.cpp",
+    "tracing_support.cpp",
+  ]
+}

@@ -1,0 +1,23 @@
+group("reader") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/reader/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/reader/actor",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/reader/common",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/common_reader",
+    "//ydb/core/tx/columnshard/engines/reader/plain_reader",
+    "//ydb/core/tx/columnshard/engines/reader/simple_reader",
+    # "//ydb/core/tx/columnshard/engines/reader/tracing",  # peerdir only
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/predicate",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme",  # peerdir only
+    # "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/resources",  # peerdir only
+    # "//ydb/core/tx/program",  # peerdir only
+  ]
+}

@@ -1,0 +1,30 @@
+library("common") {
+  public_deps = [
+    # "//library/cpp/deprecated/atomic",
+    # "//ydb/core/base",
+    "//ydb/core/kqp/compute_actor:events",
+    # "//ydb/core/kqp/runtime",
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/sys_view/service",
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/locks",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/protos",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  sources = [
+    "registry.cpp",
+    "resolver.cpp",
+  ]
+}

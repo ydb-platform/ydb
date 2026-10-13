@@ -1,0 +1,17 @@
+library("server") {
+  public_deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/http/io",
+    "//library/cpp/http/misc",
+  ]
+
+  deps = [ "//library/cpp/threading/equeue" ]
+
+  sources = [
+    "conn.cpp",
+    "http.cpp",
+    "http_ex.cpp",
+    "options.cpp",
+    "response.cpp",
+  ]
+}

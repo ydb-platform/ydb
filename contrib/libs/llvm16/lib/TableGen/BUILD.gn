@@ -1,0 +1,18 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("TableGen") {
+    sources = [
+        "DetailedRecordsBackend.cpp",
+        "Error.cpp",
+        "JSONBackend.cpp",
+        "Main.cpp",
+        "Parser.cpp",
+        "Record.cpp",
+        "SetTheory.cpp",
+        "StringMatcher.cpp",
+        "TableGenBackend.cpp",
+        "TableGenBackendSkeleton.cpp",
+        "TGLexer.cpp",
+        "TGParser.cpp",
+    ]
+}

@@ -1,0 +1,22 @@
+library("usage") {
+  public_deps = [
+    # "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/conveyor/service",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/conclusion",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/services/metadata/request",  # peerdir only
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "config.cpp",
+    "events.cpp",
+    "service.cpp",
+  ]
+}

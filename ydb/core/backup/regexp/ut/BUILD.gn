@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/backup/regexp",
+  ]
+
+  sources = [ "//ydb/core/backup/regexp/regexp_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/backup/regexp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

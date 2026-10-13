@@ -1,0 +1,36 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-funwind-tables",
+    ]
+    defines = [
+        "_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER",
+        "_LIBUNWIND_IS_NATIVE_ONLY",
+    ]
+    include_dirs = [ "include" ]
+}
+
+system_library("libunwind") {
+    sources = [
+        "src/Unwind-EHABI.cpp",
+        "src/Unwind-seh.cpp",
+        "src/Unwind-sjlj.c",
+        "src/Unwind-wasm.c",
+        "src/UnwindLevel1-gcc-ext.c",
+        "src/UnwindLevel1.c",
+        "src/UnwindRegistersRestore.S",
+        "src/UnwindRegistersSave.S",
+        "src/libunwind.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":private_config",
+        ":public_config",
+    ]
+}

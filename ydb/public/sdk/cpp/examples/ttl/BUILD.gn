@@ -1,0 +1,14 @@
+linked_executable("ttl") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "main.cpp",
+    "ttl.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

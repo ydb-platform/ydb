@@ -1,0 +1,38 @@
+library("utils") {
+  public_deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/digest/md5",
+    "//library/cpp/threading/future",
+    "//library/cpp/time_provider",
+  ]
+
+  deps = [
+    "//contrib/libs/miniselect",
+    "//library/cpp/string_utils/quote",
+  ]
+
+  sources = [
+    "checkpoint_map.cpp",
+    "chunked_buffer.cpp",
+    "debug_info.cpp",
+    "future_action.cpp",
+    "hash.cpp",
+    "limiting_allocator.cpp",
+    "line_split.cpp",
+    "md5_stream.cpp",
+    "mem_limit.cpp",
+    "method_index.cpp",
+    "parse_double.cpp",
+    "proc_alive.cpp",
+    "rand_guid.cpp",
+    "retry.cpp",
+    "sort.cpp",
+    "swap_bytes.cpp",
+    "time_provider.cpp",
+    "tty.cpp",
+    "url_builder.cpp",
+    "utf8.cpp",
+    "yql_panic.cpp",
+    "yql_paths.cpp",
+  ]
+}

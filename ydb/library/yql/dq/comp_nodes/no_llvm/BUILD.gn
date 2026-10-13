@@ -1,0 +1,70 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+_comp_gen_dir = "$target_gen_dir/yql/essentials/minikql/computation"
+
+copy("mkql_computation_node_codegen_h") {
+  sources = [
+    "//yql/essentials/minikql/computation/mkql_computation_node_codegen.h.txt",
+  ]
+  outputs = [ "$_comp_gen_dir/mkql_computation_node_codegen.h" ]
+}
+
+copy("mkql_llvm_base_h") {
+  sources = [ "//yql/essentials/minikql/computation/mkql_llvm_base.h.txt" ]
+  outputs = [ "$_comp_gen_dir/mkql_llvm_base.h" ]
+}
+
+copy("mkql_block_impl_codegen_h") {
+  sources =
+      [ "//yql/essentials/minikql/computation/mkql_block_impl_codegen.h.txt" ]
+  outputs = [ "$_comp_gen_dir/mkql_block_impl_codegen.h" ]
+}
+
+config("_includes") {
+  include_dirs = [
+    target_gen_dir,
+    _comp_gen_dir,
+    "//ydb/library/yql/dq/comp_nodes",
+    "//yql/essentials/minikql/codegen/llvm_stub",
+  ]
+}
+
+library("no_llvm") {
+  sources = [
+    "../dq_block_hash_join.cpp",
+    "../dq_hash_combine.cpp",
+    "../dq_hash_join_table.cpp",
+    "../dq_hash_operator_common.cpp",
+    "../dq_hash_operator_serdes.cpp",
+    "../dq_join_common.cpp",
+    "../dq_program_builder.cpp",
+    "../dq_scalar_hash_join.cpp",
+    "../type_utils.cpp",
+    "../yql_common_dq_factory.cpp",
+  ]
+
+  defines = [ "MKQL_DISABLE_CODEGEN" ]
+
+  configs = [ ":_includes" ]
+
+  deps = [
+    ":mkql_block_impl_codegen_h",
+    ":mkql_computation_node_codegen_h",
+    ":mkql_llvm_base_h",
+  ]
+
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
+    "//ydb/library/yql/dq/runtime",
+    "//yql/essentials/minikql/codegen/no_llvm",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/comp_nodes/no_llvm",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/computation/no_llvm",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/invoke_builtins/no_llvm",
+    "//yql/essentials/utils",
+  ]
+}

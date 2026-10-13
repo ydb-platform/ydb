@@ -1,0 +1,7 @@
+group("conveyor_composite") {
+  public_deps = [
+    # "//ydb/core/tx/conveyor_composite/service",  # peerdir only
+    # "//ydb/core/tx/conveyor_composite/tracing",
+    # "//ydb/core/tx/conveyor_composite/usage",  # peerdir only
+  ]
+}

@@ -1,0 +1,8 @@
+library("fastlz") {
+  deps = [
+    "//contrib/libs/fastlz",
+    "//library/cpp/blockcodecs/core",
+  ]
+
+  sources = [ "fastlz.cpp" ]
+}

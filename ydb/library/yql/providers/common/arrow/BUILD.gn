@@ -1,0 +1,9 @@
+library("arrow") {
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/library/yql/providers/common/arrow/interface",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "arrow_reader_impl.cpp" ]
+}

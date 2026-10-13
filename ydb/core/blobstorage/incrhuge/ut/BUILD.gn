@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/incrhuge",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
+    "//ydb/library/pdisk_io",
+  ]
+
+  sources = [
+    "incrhuge_basic_ut.cpp",
+    "incrhuge_id_dict_ut.cpp",
+    "incrhuge_log_merger_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

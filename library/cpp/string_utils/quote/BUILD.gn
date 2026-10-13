@@ -1,0 +1,3 @@
+library("quote") {
+  sources = [ "quote.cpp" ]
+}

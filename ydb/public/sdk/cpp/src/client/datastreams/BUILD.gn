@@ -1,0 +1,18 @@
+library("datastreams") {
+  public_deps = [
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  deps = [
+    # "//library/cpp/string_utils/url",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/issue",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+  ]
+
+  sources = [ "datastreams.cpp" ]
+}

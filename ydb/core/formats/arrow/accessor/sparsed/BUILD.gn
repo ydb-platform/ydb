@@ -1,0 +1,20 @@
+library("sparsed") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/library/accessor",
+    "//ydb/library/formats/arrow",
+    "//ydb/library/formats/arrow/switch",
+  ]
+
+  deps = [
+    # "//ydb/library/formats/arrow/protos",  # peerdir only
+  ]
+
+  sources = [
+    "accessor.cpp",
+    "constructor.cpp",
+    "request.cpp",
+  ]
+}

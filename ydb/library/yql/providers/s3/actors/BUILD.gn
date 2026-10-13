@@ -1,0 +1,71 @@
+library("actors") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    "//ydb/core/fq/libs/protos",
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    # "//ydb/library/yql/providers/s3/actors_factory",
+    "//ydb/library/yql/providers/s3/object_listers",
+    "//ydb/library/yql/providers/s3/proto",
+    "//ydb/library/yql/providers/s3/range_helpers",
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/providers/common/schema/mkql",
+  ]
+
+  deps = [
+    # "//contrib/libs/fmt",  # peerdir only
+    # "//contrib/libs/poco/Util",  # peerdir only
+    # "//contrib/libs/protobuf",
+    "//library/cpp/protobuf/util",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/xml/document",
+    # "//ydb/core/base",
+    # "//ydb/core/fq/libs/events",
+    "//ydb/core/util",
+    "//ydb/library/actors/http",
+    # "//ydb/library/actors/util",
+    "//ydb/library/services",
+    "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/actors/protos",
+    # "//ydb/library/yql/providers/common/arrow",  # peerdir only
+    # "//ydb/library/yql/providers/common/arrow/interface",  # peerdir only
+    "//ydb/library/yql/providers/generic/pushdown",
+    "//ydb/library/yql/providers/s3/common",
+    "//ydb/library/yql/providers/s3/compressors",
+    # "//ydb/library/yql/providers/s3/credentials",
+    "//ydb/library/yql/providers/s3/events",
+    "//ydb/library/yql/providers/s3/serializations",
+    "//ydb/library/yql/udfs/common/clickhouse/client",
+    # "//yql/essentials/core",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/minikql:terminator",
+    "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "yql_arrow_column_converters.cpp",
+    "yql_arrow_push_down.cpp",
+    "yql_s3_actors_factory_impl.cpp",
+    "yql_s3_actors_util.cpp",
+    "yql_s3_applicator_actor.cpp",
+    "yql_s3_decompressor_actor.cpp",
+    "yql_s3_raw_read_actor.cpp",
+    "yql_s3_read_actor.cpp",
+    "yql_s3_source_queue.cpp",
+    "yql_s3_write_actor.cpp",
+  ]
+}

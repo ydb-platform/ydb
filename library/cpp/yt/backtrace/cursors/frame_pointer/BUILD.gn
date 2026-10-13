@@ -1,0 +1,7 @@
+library("frame_pointer") {
+  public_deps = [
+    # "//library/cpp/yt/memory",
+  ]
+
+  sources = [ "frame_pointer_cursor_x86_64.cpp" ]
+}

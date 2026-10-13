@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/retry",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/folder_service",
+    "//ydb/library/grpc/server",
+    "//ydb/library/testlib/service_mocks",
+    "//ydb/library/ycloud/impl",
+    "//ydb/public/lib/deprecated/kicli",
+  ]
+
+  sources = [
+    "//ydb/library/ycloud/impl/access_service_ut.cpp",
+    "//ydb/library/ycloud/impl/folder_service_ut.cpp",
+    "//ydb/library/ycloud/impl/service_account_service_ut.cpp",
+    "//ydb/library/ycloud/impl/user_account_service_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/ycloud/impl" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

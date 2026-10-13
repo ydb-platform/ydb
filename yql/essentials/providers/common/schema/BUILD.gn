@@ -1,0 +1,7 @@
+library("schema") {
+  public_deps = [ "//library/cpp/yson/node" ]
+
+  deps = [ "//yql/essentials/utils" ]
+
+  sources = [ "yql_schema_utils.cpp" ]
+}

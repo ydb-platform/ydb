@@ -1,0 +1,19 @@
+library("async") {
+  public_deps = [ "//ydb/library/actors/core" ]
+
+  sources = [
+    "abi.cpp",
+    "async.cpp",
+    "callback_coroutine.cpp",
+    "cancellation.cpp",
+    "continuation.cpp",
+    "decorator.cpp",
+    "event.cpp",
+    "result.cpp",
+    "sleep.cpp",
+    "task_group.cpp",
+    "timeout.cpp",
+    "wait_for_event.cpp",
+    "yield.cpp",
+  ]
+}

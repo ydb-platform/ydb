@@ -1,0 +1,5 @@
+group("topic_parser_public") {
+  deps = [
+    # "//ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public",
+  ]
+}

@@ -1,0 +1,5 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Reader") {
+    sources = [ "BitstreamReader.cpp" ]
+}

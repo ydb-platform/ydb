@@ -1,0 +1,13 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("foreach") {
+   public_deps = [
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/mpl",
+        "//contrib/restricted/boost/range",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

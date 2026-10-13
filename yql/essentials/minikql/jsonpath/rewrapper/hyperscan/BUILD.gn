@@ -1,0 +1,9 @@
+library("hyperscan") {
+  deps = [
+    "//library/cpp/regex/hyperscan",
+    "//yql/essentials/minikql/jsonpath/rewrapper",
+    "//yql/essentials/minikql/jsonpath/rewrapper:proto",
+  ]
+
+  sources = [ "hyperscan.cpp" ]
+}

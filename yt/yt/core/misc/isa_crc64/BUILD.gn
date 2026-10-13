@@ -1,0 +1,15 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+yasm_source_set("asm") {
+    sources = [ "crc64_yt_norm_by8.asm" ]
+    asm_include_dirs = [ "//yt/yt/core/misc/isa_crc64/include" ]
+}
+
+library("isa_crc64") {
+    deps = [ ":asm" ]
+
+    sources = [
+        "checksum.cpp",
+        "crc64_yt_norm_refs.c",
+    ]
+}

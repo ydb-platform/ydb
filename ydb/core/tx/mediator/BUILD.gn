@@ -1,0 +1,32 @@
+library("mediator") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme_types",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx",
+    "//ydb/core/tx/coordinator/public",
+    # "//ydb/core/tx/time_cast",
+    # "//ydb/core/util",
+  ]
+
+  deps = [
+    # "//library/cpp/time_provider",
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/tx/coordinator",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "execute_queue.cpp",
+    "mediator.cpp",
+    "mediator__configure.cpp",
+    "mediator__init.cpp",
+    "mediator__schema.cpp",
+    "mediator__schema_upgrade.cpp",
+    "mediator_impl.cpp",
+    "tablet_queue.cpp",
+  ]
+}

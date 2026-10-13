@@ -1,0 +1,21 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+executable("enum_parser") {
+    deps += [
+        "//library/cpp/cppparser",
+        "//library/cpp/getopt/small",
+    ]
+
+    sources = [
+        "enum_parser/main.cpp",
+        "parse_enum/parse_enum.cpp",
+    ]
+}
+
+library("runtime") {
+    sources = [
+        "enum_serialization_runtime/dispatch_methods.cpp",
+        "enum_serialization_runtime/enum_runtime.cpp",
+        "enum_serialization_runtime/ordered_pairs.cpp",
+    ]
+}

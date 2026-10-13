@@ -1,0 +1,43 @@
+unittest_executable("ut_volatile") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/write_meta",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/library/ut",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/datastreams",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/tx/datashard/datashard_ut_common_pq.cpp",
+    "//ydb/core/tx/datashard/datashard_ut_volatile.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/datashard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

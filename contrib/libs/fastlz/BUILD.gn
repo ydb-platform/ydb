@@ -1,0 +1,3 @@
+contrib_library("fastlz") {
+    sources = [ "fastlz.c" ]
+}

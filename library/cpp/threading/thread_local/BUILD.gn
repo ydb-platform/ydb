@@ -1,0 +1,13 @@
+library("thread_local") {
+  public_deps = [
+    # "//library/cpp/threading/hot_swap",
+    # "//library/cpp/threading/skip_list",
+  ]
+
+  sources = [
+    "generic.cpp",
+    "thread_local.cpp",
+  ]
+
+  serialize_enum_headers = [ "thread_local.h" ]
+}

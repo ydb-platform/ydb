@@ -1,0 +1,12 @@
+config("private_config") {
+    defines = [
+        "HTTP_MAX_HEADER_SIZE=0x7fffffff",
+        "HTTP_PARSER_STRICT=0",
+    ]
+    include_dirs = [ "." ]
+}
+
+contrib_library("http-parser") {
+    sources = [ "http_parser.c" ]
+    configs = [ ":private_config" ]
+}

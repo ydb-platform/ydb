@@ -1,0 +1,15 @@
+library("maintenance") {
+  public_deps = [
+    "//ydb/core/grpc_services/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",
+    # "//ydb/public/api/grpc",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

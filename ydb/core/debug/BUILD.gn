@@ -1,0 +1,3 @@
+library("debug") {
+  sources = [ "valgrind_check.cpp" ]
+}

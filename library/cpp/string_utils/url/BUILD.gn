@@ -1,0 +1,3 @@
+library("url") {
+  sources = [ "url.cpp" ]
+}

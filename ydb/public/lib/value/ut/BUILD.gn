@@ -1,0 +1,12 @@
+gtest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/gtest",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/public/lib/value",
+  ]
+
+  sources = [ "value_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

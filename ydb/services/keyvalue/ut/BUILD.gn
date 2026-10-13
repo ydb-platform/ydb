@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/logger",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/unified_agent_client",  # peerdir only
+    "//ydb/core/keyvalue",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    "//ydb/services/keyvalue",
+  ]
+
+  sources = [ "//ydb/services/keyvalue/grpc_service_ut.cpp" ]
+
+  include_dirs = [ "//ydb/services/keyvalue" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

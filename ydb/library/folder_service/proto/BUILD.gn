@@ -1,0 +1,3 @@
+protobuf_library("proto") {
+  sources = [ "config.proto" ]
+}

@@ -1,0 +1,10 @@
+library("json") {
+  public_deps = [ "//contrib/libs/protobuf" ]
+
+  deps = [
+    "//library/cpp/string_utils/base64",
+    # "//ydb/core/viewer/protos",  # peerdir only
+  ]
+
+  sources = [ "json.cpp" ]
+}

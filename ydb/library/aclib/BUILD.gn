@@ -1,0 +1,10 @@
+library("aclib") {
+  public_deps = [ "//ydb/library/aclib/protos" ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+    "//library/cpp/protobuf/util",
+  ]
+
+  sources = [ "aclib.cpp" ]
+}

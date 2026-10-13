@@ -1,0 +1,7 @@
+library("interface") {
+  public_deps = [ "//library/cpp/threading/future" ]
+
+  sources = [ "yql_qstorage.cpp" ]
+
+  serialize_enum_headers = [ "yql_qstorage.h" ]
+}

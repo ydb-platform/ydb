@@ -1,0 +1,7 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("pdqsort") {
+    public_configs = [ ":public_config" ]
+}

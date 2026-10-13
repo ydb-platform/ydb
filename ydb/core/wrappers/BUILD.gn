@@ -1,0 +1,47 @@
+library("ut_helpers") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/http/server",
+  ]
+
+  deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/xml/document",
+  ]
+
+  sources = [ "ut_helpers/s3_mock.cpp" ]
+}
+
+library("wrappers") {
+  public_deps = [
+    # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    "//ydb/core/base",
+    "//ydb/core/util",
+    "//ydb/core/wrappers/events",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//contrib/libs/curl",
+    "//library/cpp/digest/md5",
+    "//ydb/core/protos",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "fake_storage.cpp",
+    "fake_storage_config.cpp",
+    "fs_storage.cpp",
+    "fs_storage_config.cpp",
+    "retry_policy.cpp",
+    "s3_storage.cpp",
+    "s3_storage_config.cpp",
+    "s3_wrapper.cpp",
+    "unavailable_storage.cpp",
+  ]
+}

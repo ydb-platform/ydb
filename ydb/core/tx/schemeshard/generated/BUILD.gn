@@ -1,0 +1,58 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+executable("codegen") {
+    _path = rebase_path(".", "//")
+    _unique_name = exec_script("//build/gn/scripts/unique_name.py", [ _path ], "trim string")
+    output_name = "${_unique_name}_${target_name}"
+
+    deps += [
+        "//contrib/libs/jinja2cpp",
+        "//contrib/libs/protobuf",
+        "//ydb/core/protos",
+        "//ydb/core/protos/schemeshard",
+    ]
+    sources = [ "codegen/main.cpp" ]
+}
+
+template("codegen") {
+    _gen_target = "${target_name}_gen"
+    _output = "{{source_gen_dir}}/{{source_name_part}}"
+    _codegen_name = exec_script("//build/gn/scripts/unique_name.py", [ rebase_path(".", "//") ], "trim string") + "_codegen"
+
+    action_foreach(_gen_target) {
+        script = "//build/gn/scripts/run.py"
+        sources = invoker.sources
+        outputs = [ "$_output" ]
+
+        _codegen = ":codegen"
+        _codegen_bin = rebase_path(get_label_info(_codegen, "root_out_dir") + "/$_codegen_name", root_build_dir)
+
+        args = [
+            "./$_codegen_bin",
+            "{{source}}",
+            "$_output",
+        ]
+
+        deps = [ _codegen ]
+    }
+
+    library(target_name) {
+        forward_variables_from(invoker, "*", [ "deps", "sources" ])
+
+        # Append to default deps
+        deps = [ ":$_gen_target" ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        sources = get_target_outputs(":$_gen_target")
+    }
+}
+
+codegen("generated") {
+    public_deps = [ "//ydb/core/protos" ]
+
+    sources = [
+        "dispatch_op.h.in",
+    ]
+}

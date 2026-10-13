@@ -1,0 +1,7 @@
+library("levenshtein_diff") {
+  public_deps = [
+    # "//util/draft",
+  ]
+
+  sources = [ "levenshtein_diff.cpp" ]
+}

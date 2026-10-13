@@ -1,0 +1,6 @@
+group("defaults") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/scheme/defaults/common",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme/defaults/protos",  # peerdir only
+  ]
+}

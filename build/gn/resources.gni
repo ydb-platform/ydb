@@ -1,0 +1,124 @@
+# ### @usage: RESOURCE([FORCE_TEXT ][Src Key]* [- Key=Value]*) # builtin
+# macro RESOURCE(Args...) {
+#     PEERDIR(library/cpp/resource)
+# }
+#
+# ### @usage: RESOURCE_FILES([DONT_COMPRESS] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})
+# (build/plugins/res.py)
+
+# Embeds files and strings into the binary, the counterpart of ya's RESOURCE()
+# and RESOURCE_FILES().
+#
+#   resources = [
+#     {
+#       path = "cacert.pem"          # RESOURCE(cacert.pem /builtin/cacert)
+#       key = "/builtin/cacert"
+#     },
+#     {
+#       key = "some/key"             # RESOURCE(- some/key=some value)
+#       value = "some value"
+#     },
+#   ]
+#
+#   resource_files = [
+#     {
+#       prefix = "tpch/"             # RESOURCE_FILES(PREFIX tpch/ s1/q1.sql)
+#       files = [ "s1/q1.sql" ]
+#     },
+#   ]
+#
+# `path` is relative to the current BUILD.gn, source-absolute ("//...") or
+# generated ("$root_gen_dir/..."). A `resource_files` entry registers, like
+# RESOURCE_FILES() does, each file under "resfs/file/<prefix><name>" plus its
+# source-root-relative path under "resfs/src/resfs/file/<prefix><name>", where
+# <name> is the file path relative to `base_dir` (default: the current dir, i.e.
+# the path as written in ya.make; "//" for source-root-relative names).
+#
+# The action generates a .cpp that registers every value in NResource on
+# startup; it must be compiled into a target that depends on
+# //library/cpp/resource. library() does all of that for its `resources` and
+# `resource_files` (plus `resource_deps` for the action), so the template is
+# rarely used directly.
+#
+# `deps` are forwarded: use them when a resource file is generated.
+template("resources") {
+    assert(defined(invoker.resources) || defined(invoker.resource_files),
+           "resources() requires `resources` or `resource_files`")
+
+    _files = []
+    _items = []
+
+    if (defined(invoker.resources)) {
+        foreach(_resource, invoker.resources) {
+            assert(defined(_resource.key), "resources(): an entry of `resources` in $target_name has no `key`")
+            if (defined(_resource.path)) {
+                assert(!defined(_resource.value),
+                       "resources(): an entry of `resources` in $target_name has both `path` and `value`")
+                _files += [ _resource.path ]
+                _items += [
+                    rebase_path(_resource.path, root_build_dir),
+                    _resource.key,
+                ]
+            } else {
+                assert(defined(_resource.value),
+                       "resources(): an entry of `resources` in $target_name has neither `path` nor `value`")
+                _items += [
+                    "-",
+                    _resource.key + "=" + _resource.value,
+                ]
+            }
+        }
+    }
+
+    if (defined(invoker.resource_files)) {
+        foreach(_group, invoker.resource_files) {
+            assert(defined(_group.files), "resources(): an entry of `resource_files` in $target_name has no `files`")
+            if (defined(_group.prefix)) {
+                _prefix = _group.prefix
+            } else {
+                _prefix = ""
+            }
+            if (defined(_group.base_dir)) {
+                _base_dir = _group.base_dir
+            } else {
+                _base_dir = "."
+            }
+            foreach(_file, _group.files) {
+                _key = "resfs/file/$_prefix" + rebase_path(_file, _base_dir)
+                _files += [ _file ]
+                _items += [
+                    "-",
+                    "resfs/src/$_key=" + rebase_path(_file, "//"),
+                    rebase_path(_file, root_build_dir),
+                    _key,
+                ]
+            }
+        }
+    }
+
+    _output = "$target_gen_dir/$target_name.cpp"
+    _data = "$target_gen_dir/$target_name.data"
+
+    action(target_name) {
+        forward_variables_from(invoker, [ "deps", "visibility" ])
+
+        script = "//build/gn/scripts/resources.py"
+        inputs = _files
+        outputs = [ _output, _data ]
+
+        _rescompressor = "//tools/rescompressor"
+        _rescompressor_bin = rebase_path(get_label_info(_rescompressor, "root_out_dir") + "/rescompressor", root_build_dir)
+
+        args = [
+            "--rescompressor", "./$_rescompressor_bin",
+            "--output", rebase_path(_output, root_build_dir),
+            "--data", rebase_path(_data, root_build_dir),
+            "--",
+        ] + _items
+
+        if (!defined(deps)) {
+            deps = []
+        }
+        deps += [ _rescompressor ]
+    }
+}

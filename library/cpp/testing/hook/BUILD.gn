@@ -1,0 +1,3 @@
+library("hook") {
+  sources = [ "hook.cpp" ]
+}

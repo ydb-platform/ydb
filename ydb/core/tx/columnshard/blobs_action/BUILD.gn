@@ -1,0 +1,20 @@
+library("blobs_action") {
+  public_deps = [
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/util",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/blobs_action/counters",  # peerdir only
+    # "//ydb/core/tx/columnshard/blobs_action/events",  # peerdir only
+    "//ydb/core/tx/columnshard/blobs_action/protos",  # peerdir only
+    # "//ydb/core/tx/tiering",  # peerdir only
+  ]
+
+  sources = [ "blob_manager_db.cpp" ]
+}

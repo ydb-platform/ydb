@@ -1,0 +1,10 @@
+group("logging") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+  ]
+}

@@ -1,0 +1,6 @@
+group("subscriber") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/subscriber/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/subscriber/events",  # peerdir only
+  ]
+}

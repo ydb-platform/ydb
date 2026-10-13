@@ -1,0 +1,21 @@
+library("service") {
+  public_deps = [
+    # "//library/cpp/cache",
+    # "//ydb/core/base",
+    # "//ydb/core/tx/general_cache/source",
+    # "//ydb/core/tx/general_cache/usage",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "counters.cpp",
+    "manager.cpp",
+    "service.cpp",
+  ]
+}

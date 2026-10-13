@@ -1,0 +1,16 @@
+library("arrow") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    "//yql/essentials/providers/common/codec",
+  ]
+
+  deps = [
+    "//yql/essentials/minikql/arrow",
+    "//yql/essentials/public/udf/arrow",
+  ]
+
+  sources = [
+    "yql_codec_buf_input_stream.cpp",
+    "yql_codec_buf_output_stream.cpp",
+  ]
+}

@@ -1,0 +1,18 @@
+template("llvm_library") {
+    contrib_library(target_name) {
+        forward_variables_from(invoker, "*", [ "configs", "deps" ])
+
+        deps = [ "//contrib/libs/llvm16/lib/Support" ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        configs = [
+            "//contrib/libs/llvm16:public_config",
+            "//contrib/libs/llvm16:private_config",
+        ]
+        if (defined(invoker.configs)) {
+           configs += invoker.configs
+        }
+    }
+}

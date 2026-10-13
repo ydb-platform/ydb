@@ -1,0 +1,10 @@
+library("extension_common") {
+  public_deps = [
+    # "//library/cpp/monlib/metrics",
+    "//ydb/public/sdk/cpp/src/client/driver",
+  ]
+
+  deps = [ "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections" ]
+
+  sources = [ "extension.cpp" ]
+}

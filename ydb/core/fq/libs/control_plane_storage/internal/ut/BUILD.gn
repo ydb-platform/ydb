@@ -1,0 +1,52 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "resources/v1_output.json"
+      key = "v1_output.json"
+    },
+    {
+      path = "resources/v2_output.json"
+      key = "v2_output.json"
+    },
+    {
+      path = "resources/v1_s3source.json"
+      key = "v1_s3source.json"
+    },
+    {
+      path = "resources/v2_s3source.json"
+      key = "v2_s3source.json"
+    },
+    {
+      path = "resources/v1_two_results.json"
+      key = "v1_two_results.json"
+    },
+    {
+      path = "resources/v2_two_results.json"
+      key = "v2_two_results.json"
+    },
+  ]
+}
+
+unittest_executable("ut") {
+  deps = [
+    ":ut_resources",
+    "//library/cpp/json/yson",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/control_plane_storage",
+    "//ydb/core/fq/libs/control_plane_storage/proto",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "utils_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/control_plane_storage/internal" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,19 @@
+library("abstract") {
+  public_deps = [
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/data_accessor",
+    "//ydb/core/tx/columnshard/resource_subscriber",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard",
+  ]
+
+  sources = [ "abstract.cpp" ]
+
+  serialize_enum_headers = [ "abstract.h" ]
+}

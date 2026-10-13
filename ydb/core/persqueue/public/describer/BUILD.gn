@@ -1,0 +1,16 @@
+library("describer") {
+  public_deps = [
+    "//ydb/core/persqueue/events",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/persqueue/public",  # peerdir only
+  ]
+
+  sources = [ "describer.cpp" ]
+
+  serialize_enum_headers = [ "describer.h" ]
+}

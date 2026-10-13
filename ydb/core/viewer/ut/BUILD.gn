@@ -1,0 +1,48 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/http/fetch",
+    "//library/cpp/http/misc",
+    "//library/cpp/http/simple",
+    "//library/cpp/json",
+    "//library/cpp/monlib/service",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/kqp/common",
+    "//ydb/core/mon",  # peerdir only
+    "//ydb/core/mon:ut_utils",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/persqueue/ut/common",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
+    "//ydb/core/viewer",
+    "//ydb/core/viewer/protos",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/helpers",
+    "//ydb/library/actors/interconnect",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/viewer/topic_data_ut.cpp",
+    "//ydb/core/viewer/viewer_ut.cpp",
+    "ut_utils.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/viewer" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

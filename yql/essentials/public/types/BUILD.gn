@@ -1,0 +1,3 @@
+protobuf_library("types") {
+  sources = [ "yql_types.proto" ]
+}

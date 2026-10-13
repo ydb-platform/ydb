@@ -1,0 +1,34 @@
+library("ut_common") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/engine",
+    # "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/protos",
+    # "//ydb/core/testlib",
+    "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/ut",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//ydb/core/base",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/testlib/basics",
+    # "//ydb/core/tx/balance_coverage",
+    # "//ydb/core/tx/data_events",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_allocator",
+    # "//ydb/core/tx/tx_proxy:public",
+    "//ydb/core/tx/tx_proxy:upload_rows",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    # "//yql/essentials/minikql",
+  ]
+
+  sources = [ "datashard_ut_common.cpp" ]
+}

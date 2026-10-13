@@ -1,0 +1,46 @@
+unittest_executable("ut_change_exchange") {
+  deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/change_exchange",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public/write_meta",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",  # peerdir only
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/library/ut",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/datastreams",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/tx/datashard/datashard_ut_change_exchange.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/datashard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

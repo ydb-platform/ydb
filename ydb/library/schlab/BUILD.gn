@@ -1,0 +1,7 @@
+library("schlab") {
+  deps = [
+    # "//ydb/library/schlab/schine",  # peerdir only
+  ]
+
+  sources = [ "schlab_actor.cpp" ]
+}

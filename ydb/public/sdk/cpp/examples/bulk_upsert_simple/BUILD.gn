@@ -1,0 +1,10 @@
+linked_executable("bulk_upsert_simple") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

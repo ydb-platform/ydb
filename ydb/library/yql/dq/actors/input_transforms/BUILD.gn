@@ -1,0 +1,15 @@
+library("input_transforms") {
+  public_deps = [ "//ydb/library/yql/dq/actors/compute" ]
+
+  deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/proto",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  sources = [
+    "dq_input_transform_lookup.cpp",
+    "dq_input_transform_lookup_factory.cpp",
+  ]
+}

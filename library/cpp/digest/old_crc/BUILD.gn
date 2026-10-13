@@ -1,0 +1,5 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+library("old_crc") {
+  sources = [ "crc.cpp" ]
+}

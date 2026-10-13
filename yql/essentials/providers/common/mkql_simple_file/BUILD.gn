@@ -1,0 +1,8 @@
+library("mkql_simple_file") {
+  public_deps = [
+    "//yql/essentials/core",
+    "//yql/essentials/minikql",
+  ]
+
+  sources = [ "mkql_simple_file.cpp" ]
+}

@@ -1,0 +1,8 @@
+group("ut") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/util",
+  ]
+}

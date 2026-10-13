@@ -1,0 +1,33 @@
+library("comp_nodes") {
+  public_deps = [ "//yql/essentials/minikql/computation" ]
+
+  deps = [
+    # "//yql/essentials/ast",
+    "//yql/essentials/ast/serialize",
+    "//yql/essentials/core",
+    "//yql/essentials/core/type_ann",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/providers/common/codec",
+    "//yql/essentials/providers/common/schema/expr",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/public/udf",
+  ]
+
+  sources = [
+    "yql_factory.cpp",
+    "yql_formatcode.cpp",
+    "yql_formattype.cpp",
+    "yql_formattypediff.cpp",
+    "yql_makecode.cpp",
+    "yql_maketype.cpp",
+    "yql_parsetypehandle.cpp",
+    "yql_position.cpp",
+    "yql_reprcode.cpp",
+    "yql_serializetypehandle.cpp",
+    "yql_splittype.cpp",
+    "yql_type_resource.cpp",
+    "yql_typehandle.cpp",
+    "yql_typekind.cpp",
+  ]
+}

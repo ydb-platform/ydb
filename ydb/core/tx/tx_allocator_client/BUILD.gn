@@ -1,0 +1,18 @@
+library("tx_allocator_client") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/tablet",
+    # "//ydb/core/tx/tx_allocator",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "actor_client.cpp",
+    "client.cpp",
+  ]
+}

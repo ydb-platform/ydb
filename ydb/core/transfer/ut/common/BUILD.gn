@@ -1,0 +1,23 @@
+library("common") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/local_executor",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    # "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
+  ]
+
+  sources = [
+    "transfer_common.cpp",
+    "utils.cpp",
+  ]
+}

@@ -1,0 +1,21 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+  ]
+
+  sources = [
+    "//util/folder/dirut_ut.cpp",
+    "//util/folder/filelist_ut.cpp",
+    "//util/folder/fts_ut.cpp",
+    "//util/folder/iterator_ut.cpp",
+    "//util/folder/path_ut.cpp",
+    "//util/folder/pathsplit_ut.cpp",
+    "//util/folder/tempdir_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,11 @@
+library("actor_system") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+    # "//yql/essentials/providers/common/metrics",
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "manager.cpp" ]
+}

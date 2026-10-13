@@ -1,0 +1,46 @@
+library("service") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/apps/etcd_proxy/proto",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/resource",
+    # "//ydb/core/base",
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/kesus/tablet",  # peerdir only
+    # "//ydb/core/keyvalue",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+  ]
+
+  sources = [
+    "etcd_base_init.cpp",
+    "etcd_gate.cpp",
+    "etcd_grpc.cpp",
+    "etcd_impl.cpp",
+    "etcd_lease.cpp",
+    "etcd_shared.cpp",
+    "etcd_watch.cpp",
+  ]
+
+  resources = [
+    {
+      path = "create.sql"
+      key = "create.sql"
+    },
+    {
+      path = "leases.sql"
+      key = "leases.sql"
+    },
+    {
+      path = "revision.sql"
+      key = "revision.sql"
+    },
+  ]
+}

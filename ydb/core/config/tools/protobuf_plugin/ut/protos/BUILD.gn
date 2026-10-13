@@ -1,0 +1,16 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/core/config/protos" ]
+
+  sources = [
+    "as_map_test.proto",
+    "config_root_test.proto",
+    "copy_to_test.proto",
+  ]
+
+  extra_plugins = [
+    {
+      name = "config_proto_plugin"
+      target = "//ydb/core/config/tools/protobuf_plugin:config_proto_plugin"
+    },
+  ]
+}

@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/login/password_checker",
+  ]
+
+  sources = [ "//ydb/library/login/password_checker/password_checker_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/login/password_checker" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//util/string/ascii_ut.cpp",
+    "//util/string/builder_ut.cpp",
+    "//util/string/cast_ut.cpp",
+    "//util/string/escape_ut.cpp",
+    "//util/string/hex_ut.cpp",
+    "//util/string/join_ut.cpp",
+    "//util/string/printf_ut.cpp",
+    "//util/string/split_ut.cpp",
+    "//util/string/strip_ut.cpp",
+    "//util/string/strspn_ut.cpp",
+    "//util/string/subst_ut.cpp",
+    "//util/string/type_ut.cpp",
+    "//util/string/util_ut.cpp",
+    "//util/string/vector_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

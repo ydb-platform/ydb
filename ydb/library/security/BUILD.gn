@@ -1,0 +1,13 @@
+library("security") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/types/credentials" ]
+
+  deps = [
+    "//library/cpp/digest/crc32c",
+    "//ydb/public/sdk/cpp/src/client/iam",
+  ]
+
+  sources = [
+    "util.cpp",
+    "ydb_credentials_provider_factory.cpp",
+  ]
+}

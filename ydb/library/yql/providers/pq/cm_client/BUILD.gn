@@ -1,0 +1,11 @@
+library("cm_client") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "client.cpp" ]
+
+  serialize_enum_headers = [ "client.h" ]
+}

@@ -1,0 +1,78 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//yql/essentials/core/expr_nodes_gen/gen.gni")
+
+generate_expr_nodes("gen") {
+    sources = [ "yql_kikimr_expr_nodes.json" ]
+}
+
+library("provider") {
+    public_deps = [
+        "//ydb/core/grpc_services/base",  # include path
+        "//ydb/library/actors/wilson",  # include path
+        "//ydb/library/yql/dq/runtime",
+        "//ydb/public/api/grpc",  # include path
+        "//yql/essentials/providers/common/gateway",
+        "//yql/essentials/providers/common/provider",
+    ]
+
+    deps = [
+        ":gen",
+        "//ydb/core/docapi",
+        "//ydb/core/fq/libs/result_formatter",
+        "//ydb/core/kqp/common/simple",
+        "//ydb/core/protos",
+        "//ydb/core/scheme",
+        "//ydb/core/scheme_types",
+        "//ydb/core/ydb_convert",
+        "//ydb/library/actors/core",
+        "//ydb/library/mkql_proto",
+        "//ydb/library/yql/dq/tasks",
+        "//ydb/library/yql/providers/dq/provider",
+        "//ydb/public/api/protos",
+        "//ydb/services/metadata/abstract",
+        "//yql/essentials/core/cbo",
+        "//yql/essentials/core/peephole_opt",
+        "//yql/essentials/parser/pg_wrapper/interface",
+        "//yql/essentials/providers/common/config",
+        "//yql/essentials/providers/common/schema/expr",
+        "//yql/essentials/providers/common/transform",
+        "//yql/essentials/providers/result/expr_nodes",
+        "//yql/essentials/public/decimal",
+        "//yql/essentials/public/result_format",
+        "//yql/essentials/sql",
+        "//yql/essentials/sql/v0",
+        "//yql/essentials/sql/v1",
+        "//yql/essentials/sql/v1/lexer/antlr4",
+        "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+        "//yql/essentials/sql/v1/proto_parser/antlr4",
+        "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+        "//yql/essentials/types/binary_json",
+        "//yql/essentials/types/dynumber",
+        "//yql/essentials/types/uuid",
+        "//yql/essentials/utils/log",
+    ]
+
+    sources = [
+        "kqp_translate.cpp",
+        "read_attributes_utils.cpp",
+        "rewrite_io_utils.cpp",
+        "scheme_helpers.cpp",
+        "yql_kikimr_datasink.cpp",
+        "yql_kikimr_datasource.cpp",
+        "yql_kikimr_exec.cpp",
+        "yql_kikimr_expr_nodes.cpp",
+        "yql_kikimr_gateway.cpp",
+        "yql_kikimr_opt_build.cpp",
+        "yql_kikimr_opt.cpp",
+        "yql_kikimr_provider.cpp",
+        "yql_kikimr_results.cpp",
+        "yql_kikimr_settings.cpp",
+        "yql_kikimr_type_ann_pg.cpp",
+        "yql_kikimr_type_ann.cpp",
+    ]
+
+    serialize_enum_headers = [
+        "yql_kikimr_provider.h",
+    ]
+}

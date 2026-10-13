@@ -1,0 +1,28 @@
+unittest_executable("ut_compaction") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//ydb/core/cms",  # peerdir only
+    "//ydb/core/cms/console",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/wrappers:ut_helpers",  # peerdir only
+  ]
+
+  sources = [ "ut_compaction.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

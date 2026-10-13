@@ -1,0 +1,23 @@
+unittest_executable("slow") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/client/topic",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",
+  ]
+
+  sources = [ "txusage_slow_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/public/sdk/cpp/src/client/topic",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

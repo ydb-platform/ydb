@@ -1,0 +1,7 @@
+library("common") {
+  deps = [
+    # "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [ "events_scheduling.cpp" ]
+}

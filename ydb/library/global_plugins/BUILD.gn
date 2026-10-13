@@ -1,0 +1,7 @@
+library("global_plugins") {
+  public_deps = [
+    # "//library/cpp/getopt",
+  ]
+
+  sources = [ "abstract.cpp" ]
+}

@@ -1,0 +1,25 @@
+unittest_executable("ut_pg") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/scheme",  # peerdir only
+    "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/tablet_flat/test/libs/table",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+  ]
+
+  sources = [ "flat_database_pg_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tablet_flat",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+  ]
+}

@@ -1,0 +1,4 @@
+contrib_library("antlr4-c3") {
+    deps = [ "//contrib/libs/antlr4_cpp_runtime" ]
+    sources = [ "src/CodeCompletionCore.cpp" ]
+}

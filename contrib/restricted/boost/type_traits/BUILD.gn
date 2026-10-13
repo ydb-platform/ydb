@@ -1,0 +1,10 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("type_traits") {
+    public_deps = [
+        "//contrib/restricted/boost/static_assert",
+    ]
+    public_configs = [ ":public_config" ]
+}

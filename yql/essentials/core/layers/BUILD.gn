@@ -1,0 +1,14 @@
+library("layers") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    "//yql/essentials/ast",
+    "//yql/essentials/utils",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    "//yql/essentials/utils/fetch",
+  ]
+
+  sources = [ "layers.cpp" ]
+}

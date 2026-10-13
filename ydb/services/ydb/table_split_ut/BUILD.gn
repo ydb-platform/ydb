@@ -1,0 +1,56 @@
+unittest_executable("table_split_ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services/base",  # peerdir only
+    "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/public/api/grpc",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/lib/experimental",  # peerdir only
+    "//ydb/public/lib/json_value",  # peerdir only
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/coordination",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/draft",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/export",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/extension_common",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/monitoring",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/operation",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    "//ydb/services/ydb",
+    "//yql/essentials/minikql/dom",  # peerdir only
+    "//yql/essentials/minikql/jsonpath",  # peerdir only
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "//ydb/services/ydb/ydb_table_split_ut.cpp" ]
+
+  include_dirs = [ "//ydb/services/ydb" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

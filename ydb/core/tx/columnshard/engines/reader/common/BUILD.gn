@@ -1,0 +1,37 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_reader",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/predicate",
+    # "//ydb/core/tx/columnshard/operations",
+    "//ydb/core/tx/conveyor/usage",
+    # "//ydb/core/tx/limiter/grouped_memory/service",
+    # "//ydb/core/tx/program",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+    # "//ydb/library/formats/arrow",
+    "//ydb/library/yql/dq/actors/protos",
+  ]
+
+  deps = [
+    "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/reader/abstract",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "comparable.cpp",
+    "conveyor_task.cpp",
+    "description.cpp",
+    "queue.cpp",
+    "result.cpp",
+    "stats.cpp",
+  ]
+
+  serialize_enum_headers = [ "description.h" ]
+}

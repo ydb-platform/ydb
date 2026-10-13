@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/federated_query",
+    "//ydb/public/api/protos",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/public/issue/protos",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources =
+      [ "//ydb/core/kqp/federated_query/kqp_federated_query_helpers_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/federated_query" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

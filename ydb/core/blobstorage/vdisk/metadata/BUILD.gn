@@ -1,0 +1,13 @@
+library("metadata") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/vdisk/common",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [ "metadata_actor.cpp" ]
+}

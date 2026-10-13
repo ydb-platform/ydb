@@ -1,0 +1,3 @@
+library("intrusive_rb_tree") {
+  sources = [ "rb_tree.cpp" ]
+}

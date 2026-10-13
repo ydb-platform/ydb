@@ -1,0 +1,13 @@
+library("layout") {
+  public_deps = [
+    "//ydb/core/scheme",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "layout.cpp" ]
+}

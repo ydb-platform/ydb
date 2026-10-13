@@ -1,0 +1,6 @@
+library("core") {
+  sources = [
+    "codecs.cpp",
+    "stream.cpp",
+  ]
+}

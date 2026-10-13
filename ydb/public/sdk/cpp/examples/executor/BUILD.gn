@@ -1,0 +1,12 @@
+linked_executable("executor") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/helpers",
+    "//ydb/public/sdk/cpp/src/client/query",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

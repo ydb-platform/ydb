@@ -1,0 +1,5 @@
+group("union_copy_set") {
+  public_deps = [
+    # "//library/cpp/containers/stack_vector",
+  ]
+}

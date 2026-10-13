@@ -1,0 +1,16 @@
+protobuf_library("proto") {
+  public_deps = [
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "credentials.proto",
+    "file_queue.proto",
+    "range.proto",
+    "retry_config.proto",
+    "sink.proto",
+    "source.proto",
+  ]
+}

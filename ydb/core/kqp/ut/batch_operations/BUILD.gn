@@ -1,0 +1,30 @@
+unittest_executable("batch_operations") {
+  deps = [
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/tx/data_events",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_batch_delete_ut.cpp",
+    "kqp_batch_pea_ut.cpp",
+    "kqp_batch_update_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

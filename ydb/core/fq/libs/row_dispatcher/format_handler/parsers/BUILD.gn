@@ -1,0 +1,26 @@
+library("parsers") {
+  public_deps = [
+    "//ydb/core/fq/libs/row_dispatcher/common",
+    # "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/common",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/minikql",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    "//contrib/libs/simdjson",
+    # "//library/cpp/containers/absl_flat_hash",
+    "//ydb/core/fq/libs/actors/logging",
+    "//yql/essentials/minikql/dom",
+    # "//yql/essentials/providers/common/schema",  # peerdir only
+    "//yql/essentials/providers/common/schema/mkql",
+  ]
+
+  sources = [
+    "json_parser.cpp",
+    "parser_abstract.cpp",
+    "parser_base.cpp",
+    "raw_parser.cpp",
+  ]
+}

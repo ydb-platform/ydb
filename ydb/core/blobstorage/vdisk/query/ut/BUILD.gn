@@ -1,0 +1,20 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/vdisk/huge",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/query",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "//ydb/core/blobstorage/vdisk/query/query_spacetracker_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/query" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

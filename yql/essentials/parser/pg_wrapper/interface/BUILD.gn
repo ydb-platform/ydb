@@ -1,0 +1,63 @@
+library("interface") {
+  public_deps = [
+    ":yql_pg_sql_translator",
+    # "//contrib/libs/apache/arrow",
+    # "//yql/essentials/core/pg_settings",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/providers/common/codec/yt_arrow_converter_interface",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/arrow",
+  ]
+
+  deps = [
+    # "//library/cpp/disjoint_sets",
+    # "//yql/essentials/ast",  # peerdir only
+    # "//yql/essentials/core/cbo",  # peerdir only
+  ]
+
+  sources = [ "interface.cpp" ]
+
+  link_slot_interface = "yql_pg_runtime"
+
+  link_slot_headers = [
+    "arrow.h",
+    "codec.h",
+    "comp_factory.h",
+    "compare.h",
+    "config.h",
+    "context.h",
+    "pack.h",
+    "raw_parser.h",
+    "type_desc.h",
+    "utils.h",
+  ]
+
+  link_slot_codegen = [
+    "//yql/essentials/public/issue/protos",
+    "//yql/essentials/public/types",
+  ]
+
+  link_slot_module_interfaces = [ "yql_pg_sql_translator" ]
+}
+
+slot_interface_group("yql_pg_sql_translator") {
+  public_deps = [
+    # ":interface",
+    "//yql/essentials/ast",
+    # "//yql/essentials/core/cbo",
+    # "//yql/essentials/parser/pg_catalog",
+  ]
+
+  link_slot_interface = "yql_pg_sql_translator"
+
+  link_slot_headers = [
+    "optimizer.h",
+    "parser.h",
+  ]
+
+  link_slot_flags_from = [ "interface.cpp" ]
+
+  link_slot_codegen = [ "//yql/essentials/public/issue/protos" ]
+}

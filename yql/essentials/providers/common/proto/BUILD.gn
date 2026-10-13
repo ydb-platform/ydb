@@ -1,0 +1,11 @@
+protobuf_library("proto") {
+  public_deps = [
+    "//yql/essentials/protos",
+    "//yql/essentials/utils/fetch/proto",
+  ]
+
+  sources = [
+    "gateways_config.proto",
+    "udf_resolver.proto",
+  ]
+}

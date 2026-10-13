@@ -1,0 +1,12 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("MCJIT") {
+    deps = [
+        "//contrib/libs/llvm16/lib/ExecutionEngine",
+        "//contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld",
+        "//contrib/libs/llvm16/lib/Object",
+        "//contrib/libs/llvm16/lib/Target",
+    ]
+
+    sources = [ "MCJIT.cpp" ]
+}

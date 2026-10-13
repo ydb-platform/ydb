@@ -1,0 +1,16 @@
+library("proxy") {
+  public_deps = [
+    # "//library/cpp/logger",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    "//ydb/library/logger",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    # "//ydb/core/persqueue/public",  # peerdir only
+  ]
+
+  sources = [ "actor_persqueue_client_iface.cpp" ]
+}

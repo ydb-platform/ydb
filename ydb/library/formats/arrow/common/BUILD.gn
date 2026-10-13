@@ -1,0 +1,13 @@
+group("common") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/library/conclusion",  # peerdir only
+    # "//ydb/library/formats/arrow/splitter",  # peerdir only
+    # "//ydb/library/formats/arrow/switch",  # peerdir only
+    # "//ydb/library/formats/arrow/validation",  # peerdir only
+  ]
+}

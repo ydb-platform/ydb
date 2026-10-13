@@ -1,0 +1,38 @@
+library("resources") {
+  public_deps = [ "//library/cpp/monlib/service/pages" ]
+
+  deps = [
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+  ]
+
+  resources = [
+    {
+      path = "static/css/bootstrap.min.css"
+      key = "static/css/bootstrap.min.css"
+    },
+    {
+      path = "static/fonts/glyphicons-halflings-regular.eot"
+      key = "static/fonts/glyphicons-halflings-regular.eot"
+    },
+    {
+      path = "static/fonts/glyphicons-halflings-regular.svg"
+      key = "static/fonts/glyphicons-halflings-regular.svg"
+    },
+    {
+      path = "static/fonts/glyphicons-halflings-regular.ttf"
+      key = "static/fonts/glyphicons-halflings-regular.ttf"
+    },
+    {
+      path = "static/fonts/glyphicons-halflings-regular.woff"
+      key = "static/fonts/glyphicons-halflings-regular.woff"
+    },
+    {
+      path = "static/js/bootstrap.min.js"
+      key = "static/js/bootstrap.min.js"
+    },
+    {
+      path = "static/js/jquery.min.js"
+      key = "static/js/jquery.min.js"
+    },
+  ]
+}

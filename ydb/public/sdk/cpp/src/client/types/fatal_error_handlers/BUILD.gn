@@ -1,0 +1,5 @@
+library("fatal_error_handlers") {
+  deps = [ "//ydb/public/sdk/cpp/src/client/types/exceptions" ]
+
+  sources = [ "handlers.cpp" ]
+}

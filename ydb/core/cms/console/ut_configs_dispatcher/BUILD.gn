@@ -1,0 +1,38 @@
+unittest_executable("ut_configs_dispatcher") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/protobuf/util",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/cms/console",
+    "//ydb/core/cms/console/util",
+    "//ydb/core/cms/console/validators",
+    "//ydb/core/config/init",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "//ydb/core/cms/console/configs_cache_ut.cpp",
+    "//ydb/core/cms/console/configs_dispatcher_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/cms/console" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

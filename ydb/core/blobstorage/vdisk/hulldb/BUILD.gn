@@ -1,0 +1,41 @@
+group("_self") {
+  public_deps = [
+    # "//ydb/core/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/barriers",
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    # "//ydb/core/blobstorage/vdisk:defs",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+}
+
+group("hulldb") {
+  public_deps = [
+    ":_self",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/compstrat",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/recovery",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+}
+
+library("test") {
+  public_deps = [ ":hulldb" ]
+
+  deps = [
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "test/testhull_index.cpp" ]
+}

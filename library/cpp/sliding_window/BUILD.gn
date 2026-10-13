@@ -1,0 +1,3 @@
+library("sliding_window") {
+  sources = [ "sliding_window.cpp" ]
+}

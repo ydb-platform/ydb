@@ -1,0 +1,15 @@
+library("replication") {
+  public_deps = [
+    "//ydb/core/grpc_services/base",
+    # "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",
+    # "//ydb/library/actors/core",  # peerdir only
+    # "//ydb/public/api/grpc",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

@@ -1,0 +1,7 @@
+protobuf_library("access") {
+  public_deps = [ "//contrib/libs/googleapis-common-protos" ]
+
+  sources = [ "access.proto" ]
+
+  generate_grpc_services = true
+}

@@ -1,0 +1,15 @@
+library("metrics") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//yql/essentials/providers/common/metrics",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/encode",
+    # "//ydb/library/actors/http",
+    # "//ydb/library/yql/providers/solomon/actors",  # peerdir only
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "metrics_printer.cpp" ]
+}

@@ -1,0 +1,3 @@
+library("obfuscate") {
+  sources = [ "obfuscate.cpp" ]
+}

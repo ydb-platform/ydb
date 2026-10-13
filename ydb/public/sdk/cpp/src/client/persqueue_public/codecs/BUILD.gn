@@ -1,0 +1,6 @@
+group("codecs") {
+  deps = [
+    # "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/topic/codecs",  # peerdir only
+  ]
+}

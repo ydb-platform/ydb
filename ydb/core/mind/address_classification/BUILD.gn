@@ -1,0 +1,21 @@
+library("address_classification") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//ydb/core/cms/console",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+  ]
+
+  sources = [
+    "counters.cpp",
+    "net_classifier.cpp",
+  ]
+
+  serialize_enum_headers = [ "net_classifier.h" ]
+}

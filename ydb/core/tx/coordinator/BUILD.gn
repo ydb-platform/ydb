@@ -1,0 +1,47 @@
+library("coordinator") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/control/lib",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx",
+    "//ydb/core/tx/coordinator/public",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/absl_flat_hash",
+    # "//library/cpp/time_provider",
+    # "//ydb/core/actorlib_impl",  # peerdir only
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "coordinator.cpp",
+    "coordinator__acquire_read_step.cpp",
+    "coordinator__check.cpp",
+    "coordinator__configure.cpp",
+    "coordinator__init.cpp",
+    "coordinator__last_step_subscriptions.cpp",
+    "coordinator__mediators_confirmations.cpp",
+    "coordinator__monitoring.cpp",
+    "coordinator__plan_step.cpp",
+    "coordinator__read_step_subscriptions.cpp",
+    "coordinator__restore_params.cpp",
+    "coordinator__restore_transaction.cpp",
+    "coordinator__schema.cpp",
+    "coordinator__schema_upgrade.cpp",
+    "coordinator__stop_guard.cpp",
+    "coordinator_hooks.cpp",
+    "coordinator_impl.cpp",
+    "coordinator_state.cpp",
+    "mediator_queue.cpp",
+  ]
+}

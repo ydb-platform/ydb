@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt/small",
+    "//library/cpp/logger",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/testing/gmock_in_unittest",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/ydb_cli/commands",
+  ]
+
+  sources = [
+    "//ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_params_ut.cpp",
+    "topic_workload_writer_producer_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/commands/topic_workload" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

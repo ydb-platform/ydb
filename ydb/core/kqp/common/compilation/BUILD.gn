@@ -1,0 +1,22 @@
+library("compilation") {
+  public_deps = [
+    # "//library/cpp/lwtrace",
+    # "//ydb/core/kqp/common",
+    "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/counters",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    # "//yql/essentials/ast",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//ydb/core/kqp/query_data",  # peerdir only
+    # "//ydb/core/util",
+  ]
+
+  sources = [
+    "events.cpp",
+    "result.cpp",
+  ]
+}

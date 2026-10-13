@@ -1,0 +1,11 @@
+library("group_overseer") {
+  public_deps = [
+    "//contrib/libs/t1ha",
+    "//ydb/core/base",
+  ]
+
+  sources = [
+    "group_overseer.cpp",
+    "group_state.cpp",
+  ]
+}

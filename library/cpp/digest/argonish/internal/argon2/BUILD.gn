@@ -1,0 +1,12 @@
+group("argon2") {
+  public_deps = [
+    # "//library/cpp/digest/argonish",
+    # "//library/cpp/digest/argonish/internal/blake2b",
+    # "//library/cpp/digest/argonish/internal/rotations",
+    # "//library/cpp/threading/poor_man_openmp",
+  ]
+
+  deps = [
+    # "//library/cpp/digest/argonish/internal/blamka",  # peerdir only
+  ]
+}

@@ -1,0 +1,18 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Target") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "Target.cpp",
+        "TargetIntrinsicInfo.cpp",
+        "TargetLoweringObjectFile.cpp",
+        "TargetMachine.cpp",
+        "TargetMachineC.cpp",
+    ]
+}

@@ -1,0 +1,37 @@
+library("rm_service") {
+  public_deps = [
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/counters",
+    # "//ydb/core/kqp/gateway:interface",
+    # "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/proto",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/absl_flat_hash",
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/actorlib_impl",
+    # "//ydb/core/base",
+    # "//ydb/core/cms/console",
+    # "//ydb/core/mind",
+    # "//ydb/core/mon",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/tablet",
+    "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/interconnect",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "kqp_resource_estimation.cpp",
+    "kqp_resource_info_exchanger.cpp",
+    "kqp_rm_service.cpp",
+    "kqp_snapshot_manager.cpp",
+  ]
+}

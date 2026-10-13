@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/cms/console",
+    "//ydb/core/health_check",
+    "//ydb/core/mind/hive",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+    "//ydb/public/lib/deprecated/kicli",
+  ]
+
+  sources = [ "//ydb/core/health_check/health_check_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/health_check" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

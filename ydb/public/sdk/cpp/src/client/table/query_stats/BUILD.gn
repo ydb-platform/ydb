@@ -1,0 +1,10 @@
+library("query_stats") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/query" ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  sources = [ "stats.cpp" ]
+}

@@ -1,0 +1,23 @@
+library("data_accessor") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_accessor/abstract",
+    # "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/resource_subscriber",
+    # "//ydb/core/tx/general_cache/usage",
+    # "//ydb/library/signals",
+    # "//ydb/services/bg_tasks/abstract",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/hooks/abstract",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [
+    "manager.cpp",
+    "request.cpp",
+  ]
+}

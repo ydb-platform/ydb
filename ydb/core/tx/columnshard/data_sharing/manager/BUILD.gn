@@ -1,0 +1,20 @@
+group("manager") {
+  public_deps = [
+    ":shared_blobs",
+    "//ydb/core/tx/columnshard",
+  ]
+}
+
+library("shared_blobs") {
+  public_deps = [
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [ "//ydb/core/tx/columnshard/blobs_action" ]
+
+  sources = [ "shared_blobs.cpp" ]
+}

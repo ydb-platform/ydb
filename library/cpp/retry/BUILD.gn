@@ -1,0 +1,12 @@
+protobuf_library("protos") {
+  sources = [ "protos/retry_options.proto" ]
+}
+
+library("retry") {
+  public_deps = [ ":protos" ]
+
+  sources = [
+    "retry.cpp",
+    "utils.cpp",
+  ]
+}

@@ -1,0 +1,38 @@
+library("query") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+    # "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/public/api/grpc",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/common_client",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    # "//ydb/public/sdk/cpp/src/client/impl/endpoints",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/plain_status",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/retry",
+    "//ydb/public/sdk/cpp/src/client/impl/session",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/library/issue",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  sources = [
+    "client.cpp",
+    "impl/client_session.cpp",
+    "impl/exec_query.cpp",
+    "query.cpp",
+    "stats.cpp",
+    "tx.cpp",
+  ]
+}

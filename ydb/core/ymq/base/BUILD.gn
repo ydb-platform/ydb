@@ -1,0 +1,51 @@
+library("base") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/lwtrace",
+    # "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/scheme",
+    "//ydb/core/kqp/common",
+    "//ydb/core/protos",
+    "//ydb/core/ymq/proto",
+    "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    "//ydb/library/http_proxy/error",
+    # "//ydb/public/lib/deprecated/kicli",
+    # "//ydb/public/lib/scheme_types",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    # "//yql/essentials/minikql:alloc",
+  ]
+
+  deps = [
+    # "//contrib/libs/openssl",  # peerdir only
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/cgiparam",  # peerdir only
+    # "//library/cpp/ipmath",  # peerdir only
+    "//library/cpp/logger/global",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/unified_agent_client",
+    # "//ydb/core/base",
+    # "//ydb/library/http_proxy/authorization",  # peerdir only
+    "//ydb/library/protobuf_printer",
+  ]
+
+  sources = [
+    "acl.cpp",
+    "action.cpp",
+    "counters.cpp",
+    "dlq_helpers.cpp",
+    "events_writer.cpp",
+    "events_writer_iface.cpp",
+    "helpers.cpp",
+    "probes.cpp",
+    "queue_attributes.cpp",
+    "queue_id.cpp",
+    "run_query.cpp",
+    "secure_protobuf_printer.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "cloud_enums.h",
+    "query_id.h",
+  ]
+}

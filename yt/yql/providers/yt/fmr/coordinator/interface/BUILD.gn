@@ -1,0 +1,8 @@
+library("interface") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//yt/yql/providers/yt/fmr/request_options",
+  ]
+
+  sources = [ "yql_yt_coordinator.cpp" ]
+}

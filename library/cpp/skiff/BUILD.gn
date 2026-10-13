@@ -1,0 +1,10 @@
+library("skiff") {
+  sources = [
+    "skiff.cpp",
+    "skiff_schema.cpp",
+    "skiff_validator.cpp",
+    "zerocopy_output_writer.cpp",
+  ]
+
+  serialize_enum_headers = [ "public.h" ]
+}

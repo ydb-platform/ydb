@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/hook",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/opt",
+    "//yql/essentials/core",
+    "//yql/essentials/core/cbo",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "dq_cbo_ut.cpp",
+    "dq_opt_hypergraph_ut.cpp",
+    "dq_opt_interesting_orderings_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/dq/opt" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+  ]
+}

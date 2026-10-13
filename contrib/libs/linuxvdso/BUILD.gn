@@ -1,0 +1,16 @@
+config("private_config") {
+    cflags = [
+        "-Wno-sign-compare",
+        "-Wno-unused-const-variable",
+    ]
+}
+
+contrib_library("linuxvdso") {
+    sources = [
+        "interface.cpp",
+        "original/elf_mem_image.cc",
+        "original/vdso_support.cc",
+    ]
+
+    configs = [ ":private_config" ]
+}

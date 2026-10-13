@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    "//ydb/core/grpc_services",
+    "//ydb/core/protos",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "//ydb/core/grpc_services/operation_helpers_ut.cpp",
+    "//ydb/core/grpc_services/rpc_calls_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/grpc_services" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

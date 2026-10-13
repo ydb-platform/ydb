@@ -1,0 +1,10 @@
+library("serialize") {
+  public_deps = [ "//yql/essentials/ast" ]
+
+  deps = [
+    "//yql/essentials/core/issue",  # peerdir only
+    "//yql/essentials/minikql",
+  ]
+
+  sources = [ "yql_expr_serialize.cpp" ]
+}

@@ -1,0 +1,5 @@
+group("runtime") {
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+  ]
+}

@@ -1,0 +1,19 @@
+library("check") {
+  public_deps = [
+    # "//yql/essentials/core/issue",
+  ]
+
+  deps = [
+    # "//yql/essentials/sql/settings",
+    # "//yql/essentials/sql/v1/lexer",
+    # "//yql/essentials/sql/v1/lexer/antlr4",
+    # "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+    # "//yql/essentials/sql/v1/lexer/antlr4_pure",
+    # "//yql/essentials/sql/v1/lexer/antlr4_pure_ansi",
+    # "//yql/essentials/sql/v1/lexer/regex",
+    # "//yql/essentials/sql/v1/proto_parser/antlr4",
+    # "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+  ]
+
+  sources = [ "check_lexers.cpp" ]
+}

@@ -1,0 +1,3 @@
+library("disjoint_sets") {
+  sources = [ "disjoint_sets.cpp" ]
+}

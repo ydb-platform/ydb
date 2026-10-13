@@ -1,0 +1,23 @@
+library("blob") {
+  public_deps = [
+    # "//library/cpp/containers/bitseq",
+    # "//library/cpp/packedtypes",
+    "//ydb/core/persqueue/common",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/library/logger",  # peerdir only
+  ]
+
+  sources = [
+    "blob.cpp",
+    "blob_serialization.cpp",
+    "header.cpp",
+    "type_codecs_defs.cpp",
+  ]
+}

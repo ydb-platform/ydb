@@ -1,0 +1,12 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("variant") {
+    public_deps = [
+        "//contrib/restricted/boost/integer",
+        "//contrib/restricted/boost/type_index",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

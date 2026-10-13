@@ -1,0 +1,8 @@
+protobuf_library("protos") {
+  deps = [
+    # "//ydb/core/tx/columnshard/common/protos",  # peerdir only
+    # "//ydb/services/bg_tasks/protos",  # peerdir only
+  ]
+
+  sources = [ "data.proto" ]
+}

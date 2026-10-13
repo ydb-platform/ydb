@@ -1,0 +1,26 @@
+library("profiling") {
+  public_deps = [
+    "//library/cpp/yt/compact_containers",
+    "//library/cpp/yt/cpu_clock",
+    "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+    "//library/cpp/yt/string",
+    "//library/cpp/yt/threading",
+    # "//yt/yt/core",
+  ]
+
+  deps = [
+    "//library/cpp/yt/assert",
+    "//library/cpp/yt/error",  # peerdir only
+  ]
+
+  sources = [
+    "histogram_snapshot.cpp",
+    "impl.cpp",
+    "percpu.cpp",
+    "producer.cpp",
+    "sensor.cpp",
+    "tag.cpp",
+    "testing.cpp",
+  ]
+}

@@ -1,0 +1,40 @@
+unittest_executable("ut") {
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/workload_service/common",
+    "//ydb/core/protos",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/public/lib/yson_value",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/workload_service",
+    "//ydb/core/kqp/workload_service/actors",
+    "//ydb/core/kqp/workload_service/tables",
+    "//ydb/core/kqp/workload_service/ut/common",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_workload_service_actors_ut.cpp",
+    "kqp_workload_service_tables_ut.cpp",
+    "kqp_workload_service_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/kqp/workload_service" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

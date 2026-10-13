@@ -1,0 +1,18 @@
+gtest_executable("bulk_upsert") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "bulk_upsert.cpp",
+    "main.cpp",
+  ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

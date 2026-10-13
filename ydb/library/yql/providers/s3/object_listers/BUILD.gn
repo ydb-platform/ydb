@@ -1,0 +1,27 @@
+library("object_listers") {
+  public_deps = [
+    "//contrib/libs/re2",
+    # "//library/cpp/cache",
+    "//library/cpp/threading/future",
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/common/http_gateway",
+    "//ydb/library/yql/providers/s3/credentials",
+  ]
+
+  deps = [
+    # "//library/cpp/string_utils/quote",
+    "//library/cpp/xml/document",
+    "//ydb/library/yql/providers/s3/common",
+    "//ydb/library/yql/utils/actor_log",
+    "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+    # "//yql/essentials/utils/threading",  # peerdir only
+  ]
+
+  sources = [
+    "yql_s3_list.cpp",
+    "yql_s3_path.cpp",
+  ]
+
+  serialize_enum_headers = [ "yql_s3_list.h" ]
+}

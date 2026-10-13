@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/services/persqueue_cluster_discovery:cluster_ordering",
+  ]
+
+  sources = [ "//ydb/services/persqueue_cluster_discovery/cluster_ordering/weighed_ordering_ut.cpp" ]
+
+  include_dirs =
+      [ "//ydb/services/persqueue_cluster_discovery/cluster_ordering" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

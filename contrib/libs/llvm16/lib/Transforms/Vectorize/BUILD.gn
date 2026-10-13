@@ -1,0 +1,23 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Vectorize") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "LoadStoreVectorizer.cpp",
+        "LoopVectorizationLegality.cpp",
+        "LoopVectorize.cpp",
+        "SLPVectorizer.cpp",
+        "VectorCombine.cpp",
+        "Vectorize.cpp",
+        "VPlan.cpp",
+        "VPlanHCFGBuilder.cpp",
+        "VPlanRecipes.cpp",
+        "VPlanSLP.cpp",
+        "VPlanTransforms.cpp",
+        "VPlanVerifier.cpp",
+    ]
+}

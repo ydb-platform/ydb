@@ -1,0 +1,35 @@
+linked_executable("kqprun") {
+  testonly = true
+
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/colorizer",
+    "//library/cpp/getopt",
+    "//library/cpp/getopt/small",
+    "//library/cpp/lfalloc/alloc_profiler",
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/blob_depot",
+    "//ydb/library/aclib",
+    "//ydb/library/yaml_config",
+    "//ydb/library/yql/providers/pq/gateway/dummy",
+    "//ydb/tests/tools/kqprun/runlib",
+    "//ydb/tests/tools/kqprun/src",
+    "//yql/essentials/minikql",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yt/yql/providers/yt/gateway/file",
+    "//yt/yql/providers/yt/lib/yt_download",
+  ]
+
+  sources = [ "kqprun.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

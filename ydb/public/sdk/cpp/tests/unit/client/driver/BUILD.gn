@@ -1,0 +1,15 @@
+unittest_executable("driver") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  sources = [ "driver_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

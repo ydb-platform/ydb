@@ -1,0 +1,30 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/checkpointing",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/graph_params/proto",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/basics:default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/providers/dq/api/protos",
+    "//ydb/library/yql/providers/dq/common",
+  ]
+
+  sources = [ "checkpoint_coordinator_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/checkpointing" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

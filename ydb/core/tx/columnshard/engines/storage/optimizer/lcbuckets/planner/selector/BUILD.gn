@@ -1,0 +1,20 @@
+library("selector") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/services/bg_tasks/abstract",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "empty.cpp",
+    "snapshot.cpp",
+    "transparent.cpp",
+  ]
+}

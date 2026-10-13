@@ -1,0 +1,38 @@
+library("ast") {
+  public_deps = [
+    # "//library/cpp/containers/sorted_vector",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/enumbitset",
+    "//library/cpp/json",
+    # "//library/cpp/string_utils/levenshtein_diff",
+    # "//library/cpp/yson",
+    "//library/cpp/yson/node",
+    # "//yql/essentials/core/sql_types",
+    # "//yql/essentials/core/url_lister/interface",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/utils",
+  ]
+
+  deps = [
+    "//contrib/libs/openssl",
+    # "//library/cpp/colorizer",  # peerdir only
+    # "//yql/essentials/core/issue",
+    "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/utils/fetch",
+  ]
+
+  sources = [
+    "yql_ast.cpp",
+    "yql_ast_annotation.cpp",
+    "yql_ast_escaping.cpp",
+    "yql_constraint.cpp",
+    "yql_errors.cpp",
+    "yql_expr.cpp",
+    "yql_expr_builder.cpp",
+    "yql_expr_types.cpp",
+    "yql_gc_nodes.cpp",
+    "yql_type_string.cpp",
+  ]
+}

@@ -1,0 +1,30 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/mind/address_classification",
+    "//ydb/core/persqueue/public/cluster_tracker",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/http",
+    "//ydb/public/api/grpc",  # peerdir only
+    "//ydb/public/api/grpc/draft",
+    "//ydb/services/persqueue_cluster_discovery",
+  ]
+
+  sources = [ "//ydb/services/persqueue_cluster_discovery/cluster_discovery_service_ut.cpp" ]
+
+  include_dirs = [ "//ydb/services/persqueue_cluster_discovery" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

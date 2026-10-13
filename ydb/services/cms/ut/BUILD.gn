@@ -1,0 +1,44 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/protos",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/aclib",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    "//ydb/services/cms",  # peerdir only
+    "//ydb/services/ydb",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "//ydb/services/cms/cms_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/services/cms",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

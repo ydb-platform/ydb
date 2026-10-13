@@ -1,0 +1,39 @@
+linked_executable("pgwire") {
+  deps = [
+    "//library/cpp/getopt",
+    "//library/cpp/monlib/metrics",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/local_pgwire",
+    "//ydb/core/pgproxy",
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/services",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/common_client",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "main.cpp",
+    "pg_ydb_connection.cpp",
+    "pg_ydb_proxy.cpp",
+    "pgwire.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=no_llvm",
+  ]
+}

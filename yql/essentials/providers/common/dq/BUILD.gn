@@ -1,0 +1,8 @@
+library("dq") {
+  public_deps = [ "//yql/essentials/core/dq_integration" ]
+
+  sources = [
+    "yql_dq_integration_impl.cpp",
+    "yql_dq_optimization_impl.cpp",
+  ]
+}

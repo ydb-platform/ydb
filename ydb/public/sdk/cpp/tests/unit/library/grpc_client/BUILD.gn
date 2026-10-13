@@ -1,0 +1,10 @@
+unittest_executable("grpc_client") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  sources = [ "grpc_client_low_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

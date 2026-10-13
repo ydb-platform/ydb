@@ -1,0 +1,42 @@
+library("runlib") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/colorizer",
+    # "//library/cpp/getopt",
+    # "//library/cpp/logger",
+    # "//library/cpp/threading/future",
+    "//ydb/core/fq/libs/compute/common",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/testlib",
+    "//ydb/library/services",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/ydb_cli/common",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/issue",
+    # "//yt/yql/providers/yt/provider",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/lfalloc/alloc_profiler",
+    # "//ydb/core/base",
+    # "//ydb/core/blob_depot",
+    "//ydb/library/grpc/server/actors",
+    "//ydb/library/yql/providers/s3/actors",
+    # "//ydb/public/lib/json_value",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/public/udf",
+    "//yt/yql/providers/yt/mkql_dq",
+  ]
+
+  sources = [
+    "application.cpp",
+    "kikimr_setup.cpp",
+    "utils.cpp",
+  ]
+}

@@ -1,0 +1,40 @@
+library("codecs") {
+  public_deps = [
+    ":greedy_dict",
+    "//library/cpp/bit_io",
+    "//library/cpp/containers/comptrie",
+    "//library/cpp/deprecated/accessors",
+  ]
+
+  deps = [
+    "//contrib/libs/zstd",
+    "//library/cpp/blockcodecs",
+    "//library/cpp/comptable",
+    "//library/cpp/packers",
+    "//library/cpp/string_utils/relaxed_escaper",
+  ]
+
+  sources = [
+    "codecs.cpp",
+    "codecs_registry.cpp",
+    "comptable_codec.cpp",
+    "delta_codec.cpp",
+    "float_huffman.cpp",
+    "huffman_codec.cpp",
+    "pfor_codec.cpp",
+    "solar_codec.cpp",
+    "tls_cache.cpp",
+    "zstd_dict_codec.cpp",
+  ]
+}
+
+library("greedy_dict") {
+  public_deps = [ "//library/cpp/containers/comptrie" ]
+
+  deps = [ "//library/cpp/string_utils/relaxed_escaper" ]
+
+  sources = [
+    "greedy_dict/gd_builder.cpp",
+    "greedy_dict/gd_entry.cpp",
+  ]
+}

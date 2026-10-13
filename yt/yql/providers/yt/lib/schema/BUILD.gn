@@ -1,0 +1,16 @@
+library("schema") {
+  public_deps = [
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/providers/common/codec",
+    "//yt/cpp/mapreduce/interface",
+  ]
+
+  deps = [
+    "//yql/essentials/providers/common/schema/expr",
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/common",
+  ]
+
+  sources = [ "schema.cpp" ]
+}

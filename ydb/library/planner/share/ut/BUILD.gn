@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/lwtrace",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/library/planner/share",
+  ]
+
+  sources = [ "shareplanner_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

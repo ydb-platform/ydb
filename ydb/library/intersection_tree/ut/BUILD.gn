@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/intersection_tree",
+  ]
+
+  sources = [ "//ydb/library/intersection_tree/intersection_tree_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/intersection_tree" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

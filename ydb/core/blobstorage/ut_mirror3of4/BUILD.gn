@@ -1,0 +1,30 @@
+unittest_executable("ut_mirror3of4") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/backpressure",
+    "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/dsproxy",  # peerdir only
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk/mock",
+    "//ydb/core/blobstorage/vdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/repl",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/tx/scheme_board",  # peerdir only
+    "//ydb/core/util",  # peerdir only
+    "//ydb/core/util/actorsys_test",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect/mock",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

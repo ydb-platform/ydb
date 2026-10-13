@@ -1,0 +1,37 @@
+config("pg_private_config") {
+  include_dirs = [ "//yql/essentials/parser/pg_wrapper/postgresql/src/include" ]
+  defines = [
+    "palloc0=yql_palloc0",
+    "pfree=yql_pfree",
+  ]
+}
+
+library("pg") {
+  public_deps =
+      [ "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator" ]
+
+  deps = [
+    "//yql/essentials/ast",
+    "//yql/essentials/core/cbo",  # peerdir only
+    # "//yql/essentials/core/issue",
+    # "//yql/essentials/core/sql_types",
+    "//yql/essentials/minikql",
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/parser/pg_wrapper",
+    "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/sql/settings",
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "optimizer.cpp",
+    "pg_sql.cpp",
+    "utils.cpp",
+  ]
+
+  link_slot_provides = [ "yql_pg_sql_translator" ]
+
+  configs = [ ":pg_private_config" ]
+}

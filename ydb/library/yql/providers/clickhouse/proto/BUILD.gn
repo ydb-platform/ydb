@@ -1,0 +1,6 @@
+protobuf_library("proto") {
+  sources = [
+    "range.proto",
+    "source.proto",
+  ]
+}

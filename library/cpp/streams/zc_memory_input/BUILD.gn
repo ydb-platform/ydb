@@ -1,0 +1,3 @@
+library("zc_memory_input") {
+  sources = [ "zc_memory_input.cpp" ]
+}

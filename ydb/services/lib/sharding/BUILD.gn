@@ -1,0 +1,9 @@
+library("sharding") {
+  public_deps = [
+    # "//yql/essentials/public/decimal",
+  ]
+
+  deps = [ "//library/cpp/digest/md5" ]
+
+  sources = [ "sharding.cpp" ]
+}

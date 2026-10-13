@@ -1,0 +1,25 @@
+library("counters") {
+  public_deps = [
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/monlib/metrics",
+    # "//ydb/core/kqp/common",
+    "//ydb/core/protos",
+    # "//ydb/core/sys_view/common",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    "//ydb/library/yql/dq/actors/spilling",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/minikql:alloc",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/sys_view/service",
+    # "//ydb/library/actors/core",
+    "//ydb/library/ydb_issue/proto",
+    "//yql/essentials/core/issue/protos",
+    # "//yql/essentials/minikql",  # peerdir only
+  ]
+
+  sources = [ "kqp_counters.cpp" ]
+}

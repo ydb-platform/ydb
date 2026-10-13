@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/crypto:chacha_512",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/crypto/chacha_512_ut.cpp",
+    "//ydb/core/blobstorage/crypto/chacha_ut.cpp",
+    "//ydb/core/blobstorage/crypto/chacha_vec_ut.cpp",
+    "//ydb/core/blobstorage/crypto/crypto_rope_ut.cpp",
+    "//ydb/core/blobstorage/crypto/crypto_ut.cpp",
+    "//ydb/core/blobstorage/crypto/poly1305_ut.cpp",
+    "//ydb/core/blobstorage/crypto/poly1305_vec_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/crypto" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

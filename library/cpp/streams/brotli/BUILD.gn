@@ -1,0 +1,10 @@
+library("brotli") {
+  public_deps = [ "//contrib/libs/brotli:common" ]
+
+  deps = [
+    "//contrib/libs/brotli:dec",  # peerdir only
+    "//contrib/libs/brotli:enc",  # peerdir only
+  ]
+
+  sources = [ "brotli.cpp" ]
+}

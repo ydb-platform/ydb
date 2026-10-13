@@ -1,0 +1,38 @@
+library("include") {
+  public_deps = [
+    # "//library/cpp/logger",
+    "//ydb/public/api/grpc/draft",
+    # "//ydb/public/sdk/cpp/src/client/common_client",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types",
+  ]
+
+  deps = [
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  serialize_enum_headers = [
+    "include/control_plane.h",
+    "include/read_events.h",
+    "include/write_events.h",
+    "include/write_session.h",
+  ]
+}
+
+group("persqueue_public") {
+  public_deps = [ ":include" ]
+
+  deps = [
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/topic/common",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/topic/impl",  # peerdir only
+  ]
+}

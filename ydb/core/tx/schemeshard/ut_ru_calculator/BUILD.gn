@@ -1,0 +1,29 @@
+unittest_executable("ut_ru_calculator") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/services/kesus",  # peerdir only
+    "//ydb/services/persqueue_cluster_discovery",  # peerdir only
+    "//ydb/services/ydb",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [ "ut_ru_calculator.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

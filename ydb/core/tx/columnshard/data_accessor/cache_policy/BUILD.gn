@@ -1,0 +1,16 @@
+library("cache_policy") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/general_cache/source",
+    "//ydb/core/tx/general_cache/usage",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/data_accessor/abstract",
+  ]
+
+  sources = [ "policy.cpp" ]
+}

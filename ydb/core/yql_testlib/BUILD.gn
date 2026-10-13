@@ -1,0 +1,34 @@
+library("yql_testlib") {
+  testonly = true
+
+  deps = [
+    # "//library/cpp/regex/pcre",  # peerdir only
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/base",
+    # "//ydb/core/client",  # peerdir only
+    # "//ydb/core/client/minikql_compile",
+    # "//ydb/core/client/server",  # peerdir only
+    # "//ydb/core/engine",
+    # "//ydb/core/keyvalue",
+    # "//ydb/core/mind",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/core/testlib",
+    # "//ydb/core/testlib/actors",
+    # "//ydb/core/testlib/basics",
+    # "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/services",
+    # "//ydb/public/lib/base",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    # "//yql/essentials/core",  # peerdir only
+    # "//yql/essentials/core/facade",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/providers/common/mkql",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/common/udf_resolve",  # peerdir only
+    # "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "yql_testlib.cpp" ]
+}

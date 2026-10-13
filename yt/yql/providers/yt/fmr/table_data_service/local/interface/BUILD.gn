@@ -1,0 +1,7 @@
+library("interface") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/table_data_service/interface",
+  ]
+
+  sources = [ "yql_yt_table_data_service_local_interface.cpp" ]
+}

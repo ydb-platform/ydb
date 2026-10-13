@@ -1,0 +1,21 @@
+library("abstract") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow/common",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/sys_view/common",
+    # "//ydb/library/formats/arrow",
+  ]
+
+  sources = [
+    "column_ids.cpp",
+    "index_info.cpp",
+    "schema_version.cpp",
+  ]
+}

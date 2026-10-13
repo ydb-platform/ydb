@@ -1,0 +1,11 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+contrib_library("lfalloc") {
+  deps = [ "//library/cpp/malloc/api" ]
+
+  sources = [ "lf_allocX64.cpp" ]
+
+  configs = [ "//build/gn/config:no_warnings" ]
+
+  link_slot_provides = [ "allocator" ]
+}

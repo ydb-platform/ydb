@@ -1,0 +1,20 @@
+unittest_executable("ut_stress") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/blockstore/libs/vhost",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/vhost/server_ut_stress.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/vhost/vhost_test.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/vhost" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

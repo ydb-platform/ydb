@@ -1,0 +1,7 @@
+group("general_cache") {
+  public_deps = [
+    # "//ydb/core/tx/general_cache/service",  # peerdir only
+    # "//ydb/core/tx/general_cache/source",  # peerdir only
+    # "//ydb/core/tx/general_cache/usage",  # peerdir only
+  ]
+}

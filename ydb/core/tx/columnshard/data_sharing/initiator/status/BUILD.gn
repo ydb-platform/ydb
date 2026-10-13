@@ -1,0 +1,12 @@
+library("status") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/data_sharing/protos",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+    "//ydb/services/bg_tasks/abstract",
+  ]
+
+  sources = [ "abstract.cpp" ]
+
+  serialize_enum_headers = [ "abstract.h" ]
+}

@@ -1,0 +1,10 @@
+library("range_treap") {
+  public_deps = [
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [
+    "range.cpp",
+    "range_treap.cpp",
+  ]
+}

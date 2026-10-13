@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/arrow_kernels",  # peerdir only
+    "//ydb/library/formats/arrow",
+    "//ydb/library/formats/arrow/hash",
+    "//ydb/library/formats/arrow/simple_builder",
+    "//ydb/library/formats/arrow/splitter",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [
+    "ut_arrow.cpp",
+    "ut_size_calcer.cpp",
+    "ut_splitter.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/formats/arrow" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

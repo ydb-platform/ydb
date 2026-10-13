@@ -1,0 +1,3 @@
+protobuf_library("protos") {
+  sources = [ "graph.proto" ]
+}

@@ -1,0 +1,33 @@
+library("import") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/public/lib/json_value",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/string_utils/csv",
+    # "//library/cpp/threading/future",
+    "//library/cpp/yaml/as",
+    "//ydb/library/formats/arrow/csv/table",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/ydb_cli/commands",
+    "//ydb/public/lib/ydb_cli/dump/util",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/operation",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+  ]
+
+  sources = [
+    "cli_arrow_helpers.cpp",
+    "import.cpp",
+  ]
+
+  serialize_enum_headers = [ "import.h" ]
+}

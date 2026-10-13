@@ -1,0 +1,11 @@
+library("dbg_output") {
+  public_deps = [
+    # "//library/cpp/colorizer",
+  ]
+
+  sources = [
+    "dump.cpp",
+    "dumpers.cpp",
+    "engine.cpp",
+  ]
+}

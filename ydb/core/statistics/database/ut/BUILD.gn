@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",  # peerdir only
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/statistics",
+    "//ydb/core/statistics/database",
+    "//ydb/core/statistics:ut_common",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "ut_database.cpp" ]
+
+  include_dirs = [ "//ydb/core/statistics/database" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

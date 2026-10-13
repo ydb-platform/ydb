@@ -1,0 +1,3 @@
+library("concurrent_hash") {
+  sources = [ "concurrent_hash.cpp" ]
+}

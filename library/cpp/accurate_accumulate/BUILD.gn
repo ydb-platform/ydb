@@ -1,0 +1,3 @@
+library("accurate_accumulate") {
+  sources = [ "accurate_accumulate.cpp" ]
+}

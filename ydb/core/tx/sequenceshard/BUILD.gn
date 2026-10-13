@@ -1,0 +1,31 @@
+library("sequenceshard") {
+  public_deps = [
+    # "//ydb/core/base",
+  ]
+
+  deps = [
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/erasure",  # peerdir only
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/sequenceshard/public",
+  ]
+
+  sources = [
+    "schema.cpp",
+    "sequenceshard.cpp",
+    "sequenceshard_impl.cpp",
+    "tx_allocate_sequence.cpp",
+    "tx_create_sequence.cpp",
+    "tx_drop_sequence.cpp",
+    "tx_freeze_sequence.cpp",
+    "tx_get_sequence.cpp",
+    "tx_init.cpp",
+    "tx_init_schema.cpp",
+    "tx_mark_schemeshard_pipe.cpp",
+    "tx_redirect_sequence.cpp",
+    "tx_restore_sequence.cpp",
+    "tx_update_sequence.cpp",
+  ]
+}

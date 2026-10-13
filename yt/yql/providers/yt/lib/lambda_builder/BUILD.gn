@@ -1,0 +1,21 @@
+library("lambda_builder") {
+  public_deps = [
+    "//library/cpp/random_provider",
+    "//library/cpp/time_provider",
+    # "//yql/essentials/ast",
+    "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+    "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/public/langver",
+    # "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "lambda_builder.cpp" ]
+}

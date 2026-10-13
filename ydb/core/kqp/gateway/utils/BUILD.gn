@@ -1,0 +1,16 @@
+library("utils") {
+  public_deps = [
+    "//ydb/core/kqp/provider",
+    "//ydb/services/metadata/manager",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/cms/console",
+    "//ydb/core/kqp/gateway/actors",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+  ]
+
+  sources = [ "metadata_helpers.cpp" ]
+}

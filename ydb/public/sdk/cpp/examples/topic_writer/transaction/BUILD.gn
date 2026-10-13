@@ -1,0 +1,10 @@
+linked_executable("topic_writer_transaction") {
+  deps = [
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

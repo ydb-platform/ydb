@@ -1,0 +1,19 @@
+library("tracing") {
+  public_deps = [
+    # "//library/cpp/yt/memory",
+    "//yt/yt/core",
+  ]
+
+  deps = [
+    "//library/cpp/yt/threading",
+    # "//yt/yt/build",  # peerdir only
+    # "//yt/yt_proto/yt/core",  # peerdir only
+  ]
+
+  sources = [
+    "async_queue_trace.cpp",
+    "batch_trace.cpp",
+    "public.cpp",
+    "tracer.cpp",
+  ]
+}

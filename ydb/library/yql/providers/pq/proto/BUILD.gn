@@ -1,0 +1,7 @@
+protobuf_library("proto") {
+  sources = [
+    "dq_io.proto",
+    "dq_io_state.proto",
+    "dq_task_params.proto",
+  ]
+}

@@ -1,0 +1,40 @@
+library("quota_manager") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/quota_manager/events",
+    "//ydb/core/fq/libs/shared_resources",
+    "//ydb/core/mon",
+  ]
+
+  deps = [
+    "//library/cpp/protobuf/interop",
+    # "//library/cpp/protobuf/json",  # peerdir only
+    # "//ydb/core/fq/libs/control_plane_storage",
+    # "//ydb/core/fq/libs/control_plane_storage/proto",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage:util",
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/core/grpc_services/local_rpc",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "quota_manager.cpp",
+    "quota_proxy.cpp",
+  ]
+}
+
+library("ut_helpers") {
+  public_deps = [
+    "//ydb/core/fq/libs/quota_manager/events",
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [ "ut_helpers/fake_quota_manager.cpp" ]
+}

@@ -1,0 +1,13 @@
+library("common") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/dq/common",
+  ]
+
+  deps = [
+    # "//yql/essentials/public/issue",  # peerdir only
+  ]
+
+  sources = [ "retry_queue.cpp" ]
+}

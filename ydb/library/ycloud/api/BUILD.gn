@@ -1,0 +1,15 @@
+group("api") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/library/actors/core",
+    "//ydb/public/api/client/yc_private/accessservice",
+    "//ydb/public/api/client/yc_private/iam",
+    "//ydb/public/api/client/yc_private/resourcemanager",
+    "//ydb/public/api/client/yc_private/servicecontrol",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  deps = [
+    # "//ydb/core/grpc_caching",  # peerdir only
+  ]
+}

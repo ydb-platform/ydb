@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/generic",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it_all_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/generic" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,14 @@
+library("antlr4_ansi") {
+  public_deps = [
+    # "//yql/essentials/parser/lexer_common",
+  ]
+
+  deps = [
+    # "//yql/essentials/parser/proto_ast/antlr4",
+    # "//yql/essentials/parser/proto_ast/collect_issues",
+    "//yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "lexer.cpp" ]
+}

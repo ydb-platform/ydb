@@ -1,0 +1,13 @@
+library("proto_helpers") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/coordinator/interface",
+    "//yt/yql/providers/yt/fmr/proto",
+    # "//yt/yql/providers/yt/fmr/request_options/proto_helpers",
+  ]
+
+  deps = [
+    # "//library/cpp/yson/node",
+  ]
+
+  sources = [ "yql_yt_coordinator_proto_helpers.cpp" ]
+}

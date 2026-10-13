@@ -1,0 +1,22 @@
+library("tier") {
+  public_deps = [
+    "//library/cpp/json",
+    "//library/cpp/uri",
+    # "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+    "//ydb/services/metadata/secret/accessor",
+  ]
+
+  deps = [
+    # "//contrib/restricted/aws/aws-crt-cpp",  # peerdir only
+    "//library/cpp/protobuf/json",
+  ]
+
+  sources = [
+    "identifier.cpp",
+    "object.cpp",
+    "s3_uri.cpp",
+  ]
+}

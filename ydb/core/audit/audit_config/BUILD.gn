@@ -1,0 +1,8 @@
+library("audit_config") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/library/aclib/protos",
+  ]
+
+  sources = [ "audit_config.cpp" ]
+}

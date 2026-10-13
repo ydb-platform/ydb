@@ -1,0 +1,39 @@
+library("async_jobs") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/datashard",
+  ]
+
+  sources = [ "async_jobs/import_downloader.cpp" ]
+}
+
+group("backup") {
+  public_deps = [
+    # ":async_jobs",  # peerdir only
+    # ":iscan",  # peerdir only
+    "//ydb/core/tx/columnshard",  # peerdir only
+  ]
+}
+
+library("iscan") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/tx/datashard",
+    "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard",
+  ]
+
+  sources = [ "iscan/iscan.cpp" ]
+}

@@ -1,0 +1,55 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//build/gn/antlr.gni")
+
+expand_template("stg") {
+  sources = [
+    "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg.in",
+    "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg.in",
+  ]
+
+  output_dir = "$target_gen_dir/org/antlr/v4/tool/templates/codegen/Cpp"
+
+  substitutions = [
+    "ANTLR_PACKAGE_NAME=NSQLv1Generated",
+    "PROTOBUF_HEADER_PATH=yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
+    "PROTOBUF_SUFFIX_PATH=.pb.h",
+  ]
+}
+
+expand_template("grammar") {
+  sources = [ "//yql/essentials/sql/v1/SQLv1Antlr4.g.in" ]
+  output_dir = target_gen_dir
+  substitutions = [
+    "GRAMMAR_STRING_CORE_SINGLE=~([']) | (QUOTE_SINGLE QUOTE_SINGLE)",
+    "GRAMMAR_STRING_CORE_DOUBLE=~([\"]) | (QUOTE_DOUBLE QUOTE_DOUBLE)",
+    "GRAMMAR_MULTILINE_COMMENT_CORE=MULTILINE_COMMENT | .",
+  ]
+}
+
+_grammar_files = get_target_outputs(":grammar")
+
+antlr4_run("antlr4_cpp") {
+  grammar = _grammar_files[0]
+  language = "Cpp"
+  templates_target = ":stg"
+  templates_dir = target_gen_dir
+  extra_args = [
+    "-no-listener",
+    "-package",
+    "NALPAnsiAntlr4",
+  ]
+  deps = [ ":grammar" ]
+}
+
+library("v1_ansi_antlr4") {
+  sources = get_target_outputs(":antlr4_cpp")
+
+  deps = [ ":antlr4_cpp" ]
+
+  public_deps = [
+    "//contrib/libs/antlr4_cpp_runtime",
+    "//yql/essentials/parser/proto_ast/antlr4",
+    "//yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
+  ]
+}

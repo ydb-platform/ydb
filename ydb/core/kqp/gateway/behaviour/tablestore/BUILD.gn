@@ -1,0 +1,20 @@
+library("tablestore") {
+  public_deps = [
+    "//ydb/core/kqp/gateway/behaviour/tablestore/operations",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/services/metadata/abstract",
+    # "//ydb/services/metadata/manager",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/kqp/gateway/actors",
+    # "//ydb/core/kqp/provider",
+    # "//ydb/services/metadata/initializer",  # peerdir only
+  ]
+
+  sources = [
+    "behaviour.cpp",
+    "manager.cpp",
+  ]
+}

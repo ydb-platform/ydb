@@ -1,0 +1,27 @@
+library("db_id_async_resolver_impl") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/common/db_id_async_resolver",
+    "//ydb/library/yql/providers/common/token_accessor/client",
+    # "//ydb/library/yql/providers/dq/actors",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/threading/future",  # peerdir only
+    # "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/events",
+    "//ydb/core/util",
+    "//ydb/library/actors/http",
+    "//ydb/library/services",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "database_resolver.cpp",
+    "db_async_resolver_impl.cpp",
+    "http_proxy.cpp",
+    "mdb_endpoint_generator.cpp",
+  ]
+}

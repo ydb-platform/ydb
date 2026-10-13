@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/arrow_clickhouse",
+    "//ydb/library/yql/udfs/common/clickhouse/client",
+  ]
+
+  sources = [ "//ydb/library/arrow_clickhouse/ut_aggregator.cpp" ]
+
+  include_dirs = [ "//ydb/library/arrow_clickhouse" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

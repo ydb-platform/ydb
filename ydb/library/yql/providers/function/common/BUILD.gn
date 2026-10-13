@@ -1,0 +1,3 @@
+library("common") {
+  sources = [ "dq_function_types.cpp" ]
+}

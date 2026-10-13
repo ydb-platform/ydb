@@ -1,0 +1,11 @@
+library("dummy") {
+  public_deps = [
+    "//ydb/library/yql/providers/pq/gateway/abstract",
+    "//ydb/library/yql/providers/pq/gateway/clients/file",
+  ]
+
+  sources = [
+    "yql_pq_dummy_gateway.cpp",
+    "yql_pq_dummy_gateway_factory.cpp",
+  ]
+}

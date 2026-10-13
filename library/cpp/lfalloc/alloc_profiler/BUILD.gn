@@ -1,0 +1,13 @@
+library("alloc_profiler") {
+  public_deps = [
+    # "//library/cpp/cache",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/atomic",
+    "//library/cpp/lfalloc/dbg_info",
+  ]
+
+  sources = [
+    "profiler.cpp",
+    "stackcollect.cpp",
+  ]
+}

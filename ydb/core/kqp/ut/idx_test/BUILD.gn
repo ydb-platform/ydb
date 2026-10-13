@@ -1,0 +1,27 @@
+unittest_executable("idx_test") {
+  deps = [
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/public/lib/idx_test",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/scheme",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "ydb_index_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

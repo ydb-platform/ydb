@@ -1,0 +1,35 @@
+group("abstract") {
+  public_deps = [
+    # ":events",  # peerdir only
+    # ":manager",
+    # ":subscriber",  # peerdir only
+  ]
+}
+
+library("events") {
+  public_deps = [
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [ "events/event.cpp" ]
+
+  serialize_enum_headers = [ "events/event.h" ]
+}
+
+library("manager") {
+  public_deps = [
+    ":events",
+    # ":subscriber",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "manager/manager.cpp" ]
+}
+
+library("subscriber") {
+  public_deps = [
+    # ":events",
+  ]
+
+  sources = [ "subscriber/subscriber.cpp" ]
+}

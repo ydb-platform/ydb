@@ -1,0 +1,17 @@
+library("messagebus") {
+  public_deps = [
+    "//library/cpp/messagebus",
+    "//library/cpp/messagebus/www",
+    # "//library/cpp/monlib/service/pages",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    "//library/cpp/monlib/service",
+  ]
+
+  sources = [
+    "mon_messagebus.cpp",
+    "mon_service_messagebus.cpp",
+  ]
+}

@@ -1,0 +1,28 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+config("private_config") {
+    defines = [
+        "GRAMMAR_STRING_CORE_SINGLE_DEFAULT=\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\"",
+        "GRAMMAR_STRING_CORE_DOUBLE_DEFAULT=\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"",
+        "GRAMMAR_MULTILINE_COMMENT_CORE_DEFAULT=\"(.)\"",
+        "GRAMMAR_STRING_CORE_SINGLE_ANSI=\"~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)\"",
+        "GRAMMAR_STRING_CORE_DOUBLE_ANSI=\"~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)\"",
+        "GRAMMAR_MULTILINE_COMMENT_CORE_ANSI=\"MULTILINE_COMMENT | .\"",
+    ]
+}
+
+library("regex") {
+    deps = [
+        "//contrib/libs/re2",
+        "//yql/essentials/core/issue",
+        "//yql/essentials/sql/v1/reflect",
+    ]
+
+    sources = [
+        "generic.cpp",
+        "lexer.cpp",
+        "regex.cpp",
+    ]
+
+    configs = [ ":private_config" ]
+}

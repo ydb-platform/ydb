@@ -1,0 +1,19 @@
+library("fetcher") {
+  public_deps = [
+    "//ydb/core/persqueue/public",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/actorlib_impl",
+    # "//ydb/core/client/server",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public/describer",
+    "//ydb/core/persqueue/public/write_meta",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx/replication/ydb_proxy",
+  ]
+
+  sources = [ "fetch_request_actor.cpp" ]
+}

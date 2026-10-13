@@ -1,0 +1,13 @@
+library("plain_text_formatter") {
+  public_deps = [
+    # "//library/cpp/yt/logging",
+    "//library/cpp/yt/string",
+  ]
+
+  deps = [
+    "//library/cpp/yt/cpu_clock",
+    # "//library/cpp/yt/misc",
+  ]
+
+  sources = [ "formatter.cpp" ]
+}

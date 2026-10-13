@@ -1,0 +1,5 @@
+library("probes") {
+  public_deps = [ "//library/cpp/lwtrace" ]
+
+  sources = [ "probes.cpp" ]
+}

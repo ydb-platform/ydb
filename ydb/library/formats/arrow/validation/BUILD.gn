@@ -1,0 +1,7 @@
+library("validation") {
+  public_deps = [ "//contrib/libs/apache/arrow" ]
+
+  deps = [ "//ydb/library/actors/core" ]
+
+  sources = [ "validation.cpp" ]
+}

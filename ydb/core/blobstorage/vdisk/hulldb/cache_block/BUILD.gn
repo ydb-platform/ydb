@@ -1,0 +1,11 @@
+library("cache_block") {
+  public_deps = [ "//ydb/core/blobstorage/vdisk/hulldb" ]
+
+  deps = [
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/blobstorage/vdisk/protos",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "cache_block.cpp" ]
+}

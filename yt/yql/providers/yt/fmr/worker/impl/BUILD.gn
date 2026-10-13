@@ -1,0 +1,19 @@
+library("impl") {
+  public_deps = [
+    # "//library/cpp/random_provider",
+    # "//yt/yql/providers/yt/fmr/coordinator/interface",
+    # "//yt/yql/providers/yt/fmr/job_factory/interface",
+    # "//yt/yql/providers/yt/fmr/job_preparer/interface",
+    # "//yt/yql/providers/yt/fmr/worker/interface",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/future",
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "yql_yt_worker_impl.cpp" ]
+
+  serialize_enum_headers = [ "yql_yt_worker_impl.h" ]
+}

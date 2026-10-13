@@ -1,0 +1,9 @@
+library("open_by_signature") {
+  deps = [
+    "//library/cpp/streams/bzip2",
+    "//library/cpp/streams/factory/open_common",
+    "//library/cpp/streams/lz",
+  ]
+
+  sources = [ "factory.cpp" ]
+}

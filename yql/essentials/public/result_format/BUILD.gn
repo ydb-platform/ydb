@@ -1,0 +1,20 @@
+library("result_format") {
+  public_deps = [
+    # "//library/cpp/yson",
+    "//library/cpp/yson/node",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "yql_codec_results.cpp",
+    "yql_restricted_yson.cpp",
+    "yql_result_format_data.cpp",
+    "yql_result_format_response.cpp",
+    "yql_result_format_type.cpp",
+  ]
+}

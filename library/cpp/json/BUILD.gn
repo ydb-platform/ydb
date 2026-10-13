@@ -1,0 +1,33 @@
+library("fast_sax") {
+  public_deps = [
+    # "//library/cpp/json/common",
+  ]
+
+  sources = [
+    "fast_sax/parser.rl6",
+    "fast_sax/unescape.cpp",
+  ]
+}
+
+library("json") {
+  public_deps = [
+    ":fast_sax",
+    "//library/cpp/json/common",
+  ]
+
+  deps = [
+    "//contrib/libs/rapidjson",
+    # "//library/cpp/string_utils/relaxed_escaper",
+  ]
+
+  sources = [
+    "json_prettifier.cpp",
+    "json_reader.cpp",
+    "json_writer.cpp",
+    "rapidjson_helpers.cpp",
+    "writer/json.cpp",
+    "writer/json_value.cpp",
+  ]
+
+  serialize_enum_headers = [ "writer/json_value.h" ]
+}

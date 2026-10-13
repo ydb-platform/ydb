@@ -1,0 +1,61 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//build/gn/antlr.gni")
+
+expand_template("stg") {
+  sources = [
+    "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg.in",
+    "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg.in",
+  ]
+
+  # Private copy: v1_ansi_antlr4 configures the very same .stg.in files with
+  # different values, so both must keep their own, or they would declare the
+  # same output. antlr finds them by the resource path below, relative to the
+  # cwd it is started from (templates_dir).
+  output_dir = "$target_gen_dir/org/antlr/v4/tool/templates/codegen/Cpp"
+  substitutions = [
+    "ANTLR_PACKAGE_NAME=NSQLv1Generated",
+    "PROTOBUF_HEADER_PATH=yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
+    "PROTOBUF_SUFFIX_PATH=.pb.h",
+  ]
+}
+
+expand_template("grammar") {
+  sources = [ "//yql/essentials/sql/v1/SQLv1Antlr4.g.in" ]
+
+  # Own copy, like ya make does per module: v1_proto_split_antlr4 configures the
+  # same .g.in with the same values, and mirroring would collide on the output.
+  output_dir = target_gen_dir
+  substitutions = [
+    "GRAMMAR_STRING_CORE_SINGLE=~(['\\\\]) | (BACKSLASH .)",
+    "GRAMMAR_STRING_CORE_DOUBLE=~([\"\\\\]) | (BACKSLASH .)",
+    "GRAMMAR_MULTILINE_COMMENT_CORE=.",
+  ]
+}
+
+_grammar_files = get_target_outputs(":grammar")
+
+antlr4_run("antlr4_cpp") {
+  grammar = _grammar_files[0]
+  language = "Cpp"
+  templates_target = ":stg"
+  templates_dir = target_gen_dir
+  extra_args = [
+    "-no-listener",
+    "-package",
+    "NALPDefaultAntlr4",
+  ]
+  deps = [ ":grammar" ]
+}
+
+library("v1_antlr4") {
+  sources = get_target_outputs(":antlr4_cpp")
+
+  deps = [ ":antlr4_cpp" ]
+
+  public_deps = [
+    "//contrib/libs/antlr4_cpp_runtime",
+    # "//yql/essentials/parser/proto_ast/antlr4",
+    "//yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
+  ]
+}

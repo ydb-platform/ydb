@@ -1,0 +1,9 @@
+library("local") {
+  public_deps = [
+    "//library/cpp/cache",
+    "//library/cpp/time_provider",
+    "//yql/essentials/sql/v1/complete/name/cache",
+  ]
+
+  sources = [ "cache.cpp" ]
+}

@@ -1,0 +1,11 @@
+library("queue") {
+  public_deps = [ "//library/cpp/deprecated/atomic" ]
+
+  sources = [
+    "mpmc_unordered_ring.cpp",
+    "mpsc_htswap.cpp",
+    "mpsc_intrusive_unordered.cpp",
+    "mpsc_read_as_filled.cpp",
+    "mpsc_vinfarr_obstructive.cpp",
+  ]
+}

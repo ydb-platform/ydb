@@ -1,0 +1,135 @@
+library("common") {
+  public_deps = [
+    ":ini_config",
+    ":retry_func",
+    "//contrib/libs/ftxui",
+    # "//contrib/libs/protobuf",
+    "//library/cpp/colorizer",
+    "//library/cpp/getopt",
+    "//library/cpp/json",
+    # "//library/cpp/logger",
+    # "//library/cpp/regex/pcre",
+    "//library/cpp/string_utils/csv",
+    # "//library/cpp/threading/future",
+    "//library/cpp/yaml/as",
+    # "//ydb/library/accessor",
+    "//ydb/library/plan2svg",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/json_value",
+    # "//ydb/public/lib/ydb_cli/commands",
+    "//ydb/public/sdk/cpp/src/client/coordination",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/export",
+    "//ydb/public/sdk/cpp/src/client/import",
+    # "//ydb/public/sdk/cpp/src/client/operation",
+    # "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/table/query_stats",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    ":yql_parser",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    "//contrib/libs/openssl",
+    # "//contrib/libs/yaml-cpp",
+    "//contrib/restricted/patched/replxx",
+    "//library/cpp/http/simple",
+    "//library/cpp/resource",
+    "//library/cpp/string_utils/url",
+    "//ydb/library/arrow_parquet",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/lib/ydb_cli/dump/util",
+    # "//ydb/public/lib/yson_value",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  sources = [
+    "aws.cpp",
+    "cert_format_converter.cpp",
+    "client_command_options.cpp",
+    "colors.cpp",
+    "command.cpp",
+    "command_utils.cpp",
+    "common.cpp",
+    "config.cpp",
+    "csv_parser.cpp",
+    "describe.cpp",
+    "download_manager.cpp",
+    "duration.cpp",
+    "examples.cpp",
+    "format.cpp",
+    "ftxui.cpp",
+    "interactive.cpp",
+    "interruptable.cpp",
+    "log.cpp",
+    "normalize_path.cpp",
+    "parameter_stream.cpp",
+    "parameters.cpp",
+    "pg_dump_parser.cpp",
+    "pretty_table.cpp",
+    "print_operation.cpp",
+    "print_utils.cpp",
+    "profile_manager.cpp",
+    "progress_bar.cpp",
+    "progress_indication.cpp",
+    "query_stats.cpp",
+    "query_utils.cpp",
+    "recursive_list.cpp",
+    "recursive_remove.cpp",
+    "root.cpp",
+    "scheme_printers.cpp",
+    "sys.cpp",
+    "tabbed_table.cpp",
+    "waiting_bar.cpp",
+    "ydb_path.cpp",
+    "ydb_updater.cpp",
+    "yt.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "formats.h",
+    "parameters.h",
+  ]
+}
+
+library("ini_config") {
+  sources = [
+    "ini_config/config.cpp",
+    "ini_config/ini.cpp",
+    "ini_config/value.cpp",
+  ]
+}
+
+library("retry_func") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types",
+  ]
+
+  sources = [ "retry_func.cpp" ]
+}
+
+library("yql_parser") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/value" ]
+
+  deps = [
+    # "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/sql/settings",
+    "//yql/essentials/sql/v1/lexer",
+    "//yql/essentials/sql/v1/lexer/antlr4",
+    "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+  ]
+
+  sources = [ "yql_parser/yql_parser.cpp" ]
+}

@@ -1,0 +1,6 @@
+contrib_library("setup") {
+  sources = [
+    "alloc.cpp",
+    "enable.cpp",
+  ]
+}

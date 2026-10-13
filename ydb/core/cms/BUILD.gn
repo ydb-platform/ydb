@@ -1,0 +1,670 @@
+library("cms") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/events",
+    "//ydb/core/cms/console",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/mind",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/json",
+    "//library/cpp/mime/types",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/resource",
+    "//library/cpp/svnversion",
+    "//library/cpp/time_provider",
+    "//ydb/core/actorlib_impl",
+    # "//ydb/core/blobstorage",  # peerdir only
+    # "//ydb/core/blobstorage/crypto",  # peerdir only
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/erasure",
+    # "//ydb/core/mind/bscontroller",  # peerdir only
+    "//ydb/core/mon",
+    "//ydb/core/tx/datashard",
+    # "//ydb/library/aclib",  # peerdir only
+    "//ydb/library/pretty_types_print/protobuf",  # peerdir only
+    "//ydb/library/services",
+    "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+    "//yql/essentials/public/issue/protos",
+  ]
+
+  sources = [
+    "api_adapters.cpp",
+    "audit_log.cpp",
+    "cluster_info.cpp",
+    "cms.cpp",
+    "cms_tx_get_log_tail.cpp",
+    "cms_tx_init_scheme.cpp",
+    "cms_tx_load_state.cpp",
+    "cms_tx_log_and_send.cpp",
+    "cms_tx_log_cleanup.cpp",
+    "cms_tx_process_notification.cpp",
+    "cms_tx_reject_notification.cpp",
+    "cms_tx_remove_expired_notifications.cpp",
+    "cms_tx_remove_permissions.cpp",
+    "cms_tx_remove_request.cpp",
+    "cms_tx_remove_task.cpp",
+    "cms_tx_store_first_boot_timestamp.cpp",
+    "cms_tx_store_permissions.cpp",
+    "cms_tx_store_walle_task.cpp",
+    "cms_tx_update_config.cpp",
+    "cms_tx_update_downtimes.cpp",
+    "downtime.cpp",
+    "erasure_checkers.cpp",
+    "http.cpp",
+    "info_collector.cpp",
+    "logger.cpp",
+    "node_checkers.cpp",
+    "sentinel.cpp",
+    "services.cpp",
+    "walle_api_handler.cpp",
+    "walle_check_task_adapter.cpp",
+    "walle_create_task_adapter.cpp",
+    "walle_list_tasks_adapter.cpp",
+    "walle_remove_task_adapter.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "node_checkers.h",
+    "services.h",
+  ]
+
+  resources = [
+    {
+      path = "ui/index.html"
+      key = "cms/ui/index.html"
+    },
+    {
+      path = "ui/cms.css"
+      key = "cms/ui/cms.css"
+    },
+    {
+      path = "ui/cms.js"
+      key = "cms/ui/cms.js"
+    },
+    {
+      path = "ui/config_dispatcher.css"
+      key = "cms/ui/config_dispatcher.css"
+    },
+    {
+      path = "ui/cms_log.js"
+      key = "cms/ui/cms_log.js"
+    },
+    {
+      path = "ui/console_log.js"
+      key = "cms/ui/console_log.js"
+    },
+    {
+      path = "ui/common.css"
+      key = "cms/ui/common.css"
+    },
+    {
+      path = "ui/common.js"
+      key = "cms/ui/common.js"
+    },
+    {
+      path = "ui/configs.js"
+      key = "cms/ui/configs.js"
+    },
+    {
+      path = "ui/yaml_config.js"
+      key = "cms/ui/yaml_config.js"
+    },
+    {
+      path = "ui/config_forms.js"
+      key = "cms/ui/config_forms.js"
+    },
+    {
+      path = "ui/datashard.css"
+      key = "cms/ui/datashard.css"
+    },
+    {
+      path = "ui/datashard.js"
+      key = "cms/ui/datashard.js"
+    },
+    {
+      path = "ui/datashard_hist.js"
+      key = "cms/ui/datashard_hist.js"
+    },
+    {
+      path = "ui/datashard_info.js"
+      key = "cms/ui/datashard_info.js"
+    },
+    {
+      path = "ui/datashard_op.js"
+      key = "cms/ui/datashard_op.js"
+    },
+    {
+      path = "ui/datashard_ops_list.js"
+      key = "cms/ui/datashard_ops_list.js"
+    },
+    {
+      path = "ui/datashard_rs.js"
+      key = "cms/ui/datashard_rs.js"
+    },
+    {
+      path = "ui/datashard_slow_ops.js"
+      key = "cms/ui/datashard_slow_ops.js"
+    },
+    {
+      path = "ui/enums.js"
+      key = "cms/ui/enums.js"
+    },
+    {
+      path = "ui/ext/myers-diff/myers_diff.js"
+      key = "cms/ui/ext/myers-diff/myers_diff.js"
+    },
+    {
+      path = "ui/ext/bootstrap.min.css"
+      key = "cms/ui/ext/bootstrap.min.css"
+    },
+    {
+      path = "ui/ext/fuzzycomplete.min.css"
+      key = "cms/ui/ext/fuzzycomplete.min.css"
+    },
+    {
+      path = "ui/ext/fuzzycomplete.min.js"
+      key = "cms/ui/ext/fuzzycomplete.min.js"
+    },
+    {
+      path = "ui/ext/fuse.min.js"
+      key = "cms/ui/ext/fuse.min.js"
+    },
+    {
+      path = "ui/ext/document-copy.svg"
+      key = "cms/ui/ext/document-copy.svg"
+    },
+    {
+      path = "ui/ext/unfold-less.svg"
+      key = "cms/ui/ext/unfold-less.svg"
+    },
+    {
+      path = "ui/ext/unfold-more.svg"
+      key = "cms/ui/ext/unfold-more.svg"
+    },
+    {
+      path = "ui/ext/1-circle.svg"
+      key = "cms/ui/ext/1-circle.svg"
+    },
+    {
+      path = "ui/ext/link.svg"
+      key = "cms/ui/ext/link.svg"
+    },
+    {
+      path = "ui/ext/gear.svg"
+      key = "cms/ui/ext/gear.svg"
+    },
+    {
+      path = "ui/ext/require.min.js"
+      key = "cms/ui/ext/require.min.js"
+    },
+    {
+      path = "ui/ext/jquery.min.js"
+      key = "cms/ui/ext/jquery.min.js"
+    },
+    {
+      path =
+          "ui/ext/monaco-editor/vs/base/browser/ui/codicons/codicon/codicon.ttf"
+      key = "cms/ui/ext/monaco-editor/vs/base/browser/ui/codicons/codicon/codicon.ttf"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/base/worker/workerMain.js"
+      key = "cms/ui/ext/monaco-editor/vs/base/worker/workerMain.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/abap/abap.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/abap/abap.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/apex/apex.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/apex/apex.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/azcli/azcli.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/azcli/azcli.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/bat/bat.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/bat/bat.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/bicep/bicep.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/bicep/bicep.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/cameligo/cameligo.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/cameligo/cameligo.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/clojure/clojure.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/clojure/clojure.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/coffee/coffee.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/coffee/coffee.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/cpp/cpp.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/cpp/cpp.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/csharp/csharp.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/csharp/csharp.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/csp/csp.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/csp/csp.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/css/css.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/css/css.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/dart/dart.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/dart/dart.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/dockerfile/dockerfile.js"
+      key =
+          "cms/ui/ext/monaco-editor/vs/basic-languages/dockerfile/dockerfile.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/ecl/ecl.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/ecl/ecl.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/elixir/elixir.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/elixir/elixir.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/fsharp/fsharp.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/fsharp/fsharp.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/go/go.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/go/go.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/graphql/graphql.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/graphql/graphql.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/handlebars/handlebars.js"
+      key =
+          "cms/ui/ext/monaco-editor/vs/basic-languages/handlebars/handlebars.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/hcl/hcl.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/hcl/hcl.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/html/html.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/html/html.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/ini/ini.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/ini/ini.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/java/java.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/java/java.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/javascript/javascript.js"
+      key =
+          "cms/ui/ext/monaco-editor/vs/basic-languages/javascript/javascript.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/julia/julia.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/julia/julia.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/kotlin/kotlin.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/kotlin/kotlin.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/less/less.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/less/less.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/lexon/lexon.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/lexon/lexon.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/liquid/liquid.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/liquid/liquid.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/lua/lua.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/lua/lua.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/m3/m3.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/m3/m3.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/markdown/markdown.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/markdown/markdown.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/mips/mips.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/mips/mips.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/msdax/msdax.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/msdax/msdax.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/mysql/mysql.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/mysql/mysql.js"
+    },
+    {
+      path =
+          "ui/ext/monaco-editor/vs/basic-languages/objective-c/objective-c.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/objective-c/objective-c.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/pascal/pascal.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/pascal/pascal.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/pascaligo/pascaligo.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/pascaligo/pascaligo.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/perl/perl.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/perl/perl.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/pgsql/pgsql.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/pgsql/pgsql.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/php/php.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/php/php.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/postiats/postiats.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/postiats/postiats.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/powerquery/powerquery.js"
+      key =
+          "cms/ui/ext/monaco-editor/vs/basic-languages/powerquery/powerquery.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/powershell/powershell.js"
+      key =
+          "cms/ui/ext/monaco-editor/vs/basic-languages/powershell/powershell.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/pug/pug.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/pug/pug.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/python/python.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/python/python.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/qsharp/qsharp.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/qsharp/qsharp.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/r/r.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/r/r.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/razor/razor.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/razor/razor.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/redis/redis.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/redis/redis.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/redshift/redshift.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/redshift/redshift.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/restructuredtext/restructuredtext.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/restructuredtext/restructuredtext.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/ruby/ruby.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/ruby/ruby.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/rust/rust.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/rust/rust.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/sb/sb.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/sb/sb.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/scala/scala.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/scala/scala.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/scheme/scheme.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/scheme/scheme.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/scss/scss.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/scss/scss.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/shell/shell.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/shell/shell.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/solidity/solidity.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/solidity/solidity.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/sophia/sophia.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/sophia/sophia.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/sparql/sparql.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/sparql/sparql.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/sql/sql.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/sql/sql.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/st/st.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/st/st.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/swift/swift.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/swift/swift.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/systemverilog/systemverilog.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/systemverilog/systemverilog.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/tcl/tcl.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/tcl/tcl.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/twig/twig.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/twig/twig.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/typescript/typescript.js"
+      key =
+          "cms/ui/ext/monaco-editor/vs/basic-languages/typescript/typescript.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/vb/vb.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/vb/vb.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/xml/xml.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/xml/xml.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/basic-languages/yaml/yaml.js"
+      key = "cms/ui/ext/monaco-editor/vs/basic-languages/yaml/yaml.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.css"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.css"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.de.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.de.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.es.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.es.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.fr.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.fr.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.it.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.it.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.ja.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ja.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.ko.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ko.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.ru.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.ru.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-cn.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-cn.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-tw.js"
+      key = "cms/ui/ext/monaco-editor/vs/editor/editor.main.nls.zh-tw.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/css/cssMode.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/css/cssMode.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/css/cssWorker.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/css/cssWorker.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/html/htmlMode.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/html/htmlMode.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/html/htmlWorker.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/html/htmlWorker.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/json/jsonMode.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/json/jsonMode.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/json/jsonWorker.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/json/jsonWorker.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/typescript/tsMode.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/typescript/tsMode.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/language/typescript/tsWorker.js"
+      key = "cms/ui/ext/monaco-editor/vs/language/typescript/tsWorker.js"
+    },
+    {
+      path = "ui/ext/monaco-editor/vs/loader.js"
+      key = "cms/ui/ext/monaco-editor/vs/loader.js"
+    },
+    {
+      path = "ui/main.js"
+      key = "cms/ui/main.js"
+    },
+    {
+      path = "ui/configs_dispatcher_main.js"
+      key = "cms/ui/configs_dispatcher_main.js"
+    },
+    {
+      path = "ui/ext/question-circle.svg"
+      key = "cms/ui/ext/question-circle.svg"
+    },
+    {
+      path = "ui/ext/bootstrap.bundle.min.js"
+      key = "cms/ui/ext/bootstrap.bundle.min.js"
+    },
+    {
+      path = "ui/ext/theme.blue.css"
+      key = "cms/ui/ext/theme.blue.css"
+    },
+    {
+      path = "ui/proto_types.js"
+      key = "cms/ui/proto_types.js"
+    },
+    {
+      path = "ui/res/edit.png"
+      key = "cms/ui/res/edit.png"
+    },
+    {
+      path = "ui/res/help.png"
+      key = "cms/ui/res/help.png"
+    },
+    {
+      path = "ui/res/remove.png"
+      key = "cms/ui/res/remove.png"
+    },
+    {
+      path = "ui/validators.js"
+      key = "cms/ui/validators.js"
+    },
+    {
+      path = "ui/sentinel_state.js"
+      key = "cms/ui/sentinel_state.js"
+    },
+    {
+      path = "ui/state_storage_state.js"
+      key = "cms/ui/state_storage_state.js"
+    },
+    {
+      path = "ui/nanotable.js"
+      key = "cms/ui/nanotable.js"
+    },
+    {
+      path = "ui/sentinel.css"
+      key = "cms/ui/sentinel.css"
+    },
+    {
+      path = "ui/state_storage.css"
+      key = "cms/ui/state_storage.css"
+    },
+  ]
+}

@@ -1,0 +1,34 @@
+library("highlight") {
+  public_deps = [
+    "//library/cpp/json",
+    "//yql/essentials/sql/v1/lexer/regex",
+    "//yql/essentials/sql/v1/reflect",
+  ]
+
+  deps = [
+    "//contrib/libs/re2",
+    "//library/cpp/resource",
+  ]
+
+  sources = [
+    "data_language_json.cpp",
+    "sql_highlight.cpp",
+    "sql_highlight_json.cpp",
+    "sql_highlighter.cpp",
+  ]
+
+  resources = [
+    {
+      path = "ut/suite.json"
+      key = "suite.json"
+    },
+    {
+      path = "//yql/essentials/data/language/types.json"
+      key = "types.json"
+    },
+    {
+      path = "//yql/essentials/data/language/statements_opensource.json"
+      key = "statements_opensource.json"
+    },
+  ]
+}

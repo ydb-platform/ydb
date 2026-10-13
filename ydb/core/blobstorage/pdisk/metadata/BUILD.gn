@@ -1,0 +1,18 @@
+library("metadata") {
+  public_deps = [
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    "//library/cpp/openssl/crypto",
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/crypto",  # peerdir only
+    # "//ydb/core/blobstorage/nodewarden",  # peerdir only
+    # "//ydb/library/actors/core",
+    "//ydb/library/keys",  # peerdir only
+  ]
+
+  sources = [ "blobstorage_pdisk_metadata.cpp" ]
+}

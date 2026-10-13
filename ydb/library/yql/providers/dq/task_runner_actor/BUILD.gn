@@ -1,0 +1,24 @@
+library("task_runner_actor") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/task_runner",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/dq/proto",
+    "//ydb/library/yql/dq/runtime",
+    # "//ydb/library/yql/providers/dq/task_runner",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//ydb/library/yql/dq/actors",
+    # "//ydb/library/yql/providers/dq/actors",
+    "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
+    "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/counters",
+    "//ydb/library/yql/providers/dq/runtime",
+    # "//ydb/library/yql/utils/actors",  # peerdir only
+  ]
+
+  sources = [ "task_runner_actor.cpp" ]
+}

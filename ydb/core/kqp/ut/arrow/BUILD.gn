@@ -1,0 +1,34 @@
+unittest_executable("arrow") {
+  deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/library/formats/arrow",
+    "//ydb/public/sdk/cpp/src/client/arrow",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+  ]
+
+  sources = [
+    "kqp_arrow_in_channels_ut.cpp",
+    "kqp_result_set_formats_ut.cpp",
+    "kqp_types_arrow_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

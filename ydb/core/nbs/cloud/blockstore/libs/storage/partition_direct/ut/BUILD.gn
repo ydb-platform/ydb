@@ -1,0 +1,26 @@
+unittest_executable("ut") {
+  deps = [
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/ddisk",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/nbs/cloud/blockstore/bootstrap",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct",
+    "//ydb/core/util/actorsys_test",
+  ]
+
+  sources = [ "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_ut.cpp" ]
+
+  include_dirs =
+      [ "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

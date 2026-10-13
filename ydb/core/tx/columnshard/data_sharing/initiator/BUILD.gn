@@ -1,0 +1,6 @@
+group("initiator") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/data_sharing/initiator/controller",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/initiator/status",  # peerdir only
+  ]
+}

@@ -1,0 +1,18 @@
+library("validation") {
+  public_deps = [ "//ydb/core/protos" ]
+
+  deps = [
+    "//library/cpp/protobuf/json",
+    "//ydb/core/base",
+    "//ydb/core/config/protos",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/util",
+  ]
+
+  sources = [
+    "auth_config_validator.cpp",
+    "column_shard_config_validator.cpp",
+    "monitoring_config_validator.cpp",
+    "validators.cpp",
+  ]
+}

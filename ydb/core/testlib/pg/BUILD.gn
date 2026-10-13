@@ -1,0 +1,9 @@
+group("pg") {
+  testonly = true
+
+  deps = [
+    # "//ydb/core/testlib",  # peerdir only
+    # "//yql/essentials/parser/pg_wrapper",  # link slot
+    # "//yql/essentials/sql/pg",  # link slot
+  ]
+}

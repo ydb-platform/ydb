@@ -1,0 +1,14 @@
+library("common") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/splitter/abstract",
+    # "//ydb/library/formats/arrow/splitter",
+  ]
+
+  sources = [
+    "context.cpp",
+    "result.cpp",
+  ]
+}

@@ -1,0 +1,11 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/library/drr",
+  ]
+
+  sources = [ "drr_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

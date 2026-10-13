@@ -1,0 +1,35 @@
+library("query") {
+  public_deps = [
+    "//library/cpp/streams/bzip2",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/hulldb",
+    # "//ydb/core/blobstorage/vdisk:defs",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/hulldb/barriers",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/core/blobstorage/vdisk/scrub",
+    # "//ydb/core/util",
+    "//ydb/library/actors/wilson",
+    # "//ydb/library/wilson_ids",
+  ]
+
+  sources = [
+    "assimilation.cpp",
+    "query_barrier.cpp",
+    "query_extr.cpp",
+    "query_public.cpp",
+    "query_range.cpp",
+    "query_readactor.cpp",
+    "query_readbatch.cpp",
+    "query_statdb.cpp",
+    "query_stathuge.cpp",
+    "query_stattablet.cpp",
+  ]
+}

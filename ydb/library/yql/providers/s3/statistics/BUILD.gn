@@ -1,0 +1,10 @@
+library("statistics") {
+  public_deps = [
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    "//yql/essentials/core",
+  ]
+
+  deps = [ "//ydb/library/yql/providers/s3/expr_nodes" ]
+
+  sources = [ "yql_s3_statistics.cpp" ]
+}

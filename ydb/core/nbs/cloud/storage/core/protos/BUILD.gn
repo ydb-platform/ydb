@@ -1,0 +1,19 @@
+protobuf_library("protos") {
+  deps = [
+    # "//library/cpp/lwtrace/protos",  # peerdir only
+  ]
+
+  sources = [
+    "error.proto",
+    "media.proto",
+    "request_source.proto",
+    "trace.proto",
+  ]
+
+  extra_plugins = [
+    {
+      name = "validation"
+      target = "//ydb/public/lib/validation"
+    },
+  ]
+}

@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/login:cache",
+  ]
+
+  sources = [ "//ydb/library/login/cache/lru_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/login/cache" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

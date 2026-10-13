@@ -1,0 +1,10 @@
+library("bitseq") {
+  deps = [
+    # "//util/draft",  # peerdir only
+  ]
+
+  sources = [
+    "bitvector.cpp",
+    "readonly_bitvector.cpp",
+  ]
+}

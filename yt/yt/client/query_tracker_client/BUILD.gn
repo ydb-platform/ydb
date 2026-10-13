@@ -1,0 +1,8 @@
+library("query_tracker_client") {
+  public_deps = [
+    # "//library/cpp/yt/misc",
+    # "//yt/yt/core",
+  ]
+
+  sources = [ "public.cpp" ]
+}

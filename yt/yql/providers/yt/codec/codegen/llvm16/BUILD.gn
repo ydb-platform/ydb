@@ -1,0 +1,8 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//yt/yql/providers/yt/codec/codegen/variant.gni")
+
+yt_codec_codegen_variant("llvm16") {
+  codegen = true
+  link_slot_provides = [ "yt_codegen" ]
+}

@@ -1,0 +1,13 @@
+library("dot_product") {
+  deps = [
+    # "//library/cpp/sse",
+    "//library/cpp/testing/common",
+  ]
+
+  sources = [
+    "dot_product.cpp",
+    "dot_product_avx2.cpp",
+    "dot_product_simple.cpp",
+    "dot_product_sse.cpp",
+  ]
+}

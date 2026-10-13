@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh",
+    "//ydb/core/blobstorage/vdisk/hulldb/generic",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/base" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

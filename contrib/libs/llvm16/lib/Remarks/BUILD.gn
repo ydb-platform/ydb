@@ -1,0 +1,19 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Remarks") {
+    deps = [ "//contrib/libs/llvm16/lib/Bitstream/Reader" ]
+
+    sources = [
+        "BitstreamRemarkParser.cpp",
+        "BitstreamRemarkSerializer.cpp",
+        "Remark.cpp",
+        "RemarkFormat.cpp",
+        "RemarkLinker.cpp",
+        "RemarkParser.cpp",
+        "RemarkSerializer.cpp",
+        "RemarkStreamer.cpp",
+        "RemarkStringTable.cpp",
+        "YAMLRemarkParser.cpp",
+        "YAMLRemarkSerializer.cpp",
+    ]
+}

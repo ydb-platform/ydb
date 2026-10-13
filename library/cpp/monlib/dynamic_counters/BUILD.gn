@@ -1,0 +1,23 @@
+library("dynamic_counters") {
+  public_deps = [
+    "//library/cpp/containers/stack_vector",
+    "//library/cpp/monlib/encode",
+    "//library/cpp/monlib/metrics",
+    "//library/cpp/monlib/service/pages",
+    "//library/cpp/threading/light_rw_lock",
+  ]
+
+  deps = [
+    "//library/cpp/monlib/encode/json",
+    "//library/cpp/monlib/encode/prometheus",
+    "//library/cpp/monlib/encode/spack",
+    "//library/cpp/string_utils/quote",
+  ]
+
+  sources = [
+    "counters.cpp",
+    "encode.cpp",
+    "golovan_page.cpp",
+    "page.cpp",
+  ]
+}

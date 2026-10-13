@@ -1,0 +1,13 @@
+library("common") {
+  deps = [
+    "//build/scripts/c_templates",
+    "//library/cpp/json",
+  ]
+
+  sources = [
+    "env.cpp",
+    "network.cpp",
+    "probe.cpp",
+    "scope.cpp",
+  ]
+}

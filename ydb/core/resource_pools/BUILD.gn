@@ -1,0 +1,10 @@
+library("resource_pools") {
+  public_deps = [ "//contrib/libs/protobuf" ]
+
+  deps = [ "//ydb/library/aclib" ]
+
+  sources = [
+    "resource_pool_classifier_settings.cpp",
+    "resource_pool_settings.cpp",
+  ]
+}

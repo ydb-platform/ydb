@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/security",
+    "//ydb/library/testlib/service_mocks",
+    "//ydb/mvp/core",
+    "//ydb/mvp/core:protos",
+    "//ydb/mvp/oidc_proxy",
+  ]
+
+  sources = [
+    "//ydb/mvp/core/mvp_test_runtime.cpp",
+    "//ydb/mvp/oidc_proxy/oidc_proxy_ut.cpp",
+    "//ydb/mvp/oidc_proxy/openid_connect.cpp",
+  ]
+
+  include_dirs = [ "//ydb/mvp/oidc_proxy" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

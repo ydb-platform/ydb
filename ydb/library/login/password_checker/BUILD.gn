@@ -1,0 +1,3 @@
+library("password_checker") {
+  sources = [ "password_checker.cpp" ]
+}

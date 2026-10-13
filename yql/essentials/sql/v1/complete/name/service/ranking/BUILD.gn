@@ -1,0 +1,21 @@
+library("ranking") {
+  public_deps = [ "//yql/essentials/sql/v1/complete/name/service" ]
+
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/resource",
+  ]
+
+  sources = [
+    "dummy.cpp",
+    "frequency.cpp",
+    "ranking.cpp",
+  ]
+
+  resources = [
+    {
+      path = "//yql/essentials/data/language/rules_corr_basic.json"
+      key = "rules_corr_basic.json"
+    },
+  ]
+}

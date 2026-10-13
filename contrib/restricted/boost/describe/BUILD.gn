@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("describe") {
+    public_deps = [
+        "//contrib/restricted/boost/mp11",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

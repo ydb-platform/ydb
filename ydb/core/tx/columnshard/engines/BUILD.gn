@@ -1,0 +1,114 @@
+library("engines") {
+  public_deps = [
+    ":filter",
+    "//ydb/core/base",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/tx",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/data_accessor",
+    # "//ydb/core/tx/columnshard/data_accessor/abstract",
+    # "//ydb/core/tx/columnshard/data_locks/locks",
+    "//ydb/core/tx/columnshard/engines/changes/abstract",
+    "//ydb/core/tx/columnshard/engines/changes/actualization:controller",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/predicate",
+    "//ydb/core/tx/columnshard/engines/protos",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/engines/scheme/tiering",
+    # "//ydb/core/tx/columnshard/engines/storage/actualizer:abstract",
+    "//ydb/core/tx/columnshard/engines/storage/actualizer:common",
+    # "//ydb/core/tx/columnshard/engines/storage/actualizer:counters",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    # "//ydb/core/tx/columnshard/resource_subscriber",
+    "//ydb/core/tx/columnshard/tx_reader",
+    # "//ydb/core/tx/priorities/usage",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/range_treap",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//library/cpp/time_provider",
+    # "//ydb/core/formats",  # peerdir only
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",  # peerdir only
+    # "//ydb/core/tablet",  # peerdir only
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/blobs_action",
+    # "//ydb/core/tx/columnshard/data_accessor/in_mem",
+    # "//ydb/core/tx/columnshard/data_locks:manager",
+    # "//ydb/core/tx/columnshard/engines/changes/actualization",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/changes/compaction",
+    # "//ydb/core/tx/columnshard/engines/changes/counters",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/max",
+    # "//ydb/core/tx/columnshard/splitter",
+    # "//ydb/core/tx/columnshard/splitter:settings",
+    "//ydb/core/tx/columnshard/subscriber/events:tables_erased",
+    "//ydb/core/tx/columnshard/tracing",
+    "//ydb/core/tx/columnshard:background_controller",  # peerdir only
+    # "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/core/tx/program",  # peerdir only
+    # "//ydb/core/tx/sharding",
+    # "//ydb/core/tx/tiering",
+    # "//ydb/library/conclusion",
+    # "//ydb/library/formats/arrow",
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+  ]
+
+  sources = [
+    "changes/actualization/construction/context.cpp",
+    "changes/cleanup_portions.cpp",
+    "changes/cleanup_tables.cpp",
+    "changes/compaction.cpp",
+    "changes/general_compaction.cpp",
+    "changes/merge_subset.cpp",
+    "changes/move_portions.cpp",
+    "changes/remove_portions.cpp",
+    "changes/ttl.cpp",
+    "changes/with_appended.cpp",
+    "column_engine.cpp",
+    "column_engine_logs.cpp",
+    "db_wrapper.cpp",
+    "defs.cpp",
+    "loading/stages.cpp",
+    "metadata_accessor.cpp",
+    "storage/actualizer/index/index.cpp",
+    "storage/actualizer/scheme/counters.cpp",
+    "storage/actualizer/scheme/scheme.cpp",
+    "storage/actualizer/tiering/counters.cpp",
+    "storage/actualizer/tiering/tiering.cpp",
+    "storage/granule/granule.cpp",
+    "storage/granule/portion_interval_tree.cpp",
+    "storage/granule/portions_index.cpp",
+    "storage/granule/stages.cpp",
+    "storage/granule/storage.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "column_engine_logs.h",
+    "storage/granule/granule.h",
+  ]
+
+  plugins = [
+    "//ydb/core/tx/columnshard/engines/reader",
+    "//ydb/core/tx/columnshard/engines/storage",
+  ]
+}
+
+library("filter") {
+  public_deps = [
+    # ":engines",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/formats/arrow",
+  ]
+
+  deps = [ "//ydb/core/tx/columnshard/engines/scheme/abstract" ]
+
+  sources = [ "filter.cpp" ]
+}

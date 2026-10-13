@@ -1,0 +1,39 @@
+library("draft") {
+  public_deps = [
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/common_client",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+    # "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/grpc/draft",
+    # "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    # "//ydb/public/sdk/cpp/src/client/value",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/issue",
+  ]
+
+  sources = [
+    "ydb_backup.cpp",
+    "ydb_bridge.cpp",
+    "ydb_dynamic_config.cpp",
+    "ydb_replication.cpp",
+    "ydb_scripting.cpp",
+    "ydb_test_shard.cpp",
+    "ydb_view.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h",
+    "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h",
+  ]
+}

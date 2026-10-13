@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/actors",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/mvp/core",  # peerdir only
+    "//ydb/mvp/meta",
+  ]
+
+  sources = [ "//ydb/mvp/meta/meta_cache_ut.cpp" ]
+
+  include_dirs = [ "//ydb/mvp/meta" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

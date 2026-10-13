@@ -1,0 +1,49 @@
+library("test_setup") {
+  testonly = true
+
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    # "//ydb/public/sdk/cpp/src/client/topic/impl",
+    "//ydb/public/sdk/cpp/tests/integration/topic/utils",
+  ]
+
+  sources = [ "topic_sdk_test_setup.cpp" ]
+}
+
+library("ut_utils") {
+  testonly = true
+
+  public_deps = [
+    ":test_setup",
+    # "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    "//library/cpp/streams/bzip2",
+    # "//library/cpp/string_utils/base64",
+    # "//ydb/core/cms/console",
+    # "//ydb/core/keyvalue",
+    # "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/events",
+    # "//ydb/core/persqueue/pqtablet/cache",
+    "//ydb/core/persqueue/ut/common",
+    # "//ydb/core/tx/long_tx_service/public",
+    # "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
+    "//ydb/public/api/grpc",
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/tests/integration/topic/utils",  # peerdir only
+  ]
+
+  sources = [
+    "event_loop.cpp",
+    "txusage_fixture.cpp",
+  ]
+}

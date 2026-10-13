@@ -1,0 +1,28 @@
+config("public_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("public") {
+  public_deps = [
+    # "//library/cpp/lwtrace",
+    # "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/util",
+    "//ydb/public/api/protos",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//library/cpp/cgiparam",
+    "//library/cpp/uri",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "events.cpp",
+    "lock_handle.cpp",
+    "types.cpp",
+  ]
+
+  configs = [ ":public_private_config" ]
+}

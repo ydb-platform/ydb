@@ -1,0 +1,63 @@
+unittest_executable("ut_integration") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/curl",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/protobuf/interop",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/protobuf/util",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/retry",
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/time_provider",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/fq/libs/actors",
+    "//ydb/core/fq/libs/control_plane_storage",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/core/fq/libs/db_id_async_resolver_impl",
+    "//ydb/core/fq/libs/db_schema",
+    "//ydb/core/fq/libs/events",
+    "//ydb/core/fq/libs/mock",
+    "//ydb/core/fq/libs/private_client",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/testlib",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/providers/common/db_id_async_resolver",  # peerdir only
+    "//ydb/library/yql/udfs/common/clickhouse/client",  # peerdir only
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/fq",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    "//ydb/services/fq",  # peerdir only
+    "//ydb/services/ydb",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/utils/network",
+  ]
+
+  sources = [
+    "fq_ut.cpp",
+    "ut_utils.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/services/fq",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,47 @@
+library("global_worker_manager") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/yql/providers/dq/actors",
+    # "//ydb/library/yql/providers/dq/actors/yt",
+    "//ydb/library/yql/providers/dq/api/grpc",
+    "//ydb/library/yql/providers/dq/config",
+    # "//ydb/library/yql/providers/dq/scheduler",
+    # "//ydb/library/yql/providers/dq/worker_manager/interface",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",
+    # "//yql/essentials/providers/common/gateway",
+    # "//yql/essentials/providers/common/metrics",
+  ]
+
+  deps = [
+    # "//library/cpp/protobuf/util",
+    # "//library/cpp/svnversion",
+    # "//library/cpp/yson/node",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/providers/dq/actors/events",
+    # "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
+    # "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/common:attrs",
+    # "//ydb/library/yql/providers/dq/counters",
+    # "//ydb/library/yql/providers/dq/runtime",
+    # "//ydb/library/yql/providers/dq/service",
+    # "//ydb/library/yql/providers/dq/task_runner",
+    # "//ydb/library/yql/providers/dq/worker_manager",
+    # "//yql/essentials/providers/common/config",  # peerdir only
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/failure_injector",
+    # "//yql/essentials/utils/log",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/yt/client",
+  ]
+
+  sources = [
+    "benchmark.cpp",
+    "coordination_helper.cpp",
+    "global_worker_manager.cpp",
+    "service_node_pinger.cpp",
+    "service_node_resolver.cpp",
+    "worker_filter.cpp",
+    "workers_storage.cpp",
+  ]
+}

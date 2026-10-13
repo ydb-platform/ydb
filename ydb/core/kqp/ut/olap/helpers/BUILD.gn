@@ -1,0 +1,38 @@
+library("helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    "//ydb/core/kqp/ut/common",
+    # "//ydb/core/testlib",
+    # "//ydb/library/formats/arrow/simple_builder",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    # "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  deps = [
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services",  # peerdir only
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/grpc_services/local_rpc",
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/compute_actor:events",
+    # "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/datashard/ut_common",
+    # "//ydb/library/ut",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/result",
+  ]
+
+  sources = [
+    "aggregation.cpp",
+    "get_value.cpp",
+    "local.cpp",
+    "query_executor.cpp",
+    "typed_local.cpp",
+    "writer.cpp",
+  ]
+}

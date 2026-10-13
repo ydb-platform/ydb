@@ -1,0 +1,48 @@
+library("dump") {
+  public_deps = [
+    # "//library/cpp/regex/pcre",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//contrib/libs/re2",  # peerdir only
+    # "//library/cpp/bucket_quoter",
+    # "//library/cpp/json",
+    "//library/cpp/logger",
+    "//library/cpp/string_utils/quote",
+    # "//library/cpp/threading/future",
+    "//ydb/library/backup",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/lib/ydb_cli/common:retry_func",
+    "//ydb/public/lib/ydb_cli/dump/files",
+    "//ydb/public/lib/ydb_cli/dump/util",
+    # "//ydb/public/sdk/cpp/src/client/cms",
+    # "//ydb/public/sdk/cpp/src/client/coordination",
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    # "//ydb/public/sdk/cpp/src/client/draft",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/import",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/rate_limiter",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/value",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "dump.cpp",
+    "dump_impl.cpp",
+    "restore_compat.cpp",
+    "restore_impl.cpp",
+    "restore_import_data.cpp",
+  ]
+
+  serialize_enum_headers = [ "dump.h" ]
+}

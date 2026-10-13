@@ -1,0 +1,58 @@
+library("extractor") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+  ]
+
+  deps = [
+    # "//library/cpp/json:fast_sax",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+    # "//yql/essentials/minikql/jsonpath",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "extractor/abstract.cpp",
+    "extractor/container.cpp",
+    "extractor/hash_by_columns.cpp",
+  ]
+
+  serialize_enum_headers = [ "extractor/hash_by_columns.h" ]
+}
+
+library("metadata") {
+  public_deps = [
+    # ":extractor",
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//ydb/library/accessor",
+    "//ydb/public/api/protos",
+    "//ydb/services/metadata/abstract",
+    "//ydb/services/metadata/manager",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/grpc_services",  # peerdir only
+    # "//ydb/core/grpc_services/base",  # peerdir only
+    # "//ydb/core/grpc_services/local_rpc",  # peerdir only
+    "//ydb/core/ydb_convert",
+    # "//ydb/library/actors/core",  # peerdir only
+    "//ydb/services/metadata/ds_table",
+    "//ydb/services/metadata/initializer",
+    # "//ydb/services/metadata/request",  # peerdir only
+  ]
+
+  sources = [
+    "behaviour.cpp",
+    "fetcher.cpp",
+    "initializer.cpp",
+    "manager.cpp",
+    "object.cpp",
+    "snapshot.cpp",
+  ]
+}

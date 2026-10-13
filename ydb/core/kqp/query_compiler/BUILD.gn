@@ -1,0 +1,44 @@
+library("query_compiler") {
+  public_deps = [
+    "//ydb/core/kqp/expr_nodes",
+    "//ydb/core/kqp/opt:helpers",
+    # "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/formats",  # peerdir only
+    # "//ydb/core/formats/arrow",
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/gateway/utils",
+    "//ydb/core/kqp/query_data",
+    "//ydb/core/kqp/runtime",
+    # "//ydb/core/scheme",
+    "//ydb/core/ydb_convert",
+    "//ydb/library/formats/arrow/protos",
+    # "//ydb/library/mkql_proto",
+    "//ydb/library/yql/dq/comp_nodes",
+    # "//ydb/library/yql/dq/opt",
+    "//ydb/library/yql/dq/tasks",
+    "//ydb/library/yql/dq/type_ann",
+    "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    # "//ydb/library/yql/providers/s3/expr_nodes",  # peerdir only
+    "//ydb/library/yql/providers/s3/statistics",
+    # "//yql/essentials/core",
+    "//yql/essentials/core/arrow_kernels/request",
+    "//yql/essentials/core/dq_integration",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/providers/common/mkql",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/structured_token",
+  ]
+
+  sources = [
+    "kqp_mkql_compiler.cpp",
+    "kqp_olap_compiler.cpp",
+    "kqp_query_compiler.cpp",
+  ]
+}

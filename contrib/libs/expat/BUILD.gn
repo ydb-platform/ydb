@@ -1,0 +1,18 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+config("private_config") {
+    defines = [ "HAVE_CONFIG_H" ]
+}
+
+contrib_library("expat") {
+    sources = [
+        "lib/xmlparse.c",
+        "lib/xmlrole.c",
+        "lib/xmltok.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

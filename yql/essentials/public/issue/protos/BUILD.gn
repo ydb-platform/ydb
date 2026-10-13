@@ -1,0 +1,6 @@
+protobuf_library("protos") {
+  sources = [
+    "issue_message.proto",
+    "issue_severity.proto",
+  ]
+}

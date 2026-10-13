@@ -1,0 +1,12 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("dynamic_bitset") {
+    public_deps = [
+        "//contrib/restricted/boost/assert",
+        "//contrib/restricted/boost/core",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

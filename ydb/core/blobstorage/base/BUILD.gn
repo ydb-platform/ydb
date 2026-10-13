@@ -1,0 +1,30 @@
+library("base") {
+  public_deps = [
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/monlib/metrics",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/common:guids",
+    # "//ydb/core/debug",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/util",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  deps = [
+    # "//library/cpp/deprecated/atomic",  # peerdir only
+    # "//library/cpp/lwtrace",  # peerdir only
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/library/actors/wilson",  # peerdir only
+  ]
+
+  sources = [
+    "blobstorage_syncstate.cpp",
+    "blobstorage_vdiskid.cpp",
+    "html.cpp",
+    "vdisk_priorities.cpp",
+  ]
+}

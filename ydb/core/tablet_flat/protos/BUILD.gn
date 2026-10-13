@@ -1,0 +1,11 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/scheme/protos",
+  ]
+
+  sources = [
+    "flat_table_part.proto",
+    "flat_table_shard.proto",
+  ]
+}

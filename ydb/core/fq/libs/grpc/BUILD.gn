@@ -1,0 +1,11 @@
+protobuf_library("grpc") {
+  public_deps = [ "//ydb/core/fq/libs/protos" ]
+
+  deps = [
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  sources = [ "fq_private_v1.proto" ]
+
+  generate_grpc_services = true
+}

@@ -1,0 +1,64 @@
+library("program") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//library/cpp/string_utils/quote",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor:composite",
+    # "//ydb/library/accessor",
+    "//ydb/library/arrow_kernels",
+    # "//ydb/library/conclusion",
+    "//ydb/library/formats/arrow/validation",
+    "//yql/essentials/core/arrow_kernels/request",
+  ]
+
+  deps = [
+    "//ydb/core/formats/arrow/accessor/sparsed",
+    "//ydb/core/formats/arrow/accessor/sub_columns",
+    # "//ydb/library/actors/core",
+    "//ydb/library/arrow_clickhouse",  # peerdir only
+    # "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/switch",
+    "//ydb/library/formats/arrow:modifier",  # peerdir only
+    # "//ydb/library/services",  # peerdir only
+    "//yql/essentials/core/arrow_kernels/registry",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot
+    # "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/minikql/invoke_builtins/llvm16",  # link slot
+    # "//yql/essentials/minikql:terminator",
+    # "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "aggr_common.cpp",
+    "aggr_keys.cpp",
+    "assign_const.cpp",
+    "assign_internal.cpp",
+    "collection.cpp",
+    "custom_registry.cpp",
+    "execution.cpp",
+    "filter.cpp",
+    "functions.cpp",
+    "graph_execute.cpp",
+    "graph_optimization.cpp",
+    "header.cpp",
+    "index.cpp",
+    "kernel_logic.cpp",
+    "original.cpp",
+    "projection.cpp",
+    "reserve.cpp",
+    "stream_logic.cpp",
+    "visitor.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "abstract.h",
+    "aggr_common.h",
+    "execution.h",
+  ]
+}

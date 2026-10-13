@@ -1,0 +1,28 @@
+config("lib_public_config") {
+  cflags = [ "-Wno-deprecated-volatile" ]
+}
+
+library("lib") {
+  public_deps = [
+    "//library/cpp/monlib/service/pages",
+    "//library/cpp/threading/hot_swap",
+    # "//ydb/core/base",
+    "//ydb/core/control/lib/base",
+    "//ydb/core/control/lib/generated",
+    # "//ydb/core/util",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/absl_flat_hash",  # peerdir only
+    # "//library/cpp/deprecated/atomic",  # peerdir only
+    "//library/cpp/iterator",
+  ]
+
+  sources = [
+    "dynamic_control_board_impl.cpp",
+    "immediate_control_board_html_renderer.cpp",
+    "immediate_control_board_impl.cpp",
+  ]
+
+  public_configs = [ ":lib_public_config" ]
+}

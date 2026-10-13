@@ -1,0 +1,46 @@
+library("base") {
+  public_deps = [
+    ":base_types",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    "//ydb/core/blobstorage/vdisk/ingress",
+    "//ydb/core/blobstorage/vdisk/protos",
+    # "//ydb/core/blobstorage/vdisk:defs",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/base",
+  ]
+
+  sources = [
+    "blobstorage_hulldefs.cpp",
+    "blobstorage_hullsatisfactionrank.cpp",
+  ]
+}
+
+library("base_types") {
+  public_deps = [
+    # ":base",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/groupinfo",
+    # "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/ingress",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//contrib/libs/xxhash",
+  ]
+
+  sources = [
+    "blobstorage_blob.cpp",
+    "hullbase_barrier.cpp",
+  ]
+}

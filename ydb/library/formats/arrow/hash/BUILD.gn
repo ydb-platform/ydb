@@ -1,0 +1,14 @@
+library("hash") {
+  public_deps = [ "//contrib/libs/xxhash" ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/library/actors/core",  # peerdir only
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/formats/arrow/simple_builder",  # peerdir only
+    # "//ydb/library/formats/arrow/switch",  # peerdir only
+    # "//ydb/library/services",  # peerdir only
+  ]
+
+  sources = [ "xx_hash.cpp" ]
+}

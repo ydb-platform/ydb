@@ -1,0 +1,15 @@
+config("operation_id_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("operation_id") {
+  deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/uri",
+    "//ydb/public/sdk/cpp/src/library/operation_id/protos",
+  ]
+
+  sources = [ "operation_id.cpp" ]
+
+  configs = [ ":operation_id_private_config" ]
+}

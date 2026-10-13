@@ -1,0 +1,15 @@
+library("static") {
+  public_deps = [
+    "//library/cpp/json",
+    "//yql/essentials/sql/v1/complete/name/object/simple",
+  ]
+
+  deps = [
+    # "//library/cpp/iterator",
+  ]
+
+  sources = [
+    "schema.cpp",
+    "schema_json.cpp",
+  ]
+}

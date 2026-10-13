@@ -1,0 +1,41 @@
+unittest_executable("ut_sentinel") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/malloc/api",
+    "//library/cpp/svnversion",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/cms",
+    "//ydb/core/cms/console",
+    "//ydb/core/config/init",
+    "//ydb/core/mind",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/aclib",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "//ydb/core/cms/cms_ut_common.cpp",
+    "//ydb/core/cms/sentinel_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/cms" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

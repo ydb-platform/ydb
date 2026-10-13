@@ -1,0 +1,10 @@
+library("impl") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/common_client",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    # "//ydb/public/sdk/cpp/src/client/types/exceptions",
+    # "//ydb/public/sdk/cpp/src/library/time",
+  ]
+
+  sources = [ "client.cpp" ]
+}

@@ -1,0 +1,20 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    defines = [
+        "BOOST_HAS_ICU",
+        "BOOST_NO_CXX98_BINDERS",
+        "BOOST_REGEX_STANDALONE",
+    ]
+}
+
+contrib_library("regex") {
+    sources = [
+        "src/posix_api.cpp",
+        "src/wide_posix_api.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

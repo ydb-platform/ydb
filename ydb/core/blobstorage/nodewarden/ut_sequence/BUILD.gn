@@ -1,0 +1,26 @@
+unittest_executable("ut_sequence") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+  ]
+
+  sources = [ "dsproxy_config_retrieval.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

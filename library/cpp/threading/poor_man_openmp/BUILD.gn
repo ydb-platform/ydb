@@ -1,0 +1,7 @@
+library("poor_man_openmp") {
+  public_deps = [
+    # "//library/cpp/deprecated/atomic",
+  ]
+
+  sources = [ "thread_helper.cpp" ]
+}

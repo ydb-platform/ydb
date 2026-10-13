@@ -1,0 +1,19 @@
+library("common") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/util",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/library/yql/dq/proto",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "dq_common.cpp",
+    "dq_serialized_batch.cpp",
+    "dq_value.cpp",
+    "rope_over_buffer.cpp",
+  ]
+
+  serialize_enum_headers = [ "dq_common.h" ]
+}

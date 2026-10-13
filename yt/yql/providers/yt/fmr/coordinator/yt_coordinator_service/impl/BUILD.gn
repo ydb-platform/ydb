@@ -1,0 +1,15 @@
+library("impl") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/error",
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/log",
+    # "//yt/cpp/mapreduce/common",
+    # "//yt/yql/providers/yt/fmr/utils",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_coordinator_service_impl.cpp" ]
+}

@@ -1,0 +1,7 @@
+library("binding") {
+  public_deps = [ "//yql/essentials/sql/v1/complete/name/service" ]
+
+  deps = [ "//yql/essentials/sql/v1/complete/name/service/static" ]
+
+  sources = [ "name_service.cpp" ]
+}

@@ -1,0 +1,33 @@
+config("ut_ftol_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+unittest_executable("ut_ftol") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/dsproxy",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/ut_vdisk/lib",
+    "//ydb/core/scheme",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
+  ]
+
+  sources = [ "dsproxy_fault_tolerance_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+
+  configs = [ ":ut_ftol_private_config" ]
+}

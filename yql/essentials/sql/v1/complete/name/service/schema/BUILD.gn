@@ -1,0 +1,13 @@
+library("schema") {
+  public_deps = [
+    # "//yql/essentials/sql/v1/complete/name/object",
+    # "//yql/essentials/sql/v1/complete/name/service",
+  ]
+
+  deps = [
+    # "//library/cpp/iterator",
+    "//library/cpp/threading/future",
+  ]
+
+  sources = [ "name_service.cpp" ]
+}

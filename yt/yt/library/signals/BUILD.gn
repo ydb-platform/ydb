@@ -1,0 +1,14 @@
+library("signals") {
+  public_deps = [
+    # "//library/cpp/yt/misc",
+  ]
+
+  deps = [
+    "//library/cpp/yt/assert",
+    # "//library/cpp/yt/error",  # peerdir only
+    "//library/cpp/yt/system",
+    # "//yt/yt/library/procfs",  # peerdir only
+  ]
+
+  sources = [ "signal_registry.cpp" ]
+}

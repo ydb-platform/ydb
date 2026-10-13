@@ -1,0 +1,3 @@
+group("l1_distance") {
+  public_deps = [ "//library/cpp/sse" ]
+}

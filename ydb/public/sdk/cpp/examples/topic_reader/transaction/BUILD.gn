@@ -1,0 +1,17 @@
+linked_executable("read_from_topic_in_transaction") {
+  deps = [
+    "//library/cpp/getopt",
+    "//library/cpp/logger",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  sources = [
+    "application.cpp",
+    "main.cpp",
+    "options.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

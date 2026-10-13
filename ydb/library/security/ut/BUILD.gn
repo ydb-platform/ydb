@@ -1,0 +1,10 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/security",
+  ]
+
+  sources = [ "util_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

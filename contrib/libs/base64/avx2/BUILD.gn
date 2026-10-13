@@ -1,0 +1,15 @@
+config("private_config") {
+    cflags_c = [
+        "-mavx2",
+        "-std=c11",
+    ]
+}
+
+contrib_library("avx2") {
+    sources = [
+        "codec_avx2.c",
+        "lib.c",
+    ]
+
+    configs = [ ":private_config" ]
+}

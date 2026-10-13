@@ -1,0 +1,40 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/kqp/compute_actor",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/kqp/workload_service/ut/common",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/basics:pg",  # peerdir only
+    "//ydb/library/accessor",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yt/yql/providers/yt/codec/codegen",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/kqp/runtime/kqp_scan_data_ut.cpp",
+    "//ydb/core/kqp/runtime/kqp_scan_fetcher_ut.cpp",
+    "//ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service_ut.cpp",
+    "//ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/kqp/runtime" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

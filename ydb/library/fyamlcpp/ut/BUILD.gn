@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/libfyaml",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/fyamlcpp",
+  ]
+
+  sources = [
+    "//ydb/library/fyamlcpp/fyamlcpp_ut.cpp",
+    "//ydb/library/fyamlcpp/libfyaml_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/fyamlcpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

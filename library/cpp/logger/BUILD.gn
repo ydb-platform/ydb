@@ -1,0 +1,31 @@
+library("logger") {
+  public_deps = [ "//library/cpp/json" ]
+
+  sources = [
+    "backend.cpp",
+    "backend_creator.cpp",
+    "composite.cpp",
+    "composite_creator.cpp",
+    "element.cpp",
+    "file.cpp",
+    "file_creator.cpp",
+    "filter.cpp",
+    "filter_creator.cpp",
+    "log.cpp",
+    "null.cpp",
+    "null_creator.cpp",
+    "rotating_file.cpp",
+    "rotating_file_creator.cpp",
+    "stream.cpp",
+    "stream_creator.cpp",
+    "sync_page_cache_file.cpp",
+    "sync_page_cache_file_creator.cpp",
+    "system.cpp",
+    "system_creator.cpp",
+    "thread.cpp",
+    "thread_creator.cpp",
+    "uninitialized_creator.cpp",
+  ]
+
+  serialize_enum_headers = [ "priority.h" ]
+}

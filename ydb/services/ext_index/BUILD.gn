@@ -1,0 +1,7 @@
+group("ext_index") {
+  public_deps = [
+    # "//ydb/services/ext_index/common",  # peerdir only
+    "//ydb/services/ext_index/metadata",  # peerdir only
+    # "//ydb/services/ext_index/service",  # peerdir only
+  ]
+}

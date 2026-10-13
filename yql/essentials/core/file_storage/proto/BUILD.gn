@@ -1,0 +1,3 @@
+protobuf_library("proto") {
+  sources = [ "file_storage.proto" ]
+}

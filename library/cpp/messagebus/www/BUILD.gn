@@ -1,0 +1,33 @@
+library("www") {
+  public_deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/messagebus",
+    "//library/cpp/messagebus/oldmodule",
+  ]
+
+  deps = [
+    "//library/cpp/html/pcdata",
+    "//library/cpp/http/fetch",
+    "//library/cpp/http/server",
+    # "//library/cpp/json",
+    "//library/cpp/monlib/deprecated/json",
+    "//library/cpp/resource",
+    "//library/cpp/uri",
+  ]
+
+  sources = [
+    "html_output.cpp",
+    "www.cpp",
+  ]
+
+  resources = [
+    {
+      path = "messagebus.js"
+      key = "/messagebus.js"
+    },
+    {
+      path = "bus-ico.png"
+      key = "/bus-ico.png"
+    },
+  ]
+}

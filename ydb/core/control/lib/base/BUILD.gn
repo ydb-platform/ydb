@@ -1,0 +1,5 @@
+library("base") {
+  public_deps = [ "//library/cpp/deprecated/atomic" ]
+
+  sources = [ "immediate_control_board_control.cpp" ]
+}

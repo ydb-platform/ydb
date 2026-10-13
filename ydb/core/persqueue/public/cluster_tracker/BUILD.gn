@@ -1,0 +1,18 @@
+library("cluster_tracker") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/grpc_services/cancelation",  # peerdir only
+    # "//ydb/core/kqp/common",
+    # "//ydb/core/persqueue/events",  # peerdir only
+    "//ydb/core/persqueue/public",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/public/sdk/cpp/src/client/result",
+  ]
+
+  sources = [ "cluster_tracker.cpp" ]
+}

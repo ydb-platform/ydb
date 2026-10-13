@@ -1,0 +1,12 @@
+library("resource") {
+  deps = [
+    "//library/cpp/blockcodecs/codecs/zstd",  # peerdir only
+    "//library/cpp/blockcodecs/core",
+    "//library/cpp/containers/absl_flat_hash",
+  ]
+
+  sources = [
+    "registry.cpp",
+    "resource.cpp",
+  ]
+}

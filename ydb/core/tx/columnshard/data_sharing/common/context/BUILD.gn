@@ -1,0 +1,14 @@
+library("context") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_sharing/protos",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [ "context.cpp" ]
+}

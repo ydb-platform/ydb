@@ -1,0 +1,20 @@
+group("common") {
+  public_deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/threading/future",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/library/jwt",
+  ]
+}
+
+library("iam") {
+  public_deps = [ ":common" ]
+
+  deps = [
+    "//library/cpp/http/simple",
+    "//library/cpp/json",
+    "//ydb/public/api/client/yc_public/iam",
+  ]
+
+  sources = [ "iam.cpp" ]
+}

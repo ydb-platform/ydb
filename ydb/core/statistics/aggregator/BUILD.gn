@@ -1,0 +1,57 @@
+library("aggregator") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/cms/console",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    # "//ydb/core/statistics",
+    "//ydb/core/statistics/database",
+    "//ydb/core/statistics/service:service_id",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx",
+    # "//ydb/core/tx/datashard",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/util",
+    "//ydb/library/query_actor",
+    "//ydb/library/yql/public/ydb_issue",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/value",
+    # "//yql/essentials/core/histogram",
+    "//yql/essentials/core/minsketch",
+    # "//yql/essentials/public/udf",
+  ]
+
+  sources = [
+    "aggregator.cpp",
+    "aggregator_impl.cpp",
+    "analyze_actor.cpp",
+    "column_statistic_eval.cpp",
+    "schema.cpp",
+    "select_builder.cpp",
+    "tx_ack_timeout.cpp",
+    "tx_aggr_stat_response.cpp",
+    "tx_analyze.cpp",
+    "tx_analyze_deadline.cpp",
+    "tx_analyze_shard_delivery_problem.cpp",
+    "tx_analyze_shard_request.cpp",
+    "tx_analyze_shard_response.cpp",
+    "tx_configure.cpp",
+    "tx_datashard_scan_response.cpp",
+    "tx_finish_trasersal.cpp",
+    "tx_init.cpp",
+    "tx_init_schema.cpp",
+    "tx_navigate.cpp",
+    "tx_resolve.cpp",
+    "tx_response_tablet_distribution.cpp",
+    "tx_schedule_traversal.cpp",
+    "tx_schemeshard_stats.cpp",
+  ]
+}

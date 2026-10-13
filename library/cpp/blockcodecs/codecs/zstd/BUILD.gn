@@ -1,0 +1,8 @@
+library("zstd") {
+  deps = [
+    "//contrib/libs/zstd",
+    "//library/cpp/blockcodecs/core",
+  ]
+
+  sources = [ "zstd.cpp" ]
+}

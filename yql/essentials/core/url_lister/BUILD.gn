@@ -1,0 +1,13 @@
+library("url_lister") {
+  public_deps = [
+    # "//yql/essentials/core/url_lister/interface",
+  ]
+
+  deps = [
+    # "//yql/essentials/ast",
+    # "//yql/essentials/utils/fetch",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "url_lister_manager.cpp" ]
+}

@@ -1,0 +1,66 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/base/services",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/lwtrace_probes",  # peerdir only
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/pdisk/mock",
+    "//ydb/core/control/lib",
+    "//ydb/core/driver_lib/version",
+    "//ydb/core/mon",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/protos",
+    "//ydb/library/actors/util",
+    "//ydb/library/actors/wilson:test_util",
+    "//ydb/library/pdisk_io",
+    "//ydb/library/schlab/schine",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_crypto_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_log_cache_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_restore_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_scheduler_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_actions.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_chunk_tracker.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_color_limits.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_context.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_env.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_failure.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_helpers.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_pdisk_config.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_races.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_run.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_sectormap.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_yard.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/mock/pdisk_mock.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/pdisk" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

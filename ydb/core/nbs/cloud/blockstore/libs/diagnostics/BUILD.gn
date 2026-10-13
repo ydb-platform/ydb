@@ -1,0 +1,15 @@
+library("diagnostics") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+  ]
+
+  sources = [
+    "public.cpp",
+    "vhost_stats.cpp",
+    "vhost_stats_simple.cpp",
+    "vhost_stats_test.cpp",
+    "volume_counters.cpp",
+  ]
+}

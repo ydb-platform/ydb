@@ -1,0 +1,11 @@
+group("data_sharing") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/data_sharing/common",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/destination",  # peerdir only
+    "//ydb/core/tx/columnshard/data_sharing/initiator",
+    # "//ydb/core/tx/columnshard/data_sharing/manager",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/modification",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/source",  # peerdir only
+  ]
+}

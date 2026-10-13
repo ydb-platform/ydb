@@ -1,0 +1,6 @@
+group("lcbuckets") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner",  # peerdir only
+  ]
+}

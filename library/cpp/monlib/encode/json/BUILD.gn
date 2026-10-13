@@ -1,0 +1,15 @@
+library("json") {
+  public_deps = [ "//library/cpp/monlib/encode" ]
+
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/monlib/encode/buffered",
+    "//library/cpp/monlib/exception",
+    "//library/cpp/monlib/metrics",
+  ]
+
+  sources = [
+    "json_decoder.cpp",
+    "json_encoder.cpp",
+  ]
+}

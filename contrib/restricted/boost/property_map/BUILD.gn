@@ -1,0 +1,15 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("property_map") {
+    public_deps = [
+        "//contrib/restricted/boost/any",
+        "//contrib/restricted/boost/concept_check",
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/smart_ptr",
+        "//contrib/restricted/boost/static_assert",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

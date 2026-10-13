@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/vdisk/repl",
+    "//ydb/core/erasure",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/repl/blobstorage_hullreplwritesst_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/repl/blobstorage_replrecoverymachine_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/repl" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

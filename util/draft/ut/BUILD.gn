@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//util/draft",
+  ]
+
+  sources = [
+    "//util/draft/date_ut.cpp",
+    "//util/draft/datetime_ut.cpp",
+    "//util/draft/holder_vector_ut.cpp",
+    "//util/draft/memory_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

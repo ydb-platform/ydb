@@ -1,0 +1,5 @@
+library("dwarf_backtrace") {
+  deps = [ "//contrib/libs/backtrace" ]
+
+  sources = [ "backtrace.cpp" ]
+}

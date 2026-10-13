@@ -1,0 +1,46 @@
+library("common") {
+  testonly = true
+
+  public_deps = [
+    ":pq_ut_common",
+    # "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public/describer",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+  ]
+
+  deps = [
+    "//ydb/core/persqueue",  # peerdir only
+    # "//ydb/core/testlib",  # peerdir only
+  ]
+
+  sources = [ "autoscaling_ut_common.cpp" ]
+}
+
+library("pq_ut_common") {
+  testonly = true
+
+  public_deps = [
+    "//ydb/core/persqueue",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    # "//ydb/core/testlib/basics",
+  ]
+
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/keyvalue",
+    "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/public:utils",
+    # "//ydb/core/security",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/public/lib/base",
+  ]
+
+  sources = [ "pq_ut_common.cpp" ]
+}

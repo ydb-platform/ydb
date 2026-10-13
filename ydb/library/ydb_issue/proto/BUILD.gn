@@ -1,0 +1,7 @@
+protobuf_library("proto") {
+  public_deps = [ "//yql/essentials/public/issue/protos" ]
+
+  sources = [ "issue_id.proto" ]
+
+  generate_grpc_services = true
+}

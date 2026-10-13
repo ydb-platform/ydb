@@ -1,0 +1,11 @@
+library("logs") {
+  public_deps = [ "//ydb/library/actors/core" ]
+
+  deps = [
+    "//ydb/core/cms/console",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/yql/utils/actor_log",
+  ]
+
+  sources = [ "log.cpp" ]
+}

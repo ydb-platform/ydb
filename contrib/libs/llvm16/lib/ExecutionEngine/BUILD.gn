@@ -1,0 +1,26 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+config("private_config") {
+    cflags = [ "-Wno-nontrivial-memcall" ]
+}
+
+llvm_library("ExecutionEngine") {
+    public_deps = [ "//contrib/libs/llvm16/lib/IR" ]
+    deps = [
+        "Orc:TargetProcess",
+        "RuntimeDyld",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/Object",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "ExecutionEngine.cpp",
+        "ExecutionEngineBindings.cpp",
+        "GDBRegistrationListener.cpp",
+        "SectionMemoryManager.cpp",
+        "TargetSelect.cpp",
+    ]
+
+    configs = [ ":private_config" ]
+}

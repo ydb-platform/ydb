@@ -1,0 +1,7 @@
+protobuf_library("proto") {
+  sources = [
+    "coordinator.proto",
+    "request_options.proto",
+    "table_data_service.proto",
+  ]
+}

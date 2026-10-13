@@ -1,0 +1,10 @@
+library("cgiparam") {
+  public_deps = [ "//library/cpp/iterator" ]
+
+  deps = [
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/string_utils/scan",
+  ]
+
+  sources = [ "cgiparam.cpp" ]
+}

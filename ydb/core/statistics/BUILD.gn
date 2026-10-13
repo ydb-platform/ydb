@@ -1,0 +1,41 @@
+group("statistics") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//ydb/library/query_actor",  # peerdir only
+    # "//yql/essentials/core/minsketch",  # peerdir only
+  ]
+}
+
+library("ut_common") {
+  testonly = true
+
+  public_deps = [
+    ":statistics",
+    # "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/columnshard/hooks/testing",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",  # peerdir only
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/statistics/service:service_id",
+    # "//ydb/core/testlib/actors",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/core/tx/tx_proxy:public",
+    "//ydb/public/api/grpc",
+  ]
+
+  sources = [ "ut_common/ut_common.cpp" ]
+}

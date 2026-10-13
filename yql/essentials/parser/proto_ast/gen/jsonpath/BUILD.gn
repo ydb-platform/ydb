@@ -1,0 +1,51 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//build/gn/antlr.gni")
+
+_grammar = "//yql/essentials/minikql/jsonpath/JsonPath.g"
+
+expand_template("stg") {
+  sources = [
+    "//yql/essentials/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in",
+    "//yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in",
+  ]
+  substitutions = [
+    "ANTLR_PACKAGE_NAME=NJsonPathGenerated",
+    "PROTOBUF_HEADER_PATH=yql/essentials/parser/proto_ast/gen/jsonpath",
+    "PROTOBUF_SUFFIX_PATH=.pb.h",
+    "LEXER_PARSER_NAMESPACE=NALP",
+  ]
+}
+
+antlr3_run("antlr3_proto") {
+  grammar = _grammar
+  language = "protobuf"
+  templates_target = ":stg"
+  templates_dir = "$root_gen_dir/yql/essentials/parser/proto_ast"
+}
+
+protobuf_library("proto") {
+  sources = get_target_outputs(":antlr3_proto")
+  generated_sources = true
+  deps = [ ":antlr3_proto" ]
+  public_deps = [ "//yql/essentials/public/issue/protos" ]
+}
+
+antlr3_run("antlr3_cpp") {
+  grammar = _grammar
+  language = "Cpp"
+  templates_target = ":stg"
+  templates_dir = "$root_gen_dir/yql/essentials/parser/proto_ast"
+}
+
+library("jsonpath") {
+  sources = get_target_outputs(":antlr3_cpp")
+
+  deps = [ ":antlr3_cpp" ]
+
+  public_deps = [
+    ":proto",
+    "//contrib/libs/antlr3_cpp_runtime",
+    "//yql/essentials/parser/proto_ast/antlr3",
+  ]
+}

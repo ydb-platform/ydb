@@ -1,0 +1,48 @@
+library("static") {
+  public_deps = [
+    # "//yql/essentials/sql/v1/complete/core",
+    # "//yql/essentials/sql/v1/complete/name/service",
+    # "//yql/essentials/sql/v1/complete/name/service/ranking",
+    "//yql/essentials/sql/v1/complete/text",
+  ]
+
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/resource",
+    "//yql/essentials/sql/v1/complete/name/service/union",
+  ]
+
+  sources = [
+    "name_index.cpp",
+    "name_service.cpp",
+    "name_set.cpp",
+    "name_set_json.cpp",
+  ]
+
+  resources = [
+    {
+      path = "//yql/essentials/data/language/pragmas_opensource.json"
+      key = "pragmas_opensource.json"
+    },
+    {
+      path = "//yql/essentials/data/language/types.json"
+      key = "types.json"
+    },
+    {
+      path = "//yql/essentials/data/language/sql_functions.json"
+      key = "sql_functions.json"
+    },
+    {
+      path = "//yql/essentials/data/language/udfs_basic.json"
+      key = "udfs_basic.json"
+    },
+    {
+      path = "//yql/essentials/data/language/statements_opensource.json"
+      key = "statements_opensource.json"
+    },
+    {
+      path = "//yql/essentials/data/language/rules_corr_basic.json"
+      key = "rules_corr_basic.json"
+    },
+  ]
+}

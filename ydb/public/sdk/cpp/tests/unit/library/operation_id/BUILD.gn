@@ -1,0 +1,11 @@
+gtest_executable("operation_id") {
+  deps = [
+    "//contrib/restricted/googletest/googletest",
+    "//ydb/public/sdk/cpp/src/library/operation_id",
+    "//ydb/public/sdk/cpp/src/library/operation_id/protos",
+  ]
+
+  sources = [ "operation_id_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,21 @@
+library("value") {
+  public_deps = [ "//contrib/libs/protobuf" ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/value_helpers",
+    # "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers",
+    "//ydb/public/sdk/cpp/src/library/decimal",
+    "//ydb/public/sdk/cpp/src/library/uuid",
+  ]
+
+  sources = [
+    "out.cpp",
+    "value.cpp",
+  ]
+
+  serialize_enum_headers =
+      [ "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h" ]
+}

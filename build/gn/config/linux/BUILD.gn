@@ -1,0 +1,24 @@
+config("base") {
+    defines = [
+        "_GNU_SOURCE",
+    ]
+
+    # call external functions through GOT directly, without PLT stubs
+    cflags = [
+        "-fno-plt",
+    ]
+
+    ldflags = [
+        "-rpath", "\$ORIGIN",
+
+        # drop sections unreachable from exported symbols and entry points
+        "-Wl,--gc-sections",
+
+        # bind everything at load time: no lazy PLT, read-only GOT after relocation
+        "-Wl,-z,now",
+        "-Wl,-z,relro",
+
+        "-Wl,-O1",
+        "-Wl,--hash-style=gnu",
+    ]
+}

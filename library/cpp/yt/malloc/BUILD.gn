@@ -1,0 +1,3 @@
+library("malloc") {
+  sources = [ "malloc.cpp" ]
+}

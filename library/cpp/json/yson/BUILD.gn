@@ -1,0 +1,10 @@
+library("yson") {
+  public_deps = [
+    "//library/cpp/json",
+    "//library/cpp/yson",
+  ]
+
+  deps = [ "//library/cpp/yson/json" ]
+
+  sources = [ "json2yson.cpp" ]
+}

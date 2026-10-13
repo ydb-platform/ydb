@@ -1,0 +1,19 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/library/actors/protos",
+    "//ydb/library/yql/dq/proto",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//yql/essentials/core/issue/protos",  # peerdir only
+    # "//yql/essentials/public/issue/protos",  # peerdir only
+    # "//yql/essentials/public/types",  # peerdir only
+  ]
+
+  sources = [
+    "dq_events.proto",
+    "dq_stats.proto",
+    "dq_status_codes.proto",
+  ]
+}

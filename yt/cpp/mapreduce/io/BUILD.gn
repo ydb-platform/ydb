@@ -1,0 +1,37 @@
+library("io") {
+  public_deps = [
+    # "//library/cpp/yson",
+    # "//yt/cpp/mapreduce/client",
+    # "//yt/cpp/mapreduce/common",
+    "//yt/cpp/mapreduce/interface",
+    # "//yt/cpp/mapreduce/skiff",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/protobuf/runtime",  # peerdir only
+    "//library/cpp/skiff",
+    # "//library/cpp/yson/node",
+    "//library/cpp/yt/logging",
+    "//yt/cpp/mapreduce/interface/logging",
+    "//yt/yt/core",
+    "//yt/yt_proto/yt/formats",
+  ]
+
+  sources = [
+    "counting_raw_reader.cpp",
+    "job_reader.cpp",
+    "job_writer.cpp",
+    "lenval_table_reader.cpp",
+    "node_table_reader.cpp",
+    "node_table_writer.cpp",
+    "proto_helpers.cpp",
+    "proto_table_reader.cpp",
+    "proto_table_writer.cpp",
+    "skiff_row_table_reader.cpp",
+    "skiff_table_reader.cpp",
+    "stream_raw_reader.cpp",
+    "yamr_table_reader.cpp",
+    "yamr_table_writer.cpp",
+  ]
+}

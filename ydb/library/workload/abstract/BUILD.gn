@@ -1,0 +1,18 @@
+library("abstract") {
+  public_deps = [
+    "//library/cpp/colorizer",
+    "//library/cpp/getopt",
+    # "//ydb/library/accessor",
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  sources = [
+    "colors.cpp",
+    "workload_factory.cpp",
+  ]
+}

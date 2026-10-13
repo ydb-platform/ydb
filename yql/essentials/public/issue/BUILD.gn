@@ -1,0 +1,22 @@
+library("issue") {
+  public_deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/resource",
+    "//yql/essentials/public/issue/protos",
+  ]
+
+  deps = [
+    "//library/cpp/colorizer",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "yql_issue.cpp",
+    "yql_issue_manager.cpp",
+    "yql_issue_message.cpp",
+    "yql_issue_utils.cpp",
+    "yql_warning.cpp",
+  ]
+
+  serialize_enum_headers = [ "yql_warning.h" ]
+}

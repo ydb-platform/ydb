@@ -1,0 +1,9 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("jwt-cpp") {
+    public_deps = [ "//contrib/libs/openssl" ]
+
+    public_configs = [ ":public_config" ]
+}

@@ -1,0 +1,8 @@
+library("evlog") {
+  public_deps = [
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "log.cpp" ]
+}

@@ -1,0 +1,18 @@
+library("events") {
+  public_deps = [
+    # "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/control_plane_config:events",
+    "//ydb/core/fq/libs/control_plane_storage/proto",
+    # "//ydb/core/fq/libs/events",
+    "//ydb/core/fq/libs/protos",
+    # "//ydb/core/fq/libs/quota_manager/events",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/params",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "events.cpp" ]
+}

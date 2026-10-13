@@ -1,0 +1,36 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+library("export") {
+    public_deps = [
+        "//ydb/core/tx/datashard",
+    ]
+
+    sources = [
+        "export/export.cpp",
+    ]
+}
+
+linked_executable("ydbd") {
+    link_select = [
+        "YqlServicePolicy=exception_policy",
+        "allocator=tcmalloc",
+        "minikql_codegen=llvm16",
+        "topic_rpc=persqueue_v1",
+        "yql_pg_runtime=pg_wrapper",
+        "yql_pg_sql_translator=pg",
+        "yt_codegen=llvm16",
+    ]
+
+    deps = [
+        ":export",
+        "//ydb/core/driver_lib/run:main",
+        "//ydb/core/http_proxy",
+        "//ydb/core/security",
+        "//ydb/core/security/token_manager",
+        "//ydb/core/transfer",
+        "//ydb/core/ymq/actor",
+        "//ydb/library/pdisk_io",
+    ]
+
+    sources = [ "main.cpp" ]
+}

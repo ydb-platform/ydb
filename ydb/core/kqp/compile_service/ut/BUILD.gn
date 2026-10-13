@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/compile_service",  # peerdir only
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "kqp_compile_fallback_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp/compile_service",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

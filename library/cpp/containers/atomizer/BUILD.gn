@@ -1,0 +1,5 @@
+library("atomizer") {
+  public_deps = [ "//library/cpp/containers/str_map" ]
+
+  sources = [ "atomizer.cpp" ]
+}

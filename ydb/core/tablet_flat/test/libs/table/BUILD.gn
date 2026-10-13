@@ -1,0 +1,26 @@
+group("model") {
+  testonly = true
+
+  public_deps = [
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tablet_flat/test/libs/rows",
+  ]
+}
+
+library("table") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/scheme",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/protos",
+    "//ydb/core/tablet_flat/test/libs/rows",
+  ]
+
+  deps = [
+    # ":model",  # peerdir only
+  ]
+
+  sources = [ "misc.cpp" ]
+}

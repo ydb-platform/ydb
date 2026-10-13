@@ -1,0 +1,12 @@
+library("holder") {
+  public_deps = [
+    # "//ydb/services/sqs_topic/queue_url",
+  ]
+
+  deps = [
+    # "//library/cpp/string_utils/url",  # peerdir only
+    "//ydb/core/base",
+  ]
+
+  sources = [ "queue_url_holder.cpp" ]
+}

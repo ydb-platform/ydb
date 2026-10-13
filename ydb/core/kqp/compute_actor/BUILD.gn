@@ -1,0 +1,80 @@
+library("compute_actor") {
+  public_deps = [
+    ":events",
+    ":events_stats",
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/federated_query",
+    "//ydb/core/kqp/rm_service",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/sys_view",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard:range_ops",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/wilson",
+    # "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/dq/proto",
+    # "//ydb/library/yql/dq/runtime",
+    # "//ydb/library/yql/providers/s3/actors_factory",
+    # "//ydb/library/yverify_stream",
+    # "//yql/essentials/core/issue",
+    "//yql/essentials/core/issue/protos",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/utils",
+  ]
+
+  deps = [
+    # "//ydb/core/actorlib_impl",
+    "//ydb/core/grpc_services",
+    # "//ydb/library/formats/arrow/common",  # peerdir only
+    "//ydb/library/formats/arrow/protos",
+    # "//ydb/library/wilson_ids",
+    "//ydb/library/yql/dq/actors/input_transforms",
+    "//ydb/library/yql/dq/comp_nodes",
+    "//ydb/library/yql/providers/generic/actors",
+    "//ydb/library/yql/providers/pq/async_io",
+    "//ydb/library/yql/providers/solomon/actors",
+  ]
+
+  sources = [
+    "kqp_compute_actor.cpp",
+    "kqp_compute_actor_factory.cpp",
+    "kqp_compute_actor_helpers.cpp",
+    "kqp_compute_state.cpp",
+    "kqp_pure_compute_actor.cpp",
+    "kqp_scan_common.cpp",
+    "kqp_scan_compute_actor.cpp",
+    "kqp_scan_compute_manager.cpp",
+    "kqp_scan_compute_stat.cpp",
+    "kqp_scan_events.cpp",
+    "kqp_scan_fetcher_actor.cpp",
+  ]
+
+  serialize_enum_headers = [ "kqp_compute_state.h" ]
+}
+
+library("events") {
+  public_deps = [
+    ":events_stats",
+    # "//contrib/libs/apache/arrow",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp/common",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/library/formats/arrow/validation",
+  ]
+
+  sources = [ "kqp_compute_events.cpp" ]
+}
+
+library("events_stats") {
+  sources = [ "kqp_compute_events_stats.cpp" ]
+}

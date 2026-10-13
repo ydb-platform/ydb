@@ -1,0 +1,35 @@
+unittest_executable("ut_erase_rows") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/ut",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/tx/datashard/datashard_ut_erase_rows.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/datashard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

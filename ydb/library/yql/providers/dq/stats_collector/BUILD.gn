@@ -1,0 +1,10 @@
+library("stats_collector") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [ "//ydb/library/actors/helpers" ]
+
+  sources = [ "pool_stats_collector.cpp" ]
+}

@@ -1,0 +1,59 @@
+# macro _CPP_FLATC_CMD(SRC, SRCFLAGS...) {
+#     .CMD=${cwd:ARCADIA_BUILD_ROOT} $YMAKE_PYTHON3 ${input:"build/scripts/cpp_flatc_wrapper.py"} ${tool:FLATC} --no-warnings --cpp --keep-prefix --gen-mutable --schema -b ${_FLATC_CPP_YANDEX_MAPS_ITER_FLAG} --gen-object-api --filename-suffix .fbs ${FLATC_FLAGS_VALUE} ${pre=-I :_FLATC__INCLUDE} -o ${main;norel;output;suf=.h:SRC} ${hide;norel;output;suf=.cpp:SRC} ${input:SRC} ${_FLATC_CPP_YANDEX_MAPS_ITER_HEADER} ${hide;noauto;norel;output;suf=.bfbs;noext:SRC} ${hide;kv:"p FL"} ${hide;kv:"pc light-green"} ${hide:FBS_FAKEID}
+#     .SEM=target_macroses-ITEM && target_macroses-macro target_fbs_source && target_macroses-args PRIVATE ${input:SRC} ${FLATC_FLAGS_VALUE} ${pre=-I :_FLATC__INCLUDE} ${hide;norel;output;suf=.h:SRC} ${hide;norel;output;suf=.cpp:SRC} ${_FLATC_CPP_YANDEX_MAPS_ITER_HEADER} ${hide;noauto;norel;output;suf=.bfbs;noext:SRC} ${hide;tool:FLATC} && platform_vars-FBS_CPP_FLAGS "--no-warnings --cpp --keep-prefix --gen-mutable --schema -b ${_FLATC_CPP_YANDEX_MAPS_ITER_FLAG} --gen-object-api --filename-suffix .fbs" ${hide;input:"build/scripts/cpp_flatc_wrapper.py"}
+#     .PEERDIR=contrib/libs/flatbuffers
+# }
+
+# macro _CPP_FLATC64_CMD(SRC, SRCFLAGS...) {
+#     .CMD=${cwd:ARCADIA_BUILD_ROOT} $YMAKE_PYTHON3 ${input:"build/scripts/cpp_flatc_wrapper.py"} ${tool:FLATC64} --no-warnings --cpp --keep-prefix --gen-mutable --schema -b --filename-suffix .fbs64 ${FLATC_FLAGS_VALUE} -I ${ARCADIA_ROOT} -I ${ARCADIA_BUILD_ROOT} -o ${main;norel;output;suf=.h:SRC} ${hide;norel;output;suf=.cpp:SRC} ${input:SRC} ${hide;noauto;norel;output;suf=.bfbs64;noext:SRC} ${hide;kv:"p FL64"} ${hide;kv:"pc light-green"} ${hide:FBS_FAKEID}
+#     .PEERDIR=contrib/libs/flatbuffers64
+# }
+
+template("flatbuffers_library") {
+    _path = rebase_path(".", "//")
+    _unique_name = exec_script("//build/gn/scripts/unique_name.py", [ _path ], "trim string")
+    _gen_target = "${_unique_name}_${target_name}_gen"
+
+    _flatc = "//contrib/libs/flatbuffers:flatc"
+    _flatc_bin = rebase_path(get_label_info(_flatc, "root_out_dir") + "/flatc", root_build_dir)
+
+    action_foreach(_gen_target) {
+        script = "//build/gn/scripts/run.py"
+        sources = invoker.sources
+        outputs = [ "{{source_gen_dir}}/{{source_name_part}}.fbs.h" ]
+
+        if (defined(invoker.flatc_flags)) {
+            flatc_flags = invoker.flatc_flags
+        } else {
+            flatc_flags = []
+        }
+
+        args = [
+            "./$_flatc_bin",
+            "--no-warnings", "--cpp", "--keep-prefix", "--gen-mutable",
+            # --schema -b ${_FLATC_CPP_YANDEX_MAPS_ITER_FLAG}
+            "--gen-object-api",
+            "--filename-suffix", ".fbs",
+            "-o", "{{source_gen_dir}}",
+        ] + flatc_flags + [
+            "{{source}}",
+        ]
+
+        deps = [ _flatc ]
+    }
+
+    config("public_config") {
+        include_dirs = [ target_gen_dir ]
+    }
+
+    source_set(target_name) {
+        public_deps = [ "//contrib/libs/flatbuffers" ]
+
+        deps = []
+        deps += [ ":$_gen_target" ]
+
+        sources = get_target_outputs(":$_gen_target")
+
+        public_configs = [ ":public_config" ]
+    }
+}

@@ -1,0 +1,3 @@
+library("dummy") {
+  sources = [ "dummy_cursor.cpp" ]
+}

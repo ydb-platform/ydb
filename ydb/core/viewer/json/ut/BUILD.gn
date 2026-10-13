@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/viewer/json",
+    "//ydb/core/viewer/protos",
+  ]
+
+  sources = [ "//ydb/core/viewer/json/json_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/viewer/json" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

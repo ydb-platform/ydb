@@ -1,0 +1,10 @@
+library("registry") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/langver",
+  ]
+
+  sources = [ "registry.cpp" ]
+}

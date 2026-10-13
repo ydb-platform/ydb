@@ -1,0 +1,23 @@
+group("events") {
+  public_deps = [
+    # ":tables_erased",  # peerdir only
+    # ":tx_completed",  # peerdir only
+  ]
+}
+
+library("tables_erased") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/subscriber/abstract:events",
+  ]
+
+  sources = [ "tables_erased/event.cpp" ]
+}
+
+library("tx_completed") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/subscriber/abstract:events",
+  ]
+
+  sources = [ "tx_completed/event.cpp" ]
+}

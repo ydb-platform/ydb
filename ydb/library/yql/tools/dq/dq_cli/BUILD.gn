@@ -1,0 +1,25 @@
+linked_executable("dq_cli") {
+  deps = [
+    "//library/cpp/getopt",
+    "//library/cpp/protobuf/util",
+    "//library/cpp/threading/future",
+    "//ydb/library/yql/providers/dq/actors/yt",
+    "//ydb/library/yql/providers/dq/api/grpc",
+    "//ydb/library/yql/providers/dq/common",  # peerdir only
+    "//ydb/public/api/protos",  # peerdir only
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

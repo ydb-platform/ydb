@@ -1,0 +1,3 @@
+library("blocking_queue") {
+  sources = [ "blocking_queue.cpp" ]
+}

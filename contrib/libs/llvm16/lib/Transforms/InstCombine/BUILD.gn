@@ -1,0 +1,26 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("InstCombine") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "InstCombineAddSub.cpp",
+        "InstCombineAndOrXor.cpp",
+        "InstCombineAtomicRMW.cpp",
+        "InstCombineCalls.cpp",
+        "InstCombineCasts.cpp",
+        "InstCombineCompares.cpp",
+        "InstCombineLoadStoreAlloca.cpp",
+        "InstCombineMulDivRem.cpp",
+        "InstCombineNegator.cpp",
+        "InstCombinePHI.cpp",
+        "InstCombineSelect.cpp",
+        "InstCombineShifts.cpp",
+        "InstCombineSimplifyDemanded.cpp",
+        "InstCombineVectorOps.cpp",
+        "InstructionCombining.cpp",
+    ]
+}

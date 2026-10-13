@@ -1,0 +1,7 @@
+group("simple_reader") {
+  public_deps = [
+    "//ydb/core/tx/columnshard",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",  # peerdir only
+  ]
+}

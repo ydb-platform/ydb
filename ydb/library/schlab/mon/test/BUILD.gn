@@ -1,0 +1,24 @@
+library("mon-test_resources") {
+  resources = [
+    {
+      path = "//ydb/library/schlab/mon/static/schviz-test0.json"
+      key = "schlab/schviz-test0.json"
+    },
+  ]
+}
+
+linked_executable("mon-test") {
+  deps = [
+    ":mon-test_resources",
+    "//library/cpp/getopt",
+    "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    "//library/cpp/monlib/service",
+    "//library/cpp/monlib/service/pages",
+    "//library/cpp/resource",
+    "//ydb/library/schlab/mon",
+  ]
+
+  sources = [ "test.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

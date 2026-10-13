@@ -1,0 +1,35 @@
+unittest_executable("ut_replica") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/basics:default",  # peerdir only
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_allocator",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/tx/scheme_board/replica_ut.cpp",
+    "//ydb/core/tx/scheme_board/ut_helpers.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/scheme_board" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/barriers",
+  ]
+
+  sources =
+      [ "//ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_tree_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/barriers" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

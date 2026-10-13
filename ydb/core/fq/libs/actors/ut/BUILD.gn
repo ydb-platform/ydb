@@ -1,0 +1,30 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/retry",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/actors",  # peerdir only
+    "//ydb/core/fq/libs/db_id_async_resolver_impl",
+    "//ydb/core/fq/libs/events",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/http",
+    "//ydb/library/yql/providers/common/token_accessor/client",
+  ]
+
+  sources = [ "database_resolver_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/fq/libs/actors",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

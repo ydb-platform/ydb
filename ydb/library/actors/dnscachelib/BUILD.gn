@@ -1,0 +1,12 @@
+library("dnscachelib") {
+  deps = [
+    # "//contrib/libs/c-ares",
+    # "//library/cpp/deprecated/atomic",
+    # "//library/cpp/lwtrace",
+  ]
+
+  sources = [
+    "dnscache.cpp",
+    "probes.cpp",
+  ]
+}

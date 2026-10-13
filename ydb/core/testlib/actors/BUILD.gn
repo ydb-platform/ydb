@@ -1,0 +1,32 @@
+library("actors") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    "//ydb/core/base",
+    "//ydb/core/control/lib",
+    # "//ydb/core/memory_controller",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib/audit_helpers",
+    "//ydb/library/actors/testlib",
+  ]
+
+  deps = [
+    # "//ydb/core/driver_lib/version",  # peerdir only
+    # "//ydb/core/grpc_services",
+    "//ydb/core/mon_alloc",
+    # "//ydb/core/scheme",  # peerdir only
+    # "//ydb/core/testlib",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "block_events.cpp",
+    "test_runtime.cpp",
+    "wait_events.cpp",
+  ]
+}

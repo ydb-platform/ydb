@@ -1,0 +1,20 @@
+library("quoter_service") {
+  public_deps = [
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/shared_resources",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/security",
+  ]
+
+  deps = [
+    # "//library/cpp/retry",
+    "//ydb/core/base",
+    # "//ydb/core/fq/libs/rate_limiter/events",  # peerdir only
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/quoter/public",
+    "//ydb/library/services",
+  ]
+
+  sources = [ "quoter_service.cpp" ]
+}

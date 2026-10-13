@@ -1,0 +1,12 @@
+gtest_executable("ut_mem_pool_limit_128") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//library/cpp/threading/future",
+    "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/interconnect/rdma/ut/utils",
+  ]
+
+  sources = [ "allocator_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

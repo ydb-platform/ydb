@@ -1,0 +1,45 @@
+library("constructor") {
+  deps = [
+    ":planner",
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+  ]
+
+  sources = [ "constructor/constructor.cpp" ]
+}
+
+group("lbuckets") {
+  public_deps = [
+    ":constructor",  # peerdir only
+    ":planner",  # peerdir only
+  ]
+}
+
+library("planner") {
+  public_deps = [
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/data_locks:manager",
+    "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    # "//ydb/core/tx/columnshard/hooks/abstract",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "planner/counters.cpp",
+    "planner/optimizer.cpp",
+  ]
+}

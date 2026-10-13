@@ -1,0 +1,8 @@
+library("codecs") {
+  deps = [
+    "//library/cpp/streams/zstd",
+    # "//ydb/public/sdk/cpp/src/client/topic:_self",
+  ]
+
+  sources = [ "codecs.cpp" ]
+}

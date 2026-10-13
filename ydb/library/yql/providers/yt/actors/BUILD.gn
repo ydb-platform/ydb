@@ -1,0 +1,31 @@
+library("actors") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+    "//yt/yql/providers/yt/gateway/file",
+    "//yt/yql/providers/yt/proto",
+  ]
+
+  deps = [
+    # "//library/cpp/yson/node",
+    # "//ydb/library/mkql_proto",
+    # "//ydb/library/yql/dq/runtime",
+    # "//yql/essentials/core",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/common/schema/parser",
+    # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+    "//yt/yql/providers/yt/codec",
+    # "//yt/yql/providers/yt/common",
+    "//yt/yql/providers/yt/comp_nodes",
+  ]
+
+  sources = [
+    "yql_yt_lookup_actor.cpp",
+    "yql_yt_provider_factories.cpp",
+  ]
+}

@@ -1,0 +1,12 @@
+library("interface") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/request_options",
+    # "//yt/yql/providers/yt/fmr/utils",
+  ]
+
+  deps = [
+    # "//yt/cpp/mapreduce/interface",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_coordinator_service_interface.cpp" ]
+}

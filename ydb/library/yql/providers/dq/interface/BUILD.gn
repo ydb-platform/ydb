@@ -1,0 +1,8 @@
+library("interface") {
+  public_deps = [ "//yql/essentials/public/udf" ]
+
+  sources = [
+    "yql_dq_full_result_writer.cpp",
+    "yql_dq_task_preprocessor.cpp",
+  ]
+}

@@ -1,0 +1,24 @@
+unittest_executable("s3_path_style") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/testlib/s3_recipe_helper",
+    "//ydb/public/sdk/cpp/src/client/draft",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/export",
+    "//ydb/public/sdk/cpp/src/client/import",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "s3_path_style_backup_ut.cpp" ]
+
+  test_depends_unbuilt = [
+    "//contrib/python/moto/bin",
+    "//ydb/public/tools/ydb_recipe",
+    "//ydb/tests/tools/s3_recipe",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

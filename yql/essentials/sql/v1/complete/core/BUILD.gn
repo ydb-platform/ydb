@@ -1,0 +1,12 @@
+library("core") {
+  public_deps = [ "//library/cpp/yson/node" ]
+
+  deps = [ "//yql/essentials/core/sql_types" ]
+
+  sources = [
+    "environment.cpp",
+    "input.cpp",
+    "name.cpp",
+    "statement.cpp",
+  ]
+}

@@ -1,0 +1,64 @@
+unittest_executable("control_plane_storage") {
+  deps = [
+    "//library/cpp/protobuf/interop",
+    "//library/cpp/retry",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/external_sources",  # peerdir only
+    "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/config",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/control_plane_storage",
+    "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    "//ydb/core/fq/libs/db_schema",
+    "//ydb/core/fq/libs/init",
+    "//ydb/core/fq/libs/quota_manager",
+    "//ydb/core/fq/libs/quota_manager/events",
+    "//ydb/core/fq/libs/rate_limiter/control_plane_service",
+    "//ydb/core/fq/libs/rate_limiter/events",
+    "//ydb/core/fq/libs/ydb",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/security",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/tests/tools/fqrun/src",
+    "//ydb/tests/tools/kqprun/runlib",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/public/issue",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "in_memory_control_plane_storage_ut.cpp",
+    "ydb_control_plane_storage_bindings_permissions_ut.cpp",
+    "ydb_control_plane_storage_bindings_ut.cpp",
+    "ydb_control_plane_storage_connections_permissions_ut.cpp",
+    "ydb_control_plane_storage_connections_ut.cpp",
+    "ydb_control_plane_storage_internal_ut.cpp",
+    "ydb_control_plane_storage_queries_permissions_ut.cpp",
+    "ydb_control_plane_storage_queries_ut.cpp",
+    "ydb_control_plane_storage_quotas_ut.cpp",
+    "ydb_control_plane_storage_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/fq/libs/control_plane_storage" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

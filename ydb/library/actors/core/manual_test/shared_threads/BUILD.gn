@@ -1,0 +1,10 @@
+linked_executable("shared_threads") {
+  deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

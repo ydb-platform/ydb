@@ -1,0 +1,7 @@
+library("mux_event") {
+  public_deps = [
+    # "//library/cpp/deprecated/atomic",
+  ]
+
+  sources = [ "mux_event.cpp" ]
+}

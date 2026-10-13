@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/sequenceproxy",
+    "//ydb/core/tx/sequenceshard/public",
+    "//ydb/core/tx/tx_proxy:public",
+  ]
+
+  sources = [ "//ydb/core/tx/sequenceproxy/sequenceproxy_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/sequenceproxy" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

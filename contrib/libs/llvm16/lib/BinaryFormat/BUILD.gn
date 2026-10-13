@@ -1,0 +1,22 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("BinaryFormat") {
+    deps = [ "//contrib/libs/llvm16/lib/TargetParser" ]
+
+    sources = [
+        "AMDGPUMetadataVerifier.cpp",
+        "COFF.cpp",
+        "Dwarf.cpp",
+        "DXContainer.cpp",
+        "ELF.cpp",
+        "MachO.cpp",
+        "Magic.cpp",
+        "Minidump.cpp",
+        "MsgPackDocument.cpp",
+        "MsgPackDocumentYAML.cpp",
+        "MsgPackReader.cpp",
+        "MsgPackWriter.cpp",
+        "Wasm.cpp",
+        "XCOFF.cpp",
+    ]
+}

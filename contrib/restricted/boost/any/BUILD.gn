@@ -1,0 +1,12 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("any") {
+    public_deps = [
+        "//contrib/restricted/boost/throw_exception",
+        "//contrib/restricted/boost/type_index",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

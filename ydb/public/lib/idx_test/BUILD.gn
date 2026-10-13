@@ -1,0 +1,26 @@
+library("idx_test") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  deps = [
+    "//library/cpp/string_utils/base64",
+    # "//library/cpp/threading/future",
+    "//ydb/public/lib/yson_value",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/params",
+  ]
+
+  sources = [
+    "idx_test_checker.cpp",
+    "idx_test_common.cpp",
+    "idx_test_data_provider.cpp",
+    "idx_test_loader.cpp",
+    "idx_test_stderr_progress_tracker.cpp",
+    "idx_test_upload.cpp",
+  ]
+
+  serialize_enum_headers = [ "idx_test.h" ]
+}

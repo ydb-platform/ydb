@@ -1,0 +1,7 @@
+library("text") {
+  public_deps = [ "//library/cpp/monlib/encode" ]
+
+  deps = [ "//library/cpp/monlib/metrics" ]
+
+  sources = [ "text_encoder.cpp" ]
+}

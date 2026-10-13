@@ -1,0 +1,5 @@
+library("read_batch_converter") {
+  public_deps = [ "//ydb/services/deprecated/persqueue_v0/api/protos" ]
+
+  sources = [ "read_batch_converter.cpp" ]
+}

@@ -1,0 +1,55 @@
+library("with_direct_read_ut_resources") {
+  resources = [
+    {
+      path = "//ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_0_v24-4-2.dat"
+      key = "topic_A_partition_0_v24-4-2.dat"
+    },
+    {
+      path = "//ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_1_v24-4-2.dat"
+      key = "topic_A_partition_1_v24-4-2.dat"
+    },
+  ]
+}
+
+unittest_executable("with_direct_read_ut") {
+  deps = [
+    ":with_direct_read_ut_resources",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/ut/common",
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/persqueue/writer",
+    "//ydb/core/protos",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/topic/common",
+    "//ydb/public/sdk/cpp/src/client/topic/impl",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+    "//ydb/public/sdk/cpp/tests/integration/topic/utils",
+  ]
+
+  sources = [
+    "//ydb/public/sdk/cpp/src/client/topic/ut/basic_usage_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/describe_topic_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/direct_read_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/local_partition_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/sdk/cpp/src/client/topic" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

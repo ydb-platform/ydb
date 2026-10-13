@@ -1,0 +1,49 @@
+unittest_executable("ut_restore") {
+  deps = [
+    "//contrib/libs/double-conversion",
+    "//contrib/libs/zstd",
+    "//library/cpp/json",
+    "//library/cpp/streams/zstd",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/testing/hook",
+    "//ydb/core/backup/common",
+    "//ydb/core/base",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/metering",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/audit_helpers",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/util",
+    "//ydb/core/wrappers/events",
+    "//ydb/core/wrappers:ut_helpers",
+    "//ydb/core/ydb_convert",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/ydb_cli/dump/files",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    "//yql/essentials/types/uuid",
+  ]
+
+  sources = [
+    "ut_restore.cpp",
+    "ut_restore_fs.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

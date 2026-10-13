@@ -1,0 +1,13 @@
+library("schoot") {
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/containers/stack_vector",  # peerdir only
+    "//library/cpp/protobuf/json",
+    "//ydb/library/schlab/protos",
+  ]
+
+  sources = [
+    "schoot_gen.cpp",
+    "schoot_gen_cfg.cpp",
+  ]
+}

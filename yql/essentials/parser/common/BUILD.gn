@@ -1,0 +1,9 @@
+library("common") {
+  public_deps = [ "//yql/essentials/public/issue" ]
+
+  deps = [
+    "//yql/essentials/core/issue",  # peerdir only
+  ]
+
+  sources = [ "error.cpp" ]
+}

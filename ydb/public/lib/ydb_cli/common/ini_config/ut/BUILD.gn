@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/ydb_cli/common:ini_config",
+  ]
+
+  sources = [ "//ydb/public/lib/ydb_cli/common/ini_config/config_ut.cpp" ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/common/ini_config" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

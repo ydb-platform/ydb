@@ -1,0 +1,51 @@
+library("kqp") {
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//library/cpp/digest/md5",  # peerdir only
+    # "//library/cpp/string_utils/base64",  # peerdir only
+    # "//ydb/core/actorlib_impl",  # peerdir only
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/client/minikql_compile",  # peerdir only
+    # "//ydb/core/engine",  # peerdir only
+    # "//ydb/core/formats",  # peerdir only
+    # "//ydb/core/grpc_services/local_rpc",  # peerdir only
+    # "//ydb/core/kqp/common",  # peerdir only
+    # "//ydb/core/kqp/compile_service",  # peerdir only
+    # "//ydb/core/kqp/compute_actor",  # peerdir only
+    # "//ydb/core/kqp/counters",  # peerdir only
+    # "//ydb/core/kqp/executer_actor",  # peerdir only
+    # "//ydb/core/kqp/expr_nodes",  # peerdir only
+    # "//ydb/core/kqp/gateway",  # peerdir only
+    # "//ydb/core/kqp/host",  # peerdir only
+    # "//ydb/core/kqp/node_service",  # peerdir only
+    # "//ydb/core/kqp/opt",  # peerdir only
+    # "//ydb/core/kqp/provider",  # peerdir only
+    # "//ydb/core/kqp/proxy_service",  # peerdir only
+    # "//ydb/core/kqp/query_compiler",  # peerdir only
+    # "//ydb/core/kqp/rm_service",  # peerdir only
+    # "//ydb/core/kqp/runtime",  # peerdir only
+    # "//ydb/core/kqp/session_actor",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/sys_view/service",  # peerdir only
+    # "//ydb/core/util",  # peerdir only
+    # "//ydb/core/ydb_convert",  # peerdir only
+    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/actors/core",  # peerdir only
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/wilson",  # peerdir only
+    # "//ydb/library/yql/utils/actor_log",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//ydb/public/lib/base",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+    "//yql/essentials/core/services/mounts",  # peerdir only
+    # "//yql/essentials/public/issue",  # peerdir only
+    # "//yql/essentials/utils/log",  # peerdir only
+  ]
+
+  resources = [
+    {
+      path = "kqp_default_settings.txt"
+      key = "kqp_default_settings.txt"
+    },
+  ]
+}

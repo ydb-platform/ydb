@@ -1,0 +1,20 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/tx/columnshard/blobs_action/protos",
+    "//ydb/core/tx/columnshard/common/protos",
+    "//ydb/core/tx/columnshard/engines/protos",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/protos",  # peerdir only
+  ]
+
+  sources = [
+    "data.proto",
+    "events.proto",
+    "initiator.proto",
+    "links.proto",
+    "sessions.proto",
+  ]
+}

@@ -1,0 +1,17 @@
+linked_executable("yaml-to-proto-dump-ds-init") {
+  deps = [
+    "//ydb/library/yaml_config",
+    "//ydb/library/yaml_config/deprecated",
+    "//ydb/library/yaml_config/tools/util",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

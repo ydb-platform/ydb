@@ -1,0 +1,16 @@
+library("ydb_issue") {
+  public_deps = [
+    "//ydb/library/ydb_issue/proto",
+    "//ydb/library/yql/public/ydb_issue",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "issue_helpers.cpp" ]
+
+  resources = [
+    {
+      path = "ydb_issue.txt"
+      key = "ydb_issue.txt"
+    },
+  ]
+}

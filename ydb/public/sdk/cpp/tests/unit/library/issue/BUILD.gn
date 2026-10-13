@@ -1,0 +1,16 @@
+unittest_executable("issue") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/unicode/normalization",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/library/issue",
+  ]
+
+  sources = [
+    "utf8_ut.cpp",
+    "yql_issue_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

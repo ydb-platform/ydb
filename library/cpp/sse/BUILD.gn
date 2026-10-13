@@ -1,0 +1,3 @@
+library("sse") {
+  sources = [ "sse.cpp" ]
+}

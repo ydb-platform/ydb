@@ -1,0 +1,5 @@
+library("registry") {
+  deps = [ "//library/cpp/dwarf_backtrace" ]
+
+  sources = [ "set_format_backtrace.cpp" ]
+}

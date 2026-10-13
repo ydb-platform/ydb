@@ -1,0 +1,22 @@
+unittest_executable("ut_scrub") {
+  deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/blobstorage/vdisk/scrub",
+  ]
+
+  sources = [ "//ydb/core/blobstorage/ut_blobstorage/scrub.cpp" ]
+
+  include_dirs = [ "//ydb/core/blobstorage/ut_blobstorage" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

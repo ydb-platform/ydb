@@ -1,0 +1,21 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+  ]
+
+  sources = [
+    "//util/random/common_ops_ut.cpp",
+    "//util/random/easy_ut.cpp",
+    "//util/random/entropy_ut.cpp",
+    "//util/random/fast_ut.cpp",
+    "//util/random/mersenne_ut.cpp",
+    "//util/random/normal_ut.cpp",
+    "//util/random/random_ut.cpp",
+    "//util/random/shuffle_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

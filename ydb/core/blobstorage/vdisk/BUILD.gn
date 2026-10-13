@@ -1,0 +1,27 @@
+group("defs") {
+  public_deps = [ "//ydb/core/blobstorage" ]
+}
+
+library("vdisk") {
+  public_deps = [ ":defs" ]
+
+  deps = [
+    # "//ydb/core/blobstorage/vdisk/anubis_osiris",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/defrag",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/huge",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hullop",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/ingress",
+    # "//ydb/core/blobstorage/vdisk/localrecovery",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/protos",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/query",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/repl",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/scrub",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/skeleton",
+    # "//ydb/core/blobstorage/vdisk/syncer",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/synclog",  # peerdir only
+  ]
+
+  sources = [ "vdisk_actor.cpp" ]
+}

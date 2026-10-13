@@ -1,0 +1,8 @@
+library("actors") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/grpc/server",
+  ]
+
+  sources = [ "logger.cpp" ]
+}

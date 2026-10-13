@@ -1,0 +1,8 @@
+library("interface") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_yt_table_data_service.cpp" ]
+}

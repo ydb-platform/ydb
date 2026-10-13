@@ -1,0 +1,14 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//util/charset/utf8_ut.cpp",
+    "//util/charset/wide_ut.cpp",
+  ]
+
+  include_dirs = [ "//util/charset" ]
+
+  data = [ "utf8/" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

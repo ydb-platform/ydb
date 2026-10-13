@@ -1,0 +1,41 @@
+library("load_actor_adapter") {
+  public_deps = [
+    "//ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/blockstore/public/api/protos",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [ "load_actor_adapter/load_actor_adapter.cpp" ]
+}
+
+library("partition_direct") {
+  public_deps = [
+    # "//ydb/core/blobstorage/events",
+    "//ydb/core/nbs/cloud/blockstore/config",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    ":load_actor_adapter",
+    # "//ydb/core/base",
+    # "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/nbs/cloud/blockstore/bootstrap",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service",
+    # "//ydb/core/nbs/cloud/blockstore/libs/vhost",
+    "//ydb/core/tablet",
+    # "//ydb/library/services",  # peerdir only
+  ]
+
+  sources = [
+    "partition_direct.cpp",
+    "partition_direct_actor.cpp",
+  ]
+}

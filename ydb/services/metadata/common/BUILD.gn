@@ -1,0 +1,21 @@
+library("common") {
+  public_deps = [
+    # "//library/cpp/time_provider",
+    # "//ydb/core/base",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/actors/core",
+    # "//ydb/services/metadata/abstract",
+  ]
+
+  deps = [
+    "//ydb/library/services",
+    # "//ydb/services/bg_tasks/abstract",  # peerdir only
+    # "//ydb/services/metadata/initializer",  # peerdir only
+  ]
+
+  sources = [
+    "ss_dialog.cpp",
+    "timeout.cpp",
+  ]
+}

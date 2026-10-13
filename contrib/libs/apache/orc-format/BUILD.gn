@@ -1,0 +1,8 @@
+config("public_config") {
+    include_dirs = [ "$root_gen_dir/" + rebase_path(".", "//") + "/src/main/proto/orc/proto" ]
+}
+
+protobuf_library("orc-format") {
+    sources = [ "src/main/proto/orc/proto/orc_proto.proto" ]
+    public_configs = [ ":public_config" ]
+}

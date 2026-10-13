@@ -1,0 +1,16 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("utf8_range") {
+    public_deps = [ "//contrib/restricted/abseil-cpp" ]
+
+    sources = [
+        "naive.c",
+        "range2-neon.c",
+        "range2-sse.c",
+        "utf8_range.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

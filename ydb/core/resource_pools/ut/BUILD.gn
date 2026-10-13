@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/resource_pools",
+    "//ydb/library/aclib",
+  ]
+
+  sources = [
+    "//ydb/core/resource_pools/resource_pool_classifier_settings_ut.cpp",
+    "//ydb/core/resource_pools/resource_pool_settings_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/resource_pools" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,11 @@
+library("events") {
+  public_deps = [
+    # "//contrib/libs/grpc",
+    # "//ydb/core/fq/libs/events",
+    "//ydb/core/fq/libs/quota_manager/proto",
+    "//ydb/library/actors/core",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "events.cpp" ]
+}

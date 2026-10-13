@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/providers/yt/actors",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/codegen/no_llvm",  # peerdir only
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/parser/pg_wrapper/interface",  # peerdir only
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/service/terminate_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/utils/log",
+    "//yql/essentials/utils/log/proto",
+    "//yt/yql/providers/yt/codec/codegen/no_llvm",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/no_llvm",  # peerdir only
+    "//yt/yql/providers/yt/gateway/file",
+  ]
+
+  sources = [ "yql_yt_lookup_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/yt/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=terminate_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=no_llvm",
+  ]
+}

@@ -1,0 +1,10 @@
+group("actor_client") {
+  public_deps = [
+    # "//contrib/libs/grpc",
+    "//library/cpp/digest/crc32c",
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+}

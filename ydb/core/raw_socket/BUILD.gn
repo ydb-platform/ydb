@@ -1,0 +1,16 @@
+library("raw_socket") {
+  public_deps = [
+    "//contrib/libs/openssl",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "sock_listener.cpp" ]
+}

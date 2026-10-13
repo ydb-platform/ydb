@@ -1,0 +1,14 @@
+library("impl") {
+  public_deps = [
+    "//ydb/library/grpc/actor_client",
+    "//ydb/library/ncloud/api",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/client/nc_private/iam/v1",
+  ]
+
+  sources = [ "access_service.cpp" ]
+}

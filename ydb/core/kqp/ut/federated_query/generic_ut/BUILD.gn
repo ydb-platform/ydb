@@ -1,0 +1,44 @@
+unittest_executable("generic_ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/fmt",
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/external_sources",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/federated_query/common",
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    "//ydb/library/yql/providers/generic/connector/libcpp",
+    "//ydb/library/yql/providers/generic/connector/libcpp:ut_helpers",
+    "//ydb/library/yql/providers/s3/actors",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/providers/common/structured_token",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "iceberg_ut_data.cpp",
+    "kqp_generic_provider_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

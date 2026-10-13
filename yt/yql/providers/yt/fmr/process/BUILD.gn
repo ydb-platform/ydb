@@ -1,0 +1,20 @@
+library("process") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/job/impl",
+    # "//yt/yql/providers/yt/fmr/request_options",
+    # "//yt/yql/providers/yt/fmr/table_data_service/client/impl",
+    # "//yt/yql/providers/yt/fmr/table_data_service/discovery/file",
+    # "//yt/yql/providers/yt/fmr/yt_job_service/file",
+    # "//yt/yql/providers/yt/fmr/yt_job_service/impl",
+    # "//yt/yql/providers/yt/job",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/common",
+    # "//yt/yql/providers/yt/fmr/request_options/proto_helpers",
+    # "//yt/yql/providers/yt/fmr/utils",
+  ]
+
+  sources = [ "yql_yt_job_fmr.cpp" ]
+}

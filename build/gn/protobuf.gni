@@ -1,0 +1,315 @@
+# protoc over .proto sources: the generated .pb.{h,cc} and .grpc.pb.{h,cc}
+# (get_target_outputs of the target, an action_foreach). Shared by
+# protobuf_library() and the .proto among the sources of library() and
+# linked_executable(), which compile the .cc themselves.
+#
+#   sources                    .proto files
+#   imports                    the libraries whose .proto these import
+#   codegen_target             name of the group of the generated headers of
+#                                these and of the imports, transitively --
+#                                protoc, no compiling nor linking: what the
+#                                protoc of an importer (the -I it adds, metadata
+#                                proto_include_dirs), the weak references of a
+#                                link slot (link_slot_codegen, see
+#                                //build/gn/link_slots.gni) and the global PCH
+#                                wait for; <library>_codegen
+#   deps                       of the action itself: what writes its sources
+#                                (generated_sources), never a library
+#   generate_grpc_services, extra_plugins, proto_public_include_dirs, generated_sources,
+#   proto_transitive_headers: as of protobuf_library()
+template("protobuf_sources") {
+    _action = target_name
+    _source_dir = rebase_path("//", root_build_dir)
+
+    _proto_paths = [
+        "-I", rebase_path("//", root_build_dir),
+        "-I", rebase_path("//contrib/libs/protobuf/src", root_build_dir),
+    ]
+
+    _generated_sources = defined(invoker.generated_sources) && invoker.generated_sources
+    if (_generated_sources) {
+        _proto_paths += [ "-I", rebase_path(root_gen_dir, root_build_dir) ]
+        _out_base = target_gen_dir
+    } else {
+        _out_base = "{{source_gen_dir}}"
+    }
+
+    _protoc = "//contrib/tools/protoc:protoc($tool_toolchain)"
+    _cpp_styleguide = "//contrib/tools/protoc/plugins/cpp_styleguide($tool_toolchain)"
+    _protoc_bin = rebase_path(get_label_info(_protoc, "root_out_dir") + "/protoc", root_build_dir)
+
+    # GRPC() of ya make: the services, by the grpc_cpp plugin
+    _grpc = defined(invoker.generate_grpc_services) && invoker.generate_grpc_services
+    if (_grpc) {
+        _grpc_cpp = "//contrib/tools/protoc/plugins/grpc_cpp($tool_toolchain)"
+    }
+
+    _extra_plugins = []
+    if (defined(invoker.extra_plugins)) {
+        _extra_plugins = invoker.extra_plugins
+    }
+
+    # false: SET(PROTOC_TRANSITIVE_HEADERS "no") of ya make -- X.pb.h holds the
+    # messages of X with the imported ones only declared, X.deps.pb.h adds the
+    # imports (protoc's proto_h, renamed by protoc.py)
+    _transitive_headers = !defined(invoker.proto_transitive_headers) || invoker.proto_transitive_headers
+
+    # Include dirs this library both uses for its own protoc invocation and
+    # advertises to the importers (metadata of the codegen group below).
+    _self_proto_paths = []
+    _self_include_dirs = []
+    if (defined(invoker.proto_public_include_dirs)) {
+        foreach(_dir, invoker.proto_public_include_dirs) {
+            _self_proto_paths += [ "-I", rebase_path(_dir, root_build_dir) ]
+            _self_include_dirs += [ rebase_path(_dir, root_build_dir) ]
+        }
+    }
+
+    _imports_codegen = []
+    if (defined(invoker.imports)) {
+        foreach(_l, invoker.imports) {
+            _imports_codegen += [ get_label_info(_l, "dir") + ":" + get_label_info(_l, "name") + "_codegen" ]
+        }
+    }
+
+    group(invoker.codegen_target) {
+        forward_variables_from(invoker, [ "testonly" ])
+        public_deps = [ ":$_action" ] + _imports_codegen
+        metadata = {
+            proto_include_dirs = _self_include_dirs
+        }
+    }
+
+    # the -I the imports advertise, transitively (analogue of ya make's
+    # PROTO_NAMESPACE(GLOBAL ...)): their `proto_public_include_dirs`
+    _proto_includes_target = "${_action}_includes"
+    _proto_includes_file = "$target_gen_dir/${_action}.proto_includes"
+    generated_file(_proto_includes_target) {
+        forward_variables_from(invoker, [ "testonly" ])
+        outputs = [ _proto_includes_file ]
+        data_keys = [ "proto_include_dirs" ]
+        output_conversion = "list lines"
+        deps = _imports_codegen
+    }
+
+    # Note: protoc canonicalizes each source via the most specific `-I` it lives
+    # under (see protoc.py:relativize_proto_sources), so the path it emits under
+    # `--cpp_out` uses the *short* form. protoc.py shifts every `--*_out` by the
+    # prefix it stripped, so files still land at `{{source_gen_dir}}` (the long
+    # path GN expects). This holds for `-I`s inherited from deps too, which GN
+    # cannot see here (they are resolved from `_proto_includes_file` at runtime).
+    _cpp_out = "$root_gen_dir"
+
+    action_foreach(_action) {
+        forward_variables_from(invoker, [ "testonly", "visibility" ])
+        script = "//build/gn/scripts/protoc.py"
+        sources = invoker.sources
+        inputs = [ _proto_includes_file ]
+        outputs = [
+            "$_out_base/{{source_name_part}}.pb.cc",
+            "$_out_base/{{source_name_part}}.pb.h",
+        ]
+        if (_grpc) {
+            outputs += [
+                "$_out_base/{{source_name_part}}.grpc.pb.cc",
+                "$_out_base/{{source_name_part}}.grpc.pb.h",
+            ]
+        }
+        if (!_transitive_headers) {
+            outputs += [ "$_out_base/{{source_name_part}}.deps.pb.h" ]
+        }
+
+        args = [ _source_dir ] + outputs + ["--"] + [ "./$_protoc_bin" ] + _proto_paths + _self_proto_paths
+        args += [
+            "--fatal_warnings",
+            "--cpp_out", _cpp_out,
+            "--cpp_styleguide_out", _cpp_out,
+            "--plugin=protoc-gen-cpp_styleguide=" + rebase_path(get_label_info(_cpp_styleguide, "root_out_dir") + "/cpp_styleguide"),
+            "--proto-include-paths-file", rebase_path(_proto_includes_file, root_build_dir),
+        ]
+        if (_grpc) {
+            args += [
+                "--grpc_cpp_out", _cpp_out,
+                "--plugin=protoc-gen-grpc_cpp=" + rebase_path(get_label_info(_grpc_cpp, "root_out_dir") + "/grpc_cpp"),
+            ]
+        }
+        if (!_transitive_headers) {
+            args += [ "--cpp_opt=proto_h=true" ]
+        }
+
+        deps = [
+            ":$_proto_includes_target",
+            _protoc,
+            _cpp_styleguide,
+        ]
+        if (_grpc) {
+            deps += [ _grpc_cpp ]
+        }
+
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        foreach(_plugin, _extra_plugins) {
+            _plugin_tool = get_label_info(_plugin.target, "label_no_toolchain") + "($tool_toolchain)"
+            args += [
+                "--plugin=protoc-gen-${_plugin.name}=" + rebase_path(get_label_info(_plugin_tool, "root_out_dir") + "/${_plugin.name}"),
+                "--${_plugin.name}_out", _cpp_out,
+            ]
+            deps += [ _plugin_tool ]
+        }
+
+        args += [ "{{source}}" ]
+    }
+}
+
+template("protobuf_library") {
+    _name = target_name
+    _path = rebase_path(".", "//")
+    _unique_name = exec_script("//build/gn/scripts/unique_name.py", [ _path ], "trim string")
+    _gen_target = "${_unique_name}_${target_name}_gen"
+
+    # C++ side of the same story: when a foreign proto resolves an `import` via
+    # a non-default `-I`, the corresponding `.pb.h` ends up at the long path
+    # ($root_gen_dir/<full source path>/foo.pb.h), but the generated `#include`
+    # uses the short form (foo.pb.h relative to that `-I`). Mirror each
+    # protoc `-I` with a matching $root_gen_dir/<rel> on the C++ include path.
+    _public_config_target = ""
+    if (defined(invoker.proto_public_include_dirs)) {
+        _public_config_target = "${target_name}_proto_public_config"
+        config(_public_config_target) {
+            include_dirs = []
+            foreach(_dir, invoker.proto_public_include_dirs) {
+                include_dirs += [ "$root_gen_dir/" + rebase_path(_dir, "//") ]
+            }
+        }
+    }
+
+    # C++ sources among `sources` are compiled by the library itself, the
+    # rest go to protoc
+    _cpp_sources = filter_include(invoker.sources, [ "*.cpp", "*.cc", "*.c" ])
+
+    protobuf_sources(_gen_target) {
+        forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "proto_public_include_dirs",
+                                          "generated_sources", "proto_transitive_headers", "testonly" ])
+        sources = invoker.sources - _cpp_sources
+
+        # the imports are the public_deps
+        if (defined(invoker.public_deps)) {
+            imports = invoker.public_deps
+        }
+        codegen_target = "${_name}_codegen"
+
+        # protoc waits for no library: `deps` are the library's, unless the
+        # .proto are generated -- then they are what writes them
+        if (defined(invoker.generated_sources) && invoker.generated_sources &&
+            defined(invoker.deps)) {
+            deps = invoker.deps
+        }
+    }
+
+    # Opt-in enum serialization for proto enums, analogous to the `library`
+    _enum_targets = []
+    _enum_sources = []
+    if (defined(invoker.serialize_enum_headers)) {
+        _enum_idx = 0
+        foreach(_header, invoker.serialize_enum_headers) {
+            _gen_header = "$target_gen_dir/$_header"
+            _enum_t = "${_unique_name}_${target_name}_enum_${_enum_idx}"
+            _enum_out = "$target_gen_dir/" + get_path_info(_header, "name") + "_serialized.cpp"
+
+            action(_enum_t) {
+                script = "//build/gn/scripts/run.py"
+                inputs = [ _gen_header ]
+                outputs = [ _enum_out ]
+
+                _enum_parser = "//tools/enum_parser:enum_parser($tool_toolchain)"
+                _enum_parser_bin = rebase_path(get_label_info(_enum_parser, "root_out_dir") + "/enum_parser", root_build_dir)
+
+                args = [
+                    "./$_enum_parser_bin",
+                    rebase_path(_gen_header, root_build_dir),
+                    "--include-path", rebase_path(_gen_header, root_gen_dir),
+                    "--output", rebase_path(_enum_out, root_build_dir),
+                ]
+
+                deps = [
+                    ":$_gen_target",
+                    _enum_parser,
+                ]
+            }
+
+            _enum_targets += [ ":$_enum_t" ]
+            _enum_sources += [ _enum_out ]
+            _enum_idx += 1
+        }
+    }
+
+    library(target_name) {
+        forward_variables_from(invoker, "*", [ "deps", "public_configs", "public_deps", "sources", "extra_plugins", "generate_grpc_services", "proto_public_include_dirs", "serialize_enum_headers", "generated_sources", "proto_transitive_headers" ])
+
+        output_dir = "$root_out_dir/" + rebase_path(".", "//") # TODO: doesn't work for some reason
+        output_name = _unique_name
+
+        public_deps = [ "//contrib/libs/protobuf" ]
+        if (defined(invoker.generate_grpc_services) && invoker.generate_grpc_services) {
+            public_deps += [ "//contrib/libs/grpc" ]
+        }
+        if (defined(invoker.public_deps)) {
+            public_deps += invoker.public_deps
+        }
+
+        # TODO: losing default deps here?
+        deps = [ ":$_gen_target" ]
+        deps += _enum_targets
+        if (_enum_targets != []) {
+            deps += [ "//tools/enum_parser:runtime" ]
+        }
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        public_configs = []
+        if (defined(invoker.public_configs)) {
+            public_configs += invoker.public_configs
+        }
+        if (_public_config_target != "") {
+            # Self: own .pb.cc files need the include path too (their .pb.h
+            # imports siblings via the short form). Public: consumers compiling
+            # against this library inherit it via public_deps.
+            public_configs += [ ":$_public_config_target" ]
+        }
+
+        sources = get_target_outputs(":$_gen_target") + _enum_sources + _cpp_sources
+    }
+}
+
+# The descriptors of a .proto and of all it imports, a FileDescriptorSet
+# (protoc --descriptor_set_out --include_imports) at
+# $target_gen_dir/<target_name>.desc: what a code generator reads the
+# messages from without linking their generated code (which would make it wait
+# for compiling them).
+#
+#   source                     the .proto
+template("proto_descriptor_set") {
+    _protoc = "//contrib/tools/protoc:protoc($tool_toolchain)"
+    _output = "$target_gen_dir/$target_name.desc"
+
+    action(target_name) {
+        forward_variables_from(invoker, [ "testonly", "visibility" ])
+        script = "//build/gn/scripts/run.py"
+        sources = [ invoker.source ]
+        outputs = [ _output ]
+        depfile = "$_output.d"
+        args = [
+            "./" + rebase_path(get_label_info(_protoc, "root_out_dir") + "/protoc", root_build_dir),
+            "-I", rebase_path("//", root_build_dir),
+            "-I", rebase_path("//contrib/libs/protobuf/src", root_build_dir),
+            "--include_imports",
+            "--descriptor_set_out=" + rebase_path(_output, root_build_dir),
+            "--dependency_out=" + rebase_path(depfile, root_build_dir),
+            rebase_path(invoker.source, root_build_dir),
+        ]
+        deps = [ _protoc ]
+    }
+}

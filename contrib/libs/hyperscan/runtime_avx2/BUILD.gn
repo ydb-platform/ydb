@@ -1,0 +1,16 @@
+import("//contrib/libs/hyperscan/runtime.gni")
+
+hyperscan_runtime("runtime_avx2") {
+    prefix = "avx2"
+    defines = [
+        "HAVE_SSE41",
+        "HAVE_SSE42",
+        "HAVE_POPCOUNT_INSTR",
+        "HAVE_AVX",
+        "HAVE_AVX2",
+    ]
+    configs = [
+        "//build/gn/config:_avx_config",
+        "//build/gn/config:_avx2_config",
+    ]
+}

@@ -1,0 +1,25 @@
+library("granules") {
+  deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/sys_view/common",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/reader/common",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/switch",
+  ]
+
+  sources = [
+    "constructor.cpp",
+    "metadata.cpp",
+    "schema.cpp",
+    "source.cpp",
+  ]
+}

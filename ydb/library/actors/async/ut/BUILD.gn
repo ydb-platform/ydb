@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/async",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [
+    "async_ut.cpp",
+    "callback_coroutine_ut.cpp",
+    "cancellation_ut.cpp",
+    "continuation_ut.cpp",
+    "event_ut.cpp",
+    "sleep_ut.cpp",
+    "task_group_ut.cpp",
+    "timeout_ut.cpp",
+    "wait_for_event_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/actors/async" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,7 @@
+library("bucket_quoter") {
+  public_deps = [
+    # "//library/cpp/deprecated/atomic",
+  ]
+
+  sources = [ "bucket_quoter.cpp" ]
+}

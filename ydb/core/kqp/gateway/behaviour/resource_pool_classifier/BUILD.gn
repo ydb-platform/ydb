@@ -1,0 +1,27 @@
+library("resource_pool_classifier") {
+  public_deps = [
+    "//ydb/core/resource_pools",
+    # "//ydb/services/metadata/abstract",
+    "//ydb/services/metadata/manager",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//ydb/core/base",
+    # "//ydb/core/cms/console",
+    "//ydb/core/kqp/workload_service/actors",
+    "//ydb/core/protos",
+    "//ydb/library/query_actor",
+    "//ydb/services/metadata/initializer",
+  ]
+
+  sources = [
+    "behaviour.cpp",
+    "checker.cpp",
+    "fetcher.cpp",
+    "initializer.cpp",
+    "manager.cpp",
+    "object.cpp",
+    "snapshot.cpp",
+  ]
+}

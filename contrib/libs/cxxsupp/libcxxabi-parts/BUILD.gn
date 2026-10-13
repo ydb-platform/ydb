@@ -1,0 +1,23 @@
+config("private_config") {
+    defines = [
+        "HAVE___CXA_THREAD_ATEXIT_IMPL",
+        "_LIBCPP_BUILDING_LIBRARY",
+        "_LIBCXXABI_BUILDING_LIBRARY",
+    ]
+
+    include_dirs = [
+        "//contrib/libs/cxxsupp/libcxx",
+        "//contrib/libs/cxxsupp/libcxx/include",
+        "//contrib/libs/cxxsupp/libcxxabi/include",
+    ]
+}
+
+system_library("libcxxabi-parts") {
+    sources = [
+        "//contrib/libs/cxxsupp/libcxxabi/src/abort_message.cpp",
+        "//contrib/libs/cxxsupp/libcxxabi/src/cxa_demangle.cpp",
+        "//contrib/libs/cxxsupp/libcxxabi/src/cxa_thread_atexit.cpp",
+    ]
+
+    configs = [ ":private_config" ]
+}

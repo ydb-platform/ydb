@@ -1,0 +1,24 @@
+library("abstract") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/library/formats/arrow",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/conveyor_composite/usage",
+  ]
+
+  sources = [
+    "constructor.cpp",
+    "metadata.cpp",
+    "schema.cpp",
+    "source.cpp",
+  ]
+}

@@ -1,0 +1,20 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    defines = [
+        "SIMDJSON_AVX512_ALLOWED=1",
+        "SIMDJSON_UTF8VALIDATION=1",
+    ]
+    include_dirs = [ "src" ]
+}
+
+contrib_library("simdjson") {
+    sources = [
+        "src/simdjson.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

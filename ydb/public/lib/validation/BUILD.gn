@@ -1,0 +1,13 @@
+linked_executable("validation") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//contrib/libs/protoc",
+    "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos/annotations",
+    "//ydb/public/lib/protobuf",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

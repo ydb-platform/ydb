@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/tx/long_tx_service/public",
+  ]
+
+  sources = [ "//ydb/core/tx/long_tx_service/public/types_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/long_tx_service/public" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

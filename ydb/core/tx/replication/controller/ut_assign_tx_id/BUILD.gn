@@ -1,0 +1,22 @@
+unittest_executable("ut_assign_tx_id") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/tx/replication/controller",
+    "//ydb/core/tx/replication/service",
+    "//ydb/core/tx/replication/ut_helpers",
+  ]
+
+  sources = [ "//ydb/core/tx/replication/controller/assign_tx_id_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/replication/controller" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

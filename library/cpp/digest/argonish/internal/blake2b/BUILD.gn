@@ -1,0 +1,6 @@
+group("blake2b") {
+  public_deps = [
+    # "//library/cpp/digest/argonish",
+    # "//library/cpp/digest/argonish/internal/rotations",
+  ]
+}

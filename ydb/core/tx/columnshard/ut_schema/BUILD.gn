@@ -1,0 +1,52 @@
+unittest_executable("ut_schema") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/hook",
+    "//ydb/core/base",
+    "//ydb/core/cms/console",
+    "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_reader",
+    "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/operations",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/core/util",
+    "//ydb/core/wrappers",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
+    "//ydb/library/yverify_stream",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/services/metadata",
+  ]
+
+  sources = [
+    "ut_columnshard_copy_table.cpp",
+    "ut_columnshard_move_table.cpp",
+    "ut_columnshard_schema.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/columnshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

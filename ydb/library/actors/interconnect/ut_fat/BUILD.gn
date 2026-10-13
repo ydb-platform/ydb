@@ -1,0 +1,17 @@
+unittest_executable("ut_fat") {
+  deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/digest/crc32c",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",  # peerdir only
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/mock",  # peerdir only
+    "//ydb/library/actors/interconnect/ut/lib",
+    "//ydb/library/actors/interconnect/ut/lib:port_manager",  # peerdir only
+    "//ydb/library/actors/interconnect/ut/protos",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

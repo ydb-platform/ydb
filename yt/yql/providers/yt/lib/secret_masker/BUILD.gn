@@ -1,0 +1,3 @@
+group("secret_masker") {
+  public_deps = [ "//yt/yql/providers/yt/lib/secret_masker/dummy" ]
+}

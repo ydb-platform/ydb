@@ -1,0 +1,16 @@
+library("http_download") {
+  public_deps = [ "//yql/essentials/core/file_storage/defs" ]
+
+  deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/http/misc",
+    "//yql/essentials/core/file_storage/download",
+    "//yql/essentials/core/file_storage/proto",
+    "//yql/essentials/utils",
+    "//yql/essentials/utils/fetch",
+    "//yql/essentials/utils/fetch/proto",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "http_download.cpp" ]
+}

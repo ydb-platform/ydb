@@ -1,0 +1,5 @@
+group("collect_issues") {
+  public_deps = [
+    # "//yql/essentials/parser/common",
+  ]
+}

@@ -1,0 +1,15 @@
+config("public_config") {
+    cflags = [ "-Wno-deprecated-declarations" ]
+
+    include_dirs = [ "include" ]
+}
+
+contrib_library("multi_array") {
+    public_deps = [
+        "//contrib/restricted/boost/array",
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/functional",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

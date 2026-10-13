@@ -1,0 +1,17 @@
+library("locks") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "composite.cpp",
+    "list.cpp",
+    "snapshot.cpp",
+  ]
+
+  plugins = [ "//ydb/core/tx/columnshard/engines/storage" ]
+}

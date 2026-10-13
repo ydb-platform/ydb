@@ -1,0 +1,18 @@
+library("expr") {
+  public_deps = [
+    # "//library/cpp/yson",
+    "//library/cpp/yson/node",
+    "//yql/essentials/core",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//yql/essentials/ast",
+    # "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/providers/common/schema/parser",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_expr_schema.cpp" ]
+}

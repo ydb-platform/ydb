@@ -1,0 +1,21 @@
+library("ss_tasks") {
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+  ]
+
+  deps = [
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+  ]
+
+  sources = [
+    "out.cpp",
+    "task.cpp",
+  ]
+
+  serialize_enum_headers = [ "task.h" ]
+}

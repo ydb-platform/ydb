@@ -1,0 +1,76 @@
+# Tests: a template per test macro of ya.make --
+#   unittest_executable(): UNITTEST(), UNITTEST_FOR()
+#   gtest_executable():    GTEST()
+# A test is a linked_executable() (see //build/gn/link_slots.gni: link slots
+# and plugins as for any program) with the main of its framework, testonly.
+#
+# The binary is named after the test's dir as ya names it
+# (library/cpp/foo/ut -> library-cpp-foo-ut): the dirs of tests are mostly
+# called ut. The metadata `ya_tests` of the executable describes the test for
+# a runner (walk the tests with generated_file(data_keys = [ "ya_tests" ])).
+#   test_sbr: DATA(sbr://...), resources the runner fetches (the metadata)
+#   test_depends_unbuilt: DEPENDS with no GN target (python, go...: the metadata)
+#   data_deps, data: DEPENDS that are built, DATA(arcadia/...) -- as usual
+#   everything else: as for linked_executable()
+# UNITTEST_FOR(<dir>) is include_dirs = [ "//<dir>" ] and a dep on it.
+#
+# A template here wraps ya_test() and sets its `main` (the generator and
+# link_plugin_index.py read them from this file).
+
+template("unittest_executable") {
+  ya_test(target_name) {
+    forward_variables_from(invoker, "*")
+    main = "//library/cpp/testing/unittest_main"
+    kind = "unittest"
+  }
+}
+
+template("gtest_executable") {
+  ya_test(target_name) {
+    forward_variables_from(invoker, "*")
+    main = "//library/cpp/testing/gtest_main"
+    kind = "gtest"
+  }
+}
+
+# main: the framework's main; kind: for the runner (the metadata)
+template("ya_test") {
+  _binary = string_replace(rebase_path(".", "//"), "/", "-")
+
+  linked_executable(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "deps",
+                             "kind",
+                             "main",
+                             "test_depends_unbuilt",
+                             "test_sbr",
+                           ])
+    testonly = true
+    output_name = _binary
+
+    deps = [ invoker.main ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    metadata = {
+      ya_tests = [
+        {
+          label = get_label_info(":$target_name", "label_no_toolchain")
+          kind = invoker.kind
+          binary = rebase_path("$root_out_dir/$_binary", root_build_dir)
+          sbr = []
+          if (defined(invoker.test_sbr)) {
+            sbr = invoker.test_sbr
+          }
+          depends_unbuilt = []
+          if (defined(invoker.test_depends_unbuilt)) {
+            depends_unbuilt = invoker.test_depends_unbuilt
+          }
+        },
+      ]
+    }
+  }
+}

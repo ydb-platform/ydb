@@ -1,0 +1,12 @@
+library("yaml_json") {
+  public_deps = [
+    "//contrib/libs/yaml-cpp",
+    "//library/cpp/json",
+  ]
+
+  deps = [
+    # "//library/cpp/yaml/as",
+  ]
+
+  sources = [ "yaml_to_json.cpp" ]
+}

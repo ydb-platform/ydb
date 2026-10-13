@@ -1,0 +1,32 @@
+library("data_reader") {
+  public_deps = [
+    "//ydb/core/kqp/compute_actor:events",
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_reader",
+    "//ydb/core/tx/columnshard/data_accessor",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/conveyor_composite/usage",
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/core/kqp/compute_actor",  # peerdir only
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/writer",  # peerdir only
+  ]
+
+  sources = [
+    "actor.cpp",
+    "contexts.cpp",
+    "fetcher.cpp",
+    "fetching_executor.cpp",
+    "fetching_steps.cpp",
+  ]
+
+  serialize_enum_headers = [ "contexts.h" ]
+}

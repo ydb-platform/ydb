@@ -1,0 +1,5 @@
+protobuf_library("grpc") {
+  sources = [ "streaming_service.proto" ]
+
+  generate_grpc_services = true
+}

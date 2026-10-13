@@ -1,0 +1,3 @@
+library("pcdata") {
+  sources = [ "pcdata.cpp" ]
+}

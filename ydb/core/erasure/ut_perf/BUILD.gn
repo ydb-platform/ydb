@@ -1,0 +1,13 @@
+unittest_executable("ut_perf") {
+  deps = [
+    "//library/cpp/digest/crc32c",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/erasure",
+  ]
+
+  sources = [ "//ydb/core/erasure/erasure_perf_test.cpp" ]
+
+  include_dirs = [ "//ydb/core/erasure" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

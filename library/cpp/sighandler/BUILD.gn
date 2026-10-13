@@ -1,0 +1,3 @@
+library("sighandler") {
+  sources = [ "async_signals_handler.cpp" ]
+}

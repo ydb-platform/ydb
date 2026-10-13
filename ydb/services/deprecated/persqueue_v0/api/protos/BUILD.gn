@@ -1,0 +1,7 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/public/api/protos" ]
+
+  sources = [ "persqueue.proto" ]
+
+  serialize_enum_headers = [ "persqueue.pb.h" ]
+}

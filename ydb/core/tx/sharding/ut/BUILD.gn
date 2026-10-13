@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/protobuf/json",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/sharding",
+    "//ydb/core/tx/tiering",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/formats/arrow/hash",
+    "//ydb/public/lib/yson_value",  # peerdir only
+  ]
+
+  sources = [ "ut_sharding.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/tiering",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

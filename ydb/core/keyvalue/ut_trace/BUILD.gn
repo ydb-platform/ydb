@@ -1,0 +1,25 @@
+unittest_executable("ut_trace") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/keyvalue",
+    "//ydb/core/keyvalue/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/wilson:test_util",
+  ]
+
+  sources = [ "//ydb/core/keyvalue/keyvalue_ut_trace.cpp" ]
+
+  include_dirs = [ "//ydb/core/keyvalue" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

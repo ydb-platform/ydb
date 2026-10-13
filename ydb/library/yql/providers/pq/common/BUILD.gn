@@ -1,0 +1,18 @@
+library("common") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/public/types",  # peerdir only
+  ]
+
+  sources = [
+    "pq_meta_fields.cpp",
+    "pq_partition_key.cpp",
+    "yql_names.cpp",
+  ]
+}

@@ -1,0 +1,8 @@
+protobuf_library("proto") {
+  public_deps = [ "//yql/essentials/providers/common/proto" ]
+
+  sources = [
+    "solomon.proto",
+    "yt.proto",
+  ]
+}

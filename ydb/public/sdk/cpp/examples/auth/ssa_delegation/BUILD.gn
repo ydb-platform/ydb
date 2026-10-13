@@ -1,0 +1,12 @@
+linked_executable("ssa_delegation") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/iam",
+    "//ydb/public/sdk/cpp/src/client/iam_private",
+    "//ydb/public/sdk/cpp/src/client/query",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

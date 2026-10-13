@@ -1,0 +1,5 @@
+group("blockstore") {
+  public_deps = [
+    # "//ydb/core/blockstore/core",  # peerdir only
+  ]
+}

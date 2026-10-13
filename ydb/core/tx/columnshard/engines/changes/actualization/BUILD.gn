@@ -1,0 +1,15 @@
+group("actualization") {
+  public_deps = [
+    # ":controller",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines",  # peerdir only
+  ]
+}
+
+library("controller") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/engines/changes/abstract",
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [ "controller/controller.cpp" ]
+}

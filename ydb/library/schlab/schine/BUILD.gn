@@ -1,0 +1,19 @@
+library("schine") {
+  deps = [
+    # "//library/cpp/containers/stack_vector",  # peerdir only
+    "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    "//ydb/library/schlab/probes",
+  ]
+
+  sources = [
+    "cbs.cpp",
+    "cbs_bin.cpp",
+    "cbs_state.cpp",
+    "job.cpp",
+    "job_kind.cpp",
+    "job_state.cpp",
+    "scheduler.cpp",
+    "schlog.cpp",
+  ]
+}

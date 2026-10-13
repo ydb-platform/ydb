@@ -1,0 +1,13 @@
+group("metadata") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/services/metadata/abstract",
+    # "//ydb/services/metadata/common",
+    # "//ydb/services/metadata/ds_table",
+    # "//ydb/services/metadata/initializer",
+    # "//ydb/services/metadata/manager",
+    # "//ydb/services/metadata/optimization",
+    # "//ydb/services/metadata/request",
+    # "//ydb/services/metadata/secret",
+  ]
+}

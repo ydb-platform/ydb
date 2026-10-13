@@ -1,0 +1,166 @@
+template("contrib_tool") {
+    executable(target_name) {
+        forward_variables_from(invoker, "*", [ "configs", "deps" ])
+
+        # Override default deps
+        deps = []
+        deps = platform_deps + [ "//contrib/libs/cxxsupp/libcxx" ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        # Append to default configs
+        if (defined(invoker.configs)) {
+           configs += invoker.configs
+        }
+    }
+}
+
+template("contrib_library") {
+    # Link slots, see //build/gn/link_slots.gni
+    _slot_provider = defined(invoker.link_slot_provides)
+    if (_slot_provider) {
+        link_slot_provider_config(target_name) {
+            provides = invoker.link_slot_provides
+        }
+    }
+    _slot_weak = defined(invoker.link_slot_interface)
+    if (_slot_weak) {
+        link_slot_weak_refs(target_name) {
+            slot = invoker.link_slot_interface
+            headers = invoker.link_slot_headers
+            if (defined(invoker.link_slot_flags_from)) {
+                flags_from = invoker.link_slot_flags_from
+            } else if (defined(invoker.sources)) {
+                flags_from = invoker.sources
+            }
+            if (defined(invoker.link_slot_codegen)) {
+                codegen = invoker.link_slot_codegen
+            }
+        }
+    }
+
+    # Translated sources among `sources` (//build/gn/source_kinds.gni)
+    _rl6 = []
+    if (defined(invoker.sources)) {
+        _rl6 = filter_include(invoker.sources, [ "*.rl6" ])
+    }
+    if (_rl6 != []) {
+        ragel6_sources("${target_name}_rl6") {
+            sources = _rl6
+            visibility = [ ":*" ]
+        }
+    }
+    _y = []
+    if (defined(invoker.sources)) {
+        _y = filter_include(invoker.sources, [ "*.y", "*.ypp" ])
+    }
+    if (_y != []) {
+        bison_sources("${target_name}_y") {
+            sources = _y
+            visibility = [ ":*" ]
+        }
+    }
+
+    # static = true: the objects go right into whatever links the target, all
+    # of them (ya's GLOBAL_SRCS): a static archive would lose an allocator,
+    # whose malloc() the executable's own objects don't reference
+    _static = defined(invoker.static) && invoker.static
+    _type = library_type
+    if (_static) {
+        _type = "source_set"
+    }
+
+    # plugins: linked by the executables, see linked_executable() in
+    # //build/gn/link_slots.gni
+    not_needed(invoker, [ "plugins" ])
+
+    target(_type, target_name) {
+        forward_variables_from(invoker, "*", [ "configs", "deps", "link_slot_provides", "link_slot_interface", "link_slot_headers", "link_slot_flags_from", "link_slot_codegen", "plugins", "static" ])
+
+        if (!_static) {
+            _unique_name = exec_script("//build/gn/scripts/unique_name.py", [ rebase_path(".", "//") ], "trim string")
+            output_dir = "$root_out_dir/" + rebase_path(".", "//") # TODO: doesn't work for some reason
+            output_name = "${_unique_name}_${target_name}"
+        }
+
+        # Override default deps
+        deps = []
+        deps = platform_deps + [ "//contrib/libs/cxxsupp/libcxx" ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        if (_rl6 != []) {
+            sources -= _rl6
+            sources += get_target_outputs(":${target_name}_rl6")
+            deps += [ ":${target_name}_rl6" ]
+        }
+
+        if (_y != []) {
+            sources -= _y
+            sources += filter_include(get_target_outputs(":${target_name}_y"), [ "*.cpp" ])
+            deps += [ ":${target_name}_y" ]
+            configs += [ ":${target_name}_y_config" ]
+        }
+
+        # Append to default configs
+        if (defined(invoker.configs)) {
+           configs += invoker.configs
+        }
+
+        # Link slots: a provider's definitions stay strong; an interface's
+        # dependents get weak references, the library itself does not, see
+        # library() in //build/gn/base.gni
+        if (_slot_provider) {
+            configs += [ ":${target_name}_slot_provider_config" ]
+        }
+        if (_slot_weak) {
+            if (!defined(defines)) {
+                defines = []
+            }
+            defines += [ "GN_SLOT_INTERFACE_" + invoker.link_slot_interface ]
+            if (!defined(public_deps)) {
+                public_deps = []
+            }
+            public_deps += [ ":${target_name}_slot_weak" ]
+            if (!defined(public_configs)) {
+                public_configs = []
+            }
+            public_configs += [ ":${target_name}_slot_weak_config" ]
+            if (!defined(metadata)) {
+                metadata = {}
+            }
+            metadata.link_slot_interfaces = [ invoker.link_slot_interface + "|" +
+                                              get_label_info(":$target_name", "label_no_toolchain") ]
+        }
+
+        # as library() does (//build/gn/base.gni), but the global
+        # precompiled header: no util here
+        if (pch_mode == "global" && current_toolchain == default_toolchain && defined(sources) &&
+            filter_include(sources, [ "*.cpp", "*.cc", "*.cxx" ]) != []) {
+            _pch_label = get_label_info(":$target_name", "label_no_toolchain")
+            if (label_matches(_pch_label, contrib_pch_targets) && !label_matches(_pch_label, contrib_pch_exclude)) {
+                deps += [ "//build/gn/pch:contrib" ]
+            }
+        }
+    }
+}
+
+template("system_library") {
+    static_library(target_name) {
+        forward_variables_from(invoker, "*", [ "configs", "deps" ])
+
+        # Use only platform deps
+        deps = []
+        deps = platform_deps
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        # Append to default configs
+        if (defined(invoker.configs)) {
+           configs += invoker.configs
+        }
+    }
+}

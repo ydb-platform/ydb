@@ -1,0 +1,157 @@
+library("public") {
+  public_deps = [
+    # ":tx_proxy",
+    # "//ydb/core/control/lib",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/tx",
+    # "//ydb/core/tx/locks",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/library/ydb_issue",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/base",
+    "//yql/essentials/minikql:alloc",
+  ]
+
+  deps = [ "//ydb/core/base" ]
+
+  sources = [
+    "mon.cpp",
+    "proxy.cpp",
+  ]
+}
+
+library("read_table") {
+  deps = [
+    ":public",
+    # ":tx_proxy",
+    "//ydb/core/actorlib_impl",
+    "//ydb/core/base",
+    "//ydb/core/engine",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/core/tx",
+    # "//ydb/core/tx/datashard",
+    "//ydb/core/ydb_convert",
+    # "//ydb/library/actors/core",
+    "//yql/essentials/core/issue",
+    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "read_table_impl.cpp" ]
+
+  serialize_enum_headers = [ "read_table_impl.h" ]
+}
+
+library("tx_proxy") {
+  public_deps = [
+    ":public",
+    ":read_table",
+    ":upload_rows",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//util/draft",  # peerdir only
+    "//ydb/core/actorlib_impl",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/docapi",
+    "//ydb/core/engine",
+    # "//ydb/core/formats",  # peerdir only
+    # "//ydb/core/grpc_services/local_rpc",  # peerdir only
+    # "//ydb/core/io_formats/arrow/scheme",  # peerdir only
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/executer_actor",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/scheme",
+    "//ydb/core/security/sasl",
+    "//ydb/core/sys_view/common",
+    "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    "//ydb/core/tx",
+    "//ydb/core/tx/balance_coverage",
+    # "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    # "//ydb/core/tx/tx_allocator",
+    "//ydb/core/tx/tx_allocator_client",
+    # "//ydb/core/util",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/interconnect",  # peerdir only
+    "//ydb/library/actors/protos",
+    # "//ydb/library/login",
+    "//ydb/library/login/hashes_checker",
+    "//ydb/library/login/protos",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/library/protobuf_printer",
+    # "//ydb/library/ydb_issue",
+    # "//ydb/public/lib/base",  # peerdir only
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "commitreq.cpp",
+    "datareq.cpp",
+    "describe.cpp",
+    "global.cpp",
+    "proxy_impl.cpp",
+    "resolvereq.cpp",
+    "schemereq.cpp",
+    "snapshotreq.cpp",
+    "upload_columns.cpp",
+  ]
+}
+
+library("upload_rows") {
+  public_deps = [
+    # ":tx_proxy",
+    "//contrib/restricted/boost/container_hash",
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/actorlib_impl",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/io_formats/arrow/scheme",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    # "//ydb/core/tx/datashard",
+    "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    "//ydb/library/signals",
+    # "//ydb/library/wilson_ids",
+    "//ydb/library/ydb_issue",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+  ]
+
+  deps = [
+    ":public",
+    "//contrib/libs/apache/arrow",
+    "//ydb/core/kqp/query_data",
+    "//ydb/core/tx/data_events",
+    "//ydb/library/actors/prof",
+    "//ydb/library/actors/wilson",
+    "//ydb/library/ydb_issue/proto",
+    "//ydb/services/ext_index/common",
+  ]
+
+  sources = [
+    "rpc_long_tx.cpp",
+    "upload_rows.cpp",
+    "upload_rows_common_impl.cpp",
+    "upload_rows_counters.cpp",
+  ]
+
+  serialize_enum_headers = [ "upload_rows_counters.h" ]
+}

@@ -1,0 +1,26 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("ProfileData") {
+    deps = [
+        "//contrib/libs/llvm16/lib/DebugInfo:DWARF",
+        "//contrib/libs/llvm16/lib/DebugInfo:Symbolize",
+        "//contrib/libs/llvm16/lib/Demangle",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/Object",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "GCOV.cpp",
+        "InstrProf.cpp",
+        "InstrProfCorrelator.cpp",
+        "InstrProfReader.cpp",
+        "InstrProfWriter.cpp",
+        "MemProf.cpp",
+        "ProfileSummaryBuilder.cpp",
+        "RawMemProfReader.cpp",
+        "SampleProf.cpp",
+        "SampleProfReader.cpp",
+        "SampleProfWriter.cpp",
+    ]
+}

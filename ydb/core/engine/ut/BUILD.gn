@@ -1,0 +1,38 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/engine",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/scheme_types",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/test/libs/table",
+    "//ydb/library/mkql_proto/ut/helpers",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/engine/kikimr_program_builder_ut.cpp",
+    "//ydb/core/engine/mkql_engine_flat_host_ut.cpp",
+    "//ydb/core/engine/mkql_engine_flat_ut.cpp",
+    "//ydb/core/engine/mkql_proto_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/engine" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=jemalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

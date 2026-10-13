@@ -1,0 +1,11 @@
+library("events") {
+  public_deps = [
+    # "//library/cpp/retry",
+    # "//ydb/core/base",
+    # "//ydb/library/yql/providers/solomon/common",
+    "//ydb/library/yql/providers/solomon/proto",
+    # "//ydb/library/yql/providers/solomon/solomon_accessor/client",
+  ]
+
+  sources = [ "events.cpp" ]
+}

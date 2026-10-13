@@ -1,0 +1,239 @@
+import("//contrib/libs/llvm16/llvm.gni")
+import("//contrib/libs/llvm16/utils/TableGen/gen.gni")
+
+table_gen("GenAsmMatcher") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-asm-matcher" ]
+    out = "X86GenAsmMatcher.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenAsmWriter") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-asm-writer" ]
+    out = "X86GenAsmWriter.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenAsmWriter1") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [
+        "-gen-asm-writer",
+        "-asmwriternum=1",
+    ]
+    out = "X86GenAsmWriter1.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenCallingConv") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-callingconv" ]
+    out = "X86GenCallingConv.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenDAGISel") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-dag-isel" ]
+    out = "X86GenDAGISel.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenDisassemblerTables") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-disassembler" ]
+    out = "X86GenDisassemblerTables.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenEVEX2VEXTables") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-x86-EVEX2VEX-tables" ]
+    out = "X86GenEVEX2VEXTables.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenFastISel") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-fast-isel" ]
+    out = "X86GenFastISel.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenGlobalISel") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-global-isel" ]
+    out = "X86GenGlobalISel.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenInstrInfo") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-instr-info" ]
+    out = "X86GenInstrInfo.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenMnemonicTables") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-x86-mnemonic-tables", "-asmwriternum=1" ]
+    out = "X86GenMnemonicTables.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenRegisterBank") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-register-bank" ]
+    out = "X86GenRegisterBank.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenRegisterInfo") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-register-info" ]
+    out = "X86GenRegisterInfo.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+table_gen("GenSubtargetInfo") {
+    td = "//contrib/libs/llvm16/lib/Target/X86/X86.td"
+    flags = [ "-gen-subtarget" ]
+    out = "X86GenSubtargetInfo.inc"
+    includes = [
+        ".",
+        "//contrib/libs/llvm16/include",
+    ]
+}
+
+llvm_library("X86") {
+    deps = [
+        ":GenCallingConv",
+        ":GenDAGISel",
+        ":GenEVEX2VEXTables",
+        ":GenFastISel",
+        ":GenGlobalISel",
+        ":GenInstrInfo",
+        ":GenMnemonicTables",
+        ":GenRegisterBank",
+        ":GenRegisterInfo",
+        ":GenSubtargetInfo",
+        "MCTargetDesc",
+        "TargetInfo",
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/CodeGen",
+        "//contrib/libs/llvm16/lib/CodeGen:AsmPrinter",
+        "//contrib/libs/llvm16/lib/CodeGen:GlobalISel",
+        "//contrib/libs/llvm16/lib/CodeGen:SelectionDAG",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/ProfileData",
+        "//contrib/libs/llvm16/lib/Target",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/Transforms/CFGuard",
+        "//contrib/libs/llvm16/lib/Transforms/Instrumentation",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "X86AsmPrinter.cpp",
+        "X86AvoidStoreForwardingBlocks.cpp",
+        "X86AvoidTrailingCall.cpp",
+        "X86CallFrameOptimization.cpp",
+        "X86CallingConv.cpp",
+        "X86CallLowering.cpp",
+        "X86CmovConversion.cpp",
+        "X86DiscriminateMemOps.cpp",
+        "X86DomainReassignment.cpp",
+        "X86DynAllocaExpander.cpp",
+        "X86EvexToVex.cpp",
+        "X86ExpandPseudo.cpp",
+        "X86FastISel.cpp",
+        "X86FastPreTileConfig.cpp",
+        "X86FastTileConfig.cpp",
+        "X86FixupBWInsts.cpp",
+        "X86FixupLEAs.cpp",
+        "X86FixupSetCC.cpp",
+        "X86FlagsCopyLowering.cpp",
+        "X86FloatingPoint.cpp",
+        "X86FrameLowering.cpp",
+        "X86IndirectBranchTracking.cpp",
+        "X86IndirectThunks.cpp",
+        "X86InsertPrefetch.cpp",
+        "X86InsertWait.cpp",
+        "X86InstCombineIntrinsic.cpp",
+        "X86InstrFMA3Info.cpp",
+        "X86InstrFoldTables.cpp",
+        "X86InstrInfo.cpp",
+        "X86InstructionSelector.cpp",
+        "X86InterleavedAccess.cpp",
+        "X86ISelDAGToDAG.cpp",
+        "X86ISelLowering.cpp",
+        "X86KCFI.cpp",
+        "X86LegalizerInfo.cpp",
+        "X86LoadValueInjectionLoadHardening.cpp",
+        "X86LoadValueInjectionRetHardening.cpp",
+        "X86LowerAMXIntrinsics.cpp",
+        "X86LowerAMXType.cpp",
+        "X86LowerTileCopy.cpp",
+        "X86MachineFunctionInfo.cpp",
+        "X86MacroFusion.cpp",
+        "X86MCInstLower.cpp",
+        "X86OptimizeLEAs.cpp",
+        "X86PadShortFunction.cpp",
+        "X86PartialReduction.cpp",
+        "X86PreAMXConfig.cpp",
+        "X86PreTileConfig.cpp",
+        "X86RegisterBankInfo.cpp",
+        "X86RegisterInfo.cpp",
+        "X86ReturnThunks.cpp",
+        "X86SelectionDAGInfo.cpp",
+        "X86ShuffleDecodeConstantPool.cpp",
+        "X86SpeculativeExecutionSideEffectSuppression.cpp",
+        "X86SpeculativeLoadHardening.cpp",
+        "X86Subtarget.cpp",
+        "X86TargetMachine.cpp",
+        "X86TargetObjectFile.cpp",
+        "X86TargetTransformInfo.cpp",
+        "X86TileConfig.cpp",
+        "X86VZeroUpper.cpp",
+        "X86WinEHState.cpp",
+    ]
+}

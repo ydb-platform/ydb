@@ -1,0 +1,13 @@
+library("sdk_core_access") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types/core_facility",
+  ]
+
+  deps = [
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+  ]
+
+  sources = [ "//ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.cpp" ]
+}

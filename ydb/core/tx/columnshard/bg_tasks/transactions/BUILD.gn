@@ -1,0 +1,21 @@
+library("transactions") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx/columnshard/bg_tasks/abstract",
+    # "//ydb/core/tx/columnshard/bg_tasks/session",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/bg_tasks/events",
+    # "//ydb/core/tx/columnshard/bg_tasks/manager",
+  ]
+
+  sources = [
+    "tx_add.cpp",
+    "tx_general.cpp",
+    "tx_remove.cpp",
+    "tx_save_progress.cpp",
+    "tx_save_state.cpp",
+  ]
+}

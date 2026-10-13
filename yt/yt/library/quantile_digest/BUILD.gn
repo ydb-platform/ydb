@@ -1,0 +1,14 @@
+library("quantile_digest") {
+  public_deps = [
+    "//library/cpp/yt/memory",
+    "//yt/yt/core",
+  ]
+
+  deps = [ "//library/cpp/tdigest" ]
+
+  sources = [
+    "config.cpp",
+    "proto/quantile_digest.proto",
+    "quantile_digest.cpp",
+  ]
+}

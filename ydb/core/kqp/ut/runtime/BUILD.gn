@@ -1,0 +1,33 @@
+unittest_executable("runtime") {
+  deps = [
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/host",  # peerdir only
+    "//ydb/core/kqp/provider",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_hash_shuffle_ut.cpp",
+    "kqp_re2_ut.cpp",
+    "kqp_scan_logging_ut.cpp",
+    "kqp_scan_spilling_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

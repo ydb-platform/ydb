@@ -1,0 +1,7 @@
+library("chunks") {
+  sources = [
+    "chunked_helpers.cpp",
+    "reader.cpp",
+    "writer.cpp",
+  ]
+}

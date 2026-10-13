@@ -1,0 +1,46 @@
+library("filters") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/fq/libs/row_dispatcher/events",
+    # "//ydb/core/fq/libs/row_dispatcher/format_handler/common",
+    # "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    "//contrib/libs/fmt",
+    # "//ydb/core/fq/libs/actors/logging",
+    # "//ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper",  # peerdir only
+    # "//ydb/library/actors/core",  # peerdir only
+    # "//yql/essentials/minikql",  # peerdir only
+    # "//yql/essentials/minikql/comp_nodes",  # peerdir only
+    "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/invoke_builtins",  # peerdir only
+    "//yql/essentials/providers/common/schema/parser",
+    # "//yql/essentials/public/purecalc/common",
+  ]
+
+  sources = [
+    "filters/filters_set.cpp",
+    "filters/purecalc_filter.cpp",
+  ]
+}
+
+library("format_handler") {
+  public_deps = [
+    ":filters",
+    "//ydb/core/fq/libs/row_dispatcher/common",
+    # "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/parsers",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/common",  # peerdir only
+    # "//ydb/library/yql/dq/common",
+    "//yql/essentials/minikql/computation",
+  ]
+
+  sources = [ "format_handler.cpp" ]
+}

@@ -1,0 +1,60 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "resources/topic_A_partition_0_v24-4-2.dat"
+      key = "topic_A_partition_0_v24-4-2.dat"
+    },
+    {
+      path = "resources/topic_A_partition_1_v24-4-2.dat"
+      key = "topic_A_partition_1_v24-4-2.dat"
+    },
+  ]
+}
+
+unittest_executable("ut") {
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/topic/impl",
+    "//ydb/public/sdk/cpp/tests/integration/topic/utils",
+  ]
+
+  deps = [
+    ":ut_resources",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/threading/future",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/ut/common",
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/persqueue/writer",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
+    "//ydb/public/sdk/cpp/src/client/topic/common",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+  ]
+
+  sources = [
+    "basic_usage_ut.cpp",
+    "describe_topic_ut.cpp",
+    "local_partition_ut.cpp",
+    "topic_to_table_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/sdk/cpp/src/client/topic" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

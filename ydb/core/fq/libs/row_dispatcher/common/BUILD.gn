@@ -1,0 +1,17 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [ "row_dispatcher_settings.cpp" ]
+
+  serialize_enum_headers = [ "row_dispatcher_settings.h" ]
+}

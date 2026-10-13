@@ -1,0 +1,49 @@
+unittest_executable("join") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_benches_ut.cpp",
+    "kqp_block_hash_join_ut.cpp",
+    "kqp_complex_join_query_ut.cpp",
+    "kqp_flip_join_ut.cpp",
+    "kqp_index_lookup_join_ut.cpp",
+    "kqp_join_order_ut.cpp",
+    "kqp_join_topology_generator.cpp",
+    "kqp_join_topology_ut.cpp",
+    "kqp_join_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  data = [
+    "//ydb/core/kqp/ut/join/",
+    "//ydb/library/benchmarks/gen_queries/consts.yql",
+    "//ydb/library/benchmarks/queries/",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

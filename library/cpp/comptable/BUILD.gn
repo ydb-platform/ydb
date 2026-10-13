@@ -1,0 +1,5 @@
+library("comptable") {
+  public_deps = [ "//library/cpp/compproto" ]
+
+  sources = [ "comptable.cpp" ]
+}

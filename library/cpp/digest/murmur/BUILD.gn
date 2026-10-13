@@ -1,0 +1,3 @@
+library("murmur") {
+  sources = [ "murmur.cpp" ]
+}

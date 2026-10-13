@@ -1,0 +1,10 @@
+library("ydb_dump") {
+  public_deps = [
+    "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+  ]
+
+  deps = [ "//ydb/core/io_formats/cell_maker" ]
+
+  sources = [ "csv_ydb_dump.cpp" ]
+}

@@ -1,0 +1,3 @@
+library("common") {
+  sources = [ "defs.cpp" ]
+}

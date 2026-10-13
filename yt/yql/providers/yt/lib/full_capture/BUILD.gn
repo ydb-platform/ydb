@@ -1,0 +1,14 @@
+library("full_capture") {
+  public_deps = [
+    # "//yql/essentials/core/qplayer/storage/interface",
+    "//yql/essentials/providers/common/gateway",
+  ]
+
+  deps = [
+    "//library/cpp/threading/future",  # peerdir only
+    "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "yql_yt_full_capture.cpp" ]
+}

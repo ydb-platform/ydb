@@ -1,0 +1,44 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-deprecated-anon-enum-enum-conversion",
+        "-Wno-deprecated-enum-enum-conversion",
+        "-Wno-deprecated-this-capture",
+    ]
+}
+
+group("llvm16") {
+    public_deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/CodeGen",
+        "//contrib/libs/llvm16/lib/ExecutionEngine",
+        "//contrib/libs/llvm16/lib/ExecutionEngine/MCJIT",
+        "//contrib/libs/llvm16/lib/ExecutionEngine/PerfJITEvents",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/IRReader",
+        "//contrib/libs/llvm16/lib/Linker",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/MC:MCDisassembler",
+        "//contrib/libs/llvm16/lib/Object",
+        "//contrib/libs/llvm16/lib/Passes",
+        "//contrib/libs/llvm16/lib/Support",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/Target/X86",
+        "//contrib/libs/llvm16/lib/Target/X86/AsmParser",
+        "//contrib/libs/llvm16/lib/Target/X86/Disassembler",
+        "//contrib/libs/llvm16/lib/Target/X86/MCTargetDesc",
+        "//contrib/libs/llvm16/lib/Target/X86/TargetInfo",
+        "//contrib/libs/llvm16/lib/Transforms/InstCombine",
+        "//contrib/libs/llvm16/lib/Transforms/Instrumentation",
+        "//contrib/libs/llvm16/lib/Transforms/IPO",
+        "//contrib/libs/llvm16/lib/Transforms/ObjCARC",
+        "//contrib/libs/llvm16/lib/Transforms/Scalar",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+        "//contrib/libs/llvm16/lib/Transforms/Vectorize",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

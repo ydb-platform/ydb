@@ -1,0 +1,19 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+library("expr_nodes_gen") {
+  public_deps = [
+    "//yql/essentials/ast",
+    "//yql/essentials/core/issue",
+    "//yql/essentials/utils",
+ ]
+
+  sources = [ "yql_expr_nodes_gen.cpp" ]
+}
+
+python_binary("gen") {
+    deps = [
+        "//contrib/python/Jinja2",
+    ]
+
+    main_source = "gen/__main__.py"
+}

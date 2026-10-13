@@ -1,0 +1,21 @@
+library("types") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types/status",
+    "//ydb/public/sdk/cpp/src/library/time",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/impl/internal/common",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/issue",  # peerdir only
+  ]
+
+  sources = [ "ydb.cpp" ]
+
+  serialize_enum_headers = [
+    "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h",
+    "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h",
+    "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h",
+  ]
+}

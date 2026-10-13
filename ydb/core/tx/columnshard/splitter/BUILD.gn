@@ -1,0 +1,30 @@
+library("settings") {
+  public_deps = [
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "settings.cpp" ]
+}
+
+library("splitter") {
+  public_deps = [
+    ":settings",
+    "//contrib/libs/apache/arrow",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/splitter/abstract",
+    "//ydb/library/accessor",
+    "//ydb/library/formats/arrow/splitter",
+  ]
+
+  sources = [
+    "batch_slice.cpp",
+    "blob_info.cpp",
+    "chunk_meta.cpp",
+    "chunks.cpp",
+    "column_info.cpp",
+  ]
+}

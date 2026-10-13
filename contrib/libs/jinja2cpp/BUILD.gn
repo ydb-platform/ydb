@@ -1,0 +1,54 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    defines = [
+        "BOOST_ERROR_CODE_HEADER_ONLY",
+        "BOOST_SYSTEM_NO_DEPRECATED",
+        "FMT_HEADER_ONLY=1",
+        "FMT_USE_INTERNAL=TRUE",
+        "JINJA2CPP_BUILD_AS_SHARED",
+        "JINJA2CPP_LINK_AS_SHARED",
+        "JINJA2CPP_USE_REGEX_BOOST",
+    ]
+}
+
+contrib_library("jinja2cpp") {
+    deps = [
+        "//contrib/libs/fmt",
+        "//contrib/libs/rapidjson",
+        "//contrib/restricted/boost/algorithm",
+        "//contrib/restricted/boost/container",
+        "//contrib/restricted/boost/filesystem",
+        "//contrib/restricted/boost/iterator",
+        "//contrib/restricted/boost/numeric_conversion",
+        "//contrib/restricted/boost/optional",
+        "//contrib/restricted/boost/regex",
+        "//contrib/restricted/boost/unordered",
+        "//contrib/restricted/boost/variant",
+    ]
+
+    sources = [
+        "src/binding/rapid_json_serializer.cpp",
+        "src/error_info.cpp",
+        "src/expression_evaluator.cpp",
+        "src/expression_parser.cpp",
+        "src/filesystem_handler.cpp",
+        "src/filters.cpp",
+        "src/generic_list.cpp",
+        "src/internal_value.cpp",
+        "src/lexer.cpp",
+        "src/serialize_filters.cpp",
+        "src/statements.cpp",
+        "src/string_converter_filter.cpp",
+        "src/template_env.cpp",
+        "src/template_parser.cpp",
+        "src/template.cpp",
+        "src/testers.cpp",
+        "src/value.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

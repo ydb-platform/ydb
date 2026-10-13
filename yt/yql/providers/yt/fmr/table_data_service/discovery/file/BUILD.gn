@@ -1,0 +1,11 @@
+library("file") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/table_data_service/discovery/interface",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_yt_file_service_discovery.cpp" ]
+}

@@ -1,0 +1,3 @@
+library("enum_codegen") {
+  sources = [ "enum_codegen.cpp" ]
+}

@@ -1,0 +1,33 @@
+unittest_executable("ut_shred_reboots") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/cms",  # peerdir only
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/wrappers:ut_helpers",  # peerdir only
+  ]
+
+  sources = [ "ut_shred_reboots.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/schemeshard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

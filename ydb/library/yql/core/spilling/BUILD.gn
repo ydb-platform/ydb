@@ -1,0 +1,19 @@
+library("spilling") {
+  public_deps = [ "//library/cpp/threading/future" ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    "//contrib/libs/xxhash",
+    # "//yql/essentials/types/binary_json",  # peerdir only
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "namespace_cache.cpp",
+    "namespaces_list.cpp",
+    "spilling_imp.cpp",
+    "storage/file_storage/file_storage.cpp",
+    "storage/storage.cpp",
+  ]
+}

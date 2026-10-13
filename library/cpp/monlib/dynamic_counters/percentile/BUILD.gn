@@ -1,0 +1,7 @@
+group("percentile") {
+  public_deps = [ "//library/cpp/monlib/dynamic_counters" ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",  # peerdir only
+  ]
+}

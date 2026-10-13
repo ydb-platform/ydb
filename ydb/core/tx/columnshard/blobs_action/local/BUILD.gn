@@ -1,0 +1,5 @@
+library("local") {
+  public_deps = [ "//ydb/core/tx/columnshard/blobs_action/abstract" ]
+
+  sources = [ "storage.cpp" ]
+}

@@ -1,0 +1,16 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("lz4") {
+    deps = [ "//contrib/libs/xxhash" ]
+
+    sources = [
+        "lz4.c",
+        "lz4file.c",
+        "lz4frame.c",
+        "lz4hc.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

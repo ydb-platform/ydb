@@ -1,0 +1,28 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("chrono") {
+    public_deps = [
+        "//contrib/restricted/boost/integer",
+        "//contrib/restricted/boost/ratio",
+    ]
+
+    deps = [
+        "//contrib/restricted/boost/config",
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/mpl",
+        "//contrib/restricted/boost/predef",
+        "//contrib/restricted/boost/system",
+        "//contrib/restricted/boost/type_traits",
+        "//contrib/restricted/boost/utility",
+    ]
+
+    sources = [
+        "src/chrono.cpp",
+        "src/process_cpu_clocks.cpp",
+        "src/thread_clock.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

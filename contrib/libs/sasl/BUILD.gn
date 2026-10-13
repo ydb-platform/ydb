@@ -1,0 +1,59 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-deprecated-non-prototype",
+        "-Wno-implicit-function-declaration",
+        "-Wno-sign-compare",
+        "-Wno-sometimes-uninitialized",
+        "-Wno-unused-but-set-variable",
+    ]
+
+    defines = [
+        "CONFIGDIR=\"/tmp/yamaker/sasl/out/lib/sasl2:/var/empty/cyrus-sasl-2.1.28/etc/sasl2\"",
+        "HAVE_CONFIG_H",
+        "OBSOLETE_CRAM_ATTR=1",
+        "OBSOLETE_DIGEST_ATTR=1",
+        "PLUGINDIR=\"/tmp/yamaker/sasl/out/lib/sasl2\"",
+    ]
+
+    include_dirs = [
+        ".",
+        "common",
+    ]
+}
+
+contrib_library("sasl") {
+    deps = [
+        "//contrib/libs/openssl",
+    ]
+
+    sources = [
+        "common/plugin_common.c",
+        "lib/auxprop.c",
+        "lib/canonusr.c",
+        "lib/checkpw.c",
+        "lib/client.c",
+        "lib/common.c",
+        "lib/config.c",
+        "lib/dlopen.c",
+        "lib/external.c",
+        "lib/md5.c",
+        "lib/saslutil.c",
+        "lib/server.c",
+        "lib/seterror.c",
+        "plugins/anonymous.c",
+        "plugins/cram.c",
+        "plugins/digestmd5.c",
+        "plugins/otp.c",
+        "plugins/plain.c",
+        "plugins/sasldb.c",
+        "plugins/scram.c",
+        "sasldb/db_none.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

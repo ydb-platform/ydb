@@ -1,0 +1,18 @@
+library("metering") {
+  public_deps = [
+    "//library/cpp/json",
+    # "//library/cpp/logger",
+    "//ydb/core/base",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [ "//ydb/library/services" ]
+
+  sources = [
+    "bill_record.cpp",
+    "metering.cpp",
+    "stream_ru_calculator.cpp",
+  ]
+
+  serialize_enum_headers = [ "bill_record.h" ]
+}

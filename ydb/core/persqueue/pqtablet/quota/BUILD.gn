@@ -1,0 +1,24 @@
+library("quota") {
+  public_deps = [
+    # "//ydb/core/persqueue/common",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/quoter/public",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/persqueue/pqtablet/common",
+    # "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/counters",
+    "//ydb/library/persqueue/topic_parser",
+  ]
+
+  sources = [
+    "account_read_quoter.cpp",
+    "quota_tracker.cpp",
+    "quoter_base.cpp",
+    "read_quoter.cpp",
+    "write_quoter.cpp",
+  ]
+}

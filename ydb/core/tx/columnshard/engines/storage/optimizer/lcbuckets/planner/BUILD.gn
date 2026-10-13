@@ -1,0 +1,17 @@
+library("planner") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector",
+  ]
+
+  sources = [ "optimizer.cpp" ]
+}

@@ -1,0 +1,33 @@
+unittest_executable("ut_ycsb") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/load_test",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/scheme",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/result",  # peerdir only
+    "//yql/essentials/minikql",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/load_test/ut_ycsb.cpp" ]
+
+  include_dirs = [ "//ydb/core/load_test" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

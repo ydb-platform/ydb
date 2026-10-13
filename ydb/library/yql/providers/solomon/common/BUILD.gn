@@ -1,0 +1,13 @@
+library("common") {
+  public_deps = [
+    "//ydb/library/yql/providers/solomon/proto",
+    "//yql/essentials/providers/common/proto",
+  ]
+
+  deps = [
+    "//contrib/libs/re2",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "util.cpp" ]
+}

@@ -1,0 +1,7 @@
+library("procfs") {
+  public_deps = [
+    # "//library/cpp/yt/error",
+  ]
+
+  sources = [ "procfs.cpp" ]
+}

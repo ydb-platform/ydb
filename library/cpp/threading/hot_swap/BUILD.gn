@@ -1,0 +1,3 @@
+library("hot_swap") {
+  sources = [ "hot_swap.cpp" ]
+}

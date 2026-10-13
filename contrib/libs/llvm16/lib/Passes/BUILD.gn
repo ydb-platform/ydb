@@ -1,0 +1,28 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Passes") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/CodeGen",
+        "//contrib/libs/llvm16/lib/IRPrinter",
+        "//contrib/libs/llvm16/lib/Target",
+        "//contrib/libs/llvm16/lib/Transforms/AggressiveInstCombine",
+        "//contrib/libs/llvm16/lib/Transforms/Coroutines",
+        "//contrib/libs/llvm16/lib/Transforms/InstCombine",
+        "//contrib/libs/llvm16/lib/Transforms/Instrumentation",
+        "//contrib/libs/llvm16/lib/Transforms/IPO",
+        "//contrib/libs/llvm16/lib/Transforms/ObjCARC",
+        "//contrib/libs/llvm16/lib/Transforms/Scalar",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+        "//contrib/libs/llvm16/lib/Transforms/Vectorize",
+    ]
+
+    sources = [
+        "OptimizationLevel.cpp",
+        "PassBuilder.cpp",
+        "PassBuilderBindings.cpp",
+        "PassBuilderPipelines.cpp",
+        "PassPlugin.cpp",
+        "StandardInstrumentations.cpp",
+    ]
+}

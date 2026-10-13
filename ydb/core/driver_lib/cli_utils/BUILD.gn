@@ -1,0 +1,78 @@
+library("cli_utils") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/getopt",
+    "//library/cpp/string_utils/parse_size",
+    # "//library/cpp/svnversion",
+    "//ydb/core/driver_lib/cli_base",
+    "//ydb/core/driver_lib/run:_self",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/public/lib/deprecated/client",
+    "//ydb/public/lib/deprecated/kicli",
+  ]
+
+  deps = [
+    # "//library/cpp/protobuf/json",
+    # "//library/cpp/yson",  # peerdir only
+    # "//ydb/core/actorlib_impl",  # peerdir only
+    # "//ydb/core/base",
+    "//ydb/core/blobstorage/nodewarden",
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/pdisk/metadata",
+    # "//ydb/core/client/minikql_compile",  # peerdir only
+    # "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    # "//ydb/core/config/init",
+    "//ydb/core/config/validation",
+    # "//ydb/core/driver_lib/cli_config_base",
+    # "//ydb/core/engine",  # peerdir only
+    # "//ydb/core/erasure",  # peerdir only
+    "//ydb/core/mind/bscontroller",  # peerdir only
+    "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    # "//ydb/library/aclib",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
+    # "//ydb/library/folder_service/proto",  # peerdir only
+    "//ydb/library/keys",  # peerdir only
+    "//ydb/library/yaml_config",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/ydb_cli/commands",
+    "//ydb/public/lib/ydb_cli/commands/ydb_discovery",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/resources",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  sources = [
+    "cli.cpp",
+    "cli_actorsystem_perftest.cpp",
+    "cli_cmd_config.cpp",
+    "cli_cmds_admin.cpp",
+    "cli_cmds_bs.cpp",
+    "cli_cmds_cms.cpp",
+    "cli_cmds_config.cpp",
+    "cli_cmds_console.cpp",
+    "cli_cmds_debug.cpp",
+    "cli_cmds_disk.cpp",
+    "cli_cmds_genconfig.cpp",
+    "cli_cmds_node.cpp",
+    "cli_cmds_root.cpp",
+    "cli_cmds_server.cpp",
+    "cli_cmds_tablet.cpp",
+    "cli_cmds_tenant.cpp",
+    "cli_cmds_validate_config.cpp",
+    "cli_fakeinitshard.cpp",
+    "cli_persqueue.cpp",
+    "cli_persqueue_cluster_discovery.cpp",
+    "cli_persqueue_stress.cpp",
+    "cli_scheme_cache_append.cpp",
+    "cli_scheme_initroot.cpp",
+    "melancholic_gopher.cpp",
+  ]
+}

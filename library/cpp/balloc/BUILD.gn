@@ -1,0 +1,26 @@
+contrib_library("balloc") {
+  public_deps = [
+    # "//library/cpp/malloc/api",
+  ]
+
+  deps = [
+    # ":lib",
+  ]
+
+  sources = [
+    "balloc.cpp",
+    "malloc-info.cpp",
+  ]
+
+  link_slot_provides = [ "allocator" ]
+}
+
+contrib_library("lib") {
+  public_deps = [
+    # "//contrib/libs/linuxvdso",
+    # "//library/cpp/balloc/setup",
+    # "//library/cpp/malloc/api",
+  ]
+
+  sources = [ "lib/alloc_stats.cpp" ]
+}

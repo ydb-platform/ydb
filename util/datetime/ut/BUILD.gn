@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//util/datetime/base_ut.cpp",
+    "//util/datetime/cputimer_ut.cpp",
+    "//util/datetime/parser_deprecated_ut.cpp",
+    "//util/datetime/parser_ut.cpp",
+    "//util/datetime/process_uptime_ut.cpp",
+    "//util/datetime/uptime_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

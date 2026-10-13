@@ -1,0 +1,66 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    include_dirs = [ "src" ]
+    defines = [
+        "POCO_ENABLE_CPP11",
+        "POCO_ENABLE_CPP14",
+        "POCO_HAVE_FD_EPOLL",
+        "POCO_NO_AUTOMATIC_LIBS",
+        "POCO_OS_FAMILY_UNIX",
+        "POCO_UNBUNDLED",
+    ]
+}
+
+contrib_library("NetSSL_OpenSSL") {
+    public_deps = [
+        "//contrib/libs/openssl",
+        "//contrib/libs/poco/Crypto",
+        "//contrib/libs/poco/Foundation",
+        "//contrib/libs/poco/Net",
+        "//contrib/libs/poco/Util",
+    ]
+
+    deps = [
+        "//contrib/libs/poco/JSON",
+        "//contrib/libs/poco/XML",
+    ]
+
+    sources = [
+        "src/AcceptCertificateHandler.cpp",
+        "src/CertificateHandlerFactory.cpp",
+        "src/CertificateHandlerFactoryMgr.cpp",
+        "src/ConsoleCertificateHandler.cpp",
+        "src/Context.cpp",
+        "src/HTTPSClientSession.cpp",
+        "src/HTTPSSessionInstantiator.cpp",
+        "src/HTTPSStreamFactory.cpp",
+        "src/InvalidCertificateHandler.cpp",
+        "src/KeyConsoleHandler.cpp",
+        "src/KeyFileHandler.cpp",
+        "src/PrivateKeyFactory.cpp",
+        "src/PrivateKeyFactoryMgr.cpp",
+        "src/PrivateKeyPassphraseHandler.cpp",
+        "src/RejectCertificateHandler.cpp",
+        "src/SSLException.cpp",
+        "src/SSLManager.cpp",
+        "src/SecureSMTPClientSession.cpp",
+        "src/SecureServerSocket.cpp",
+        "src/SecureServerSocketImpl.cpp",
+        "src/SecureSocketImpl.cpp",
+        "src/SecureStreamSocket.cpp",
+        "src/SecureStreamSocketImpl.cpp",
+        "src/Session.cpp",
+        "src/Utility.cpp",
+        "src/VerificationErrorArgs.cpp",
+        "src/X509Certificate.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":private_config",
+        "//build/gn/config:no_warnings",
+    ]
+}

@@ -1,0 +1,60 @@
+linked_executable("mvp_oidc_proxy") {
+  deps = [
+    ":oidc_proxy",
+    "//library/cpp/getopt",  # peerdir only
+  ]
+
+  sources = [ "bin/main.cpp" ]
+
+  link_select = [ "allocator=dbg" ]
+}
+
+library("oidc_proxy") {
+  public_deps = [
+    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/deprecated/atomic",
+    # "//library/cpp/getopt",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/mvp/core",
+    "//ydb/mvp/core:protos",
+    "//ydb/public/api/client/nc_private/iam/v1",
+    "//ydb/public/api/client/yc_private/oauth",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  deps = [
+    # "//contrib/libs/openssl",
+    # "//library/cpp/json",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/string_utils/base64",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/security",
+  ]
+
+  sources = [
+    "context.cpp",
+    "cracked_page.cpp",
+    "extension.cpp",
+    "extension_final.cpp",
+    "extension_manager.cpp",
+    "extension_whoami.cpp",
+    "mvp.cpp",
+    "oidc_cleanup_page.cpp",
+    "oidc_client.cpp",
+    "oidc_impersonate_start_page_nebius.cpp",
+    "oidc_impersonate_stop_page_nebius.cpp",
+    "oidc_protected_page.cpp",
+    "oidc_protected_page_handler.cpp",
+    "oidc_protected_page_nebius.cpp",
+    "oidc_protected_page_yandex.cpp",
+    "oidc_session_create.cpp",
+    "oidc_session_create_handler.cpp",
+    "oidc_session_create_nebius.cpp",
+    "oidc_session_create_yandex.cpp",
+    "oidc_settings.cpp",
+    "openid_connect.cpp",
+  ]
+}

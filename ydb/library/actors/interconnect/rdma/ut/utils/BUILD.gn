@@ -1,0 +1,3 @@
+library("utils") {
+  sources = [ "utils.cpp" ]
+}

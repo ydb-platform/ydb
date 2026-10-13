@@ -1,0 +1,8 @@
+library("certs") {
+  resources = [
+    {
+      path = "cacert.pem"
+      key = "/builtin/cacert"
+    },
+  ]
+}

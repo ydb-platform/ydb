@@ -1,0 +1,18 @@
+gtest_executable("sessions") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/testing/gtest",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "main.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

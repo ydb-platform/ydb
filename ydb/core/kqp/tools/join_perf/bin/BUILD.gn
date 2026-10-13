@@ -1,0 +1,24 @@
+linked_executable("join_perf") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/dwarf_backtrace",  # peerdir only
+    "//library/cpp/dwarf_backtrace/registry",  # peerdir only
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/getopt/small",
+    "//library/cpp/json",  # peerdir only
+    "//library/cpp/lfalloc/alloc_profiler",  # peerdir only
+    "//ydb/core/kqp/tools/combiner_perf",
+    "//ydb/core/kqp/tools/join_perf",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,34 @@
+unittest_executable("data") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/core/tx/tx_proxy:upload_rows",
+    "//ydb/library/ut",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/types",
+  ]
+
+  sources = [ "kqp_read_null_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

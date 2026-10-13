@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/backup",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/backup" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

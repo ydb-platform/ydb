@@ -1,0 +1,34 @@
+unittest_executable("yql") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/tx/datashard",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_pragma_ut.cpp",
+    "kqp_scripting_ut.cpp",
+    "kqp_yql_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,7 @@
+library("impatient") {
+  public_deps = [
+    # "//yql/essentials/sql/v1/complete/name/service",
+  ]
+
+  sources = [ "name_service.cpp" ]
+}

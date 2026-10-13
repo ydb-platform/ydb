@@ -1,0 +1,26 @@
+config("common_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("common") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",
+    # "//ydb/public/sdk/cpp/src/library/issue",
+  ]
+
+  deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/uri",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  sources = [
+    "balancing_policies.cpp",
+    "client_pid.cpp",
+    "getenv.cpp",
+    "parser.cpp",
+  ]
+
+  configs = [ ":common_private_config" ]
+}

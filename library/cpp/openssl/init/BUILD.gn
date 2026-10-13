@@ -1,0 +1,5 @@
+library("init") {
+  deps = [ "//contrib/libs/openssl" ]
+
+  sources = [ "init.cpp" ]
+}

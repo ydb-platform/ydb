@@ -1,0 +1,10 @@
+gtest_executable("time") {
+  deps = [
+    "//contrib/restricted/googletest/googletest",
+    "//ydb/public/sdk/cpp/src/library/time",
+  ]
+
+  sources = [ "time_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

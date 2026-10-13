@@ -1,0 +1,40 @@
+library("events") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_sharing/protos",
+    # "//ydb/core/tx/columnshard:ev_ids",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    ":tasks",
+    # "//ydb/core/tx/columnshard/blobs_action/protos",  # peerdir only
+    "//ydb/core/tx/datashard",  # peerdir only
+  ]
+
+  sources = [ "events/change_owning.cpp" ]
+}
+
+group("modification") {
+  public_deps = [
+    # ":events",  # peerdir only
+    # ":tasks",  # peerdir only
+    # "//ydb/core/tx/columnshard",  # peerdir only
+  ]
+}
+
+library("tasks") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_sharing/common/session",
+    "//ydb/core/tx/columnshard/data_sharing/initiator/controller",
+    "//ydb/core/tx/columnshard/data_sharing/protos",
+    "//ydb/library/conclusion",
+  ]
+
+  deps = [ "//ydb/core/tx/columnshard/data_sharing/manager:shared_blobs" ]
+
+  sources = [ "tasks/modification.cpp" ]
+}

@@ -1,0 +1,39 @@
+unittest_executable("ut_schemereq") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/tx/tx_proxy/schemereq_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

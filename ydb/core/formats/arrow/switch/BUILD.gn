@@ -1,0 +1,16 @@
+library("switch") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
+    "//ydb/library/formats/arrow/switch",
+    # "//yql/essentials/parser/pg_wrapper",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [ "switch_type.cpp" ]
+}

@@ -1,0 +1,23 @@
+linked_executable("ydb_s3_bench") {
+  deps = [
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    "//library/cpp/getopt",
+    "//library/cpp/threading/future",
+    "//ydb/core/protos",
+    "//ydb/core/util",  # peerdir only
+    "//ydb/core/wrappers",
+    "//ydb/core/wrappers/events",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

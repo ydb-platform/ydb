@@ -1,0 +1,54 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/kqp/session_actor",  # peerdir only
+    "//ydb/core/mind",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/columnshard/blobs_action",  # peerdir only
+    "//ydb/core/tx/columnshard/common",  # peerdir only
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/data_accessor",  # peerdir only
+    "//ydb/core/tx/columnshard/data_sharing",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/indexes/max",  # peerdir only
+    "//ydb/core/tx/columnshard/splitter",
+    "//ydb/core/tx/columnshard/splitter:settings",
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/library/accessor",
+    "//ydb/library/arrow_kernels",  # peerdir only
+    "//ydb/library/formats/arrow/simple_builder",
+    "//ydb/library/formats/arrow/splitter",
+    "//ydb/services/kesus",  # peerdir only
+    "//ydb/services/persqueue_cluster_discovery",  # peerdir only
+    "//ydb/services/ydb",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [
+    "batch_slice.cpp",
+    "ut_splitter.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/columnshard/splitter" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

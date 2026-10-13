@@ -1,0 +1,30 @@
+library("service") {
+  public_deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/coroutine/listener",
+    "//library/cpp/http/fetch",
+    "//library/cpp/http/server",
+    "//library/cpp/logger",
+    "//library/cpp/monlib/encode",
+    "//library/cpp/monlib/service/pages",
+  ]
+
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/coroutine/engine",
+    # "//library/cpp/http/io",
+    "//library/cpp/malloc/api",
+    # "//library/cpp/protobuf/runtime",  # peerdir only
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/svnversion",
+    "//library/cpp/uri",
+  ]
+
+  sources = [
+    "auth.cpp",
+    "format.cpp",
+    "mon_service_http_request.cpp",
+    "monservice.cpp",
+    "service.cpp",
+  ]
+}

@@ -1,0 +1,42 @@
+unittest_executable("scan") {
+  deps = [
+    "//library/cpp/threading/future",
+    "//ydb/core/base",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common",
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_flowcontrol_ut.cpp",
+    "kqp_point_consolidation_ut.cpp",
+    "kqp_scan_ut.cpp",
+    "kqp_split_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

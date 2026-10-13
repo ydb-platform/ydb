@@ -1,0 +1,5 @@
+protobuf_library("protos") {
+  public_deps = [ "//yql/essentials/public/issue/protos" ]
+
+  sources = [ "issue_id.proto" ]
+}

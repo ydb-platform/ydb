@@ -1,0 +1,17 @@
+library("common") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/core/scheme_types",
+    "//ydb/core/tx/columnshard/engines/scheme/defaults/protos",
+    "//ydb/library/accessor",
+    "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/library/actors/core",
+    "//ydb/library/formats/arrow/switch",
+  ]
+
+  sources = [ "scalar.cpp" ]
+}

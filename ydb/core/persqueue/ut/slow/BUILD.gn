@@ -1,0 +1,45 @@
+unittest_executable("slow") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/keyvalue",
+    "//ydb/core/persqueue",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/pqrb",
+    "//ydb/core/persqueue/public/partition_key_range",
+    "//ydb/core/persqueue/ut/common",
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/security",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/public/lib/base",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+  ]
+
+  sources = [
+    "autopartitioning_ut.cpp",
+    "pq_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

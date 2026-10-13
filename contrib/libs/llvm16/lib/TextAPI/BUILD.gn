@@ -1,0 +1,17 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("TextAPI") {
+    deps = [ "//contrib/libs/llvm16/lib/TargetParser" ]
+
+    sources = [
+        "Architecture.cpp",
+        "ArchitectureSet.cpp",
+        "InterfaceFile.cpp",
+        "PackedVersion.cpp",
+        "Platform.cpp",
+        "Symbol.cpp",
+        "Target.cpp",
+        "TextStub.cpp",
+        "TextStubCommon.cpp",
+    ]
+}

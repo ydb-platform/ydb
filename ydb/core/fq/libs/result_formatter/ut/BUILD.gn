@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/fq/libs/result_formatter",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/services/ydb",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/fq/libs/result_formatter/result_formatter_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/result_formatter" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,22 @@
+library("arrow") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//yql/essentials/public/decimal",
+    "//yql/essentials/public/udf",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "args_dechunker.cpp",
+    "bit_util.cpp",
+    "block_builder.cpp",
+    "block_item.cpp",
+    "block_item_comparator.cpp",
+    "block_item_hasher.cpp",
+    "block_reader.cpp",
+    "block_type_helper.cpp",
+    "memory_pool.cpp",
+    "udf_arrow_helpers.cpp",
+    "util.cpp",
+  ]
+}

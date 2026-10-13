@@ -1,0 +1,8 @@
+group("containers") {
+  public_deps = [
+    # "//library/cpp/iterator",
+    # "//library/cpp/yt/assert",
+    # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/string",
+  ]
+}

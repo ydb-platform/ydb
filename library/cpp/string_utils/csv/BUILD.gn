@@ -1,0 +1,3 @@
+library("csv") {
+  sources = [ "csv.cpp" ]
+}

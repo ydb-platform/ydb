@@ -1,0 +1,26 @@
+protobuf_library("v1") {
+  public_deps = [
+    "//contrib/libs/googleapis-common-protos",
+    "//ydb/public/api/client/nc_private",
+    "//ydb/public/api/client/nc_private/audit",
+    "//ydb/public/api/client/nc_private/common/v1",
+  ]
+
+  deps = [
+    # "//ydb/public/api/client/nc_private/audit/v1/common",  # peerdir only
+  ]
+
+  sources = [
+    "access.proto",
+    "access_service.proto",
+    "profile_service.proto",
+    "service_account.proto",
+    "tenant_user_account.proto",
+    "token.proto",
+    "token_exchange_service.proto",
+    "token_service.proto",
+    "user_account.proto",
+  ]
+
+  generate_grpc_services = true
+}

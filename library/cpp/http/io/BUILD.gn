@@ -1,0 +1,24 @@
+library("io") {
+  deps = [
+    "//library/cpp/blockcodecs",
+    "//library/cpp/blockcodecs/codecs/brotli",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/bzip",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/fastlz",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/lz4",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/lzma",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/snappy",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/zlib",  # peerdir only
+    "//library/cpp/blockcodecs/codecs/zstd",  # peerdir only
+    # "//library/cpp/blockcodecs/core",  # peerdir only
+    "//library/cpp/streams/brotli",
+    "//library/cpp/streams/bzip2",
+    "//library/cpp/streams/lzma",
+  ]
+
+  sources = [
+    "chunk.cpp",
+    "compression.cpp",
+    "headers.cpp",
+    "stream.cpp",
+  ]
+}

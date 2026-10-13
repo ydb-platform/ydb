@@ -1,0 +1,34 @@
+config("engine_private_config") {
+  cflags = [ "-Wno-logical-op-parentheses" ]
+}
+
+library("engine") {
+  public_deps = [ "//library/cpp/containers/intrusive_rb_tree" ]
+
+  deps = [
+    # "//contrib/libs/libc_compat",  # peerdir only
+  ]
+
+  sources = [
+    "cont_poller.cpp",
+    "helper.cpp",
+    "impl.cpp",
+    "iostatus.cpp",
+    "network.cpp",
+    "poller.cpp",
+    "sockpool.cpp",
+    "stack/stack.cpp",
+    "stack/stack_allocator.cpp",
+    "stack/stack_guards.cpp",
+    "stack/stack_storage.cpp",
+    "stack/stack_utils.cpp",
+    "trampoline.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "poller.h",
+    "stack/stack_common.h",
+  ]
+
+  configs = [ ":engine_private_config" ]
+}

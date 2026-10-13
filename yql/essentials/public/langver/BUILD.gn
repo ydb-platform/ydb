@@ -1,0 +1,5 @@
+library("langver") {
+  sources = [ "yql_langver.cpp" ]
+
+  serialize_enum_headers = [ "yql_langver.h" ]
+}

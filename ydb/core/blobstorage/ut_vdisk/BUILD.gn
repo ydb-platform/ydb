@@ -1,0 +1,42 @@
+unittest_executable("ut_vdisk") {
+  deps = [
+    "//library/cpp/codecs",  # peerdir only
+    "//library/cpp/http/io",
+    "//library/cpp/monlib/service/pages",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/ut_vdisk/lib",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/erasure",
+    "//ydb/core/mon",
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/pdisk_io",
+    "//yql/essentials/minikql",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "gen_restarts.cpp",
+    "huge_migration_ut.cpp",
+    "mon_reregister_ut.cpp",
+    "vdisk_test.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

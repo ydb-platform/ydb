@@ -1,0 +1,26 @@
+library("mlp") {
+  public_deps = [
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public/describer",
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/persqueue/common",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  sources = [
+    "mlp.cpp",
+    "mlp_changer.cpp",
+    "mlp_purger.cpp",
+    "mlp_reader.cpp",
+    "mlp_writer.cpp",
+  ]
+}

@@ -1,0 +1,12 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("tti") {
+    public_deps = [
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/function_types",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

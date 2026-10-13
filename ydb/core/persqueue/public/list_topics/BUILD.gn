@@ -1,0 +1,14 @@
+library("list_topics") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/grpc_services/cancelation",  # peerdir only
+    "//ydb/core/persqueue/events",
+    # "//ydb/core/persqueue/public",  # peerdir only
+    # "//ydb/core/tx/scheme_cache",
+  ]
+
+  sources = [ "list_all_topics_actor.cpp" ]
+}

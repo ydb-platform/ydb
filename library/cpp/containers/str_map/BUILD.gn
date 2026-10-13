@@ -1,0 +1,3 @@
+library("str_map") {
+  sources = [ "str_map.cpp" ]
+}

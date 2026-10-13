@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("xxhash") {
+    sources = [
+        "xxhash.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

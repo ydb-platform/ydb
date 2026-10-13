@@ -1,0 +1,20 @@
+library("session") {
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/impl/endpoints",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/future",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/plain_status",
+    "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+    "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  sources = [
+    "kqp_session_common.cpp",
+    "session_pool.cpp",
+  ]
+}

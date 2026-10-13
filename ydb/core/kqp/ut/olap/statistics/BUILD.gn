@@ -1,0 +1,32 @@
+unittest_executable("statistics") {
+  deps = [
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/olap/combinatory",  # peerdir only
+    "//ydb/core/kqp/ut/olap/helpers",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/columnshard",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/test_helper",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_olap_stats_ut.cpp",
+    "statistics_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

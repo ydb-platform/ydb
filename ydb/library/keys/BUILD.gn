@@ -1,0 +1,3 @@
+library("keys") {
+  sources = [ "default_keys.cpp" ]
+}

@@ -1,0 +1,9 @@
+library("util") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [ "config_index.cpp" ]
+}

@@ -1,0 +1,28 @@
+library("join_perf") {
+  testonly = true
+
+  public_deps = [
+    "//ydb/library/yql/dq/comp_nodes",
+    "//ydb/library/yql/dq/comp_nodes/ut/utils",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/dwarf_backtrace",  # peerdir only
+    "//library/cpp/dwarf_backtrace/registry",  # peerdir only
+    "//library/cpp/getopt",  # peerdir only
+    # "//library/cpp/getopt/small",  # peerdir only
+    # "//library/cpp/json",
+    # "//library/cpp/lfalloc/alloc_profiler",  # peerdir only
+    # "//library/cpp/threading/future",
+    "//ydb/core/kqp/tools/combiner_perf",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  sources = [
+    "benchmark_settings.cpp",
+    "construct_join_graph.cpp",
+    "joins.cpp",
+  ]
+}

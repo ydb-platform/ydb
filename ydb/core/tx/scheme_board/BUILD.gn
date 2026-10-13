@@ -1,0 +1,47 @@
+library("scheme_board") {
+  public_deps = [
+    "//library/cpp/json",
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/mon",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/persqueue/public/partition_key_range",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/persqueue/writer:partition_chooser",  # peerdir only
+    "//ydb/core/sys_view/common",
+    # "//ydb/core/tx",
+    # "//ydb/core/tx/locks",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/sharding",
+    # "//ydb/core/util",
+    "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/actors/util",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "backup.cpp",
+    "cache.cpp",
+    "events.cpp",
+    "helpers.cpp",
+    "load_test.cpp",
+    "monitoring.cpp",
+    "opaque_path_description.cpp",
+    "populator.cpp",
+    "replica.cpp",
+    "subscriber.cpp",
+    "two_part_description.cpp",
+  ]
+
+  serialize_enum_headers = [ "subscriber.h" ]
+}

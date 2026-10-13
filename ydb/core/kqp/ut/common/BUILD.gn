@@ -1,0 +1,56 @@
+library("common") {
+  testonly = true
+
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    # "//library/cpp/yson",
+    # "//library/cpp/yson/node",
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/federated_query",
+    "//ydb/core/testlib",
+    # "//ydb/core/tx/columnshard/test_helper",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/accessor",
+    "//ydb/library/formats/arrow/simple_builder",
+    # "//ydb/library/yql/providers/s3/actors_factory",
+    # "//ydb/public/lib/scheme_types",
+    "//ydb/public/lib/yson_value",
+    # "//ydb/public/sdk/cpp/src/client/draft",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    # "//yql/essentials/core/issue",
+  ]
+
+  deps = [
+    # "//contrib/libs/highwayhash",  # peerdir only
+    # "//library/cpp/testing/common",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/fq/libs/checkpointing",
+    # "//ydb/core/kqp/counters",
+    # "//ydb/core/kqp/provider",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/topic",  # peerdir only
+    # "//yql/essentials/core",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/parser/pg_wrapper",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/backtrace",
+  ]
+
+  sources = [
+    "arrow_builders.cpp",
+    "columnshard.cpp",
+    "kqp_benches.cpp",
+    "kqp_ut_common.cpp",
+  ]
+}

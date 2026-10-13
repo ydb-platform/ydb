@@ -1,0 +1,21 @@
+library("tasks") {
+  public_deps = [
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/common",
+    # "//ydb/library/yql/dq/expr_nodes",
+    # "//ydb/library/yql/dq/opt",
+    "//ydb/library/yql/dq/proto",
+    # "//ydb/library/yql/dq/type_ann",
+    # "//ydb/library/yql/providers/dq/common",
+    "//yql/essentials/ast",
+    "//yql/essentials/minikql",
+    "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/public/types",
+  ]
+
+  deps = [ "//yql/essentials/core" ]
+
+  sources = [ "dq_task_program.cpp" ]
+}

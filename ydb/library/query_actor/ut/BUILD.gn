@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/testlib",
+    "//ydb/library/query_actor",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/library/query_actor/query_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/query_actor" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

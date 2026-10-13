@@ -1,0 +1,18 @@
+library("setup") {
+  testonly = true
+
+  public_deps = [
+    "//contrib/restricted/googletest/googletest",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/tests/integration/topic/utils",
+  ]
+
+  deps = [
+    # "//library/cpp/testing/gtest",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "fixture.cpp" ]
+}

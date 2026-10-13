@@ -1,0 +1,37 @@
+protobuf_library("protos") {
+  sources = [ "protos/config.proto" ]
+}
+
+linked_executable("workload_keyvalue_volume") {
+  deps = [
+    ":protos",
+    "//contrib/libs/ftxui",
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "action_pool.cpp",
+    "execution_context.cpp",
+    "grpc_async_executor.cpp",
+    "initial_load_display.cpp",
+    "initial_load_progress.cpp",
+    "key_bucket.cpp",
+    "keyvalue_client.cpp",
+    "keyvalue_client_v1.cpp",
+    "keyvalue_client_v2.cpp",
+    "main.cpp",
+    "run_display.cpp",
+    "run_stats.cpp",
+    "run_tui.cpp",
+    "scroller.cpp",
+    "utils.cpp",
+    "worker.cpp",
+    "worker_load.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

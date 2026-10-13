@@ -1,0 +1,42 @@
+unittest_executable("ut_testshard") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blob_depot",
+    "//ydb/core/blobstorage/backpressure",  # peerdir only
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/dsproxy/mock",
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/pdisk/mock",
+    "//ydb/core/blobstorage/testing/group_overseer",
+    "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/mind",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/mind/hive",
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/protos",
+    "//ydb/core/sys_view/service",
+    "//ydb/core/test_tablet",
+    "//ydb/core/tx/coordinator",  # peerdir only
+    "//ydb/core/tx/mediator",  # peerdir only
+    "//ydb/core/tx/scheme_board",  # peerdir only
+    "//ydb/core/tx/tx_allocator",  # peerdir only
+    "//ydb/core/util",  # peerdir only
+    "//ydb/core/util/actorsys_test",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

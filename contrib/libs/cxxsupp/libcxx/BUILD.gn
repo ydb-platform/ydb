@@ -1,0 +1,87 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    defines = [ "_LIBCPP_BUILDING_LIBRARY" ]
+    include_dirs = [ "src" ]
+}
+
+shared_library("libcxx") {
+    deps = [] # no default deps
+    deps = [
+        "//contrib/libs/cxxsupp/builtins",
+        "//contrib/libs/cxxsupp/libcxxabi-parts",
+    ]
+    public_deps = [
+        "//contrib/libs/cxxsupp/libcxxrt",
+    ]
+
+    sources = [
+        "src/algorithm.cpp",
+        "src/any.cpp",
+        "src/atomic.cpp",
+        "src/barrier.cpp",
+        "src/bind.cpp",
+        "src/call_once.cpp",
+        "src/charconv.cpp",
+        "src/chrono.cpp",
+        "src/condition_variable.cpp",
+        "src/condition_variable_destructor.cpp",
+        "src/error_category.cpp",
+        "src/exception.cpp",
+        "src/expected.cpp",
+        "src/filesystem/directory_entry.cpp",
+        "src/filesystem/directory_iterator.cpp",
+        "src/filesystem/filesystem_clock.cpp",
+        "src/filesystem/filesystem_error.cpp",
+        "src/filesystem/operations.cpp",
+        "src/filesystem/path.cpp",
+        "src/fstream.cpp",
+        "src/functional.cpp",
+        "src/future.cpp",
+        "src/hash.cpp",
+        "src/ios.cpp",
+        "src/ios.instantiations.cpp",
+        "src/iostream.cpp",
+        "src/locale.cpp",
+        "src/memory.cpp",
+        "src/memory_resource.cpp",
+        "src/mutex.cpp",
+        "src/mutex_destructor.cpp",
+        "src/new.cpp",
+        "src/new_handler.cpp",
+        "src/new_helpers.cpp",
+        "src/optional.cpp",
+        "src/ostream.cpp",
+        "src/print.cpp",
+        "src/random.cpp",
+        "src/random_shuffle.cpp",
+        "src/regex.cpp",
+        "src/ryu/d2fixed.cpp",
+        "src/ryu/d2s.cpp",
+        "src/ryu/f2s.cpp",
+        "src/shared_mutex.cpp",
+        "src/stdexcept.cpp",
+        "src/string.cpp",
+        "src/strstream.cpp",
+        "src/system_error.cpp",
+        "src/thread.cpp",
+        "src/typeinfo.cpp",
+        "src/valarray.cpp",
+        "src/variant.cpp",
+        "src/vector.cpp",
+        "src/verbose_abort.cpp",
+        "src/experimental/chrono_exception.cpp",
+        "src/experimental/time_zone.cpp",
+        "src/experimental/tzdb.cpp",
+        "src/experimental/tzdb_list.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs += [
+        ":private_config",
+        ":public_config",
+        "//build/gn/config:no_warnings",
+    ]
+}

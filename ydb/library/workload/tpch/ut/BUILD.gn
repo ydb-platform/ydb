@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/regex/pcre",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/workload/tpch",
+  ]
+
+  sources = [ "queries_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/workload/tpch" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,9 @@
+protobuf_library("proto") {
+  testonly = true
+
+  deps = [
+    # "//yql/essentials/providers/common/proto",  # peerdir only
+  ]
+
+  sources = [ "mock.proto" ]
+}

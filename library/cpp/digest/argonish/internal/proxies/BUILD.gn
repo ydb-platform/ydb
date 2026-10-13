@@ -1,0 +1,41 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+config("avx2_config") {
+    cflags = [ "-mavx2", "-mfma", "-mbmi", "-mbmi2" ]
+}
+
+library("avx2") {
+    deps = [ "//library/cpp/threading/poor_man_openmp" ]
+    sources = [ "avx2/proxy_avx2.cpp" ]
+    configs = [ ":avx2_config" ]
+}
+
+library("ref") {
+    deps = [ "//library/cpp/threading/poor_man_openmp" ]
+    sources = [ "ref/proxy_ref.cpp" ]
+}
+
+library("sse2") {
+    deps = [ "//library/cpp/threading/poor_man_openmp" ]
+    sources = [ "sse2/proxy_sse2.cpp" ]
+}
+
+library("sse41") {
+    deps = [ "//library/cpp/threading/poor_man_openmp" ]
+    sources = [ "sse41/proxy_sse41.cpp" ]
+}
+
+library("ssse3") {
+    deps = [ "//library/cpp/threading/poor_man_openmp" ]
+    sources = [ "ssse3/proxy_ssse3.cpp" ]
+}
+
+group("proxies") {
+    public_deps = [
+        ":avx2",
+        ":ref",
+        ":sse2",
+        ":sse41",
+        ":ssse3",
+    ]
+}

@@ -1,0 +1,13 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("date_time") {
+    public_deps = [
+        "//contrib/restricted/boost/numeric_conversion",
+        "//contrib/restricted/boost/smart_ptr",
+        "//contrib/restricted/boost/utility",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

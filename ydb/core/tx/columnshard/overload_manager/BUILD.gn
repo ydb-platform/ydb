@@ -1,0 +1,21 @@
+library("overload_manager") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//ydb/core/kqp/query_data",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/data_events",  # peerdir only
+    "//ydb/library/signals",
+  ]
+
+  sources = [
+    "overload_manager_actor.cpp",
+    "overload_manager_service.cpp",
+    "overload_subscribers.cpp",
+  ]
+}

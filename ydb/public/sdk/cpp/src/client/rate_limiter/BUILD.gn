@@ -1,0 +1,12 @@
+library("rate_limiter") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/driver" ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+  ]
+
+  sources = [ "rate_limiter.cpp" ]
+}

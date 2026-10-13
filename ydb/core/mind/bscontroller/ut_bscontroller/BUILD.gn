@@ -1,0 +1,31 @@
+unittest_executable("ut_bscontroller") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/dsproxy/mock",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

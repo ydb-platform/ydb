@@ -1,0 +1,46 @@
+library("mounts") {
+  public_deps = [
+    "//yql/essentials/core",
+    "//yql/essentials/core/user_data",
+  ]
+
+  deps = [
+    # "//library/cpp/resource",
+    # "//yql/essentials/sql",
+    "//yql/essentials/sql/v1",
+    "//yql/essentials/sql/v1/lexer/antlr4",
+    "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+    "//yql/essentials/sql/v1/proto_parser/antlr4",
+    "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "yql_mounts.cpp" ]
+
+  resources = [
+    {
+      path = "//yql/essentials/mount/lib/yql/aggregate.yqls"
+      key = "/lib/yql/aggregate.yqls"
+    },
+    {
+      path = "//yql/essentials/mount/lib/yql/window.yqls"
+      key = "/lib/yql/window.yqls"
+    },
+    {
+      path = "//yql/essentials/mount/lib/yql/id.yqls"
+      key = "/lib/yql/id.yqls"
+    },
+    {
+      path = "//yql/essentials/mount/lib/yql/sqr.yqls"
+      key = "/lib/yql/sqr.yqls"
+    },
+    {
+      path = "//yql/essentials/mount/lib/yql/core.yqls"
+      key = "/lib/yql/core.yqls"
+    },
+    {
+      path = "//yql/essentials/mount/lib/yql/walk_folders.yqls"
+      key = "/lib/yql/walk_folders.yqls"
+    },
+  ]
+}

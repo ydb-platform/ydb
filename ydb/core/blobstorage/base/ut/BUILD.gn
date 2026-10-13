@@ -1,0 +1,25 @@
+gtest_executable("ut") {
+  deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/gtest",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/erasure",  # peerdir only
+    "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/base/batched_vec_ut.cpp",
+    "//ydb/core/blobstorage/base/bufferwithgaps_ut.cpp",
+    "//ydb/core/blobstorage/base/ptr_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

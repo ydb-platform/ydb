@@ -1,0 +1,18 @@
+library("object_storage") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//contrib/libs/curl",
+    # "//ydb/core/external_sources/object_storage/inference",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/common/http_gateway",
+    "//ydb/library/yql/providers/s3/credentials",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [ "//ydb/library/yql/providers/s3/common" ]
+
+  sources = [ "s3_fetcher.cpp" ]
+}

@@ -1,0 +1,37 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/comp_nodes/no_llvm",  # peerdir only
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "accumulator_ut.cpp",
+    "block_layout_converter_sliced_blocks_ut.cpp",
+    "block_layout_converter_ut.cpp",
+    "deep_copy_ut.cpp",
+    "hash_table_ut.cpp",
+    "packed_tuple_ut.cpp",
+    "scalar_layout_converter_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/dq/comp_nodes/hash_join_utils" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,116 @@
+template("clang_toolchain") {
+  not_needed([ "invoker" ])
+
+  toolchain(target_name) {
+    if (clang_bin_path != "") {
+      cc = "$clang_bin_path/clang"
+      cxx = "$clang_bin_path/clang++"
+      ar = "$clang_bin_path/llvm-ar"
+      ld = "$cxx -fuse-ld=$clang_bin_path/ld.lld"
+    } else {
+      cc = "clang-18"
+      cxx = "clang++-18"
+      ar = "ar"
+      ld = "clang++-18 -fuse-ld=/usr/bin/ld.lld-18"
+    }
+
+    sysroot = "--sysroot=/home/ilezhankin/.ya/tools/v4/243881345"
+
+    tool("stamp") {
+      command = "touch {{output}}"
+      description = "STAMP {{output}}"
+    }
+
+    tool("copy") {
+      command = "ln -f {{source}} {{output}} 2>/dev/null || (rm -rf {{output}} && cp -af {{source}} {{output}})"
+      description = "COPY {{source}} {{output}}"
+    }
+
+    tool("asm") {
+      command_launcher = cc_wrapper
+      depfile = "{{output}}.d"
+      command = "$cc {{include_dirs}} {{asmflags}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "ASM {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_file_part}}.o",
+      ]
+    }
+
+    tool("cc") {
+      command_launcher = cc_wrapper
+      depfile = "{{output}}.d"
+      command = "$cc $sysroot -MD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CC {{output}}"
+      restat = true
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_file_part}}.o",
+      ]
+    }
+
+    tool("cxx") {
+      command_launcher = cc_wrapper
+      precompiled_header_type = "gcc"
+      depfile = "{{output}}.d"
+      command = "$cxx $sysroot -MD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CXX {{output}}"
+      restat = true
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_file_part}}.o",
+      ]
+    }
+
+    tool("alink") {
+      command = "rm -f {{output}} && $ar rcs {{output}} {{inputs}}"
+      description = "AR {{output}}"
+      outputs = [
+        "{{target_out_dir}}/{{target_output_name}}{{output_extension}}",
+      ]
+      default_output_extension = ".a"
+      output_prefix = "lib"
+    }
+
+    tool("solink") {
+      soname = "{{target_output_name}}{{output_extension}}"
+      sofile = "{{root_out_dir}}/$soname"
+      tocname = sofile + ".TOC"
+      temporary_tocname = tocname + ".tmp"
+
+      link_command = "$ld -shared {{ldflags}} -o $sofile -Wl,-soname=$soname -Wl,--whole-archive {{inputs}} -Wl,--no-whole-archive {{solibs}} {{libs}}"
+      toc_command = "{ readelf -d $sofile | grep SONAME ; nm -gD -f p $sofile | cut -f1-2 -d' '; } > $temporary_tocname"
+      replace_command = "if ! cmp -s $temporary_tocname $tocname; then mv $temporary_tocname $tocname; fi"
+
+      command = "$link_command && $toc_command && $replace_command"
+      description = "SOLINK {{output}}"
+      default_output_extension = ".so"
+      output_prefix = "lib"
+
+      restat = true
+
+      outputs = [
+        sofile,
+        tocname,
+      ]
+
+      link_output = sofile
+      depend_output = tocname
+    }
+
+    tool("link") {
+      outfile = "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"
+      command = "$ld -rdynamic {{ldflags}} -o $outfile -Wl,--whole-archive -Wl,--start-group {{inputs}} {{solibs}} -Wl,--end-group -Wl,--no-whole-archive {{libs}}"
+      description = "LINK $outfile"
+      outputs = [
+        outfile,
+      ]
+    }
+  }
+}
+
+clang_toolchain("clang") {
+}
+
+clang_toolchain("clang_no_global_pch") {
+}

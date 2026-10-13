@@ -1,0 +1,25 @@
+library("idx_test_resources") {
+  resources = [
+    {
+      path = "sql/create_table1.sql"
+      key = "create_table1"
+    },
+  ]
+}
+
+linked_executable("idx_test") {
+  deps = [
+    ":idx_test_resources",
+    "//library/cpp/getopt",
+    "//library/cpp/json",
+    "//library/cpp/resource",
+    "//ydb/public/lib/idx_test",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,3 @@
+library("ztstrbuf") {
+  sources = [ "ztstrbuf.cpp" ]
+}

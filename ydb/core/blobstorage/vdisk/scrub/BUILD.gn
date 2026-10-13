@@ -1,0 +1,33 @@
+library("scrub") {
+  public_deps = [
+    "//ydb/core/blobstorage/backpressure",
+    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/hulldb",
+    # "//ydb/core/blobstorage/vdisk:defs",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/blobstorage/vdisk/skeleton",  # peerdir only
+  ]
+
+  sources = [
+    "blob_recovery.cpp",
+    "blob_recovery_process.cpp",
+    "blob_recovery_queue.cpp",
+    "blob_recovery_request.cpp",
+    "restore_corrupted_blob_actor.cpp",
+    "scrub_actor.cpp",
+    "scrub_actor_huge.cpp",
+    "scrub_actor_mon.cpp",
+    "scrub_actor_pdisk.cpp",
+    "scrub_actor_snapshot.cpp",
+    "scrub_actor_sst.cpp",
+    "scrub_actor_unreadable.cpp",
+  ]
+}

@@ -1,0 +1,32 @@
+slot_interface_group("comp_nodes") {
+  public_deps = [
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/providers/common/codec",
+    # "//yql/essentials/public/udf",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/yql/providers/yt/codec",
+  ]
+
+  link_slot_interface = "yt_codegen"
+
+  link_slot_headers = [
+    "yql_mkql_block_table_content.h",
+    "yql_mkql_file_input_state.h",
+    "yql_mkql_file_list.h",
+    "yql_mkql_input.h",
+    "yql_mkql_input_stream.h",
+    "yql_mkql_output.h",
+    "yql_mkql_table.h",
+    "yql_mkql_table_content.h",
+    "yql_mkql_ungrouping_list.h",
+  ]
+
+  link_slot_flags_from = [ "yql_mkql_block_table_content.cpp" ]
+
+  link_slot_codegen = [
+    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/public/issue/protos",
+    "//yql/essentials/public/types",
+  ]
+}

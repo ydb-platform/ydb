@@ -1,0 +1,18 @@
+library("jaeger_tracing") {
+  public_deps = [
+    "//library/cpp/containers/stack_vector",
+    "//library/cpp/int128",
+    "//library/cpp/random_provider",
+    "//library/cpp/time_provider",
+    "//ydb/core/protos",
+    "//ydb/library/actors/wilson",
+  ]
+
+  sources = [
+    "request_discriminator.cpp",
+    "sampling_throttling_configurator.cpp",
+    "sampling_throttling_control.cpp",
+    "sampling_throttling_control_internals.cpp",
+    "throttler.cpp",
+  ]
+}

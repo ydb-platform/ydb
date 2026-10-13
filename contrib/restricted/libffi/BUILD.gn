@@ -1,0 +1,40 @@
+config("public_config") {
+    defines = [ "FFI_STATIC_BUILD" ]
+    include_dirs = [ "configs/x86_64-unknown-linux-gnu/include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-deprecated-declarations",
+        "-Wno-implicit-function-declaration",
+    ]
+    defines = [ "HAVE_CONFIG_H" ]
+    include_dirs = [
+        ".",
+        "include",
+        "src",
+        "configs/x86_64-unknown-linux-gnu",
+    ]
+}
+
+system_library("libffi") {
+    deps = [
+        "//contrib/libs/libc_compat",
+    ]
+
+    sources = [
+        "src/closures.c",
+        "src/java_raw_api.c",
+        "src/prep_cif.c",
+        "src/raw_api.c",
+        "src/tramp.c",
+        "src/types.c",
+        "src/x86/ffi64.c",
+        "src/x86/ffiw64.c",
+        "src/x86/unix64.S",
+        "src/x86/win64.S",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

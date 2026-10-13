@@ -1,0 +1,27 @@
+unittest_executable("backup") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",
+    "//library/cpp/yson",
+    "//ydb/library/testlib/s3_recipe_helper",
+    "//ydb/public/lib/yson_value",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/export",
+    "//ydb/public/sdk/cpp/src/client/import",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "backup_ut.cpp" ]
+
+  test_depends_unbuilt = [
+    "//contrib/python/moto/bin",
+    "//ydb/public/tools/ydb_recipe",
+    "//ydb/tests/tools/s3_recipe",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

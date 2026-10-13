@@ -1,0 +1,21 @@
+linked_executable("example_02_discovery") {
+  deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/dnsresolver",
+    "//ydb/library/actors/http",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "endpoint.cpp",
+    "lookup.cpp",
+    "main.cpp",
+    "protocol.proto",
+    "publish.cpp",
+    "replica.cpp",
+  ]
+
+  link_select = [ "allocator=lfalloc" ]
+}

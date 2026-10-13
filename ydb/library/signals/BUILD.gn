@@ -1,0 +1,23 @@
+library("signals") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "agent.cpp",
+    "client.cpp",
+    "histogram.cpp",
+    "object_counter.cpp",
+    "owner.cpp",
+    "private.cpp",
+    "states.cpp",
+  ]
+}

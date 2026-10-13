@@ -1,0 +1,38 @@
+config("arrow_clickhouse_private_config") {
+  defines = [
+    "__POPCNT__",
+    "__SSE2__",
+  ]
+}
+
+config("arrow_clickhouse_public_config") {
+  include_dirs = [
+    ".",
+    "base",
+  ]
+}
+
+library("arrow_clickhouse") {
+  public_deps = [ "//contrib/libs/apache/arrow" ]
+
+  deps = [
+    "//contrib/restricted/cityhash-1.0.2",  # peerdir only
+  ]
+
+  sources = [
+    "AggregateFunctions/IAggregateFunction.cpp",
+    "Aggregator.cpp",
+    "Columns/ColumnAggregateFunction.cpp",
+    "Columns/ColumnsCommon.cpp",
+    "Common/Allocator.cpp",
+    "Common/PODArray.cpp",
+    "DataStreams/AggregatingBlockInputStream.cpp",
+    "DataStreams/IBlockInputStream.cpp",
+    "DataStreams/MergingAggregatedBlockInputStream.cpp",
+    "base/common/mremap.cpp",
+  ]
+
+  configs = [ ":arrow_clickhouse_private_config" ]
+
+  public_configs = [ ":arrow_clickhouse_public_config" ]
+}

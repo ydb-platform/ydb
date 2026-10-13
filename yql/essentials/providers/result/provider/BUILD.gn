@@ -1,0 +1,16 @@
+library("provider") {
+  public_deps = [ "//yql/essentials/core" ]
+
+  deps = [
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core/expr_nodes",
+    "//yql/essentials/providers/common/codec",
+    "//yql/essentials/providers/common/mkql",
+    "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/result/expr_nodes",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "yql_result_provider.cpp" ]
+}

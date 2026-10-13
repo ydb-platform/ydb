@@ -1,0 +1,73 @@
+library("helpers") {
+  deps = [
+    # ":physical",
+    "//ydb/core/kqp/common",
+    "//ydb/core/kqp/opt:helpers",  # peerdir only
+    "//ydb/core/kqp/provider",
+  ]
+
+  sources = [ "kqp_opt_phy_helpers.cpp" ]
+}
+
+config("physical_private_config") {
+  cflags = [ "-Wno-ambiguous-reversed-operator" ]
+}
+
+library("physical") {
+  public_deps = [
+    ":helpers",
+    "//ydb/core/kqp/opt:helpers",
+    "//ydb/core/kqp/provider",
+    "//ydb/library/yql/dq/opt",
+    "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes_gen",
+    "//yql/essentials/utils/log",
+  ]
+
+  deps = [
+    # "//library/cpp/iterator",
+    # "//ydb/core/base",
+    "//ydb/core/kqp/common",
+    # "//ydb/core/scheme",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/common",  # peerdir only
+    "//ydb/library/yql/dq/type_ann",
+    # "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/scheme_types",
+    # "//yql/essentials/core/expr_nodes",
+    "//yql/essentials/core/peephole_opt",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/transform",
+  ]
+
+  sources = [
+    "effects/kqp_opt_phy_delete_index.cpp",
+    "effects/kqp_opt_phy_effects.cpp",
+    "effects/kqp_opt_phy_fulltext_index.cpp",
+    "effects/kqp_opt_phy_indexes.cpp",
+    "effects/kqp_opt_phy_insert.cpp",
+    "effects/kqp_opt_phy_insert_index.cpp",
+    "effects/kqp_opt_phy_returning.cpp",
+    "effects/kqp_opt_phy_uniq_helper.cpp",
+    "effects/kqp_opt_phy_update.cpp",
+    "effects/kqp_opt_phy_update_index.cpp",
+    "effects/kqp_opt_phy_upsert_defaults.cpp",
+    "effects/kqp_opt_phy_upsert_index.cpp",
+    "effects/kqp_opt_phy_vector_index.cpp",
+    "kqp_opt_phy.cpp",
+    "kqp_opt_phy_build_stage.cpp",
+    "kqp_opt_phy_limit.cpp",
+    "kqp_opt_phy_olap_agg.cpp",
+    "kqp_opt_phy_olap_filter.cpp",
+    "kqp_opt_phy_precompute.cpp",
+    "kqp_opt_phy_sort.cpp",
+    "kqp_opt_phy_source.cpp",
+    "kqp_opt_phy_stage_float_up.cpp",
+    "predicate_collector.cpp",
+  ]
+
+  configs = [ ":physical_private_config" ]
+}

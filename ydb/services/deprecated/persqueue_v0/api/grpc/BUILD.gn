@@ -1,0 +1,11 @@
+protobuf_library("grpc") {
+  public_deps = [ "//ydb/services/deprecated/persqueue_v0/api/protos" ]
+
+  deps = [
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  sources = [ "persqueue.proto" ]
+
+  generate_grpc_services = true
+}

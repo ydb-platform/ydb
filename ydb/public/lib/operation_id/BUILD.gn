@@ -1,0 +1,5 @@
+group("operation_id") {
+  deps = [
+    # "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+}

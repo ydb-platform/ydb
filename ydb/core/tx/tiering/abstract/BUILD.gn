@@ -1,0 +1,7 @@
+library("abstract") {
+  public_deps = [ "//ydb/core/tx/tiering/tier" ]
+
+  deps = [ "//ydb/library/actors/core" ]
+
+  sources = [ "manager.cpp" ]
+}

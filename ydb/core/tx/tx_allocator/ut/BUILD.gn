@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/mind",  # peerdir only
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/core/tx/tx_allocator",
+  ]
+
+  sources = [
+    "//ydb/core/tx/tx_allocator/txallocator_ut.cpp",
+    "//ydb/core/tx/tx_allocator/txallocator_ut_helpers.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/tx_allocator" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

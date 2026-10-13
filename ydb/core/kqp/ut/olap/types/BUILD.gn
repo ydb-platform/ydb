@@ -1,0 +1,57 @@
+unittest_executable("types") {
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/olap/combinatory",
+    "//ydb/core/kqp/ut/olap/helpers",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/columnshard",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/datashard/ut_common",  # peerdir only
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/core/wrappers",
+    "//ydb/library/actors/core",
+    "//ydb/library/signals",
+    "//ydb/public/lib/scheme_types",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/operation",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/minikql/jsonpath/parser",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/uuid",
+  ]
+
+  sources = [
+    "bool_ut.cpp",
+    "datatime64_ut.cpp",
+    "decimal_ut.cpp",
+    "json_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  serialize_enum_headers = [ "bool_test_enums.h" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

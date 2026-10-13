@@ -1,0 +1,7 @@
+library("libunwind") {
+  public_deps = [
+    # "//contrib/libs/libunwind",
+  ]
+
+  sources = [ "libunwind_cursor.cpp" ]
+}

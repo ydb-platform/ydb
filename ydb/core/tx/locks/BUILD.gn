@@ -1,0 +1,21 @@
+library("locks") {
+  public_deps = [
+    # "//library/cpp/cache",
+    "//library/cpp/containers/absl_flat_hash",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/library/mkql_proto/protos",
+    # "//ydb/library/range_treap",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "locks.cpp",
+    "locks_db.cpp",
+    "range_treap.cpp",
+    "time_counters.cpp",
+  ]
+}

@@ -1,0 +1,39 @@
+unittest_executable("ut_incremental_restore_scan") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/util/actorsys_test",
+    "//ydb/library/ut",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/datastreams",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/topic",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources =
+      [ "//ydb/core/tx/datashard/datashard_ut_incremental_restore_scan.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/datashard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,25 @@
+unittest_executable("fast") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/federated_query/actors",
+    "//ydb/core/kqp/federated_query/actors/ut_service/common",
+    "//ydb/core/kqp/ut/common",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "kqp_federated_query_actors_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/federated_query/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

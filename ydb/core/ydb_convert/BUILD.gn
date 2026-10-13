@@ -1,0 +1,57 @@
+library("ydb_convert") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    # "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/json",
+    "//library/cpp/protobuf/json",
+    # "//ydb/core/engine",
+    "//ydb/core/external_sources",
+    # "//ydb/core/formats/arrow/switch",
+    # "//ydb/core/kafka_proxy",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/scheme/protos",
+    # "//ydb/core/util",  # peerdir only
+    # "//ydb/library/conclusion",
+    "//ydb/library/mkql_proto",
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/library/ydb_issue",
+    "//ydb/library/ydb_issue/proto",
+    # "//ydb/library/yverify_stream",
+    # "//yql/essentials/core",  # peerdir only
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/dom",
+    "//yql/essentials/public/decimal",
+    "//yql/essentials/public/issue",
+    # "//yql/essentials/public/udf",
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "column_families.cpp",
+    "compression.cpp",
+    "external_data_source_description.cpp",
+    "external_table_description.cpp",
+    "kesus_description.cpp",
+    "replication_description.cpp",
+    "table_description.cpp",
+    "table_profiles.cpp",
+    "table_settings.cpp",
+    "topic_description.cpp",
+    "tx_proxy_status.cpp",
+    "ydb_convert.cpp",
+  ]
+}

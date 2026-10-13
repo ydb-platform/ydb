@@ -1,0 +1,48 @@
+protobuf_library("proto") {
+  sources = [ "proto/storage_meta.proto" ]
+}
+
+library("src") {
+  testonly = true
+
+  public_deps = [
+    ":proto",
+    "//ydb/core/protos",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/ydb_cli/common",
+    "//ydb/tests/tools/kqprun/runlib",
+  ]
+
+  deps = [
+    "//contrib/libs/fmt",
+    # "//library/cpp/colorizer",
+    # "//library/cpp/protobuf/json",
+    # "//ydb/core/blob_depot",
+    # "//ydb/core/client/server",
+    # "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/common/events",
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/proxy_service",
+    "//ydb/core/kqp/rm_service",
+    "//ydb/core/kqp/workload_service/actors",
+    # "//ydb/core/testlib",
+    # "//ydb/core/testlib/basics",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/services/persqueue_v1",
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/mkql_dq",  # peerdir only
+  ]
+
+  sources = [
+    "actors.cpp",
+    "kqp_runner.cpp",
+    "ydb_setup.cpp",
+  ]
+
+  serialize_enum_headers = [ "common.h" ]
+}

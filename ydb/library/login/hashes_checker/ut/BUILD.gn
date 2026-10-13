@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/login/hashes_checker",
+  ]
+
+  sources = [ "//ydb/library/login/hashes_checker/hashes_checker_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/login/hashes_checker" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

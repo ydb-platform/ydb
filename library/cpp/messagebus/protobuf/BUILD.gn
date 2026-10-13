@@ -1,0 +1,10 @@
+library("protobuf") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/messagebus",
+  ]
+
+  deps = [ "//library/cpp/messagebus/actor" ]
+
+  sources = [ "ybusbuf.cpp" ]
+}

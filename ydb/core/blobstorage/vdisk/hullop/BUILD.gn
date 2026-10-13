@@ -1,0 +1,56 @@
+library("hullcompdelete") {
+  public_deps = [
+    # ":hullop",
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/blobstorage/vdisk/huge",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "hullcompdelete/blobstorage_hullcompdelete.cpp" ]
+}
+
+library("hullop") {
+  public_deps = [
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/hulldb",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",
+    "//ydb/core/blobstorage/vdisk/hulldb/cache_block",
+    "//ydb/core/blobstorage/vdisk/hulldb/recovery",
+    # "//ydb/core/blobstorage/vdisk/ingress",
+    "//ydb/core/blobstorage/vdisk/synclog",
+    # "//ydb/core/blobstorage/vdisk:defs",
+    "//ydb/core/protos",
+    "//ydb/library/actors/wilson",
+    # "//ydb/library/wilson_ids",
+  ]
+
+  deps = [
+    ":hullcompdelete",
+    # "//library/cpp/random_provider",
+    # "//ydb/core/blobstorage/vdisk/balance",
+    # "//ydb/core/blobstorage/vdisk/huge",
+    # "//ydb/core/blobstorage/vdisk/hulldb/barriers",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/compstrat",
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    # "//ydb/core/blobstorage/vdisk/scrub",
+  ]
+
+  sources = [
+    "blobstorage_hull.cpp",
+    "blobstorage_hullactor.cpp",
+    "blobstorage_hulllog.cpp",
+    "blobstorage_hulllogcutternotify.cpp",
+    "hullop_compactfreshappendix.cpp",
+    "hullop_entryserialize.cpp",
+  ]
+}

@@ -1,0 +1,14 @@
+library("bindings") {
+  public_deps = [
+    # "//yql/essentials/sql/settings",
+  ]
+
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/json/yson",
+    "//library/cpp/yson",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "utils.cpp" ]
+}

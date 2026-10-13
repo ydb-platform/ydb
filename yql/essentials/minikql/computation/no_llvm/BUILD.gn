@@ -1,0 +1,7 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//yql/essentials/minikql/computation/variant.gni")
+
+mkql_computation_variant("no_llvm") {
+  codegen = false
+}

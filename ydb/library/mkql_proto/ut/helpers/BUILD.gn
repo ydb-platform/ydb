@@ -1,0 +1,18 @@
+library("helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/testing/unittest",
+    "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/invoke_builtins",
+  ]
+
+  deps = [
+    # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot
+  ]
+
+  sources = [ "helpers.cpp" ]
+}

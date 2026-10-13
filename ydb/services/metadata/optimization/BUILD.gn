@@ -1,0 +1,9 @@
+library("optimization") {
+  public_deps = [
+    "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+  ]
+
+  sources = [ "abstract.cpp" ]
+}

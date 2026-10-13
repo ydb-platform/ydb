@@ -1,0 +1,17 @@
+library("retro_tracing") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    # "//contrib/libs/opentelemetry-proto",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "retro_collector.cpp",
+    "retro_span.cpp",
+    "span_buffer.cpp",
+  ]
+}

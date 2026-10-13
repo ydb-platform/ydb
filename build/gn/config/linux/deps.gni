@@ -1,0 +1,3 @@
+platform_deps = [
+    "//contrib/libs/linux-headers",
+]

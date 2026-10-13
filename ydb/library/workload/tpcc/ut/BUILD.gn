@@ -1,0 +1,29 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt/small",  # peerdir only
+    "//library/cpp/logger",
+    "//library/cpp/testing/gmock_in_unittest",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/public/lib/ydb_cli/commands",
+  ]
+
+  sources = [
+    "circular_queue_ut.cpp",
+    "data_splitter_ut.cpp",
+    "histogram_ut.cpp",
+    "log_capture_ut.cpp",
+    "task_queue_ut.cpp",
+    "timer_queue_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/workload/tpcc" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

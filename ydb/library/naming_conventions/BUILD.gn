@@ -1,0 +1,3 @@
+library("naming_conventions") {
+  sources = [ "naming_conventions.cpp" ]
+}

@@ -1,0 +1,49 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/actors",
+    "//ydb/core/fq/libs/events",
+    "//ydb/core/fq/libs/row_dispatcher",
+    "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/ut/common",
+    "//ydb/core/fq/libs/ydb",
+    "//ydb/core/kqp/federated_query",
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/library/testlib/pq_helpers",
+    "//ydb/library/yql/providers/pq/gateway/dummy",  # peerdir only
+    "//ydb/library/yql/providers/pq/gateway/native",
+    "//ydb/tests/fq/pq_async_io",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/public/purecalc/common",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "coordinator_ut.cpp",
+    "leader_election_ut.cpp",
+    "local_leader_election_ut.cpp",
+    "row_dispatcher_ut.cpp",
+    "topic_session_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/fq/libs/row_dispatcher" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

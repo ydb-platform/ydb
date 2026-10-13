@@ -1,0 +1,20 @@
+library("tablesorter") {
+  public_deps = [
+    # "//library/cpp/monlib/service/pages",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+  ]
+
+  resources = [
+    {
+      path = "resources/jquery.tablesorter.css"
+      key = "jquery.tablesorter.css"
+    },
+    {
+      path = "resources/jquery.tablesorter.js"
+      key = "jquery.tablesorter.js"
+    },
+  ]
+}

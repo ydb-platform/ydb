@@ -1,0 +1,11 @@
+linked_executable("yaml-config-fuse") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/library/fyamlcpp",  # peerdir only
+    "//ydb/library/yaml_config/public",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,20 @@
+linked_executable("key_value") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/tests/slo_workloads/utils",
+  ]
+
+  sources = [
+    "create.cpp",
+    "drop.cpp",
+    "generate.cpp",
+    "key_value.cpp",
+    "main.cpp",
+    "run.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

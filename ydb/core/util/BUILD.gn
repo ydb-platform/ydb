@@ -1,0 +1,58 @@
+library("util") {
+  public_deps = [
+    "//contrib/libs/lz4",
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/atomic",
+    "//library/cpp/ipmath",
+    "//library/cpp/json",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/random_provider",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet_flat",
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/util",
+    # "//ydb/library/actors/wilson",
+    "//ydb/library/services",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/curl",
+    # "//library/cpp/html/escape",  # peerdir only
+    # "//library/cpp/lwtrace",
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/mon",  # peerdir only
+    # "//ydb/library/actors/interconnect/mock",  # peerdir only
+  ]
+
+  sources = [
+    "address_classifier.cpp",
+    "aws.cpp",
+    "backoff.cpp",
+    "cache.cpp",
+    "concurrent_rw_hash.cpp",
+    "console.cpp",
+    "cpuinfo.cpp",
+    "exceptions.cpp",
+    "failure_injection.cpp",
+    "fast_tls.cpp",
+    "format.cpp",
+    "fragmented_buffer.cpp",
+    "gen_step.cpp",
+    "hazard.cpp",
+    "hyperlog_counter.cpp",
+    "intrusive_heap.cpp",
+    "page_map.cpp",
+    "random.cpp",
+    "source_location.cpp",
+    "stlog.cpp",
+    "text.cpp",
+    "ui64id.cpp",
+    "ulid.cpp",
+  ]
+}

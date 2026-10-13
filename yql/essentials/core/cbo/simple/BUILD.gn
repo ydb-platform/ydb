@@ -1,0 +1,13 @@
+library("simple") {
+  public_deps = [
+    # "//yql/essentials/core/cbo",
+  ]
+
+  deps = [
+    # "//yql/essentials/parser/pg_wrapper/interface",  # peerdir only
+    # "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "cbo_simple.cpp" ]
+}

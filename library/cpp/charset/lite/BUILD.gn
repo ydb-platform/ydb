@@ -1,0 +1,10 @@
+library("lite") {
+  sources = [
+    "//library/cpp/charset/ci_string.cpp",
+    "//library/cpp/charset/codepage.cpp",
+    "//library/cpp/charset/cp_encrec.cpp",
+    "//library/cpp/charset/doccodes.cpp",
+    "//library/cpp/charset/generated/cp_data.cpp",
+    "//library/cpp/charset/generated/encrec_data.cpp",
+  ]
+}

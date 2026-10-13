@@ -1,0 +1,29 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    cflags = [ "-Wno-macro-redefined" ]
+}
+
+contrib_library("container") {
+    public_deps = [
+        "//contrib/restricted/boost/assert",
+        "//contrib/restricted/boost/config",
+        "//contrib/restricted/boost/intrusive",
+        "//contrib/restricted/boost/move",
+    ]
+
+    sources = [
+        "src/alloc_lib.c",
+        "src/dlmalloc.cpp",
+        "src/global_resource.cpp",
+        "src/monotonic_buffer_resource.cpp",
+        "src/pool_resource.cpp",
+        "src/synchronized_pool_resource.cpp",
+        "src/unsynchronized_pool_resource.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

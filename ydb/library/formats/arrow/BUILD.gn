@@ -1,0 +1,74 @@
+library("arrow") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/cache",
+    "//library/cpp/json",
+    # "//library/cpp/string_utils/base64",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/conclusion",
+    # "//ydb/library/formats/arrow/switch",
+  ]
+
+  deps = [
+    # ":modifier",  # peerdir only
+    # ":scalar",  # peerdir only
+    # "//contrib/libs/xxhash",
+    # "//library/cpp/containers/stack_vector",
+    # "//ydb/core/scheme_types",
+    # "//ydb/library/arrow_clickhouse",  # peerdir only
+    # "//ydb/library/arrow_kernels",  # peerdir only
+    # "//ydb/library/formats/arrow/hash",  # peerdir only
+    # "//ydb/library/formats/arrow/simple_builder",  # peerdir only
+    # "//ydb/library/formats/arrow/splitter",  # peerdir only
+    # "//ydb/library/formats/arrow/transformer",  # peerdir only
+    "//ydb/library/formats/arrow/validation",
+    "//ydb/library/services",
+    # "//ydb/library/yverify_stream",
+    # "//yql/essentials/core/arrow_kernels/request",  # peerdir only
+    # "//yql/essentials/types/binary_json",  # peerdir only
+    # "//yql/essentials/types/dynumber",  # peerdir only
+  ]
+
+  sources = [
+    "arrow_helpers.cpp",
+    "permutations.cpp",
+    "replace_key.cpp",
+    "simple_arrays_cache.cpp",
+    "size_calcer.cpp",
+  ]
+}
+
+library("modifier") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/conclusion",
+    # "//ydb/library/formats/arrow/common",
+    "//ydb/library/formats/arrow/protos",
+  ]
+
+  deps = [
+    # "//ydb/library/formats/arrow/switch",  # peerdir only
+  ]
+
+  sources = [
+    "modifier/schema.cpp",
+    "modifier/subset.cpp",
+  ]
+}
+
+library("scalar") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow/switch",
+  ]
+
+  sources = [ "scalar/serialization.cpp" ]
+}

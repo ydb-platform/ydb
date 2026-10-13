@@ -1,0 +1,11 @@
+library("common") {
+  public_deps = [
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  deps = [
+    # "//library/cpp/lwtrace",  # peerdir only
+  ]
+
+  sources = [ "block_range.cpp" ]
+}

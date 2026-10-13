@@ -1,0 +1,16 @@
+library("rate_limiter") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/kesus/tablet",  # peerdir only
+    # "//ydb/services/ydb",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

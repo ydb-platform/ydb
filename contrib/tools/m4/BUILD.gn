@@ -1,0 +1,111 @@
+config("private_config") {
+    cflags = [
+        "-Wno-ignored-attributes",
+        "-Wno-infinite-recursion",
+        "-Wno-sign-compare",
+    ]
+    include_dirs = [ "lib" ]
+}
+
+contrib_library("lib") {
+    sources = [
+        "lib/asnprintf.c",
+        "lib/basename-lgpl.c",
+        "lib/basename.c",
+        "lib/binary-io.c",
+        "lib/c-ctype.c",
+        "lib/c-stack.c",
+        "lib/c-strcasecmp.c",
+        "lib/c-strncasecmp.c",
+        "lib/clean-temp.c",
+        "lib/cloexec.c",
+        "lib/close-stream.c",
+        "lib/closein.c",
+        "lib/closeout.c",
+        "lib/dirname-lgpl.c",
+        "lib/dirname.c",
+        "lib/dup-safer-flag.c",
+        "lib/dup-safer.c",
+        "lib/execute.c",
+        "lib/exitfail.c",
+        "lib/fatal-signal.c",
+        "lib/fclose.c",
+        "lib/fcntl.c",
+        "lib/fd-hook.c",
+        "lib/fd-safer-flag.c",
+        "lib/fd-safer.c",
+        "lib/filenamecat-lgpl.c",
+        "lib/filenamecat.c",
+        "lib/fopen-safer.c",
+        "lib/freadahead.c",
+        "lib/getprogname.c",
+        "lib/gl_avltree_oset.c",
+        "lib/gl_linkedhash_list.c",
+        "lib/gl_list.c",
+        "lib/gl_oset.c",
+        "lib/gl_xlist.c",
+        "lib/gl_xoset.c",
+        "lib/glthread/lock.c",
+        "lib/glthread/threadlib.c",
+        "lib/glthread/tls.c",
+        "lib/hard-locale.c",
+        "lib/localcharset.c",
+        "lib/malloca.c",
+        "lib/math.c",
+        "lib/mbrtowc.c",
+        "lib/memchr2.c",
+        "lib/mkstemp-safer.c",
+        "lib/pipe-safer.c",
+        "lib/pipe2-safer.c",
+        "lib/pipe2.c",
+        "lib/printf-args.c",
+        "lib/printf-frexp.c",
+        "lib/printf-frexpl.c",
+        "lib/printf-parse.c",
+        "lib/progname.c",
+        "lib/quotearg.c",
+        "lib/sig-handler.c",
+        "lib/spawn-pipe.c",
+        "lib/stripslash.c",
+        "lib/tempname.c",
+        "lib/tmpdir.c",
+        "lib/unistd.c",
+        "lib/vasnprintf.c",
+        "lib/vasprintf.c",
+        "lib/verror.c",
+        "lib/version-etc-fsf.c",
+        "lib/version-etc.c",
+        "lib/wait-process.c",
+        "lib/wctype-h.c",
+        "lib/xalloc-die.c",
+        "lib/xasprintf.c",
+        "lib/xmalloc.c",
+        "lib/xmalloca.c",
+        "lib/xprintf.c",
+        "lib/xsize.c",
+        "lib/xstrndup.c",
+        "lib/xvasprintf.c",
+    ]
+
+    configs = [ ":private_config" ]
+}
+
+contrib_tool("m4") {
+    deps = [ ":lib" ]
+
+    sources = [
+        "src/builtin.c",
+        "src/debug.c",
+        "src/eval.c",
+        "src/format.c",
+        "src/freeze.c",
+        "src/input.c",
+        "src/m4.c",
+        "src/macro.c",
+        "src/output.c",
+        "src/path.c",
+        "src/symtab.c",
+    ]
+
+    configs = [ ":private_config" ]
+}

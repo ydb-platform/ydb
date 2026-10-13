@@ -1,0 +1,12 @@
+library("job_launcher") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/process",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/fmr/request_options/proto_helpers",
+  ]
+
+  sources = [ "yql_yt_job_launcher.cpp" ]
+}

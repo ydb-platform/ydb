@@ -1,0 +1,18 @@
+library("service") {
+  public_deps = [
+    # "//library/cpp/yt/memory",
+    # "//yt/yt/core",
+    # "//yt/yt/library/profiling",
+    # "//yt/yt/library/tvm",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/logging",  # peerdir only
+  ]
+
+  sources = [
+    "config.cpp",
+    "tvm_service_common.cpp",
+    "tvm_service_dummy.cpp",
+  ]
+}

@@ -1,0 +1,34 @@
+library("combinatory") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/ut/common",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/base",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/kqp/ut/olap/helpers",
+    # "//ydb/core/testlib",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    # "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    # "//ydb/core/tx/limiter/grouped_memory/service",
+    # "//ydb/library/formats/arrow/validation",
+    # "//ydb/library/signals",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "actualization.cpp",
+    "bulk_upsert.cpp",
+    "compaction.cpp",
+    "execute.cpp",
+    "executor.cpp",
+    "select.cpp",
+    "variator.cpp",
+  ]
+}

@@ -1,0 +1,9 @@
+library("cow_string") {
+  sources = [
+    "cow_string.cpp",
+    "output.cpp",
+    "reverse.cpp",
+    "subst.cpp",
+    "ysaveload.cpp",
+  ]
+}

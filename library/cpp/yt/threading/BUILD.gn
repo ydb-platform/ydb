@@ -1,0 +1,29 @@
+library("threading") {
+  public_deps = [
+    "//library/cpp/yt/assert",
+    # "//library/cpp/yt/cpu_clock",
+    # "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+    "//library/cpp/yt/system",
+  ]
+
+  deps = [ "//library/cpp/yt/exception" ]
+
+  sources = [
+    "at_fork.cpp",
+    "count_down_latch.cpp",
+    "event_count.cpp",
+    "fork_aware_rw_spin_lock.cpp",
+    "fork_aware_spin_lock.cpp",
+    "futex.cpp",
+    "notification_handle.cpp",
+    "public.cpp",
+    "recursive_spin_lock.cpp",
+    "rw_spin_lock.cpp",
+    "spin_lock.cpp",
+    "spin_lock_count.cpp",
+    "spin_wait.cpp",
+    "spin_wait_hook.cpp",
+    "writer_starving_rw_spin_lock.cpp",
+  ]
+}

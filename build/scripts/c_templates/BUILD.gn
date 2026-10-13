@@ -1,0 +1,5 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+source_set("c_templates") {
+  sources = [ "svn_interface.c" ]
+}

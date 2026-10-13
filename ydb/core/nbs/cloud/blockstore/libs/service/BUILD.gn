@@ -1,0 +1,23 @@
+library("service") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/nbs/cloud/blockstore/public/api/protos",  # peerdir only
+  ]
+
+  sources = [
+    "aligned_device_handler.cpp",
+    "blocks_info.cpp",
+    "context.cpp",
+    "device_handler.cpp",
+    "request.cpp",
+    "unaligned_device_handler.cpp",
+  ]
+
+  serialize_enum_headers = [ "request.h" ]
+}

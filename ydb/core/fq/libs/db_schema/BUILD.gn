@@ -1,0 +1,12 @@
+library("db_schema") {
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/params",
+  ]
+
+  deps = [
+    # "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "db_schema.cpp" ]
+}

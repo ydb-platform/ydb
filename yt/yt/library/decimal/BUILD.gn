@@ -1,0 +1,9 @@
+library("decimal") {
+  public_deps = [
+    # "//library/cpp/int128",
+  ]
+
+  deps = [ "//yt/yt/core" ]
+
+  sources = [ "decimal.cpp" ]
+}

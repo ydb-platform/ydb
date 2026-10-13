@@ -1,0 +1,5 @@
+group("alter") {
+  public_deps = [
+    # "//ydb/core/tx/schemeshard",  # peerdir only
+  ]
+}

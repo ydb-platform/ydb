@@ -1,0 +1,26 @@
+library("common") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/parsers",
+    "//ydb/core/testlib/actors",
+    "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/fq/libs/row_dispatcher/events",
+    # "//ydb/core/fq/libs/row_dispatcher/format_handler/common",  # peerdir only
+    # "//ydb/core/testlib",  # peerdir only
+    "//ydb/core/testlib/basics",
+    # "//ydb/library/yql/dq/actors",  # peerdir only
+    "//ydb/library/yql/dq/common",
+    # "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/providers/common/schema/mkql",  # peerdir only
+    "//yql/essentials/public/purecalc/common",
+  ]
+
+  sources = [ "ut_common.cpp" ]
+}

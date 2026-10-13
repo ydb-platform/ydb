@@ -1,0 +1,15 @@
+library("gtest_extensions") {
+  public_deps = [
+    # "//contrib/restricted/googletest/googlemock",
+    # "//contrib/restricted/googletest/googletest",
+    # "//library/cpp/testing/common",
+  ]
+
+  sources = [
+    "assertions.cpp",
+    "gtest_extensions.cpp",
+    "matchers.cpp",
+    "pretty_printers.cpp",
+    "probe.cpp",
+  ]
+}

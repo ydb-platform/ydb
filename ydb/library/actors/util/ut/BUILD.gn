@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "//ydb/library/actors/util/cpu_load_log_ut.cpp",
+    "//ydb/library/actors/util/memory_tracker_ut.cpp",
+    "//ydb/library/actors/util/rc_buf_ut.cpp",
+    "//ydb/library/actors/util/rope_ut.cpp",
+    "//ydb/library/actors/util/shared_data_native_rope_backend_ut.cpp",
+    "//ydb/library/actors/util/shared_data_rope_backend_ut.cpp",
+    "//ydb/library/actors/util/shared_data_ut.cpp",
+    "//ydb/library/actors/util/spinparkpad_ut.cpp",
+    "//ydb/library/actors/util/thread_load_log_ut.cpp",
+    "//ydb/library/actors/util/unordered_cache_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/actors/util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

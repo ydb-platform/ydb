@@ -1,0 +1,37 @@
+library("tier") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/tiering",
+    "//ydb/core/wrappers",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    "//library/cpp/retry",
+    "//ydb/core/base",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/tx/columnshard/blobs_action",
+    "//ydb/core/tx/columnshard/blobs_action/counters",
+    # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/wrappers/events",
+  ]
+
+  sources = [
+    "adapter.cpp",
+    "common.cpp",
+    "gc.cpp",
+    "gc_actor.cpp",
+    "gc_info.cpp",
+    "read.cpp",
+    "remove.cpp",
+    "storage.cpp",
+    "write.cpp",
+  ]
+}

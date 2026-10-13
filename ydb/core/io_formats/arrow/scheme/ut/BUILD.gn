@@ -1,0 +1,21 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/io_formats/arrow/scheme",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/io_formats/arrow/scheme/csv_arrow_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/io_formats/arrow/scheme" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

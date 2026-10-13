@@ -1,0 +1,22 @@
+library("actors") {
+  public_deps = [
+    # "//library/cpp/retry",
+    # "//library/cpp/threading/future",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/protos",
+    "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/services/metadata",
+    "//ydb/services/metadata/secret",
+  ]
+
+  sources = [ "kqp_federated_query_actors.cpp" ]
+}

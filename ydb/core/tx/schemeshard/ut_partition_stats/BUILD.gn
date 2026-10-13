@@ -1,0 +1,22 @@
+unittest_executable("ut_partition_stats") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "ut_top_cpu_usage.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

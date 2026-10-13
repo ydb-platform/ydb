@@ -1,0 +1,38 @@
+unittest_executable("ut_user_attributes") {
+  deps = [
+    "//library/cpp/http/io",  # peerdir only
+    "//library/cpp/http/server",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",  # peerdir only
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blockstore/core",  # peerdir only
+    "//ydb/core/engine/minikql",  # peerdir only
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/scheme",  # peerdir only
+    "//ydb/core/tablet",  # peerdir only
+    "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",  # peerdir only
+    "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/util",  # peerdir only
+    "//yql/essentials/public/issue",  # peerdir only
+  ]
+
+  sources = [ "ut_user_attributes.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/schemeshard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

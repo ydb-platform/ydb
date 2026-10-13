@@ -1,0 +1,15 @@
+library("json_value") {
+  public_deps = [
+    "//library/cpp/json",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers",
+    # "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  deps = [
+    "//library/cpp/string_utils/base64",
+    # "//yql/essentials/types/uuid",  # peerdir only
+  ]
+
+  sources = [ "ydb_json_value.cpp" ]
+}

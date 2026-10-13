@@ -1,0 +1,58 @@
+library("scheme") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    "//library/cpp/string_utils/quote",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/formats/arrow/program",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/data_accessor/abstract",
+    # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/scheme/abstract",
+    "//ydb/core/tx/columnshard/engines/scheme/column",
+    # "//ydb/core/tx/columnshard/engines/scheme/common",
+    "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
+    # "//ydb/core/tx/columnshard/engines/scheme/tiering",
+    # "//ydb/core/tx/columnshard/splitter/abstract",
+    # "//ydb/core/tx/data_events/common",
+    # "//ydb/core/tx/sharding",
+    # "//ydb/library/conclusion",
+    # "//ydb/library/formats/arrow/transformer",
+    "//ydb/library/formats/arrow/validation",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract",
+    # "//ydb/core/tx/columnshard/engines/scheme/defaults",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme/indexes",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow",
+  ]
+
+  sources = [
+    "abstract_scheme.cpp",
+    "column_features.cpp",
+    "filtered_scheme.cpp",
+    "index_info.cpp",
+    "objects_cache.cpp",
+    "schema_diff.cpp",
+    "schema_version.cpp",
+    "snapshot_scheme.cpp",
+    "tier_info.cpp",
+    "versions/abstract_scheme.cpp",
+    "versions/filtered_scheme.cpp",
+    "versions/preset_schemas.cpp",
+    "versions/snapshot_scheme.cpp",
+    "versions/versioned_index.cpp",
+  ]
+
+  plugins = [ "//ydb/core/formats/arrow/accessor" ]
+}

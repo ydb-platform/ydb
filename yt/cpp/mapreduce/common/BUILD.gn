@@ -1,0 +1,22 @@
+library("common") {
+  public_deps = [
+    # "//library/cpp/yson",
+    # "//library/cpp/yson/node",
+    "//yt/cpp/mapreduce/interface",
+    # "//yt/cpp/mapreduce/interface/logging",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/svnversion",  # peerdir only
+    # "//library/cpp/threading/future",
+    # "//library/cpp/yson/json",  # peerdir only
+  ]
+
+  sources = [
+    "debug_metrics.cpp",
+    "helpers.cpp",
+    "retry_lib.cpp",
+    "wait_proxy.cpp",
+  ]
+}

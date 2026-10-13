@@ -1,0 +1,3 @@
+library("utils") {
+  sources = [ "path.cpp" ]
+}

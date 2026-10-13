@@ -1,0 +1,13 @@
+library("hashes_checker") {
+  public_deps = [ "//ydb/library/login/protos" ]
+
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+  ]
+
+  sources = [
+    "hash_types.cpp",
+    "hashes_checker.cpp",
+  ]
+}

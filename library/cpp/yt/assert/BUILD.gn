@@ -1,0 +1,3 @@
+library("assert") {
+  sources = [ "assert.cpp" ]
+}

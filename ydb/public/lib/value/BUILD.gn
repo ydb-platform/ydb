@@ -1,0 +1,16 @@
+library("value") {
+  public_deps = [
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/public/lib/scheme_types",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/string_utils/base64",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//yql/essentials/public/decimal",
+  ]
+
+  sources = [ "value.cpp" ]
+}

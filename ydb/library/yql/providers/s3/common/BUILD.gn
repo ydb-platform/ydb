@@ -1,0 +1,21 @@
+library("common") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/common/http_gateway",
+    "//ydb/library/yql/providers/s3/events",
+    # "//yql/essentials/ast",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//library/cpp/string_utils/quote",
+    "//yql/essentials/core",
+    # "//yql/essentials/minikql/dom",
+    # "//yql/essentials/public/issue/protos",  # peerdir only
+  ]
+
+  sources = [
+    "source_context.cpp",
+    "util.cpp",
+  ]
+}

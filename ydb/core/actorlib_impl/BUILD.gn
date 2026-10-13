@@ -1,0 +1,40 @@
+library("actorlib_impl") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/memory_log",
+    "//ydb/library/actors/protos",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",  # peerdir only
+    # "//library/cpp/digest/crc32c",  # peerdir only
+    # "//library/cpp/html/pcdata",  # peerdir only
+    # "//library/cpp/lwtrace",  # peerdir only
+    "//library/cpp/lwtrace/mon",  # peerdir only
+    # "//library/cpp/messagebus/monitoring",  # peerdir only
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    "//library/cpp/monlib/service/pages/resources",  # peerdir only
+    "//library/cpp/monlib/service/pages/tablesorter",  # peerdir only
+    # "//library/cpp/packedtypes",  # peerdir only
+    # "//library/cpp/sliding_window",  # peerdir only
+    "//ydb/core/base",
+    # "//ydb/core/driver_lib/version",  # peerdir only
+    # "//ydb/core/mon",  # peerdir only
+    # "//ydb/core/node_whiteboard",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/util",  # peerdir only
+    # "//ydb/library/actors/dnscachelib",  # peerdir only
+  ]
+
+  sources = [
+    "actor_tracker.cpp",
+    "connect_socket_protocol.cpp",
+    "long_timer.cpp",
+    "name_service_client_protocol.cpp",
+    "read_data_protocol.cpp",
+    "read_http_reply_protocol.cpp",
+    "send_data_protocol.cpp",
+  ]
+}

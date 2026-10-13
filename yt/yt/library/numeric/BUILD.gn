@@ -1,0 +1,10 @@
+library("numeric") {
+  public_deps = [
+    # "//library/cpp/testing/gtest",
+    # "//library/cpp/yt/assert",
+    # "//library/cpp/yt/compact_containers",
+    # "//library/cpp/yt/string",
+  ]
+
+  sources = [ "piecewise_linear_function.cpp" ]
+}

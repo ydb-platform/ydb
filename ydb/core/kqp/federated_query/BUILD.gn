@@ -1,0 +1,35 @@
+library("federated_query") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/local_proxy/local_pq_client",
+    "//ydb/library/logger",
+    "//ydb/library/yql/providers/common/db_id_async_resolver",
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/generic/connector/libcpp",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+    "//ydb/library/yql/providers/s3/actors_factory",
+    "//ydb/library/yql/providers/solomon/gateway",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/core/dq_integration/transform",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/issue",
+    "//yt/yql/providers/yt/provider",
+  ]
+
+  deps = [
+    "//ydb/core/fq/libs/db_id_async_resolver_impl",
+    "//ydb/core/protos",
+    "//ydb/library/actors/http",
+    "//ydb/library/yql/providers/pq/gateway/native",
+    "//ydb/library/yql/providers/s3/proto",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/extensions/discovery_mutator",
+    "//yt/yql/providers/yt/comp_nodes/dq",
+    "//yt/yql/providers/yt/gateway/native",
+    "//yt/yql/providers/yt/lib/yt_download",
+    "//yt/yql/providers/yt/mkql_dq",
+  ]
+
+  sources = [ "kqp_federated_query_helpers.cpp" ]
+}

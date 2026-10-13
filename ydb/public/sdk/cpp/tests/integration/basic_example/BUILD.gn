@@ -1,0 +1,22 @@
+gtest_executable("basic_example") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/gtest",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "basic_example.cpp",
+    "basic_example_data.cpp",
+    "main.cpp",
+  ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

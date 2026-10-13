@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [
+        ".",
+        "_nf",
+    ]
+}
+
+source_set("linux-headers") {
+    deps = []
+    public_configs = [ ":public_config" ]
+}

@@ -1,0 +1,41 @@
+protobuf_library("proto") {
+  sources = [ "proto/unified_agent.proto" ]
+
+  serialize_enum_headers = [ "proto/unified_agent.pb.h" ]
+
+  generate_grpc_services = true
+}
+
+library("unified_agent_client") {
+  public_deps = [
+    "//library/cpp/logger",
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/threading/future",
+  ]
+
+  deps = [
+    ":proto",
+    # "//contrib/libs/grpc",
+    # "//contrib/libs/protobuf",
+    "//library/cpp/logger/global",
+  ]
+
+  sources = [
+    "backend.cpp",
+    "backend_creator.cpp",
+    "client_impl.cpp",
+    "clock.cpp",
+    "counters.cpp",
+    "duration_counter.cpp",
+    "grpc_io.cpp",
+    "grpc_status_code.cpp",
+    "helpers.cpp",
+    "logger.cpp",
+    "proto_weighing.cpp",
+    "registrar.cpp",
+    "stream.cpp",
+    "throttling.cpp",
+  ]
+
+  serialize_enum_headers = [ "grpc_io.h" ]
+}

@@ -1,0 +1,7 @@
+group("compact_containers") {
+  public_deps = [
+    # "//library/cpp/yt/assert",
+    "//library/cpp/yt/malloc",
+    # "//library/cpp/yt/misc",
+  ]
+}

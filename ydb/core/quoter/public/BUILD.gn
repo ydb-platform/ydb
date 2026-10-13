@@ -1,0 +1,10 @@
+library("public") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/library/time_series_vec",
+  ]
+
+  sources = [ "quoter.cpp" ]
+
+  serialize_enum_headers = [ "quoter.h" ]
+}

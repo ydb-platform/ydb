@@ -1,0 +1,13 @@
+library("logging") {
+  public_deps = [
+    # "//library/cpp/yt/cpu_clock",
+    # "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/string",
+    "//library/cpp/yt/yson_string",
+  ]
+
+  deps = [ "//library/cpp/yt/assert" ]
+
+  sources = [ "logger.cpp" ]
+}

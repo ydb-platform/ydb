@@ -1,0 +1,7 @@
+library("exceptions") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types",
+  ]
+
+  sources = [ "exceptions.cpp" ]
+}

@@ -1,0 +1,14 @@
+library("antlr4_pure_ansi") {
+  public_deps = [
+    # "//yql/essentials/parser/lexer_common",
+  ]
+
+  deps = [
+    "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",  # peerdir only
+    "//yql/essentials/parser/common",
+    "//yql/essentials/parser/common/antlr4",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "lexer.cpp" ]
+}

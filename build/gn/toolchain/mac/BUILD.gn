@@ -1,0 +1,114 @@
+config("base") {
+  cflags = [
+    "-arch", "x86_64",
+  ]
+  ldflags = [
+    "-arch", "x86_64",
+    "-rpath", "@loader_path/.",
+    "-undefined", "error",
+  ]
+}
+
+template("clang_toolchain") {
+  not_needed([ "invoker" ])
+
+  toolchain(target_name) {
+    cc = "clang"
+    cxx = "clang++"
+    ar = "ar"
+    ld = cxx
+
+    lib_switch = "-l"
+
+    tool("stamp") {
+      command = "touch {{output}}"
+      description = "STAMP {{output}}"
+    }
+
+    tool("copy") {
+      command = "ln -f {{source}} {{output}} 2>/dev/null || (rm -rf {{output}} && cp -af {{source}} {{output}})"
+      description = "COPY {{source}} {{output}}"
+    }
+
+    tool("asm") {
+      depfile = "{{output}}.d"
+      command = "$cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "ASM {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_file_part}}.o",
+      ]
+    }
+
+    tool("cc") {
+      depfile = "{{output}}.d"
+      command = "$cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CC {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_file_part}}.o",
+      ]
+    }
+
+    tool("cxx") {
+      depfile = "{{output}}.d"
+      command = "$cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CXX {{output}}"
+      outputs = [
+        "{{source_out_dir}}/{{target_output_name}}.{{source_file_part}}.o",
+      ]
+    }
+
+    tool("alink") {
+      command = "rm -f {{output}} && $ar rcs {{output}} {{inputs}}"
+      description = "AR {{output}}"
+      outputs = [
+        "{{target_out_dir}}/{{target_output_name}}{{output_extension}}",
+      ]
+      default_output_extension = ".a"
+      output_prefix = "lib"
+    }
+
+    tool("solink") {
+      dylib = "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"
+      tocname = dylib + ".TOC"
+      temporary_tocname = dylib + ".tmp"
+
+      does_reexport_command = "[ ! -e $dylib -o ! -e $tocname ] || otool -l $dylib | grep -q LC_REEXPORT_DYLIB"
+      link_command = "$ld -shared {{ldflags}} -install_name @rpath/$dylib -o $dylib {{inputs}} {{solibs}} {{libs}}"
+      toc_command = "{ otool -l $dylib | grep LC_ID_DYLIB -A 5; nm -gP $dylib | cut -f1-2 -d' ' | grep -v U\$\$; true; }"
+      replace_command = "if ! cmp -s $temporary_tocname $tocname; then mv $temporary_tocname $tocname"
+
+      command = "if $does_reexport_command ; then $link_command && $toc_command > $tocname; else $link_command && $toc_command > $temporary_tocname && $replace_command ; fi; fi"
+      description = "SOLINK {{output}}"
+      default_output_extension = ".dylib"
+      output_prefix = "lib"
+
+      restat = true
+
+      outputs = [
+        dylib,
+        tocname,
+      ]
+
+      link_output = dylib
+      depend_output = tocname
+    }
+
+    tool("link") {
+      outfile = "{{root_out_dir}}/{{target_output_name}}{{output_extension}}"
+      command = "$ld {{ldflags}} -o $outfile {{inputs}} {{solibs}} {{libs}}"
+      description = "LINK $outfile"
+      outputs = [
+        outfile,
+      ]
+    }
+  }
+}
+
+clang_toolchain("clang") {
+}
+
+clang_toolchain("clang_no_global_pch") {
+}

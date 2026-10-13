@@ -1,0 +1,8 @@
+library("proto_helpers") {
+  public_deps = [
+    "//yt/yql/providers/yt/fmr/proto",
+    # "//yt/yql/providers/yt/fmr/table_data_service/local/interface",
+  ]
+
+  sources = [ "yql_yt_table_data_service_proto_helpers.cpp" ]
+}

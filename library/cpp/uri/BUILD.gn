@@ -1,0 +1,29 @@
+config("uri_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("uri") {
+  public_deps = [
+    # "//library/cpp/charset/lite",
+  ]
+
+  deps = [
+    "//contrib/libs/libidn",
+    "//library/cpp/charset",
+  ]
+
+  sources = [
+    "assign.cpp",
+    "common.cpp",
+    "encode.cpp",
+    "encodefsm.rl6",
+    "location.cpp",
+    "other.cpp",
+    "parse.cpp",
+    "parsefsm.rl6",
+    "qargs.cpp",
+    "uri.cpp",
+  ]
+
+  configs = [ ":uri_private_config" ]
+}

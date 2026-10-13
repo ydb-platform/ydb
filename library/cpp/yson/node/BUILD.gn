@@ -1,0 +1,18 @@
+library("node") {
+  public_deps = [
+    "//library/cpp/json",
+    "//library/cpp/yson",
+  ]
+
+  deps = [ "//library/cpp/yson/json" ]
+
+  sources = [
+    "node.cpp",
+    "node_builder.cpp",
+    "node_io.cpp",
+    "node_visitor.cpp",
+    "serialize.cpp",
+  ]
+
+  serialize_enum_headers = [ "node.h" ]
+}

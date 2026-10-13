@@ -1,0 +1,29 @@
+unittest_executable("ut_large") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/scheme",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/test/libs/exec",
+    "//ydb/core/tablet_flat/test/libs/rows",
+    "//ydb/core/tablet_flat/test/libs/table",
+    "//ydb/library/yverify_stream",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/tablet_flat/flat_executor_ut_large.cpp",
+    "ut_btree_index_large.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tablet_flat" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

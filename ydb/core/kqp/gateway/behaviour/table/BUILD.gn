@@ -1,0 +1,8 @@
+library("table") {
+  deps = [
+    "//ydb/core/kqp/gateway/behaviour/tablestore",
+    "//ydb/services/metadata/abstract",
+  ]
+
+  sources = [ "behaviour.cpp" ]
+}

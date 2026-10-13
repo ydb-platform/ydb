@@ -1,0 +1,19 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/c-ares",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/dnsresolver",
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [
+    "//ydb/library/actors/dnsresolver/dnsresolver_caching_ut.cpp",
+    "//ydb/library/actors/dnsresolver/dnsresolver_ondemand_ut.cpp",
+    "//ydb/library/actors/dnsresolver/dnsresolver_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/actors/dnsresolver" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

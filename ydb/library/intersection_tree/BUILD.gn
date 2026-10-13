@@ -1,0 +1,5 @@
+group("intersection_tree") {
+  public_deps = [
+    # "//ydb/library/union_copy_set",
+  ]
+}

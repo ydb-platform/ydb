@@ -1,0 +1,33 @@
+library("memory_controller") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    # "//ydb/core/mon_alloc",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//contrib/libs/tcmalloc",
+    "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
+    # "//ydb/core/cms/console",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/library/services",
+    # "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils/memory_profiling",  # peerdir only
+  ]
+
+  sources = [
+    "memory_controller.cpp",
+    "memtable_collection.cpp",
+  ]
+}

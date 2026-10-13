@@ -1,0 +1,79 @@
+config("dsproxy_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("dsproxy") {
+  public_deps = [
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/digest/crc32c",
+    # "//library/cpp/monlib/dynamic_counters/percentile",
+    # "//library/cpp/monlib/metrics",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/random_provider",
+    # "//ydb/core/base",
+    # "//ydb/core/blobstorage",
+    "//ydb/core/blobstorage/backpressure",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/common",
+    # "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/lwtrace_probes",
+    # "//ydb/core/blobstorage/nodewarden",
+    # "//ydb/core/blobstorage/storagepoolmon",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/ingress",
+    # "//ydb/core/blobstorage/vdisk/query",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+    "//ydb/core/retro_tracing_impl",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/wilson",
+    # "//ydb/library/wilson_ids",
+  ]
+
+  deps = [
+    # "//ydb/core/control/lib",  # peerdir only
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/library/actors/async",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/bridge/proxy/bridge_proxy.cpp",
+    "dsproxy_assimilate.cpp",
+    "dsproxy_blackboard.cpp",
+    "dsproxy_block.cpp",
+    "dsproxy_check_integrity_get.cpp",
+    "dsproxy_collect.cpp",
+    "dsproxy_discover.cpp",
+    "dsproxy_discover_m3dc.cpp",
+    "dsproxy_discover_m3of4.cpp",
+    "dsproxy_encrypt.cpp",
+    "dsproxy_get.cpp",
+    "dsproxy_get_block.cpp",
+    "dsproxy_get_impl.cpp",
+    "dsproxy_impl.cpp",
+    "dsproxy_indexrestoreget.cpp",
+    "dsproxy_mon.cpp",
+    "dsproxy_monactor.cpp",
+    "dsproxy_multicollect.cpp",
+    "dsproxy_multiget.cpp",
+    "dsproxy_nodemon.cpp",
+    "dsproxy_nodemonactor.cpp",
+    "dsproxy_patch.cpp",
+    "dsproxy_put.cpp",
+    "dsproxy_put_impl.cpp",
+    "dsproxy_range.cpp",
+    "dsproxy_request.cpp",
+    "dsproxy_request_reporting.cpp",
+    "dsproxy_stat.cpp",
+    "dsproxy_state.cpp",
+    "dsproxy_status.cpp",
+    "dsproxy_strategy_base.cpp",
+    "group_sessions.cpp",
+  ]
+
+  configs = [ ":dsproxy_private_config" ]
+}

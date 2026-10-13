@@ -1,0 +1,23 @@
+group("blobstorage") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/backpressure",  # peerdir only
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/crypto",  # peerdir only
+    # "//ydb/core/blobstorage/dsproxy",  # peerdir only
+    # "//ydb/core/blobstorage/events",  # peerdir only
+    # "//ydb/core/blobstorage/groupinfo",  # peerdir only
+    # "//ydb/core/blobstorage/incrhuge",  # peerdir only
+    # "//ydb/core/blobstorage/lwtrace_probes",  # peerdir only
+    # "//ydb/core/blobstorage/nodewarden",  # peerdir only
+    # "//ydb/core/blobstorage/other",  # peerdir only
+    # "//ydb/core/blobstorage/pdisk",  # peerdir only
+    # "//ydb/core/blobstorage/storagepoolmon",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk",  # peerdir only
+  ]
+}

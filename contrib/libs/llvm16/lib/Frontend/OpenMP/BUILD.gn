@@ -1,0 +1,27 @@
+import("//contrib/libs/llvm16/llvm.gni")
+import("//contrib/libs/llvm16/utils/TableGen/gen.gni")
+
+table_gen("OMP") {
+    td = "//contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.td"
+    flags = [ "--gen-directive-decl" ]
+    out = "llvm/Frontend/OpenMP/OMP.h.inc"
+    includes = [ "//contrib/libs/llvm16/include" ]
+}
+
+llvm_library("OpenMP") {
+    public_deps = [ ":OMP" ]
+
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/Transforms/Scalar",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "OMP.cpp",
+        "OMPContext.cpp",
+        "OMPIRBuilder.cpp",
+    ]
+}

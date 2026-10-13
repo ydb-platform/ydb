@@ -1,0 +1,12 @@
+library("tests") {
+  testonly = true
+
+  public_deps = [ "//library/cpp/json" ]
+
+  deps = [
+    "//library/cpp/http/io",
+    "//library/cpp/testing/unittest",
+  ]
+
+  sources = [ "counters.cpp" ]
+}

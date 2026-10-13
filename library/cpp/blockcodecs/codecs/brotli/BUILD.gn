@@ -1,0 +1,10 @@
+library("brotli") {
+  deps = [
+    # "//contrib/libs/brotli:common",
+    "//contrib/libs/brotli:dec",  # peerdir only
+    "//contrib/libs/brotli:enc",  # peerdir only
+    "//library/cpp/blockcodecs/core",
+  ]
+
+  sources = [ "brotli.cpp" ]
+}

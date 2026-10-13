@@ -1,0 +1,25 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+expand_template("gen") {
+    sources = [
+        "build.cpp.in",
+        "config.h.in",
+    ]
+
+    substitutions = [
+        "PC_FROM_UCONTEXT=uc_mcontext.gregs[REG_RIP]",
+        "YT_VERSION_MAJOR=26",
+        "YT_VERSION_MINOR=1",
+        "YT_VERSION_PATCH=0",
+        "YT_VERSION_BRANCH=local",
+        "YT_VERSION_TYPE=ya",
+    ]
+}
+
+library("build") {
+    public_deps = [ ":gen" ]
+
+    deps = [ "//library/cpp/svnversion" ]
+
+    sources = [ "ya_version.cpp" ] + get_target_outputs(":gen")
+}

@@ -1,0 +1,7 @@
+library("execprofile") {
+  deps = [
+    # "//library/cpp/deprecated/atomic",
+  ]
+
+  sources = [ "profile.cpp" ]
+}

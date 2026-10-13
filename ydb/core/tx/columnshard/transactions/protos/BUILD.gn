@@ -1,0 +1,8 @@
+protobuf_library("protos") {
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/common/protos",  # peerdir only
+  ]
+
+  sources = [ "tx_event.proto" ]
+}

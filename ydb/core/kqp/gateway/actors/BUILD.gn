@@ -1,0 +1,26 @@
+library("actors") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/common",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/provider",
+    # "//ydb/core/statistics",
+    "//ydb/core/tablet",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/library/actors/core",
+    "//yql/essentials/providers/common/gateway",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/core/util",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "analyze_actor.cpp",
+    "scheme.cpp",
+  ]
+}

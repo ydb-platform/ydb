@@ -1,0 +1,16 @@
+library("prof") {
+  deps = [
+    # "//contrib/libs/tcmalloc",
+    "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
+    "//library/cpp/charset/lite",
+    "//library/cpp/containers/atomizer",
+    "//library/cpp/malloc/api",
+    # "//ydb/library/actors/actor_type",
+    # "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "tag.cpp",
+    "tcmalloc.cpp",
+  ]
+}

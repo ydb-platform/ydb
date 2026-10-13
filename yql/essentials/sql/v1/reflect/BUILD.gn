@@ -1,0 +1,15 @@
+library("reflect") {
+  deps = [
+    "//library/cpp/case_insensitive_string",
+    "//library/cpp/resource",
+  ]
+
+  sources = [ "sql_reflect.cpp" ]
+
+  resources = [
+    {
+      path = "//yql/essentials/sql/v1/SQLv1Antlr4.g.in"
+      key = "SQLv1Antlr4.g.in"
+    },
+  ]
+}

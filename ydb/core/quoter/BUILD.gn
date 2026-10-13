@@ -1,0 +1,64 @@
+library("quoter") {
+  public_deps = [
+    # "//library/cpp/containers/ring_buffer",
+    # "//library/cpp/lwtrace",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/quoter/public",
+    "//ydb/core/tablet",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//library/cpp/lwtrace/mon",
+    "//ydb/core/kesus/tablet",
+    "//ydb/core/mon",
+    # "//ydb/core/util",  # peerdir only
+    # "//ydb/library/time_series_vec",
+    "//ydb/library/yql/public/ydb_issue",
+    "//yql/essentials/public/issue",  # peerdir only
+  ]
+
+  sources = [
+    "debug_info.cpp",
+    "kesus_quoter_proxy.cpp",
+    "probes.cpp",
+    "quoter_service.cpp",
+  ]
+}
+
+linked_executable("quoter_service_bandwidth_test") {
+  testonly = true
+
+  deps = [
+    ":quoter",
+    "//library/cpp/colorizer",
+    "//library/cpp/getopt",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/kesus/tablet",
+    "//ydb/core/quoter/public",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/ydb_issue/proto",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "quoter_service_bandwidth_test/main.cpp",
+    "quoter_service_bandwidth_test/quota_requester.cpp",
+    "quoter_service_bandwidth_test/server.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,5 @@
+library("scheme_types") {
+  public_deps = [ "//yql/essentials/public/types" ]
+
+  sources = [ "scheme_type_id.cpp" ]
+}

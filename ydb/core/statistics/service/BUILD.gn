@@ -1,0 +1,54 @@
+library("service") {
+  public_deps = [
+    ":service_id",
+    "//ydb/core/base",
+    # "//ydb/core/statistics",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//library/cpp/json",
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/cms/console",
+    # "//ydb/core/engine/minikql",  # peerdir only
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/io_formats/cell_maker",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+    "//ydb/core/statistics/database",
+    "//ydb/core/tablet",  # peerdir only
+    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/library/services",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/core/histogram",
+    "//yql/essentials/core/minsketch",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "http_request.cpp",
+    "service_impl.cpp",
+  ]
+}
+
+library("service_id") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/base",
+    # "//ydb/core/cms/console",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+    # "//ydb/core/statistics",
+    # "//ydb/core/statistics/database",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/library/services",
+  ]
+
+  sources = [ "service.cpp" ]
+}

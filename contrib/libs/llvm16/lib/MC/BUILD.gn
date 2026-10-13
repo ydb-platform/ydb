@@ -1,0 +1,120 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("MC") {
+    deps = [
+        "//contrib/libs/llvm16/lib/BinaryFormat",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "ConstantPools.cpp",
+        "ELFObjectWriter.cpp",
+        "MachObjectWriter.cpp",
+        "MCAsmBackend.cpp",
+        "MCAsmInfo.cpp",
+        "MCAsmInfoCOFF.cpp",
+        "MCAsmInfoDarwin.cpp",
+        "MCAsmInfoELF.cpp",
+        "MCAsmInfoGOFF.cpp",
+        "MCAsmInfoWasm.cpp",
+        "MCAsmInfoXCOFF.cpp",
+        "MCAsmMacro.cpp",
+        "MCAsmStreamer.cpp",
+        "MCAssembler.cpp",
+        "MCCodeEmitter.cpp",
+        "MCCodeView.cpp",
+        "MCContext.cpp",
+        "MCDwarf.cpp",
+        "MCDXContainerStreamer.cpp",
+        "MCDXContainerWriter.cpp",
+        "MCELFObjectTargetWriter.cpp",
+        "MCELFStreamer.cpp",
+        "MCExpr.cpp",
+        "MCFragment.cpp",
+        "MCInst.cpp",
+        "MCInstPrinter.cpp",
+        "MCInstrAnalysis.cpp",
+        "MCInstrDesc.cpp",
+        "MCInstrInfo.cpp",
+        "MCLabel.cpp",
+        "MCLinkerOptimizationHint.cpp",
+        "MCMachObjectTargetWriter.cpp",
+        "MCMachOStreamer.cpp",
+        "MCNullStreamer.cpp",
+        "MCObjectFileInfo.cpp",
+        "MCObjectStreamer.cpp",
+        "MCObjectWriter.cpp",
+        "MCPseudoProbe.cpp",
+        "MCRegisterInfo.cpp",
+        "MCSchedule.cpp",
+        "MCSection.cpp",
+        "MCSectionCOFF.cpp",
+        "MCSectionDXContainer.cpp",
+        "MCSectionELF.cpp",
+        "MCSectionMachO.cpp",
+        "MCSectionWasm.cpp",
+        "MCSectionXCOFF.cpp",
+        "MCSPIRVStreamer.cpp",
+        "MCStreamer.cpp",
+        "MCSubtargetInfo.cpp",
+        "MCSymbol.cpp",
+        "MCSymbolELF.cpp",
+        "MCSymbolXCOFF.cpp",
+        "MCTargetOptions.cpp",
+        "MCTargetOptionsCommandFlags.cpp",
+        "MCValue.cpp",
+        "MCWasmObjectTargetWriter.cpp",
+        "MCWasmStreamer.cpp",
+        "MCWin64EH.cpp",
+        "MCWinCOFFStreamer.cpp",
+        "MCWinEH.cpp",
+        "MCXCOFFObjectTargetWriter.cpp",
+        "MCXCOFFStreamer.cpp",
+        "SPIRVObjectWriter.cpp",
+        "StringTableBuilder.cpp",
+        "SubtargetFeature.cpp",
+        "TargetRegistry.cpp",
+        "WasmObjectWriter.cpp",
+        "WinCOFFObjectWriter.cpp",
+        "XCOFFObjectWriter.cpp",
+    ]
+}
+
+llvm_library("MCDisassembler") {
+    deps = [
+        ":MC",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "MCDisassembler/Disassembler.cpp",
+        "MCDisassembler/MCDisassembler.cpp",
+        "MCDisassembler/MCExternalSymbolizer.cpp",
+        "MCDisassembler/MCRelocationInfo.cpp",
+        "MCDisassembler/MCSymbolizer.cpp",
+    ]
+}
+
+llvm_library("MCParser") {
+    deps = [
+        ":MC",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "MCParser/AsmLexer.cpp",
+        "MCParser/AsmParser.cpp",
+        "MCParser/COFFAsmParser.cpp",
+        "MCParser/COFFMasmParser.cpp",
+        "MCParser/DarwinAsmParser.cpp",
+        "MCParser/ELFAsmParser.cpp",
+        "MCParser/GOFFAsmParser.cpp",
+        "MCParser/MasmParser.cpp",
+        "MCParser/MCAsmLexer.cpp",
+        "MCParser/MCAsmParser.cpp",
+        "MCParser/MCAsmParserExtension.cpp",
+        "MCParser/MCTargetAsmParser.cpp",
+        "MCParser/WasmAsmParser.cpp",
+        "MCParser/XCOFFAsmParser.cpp",
+    ]
+}

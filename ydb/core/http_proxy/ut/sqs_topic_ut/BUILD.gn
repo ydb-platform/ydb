@@ -1,0 +1,39 @@
+unittest_executable("sqs_topic_ut") {
+  deps = [
+    "//contrib/restricted/nlohmann_json",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/string_utils/url",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/http_proxy",
+    "//ydb/core/http_proxy/ut/datastreams_fixture",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/ymq/actor",
+    "//ydb/core/ymq/base",
+    "//ydb/library/aclib",  # peerdir only
+    "//ydb/library/actors/http",  # peerdir only
+    "//ydb/library/grpc/server",  # peerdir only
+    "//ydb/library/grpc/server/actors",  # peerdir only
+    "//ydb/library/persqueue/tests",  # peerdir only
+    "//ydb/library/testlib/service_mocks",
+    "//ydb/public/sdk/cpp/src/client/discovery",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    "//ydb/services/ydb",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/http_proxy/ut/sqs_topic_ut.cpp",
+    "inside_ydb_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

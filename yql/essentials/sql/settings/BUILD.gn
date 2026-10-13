@@ -1,0 +1,24 @@
+library("settings") {
+  public_deps = [
+    # "//yql/essentials/ast",
+    "//yql/essentials/core/pg_settings",
+    "//yql/essentials/parser/lexer_common",
+    # "//yql/essentials/public/issue",
+    "//yql/essentials/public/langver",
+  ]
+
+  deps = [
+    "//library/cpp/deprecated/split",
+    "//library/cpp/json",
+    "//yql/essentials/core/issue",
+    # "//yql/essentials/core/issue/protos",  # peerdir only
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "partitioning.cpp",
+    "translation_settings.cpp",
+    "translator.cpp",
+  ]
+}

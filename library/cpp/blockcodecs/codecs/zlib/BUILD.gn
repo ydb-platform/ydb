@@ -1,0 +1,8 @@
+library("zlib") {
+  deps = [
+    "//contrib/libs/zlib",
+    "//library/cpp/blockcodecs/core",
+  ]
+
+  sources = [ "zlib.cpp" ]
+}

@@ -1,0 +1,14 @@
+python_library("MarkupSafe") {
+    library_name = "markupsafe"
+
+    source_root = "py3/markupsafe"
+
+    sources = [
+        "__init__.py",
+        "_native.py",
+    ]
+
+    extension_sources = [
+        "_speedups.c",
+    ]
+}

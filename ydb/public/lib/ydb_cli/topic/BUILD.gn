@@ -1,0 +1,25 @@
+library("topic") {
+  public_deps = [
+    "//library/cpp/logger",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types/operation",
+  ]
+
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+  ]
+
+  sources = [
+    "topic_read.cpp",
+    "topic_write.cpp",
+  ]
+
+  serialize_enum_headers = [ "topic_metadata_fields.h" ]
+}

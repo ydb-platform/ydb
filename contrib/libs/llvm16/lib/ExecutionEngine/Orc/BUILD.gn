@@ -1,0 +1,28 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Shared") {
+    sources = [
+        "Shared/AllocationActions.cpp",
+        "Shared/OrcError.cpp",
+        "Shared/OrcRTBridge.cpp",
+        "Shared/SimpleRemoteEPCUtils.cpp",
+    ]
+}
+
+llvm_library("TargetProcess") {
+    deps = [
+        ":Shared",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "TargetProcess/ExecutorSharedMemoryMapperService.cpp",
+        "TargetProcess/JITLoaderGDB.cpp",
+        "TargetProcess/OrcRTBootstrap.cpp",
+        "TargetProcess/RegisterEHFrames.cpp",
+        "TargetProcess/SimpleExecutorDylibManager.cpp",
+        "TargetProcess/SimpleExecutorMemoryManager.cpp",
+        "TargetProcess/SimpleRemoteEPCServer.cpp",
+        "TargetProcess/TargetExecutionUtils.cpp",
+    ]
+}

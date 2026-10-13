@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/time_provider",
+    "//ydb/core/jaeger_tracing",
+  ]
+
+  sources = [
+    "//ydb/core/jaeger_tracing/sampler_ut.cpp",
+    "//ydb/core/jaeger_tracing/throttler_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/jaeger_tracing" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

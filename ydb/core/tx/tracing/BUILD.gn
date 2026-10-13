@@ -1,0 +1,6 @@
+group("tracing") {
+  public_deps = [
+    # "//ydb/core/tx/tracing/service",  # peerdir only
+    # "//ydb/core/tx/tracing/usage",  # peerdir only
+  ]
+}

@@ -1,0 +1,22 @@
+library("fq") {
+  public_deps = [
+    "//ydb/core/fq/libs/grpc",
+    # "//ydb/library/actors/core",
+    "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    # "//library/cpp/retry",  # peerdir only
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/base",
+    "//ydb/library/protobuf_printer",
+  ]
+
+  sources = [
+    "grpc_service.cpp",
+    "private_grpc.cpp",
+    "ydb_over_fq.cpp",
+  ]
+}

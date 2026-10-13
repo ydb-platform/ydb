@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/grpc/server",
+  ]
+
+  sources = [
+    "grpc_response_ut.cpp",
+    "stream_adaptor_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/grpc/server" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

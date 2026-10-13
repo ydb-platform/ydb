@@ -1,0 +1,12 @@
+library("base64") {
+  deps = [
+    "//contrib/libs/base64/avx2",
+    "//contrib/libs/base64/neon32",
+    "//contrib/libs/base64/neon64",
+    "//contrib/libs/base64/plain32",
+    "//contrib/libs/base64/plain64",
+    "//contrib/libs/base64/ssse3",
+  ]
+
+  sources = [ "base64.cpp" ]
+}

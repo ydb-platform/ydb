@@ -1,0 +1,10 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("PerfJITEvents") {
+    deps = [
+        "//contrib/libs/llvm16/lib/DebugInfo:DWARF",
+        "//contrib/libs/llvm16/lib/ExecutionEngine",
+        "//contrib/libs/llvm16/lib/Object",
+    ]
+    sources = [ "PerfJITEventListener.cpp" ]
+}

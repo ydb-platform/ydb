@@ -1,0 +1,11 @@
+protobuf_library("proto") {
+  public_deps = [ "//contrib/libs/googleapis-common-protos" ]
+
+  sources = [
+    "auth.proto",
+    "kv.proto",
+    "rpc.proto",
+  ]
+
+  generate_grpc_services = true
+}

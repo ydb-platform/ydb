@@ -1,0 +1,12 @@
+gtest_executable("params") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//contrib/restricted/googletest/googletest",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/params",
+  ]
+
+  sources = [ "params_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

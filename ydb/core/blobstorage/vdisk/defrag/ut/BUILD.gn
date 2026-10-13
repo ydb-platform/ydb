@@ -1,0 +1,21 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/vdisk/defrag",
+    "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/blobstorage/vdisk/defrag/defrag_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/defrag" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

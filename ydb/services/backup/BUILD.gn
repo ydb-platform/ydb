@@ -1,0 +1,19 @@
+library("backup") {
+  public_deps = [
+    "//ydb/core/grpc_services/base",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    # "//library/cpp/lwtrace",  # peerdir only
+    "//ydb/core/grpc_services",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/library/grpc/server",
+    # "//ydb/library/login",  # peerdir only
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/resources",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

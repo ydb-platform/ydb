@@ -1,0 +1,40 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",
+    "//library/cpp/threading/mux_event",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib/actors",
+    "//ydb/library/formats/arrow",
+    "//ydb/library/formats/arrow/simple_builder",
+    "//ydb/library/yql/dq/runtime",
+    "//ydb/library/yverify_stream",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp",
+    "//ydb/library/yql/dq/runtime/dq_channel_service_ut.cpp",
+    "//ydb/library/yql/dq/runtime/dq_output_channel_ut.cpp",
+    "ut_helper.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/dq/runtime" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

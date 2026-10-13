@@ -1,0 +1,20 @@
+unittest_executable("kqp_query_session") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",
+    "//ydb/public/api/grpc",
+    "//ydb/public/lib/ut_helpers",
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "main.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

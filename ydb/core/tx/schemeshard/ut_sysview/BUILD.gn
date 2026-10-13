@@ -1,0 +1,24 @@
+unittest_executable("ut_sysview") {
+  deps = [
+    "//ydb/core/protos",
+    "//ydb/core/testlib/basics:default",  # peerdir only
+    "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",
+  ]
+
+  sources = [ "ut_sysview.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/schemeshard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,54 @@
+unittest_executable("query") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/iterator",
+    "//library/cpp/json",
+    "//ydb/core/base",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/statistics:ut_common",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/datashard",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/ydb_issue/proto",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//yql/essentials/ast",
+    "//yql/essentials/core",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_analyze_ut.cpp",
+    "kqp_explain_ut.cpp",
+    "kqp_limits_ut.cpp",
+    "kqp_params_ut.cpp",
+    "kqp_query_ut.cpp",
+    "kqp_stats_ut.cpp",
+    "kqp_types_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

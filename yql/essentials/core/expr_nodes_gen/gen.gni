@@ -1,0 +1,36 @@
+template("generate_expr_nodes") {
+    _path = rebase_path(".", "//")
+    _unique_name = exec_script("//build/gn/scripts/unique_name.py", [ _path ], "trim string")
+    _gen_target = "${_unique_name}_${target_name}_gen"
+
+    python_action_foreach(_gen_target) {
+        binary_label = "//yql/essentials/core/expr_nodes_gen:gen"
+        sources = invoker.sources
+        inputs = [
+            "//yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj",
+        ]
+        outputs = [
+            "{{source_gen_dir}}/{{source_name_part}}.gen.h",
+            "{{source_gen_dir}}/{{source_name_part}}.decl.inl.h",
+            "{{source_gen_dir}}/{{source_name_part}}.defs.inl.h",
+        ]
+
+        args = [
+            # Use //-rooted path: a bare "yql_expr_nodes_gen.jnj" would be
+            # resolved against the BUILD.gn that invoked this template, but
+            # the .jnj actually lives next to the template (expr_nodes_gen/),
+            # not next to the invoker.
+            rebase_path("//yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj",
+                        root_build_dir),
+            "{{source}}",
+        ] + outputs
+        if (defined(invoker.node_namespace)) {
+            args += [ invoker.node_namespace ]
+        }
+    }
+
+    library(target_name) {
+        public_deps = [ "//yql/essentials/core/expr_nodes_gen" ]
+        deps = [ ":$_gen_target" ]
+    }
+}

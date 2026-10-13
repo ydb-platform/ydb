@@ -1,0 +1,14 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/colorizer",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/config/utils",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

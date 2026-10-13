@@ -1,0 +1,30 @@
+unittest_executable("ut_aggregation") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/statistics",
+    "//ydb/core/statistics/service",  # peerdir only
+    "//ydb/core/statistics/service:service_id",
+    "//ydb/core/statistics:ut_common",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+  ]
+
+  sources = [ "ut_aggregate_statistics.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/statistics/service",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

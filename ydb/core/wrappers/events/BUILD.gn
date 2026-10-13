@@ -1,0 +1,20 @@
+library("events") {
+  public_deps = [
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    "//ydb/core/base",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/curl",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "common.cpp",
+    "get_object.cpp",
+    "object_exists.cpp",
+    "s3_out.cpp",
+  ]
+}

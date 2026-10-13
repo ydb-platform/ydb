@@ -1,0 +1,49 @@
+library("datastreams_fixture") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/http/misc",
+    # "//library/cpp/json",
+    # "//library/cpp/logger/global",
+    # "//library/cpp/resource",
+    # "//library/cpp/string_utils/base64",
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/formats/arrow",
+    "//ydb/core/http_proxy",
+    # "//ydb/core/mon",
+    # "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/core/ymq/actor",
+    # "//ydb/library/aclib",
+    "//ydb/library/actors/http",
+    "//ydb/library/folder_service",
+    # "//ydb/library/formats/arrow/switch",
+    "//ydb/library/grpc/server/actors",
+    # "//ydb/library/persqueue/tests",
+    # "//ydb/library/testlib/service_mocks",
+    # "//ydb/public/sdk/cpp/src/client/common_client",
+    # "//ydb/public/sdk/cpp/src/client/datastreams",
+    # "//ydb/public/sdk/cpp/src/client/discovery",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    # "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/services/ydb",
+  ]
+
+  deps = [
+    # "//contrib/restricted/nlohmann_json",  # peerdir only
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/testlib/default",  # peerdir only
+    # "//ydb/core/tx/datashard/ut_common",  # peerdir only
+    # "//ydb/library/grpc/server",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    # "//ydb/services/datastreams",  # peerdir only
+    # "//ydb/services/kesus",  # peerdir only
+    # "//ydb/services/persqueue_cluster_discovery",  # peerdir only
+    # "//ydb/services/ymq",  # peerdir only
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+  ]
+
+  sources = [ "datastreams_fixture.cpp" ]
+}

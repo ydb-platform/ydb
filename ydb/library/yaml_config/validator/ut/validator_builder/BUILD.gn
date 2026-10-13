@@ -1,0 +1,10 @@
+unittest_executable("validator_builder") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yaml_config/validator",
+  ]
+
+  sources = [ "validator_builder_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

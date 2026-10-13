@@ -1,0 +1,16 @@
+library("time_cast") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//library/cpp/random_provider",
+    "//ydb/core/tablet",
+    # "//ydb/core/tx",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  sources = [ "time_cast.cpp" ]
+}

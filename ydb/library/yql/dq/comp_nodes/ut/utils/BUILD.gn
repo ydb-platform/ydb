@@ -1,0 +1,29 @@
+library("utils") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    "//ydb/library/yql/dq/comp_nodes",
+    # "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/minikql:terminator",
+  ]
+
+  deps = [
+    # "//library/cpp/dwarf_backtrace",  # peerdir only
+    "//library/cpp/dwarf_backtrace/registry",  # peerdir only
+    # "//ydb/core/kqp/runtime",  # peerdir only
+    "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+  ]
+
+  sources = [
+    "dq_factories.cpp",
+    "utils.cpp",
+  ]
+}

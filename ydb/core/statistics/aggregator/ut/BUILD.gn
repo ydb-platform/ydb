@@ -1,0 +1,37 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",  # peerdir only
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/statistics",
+    "//ydb/core/statistics/aggregator",  # peerdir only
+    "//ydb/core/statistics/service:service_id",
+    "//ydb/core/statistics:ut_common",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [
+    "ut_analyze_columnshard.cpp",
+    "ut_analyze_datashard.cpp",
+    "ut_traverse_columnshard.cpp",
+    "ut_traverse_datashard.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/statistics/aggregator",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

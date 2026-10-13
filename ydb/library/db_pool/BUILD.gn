@@ -1,0 +1,16 @@
+library("db_pool") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+    "//ydb/library/db_pool/protos",
+    # "//ydb/library/security",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  deps = [
+    "//ydb/library/services",
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+  ]
+
+  sources = [ "db_pool.cpp" ]
+}

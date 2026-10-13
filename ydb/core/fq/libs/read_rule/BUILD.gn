@@ -1,0 +1,27 @@
+library("read_rule") {
+  public_deps = [
+    "//ydb/core/fq/libs/protos",
+    "//ydb/library/actors/core",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+  ]
+
+  deps = [
+    # "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/events",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/services",
+    "//ydb/library/yql/providers/dq/api/protos",
+    "//ydb/library/yql/providers/pq/proto",
+    # "//ydb/public/api/protos",  # peerdir only
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+    # "//yql/essentials/providers/common/proto",  # peerdir only
+  ]
+
+  sources = [
+    "read_rule_creator.cpp",
+    "read_rule_deleter.cpp",
+  ]
+}

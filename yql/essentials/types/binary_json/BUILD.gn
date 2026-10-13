@@ -1,0 +1,20 @@
+library("binary_json") {
+  public_deps = [ "//yql/essentials/minikql/dom" ]
+
+  deps = [
+    "//contrib/libs/simdjson",
+    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/json",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "format.cpp",
+    "read.cpp",
+    "write.cpp",
+  ]
+
+  serialize_enum_headers = [ "format.h" ]
+
+  yql_abi_version = "2.27.0"
+}

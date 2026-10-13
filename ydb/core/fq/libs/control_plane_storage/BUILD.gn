@@ -1,0 +1,106 @@
+library("control_plane_storage") {
+  public_deps = [
+    ":service_id",
+    ":util",
+    # "//library/cpp/scheme",
+    "//ydb/core/external_sources",
+    # "//ydb/core/fq/libs/config",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/control_plane_storage/proto",
+    "//ydb/core/fq/libs/protos",
+    "//ydb/core/kqp/proxy_service/script_executions_utils",
+    # "//ydb/library/yql/providers/s3/path_generator",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/value",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//contrib/libs/fmt",
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/json/yson",
+    "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/protobuf/interop",
+    "//ydb/core/base",
+    # "//ydb/core/fq/libs/actors/logging",  # peerdir only
+    # "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/compute/common",
+    # "//ydb/core/fq/libs/control_plane_storage/events",
+    # "//ydb/core/fq/libs/db_schema",
+    # "//ydb/core/fq/libs/events",
+    # "//ydb/core/fq/libs/graph_params/proto",  # peerdir only
+    "//ydb/core/fq/libs/metrics",
+    "//ydb/core/fq/libs/quota_manager",
+    # "//ydb/core/fq/libs/quota_manager/events",
+    "//ydb/core/fq/libs/rate_limiter/events",
+    # "//ydb/core/fq/libs/shared_resources",
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/core/kqp/opt",  # peerdir only
+    "//ydb/core/metering",
+    # "//ydb/core/mon",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/db_pool",
+    "//ydb/library/protobuf_printer",
+    "//ydb/library/security",
+    "//ydb/public/lib/fq",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    # "//ydb/public/sdk/cpp/src/client/params",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/core/issue/protos",
+    # "//yql/essentials/utils",  # peerdir only
+  ]
+
+  sources = [
+    "config.cpp",
+    "control_plane_storage_counters.cpp",
+    "in_memory_control_plane_storage.cpp",
+    "internal/nodes_health_check.cpp",
+    "internal/rate_limiter_resources.cpp",
+    "internal/response_tasks.cpp",
+    "internal/task_get.cpp",
+    "internal/task_ping.cpp",
+    "internal/task_result_write.cpp",
+    "internal/utils.cpp",
+    "probes.cpp",
+    "request_validators.cpp",
+    "validators.cpp",
+    "ydb_control_plane_storage.cpp",
+    "ydb_control_plane_storage_bindings.cpp",
+    "ydb_control_plane_storage_compute_database.cpp",
+    "ydb_control_plane_storage_connections.cpp",
+    "ydb_control_plane_storage_folder.cpp",
+    "ydb_control_plane_storage_queries.cpp",
+    "ydb_control_plane_storage_quotas.cpp",
+  ]
+}
+
+library("service_id") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/shared_resources",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "control_plane_storage.cpp" ]
+}
+
+library("util") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/library/yql/dq/actors/protos",
+  ]
+
+  sources = [ "util.cpp" ]
+}

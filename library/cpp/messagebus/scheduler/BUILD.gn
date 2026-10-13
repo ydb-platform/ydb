@@ -1,0 +1,8 @@
+library("scheduler") {
+  public_deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/threading/future",
+  ]
+
+  sources = [ "scheduler.cpp" ]
+}

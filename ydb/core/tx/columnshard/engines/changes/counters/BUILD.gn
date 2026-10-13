@@ -1,0 +1,21 @@
+library("counters") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/tx/columnshard/blobs_action/counters",
+    # "//ydb/core/tx/columnshard/counters",
+    "//ydb/library/actors/core",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tablet_flat",  # peerdir only
+  ]
+
+  sources = [
+    "changes.cpp",
+    "general.cpp",
+  ]
+
+  serialize_enum_headers = [ "changes.h" ]
+}

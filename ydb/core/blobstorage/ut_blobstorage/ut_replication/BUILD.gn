@@ -1,0 +1,23 @@
+unittest_executable("ut_replication") {
+  deps = [
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/ut_blobstorage/replication.cpp",
+    "//ydb/core/blobstorage/ut_blobstorage/replication_huge.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/ut_blobstorage" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,8 @@
+protobuf_library("service") {
+  public_deps =
+      [ "//ydb/library/yql/providers/generic/connector/api/service/protos" ]
+
+  sources = [ "connector.proto" ]
+
+  generate_grpc_services = true
+}

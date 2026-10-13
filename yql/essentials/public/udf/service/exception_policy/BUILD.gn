@@ -1,0 +1,12 @@
+library("exception_policy") {
+  deps = [
+    # "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/minikql:terminator",
+    "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "udf_service.cpp" ]
+
+  link_slot_provides = [ "YqlServicePolicy" ]
+}

@@ -1,0 +1,12 @@
+library("metadata") {
+  deps = [
+    "//ydb/core/protos",
+    # "//ydb/core/scheme_types",
+    "//yql/essentials/minikql",
+  ]
+
+  sources = [
+    "functions_metadata.cpp",
+    "types_metadata.cpp",
+  ]
+}

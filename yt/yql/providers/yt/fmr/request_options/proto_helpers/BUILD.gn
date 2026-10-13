@@ -1,0 +1,14 @@
+library("proto_helpers") {
+  public_deps = [
+    "//yt/yql/providers/yt/fmr/proto",
+    # "//yt/yql/providers/yt/fmr/request_options",
+  ]
+
+  deps = [
+    # "//library/cpp/yson/node",
+    # "//yt/cpp/mapreduce/common",
+    # "//yt/cpp/mapreduce/interface",
+  ]
+
+  sources = [ "yql_yt_request_proto_helpers.cpp" ]
+}

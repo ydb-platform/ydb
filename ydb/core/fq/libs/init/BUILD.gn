@@ -1,0 +1,74 @@
+library("init") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/fq/libs/actors",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/events",
+    # "//ydb/core/fq/libs/shared_resources/interface",
+    # "//ydb/library/actors/core",
+    "//ydb/library/folder_service/proto",
+    # "//ydb/library/yql/providers/pq/cm_client",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+  ]
+
+  deps = [
+    # "//library/cpp/protobuf/json",
+    "//ydb/core/fq/libs/audit",
+    "//ydb/core/fq/libs/checkpoint_storage",
+    # "//ydb/core/fq/libs/checkpointing",  # peerdir only
+    "//ydb/core/fq/libs/cloud_audit",
+    # "//ydb/core/fq/libs/common",  # peerdir only
+    "//ydb/core/fq/libs/compute/ydb/control_plane",
+    "//ydb/core/fq/libs/control_plane_config",
+    "//ydb/core/fq/libs/control_plane_proxy",
+    "//ydb/core/fq/libs/control_plane_proxy/events",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    "//ydb/core/fq/libs/db_id_async_resolver_impl",
+    # "//ydb/core/fq/libs/gateway",  # peerdir only
+    "//ydb/core/fq/libs/health",
+    # "//ydb/core/fq/libs/private_client",
+    "//ydb/core/fq/libs/quota_manager",
+    "//ydb/core/fq/libs/rate_limiter/control_plane_service",
+    "//ydb/core/fq/libs/rate_limiter/events",
+    "//ydb/core/fq/libs/rate_limiter/quoter_service",
+    "//ydb/core/fq/libs/row_dispatcher",
+    "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/fq/libs/shared_resources",
+    "//ydb/core/fq/libs/test_connection",
+    "//ydb/core/kqp/federated_query",
+    "//ydb/core/protos",
+    "//ydb/library/actors/http",
+    "//ydb/library/folder_service",
+    "//ydb/library/security",
+    # "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/input_transforms",
+    "//ydb/library/yql/dq/actors/task_runner",  # peerdir only
+    "//ydb/library/yql/dq/comp_nodes",
+    "//ydb/library/yql/dq/transform",
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/dq/actors",  # peerdir only
+    # "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
+    # "//ydb/library/yql/providers/dq/provider",  # peerdir only
+    "//ydb/library/yql/providers/dq/task_runner",
+    "//ydb/library/yql/providers/dq/worker_manager",
+    # "//ydb/library/yql/providers/dq/worker_manager/interface",  # peerdir only
+    "//ydb/library/yql/providers/generic/actors",
+    "//ydb/library/yql/providers/pq/async_io",
+    "//ydb/library/yql/providers/pq/gateway/native",
+    # "//ydb/library/yql/providers/pq/provider",  # peerdir only
+    "//ydb/library/yql/providers/s3/actors",
+    "//ydb/library/yql/providers/s3/proto",
+    # "//ydb/library/yql/providers/s3/provider",  # peerdir only
+    "//ydb/library/yql/providers/solomon/actors",
+    # "//ydb/library/yql/providers/solomon/gateway",  # peerdir only
+    # "//ydb/library/yql/providers/solomon/proto",  # peerdir only
+    # "//ydb/library/yql/providers/solomon/provider",  # peerdir only
+    # "//ydb/library/yql/utils/actor_log",
+    # "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/providers/common/comp_nodes",
+    # "//yql/essentials/providers/common/metrics",
+  ]
+
+  sources = [ "init.cpp" ]
+}

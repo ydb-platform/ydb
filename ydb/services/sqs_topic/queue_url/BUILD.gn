@@ -1,0 +1,9 @@
+library("queue_url") {
+  deps = [ "//library/cpp/string_utils/url" ]
+
+  sources = [
+    "arn.cpp",
+    "consumer.cpp",
+    "utils.cpp",
+  ]
+}

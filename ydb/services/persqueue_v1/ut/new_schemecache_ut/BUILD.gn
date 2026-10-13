@@ -1,0 +1,51 @@
+unittest_executable("new_schemecache_ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/logger",
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/mon",
+    "//ydb/core/persqueue/public/cluster_tracker",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/aclib",
+    "//ydb/library/persqueue/tests",
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/public/api/grpc",  # peerdir only
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/resources",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/library/persqueue/obfuscate",
+    "//ydb/services/persqueue_v1",  # peerdir only
+    "//ydb/services/persqueue_v1/actors",
+  ]
+
+  sources = [
+    "//ydb/services/persqueue_v1/persqueue_common_new_schemecache_ut.cpp",
+    "//ydb/services/persqueue_v1/persqueue_new_schemecache_ut.cpp",
+    "//ydb/services/persqueue_v1/ut/rate_limiter_test_setup.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/services/persqueue_v1",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

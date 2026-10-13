@@ -1,0 +1,48 @@
+unittest_executable("ut_console") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/protobuf/util",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/cms/console",
+    "//ydb/core/cms/console/util",
+    "//ydb/core/cms/console/validators",
+    "//ydb/core/jaeger_tracing",
+    "//ydb/core/mind",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+    "//ydb/library/actors/http",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "//ydb/core/cms/console/console_ut_configs.cpp",
+    "//ydb/core/cms/console/console_ut_tenants.cpp",
+    "//ydb/core/cms/console/feature_flags_configurator_ut.cpp",
+    "//ydb/core/cms/console/immediate_controls_configurator_ut.cpp",
+    "//ydb/core/cms/console/jaeger_tracing_configurator_ut.cpp",
+    "//ydb/core/cms/console/log_settings_configurator_ut.cpp",
+    "//ydb/core/cms/console/modifications_validator_ut.cpp",
+    "//ydb/core/cms/console/net_classifier_updater_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/cms/console" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,41 @@
+library("actorsys_test") {
+  public_deps = [
+    # "//library/cpp/deprecated/atomic",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/rdma",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",  # peerdir only
+    # "//library/cpp/html/escape",  # peerdir only
+    # "//library/cpp/ipmath",  # peerdir only
+    # "//library/cpp/json",  # peerdir only
+    # "//library/cpp/lwtrace",  # peerdir only
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    # "//library/cpp/random_provider",  # peerdir only
+    # "//library/cpp/time_provider",
+    # "//ydb/core/blobstorage/backpressure",  # peerdir only
+    # "//ydb/core/blobstorage/groupinfo",  # peerdir only
+    # "//ydb/core/blobstorage/pdisk/mock",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/control/lib",
+    # "//ydb/core/driver_lib/version",  # peerdir only
+    # "//ydb/core/grpc_services",
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/util",
+    # "//ydb/library/actors/interconnect/mock",  # peerdir only
+    # "//ydb/library/actors/wilson",  # peerdir only
+    # "//ydb/library/yverify_stream",  # peerdir only
+  ]
+
+  sources = [
+    "single_thread_ic_mock.cpp",
+    "testactorsys.cpp",
+  ]
+}

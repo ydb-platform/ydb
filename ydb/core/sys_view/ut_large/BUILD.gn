@@ -1,0 +1,41 @@
+unittest_executable("ut_large") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/yson/node",
+    "//ydb/core/base",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/persqueue/ut/common",  # peerdir only
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/sys_view",  # peerdir only
+    "//ydb/core/sys_view/common",
+    "//ydb/core/sys_view/service",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/wrappers",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "//ydb/core/sys_view/ut_common.cpp",
+    "//ydb/core/sys_view/ut_large.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/sys_view",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

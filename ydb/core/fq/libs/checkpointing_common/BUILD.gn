@@ -1,0 +1,7 @@
+library("checkpointing_common") {
+  public_deps = [ "//ydb/core/fq/libs/graph_params/proto" ]
+
+  sources = [ "defs.cpp" ]
+
+  serialize_enum_headers = [ "defs.h" ]
+}

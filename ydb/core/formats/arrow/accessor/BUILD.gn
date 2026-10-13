@@ -1,0 +1,47 @@
+group("accessor") {
+  public_deps = [
+    # ":composite",  # peerdir only
+    ":dictionary",  # peerdir only
+    "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/core/formats/arrow/accessor/composite_serial",  # peerdir only
+    "//ydb/core/formats/arrow/accessor/sparsed",  # peerdir only
+    "//ydb/core/formats/arrow/accessor/sub_columns",  # peerdir only
+  ]
+}
+
+library("composite") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/common",  # peerdir only
+  ]
+
+  sources = [ "composite/accessor.cpp" ]
+}
+
+library("dictionary") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/switch",
+    # "//ydb/library/formats/arrow/validation",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/library/formats/arrow/protos",  # peerdir only
+  ]
+
+  sources = [
+    "dictionary/accessor.cpp",
+    "dictionary/constructor.cpp",
+    "dictionary/request.cpp",
+  ]
+}

@@ -1,0 +1,13 @@
+library("bulksst_add") {
+  public_deps = [
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    "//ydb/core/blobstorage/vdisk/hulldb:_self",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "hulldb_bulksst_add.cpp" ]
+}

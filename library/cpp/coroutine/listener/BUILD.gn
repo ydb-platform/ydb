@@ -1,0 +1,5 @@
+library("listener") {
+  deps = [ "//library/cpp/coroutine/engine" ]
+
+  sources = [ "listen.cpp" ]
+}

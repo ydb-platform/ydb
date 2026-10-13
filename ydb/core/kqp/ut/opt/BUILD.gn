@@ -1,0 +1,51 @@
+unittest_executable("opt") {
+  deps = [
+    "//library/cpp/json",
+    "//ydb/core/base",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/ast",
+    "//yql/essentials/core",
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "kqp_agg_ut.cpp",
+    "kqp_extract_predicate_unpack_ut.cpp",
+    "kqp_hash_combine_ut.cpp",
+    "kqp_kv_ut.cpp",
+    "kqp_merge_ut.cpp",
+    "kqp_named_expressions_ut.cpp",
+    "kqp_ne_ut.cpp",
+    "kqp_not_null_ut.cpp",
+    "kqp_ranges_ut.cpp",
+    "kqp_returning_ut.cpp",
+    "kqp_sort_ut.cpp",
+    "kqp_sqlin_ut.cpp",
+    "kqp_union_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,10 @@
+library("grpc_streaming") {
+  public_deps = [
+    # "//contrib/libs/grpc",
+    "//ydb/core/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+  ]
+
+  sources = [ "grpc_streaming.cpp" ]
+}

@@ -1,0 +1,9 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/graph/protos",
+    "//ydb/core/protos",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [ "viewer.proto" ]
+}

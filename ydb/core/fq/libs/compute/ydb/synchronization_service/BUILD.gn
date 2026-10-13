@@ -1,0 +1,35 @@
+library("synchronization_service") {
+  public_deps = [
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/shared_resources",
+    # "//ydb/core/fq/libs/signer",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/actor_client",
+    # "//ydb/library/security",
+  ]
+
+  deps = [
+    "//contrib/libs/fmt",
+    # "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/compute/common",
+    # "//ydb/core/fq/libs/compute/ydb:events",
+    "//ydb/core/fq/libs/control_plane_proxy:actors",
+    # "//ydb/core/fq/libs/control_plane_storage/events",
+    # "//ydb/core/fq/libs/control_plane_storage/proto",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    # "//ydb/core/fq/libs/quota_manager/proto",  # peerdir only
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/db_pool/protos",  # peerdir only
+    # "//ydb/library/services",  # peerdir only
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/lib/fq",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    # "//ydb/public/sdk/cpp/src/client/operation",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+  ]
+
+  sources = [ "synchronization_service.cpp" ]
+}

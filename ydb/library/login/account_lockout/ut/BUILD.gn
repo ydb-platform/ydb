@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/login:account_lockout",
+  ]
+
+  sources = [ "//ydb/library/login/account_lockout/account_lockout_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/login/account_lockout" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,3 @@
+library("parse_size") {
+  sources = [ "parse_size.cpp" ]
+}

@@ -1,0 +1,22 @@
+library("storage") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [
+    "groups.cpp",
+    "pdisks.cpp",
+    "storage_pools.cpp",
+    "storage_stats.cpp",
+    "vslots.cpp",
+  ]
+}

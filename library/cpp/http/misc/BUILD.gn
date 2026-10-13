@@ -1,0 +1,17 @@
+library("misc") {
+  public_deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/digest/lower_case",
+  ]
+
+  deps = [ "//library/cpp/case_insensitive_string" ]
+
+  sources = [
+    "httpcodes.cpp",
+    "httpdate.cpp",
+    "httpreqdata.cpp",
+    "parsed_request.cpp",
+  ]
+
+  serialize_enum_headers = [ "httpcodes.h" ]
+}

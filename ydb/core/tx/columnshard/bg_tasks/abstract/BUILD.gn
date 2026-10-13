@@ -1,0 +1,25 @@
+library("abstract") {
+  public_deps = [
+    # "//ydb/core/tablet_flat",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    "//ydb/library/services",
+    "//ydb/services/bg_tasks/abstract",
+  ]
+
+  deps = [
+    "//ydb/core/tx/columnshard/bg_tasks/protos",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  sources = [
+    "adapter.cpp",
+    "control.cpp",
+    "session.cpp",
+    "status_channel.cpp",
+    "task.cpp",
+  ]
+}

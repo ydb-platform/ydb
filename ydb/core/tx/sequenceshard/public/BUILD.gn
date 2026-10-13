@@ -1,0 +1,9 @@
+library("public") {
+  public_deps = [
+    # "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+  ]
+
+  sources = [ "events.cpp" ]
+}

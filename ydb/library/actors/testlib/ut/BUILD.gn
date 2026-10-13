@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [ "//ydb/library/actors/testlib/decorator_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/actors/testlib" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

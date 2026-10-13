@@ -1,0 +1,62 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/config/protos",
+    "//ydb/core/protos",
+    "//ydb/library/actors/protos",
+  ]
+
+  sources = [
+    "protos/blobstorage_config.proto",
+    "protos/config.proto",
+  ]
+
+  extra_plugins = [
+    {
+      name = "config_proto_plugin"
+      target = "//ydb/core/config/tools/protobuf_plugin:config_proto_plugin"
+    },
+  ]
+}
+
+library("static_validator") {
+  public_deps = [ "//ydb/library/yaml_config/validator" ]
+
+  sources = [ "static_validator/builders.cpp" ]
+}
+
+library("yaml_config") {
+  public_deps = [
+    ":protos",
+    # "//contrib/libs/openssl",
+    # "//contrib/libs/protobuf",
+    "//library/cpp/json",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/streams/zstd",
+    "//library/cpp/yaml/as",
+    "//ydb/core/base",
+    "//ydb/core/erasure",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+    "//ydb/library/fyamlcpp",
+    "//ydb/library/yaml_config/public",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//contrib/libs/xxhash",
+    "//ydb/core/cms/console/util",
+    "//ydb/core/config/validation",
+    # "//ydb/core/viewer/json",
+    # "//ydb/library/pdisk_io:device_type",
+    "//ydb/library/yaml_json",
+  ]
+
+  sources = [
+    "console_dumper.cpp",
+    "serialize_deserialize.cpp",
+    "yaml_config.cpp",
+    "yaml_config_helpers.cpp",
+    "yaml_config_parser.cpp",
+  ]
+}

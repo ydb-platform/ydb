@@ -1,0 +1,102 @@
+linked_executable("dqrun") {
+  deps = [
+    ":lib",
+    "//library/cpp/lfalloc/alloc_profiler",  # peerdir only
+    "//ydb/library/yql/dq/comp_nodes/llvm16",  # peerdir only
+    "//ydb/library/yql/providers/pq/gateway/dummy",  # peerdir only
+    "//ydb/library/yql/udfs/common/clickhouse/client",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/codecs",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins/llvm16",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yt/yql/providers/yt/codec/codegen",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [ "dqrun.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}
+
+library("lib") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/providers/common/db_id_async_resolver",
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+    # "//ydb/library/yql/providers/dq/interface",
+    # "//ydb/library/yql/providers/generic/connector/libcpp",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+    # "//ydb/library/yql/utils/actor_system",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//yql/essentials/core/cbo",
+    # "//yql/essentials/core/dq_integration",
+    # "//yql/essentials/core/dq_integration/transform",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/providers/common/metrics",
+    # "//yql/essentials/sql/settings",
+    # "//yql/essentials/tools/yql_facade_run",
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/gateway/file",
+    # "//yt/yql/tools/ytrun/lib",
+  ]
+
+  deps = [
+    # "//library/cpp/lfalloc/alloc_profiler",
+    # "//ydb/core/fq/libs/actors",  # peerdir only
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/db_id_async_resolver_impl",
+    # "//ydb/core/fq/libs/init",
+    # "//ydb/core/fq/libs/shared_resources/interface",
+    # "//ydb/library/actors/http",
+    # "//ydb/library/yql/dq/actors/input_transforms",
+    # "//ydb/library/yql/dq/comp_nodes",
+    # "//ydb/library/yql/dq/opt",
+    # "//ydb/library/yql/dq/transform",
+    # "//ydb/library/yql/providers/clickhouse/actors",
+    # "//ydb/library/yql/providers/clickhouse/provider",
+    # "//ydb/library/yql/providers/dq/helper",
+    # "//ydb/library/yql/providers/dq/local_gateway",
+    # "//ydb/library/yql/providers/dq/provider",
+    # "//ydb/library/yql/providers/dq/provider/exec",
+    # "//ydb/library/yql/providers/generic/actors",
+    # "//ydb/library/yql/providers/generic/provider",
+    # "//ydb/library/yql/providers/pq/async_io",
+    # "//ydb/library/yql/providers/pq/gateway/dummy",
+    # "//ydb/library/yql/providers/pq/gateway/native",
+    # "//ydb/library/yql/providers/pq/provider",
+    # "//ydb/library/yql/providers/s3/actors",
+    # "//ydb/library/yql/providers/s3/provider",
+    # "//ydb/library/yql/providers/solomon/actors",
+    # "//ydb/library/yql/providers/solomon/gateway",
+    # "//ydb/library/yql/providers/solomon/provider",
+    # "//ydb/library/yql/providers/ydb/actors",
+    # "//ydb/library/yql/providers/ydb/comp_nodes",
+    # "//ydb/library/yql/providers/ydb/provider",
+    # "//ydb/library/yql/providers/yt/actors",
+    # "//ydb/library/yql/providers/yt/dq_task_preprocessor",
+    # "//ydb/library/yql/utils/bindings",
+    # "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/providers/common/comp_nodes",
+    # "//yql/essentials/providers/common/provider",
+    # "//yt/yql/providers/yt/comp_nodes/dq",
+    # "//yt/yql/providers/yt/gateway/native",
+    # "//yt/yql/providers/yt/mkql_dq",
+    # "//yt/yql/providers/yt/provider",
+  ]
+
+  sources = [ "lib/dqrun_lib.cpp" ]
+}

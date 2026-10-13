@@ -1,0 +1,29 @@
+library("huge") {
+  public_deps = [
+    # "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/ingress",
+    # "//ydb/core/blobstorage/vdisk:defs",
+    # "//ydb/core/control/lib",
+    # "//ydb/core/util",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/random_provider",
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/lwtrace_probes",
+    # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/library/wilson_ids",
+  ]
+
+  sources = [
+    "blobstorage_hullhuge.cpp",
+    "blobstorage_hullhugedefs.cpp",
+    "blobstorage_hullhugeheap.cpp",
+    "blobstorage_hullhugerecovery.cpp",
+  ]
+}

@@ -1,0 +1,11 @@
+library("skiff_ext") {
+  public_deps = [
+    # "//library/cpp/skiff",
+    # "//yt/yt/core",
+  ]
+
+  sources = [
+    "schema_match.cpp",
+    "serialize.cpp",
+  ]
+}

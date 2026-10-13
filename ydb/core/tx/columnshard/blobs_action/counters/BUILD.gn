@@ -1,0 +1,22 @@
+library("counters") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "read.cpp",
+    "remove_declare.cpp",
+    "remove_gc.cpp",
+    "storage.cpp",
+    "write.cpp",
+  ]
+
+  serialize_enum_headers = [ "storage.h" ]
+}

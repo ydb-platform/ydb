@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/pqtablet/quota",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+  ]
+
+  sources = [
+    "//ydb/core/persqueue/pqtablet/quota/quota_tracker_ut.cpp",
+    "//ydb/core/persqueue/pqtablet/quota/write_quoter_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue/pqtablet/quota" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

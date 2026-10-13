@@ -1,0 +1,30 @@
+config("public_config") {
+    defines = [ "LIBCXXRT" ]
+    include_dirs = [ "include" ]
+}
+
+system_library("libcxxrt") {
+    deps = [
+        "//contrib/libs/libunwind",
+        "//library/cpp/sanitizer/include",
+    ]
+
+    sources = [
+        "auxhelper.cc",
+        "dynamic_cast.cc",
+        "exception.cc",
+        "guard.cc",
+        "memory.cc",
+        "stdexcept.cc",
+        "typeinfo.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":public_config",
+        "//build/gn/config:no_warnings",
+    ]
+
+    # TODO: not converted:
+    #   SET(CXX_RT "libcxxrt")
+}

@@ -1,0 +1,13 @@
+linked_executable("ydb-config-meta-dumper") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",
+    "//library/cpp/json",
+    "//library/cpp/svnversion",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

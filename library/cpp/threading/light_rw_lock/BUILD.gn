@@ -1,0 +1,3 @@
+library("light_rw_lock") {
+  sources = [ "lightrwlock.cpp" ]
+}

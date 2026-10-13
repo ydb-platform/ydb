@@ -1,0 +1,9 @@
+protobuf_library("protos") {
+  sources = [
+    "clickhouse.proto",
+    "common.proto",
+    "fmr.proto",
+    "pg_ext.proto",
+    "yql_mount.proto",
+  ]
+}

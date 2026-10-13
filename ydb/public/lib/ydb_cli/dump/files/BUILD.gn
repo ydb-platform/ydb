@@ -1,0 +1,3 @@
+library("files") {
+  sources = [ "files.cpp" ]
+}

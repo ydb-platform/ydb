@@ -1,0 +1,61 @@
+library("rbo_resources") {
+  resources = [
+    {
+      path = "//ydb/library/benchmarks/gen_queries/consts.yql"
+      key = "consts.yql"
+    },
+    {
+      path = "//ydb/library/benchmarks/gen_queries/consts_decimal.yql"
+      key = "consts_decimal.yql"
+    },
+  ]
+}
+
+unittest_executable("rbo") {
+  deps = [
+    ":rbo_resources",
+    "//library/cpp/resource",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/statistics:ut_common",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/benchmarks/queries/tpch",  # peerdir only
+    "//ydb/public/lib/ut_helpers",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//yql/essentials/parser/pg_catalog",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "kqp_rbo_pg_ut.cpp",
+    "kqp_rbo_yql_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  data = [
+    "//ydb/core/kqp/ut/join/data/",
+    "data/",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,11 @@
+library("cache") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+  ]
+
+  sources = [
+    "byte_size.cpp",
+    "cache.cpp",
+    "cached.cpp",
+  ]
+}

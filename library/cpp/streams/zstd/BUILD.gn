@@ -1,0 +1,5 @@
+library("zstd") {
+  deps = [ "//contrib/libs/zstd" ]
+
+  sources = [ "zstd.cpp" ]
+}

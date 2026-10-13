@@ -1,0 +1,20 @@
+library("other") {
+  public_deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/blobstorage",
+  ]
+
+  deps = [
+    "//library/cpp/json",
+    # "//library/cpp/threading/future",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/events",
+  ]
+
+  sources = [
+    "mon_blob_range_page.cpp",
+    "mon_get_blob_page.cpp",
+    "mon_vdisk_stream.cpp",
+  ]
+}

@@ -1,0 +1,15 @@
+group("storage") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/portions",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/storage/actualizer",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/indexes",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+}

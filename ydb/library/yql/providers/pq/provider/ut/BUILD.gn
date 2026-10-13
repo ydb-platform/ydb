@@ -1,0 +1,49 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/lwtrace",  # peerdir only
+    "//library/cpp/lwtrace/mon",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/wilson/protos",  # peerdir only
+    "//ydb/library/yql/dq/comp_nodes",
+    "//ydb/library/yql/dq/transform",
+    "//ydb/library/yql/providers/common/db_id_async_resolver",  # peerdir only
+    "//ydb/library/yql/providers/dq/local_gateway",
+    "//ydb/library/yql/providers/dq/provider",
+    "//ydb/library/yql/providers/dq/provider/exec",
+    "//ydb/library/yql/providers/pq/async_io",
+    "//ydb/library/yql/providers/pq/gateway/dummy",
+    "//ydb/library/yql/providers/pq/provider",
+    "//ydb/library/yql/providers/solomon/gateway",
+    "//ydb/library/yql/providers/solomon/provider",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/codecs",  # peerdir only
+    "//yql/essentials/core/facade",
+    "//yql/essentials/core/file_storage",
+    "//yql/essentials/core/file_storage/proto",
+    "//yql/essentials/core/services/mounts",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/providers/common/comp_nodes",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "yql_pq_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/pq/provider" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

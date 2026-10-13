@@ -1,0 +1,24 @@
+library("experimental") {
+  public_deps = [
+    "//ydb/core/scheme",
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  deps = [
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "ydb_clickhouse_internal.cpp",
+    "ydb_logstore.cpp",
+    "ydb_object_storage.cpp",
+  ]
+}

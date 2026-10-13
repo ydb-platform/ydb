@@ -1,0 +1,13 @@
+library("counters") {
+  public_deps = [
+    "//ydb/library/yql/dq/runtime",
+    "//yql/essentials/core",
+  ]
+
+  deps = [ "//ydb/library/yql/providers/dq/common" ]
+
+  sources = [
+    "counters.cpp",
+    "task_counters.cpp",
+  ]
+}

@@ -1,0 +1,49 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/program",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",  # peerdir only
+    "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/columnshard/counters",  # peerdir only
+    "//ydb/core/tx/columnshard/engines",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/program",
+    "//ydb/library/formats/arrow",
+    "//yql/essentials/core/arrow_kernels/registry",
+    "//yql/essentials/core/arrow_kernels/request",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "helper.cpp",
+    "ut_program.cpp",
+    "ut_script.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/tx/columnshard/engines",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

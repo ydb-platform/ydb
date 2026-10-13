@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/pdisk_io",
+  ]
+
+  sources = [ "uring_router_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/pdisk_io" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

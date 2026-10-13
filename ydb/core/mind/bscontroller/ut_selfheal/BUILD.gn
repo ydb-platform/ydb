@@ -1,0 +1,34 @@
+unittest_executable("ut_selfheal") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/dsproxy/mock",
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/pdisk/mock",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/mind",  # peerdir only
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/protos",
+    "//ydb/core/tx/scheme_board",  # peerdir only
+    "//ydb/core/util",
+    "//ydb/core/util/actorsys_test",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "main.cpp",
+    "self_heal_actor_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

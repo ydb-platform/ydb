@@ -1,0 +1,44 @@
+library("keyvalue") {
+  public_deps = [
+    "//library/cpp/json",
+    # "//library/cpp/time_provider",
+    "//ydb/core/base",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/keyvalue/protos",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/wilson",
+    "//ydb/library/services",
+    # "//ydb/library/wilson_ids",
+    # "//ydb/public/lib/base",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/mind",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tx",  # peerdir only
+    "//ydb/library/actors/protos",
+  ]
+
+  sources = [
+    "keyvalue.cpp",
+    "keyvalue_collect_operation.cpp",
+    "keyvalue_collector.cpp",
+    "keyvalue_data.cpp",
+    "keyvalue_helpers.cpp",
+    "keyvalue_index_record.cpp",
+    "keyvalue_intermediate.cpp",
+    "keyvalue_simple_db_flat.cpp",
+    "keyvalue_state.cpp",
+    "keyvalue_state_collect.cpp",
+    "keyvalue_storage_read_request.cpp",
+    "keyvalue_storage_request.cpp",
+    "keyvalue_stored_state_data.cpp",
+    "keyvalue_utils.cpp",
+  ]
+}

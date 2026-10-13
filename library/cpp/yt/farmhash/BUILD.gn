@@ -1,0 +1,5 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+library("farmhash") {
+    public_deps = [ "//contrib/libs/farmhash" ]
+}

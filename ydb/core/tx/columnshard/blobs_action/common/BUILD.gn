@@ -1,0 +1,11 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/protos",
+    # "//ydb/core/tx/data_events/common",
+  ]
+
+  sources = [
+    "const.cpp",
+    "statistics.cpp",
+  ]
+}

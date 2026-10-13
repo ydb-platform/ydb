@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/grpc_services/tablet",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/grpc_services/tablet/rpc_change_schema_ut.cpp",
+    "//ydb/core/grpc_services/tablet/rpc_execute_mkql_ut.cpp",
+    "//ydb/core/grpc_services/tablet/rpc_restart_tablet_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/grpc_services/tablet" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

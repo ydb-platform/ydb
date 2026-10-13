@@ -1,0 +1,21 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("ObjCARC") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "DependencyAnalysis.cpp",
+        "ObjCARC.cpp",
+        "ObjCARCAPElim.cpp",
+        "ObjCARCContract.cpp",
+        "ObjCARCExpand.cpp",
+        "ObjCARCOpts.cpp",
+        "ProvenanceAnalysis.cpp",
+        "ProvenanceAnalysisEvaluator.cpp",
+        "PtrState.cpp",
+    ]
+}

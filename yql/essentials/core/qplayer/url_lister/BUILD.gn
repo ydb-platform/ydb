@@ -1,0 +1,14 @@
+library("url_lister") {
+  public_deps = [
+    "//yql/essentials/core/qplayer/storage/interface",
+    "//yql/essentials/core/url_lister/interface",
+  ]
+
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/yson/node",
+    # "//yql/essentials/core",  # peerdir only
+  ]
+
+  sources = [ "qplayer_url_lister_manager.cpp" ]
+}

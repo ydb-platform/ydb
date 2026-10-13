@@ -1,0 +1,21 @@
+library("keyvalue") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/grpc_services",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/jaeger_tracing",
+    # "//ydb/core/kesus/tablet",  # peerdir only
+    # "//ydb/core/keyvalue",  # peerdir only
+  ]
+
+  sources = [
+    "grpc_service_v1.cpp",
+    "grpc_service_v2.cpp",
+  ]
+}

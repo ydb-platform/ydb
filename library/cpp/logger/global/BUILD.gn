@@ -1,0 +1,9 @@
+library("global") {
+  public_deps = [ "//library/cpp/logger" ]
+
+  sources = [
+    "common.cpp",
+    "global.cpp",
+    "rty_formater.cpp",
+  ]
+}

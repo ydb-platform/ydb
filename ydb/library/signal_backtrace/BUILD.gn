@@ -1,0 +1,9 @@
+library("signal_backtrace") {
+  deps = [
+    "//library/cpp/dwarf_backtrace",
+    # "//library/cpp/logger",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [ "signal_backtrace.cpp" ]
+}

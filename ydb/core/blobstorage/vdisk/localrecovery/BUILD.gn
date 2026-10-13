@@ -1,0 +1,31 @@
+library("localrecovery") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/common:guids",
+    # "//ydb/core/blobstorage/vdisk:defs",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/time_provider",
+    "//ydb/core/blobstorage/vdisk/anubis_osiris",
+    "//ydb/core/blobstorage/vdisk/huge",
+    # "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    "//ydb/core/blobstorage/vdisk/hulldb/recovery",
+    "//ydb/core/blobstorage/vdisk/hullop",
+    "//ydb/core/blobstorage/vdisk/syncer",
+    "//ydb/core/blobstorage/vdisk/synclog",
+  ]
+
+  sources = [
+    "localrecovery_defs.cpp",
+    "localrecovery_logreplay.cpp",
+    "localrecovery_public.cpp",
+    "localrecovery_readbulksst.cpp",
+  ]
+}

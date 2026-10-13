@@ -1,0 +1,12 @@
+library("transform") {
+  public_deps = [ "//yql/essentials/core/dq_integration/transform" ]
+
+  deps = [
+    "//ydb/library/actors/core",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",  # peerdir only
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_common_dq_transform.cpp" ]
+}

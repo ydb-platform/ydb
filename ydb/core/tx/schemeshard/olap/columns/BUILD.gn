@@ -1,0 +1,23 @@
+library("columns") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/protos",
+    "//ydb/core/scheme_types",
+    "//ydb/core/tx/columnshard/engines/scheme/defaults/common",
+    "//ydb/core/tx/schemeshard/olap/common",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/scheme",
+    "//yql/essentials/minikql",
+    # "//yql/essentials/parser/pg_wrapper",
+    "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  sources = [
+    "schema.cpp",
+    "update.cpp",
+  ]
+}

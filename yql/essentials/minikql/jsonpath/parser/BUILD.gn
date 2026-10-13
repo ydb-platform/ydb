@@ -1,0 +1,36 @@
+config("parser_private_config") {
+  defines = [ "YDB_REWRAPPER_LIB_ID=kHyperscan" ]
+}
+
+library("parser") {
+  public_deps = [
+    # "//library/cpp/json",
+    "//yql/essentials/minikql/jsonpath/rewrapper",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//contrib/libs/double-conversion",
+    # "//contrib/libs/protobuf",
+    "//yql/essentials/ast",
+    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/minikql/jsonpath/rewrapper/re2",  # peerdir only
+    # "//yql/essentials/minikql/jsonpath/rewrapper:proto",
+    # "//yql/essentials/parser/proto_ast/antlr3",
+    "//yql/essentials/parser/proto_ast/gen/jsonpath",  # peerdir only
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "ast_builder.cpp",
+    "ast_nodes.cpp",
+    "binary.cpp",
+    "parse_double.cpp",
+    "parser.cpp",
+    "type_check.cpp",
+  ]
+
+  serialize_enum_headers = [ "ast_nodes.h" ]
+
+  configs = [ ":parser_private_config" ]
+}

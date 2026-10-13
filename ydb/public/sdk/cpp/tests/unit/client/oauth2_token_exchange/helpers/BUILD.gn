@@ -1,0 +1,19 @@
+library("helpers") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/http/misc",
+    "//library/cpp/http/server",
+    # "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange",
+  ]
+
+  deps = [
+    "//contrib/libs/jwt-cpp",  # peerdir only
+    # "//library/cpp/string_utils/base64",  # peerdir only
+  ]
+
+  sources = [ "test_token_exchange_server.cpp" ]
+}

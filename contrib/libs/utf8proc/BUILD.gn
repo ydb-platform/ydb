@@ -1,0 +1,8 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("utf8proc") {
+    sources = [ "utf8proc.c" ]
+    public_configs = [ ":public_config" ]
+}

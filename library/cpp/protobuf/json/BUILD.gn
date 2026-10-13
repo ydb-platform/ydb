@@ -1,0 +1,30 @@
+library("json") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/json",
+    # "//library/cpp/string_utils/relaxed_escaper",
+  ]
+
+  deps = [
+    ":proto",
+    # "//library/cpp/protobuf/runtime",  # peerdir only
+    # "//library/cpp/protobuf/util",  # peerdir only
+    "//library/cpp/string_utils/base64",
+  ]
+
+  sources = [
+    "json2proto.cpp",
+    "json_output_create.cpp",
+    "json_value_output.cpp",
+    "json_writer_output.cpp",
+    "name_generator.cpp",
+    "proto2json.cpp",
+    "proto2json_printer.cpp",
+    "string_transform.cpp",
+    "util.cpp",
+  ]
+}
+
+protobuf_library("proto") {
+  sources = [ "proto/enum_options.proto" ]
+}

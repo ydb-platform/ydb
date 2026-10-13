@@ -1,0 +1,5 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+group("proto_ast") {
+  public_deps = [ "//yql/essentials/parser/common" ]
+}

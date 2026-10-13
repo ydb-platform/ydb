@@ -1,0 +1,7 @@
+library("common") {
+  testonly = true
+
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [ "test_utils.cpp" ]
+}

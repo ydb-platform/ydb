@@ -1,0 +1,23 @@
+config("fetch_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("fetch") {
+  public_deps = [
+    "//library/cpp/http/io",
+    # "//library/cpp/retry",
+    "//library/cpp/uri",
+  ]
+
+  deps = [
+    "//library/cpp/charset/lite",
+    # "//library/cpp/http/misc",
+    "//library/cpp/openssl/io",
+    # "//yql/essentials/utils/fetch/proto",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "fetch.cpp" ]
+
+  configs = [ ":fetch_private_config" ]
+}

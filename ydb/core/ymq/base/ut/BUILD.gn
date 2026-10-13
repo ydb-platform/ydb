@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/ymq/base",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "action_ut.cpp",
+    "counters_ut.cpp",
+    "dlq_helpers_ut.cpp",
+    "helpers_ut.cpp",
+    "queue_attributes_ut.cpp",
+    "secure_protobuf_printer_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

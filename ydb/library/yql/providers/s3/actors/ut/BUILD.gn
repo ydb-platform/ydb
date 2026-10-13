@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/providers/s3/actors",
+    "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "yql_arrow_push_down_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/s3/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

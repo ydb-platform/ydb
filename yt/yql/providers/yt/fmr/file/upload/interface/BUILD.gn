@@ -1,0 +1,7 @@
+library("interface") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+  ]
+
+  sources = [ "yql_yt_file_upload_interface.cpp" ]
+}

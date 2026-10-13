@@ -1,0 +1,7 @@
+library("archive") {
+  sources = [
+    "directory_models_archive_reader.cpp",
+    "models_archive_reader.cpp",
+    "yarchive.cpp",
+  ]
+}

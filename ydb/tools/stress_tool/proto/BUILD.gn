@@ -1,0 +1,7 @@
+protobuf_library("proto") {
+  public_deps = [ "//ydb/core/protos" ]
+
+  sources = [ "device_perf_test.proto" ]
+
+  generate_grpc_services = true
+}

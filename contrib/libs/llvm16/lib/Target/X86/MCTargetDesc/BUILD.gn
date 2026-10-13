@@ -1,0 +1,41 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+config("private_config") {
+    include_dirs = [ "//contrib/libs/llvm16/lib/Target/X86" ]
+}
+
+llvm_library("MCTargetDesc") {
+    public_deps = [ "//contrib/libs/llvm16/lib/Target/X86:GenRegisterInfo" ]
+
+    deps = [
+        "//contrib/libs/llvm16/lib/BinaryFormat",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/MC:MCDisassembler",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/Target/X86:GenAsmWriter",
+        "//contrib/libs/llvm16/lib/Target/X86:GenAsmWriter1",
+        "//contrib/libs/llvm16/lib/Target/X86/TargetInfo",
+    ]
+
+    sources = [
+        "X86AsmBackend.cpp",
+        "X86ATTInstPrinter.cpp",
+        "X86ELFObjectWriter.cpp",
+        "X86InstComments.cpp",
+        "X86InstPrinterCommon.cpp",
+        "X86InstrRelaxTables.cpp",
+        "X86IntelInstPrinter.cpp",
+        "X86MachObjectWriter.cpp",
+        "X86MCAsmInfo.cpp",
+        "X86MCCodeEmitter.cpp",
+        "X86MCTargetDesc.cpp",
+        "X86MnemonicTables.cpp",
+        "X86ShuffleDecode.cpp",
+        "X86WinCOFFObjectWriter.cpp",
+        "X86WinCOFFStreamer.cpp",
+        "X86WinCOFFTargetStreamer.cpp",
+    ]
+
+    configs = [ ":private_config" ]
+}

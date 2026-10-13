@@ -1,0 +1,9 @@
+library("codecs") {
+  public_deps = [
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  sources = [ "pqv1.cpp" ]
+}

@@ -1,0 +1,37 @@
+library("sasl") {
+  public_deps = [
+    "//library/cpp/threading/atomic_shared_ptr",
+    "//ydb/core/base",
+    "//ydb/library/actors/core",
+    "//ydb/library/login/password_checker",
+    "//ydb/library/login/protos",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//contrib/libs/openssl",
+    "//library/cpp/digest/argonish",
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//ydb/core/protos",
+    "//ydb/core/security",
+    "//ydb/core/security/ldap_auth_provider",
+    "//ydb/core/tablet",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/library/login/hashes_checker",
+    "//ydb/library/login/sasl",
+    "//ydb/library/services",
+    "//ydb/library/ydb_issue",  # peerdir only
+    "//ydb/library/ydb_issue/proto",  # peerdir only
+  ]
+
+  sources = [
+    "base_auth_actors.cpp",
+    "hasher.cpp",
+    "plain_auth_actor.cpp",
+    "plain_ldap_auth_proxy_actor.cpp",
+    "scram_auth_actor.cpp",
+    "static_credentials_provider.cpp",
+  ]
+}

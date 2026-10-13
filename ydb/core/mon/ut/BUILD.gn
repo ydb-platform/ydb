@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/http/misc",
+    "//library/cpp/http/simple",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/mon",
+    "//ydb/core/mon:ut_utils",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/aclib",  # peerdir only
+    "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/mon/mon_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/mon" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

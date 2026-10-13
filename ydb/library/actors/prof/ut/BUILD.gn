@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/prof",
+  ]
+
+  sources = [ "tag_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/actors/prof" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,26 @@
+library("checkpointing") {
+  public_deps = [
+    "//ydb/core/fq/libs/checkpoint_storage/events",
+    # "//ydb/core/fq/libs/checkpointing/events",
+    "//ydb/core/fq/libs/checkpointing_common",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/library/yql/dq/actors",
+    "//ydb/library/yql/dq/state",
+  ]
+
+  sources = [
+    "checkpoint_coordinator.cpp",
+    "checkpoint_id_generator.cpp",
+    "pending_checkpoint.cpp",
+  ]
+}

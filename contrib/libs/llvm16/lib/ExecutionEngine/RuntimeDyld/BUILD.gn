@@ -1,0 +1,21 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("RuntimeDyld") {
+    deps = [
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/Object",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [
+        "JITSymbol.cpp",
+        "RTDyldMemoryManager.cpp",
+        "RuntimeDyld.cpp",
+        "RuntimeDyldChecker.cpp",
+        "RuntimeDyldCOFF.cpp",
+        "RuntimeDyldELF.cpp",
+        "RuntimeDyldMachO.cpp",
+        "Targets/RuntimeDyldELFMips.cpp",
+    ]
+}

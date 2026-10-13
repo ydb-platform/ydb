@@ -1,0 +1,10 @@
+library("scheduler") {
+  public_deps = [ "//ydb/library/actors/core" ]
+
+  deps = [
+    "//library/cpp/time_provider",  # peerdir only
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [ "scheduler_actor.cpp" ]
+}

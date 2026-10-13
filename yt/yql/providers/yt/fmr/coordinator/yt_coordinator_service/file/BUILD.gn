@@ -1,0 +1,15 @@
+library("file") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface",
+  ]
+
+  deps = [
+    # "//library/cpp/yson",
+    # "//yql/essentials/utils",
+    # "//yt/cpp/mapreduce/common",
+    # "//yt/yql/providers/yt/gateway/file",
+    # "//yt/yql/providers/yt/lib/yson_helpers",
+  ]
+
+  sources = [ "yql_yt_file_coordinator_service.cpp" ]
+}

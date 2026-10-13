@@ -1,0 +1,11 @@
+library("events") {
+  public_deps = [
+    # "//ydb/core/base",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/pdisk",
+  ]
+
+  deps = [ "//ydb/core/protos" ]
+
+  sources = [ "blobstorage_events.cpp" ]
+}

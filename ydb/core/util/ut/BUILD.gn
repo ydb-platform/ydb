@@ -1,0 +1,58 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "//ydb/core/util/address_classifier_ut.cpp",
+    "//ydb/core/util/bits_ut.cpp",
+    "//ydb/core/util/btree_cow_ut.cpp",
+    "//ydb/core/util/btree_ut.cpp",
+    "//ydb/core/util/cache_ut.cpp",
+    "//ydb/core/util/circular_queue_ut.cpp",
+    "//ydb/core/util/concurrent_rw_hash_ut.cpp",
+    "//ydb/core/util/event_priority_queue_ut.cpp",
+    "//ydb/core/util/fast_lookup_unique_list_ut.cpp",
+    "//ydb/core/util/fast_tls_ut.cpp",
+    "//ydb/core/util/fragmented_buffer_ut.cpp",
+    "//ydb/core/util/hazard_ut.cpp",
+    "//ydb/core/util/hyperlog_counter_ut.cpp",
+    "//ydb/core/util/interval_set_ut.cpp",
+    "//ydb/core/util/intrusive_fixed_hash_set_ut.cpp",
+    "//ydb/core/util/intrusive_heap_ut.cpp",
+    "//ydb/core/util/intrusive_stack_ut.cpp",
+    "//ydb/core/util/lf_stack_ut.cpp",
+    "//ydb/core/util/log_priority_mute_checker_ut.cpp",
+    "//ydb/core/util/lz4_data_generator_ut.cpp",
+    "//ydb/core/util/max_tracker_ut.cpp",
+    "//ydb/core/util/numerical_maybe_ut.cpp",
+    "//ydb/core/util/operation_queue_priority_ut.cpp",
+    "//ydb/core/util/operation_queue_ut.cpp",
+    "//ydb/core/util/page_map_ut.cpp",
+    "//ydb/core/util/queue_inplace_ut.cpp",
+    "//ydb/core/util/queue_oneone_inplace_ut.cpp",
+    "//ydb/core/util/simple_cache_ut.cpp",
+    "//ydb/core/util/stlog_ut.cpp",
+    "//ydb/core/util/token_bucket_ut.cpp",
+    "//ydb/core/util/ui64id_ut.cpp",
+    "//ydb/core/util/ulid_ut.cpp",
+    "//ydb/core/util/wildcard_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/util" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

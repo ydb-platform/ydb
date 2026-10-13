@@ -1,0 +1,14 @@
+library("write_meta") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    "//ydb/core/persqueue/public/codecs",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "write_meta.cpp" ]
+}

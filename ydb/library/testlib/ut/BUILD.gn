@@ -1,0 +1,7 @@
+gtest_executable("ut") {
+  deps = [ "//library/cpp/testing/gtest" ]
+
+  sources = [ "gtest_compat_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,19 @@
+library("inference") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//ydb/core/external_sources/object_storage",
+    "//ydb/library/yql/providers/s3/compressors",
+    "//ydb/library/yql/udfs/common/clickhouse/client",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "arrow_fetcher.cpp",
+    "arrow_inferencinator.cpp",
+    "infer_config.cpp",
+  ]
+}

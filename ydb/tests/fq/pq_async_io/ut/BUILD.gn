@@ -1,0 +1,51 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/testlib/basics:default",  # peerdir only
+    "//ydb/library/actors/testlib",
+    "//ydb/library/testlib/pq_helpers",
+    "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/common/ut_helpers",  # peerdir only
+    "//ydb/library/yql/providers/pq/async_io",  # peerdir only
+    "//ydb/library/yql/providers/pq/gateway/native",
+    "//ydb/public/sdk/cpp/src/client/datastreams",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
+    "//ydb/tests/fq/pq_async_io",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/computation/llvm16",  # peerdir only
+    "//yql/essentials/providers/common/comp_nodes",  # peerdir only
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/providers/common/schema/mkql",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql",  # peerdir only
+    "//yql/essentials/utils",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "dq_pq_rd_read_actor_ut.cpp",
+    "dq_pq_read_actor_ut.cpp",
+    "dq_pq_write_actor_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/library/yql/providers/pq/async_io",  # peerdir only
+  ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

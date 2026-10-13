@@ -1,0 +1,106 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-deprecated-declarations",
+        "-Wno-sign-compare",
+    ]
+}
+
+config("malloc_extension_private_config") {
+    defines = [ "TCMALLOC_256K_PAGES" ]
+}
+
+config("tcmalloc_private_config") {
+    defines = [ "TCMALLOC_INTERNAL_256K_PAGES" ]
+}
+
+contrib_library("malloc_extension") {
+    public_deps = [
+        "//contrib/restricted/abseil-cpp",
+    ]
+
+    sources = [
+        "tcmalloc/malloc_extension.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":public_config",
+        ":private_config",
+        ":malloc_extension_private_config",
+    ]
+}
+
+contrib_library("tcmalloc") {
+    static = true
+
+    deps = [ ":malloc_extension" ]
+
+    sources = [
+        "tcmalloc/allocation_sample.cc",
+        "tcmalloc/allocation_sampling.cc",
+        "tcmalloc/arena.cc",
+        "tcmalloc/background.cc",
+        "tcmalloc/central_freelist.cc",
+        "tcmalloc/common.cc",
+        "tcmalloc/cpu_cache.cc",
+        "tcmalloc/deallocation_profiler.cc",
+        "tcmalloc/experiment.cc",
+        "tcmalloc/experimental_pow2_size_class.cc",
+        "tcmalloc/global_stats.cc",
+        "tcmalloc/guarded_page_allocator.cc",
+        "tcmalloc/huge_address_map.cc",
+        "tcmalloc/huge_allocator.cc",
+        "tcmalloc/huge_cache.cc",
+        "tcmalloc/huge_page_aware_allocator.cc",
+        "tcmalloc/internal/affinity.cc",
+        "tcmalloc/internal/allocation_guard.cc",
+        "tcmalloc/internal/cache_topology.cc",
+        "tcmalloc/internal/environment.cc",
+        "tcmalloc/internal/logging.cc",
+        "tcmalloc/internal/memory_stats.cc",
+        "tcmalloc/internal/memory_tag.cc",
+        "tcmalloc/internal/mincore.cc",
+        "tcmalloc/internal/numa.cc",
+        "tcmalloc/internal/page_size.cc",
+        "tcmalloc/internal/pageflags.cc",
+        "tcmalloc/internal/percpu_rseq_asm.S",
+        "tcmalloc/internal/percpu_rseq_unsupported.cc",
+        "tcmalloc/internal/percpu.cc",
+        "tcmalloc/internal/proc_maps.cc",
+        "tcmalloc/internal/residency.cc",
+        "tcmalloc/internal/sysinfo.cc",
+        "tcmalloc/internal/util.cc",
+        "tcmalloc/legacy_size_classes.cc",
+        "tcmalloc/page_allocator_interface.cc",
+        "tcmalloc/page_allocator.cc",
+        "tcmalloc/pagemap.cc",
+        "tcmalloc/parameters.cc",
+        "tcmalloc/peak_heap_tracker.cc",
+        "tcmalloc/reuse_size_classes.cc",
+        "tcmalloc/sampler.cc",
+        "tcmalloc/segv_handler.cc",
+        "tcmalloc/size_classes.cc",
+        "tcmalloc/sizemap.cc",
+        "tcmalloc/span.cc",
+        "tcmalloc/stack_trace_table.cc",
+        "tcmalloc/static_vars.cc",
+        "tcmalloc/stats.cc",
+        "tcmalloc/system-alloc.cc",
+        "tcmalloc/tcmalloc.cc",
+        "tcmalloc/thread_cache.cc",
+        "tcmalloc/transfer_cache.cc",
+        "tcmalloc/want_hpaa.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":private_config",
+        ":tcmalloc_private_config",
+    ]
+
+    link_slot_provides = [ "allocator" ]
+}

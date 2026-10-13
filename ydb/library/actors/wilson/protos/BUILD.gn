@@ -1,0 +1,5 @@
+group("protos") {
+  deps = [
+    # "//contrib/libs/opentelemetry-proto",  # peerdir only
+  ]
+}

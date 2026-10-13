@@ -1,0 +1,19 @@
+library("yson_string") {
+  public_deps = [
+    # "//library/cpp/containers/cow_string",
+    "//library/cpp/yt/exception",
+    "//library/cpp/yt/memory",
+    "//library/cpp/yt/misc",
+    "//library/cpp/yt/string",
+  ]
+
+  deps = [
+    "//library/cpp/yt/assert",
+    # "//library/cpp/yt/coding",
+  ]
+
+  sources = [
+    "convert.cpp",
+    "string.cpp",
+  ]
+}

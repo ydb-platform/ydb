@@ -1,0 +1,15 @@
+library("range_helpers") {
+  public_deps = [ "//ydb/library/yql/providers/s3/proto" ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/protobuf/util",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "file_tree_builder.cpp",
+    "path_list_reader.cpp",
+  ]
+}

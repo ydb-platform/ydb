@@ -1,0 +1,128 @@
+config("helpers_private_config") {
+  cflags = [ "-Wno-ambiguous-reversed-operator" ]
+}
+
+library("helpers") {
+  public_deps = [
+    "//ydb/core/kqp/common",
+    "//ydb/core/kqp/provider",
+    "//ydb/library/yql/dq/opt",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/cbo",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "kqp_opt.cpp" ]
+
+  configs = [ ":helpers_private_config" ]
+}
+
+library("opt") {
+  public_deps = [
+    ":helpers",
+    # "//library/cpp/json",
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/expr_nodes",
+    "//ydb/core/kqp/gateway/actors",
+    "//ydb/core/kqp/opt/logical",
+    "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+    # "//ydb/core/statistics",
+    "//ydb/core/statistics/service:service_id",
+    "//ydb/library/yql/dq/opt",
+    # "//yql/essentials/ast",
+    "//yql/essentials/core",
+    # "//yql/essentials/core/type_ann",
+    "//yql/essentials/utils/log",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/protobuf/json",
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/gateway:interface",
+    "//ydb/core/kqp/opt/peephole",
+    "//ydb/core/kqp/opt/physical",
+    "//ydb/library/formats/arrow/protos",
+    "//ydb/library/yql/dq/actors/protos",
+    # "//ydb/library/yql/dq/common",
+    # "//ydb/library/yql/dq/tasks",
+    "//ydb/library/yql/dq/type_ann",
+    # "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    # "//ydb/library/yql/providers/s3/expr_nodes",
+    # "//ydb/library/yql/providers/s3/statistics",
+    "//ydb/library/yql/utils/plan",
+    "//ydb/public/lib/value",
+    # "//ydb/public/lib/ydb_cli/common",
+    # "//yql/essentials/core/cbo",
+    # "//yql/essentials/core/dq_integration",
+    # "//yql/essentials/core/expr_nodes",
+    "//yql/essentials/core/peephole_opt",
+    "//yql/essentials/core/services",  # peerdir only
+    "//yql/essentials/core/services:pipeline",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/types/uuid",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "kqp_column_statistics_requester.cpp",
+    "kqp_column_statistics_utils.cpp",
+    "kqp_constant_folding_transformer.cpp",
+    "kqp_opt_build_phy_query.cpp",
+    "kqp_opt_build_txs.cpp",
+    "kqp_opt_effects.cpp",
+    "kqp_opt_hash_func_propagate_transformer.cpp",
+    "kqp_opt_kql.cpp",
+    "kqp_opt_phase.cpp",
+    "kqp_opt_phy_check.cpp",
+    "kqp_opt_phy_finalize.cpp",
+    "kqp_opt_sink_precompute.cpp",
+    "kqp_query_blocks_transformer.cpp",
+    "kqp_query_plan.cpp",
+    "kqp_statistics_transformer.cpp",
+    "kqp_type_ann.cpp",
+    "rbo/kqp_expression.cpp",
+    "rbo/kqp_operator.cpp",
+    "rbo/kqp_plan_conversion_utils.cpp",
+    "rbo/kqp_rbo.cpp",
+    "rbo/kqp_rbo_compute_statistics.cpp",
+    "rbo/kqp_rbo_statistics.cpp",
+    "rbo/kqp_rbo_transformer.cpp",
+    "rbo/kqp_rbo_type_ann.cpp",
+    "rbo/kqp_rbo_utils.cpp",
+    "rbo/kqp_rewrite_select.cpp",
+    "rbo/kqp_stage_graph.cpp",
+    "rbo/physical_convertion/kqp_rbo_convert_to_physical.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_aggregation_builder.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_convertion_utils.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_filter_builder.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_join_builder.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_map_builder.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_query_builder.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_sort_builder.cpp",
+    "rbo/physical_convertion/kqp_rbo_physical_source_builder.cpp",
+    "rbo/rules/apply_cbo.cpp",
+    "rbo/rules/assign_stages.cpp",
+    "rbo/rules/build_initial_cbo_tree.cpp",
+    "rbo/rules/constant_folding_stage.cpp",
+    "rbo/rules/correlated_filter_pullup.cpp",
+    "rbo/rules/expand_cbo_tree.cpp",
+    "rbo/rules/extract_join_expressions.cpp",
+    "rbo/rules/inline_cbo_tree.cpp",
+    "rbo/rules/inline_scalar_subplan.cpp",
+    "rbo/rules/inline_simple_in_exists_subplan.cpp",
+    "rbo/rules/peephole_predicate.cpp",
+    "rbo/rules/prune_columns_stage.cpp",
+    "rbo/rules/push_filter_into_join.cpp",
+    "rbo/rules/push_filter_under_map.cpp",
+    "rbo/rules/push_limit_into_sort.cpp",
+    "rbo/rules/push_map.cpp",
+    "rbo/rules/push_olap_filter.cpp",
+    "rbo/rules/remove_extra_renames_stage.cpp",
+    "rbo/rules/remove_identity_map.cpp",
+  ]
+
+  serialize_enum_headers = [ "kqp_query_plan.h" ]
+}

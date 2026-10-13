@@ -1,0 +1,68 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    defines = [ "FLATBUFFERS_LOCALE_INDEPENDENT=1" ]
+    include_dirs = [
+        "grpc",
+        "include",
+    ]
+}
+
+contrib_tool("flatc") {
+    sources = [
+        "grpc/src/compiler/cpp_generator.cc",
+        "grpc/src/compiler/go_generator.cc",
+        "grpc/src/compiler/java_generator.cc",
+        "grpc/src/compiler/python_generator.cc",
+        "grpc/src/compiler/swift_generator.cc",
+        "grpc/src/compiler/ts_generator.cc",
+        "src/annotated_binary_text_gen.cpp",
+        "src/bfbs_gen_lua.cpp",
+        "src/bfbs_gen_nim.cpp",
+        "src/binary_annotator.cpp",
+        "src/code_generators.cpp",
+        "src/file_binary_writer.cpp",
+        "src/file_name_saving_file_manager.cpp",
+        "src/file_writer.cpp",
+        "src/flatc_main.cpp",
+        "src/flatc.cpp",
+        "src/idl_gen_binary.cpp",
+        "src/idl_gen_cpp_yandex_maps_iter.cpp",
+        "src/idl_gen_cpp.cpp",
+        "src/idl_gen_csharp.cpp",
+        "src/idl_gen_dart.cpp",
+        "src/idl_gen_fbs.cpp",
+        "src/idl_gen_go.cpp",
+        "src/idl_gen_grpc.cpp",
+        "src/idl_gen_java.cpp",
+        "src/idl_gen_json_schema.cpp",
+        "src/idl_gen_kotlin_kmp.cpp",
+        "src/idl_gen_kotlin.cpp",
+        "src/idl_gen_lobster.cpp",
+        "src/idl_gen_php.cpp",
+        "src/idl_gen_python.cpp",
+        "src/idl_gen_rust.cpp",
+        "src/idl_gen_swift.cpp",
+        "src/idl_gen_text.cpp",
+        "src/idl_gen_ts.cpp",
+        "src/idl_parser.cpp",
+        "src/reflection.cpp",
+        "src/util.cpp",
+    ]
+
+    configs = [ ":private_config" ]
+}
+
+contrib_library("flatbuffers") {
+    sources = [
+        "src/idl_gen_text.cpp",
+        "src/idl_parser.cpp",
+        "src/reflection.cpp",
+        "src/util.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

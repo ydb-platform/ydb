@@ -1,0 +1,8 @@
+protobuf_library("proto") {
+  public_deps = [
+    "//ydb/library/yql/dq/proto",
+    "//ydb/library/yql/providers/dq/api/protos",
+  ]
+
+  sources = [ "graph_params.proto" ]
+}

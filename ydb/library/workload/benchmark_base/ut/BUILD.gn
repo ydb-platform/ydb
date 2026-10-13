@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/workload/benchmark_base",
+  ]
+
+  sources = [ "//ydb/library/workload/benchmark_base/state_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/workload/benchmark_base" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

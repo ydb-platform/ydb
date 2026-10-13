@@ -1,0 +1,8 @@
+library("solomon_helpers") {
+  deps = [
+    "//library/cpp/http/simple",
+    "//library/cpp/retry",
+  ]
+
+  sources = [ "solomon_emulator_helpers.cpp" ]
+}

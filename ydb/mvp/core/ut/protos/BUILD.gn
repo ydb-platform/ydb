@@ -1,0 +1,8 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/public/api/client/nc_private",
+    "//ydb/public/api/client/yc_private/accessservice",
+  ]
+
+  sources = [ "masking_test.proto" ]
+}

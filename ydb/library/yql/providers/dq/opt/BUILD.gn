@@ -1,0 +1,33 @@
+library("opt") {
+  public_deps = [
+    "//ydb/library/yql/providers/dq/common",
+    # "//yql/essentials/core",
+  ]
+
+  deps = [
+    # "//library/cpp/yson/node",
+    # "//ydb/library/yql/dq/expr_nodes",
+    "//ydb/library/yql/dq/opt",
+    # "//ydb/library/yql/dq/type_ann",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    # "//yql/essentials/core/dq_integration",
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/core/peephole_opt",
+    # "//yql/essentials/core/type_ann",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator",
+    "//yql/essentials/providers/common/codec",
+    "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/transform",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "dqs_opt.cpp",
+    "logical_optimize.cpp",
+    "physical_optimize.cpp",
+  ]
+}

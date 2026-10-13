@@ -1,0 +1,31 @@
+unittest_executable("high_load") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/services/ydb",  # peerdir only
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "read_update_write.cpp" ]
+
+  include_dirs = [
+    "//ydb/services/ydb",  # peerdir only
+  ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

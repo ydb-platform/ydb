@@ -1,0 +1,9 @@
+linked_executable("tuples_to_bucket") {
+  testonly = true
+
+  deps = [ "//ydb/library/yql/dq/comp_nodes/hash_join_utils/simd" ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

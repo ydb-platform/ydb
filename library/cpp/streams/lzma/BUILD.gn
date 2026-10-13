@@ -1,0 +1,5 @@
+library("lzma") {
+  deps = [ "//contrib/libs/lzmasdk" ]
+
+  sources = [ "lzma.cpp" ]
+}

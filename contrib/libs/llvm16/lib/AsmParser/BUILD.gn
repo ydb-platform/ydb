@@ -1,0 +1,14 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("AsmParser") {
+    deps = [
+        "//contrib/libs/llvm16/lib/BinaryFormat",
+        "//contrib/libs/llvm16/lib/IR",
+    ]
+
+    sources = [
+        "LLLexer.cpp",
+        "LLParser.cpp",
+        "Parser.cpp",
+    ]
+}

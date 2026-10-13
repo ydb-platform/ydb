@@ -1,0 +1,48 @@
+unittest_executable("ut_export") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/hook",
+    "//ydb/core/backup/common",
+    "//ydb/core/base",
+    "//ydb/core/metering",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/audit_helpers",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/util",
+    "//ydb/core/wrappers",
+    "//ydb/core/wrappers:ut_helpers",
+    "//ydb/public/api/protos",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "ut_export.cpp",
+    "ut_export_fs.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  data = [ "//ydb/tests/supp/" ]
+
+  test_depends_unbuilt = [ "//ydb/tests/supp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

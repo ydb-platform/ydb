@@ -1,0 +1,18 @@
+library("yson_pull") {
+  sources = [
+    "consumer.cpp",
+    "event.cpp",
+    "exceptions.cpp",
+    "input.cpp",
+    "output.cpp",
+    "read_ops.cpp",
+    "reader.cpp",
+    "scalar.cpp",
+    "writer.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "event.h",
+    "scalar.h",
+  ]
+}

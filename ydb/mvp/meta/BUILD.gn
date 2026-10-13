@@ -1,0 +1,60 @@
+library("meta") {
+  public_deps = [
+    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/deprecated/atomic",
+    # "//library/cpp/getopt",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/mvp/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/digest/md5",
+    "//library/cpp/protobuf/json",  # peerdir only
+    # "//ydb/core/ydb_convert",
+    # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    # "//ydb/mvp/core:protos",
+    "//ydb/public/api/client/yc_private/resourcemanager",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/deprecated/client",
+    # "//ydb/public/sdk/cpp/src/client/draft",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",
+    # "//yql/essentials/core/expr_nodes",  # peerdir only
+    # "//yql/essentials/providers/result/expr_nodes",  # peerdir only
+    # "//yql/essentials/public/udf",  # peerdir only
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+  ]
+
+  sources = [
+    "meta.cpp",
+    "meta_cache.cpp",
+    "meta_versions.cpp",
+    "mvp.cpp",
+  ]
+}
+
+linked_executable("mvp_meta") {
+  deps = [
+    ":meta",
+    "//library/cpp/getopt",  # peerdir only
+  ]
+
+  sources = [ "bin/main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=dbg",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,46 @@
+library("actors") {
+  public_deps = [
+    ":cpu_load_actors",
+    ":scheme_actors",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/kqp/common/events",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/workload_service/common",
+    "//ydb/core/kqp/workload_service/tables",
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+  ]
+
+  sources = [ "pool_handlers_actors.cpp" ]
+}
+
+library("cpu_load_actors") {
+  deps = [
+    # ":actors",
+    "//ydb/core/kqp/workload_service/common",
+    "//ydb/library/query_actor",
+  ]
+
+  sources = [ "cpu_load_actors.cpp" ]
+}
+
+library("scheme_actors") {
+  deps = [
+    # ":actors",
+    # "//ydb/core/base",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/workload_service/common",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tablet",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/table_creator",
+  ]
+
+  sources = [ "scheme_actors.cpp" ]
+}

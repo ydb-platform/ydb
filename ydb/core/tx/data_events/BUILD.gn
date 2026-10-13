@@ -1,0 +1,42 @@
+library("data_events") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/lwtrace",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/data_events/common",
+    "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/util",
+    "//ydb/library/actors/wilson",
+    "//ydb/library/conclusion",
+    "//ydb/library/formats/arrow:modifier",
+    "//ydb/library/signals",
+    "//ydb/public/api/protos",
+    "//yql/essentials/core/issue",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//ydb/core/blobstorage/vdisk/protos",  # peerdir only
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/tablet_flat/protos",  # peerdir only
+    "//ydb/core/tx/columnshard/splitter:settings",
+    "//ydb/core/tx/sharding",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+  ]
+
+  sources = [
+    "columnshard_splitter.cpp",
+    "shard_writer.cpp",
+    "shards_splitter.cpp",
+    "write_data.cpp",
+  ]
+}

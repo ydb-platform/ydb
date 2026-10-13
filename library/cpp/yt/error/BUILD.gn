@@ -1,0 +1,27 @@
+library("error") {
+  public_deps = [
+    # "//library/cpp/yt/containers",
+    "//library/cpp/yt/global",
+    # "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+    "//library/cpp/yt/string",
+    # "//library/cpp/yt/threading",
+    # "//library/cpp/yt/yson_string",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/assert",
+    # "//library/cpp/yt/coding",
+    # "//library/cpp/yt/exception",
+    "//library/cpp/yt/logging",
+    # "//library/cpp/yt/system",
+  ]
+
+  sources = [
+    "error.cpp",
+    "error_attributes.cpp",
+    "error_code.cpp",
+    "origin_attributes.cpp",
+    "text_yson.cpp",
+  ]
+}

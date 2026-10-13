@@ -1,0 +1,60 @@
+library("lib") {
+  testonly = true
+
+  public_deps = [
+    "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    "//ydb/library/actors/protos",
+    "//ydb/library/keys",  # peerdir only
+  ]
+
+  deps = [
+    # "//library/cpp/http/io",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/openssl/io",
+    "//library/cpp/string_utils/url",
+    "//library/cpp/testing/unittest",
+    # "//ydb/core/base",
+    # "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/backpressure",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/crypto",
+    # "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk",
+    "//ydb/core/blobstorage/vdisk/huge",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/repl",
+    "//ydb/core/blobstorage/vdisk/skeleton",
+    "//ydb/core/blobstorage/vdisk/synclog",
+    # "//ydb/core/erasure",
+    "//ydb/core/mon",
+    # "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/pdisk_io",
+  ]
+
+  sources = [
+    "dataset.cpp",
+    "helpers.cpp",
+    "http_client.cpp",
+    "prepare.cpp",
+    "test_bad_blobid.cpp",
+    "test_brokendevice.cpp",
+    "test_dbstat.cpp",
+    "test_defrag.cpp",
+    "test_faketablet.cpp",
+    "test_gc.cpp",
+    "test_huge.cpp",
+    "test_load.cpp",
+    "test_localrecovery.cpp",
+    "test_many.cpp",
+    "test_outofspace.cpp",
+    "test_repl.cpp",
+    "test_simplebs.cpp",
+    "test_synclog.cpp",
+    "vdisk_mock.cpp",
+  ]
+}

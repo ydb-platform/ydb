@@ -1,0 +1,3009 @@
+library("viewer") {
+  public_deps = [
+    ":yaml",
+    # "//library/cpp/protobuf/json",
+    # "//library/cpp/string_utils/base64",
+    # "//ydb/core/base",
+    "//ydb/core/blobstorage/events",
+    # "//ydb/core/cms/console",
+    "//ydb/core/driver_lib/run:config",
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/kqp/common/events",
+    "//ydb/core/node_whiteboard",
+    # "//ydb/core/scheme",
+    # "//ydb/core/sys_view/common",
+    "//ydb/core/tablet",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    "//ydb/core/viewer/json",
+    "//ydb/core/viewer/protos",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/http",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/wilson",
+    "//ydb/library/services",
+    # "//ydb/library/wilson_ids",
+    # "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/archive",  # peerdir only
+    # "//library/cpp/digest/md5",
+    # "//library/cpp/json",
+    # "//library/cpp/mime/types",
+    "//library/cpp/monlib/encode/prometheus",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/yaml/as",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/client/server",
+    "//ydb/core/external_sources",
+    # "//ydb/core/graph/api",
+    # "//ydb/core/grpc_services/local_rpc",
+    # "//ydb/core/health_check",  # peerdir only
+    # "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/proxy_service",
+    # "//ydb/core/mon",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    # "//ydb/core/persqueue/public/partition_key_range",
+    "//ydb/core/persqueue/public/write_meta",
+    "//ydb/core/persqueue/writer",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/tx/datashard",
+    # "//ydb/core/ydb_convert",
+    "//ydb/library/aclib",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/persqueue/topic_parser",
+    # "//ydb/library/yaml_config",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/deprecated/kicli",  # peerdir only
+    "//ydb/public/lib/json_value",
+    # "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/operation_id/protos",
+    # "//ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public",
+    "//ydb/services/lib/auth",
+    # "//ydb/services/lib/sharding",
+    "//ydb/services/persqueue_v1",  # link slot
+    # "//ydb/services/replication",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "json_handlers.cpp",
+    "json_handlers_browse.cpp",
+    "json_handlers_operation.cpp",
+    "json_handlers_pdisk.cpp",
+    "json_handlers_pq.cpp",
+    "json_handlers_query.cpp",
+    "json_handlers_scheme.cpp",
+    "json_handlers_vdisk.cpp",
+    "json_handlers_viewer.cpp",
+    "json_pipe_req.cpp",
+    "json_wb_req.cpp",
+    "viewer.cpp",
+    "viewer_request.cpp",
+    "viewer_topic_data.cpp",
+    "wb_aggregate.cpp",
+    "wb_filter.cpp",
+    "wb_merge.cpp",
+  ]
+
+  resources = [
+    {
+      path = "monitoring/CHANGELOG.md"
+      key = "monitoring/CHANGELOG.md"
+    },
+    {
+      path = "monitoring/editor.worker.js"
+      key = "monitoring/editor.worker.js"
+    },
+    {
+      path = "monitoring/index.html"
+      key = "monitoring/index.html"
+    },
+    {
+      path = "monitoring/static/css/13708.897f6bb1.css"
+      key = "monitoring/static/css/13708.897f6bb1.css"
+    },
+    {
+      path = "monitoring/static/css/async/13783.ee247d98.css"
+      key = "monitoring/static/css/async/13783.ee247d98.css"
+    },
+    {
+      path = "monitoring/static/css/async/15145.cf1dcc4c.css"
+      key = "monitoring/static/css/async/15145.cf1dcc4c.css"
+    },
+    {
+      path = "monitoring/static/css/async/15888.559da383.css"
+      key = "monitoring/static/css/async/15888.559da383.css"
+    },
+    {
+      path = "monitoring/static/css/async/2026.2c4e6ced.css"
+      key = "monitoring/static/css/async/2026.2c4e6ced.css"
+    },
+    {
+      path = "monitoring/static/css/async/21239.5b5e4ac2.css"
+      key = "monitoring/static/css/async/21239.5b5e4ac2.css"
+    },
+    {
+      path = "monitoring/static/css/async/21678.633b5b03.css"
+      key = "monitoring/static/css/async/21678.633b5b03.css"
+    },
+    {
+      path = "monitoring/static/css/async/24662.b4b8d8e3.css"
+      key = "monitoring/static/css/async/24662.b4b8d8e3.css"
+    },
+    {
+      path = "monitoring/static/css/async/24712.584b7f08.css"
+      key = "monitoring/static/css/async/24712.584b7f08.css"
+    },
+    {
+      path = "monitoring/static/css/async/27518.470b5678.css"
+      key = "monitoring/static/css/async/27518.470b5678.css"
+    },
+    {
+      path = "monitoring/static/css/async/35254.7628be1b.css"
+      key = "monitoring/static/css/async/35254.7628be1b.css"
+    },
+    {
+      path = "monitoring/static/css/async/42042.eb3c89ef.css"
+      key = "monitoring/static/css/async/42042.eb3c89ef.css"
+    },
+    {
+      path = "monitoring/static/css/async/6029.a5352a23.css"
+      key = "monitoring/static/css/async/6029.a5352a23.css"
+    },
+    {
+      path = "monitoring/static/css/async/70950.34a956cb.css"
+      key = "monitoring/static/css/async/70950.34a956cb.css"
+    },
+    {
+      path = "monitoring/static/css/async/77099.8cbc2f23.css"
+      key = "monitoring/static/css/async/77099.8cbc2f23.css"
+    },
+    {
+      path = "monitoring/static/css/async/80432.868dea2d.css"
+      key = "monitoring/static/css/async/80432.868dea2d.css"
+    },
+    {
+      path = "monitoring/static/css/async/86222.b4d7cefa.css"
+      key = "monitoring/static/css/async/86222.b4d7cefa.css"
+    },
+    {
+      path = "monitoring/static/css/index.7b9a53d3.css"
+      key = "monitoring/static/css/index.7b9a53d3.css"
+    },
+    {
+      path = "monitoring/static/favicon.png"
+      key = "monitoring/static/favicon.png"
+    },
+    {
+      path = "monitoring/static/js/13708.33fbd484.js"
+      key = "monitoring/static/js/13708.33fbd484.js"
+    },
+    {
+      path = "monitoring/static/js/13708.33fbd484.js.LICENSE.txt"
+      key = "monitoring/static/js/13708.33fbd484.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/10103.2b987b59.js"
+      key = "monitoring/static/js/async/10103.2b987b59.js"
+    },
+    {
+      path = "monitoring/static/js/async/10183.8c539f92.js"
+      key = "monitoring/static/js/async/10183.8c539f92.js"
+    },
+    {
+      path = "monitoring/static/js/async/10273.40deb6ab.js"
+      key = "monitoring/static/js/async/10273.40deb6ab.js"
+    },
+    {
+      path = "monitoring/static/js/async/1063.582a7f5a.js"
+      key = "monitoring/static/js/async/1063.582a7f5a.js"
+    },
+    {
+      path = "monitoring/static/js/async/10650.9dad8a42.js"
+      key = "monitoring/static/js/async/10650.9dad8a42.js"
+    },
+    {
+      path = "monitoring/static/js/async/10708.bc2661b7.js"
+      key = "monitoring/static/js/async/10708.bc2661b7.js"
+    },
+    {
+      path = "monitoring/static/js/async/10800.017514a5.js"
+      key = "monitoring/static/js/async/10800.017514a5.js"
+    },
+    {
+      path = "monitoring/static/js/async/10883.d3d9e388.js"
+      key = "monitoring/static/js/async/10883.d3d9e388.js"
+    },
+    {
+      path = "monitoring/static/js/async/10883.d3d9e388.js.LICENSE.txt"
+      key = "monitoring/static/js/async/10883.d3d9e388.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/11101.9f5d896a.js"
+      key = "monitoring/static/js/async/11101.9f5d896a.js"
+    },
+    {
+      path = "monitoring/static/js/async/11563.094c639c.js"
+      key = "monitoring/static/js/async/11563.094c639c.js"
+    },
+    {
+      path = "monitoring/static/js/async/11755.d6879b9d.js"
+      key = "monitoring/static/js/async/11755.d6879b9d.js"
+    },
+    {
+      path = "monitoring/static/js/async/11755.d6879b9d.js.LICENSE.txt"
+      key = "monitoring/static/js/async/11755.d6879b9d.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/1179.8ed56da0.js"
+      key = "monitoring/static/js/async/1179.8ed56da0.js"
+    },
+    {
+      path = "monitoring/static/js/async/11930.eb008365.js"
+      key = "monitoring/static/js/async/11930.eb008365.js"
+    },
+    {
+      path = "monitoring/static/js/async/12190.7acb500e.js"
+      key = "monitoring/static/js/async/12190.7acb500e.js"
+    },
+    {
+      path = "monitoring/static/js/async/12753.2b75a04f.js"
+      key = "monitoring/static/js/async/12753.2b75a04f.js"
+    },
+    {
+      path = "monitoring/static/js/async/12765.7f44f7d7.js"
+      key = "monitoring/static/js/async/12765.7f44f7d7.js"
+    },
+    {
+      path = "monitoring/static/js/async/12984.cfb4b165.js"
+      key = "monitoring/static/js/async/12984.cfb4b165.js"
+    },
+    {
+      path = "monitoring/static/js/async/13677.7595b2ae.js"
+      key = "monitoring/static/js/async/13677.7595b2ae.js"
+    },
+    {
+      path = "monitoring/static/js/async/13783.e72d9a2d.js"
+      key = "monitoring/static/js/async/13783.e72d9a2d.js"
+    },
+    {
+      path = "monitoring/static/js/async/13903.503e04f9.js"
+      key = "monitoring/static/js/async/13903.503e04f9.js"
+    },
+    {
+      path = "monitoring/static/js/async/13907.5419f8ae.js"
+      key = "monitoring/static/js/async/13907.5419f8ae.js"
+    },
+    {
+      path = "monitoring/static/js/async/13979.350001bb.js"
+      key = "monitoring/static/js/async/13979.350001bb.js"
+    },
+    {
+      path = "monitoring/static/js/async/13979.350001bb.js.LICENSE.txt"
+      key = "monitoring/static/js/async/13979.350001bb.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/14095.e0c884f1.js"
+      key = "monitoring/static/js/async/14095.e0c884f1.js"
+    },
+    {
+      path = "monitoring/static/js/async/14095.e0c884f1.js.LICENSE.txt"
+      key = "monitoring/static/js/async/14095.e0c884f1.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/14323.2c384ec1.js"
+      key = "monitoring/static/js/async/14323.2c384ec1.js"
+    },
+    {
+      path = "monitoring/static/js/async/14323.2c384ec1.js.LICENSE.txt"
+      key = "monitoring/static/js/async/14323.2c384ec1.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/14509.d66ac416.js"
+      key = "monitoring/static/js/async/14509.d66ac416.js"
+    },
+    {
+      path = "monitoring/static/js/async/14598.3674ebc4.js"
+      key = "monitoring/static/js/async/14598.3674ebc4.js"
+    },
+    {
+      path = "monitoring/static/js/async/14627.815dfc8f.js"
+      key = "monitoring/static/js/async/14627.815dfc8f.js"
+    },
+    {
+      path = "monitoring/static/js/async/14627.815dfc8f.js.LICENSE.txt"
+      key = "monitoring/static/js/async/14627.815dfc8f.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/1469.9b21d86d.js"
+      key = "monitoring/static/js/async/1469.9b21d86d.js"
+    },
+    {
+      path = "monitoring/static/js/async/15087.4a4178fb.js"
+      key = "monitoring/static/js/async/15087.4a4178fb.js"
+    },
+    {
+      path = "monitoring/static/js/async/15139.ff494037.js"
+      key = "monitoring/static/js/async/15139.ff494037.js"
+    },
+    {
+      path = "monitoring/static/js/async/1514.f953c72e.js"
+      key = "monitoring/static/js/async/1514.f953c72e.js"
+    },
+    {
+      path = "monitoring/static/js/async/15145.1da6c689.js"
+      key = "monitoring/static/js/async/15145.1da6c689.js"
+    },
+    {
+      path = "monitoring/static/js/async/15367.d8f40316.js"
+      key = "monitoring/static/js/async/15367.d8f40316.js"
+    },
+    {
+      path = "monitoring/static/js/async/15408.7e573b4b.js"
+      key = "monitoring/static/js/async/15408.7e573b4b.js"
+    },
+    {
+      path = "monitoring/static/js/async/1557.9b60f198.js"
+      key = "monitoring/static/js/async/1557.9b60f198.js"
+    },
+    {
+      path = "monitoring/static/js/async/15640.7d6f2319.js"
+      key = "monitoring/static/js/async/15640.7d6f2319.js"
+    },
+    {
+      path = "monitoring/static/js/async/15736.36200b96.js"
+      key = "monitoring/static/js/async/15736.36200b96.js"
+    },
+    {
+      path = "monitoring/static/js/async/15809.69c1aa15.js"
+      key = "monitoring/static/js/async/15809.69c1aa15.js"
+    },
+    {
+      path = "monitoring/static/js/async/15819.064fb058.js"
+      key = "monitoring/static/js/async/15819.064fb058.js"
+    },
+    {
+      path = "monitoring/static/js/async/15888.25c4f894.js"
+      key = "monitoring/static/js/async/15888.25c4f894.js"
+    },
+    {
+      path = "monitoring/static/js/async/16069.11e227e6.js"
+      key = "monitoring/static/js/async/16069.11e227e6.js"
+    },
+    {
+      path = "monitoring/static/js/async/16919.e262ebda.js"
+      key = "monitoring/static/js/async/16919.e262ebda.js"
+    },
+    {
+      path = "monitoring/static/js/async/17161.abdb152f.js"
+      key = "monitoring/static/js/async/17161.abdb152f.js"
+    },
+    {
+      path = "monitoring/static/js/async/17386.3665b6fe.js"
+      key = "monitoring/static/js/async/17386.3665b6fe.js"
+    },
+    {
+      path = "monitoring/static/js/async/17533.b5e66525.js"
+      key = "monitoring/static/js/async/17533.b5e66525.js"
+    },
+    {
+      path = "monitoring/static/js/async/17663.5d7c935e.js"
+      key = "monitoring/static/js/async/17663.5d7c935e.js"
+    },
+    {
+      path = "monitoring/static/js/async/17663.5d7c935e.js.LICENSE.txt"
+      key = "monitoring/static/js/async/17663.5d7c935e.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/18327.5941e8fa.js"
+      key = "monitoring/static/js/async/18327.5941e8fa.js"
+    },
+    {
+      path = "monitoring/static/js/async/18729.15e40cf1.js"
+      key = "monitoring/static/js/async/18729.15e40cf1.js"
+    },
+    {
+      path = "monitoring/static/js/async/18842.35d398ab.js"
+      key = "monitoring/static/js/async/18842.35d398ab.js"
+    },
+    {
+      path = "monitoring/static/js/async/18977.613fadf6.js"
+      key = "monitoring/static/js/async/18977.613fadf6.js"
+    },
+    {
+      path = "monitoring/static/js/async/18977.613fadf6.js.LICENSE.txt"
+      key = "monitoring/static/js/async/18977.613fadf6.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/19133.7e5bb031.js"
+      key = "monitoring/static/js/async/19133.7e5bb031.js"
+    },
+    {
+      path = "monitoring/static/js/async/19133.7e5bb031.js.LICENSE.txt"
+      key = "monitoring/static/js/async/19133.7e5bb031.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/19312.650eeacf.js"
+      key = "monitoring/static/js/async/19312.650eeacf.js"
+    },
+    {
+      path = "monitoring/static/js/async/19357.567404ca.js"
+      key = "monitoring/static/js/async/19357.567404ca.js"
+    },
+    {
+      path = "monitoring/static/js/async/19357.567404ca.js.LICENSE.txt"
+      key = "monitoring/static/js/async/19357.567404ca.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/19376.ad9c8f70.js"
+      key = "monitoring/static/js/async/19376.ad9c8f70.js"
+    },
+    {
+      path = "monitoring/static/js/async/19423.b37c77d5.js"
+      key = "monitoring/static/js/async/19423.b37c77d5.js"
+    },
+    {
+      path = "monitoring/static/js/async/19734.ee4a4a97.js"
+      key = "monitoring/static/js/async/19734.ee4a4a97.js"
+    },
+    {
+      path = "monitoring/static/js/async/19739.5ffa4e61.js"
+      key = "monitoring/static/js/async/19739.5ffa4e61.js"
+    },
+    {
+      path = "monitoring/static/js/async/1979.8b95763b.js"
+      key = "monitoring/static/js/async/1979.8b95763b.js"
+    },
+    {
+      path = "monitoring/static/js/async/19847.322cca42.js"
+      key = "monitoring/static/js/async/19847.322cca42.js"
+    },
+    {
+      path = "monitoring/static/js/async/20030.b9677ec8.js"
+      key = "monitoring/static/js/async/20030.b9677ec8.js"
+    },
+    {
+      path = "monitoring/static/js/async/20056.1c5beb03.js"
+      key = "monitoring/static/js/async/20056.1c5beb03.js"
+    },
+    {
+      path = "monitoring/static/js/async/20300.309c73f1.js"
+      key = "monitoring/static/js/async/20300.309c73f1.js"
+    },
+    {
+      path = "monitoring/static/js/async/20335.c3f1ed10.js"
+      key = "monitoring/static/js/async/20335.c3f1ed10.js"
+    },
+    {
+      path = "monitoring/static/js/async/20557.d27e1639.js"
+      key = "monitoring/static/js/async/20557.d27e1639.js"
+    },
+    {
+      path = "monitoring/static/js/async/20947.2e439a99.js"
+      key = "monitoring/static/js/async/20947.2e439a99.js"
+    },
+    {
+      path = "monitoring/static/js/async/20983.d7626dd1.js"
+      key = "monitoring/static/js/async/20983.d7626dd1.js"
+    },
+    {
+      path = "monitoring/static/js/async/21172.904bd1bf.js"
+      key = "monitoring/static/js/async/21172.904bd1bf.js"
+    },
+    {
+      path = "monitoring/static/js/async/21239.c2ee01b7.js"
+      key = "monitoring/static/js/async/21239.c2ee01b7.js"
+    },
+    {
+      path = "monitoring/static/js/async/21276.27186f77.js"
+      key = "monitoring/static/js/async/21276.27186f77.js"
+    },
+    {
+      path = "monitoring/static/js/async/21299.922b26e3.js"
+      key = "monitoring/static/js/async/21299.922b26e3.js"
+    },
+    {
+      path = "monitoring/static/js/async/21299.922b26e3.js.LICENSE.txt"
+      key = "monitoring/static/js/async/21299.922b26e3.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/21550.0f2771f4.js"
+      key = "monitoring/static/js/async/21550.0f2771f4.js"
+    },
+    {
+      path = "monitoring/static/js/async/21678.382d5bd2.js"
+      key = "monitoring/static/js/async/21678.382d5bd2.js"
+    },
+    {
+      path = "monitoring/static/js/async/2174.094938cb.js"
+      key = "monitoring/static/js/async/2174.094938cb.js"
+    },
+    {
+      path = "monitoring/static/js/async/21863.c34f1918.js"
+      key = "monitoring/static/js/async/21863.c34f1918.js"
+    },
+    {
+      path = "monitoring/static/js/async/21864.036be292.js"
+      key = "monitoring/static/js/async/21864.036be292.js"
+    },
+    {
+      path = "monitoring/static/js/async/21864.036be292.js.LICENSE.txt"
+      key = "monitoring/static/js/async/21864.036be292.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/2199.90b1c925.js"
+      key = "monitoring/static/js/async/2199.90b1c925.js"
+    },
+    {
+      path = "monitoring/static/js/async/22322.ff416d52.js"
+      key = "monitoring/static/js/async/22322.ff416d52.js"
+    },
+    {
+      path = "monitoring/static/js/async/22385.1af7fcef.js"
+      key = "monitoring/static/js/async/22385.1af7fcef.js"
+    },
+    {
+      path = "monitoring/static/js/async/22622.0176d828.js"
+      key = "monitoring/static/js/async/22622.0176d828.js"
+    },
+    {
+      path = "monitoring/static/js/async/22933.299444fa.js"
+      key = "monitoring/static/js/async/22933.299444fa.js"
+    },
+    {
+      path = "monitoring/static/js/async/23039.3a4ba7c7.js"
+      key = "monitoring/static/js/async/23039.3a4ba7c7.js"
+    },
+    {
+      path = "monitoring/static/js/async/23143.cbd4e5f7.js"
+      key = "monitoring/static/js/async/23143.cbd4e5f7.js"
+    },
+    {
+      path = "monitoring/static/js/async/23267.0cff0c0c.js"
+      key = "monitoring/static/js/async/23267.0cff0c0c.js"
+    },
+    {
+      path = "monitoring/static/js/async/23267.0cff0c0c.js.LICENSE.txt"
+      key = "monitoring/static/js/async/23267.0cff0c0c.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/2339.f0b01444.js"
+      key = "monitoring/static/js/async/2339.f0b01444.js"
+    },
+    {
+      path = "monitoring/static/js/async/2339.f0b01444.js.LICENSE.txt"
+      key = "monitoring/static/js/async/2339.f0b01444.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/23458.f964a304.js"
+      key = "monitoring/static/js/async/23458.f964a304.js"
+    },
+    {
+      path = "monitoring/static/js/async/24158.36a7595d.js"
+      key = "monitoring/static/js/async/24158.36a7595d.js"
+    },
+    {
+      path = "monitoring/static/js/async/24358.9dbaf936.js"
+      key = "monitoring/static/js/async/24358.9dbaf936.js"
+    },
+    {
+      path = "monitoring/static/js/async/24359.6dc92317.js"
+      key = "monitoring/static/js/async/24359.6dc92317.js"
+    },
+    {
+      path = "monitoring/static/js/async/2440.bc49c576.js"
+      key = "monitoring/static/js/async/2440.bc49c576.js"
+    },
+    {
+      path = "monitoring/static/js/async/24662.b880b37a.js"
+      key = "monitoring/static/js/async/24662.b880b37a.js"
+    },
+    {
+      path = "monitoring/static/js/async/24662.b880b37a.js.LICENSE.txt"
+      key = "monitoring/static/js/async/24662.b880b37a.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/24672.9bb47bd1.js"
+      key = "monitoring/static/js/async/24672.9bb47bd1.js"
+    },
+    {
+      path = "monitoring/static/js/async/25019.7f036768.js"
+      key = "monitoring/static/js/async/25019.7f036768.js"
+    },
+    {
+      path = "monitoring/static/js/async/25019.7f036768.js.LICENSE.txt"
+      key = "monitoring/static/js/async/25019.7f036768.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/25108.0c4a4735.js"
+      key = "monitoring/static/js/async/25108.0c4a4735.js"
+    },
+    {
+      path = "monitoring/static/js/async/25316.5f89e6dc.js"
+      key = "monitoring/static/js/async/25316.5f89e6dc.js"
+    },
+    {
+      path = "monitoring/static/js/async/25391.9433b0a6.js"
+      key = "monitoring/static/js/async/25391.9433b0a6.js"
+    },
+    {
+      path = "monitoring/static/js/async/25391.9433b0a6.js.LICENSE.txt"
+      key = "monitoring/static/js/async/25391.9433b0a6.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/25418.258f5a79.js"
+      key = "monitoring/static/js/async/25418.258f5a79.js"
+    },
+    {
+      path = "monitoring/static/js/async/25674.2e4fd52b.js"
+      key = "monitoring/static/js/async/25674.2e4fd52b.js"
+    },
+    {
+      path = "monitoring/static/js/async/2571.663e2569.js"
+      key = "monitoring/static/js/async/2571.663e2569.js"
+    },
+    {
+      path = "monitoring/static/js/async/2571.663e2569.js.LICENSE.txt"
+      key = "monitoring/static/js/async/2571.663e2569.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/25731.d051576e.js"
+      key = "monitoring/static/js/async/25731.d051576e.js"
+    },
+    {
+      path = "monitoring/static/js/async/26008.4b346d6c.js"
+      key = "monitoring/static/js/async/26008.4b346d6c.js"
+    },
+    {
+      path = "monitoring/static/js/async/26123.036e8143.js"
+      key = "monitoring/static/js/async/26123.036e8143.js"
+    },
+    {
+      path = "monitoring/static/js/async/26123.036e8143.js.LICENSE.txt"
+      key = "monitoring/static/js/async/26123.036e8143.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/26438.a0f8078a.js"
+      key = "monitoring/static/js/async/26438.a0f8078a.js"
+    },
+    {
+      path = "monitoring/static/js/async/26497.10975979.js"
+      key = "monitoring/static/js/async/26497.10975979.js"
+    },
+    {
+      path = "monitoring/static/js/async/26526.ed8a7abe.js"
+      key = "monitoring/static/js/async/26526.ed8a7abe.js"
+    },
+    {
+      path = "monitoring/static/js/async/26534.2e69e4cc.js"
+      key = "monitoring/static/js/async/26534.2e69e4cc.js"
+    },
+    {
+      path = "monitoring/static/js/async/26621.b5ce50bf.js"
+      key = "monitoring/static/js/async/26621.b5ce50bf.js"
+    },
+    {
+      path = "monitoring/static/js/async/26621.b5ce50bf.js.LICENSE.txt"
+      key = "monitoring/static/js/async/26621.b5ce50bf.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/26938.0313f03b.js"
+      key = "monitoring/static/js/async/26938.0313f03b.js"
+    },
+    {
+      path = "monitoring/static/js/async/27012.0060616c.js"
+      key = "monitoring/static/js/async/27012.0060616c.js"
+    },
+    {
+      path = "monitoring/static/js/async/2749.0e1a8baa.js"
+      key = "monitoring/static/js/async/2749.0e1a8baa.js"
+    },
+    {
+      path = "monitoring/static/js/async/27518.491c1be2.js"
+      key = "monitoring/static/js/async/27518.491c1be2.js"
+    },
+    {
+      path = "monitoring/static/js/async/27518.491c1be2.js.LICENSE.txt"
+      key = "monitoring/static/js/async/27518.491c1be2.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/2765.0eb73c8c.js"
+      key = "monitoring/static/js/async/2765.0eb73c8c.js"
+    },
+    {
+      path = "monitoring/static/js/async/27900.607f63b4.js"
+      key = "monitoring/static/js/async/27900.607f63b4.js"
+    },
+    {
+      path = "monitoring/static/js/async/27980.da2d0100.js"
+      key = "monitoring/static/js/async/27980.da2d0100.js"
+    },
+    {
+      path = "monitoring/static/js/async/28128.bf88942c.js"
+      key = "monitoring/static/js/async/28128.bf88942c.js"
+    },
+    {
+      path = "monitoring/static/js/async/2817.9edae78a.js"
+      key = "monitoring/static/js/async/2817.9edae78a.js"
+    },
+    {
+      path = "monitoring/static/js/async/2817.9edae78a.js.LICENSE.txt"
+      key = "monitoring/static/js/async/2817.9edae78a.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/28242.9d6f9d6e.js"
+      key = "monitoring/static/js/async/28242.9d6f9d6e.js"
+    },
+    {
+      path = "monitoring/static/js/async/28331.297da9fb.js"
+      key = "monitoring/static/js/async/28331.297da9fb.js"
+    },
+    {
+      path = "monitoring/static/js/async/28442.16288050.js"
+      key = "monitoring/static/js/async/28442.16288050.js"
+    },
+    {
+      path = "monitoring/static/js/async/28498.d69b2c05.js"
+      key = "monitoring/static/js/async/28498.d69b2c05.js"
+    },
+    {
+      path = "monitoring/static/js/async/28531.c5c4cec7.js"
+      key = "monitoring/static/js/async/28531.c5c4cec7.js"
+    },
+    {
+      path = "monitoring/static/js/async/28592.acfa7a9e.js"
+      key = "monitoring/static/js/async/28592.acfa7a9e.js"
+    },
+    {
+      path = "monitoring/static/js/async/28942.d530bb0e.js"
+      key = "monitoring/static/js/async/28942.d530bb0e.js"
+    },
+    {
+      path = "monitoring/static/js/async/28959.60bdb2bd.js"
+      key = "monitoring/static/js/async/28959.60bdb2bd.js"
+    },
+    {
+      path = "monitoring/static/js/async/29032.c5f46b05.js"
+      key = "monitoring/static/js/async/29032.c5f46b05.js"
+    },
+    {
+      path = "monitoring/static/js/async/29044.c2a4e044.js"
+      key = "monitoring/static/js/async/29044.c2a4e044.js"
+    },
+    {
+      path = "monitoring/static/js/async/29170.f25e2085.js"
+      key = "monitoring/static/js/async/29170.f25e2085.js"
+    },
+    {
+      path = "monitoring/static/js/async/29217.eb9f87b6.js"
+      key = "monitoring/static/js/async/29217.eb9f87b6.js"
+    },
+    {
+      path = "monitoring/static/js/async/29485.78fe5382.js"
+      key = "monitoring/static/js/async/29485.78fe5382.js"
+    },
+    {
+      path = "monitoring/static/js/async/29546.d66a47cf.js"
+      key = "monitoring/static/js/async/29546.d66a47cf.js"
+    },
+    {
+      path = "monitoring/static/js/async/3005.d3b3a3b0.js"
+      key = "monitoring/static/js/async/3005.d3b3a3b0.js"
+    },
+    {
+      path = "monitoring/static/js/async/3005.d3b3a3b0.js.LICENSE.txt"
+      key = "monitoring/static/js/async/3005.d3b3a3b0.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/30232.8c42342a.js"
+      key = "monitoring/static/js/async/30232.8c42342a.js"
+    },
+    {
+      path = "monitoring/static/js/async/30540.531cf8c7.js"
+      key = "monitoring/static/js/async/30540.531cf8c7.js"
+    },
+    {
+      path = "monitoring/static/js/async/30540.531cf8c7.js.LICENSE.txt"
+      key = "monitoring/static/js/async/30540.531cf8c7.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/30828.5f44c874.js"
+      key = "monitoring/static/js/async/30828.5f44c874.js"
+    },
+    {
+      path = "monitoring/static/js/async/30889.802b27d9.js"
+      key = "monitoring/static/js/async/30889.802b27d9.js"
+    },
+    {
+      path = "monitoring/static/js/async/30893.b2788818.js"
+      key = "monitoring/static/js/async/30893.b2788818.js"
+    },
+    {
+      path = "monitoring/static/js/async/31039.f6eda8d2.js"
+      key = "monitoring/static/js/async/31039.f6eda8d2.js"
+    },
+    {
+      path = "monitoring/static/js/async/31039.f6eda8d2.js.LICENSE.txt"
+      key = "monitoring/static/js/async/31039.f6eda8d2.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/31195.b9680a57.js"
+      key = "monitoring/static/js/async/31195.b9680a57.js"
+    },
+    {
+      path = "monitoring/static/js/async/31195.b9680a57.js.LICENSE.txt"
+      key = "monitoring/static/js/async/31195.b9680a57.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/31229.1d00ec9c.js"
+      key = "monitoring/static/js/async/31229.1d00ec9c.js"
+    },
+    {
+      path = "monitoring/static/js/async/31516.9e5523cd.js"
+      key = "monitoring/static/js/async/31516.9e5523cd.js"
+    },
+    {
+      path = "monitoring/static/js/async/31931.c755ba19.js"
+      key = "monitoring/static/js/async/31931.c755ba19.js"
+    },
+    {
+      path = "monitoring/static/js/async/32239.dd580435.js"
+      key = "monitoring/static/js/async/32239.dd580435.js"
+    },
+    {
+      path = "monitoring/static/js/async/32276.6abd0548.js"
+      key = "monitoring/static/js/async/32276.6abd0548.js"
+    },
+    {
+      path = "monitoring/static/js/async/32606.432e0aa7.js"
+      key = "monitoring/static/js/async/32606.432e0aa7.js"
+    },
+    {
+      path = "monitoring/static/js/async/33071.4560a0ae.js"
+      key = "monitoring/static/js/async/33071.4560a0ae.js"
+    },
+    {
+      path = "monitoring/static/js/async/33071.4560a0ae.js.LICENSE.txt"
+      key = "monitoring/static/js/async/33071.4560a0ae.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/33103.f4f1bc6e.js"
+      key = "monitoring/static/js/async/33103.f4f1bc6e.js"
+    },
+    {
+      path = "monitoring/static/js/async/33281.f735cff8.js"
+      key = "monitoring/static/js/async/33281.f735cff8.js"
+    },
+    {
+      path = "monitoring/static/js/async/33382.b60741b2.js"
+      key = "monitoring/static/js/async/33382.b60741b2.js"
+    },
+    {
+      path = "monitoring/static/js/async/34135.747ad134.js"
+      key = "monitoring/static/js/async/34135.747ad134.js"
+    },
+    {
+      path = "monitoring/static/js/async/34135.747ad134.js.LICENSE.txt"
+      key = "monitoring/static/js/async/34135.747ad134.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/34195.c6de7051.js"
+      key = "monitoring/static/js/async/34195.c6de7051.js"
+    },
+    {
+      path = "monitoring/static/js/async/34801.bd23a818.js"
+      key = "monitoring/static/js/async/34801.bd23a818.js"
+    },
+    {
+      path = "monitoring/static/js/async/34930.34eac0f6.js"
+      key = "monitoring/static/js/async/34930.34eac0f6.js"
+    },
+    {
+      path = "monitoring/static/js/async/35254.f3180067.js"
+      key = "monitoring/static/js/async/35254.f3180067.js"
+    },
+    {
+      path = "monitoring/static/js/async/35540.b7a99ad9.js"
+      key = "monitoring/static/js/async/35540.b7a99ad9.js"
+    },
+    {
+      path = "monitoring/static/js/async/35548.84577723.js"
+      key = "monitoring/static/js/async/35548.84577723.js"
+    },
+    {
+      path = "monitoring/static/js/async/35659.b0672f99.js"
+      key = "monitoring/static/js/async/35659.b0672f99.js"
+    },
+    {
+      path = "monitoring/static/js/async/35659.b0672f99.js.LICENSE.txt"
+      key = "monitoring/static/js/async/35659.b0672f99.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/35773.4887629e.js"
+      key = "monitoring/static/js/async/35773.4887629e.js"
+    },
+    {
+      path = "monitoring/static/js/async/35863.9bb4e636.js"
+      key = "monitoring/static/js/async/35863.9bb4e636.js"
+    },
+    {
+      path = "monitoring/static/js/async/35959.e0a5f202.js"
+      key = "monitoring/static/js/async/35959.e0a5f202.js"
+    },
+    {
+      path = "monitoring/static/js/async/3600.90798a79.js"
+      key = "monitoring/static/js/async/3600.90798a79.js"
+    },
+    {
+      path = "monitoring/static/js/async/36345.3c2b095b.js"
+      key = "monitoring/static/js/async/36345.3c2b095b.js"
+    },
+    {
+      path = "monitoring/static/js/async/36765.ac1619d4.js"
+      key = "monitoring/static/js/async/36765.ac1619d4.js"
+    },
+    {
+      path = "monitoring/static/js/async/36870.7857b32a.js"
+      key = "monitoring/static/js/async/36870.7857b32a.js"
+    },
+    {
+      path = "monitoring/static/js/async/37164.bed8782b.js"
+      key = "monitoring/static/js/async/37164.bed8782b.js"
+    },
+    {
+      path = "monitoring/static/js/async/37211.f4d7f789.js"
+      key = "monitoring/static/js/async/37211.f4d7f789.js"
+    },
+    {
+      path = "monitoring/static/js/async/37272.65bec297.js"
+      key = "monitoring/static/js/async/37272.65bec297.js"
+    },
+    {
+      path = "monitoring/static/js/async/37459.af5ffddc.js"
+      key = "monitoring/static/js/async/37459.af5ffddc.js"
+    },
+    {
+      path = "monitoring/static/js/async/37459.af5ffddc.js.LICENSE.txt"
+      key = "monitoring/static/js/async/37459.af5ffddc.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/37468.fe9f414b.js"
+      key = "monitoring/static/js/async/37468.fe9f414b.js"
+    },
+    {
+      path = "monitoring/static/js/async/37851.e936a6b8.js"
+      key = "monitoring/static/js/async/37851.e936a6b8.js"
+    },
+    {
+      path = "monitoring/static/js/async/38536.b24a052f.js"
+      key = "monitoring/static/js/async/38536.b24a052f.js"
+    },
+    {
+      path = "monitoring/static/js/async/38749.f5d8b8d3.js"
+      key = "monitoring/static/js/async/38749.f5d8b8d3.js"
+    },
+    {
+      path = "monitoring/static/js/async/38749.f5d8b8d3.js.LICENSE.txt"
+      key = "monitoring/static/js/async/38749.f5d8b8d3.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/38838.ddf5d771.js"
+      key = "monitoring/static/js/async/38838.ddf5d771.js"
+    },
+    {
+      path = "monitoring/static/js/async/39274.6b808300.js"
+      key = "monitoring/static/js/async/39274.6b808300.js"
+    },
+    {
+      path = "monitoring/static/js/async/3977.715587c0.js"
+      key = "monitoring/static/js/async/3977.715587c0.js"
+    },
+    {
+      path = "monitoring/static/js/async/40015.357eeb66.js"
+      key = "monitoring/static/js/async/40015.357eeb66.js"
+    },
+    {
+      path = "monitoring/static/js/async/40084.37130d0e.js"
+      key = "monitoring/static/js/async/40084.37130d0e.js"
+    },
+    {
+      path = "monitoring/static/js/async/40115.61cd056e.js"
+      key = "monitoring/static/js/async/40115.61cd056e.js"
+    },
+    {
+      path = "monitoring/static/js/async/40115.61cd056e.js.LICENSE.txt"
+      key = "monitoring/static/js/async/40115.61cd056e.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/40248.5dae1b4b.js"
+      key = "monitoring/static/js/async/40248.5dae1b4b.js"
+    },
+    {
+      path = "monitoring/static/js/async/40492.fb065c08.js"
+      key = "monitoring/static/js/async/40492.fb065c08.js"
+    },
+    {
+      path = "monitoring/static/js/async/40637.fad211d6.js"
+      key = "monitoring/static/js/async/40637.fad211d6.js"
+    },
+    {
+      path = "monitoring/static/js/async/40842.5a2fd3b1.js"
+      key = "monitoring/static/js/async/40842.5a2fd3b1.js"
+    },
+    {
+      path = "monitoring/static/js/async/41169.4f955ae5.js"
+      key = "monitoring/static/js/async/41169.4f955ae5.js"
+    },
+    {
+      path = "monitoring/static/js/async/41212.41bde9b1.js"
+      key = "monitoring/static/js/async/41212.41bde9b1.js"
+    },
+    {
+      path = "monitoring/static/js/async/41329.b1196c30.js"
+      key = "monitoring/static/js/async/41329.b1196c30.js"
+    },
+    {
+      path = "monitoring/static/js/async/41434.53cfdc71.js"
+      key = "monitoring/static/js/async/41434.53cfdc71.js"
+    },
+    {
+      path = "monitoring/static/js/async/4145.44c1b7a9.js"
+      key = "monitoring/static/js/async/4145.44c1b7a9.js"
+    },
+    {
+      path = "monitoring/static/js/async/41463.94a62fae.js"
+      key = "monitoring/static/js/async/41463.94a62fae.js"
+    },
+    {
+      path = "monitoring/static/js/async/41489.67b4e319.js"
+      key = "monitoring/static/js/async/41489.67b4e319.js"
+    },
+    {
+      path = "monitoring/static/js/async/41982.53bad7ec.js"
+      key = "monitoring/static/js/async/41982.53bad7ec.js"
+    },
+    {
+      path = "monitoring/static/js/async/41982.53bad7ec.js.LICENSE.txt"
+      key = "monitoring/static/js/async/41982.53bad7ec.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/42042.79c969e4.js"
+      key = "monitoring/static/js/async/42042.79c969e4.js"
+    },
+    {
+      path = "monitoring/static/js/async/42100.a5f10855.js"
+      key = "monitoring/static/js/async/42100.a5f10855.js"
+    },
+    {
+      path = "monitoring/static/js/async/42104.50c384c9.js"
+      key = "monitoring/static/js/async/42104.50c384c9.js"
+    },
+    {
+      path = "monitoring/static/js/async/42446.0087fe16.js"
+      key = "monitoring/static/js/async/42446.0087fe16.js"
+    },
+    {
+      path = "monitoring/static/js/async/42489.e5ca84d7.js"
+      key = "monitoring/static/js/async/42489.e5ca84d7.js"
+    },
+    {
+      path = "monitoring/static/js/async/42564.d4fb1f84.js"
+      key = "monitoring/static/js/async/42564.d4fb1f84.js"
+    },
+    {
+      path = "monitoring/static/js/async/42613.a6551665.js"
+      key = "monitoring/static/js/async/42613.a6551665.js"
+    },
+    {
+      path = "monitoring/static/js/async/42694.2283704e.js"
+      key = "monitoring/static/js/async/42694.2283704e.js"
+    },
+    {
+      path = "monitoring/static/js/async/42914.86418ece.js"
+      key = "monitoring/static/js/async/42914.86418ece.js"
+    },
+    {
+      path = "monitoring/static/js/async/43031.410e5f31.js"
+      key = "monitoring/static/js/async/43031.410e5f31.js"
+    },
+    {
+      path = "monitoring/static/js/async/43335.34771c33.js"
+      key = "monitoring/static/js/async/43335.34771c33.js"
+    },
+    {
+      path = "monitoring/static/js/async/43479.3881af6f.js"
+      key = "monitoring/static/js/async/43479.3881af6f.js"
+    },
+    {
+      path = "monitoring/static/js/async/43646.9b890c13.js"
+      key = "monitoring/static/js/async/43646.9b890c13.js"
+    },
+    {
+      path = "monitoring/static/js/async/43749.3865f3cc.js"
+      key = "monitoring/static/js/async/43749.3865f3cc.js"
+    },
+    {
+      path = "monitoring/static/js/async/43815.21902b4b.js"
+      key = "monitoring/static/js/async/43815.21902b4b.js"
+    },
+    {
+      path = "monitoring/static/js/async/43815.21902b4b.js.LICENSE.txt"
+      key = "monitoring/static/js/async/43815.21902b4b.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/4382.1ed00c29.js"
+      key = "monitoring/static/js/async/4382.1ed00c29.js"
+    },
+    {
+      path = "monitoring/static/js/async/43859.2d562724.js"
+      key = "monitoring/static/js/async/43859.2d562724.js"
+    },
+    {
+      path = "monitoring/static/js/async/44349.a45e7e92.js"
+      key = "monitoring/static/js/async/44349.a45e7e92.js"
+    },
+    {
+      path = "monitoring/static/js/async/44473.a478059d.js"
+      key = "monitoring/static/js/async/44473.a478059d.js"
+    },
+    {
+      path = "monitoring/static/js/async/44594.5145ad9e.js"
+      key = "monitoring/static/js/async/44594.5145ad9e.js"
+    },
+    {
+      path = "monitoring/static/js/async/45306.6d981d1d.js"
+      key = "monitoring/static/js/async/45306.6d981d1d.js"
+    },
+    {
+      path = "monitoring/static/js/async/45488.7382d15e.js"
+      key = "monitoring/static/js/async/45488.7382d15e.js"
+    },
+    {
+      path = "monitoring/static/js/async/45565.f11494bf.js"
+      key = "monitoring/static/js/async/45565.f11494bf.js"
+    },
+    {
+      path = "monitoring/static/js/async/45565.f11494bf.js.LICENSE.txt"
+      key = "monitoring/static/js/async/45565.f11494bf.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/45723.3986a49e.js"
+      key = "monitoring/static/js/async/45723.3986a49e.js"
+    },
+    {
+      path = "monitoring/static/js/async/45723.3986a49e.js.LICENSE.txt"
+      key = "monitoring/static/js/async/45723.3986a49e.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/45850.7c1e2dd1.js"
+      key = "monitoring/static/js/async/45850.7c1e2dd1.js"
+    },
+    {
+      path = "monitoring/static/js/async/46023.594375ac.js"
+      key = "monitoring/static/js/async/46023.594375ac.js"
+    },
+    {
+      path = "monitoring/static/js/async/46023.594375ac.js.LICENSE.txt"
+      key = "monitoring/static/js/async/46023.594375ac.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/46130.f0b196d5.js"
+      key = "monitoring/static/js/async/46130.f0b196d5.js"
+    },
+    {
+      path = "monitoring/static/js/async/46332.7a6adbb7.js"
+      key = "monitoring/static/js/async/46332.7a6adbb7.js"
+    },
+    {
+      path = "monitoring/static/js/async/46346.f3f233ed.js"
+      key = "monitoring/static/js/async/46346.f3f233ed.js"
+    },
+    {
+      path = "monitoring/static/js/async/46403.9d6b4fbb.js"
+      key = "monitoring/static/js/async/46403.9d6b4fbb.js"
+    },
+    {
+      path = "monitoring/static/js/async/46542.2816095b.js"
+      key = "monitoring/static/js/async/46542.2816095b.js"
+    },
+    {
+      path = "monitoring/static/js/async/46635.f4fb6d47.js"
+      key = "monitoring/static/js/async/46635.f4fb6d47.js"
+    },
+    {
+      path = "monitoring/static/js/async/46704.4a97a70a.js"
+      key = "monitoring/static/js/async/46704.4a97a70a.js"
+    },
+    {
+      path = "monitoring/static/js/async/46815.9dfac84e.js"
+      key = "monitoring/static/js/async/46815.9dfac84e.js"
+    },
+    {
+      path = "monitoring/static/js/async/47171.fc127ed1.js"
+      key = "monitoring/static/js/async/47171.fc127ed1.js"
+    },
+    {
+      path = "monitoring/static/js/async/47173.b189e37f.js"
+      key = "monitoring/static/js/async/47173.b189e37f.js"
+    },
+    {
+      path = "monitoring/static/js/async/47379.e846e3bd.js"
+      key = "monitoring/static/js/async/47379.e846e3bd.js"
+    },
+    {
+      path = "monitoring/static/js/async/47379.e846e3bd.js.LICENSE.txt"
+      key = "monitoring/static/js/async/47379.e846e3bd.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/47744.ef299837.js"
+      key = "monitoring/static/js/async/47744.ef299837.js"
+    },
+    {
+      path = "monitoring/static/js/async/48053.67f5901e.js"
+      key = "monitoring/static/js/async/48053.67f5901e.js"
+    },
+    {
+      path = "monitoring/static/js/async/48269.545773c0.js"
+      key = "monitoring/static/js/async/48269.545773c0.js"
+    },
+    {
+      path = "monitoring/static/js/async/48349.bf8ea4f9.js"
+      key = "monitoring/static/js/async/48349.bf8ea4f9.js"
+    },
+    {
+      path = "monitoring/static/js/async/48399.626a5af0.js"
+      key = "monitoring/static/js/async/48399.626a5af0.js"
+    },
+    {
+      path = "monitoring/static/js/async/48635.b797ede9.js"
+      key = "monitoring/static/js/async/48635.b797ede9.js"
+    },
+    {
+      path = "monitoring/static/js/async/48736.3e8afbe1.js"
+      key = "monitoring/static/js/async/48736.3e8afbe1.js"
+    },
+    {
+      path = "monitoring/static/js/async/48924.24cca422.js"
+      key = "monitoring/static/js/async/48924.24cca422.js"
+    },
+    {
+      path = "monitoring/static/js/async/4907.f7e6a01e.js"
+      key = "monitoring/static/js/async/4907.f7e6a01e.js"
+    },
+    {
+      path = "monitoring/static/js/async/50192.107430ca.js"
+      key = "monitoring/static/js/async/50192.107430ca.js"
+    },
+    {
+      path = "monitoring/static/js/async/50242.f84220da.js"
+      key = "monitoring/static/js/async/50242.f84220da.js"
+    },
+    {
+      path = "monitoring/static/js/async/50331.e6277586.js"
+      key = "monitoring/static/js/async/50331.e6277586.js"
+    },
+    {
+      path = "monitoring/static/js/async/50375.d70f0853.js"
+      key = "monitoring/static/js/async/50375.d70f0853.js"
+    },
+    {
+      path = "monitoring/static/js/async/50499.91fd09bd.js"
+      key = "monitoring/static/js/async/50499.91fd09bd.js"
+    },
+    {
+      path = "monitoring/static/js/async/50499.91fd09bd.js.LICENSE.txt"
+      key = "monitoring/static/js/async/50499.91fd09bd.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/5087.b316f527.js"
+      key = "monitoring/static/js/async/5087.b316f527.js"
+    },
+    {
+      path = "monitoring/static/js/async/5122.e2ac3506.js"
+      key = "monitoring/static/js/async/5122.e2ac3506.js"
+    },
+    {
+      path = "monitoring/static/js/async/51898.235b8f9f.js"
+      key = "monitoring/static/js/async/51898.235b8f9f.js"
+    },
+    {
+      path = "monitoring/static/js/async/51906.05bffa52.js"
+      key = "monitoring/static/js/async/51906.05bffa52.js"
+    },
+    {
+      path = "monitoring/static/js/async/51915.19c88301.js"
+      key = "monitoring/static/js/async/51915.19c88301.js"
+    },
+    {
+      path = "monitoring/static/js/async/51941.3a3d6dc7.js"
+      key = "monitoring/static/js/async/51941.3a3d6dc7.js"
+    },
+    {
+      path = "monitoring/static/js/async/51941.3a3d6dc7.js.LICENSE.txt"
+      key = "monitoring/static/js/async/51941.3a3d6dc7.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/52078.33bb7736.js"
+      key = "monitoring/static/js/async/52078.33bb7736.js"
+    },
+    {
+      path = "monitoring/static/js/async/52110.ebae4907.js"
+      key = "monitoring/static/js/async/52110.ebae4907.js"
+    },
+    {
+      path = "monitoring/static/js/async/52257.aa53f23d.js"
+      key = "monitoring/static/js/async/52257.aa53f23d.js"
+    },
+    {
+      path = "monitoring/static/js/async/52257.aa53f23d.js.LICENSE.txt"
+      key = "monitoring/static/js/async/52257.aa53f23d.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/52270.9fe60058.js"
+      key = "monitoring/static/js/async/52270.9fe60058.js"
+    },
+    {
+      path = "monitoring/static/js/async/52295.dc5370f7.js"
+      key = "monitoring/static/js/async/52295.dc5370f7.js"
+    },
+    {
+      path = "monitoring/static/js/async/52388.76402988.js"
+      key = "monitoring/static/js/async/52388.76402988.js"
+    },
+    {
+      path = "monitoring/static/js/async/52389.a5e6348f.js"
+      key = "monitoring/static/js/async/52389.a5e6348f.js"
+    },
+    {
+      path = "monitoring/static/js/async/52497.28d97464.js"
+      key = "monitoring/static/js/async/52497.28d97464.js"
+    },
+    {
+      path = "monitoring/static/js/async/52528.a4b357ed.js"
+      key = "monitoring/static/js/async/52528.a4b357ed.js"
+    },
+    {
+      path = "monitoring/static/js/async/52567.1e171b98.js"
+      key = "monitoring/static/js/async/52567.1e171b98.js"
+    },
+    {
+      path = "monitoring/static/js/async/52622.cdced710.js"
+      key = "monitoring/static/js/async/52622.cdced710.js"
+    },
+    {
+      path = "monitoring/static/js/async/52754.87e260b9.js"
+      key = "monitoring/static/js/async/52754.87e260b9.js"
+    },
+    {
+      path = "monitoring/static/js/async/52817.3a133d80.js"
+      key = "monitoring/static/js/async/52817.3a133d80.js"
+    },
+    {
+      path = "monitoring/static/js/async/52817.3a133d80.js.LICENSE.txt"
+      key = "monitoring/static/js/async/52817.3a133d80.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/53102.aeee3b6a.js"
+      key = "monitoring/static/js/async/53102.aeee3b6a.js"
+    },
+    {
+      path = "monitoring/static/js/async/53107.fbf233b2.js"
+      key = "monitoring/static/js/async/53107.fbf233b2.js"
+    },
+    {
+      path = "monitoring/static/js/async/53107.fbf233b2.js.LICENSE.txt"
+      key = "monitoring/static/js/async/53107.fbf233b2.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/53134.19b03022.js"
+      key = "monitoring/static/js/async/53134.19b03022.js"
+    },
+    {
+      path = "monitoring/static/js/async/5317.8641eb54.js"
+      key = "monitoring/static/js/async/5317.8641eb54.js"
+    },
+    {
+      path = "monitoring/static/js/async/53260.53a412c0.js"
+      key = "monitoring/static/js/async/53260.53a412c0.js"
+    },
+    {
+      path = "monitoring/static/js/async/53283.2414009e.js"
+      key = "monitoring/static/js/async/53283.2414009e.js"
+    },
+    {
+      path = "monitoring/static/js/async/53507.60d069b5.js"
+      key = "monitoring/static/js/async/53507.60d069b5.js"
+    },
+    {
+      path = "monitoring/static/js/async/53507.60d069b5.js.LICENSE.txt"
+      key = "monitoring/static/js/async/53507.60d069b5.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/53523.9a7d5bc5.js"
+      key = "monitoring/static/js/async/53523.9a7d5bc5.js"
+    },
+    {
+      path = "monitoring/static/js/async/53988.3505f78d.js"
+      key = "monitoring/static/js/async/53988.3505f78d.js"
+    },
+    {
+      path = "monitoring/static/js/async/54046.eee6769c.js"
+      key = "monitoring/static/js/async/54046.eee6769c.js"
+    },
+    {
+      path = "monitoring/static/js/async/54096.603d3e27.js"
+      key = "monitoring/static/js/async/54096.603d3e27.js"
+    },
+    {
+      path = "monitoring/static/js/async/54151.fb125fe8.js"
+      key = "monitoring/static/js/async/54151.fb125fe8.js"
+    },
+    {
+      path = "monitoring/static/js/async/54223.a5db91db.js"
+      key = "monitoring/static/js/async/54223.a5db91db.js"
+    },
+    {
+      path = "monitoring/static/js/async/5445.bcb1a399.js"
+      key = "monitoring/static/js/async/5445.bcb1a399.js"
+    },
+    {
+      path = "monitoring/static/js/async/54767.46034a20.js"
+      key = "monitoring/static/js/async/54767.46034a20.js"
+    },
+    {
+      path = "monitoring/static/js/async/54867.425cd7f4.js"
+      key = "monitoring/static/js/async/54867.425cd7f4.js"
+    },
+    {
+      path = "monitoring/static/js/async/54867.425cd7f4.js.LICENSE.txt"
+      key = "monitoring/static/js/async/54867.425cd7f4.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/5506.901df532.js"
+      key = "monitoring/static/js/async/5506.901df532.js"
+    },
+    {
+      path = "monitoring/static/js/async/55420.e534c48e.js"
+      key = "monitoring/static/js/async/55420.e534c48e.js"
+    },
+    {
+      path = "monitoring/static/js/async/55701.8be32335.js"
+      key = "monitoring/static/js/async/55701.8be32335.js"
+    },
+    {
+      path = "monitoring/static/js/async/55835.b5569471.js"
+      key = "monitoring/static/js/async/55835.b5569471.js"
+    },
+    {
+      path = "monitoring/static/js/async/56063.d5c563f8.js"
+      key = "monitoring/static/js/async/56063.d5c563f8.js"
+    },
+    {
+      path = "monitoring/static/js/async/56312.ba126fcd.js"
+      key = "monitoring/static/js/async/56312.ba126fcd.js"
+    },
+    {
+      path = "monitoring/static/js/async/56420.5d52c507.js"
+      key = "monitoring/static/js/async/56420.5d52c507.js"
+    },
+    {
+      path = "monitoring/static/js/async/5645.fd8cb458.js"
+      key = "monitoring/static/js/async/5645.fd8cb458.js"
+    },
+    {
+      path = "monitoring/static/js/async/56660.c45674cb.js"
+      key = "monitoring/static/js/async/56660.c45674cb.js"
+    },
+    {
+      path = "monitoring/static/js/async/56905.8be0525c.js"
+      key = "monitoring/static/js/async/56905.8be0525c.js"
+    },
+    {
+      path = "monitoring/static/js/async/57043.6f4239a8.js"
+      key = "monitoring/static/js/async/57043.6f4239a8.js"
+    },
+    {
+      path = "monitoring/static/js/async/57043.6f4239a8.js.LICENSE.txt"
+      key = "monitoring/static/js/async/57043.6f4239a8.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/57566.5920620d.js"
+      key = "monitoring/static/js/async/57566.5920620d.js"
+    },
+    {
+      path = "monitoring/static/js/async/57615.142f709c.js"
+      key = "monitoring/static/js/async/57615.142f709c.js"
+    },
+    {
+      path = "monitoring/static/js/async/57865.36e5d43c.js"
+      key = "monitoring/static/js/async/57865.36e5d43c.js"
+    },
+    {
+      path = "monitoring/static/js/async/58232.ab2b75d8.js"
+      key = "monitoring/static/js/async/58232.ab2b75d8.js"
+    },
+    {
+      path = "monitoring/static/js/async/58294.afdef38d.js"
+      key = "monitoring/static/js/async/58294.afdef38d.js"
+    },
+    {
+      path = "monitoring/static/js/async/58516.8d1da251.js"
+      key = "monitoring/static/js/async/58516.8d1da251.js"
+    },
+    {
+      path = "monitoring/static/js/async/58759.a9d1c206.js"
+      key = "monitoring/static/js/async/58759.a9d1c206.js"
+    },
+    {
+      path = "monitoring/static/js/async/58935.d654b184.js"
+      key = "monitoring/static/js/async/58935.d654b184.js"
+    },
+    {
+      path = "monitoring/static/js/async/58935.d654b184.js.LICENSE.txt"
+      key = "monitoring/static/js/async/58935.d654b184.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/5903.c7cb0be6.js"
+      key = "monitoring/static/js/async/5903.c7cb0be6.js"
+    },
+    {
+      path = "monitoring/static/js/async/59043.04cb3fa8.js"
+      key = "monitoring/static/js/async/59043.04cb3fa8.js"
+    },
+    {
+      path = "monitoring/static/js/async/59043.04cb3fa8.js.LICENSE.txt"
+      key = "monitoring/static/js/async/59043.04cb3fa8.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/59046.4f52bf18.js"
+      key = "monitoring/static/js/async/59046.4f52bf18.js"
+    },
+    {
+      path = "monitoring/static/js/async/59324.2544ef63.js"
+      key = "monitoring/static/js/async/59324.2544ef63.js"
+    },
+    {
+      path = "monitoring/static/js/async/59411.cae373dc.js"
+      key = "monitoring/static/js/async/59411.cae373dc.js"
+    },
+    {
+      path = "monitoring/static/js/async/59411.cae373dc.js.LICENSE.txt"
+      key = "monitoring/static/js/async/59411.cae373dc.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/59703.73354731.js"
+      key = "monitoring/static/js/async/59703.73354731.js"
+    },
+    {
+      path = "monitoring/static/js/async/59752.e2b32059.js"
+      key = "monitoring/static/js/async/59752.e2b32059.js"
+    },
+    {
+      path = "monitoring/static/js/async/5989.b322ecd3.js"
+      key = "monitoring/static/js/async/5989.b322ecd3.js"
+    },
+    {
+      path = "monitoring/static/js/async/60103.fc41375a.js"
+      key = "monitoring/static/js/async/60103.fc41375a.js"
+    },
+    {
+      path = "monitoring/static/js/async/6029.ca4b333c.js"
+      key = "monitoring/static/js/async/6029.ca4b333c.js"
+    },
+    {
+      path = "monitoring/static/js/async/60362.8462872f.js"
+      key = "monitoring/static/js/async/60362.8462872f.js"
+    },
+    {
+      path = "monitoring/static/js/async/60448.c6666ead.js"
+      key = "monitoring/static/js/async/60448.c6666ead.js"
+    },
+    {
+      path = "monitoring/static/js/async/60474.69d002aa.js"
+      key = "monitoring/static/js/async/60474.69d002aa.js"
+    },
+    {
+      path = "monitoring/static/js/async/60553.766a1dc8.js"
+      key = "monitoring/static/js/async/60553.766a1dc8.js"
+    },
+    {
+      path = "monitoring/static/js/async/60635.147b2ff3.js"
+      key = "monitoring/static/js/async/60635.147b2ff3.js"
+    },
+    {
+      path = "monitoring/static/js/async/60789.21b3410d.js"
+      key = "monitoring/static/js/async/60789.21b3410d.js"
+    },
+    {
+      path = "monitoring/static/js/async/60791.d9406276.js"
+      key = "monitoring/static/js/async/60791.d9406276.js"
+    },
+    {
+      path = "monitoring/static/js/async/60919.b81270e6.js"
+      key = "monitoring/static/js/async/60919.b81270e6.js"
+    },
+    {
+      path = "monitoring/static/js/async/61020.f5011c4d.js"
+      key = "monitoring/static/js/async/61020.f5011c4d.js"
+    },
+    {
+      path = "monitoring/static/js/async/61052.d8d3d3de.js"
+      key = "monitoring/static/js/async/61052.d8d3d3de.js"
+    },
+    {
+      path = "monitoring/static/js/async/61436.43591ddd.js"
+      key = "monitoring/static/js/async/61436.43591ddd.js"
+    },
+    {
+      path = "monitoring/static/js/async/61621.6899e037.js"
+      key = "monitoring/static/js/async/61621.6899e037.js"
+    },
+    {
+      path = "monitoring/static/js/async/61887.073b4f5d.js"
+      key = "monitoring/static/js/async/61887.073b4f5d.js"
+    },
+    {
+      path = "monitoring/static/js/async/62258.16f55c87.js"
+      key = "monitoring/static/js/async/62258.16f55c87.js"
+    },
+    {
+      path = "monitoring/static/js/async/62565.d30d75e9.js"
+      key = "monitoring/static/js/async/62565.d30d75e9.js"
+    },
+    {
+      path = "monitoring/static/js/async/63309.dd08a775.js"
+      key = "monitoring/static/js/async/63309.dd08a775.js"
+    },
+    {
+      path = "monitoring/static/js/async/63359.f6fef534.js"
+      key = "monitoring/static/js/async/63359.f6fef534.js"
+    },
+    {
+      path = "monitoring/static/js/async/6361.e055a317.js"
+      key = "monitoring/static/js/async/6361.e055a317.js"
+    },
+    {
+      path = "monitoring/static/js/async/63632.0a829520.js"
+      key = "monitoring/static/js/async/63632.0a829520.js"
+    },
+    {
+      path = "monitoring/static/js/async/63858.217bcf75.js"
+      key = "monitoring/static/js/async/63858.217bcf75.js"
+    },
+    {
+      path = "monitoring/static/js/async/63858.217bcf75.js.LICENSE.txt"
+      key = "monitoring/static/js/async/63858.217bcf75.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/64140.fdafc7c8.js"
+      key = "monitoring/static/js/async/64140.fdafc7c8.js"
+    },
+    {
+      path = "monitoring/static/js/async/64366.c0fb6f6c.js"
+      key = "monitoring/static/js/async/64366.c0fb6f6c.js"
+    },
+    {
+      path = "monitoring/static/js/async/64419.c3053aa2.js"
+      key = "monitoring/static/js/async/64419.c3053aa2.js"
+    },
+    {
+      path = "monitoring/static/js/async/647.fe976119.js"
+      key = "monitoring/static/js/async/647.fe976119.js"
+    },
+    {
+      path = "monitoring/static/js/async/65104.c09d0e39.js"
+      key = "monitoring/static/js/async/65104.c09d0e39.js"
+    },
+    {
+      path = "monitoring/static/js/async/65104.c09d0e39.js.LICENSE.txt"
+      key = "monitoring/static/js/async/65104.c09d0e39.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/65311.e2206300.js"
+      key = "monitoring/static/js/async/65311.e2206300.js"
+    },
+    {
+      path = "monitoring/static/js/async/6547.9823596d.js"
+      key = "monitoring/static/js/async/6547.9823596d.js"
+    },
+    {
+      path = "monitoring/static/js/async/6547.9823596d.js.LICENSE.txt"
+      key = "monitoring/static/js/async/6547.9823596d.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/65530.7e81e92d.js"
+      key = "monitoring/static/js/async/65530.7e81e92d.js"
+    },
+    {
+      path = "monitoring/static/js/async/65642.0b92eccd.js"
+      key = "monitoring/static/js/async/65642.0b92eccd.js"
+    },
+    {
+      path = "monitoring/static/js/async/6579.bb18f608.js"
+      key = "monitoring/static/js/async/6579.bb18f608.js"
+    },
+    {
+      path = "monitoring/static/js/async/65791.2c942c3f.js"
+      key = "monitoring/static/js/async/65791.2c942c3f.js"
+    },
+    {
+      path = "monitoring/static/js/async/6580.a8c690a8.js"
+      key = "monitoring/static/js/async/6580.a8c690a8.js"
+    },
+    {
+      path = "monitoring/static/js/async/65870.124185ad.js"
+      key = "monitoring/static/js/async/65870.124185ad.js"
+    },
+    {
+      path = "monitoring/static/js/async/65891.0250795a.js"
+      key = "monitoring/static/js/async/65891.0250795a.js"
+    },
+    {
+      path = "monitoring/static/js/async/65891.0250795a.js.LICENSE.txt"
+      key = "monitoring/static/js/async/65891.0250795a.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/66247.dafb143a.js"
+      key = "monitoring/static/js/async/66247.dafb143a.js"
+    },
+    {
+      path = "monitoring/static/js/async/66247.dafb143a.js.LICENSE.txt"
+      key = "monitoring/static/js/async/66247.dafb143a.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/66266.d565870b.js"
+      key = "monitoring/static/js/async/66266.d565870b.js"
+    },
+    {
+      path = "monitoring/static/js/async/66367.41dac86a.js"
+      key = "monitoring/static/js/async/66367.41dac86a.js"
+    },
+    {
+      path = "monitoring/static/js/async/66367.41dac86a.js.LICENSE.txt"
+      key = "monitoring/static/js/async/66367.41dac86a.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/66579.5d36c151.js"
+      key = "monitoring/static/js/async/66579.5d36c151.js"
+    },
+    {
+      path = "monitoring/static/js/async/66579.5d36c151.js.LICENSE.txt"
+      key = "monitoring/static/js/async/66579.5d36c151.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/66690.ff1f9e29.js"
+      key = "monitoring/static/js/async/66690.ff1f9e29.js"
+    },
+    {
+      path = "monitoring/static/js/async/66914.2769541b.js"
+      key = "monitoring/static/js/async/66914.2769541b.js"
+    },
+    {
+      path = "monitoring/static/js/async/67264.49065ecb.js"
+      key = "monitoring/static/js/async/67264.49065ecb.js"
+    },
+    {
+      path = "monitoring/static/js/async/67359.5d50b788.js"
+      key = "monitoring/static/js/async/67359.5d50b788.js"
+    },
+    {
+      path = "monitoring/static/js/async/67523.947f464c.js"
+      key = "monitoring/static/js/async/67523.947f464c.js"
+    },
+    {
+      path = "monitoring/static/js/async/67523.947f464c.js.LICENSE.txt"
+      key = "monitoring/static/js/async/67523.947f464c.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/67555.982f1075.js"
+      key = "monitoring/static/js/async/67555.982f1075.js"
+    },
+    {
+      path = "monitoring/static/js/async/67818.0e1c3f30.js"
+      key = "monitoring/static/js/async/67818.0e1c3f30.js"
+    },
+    {
+      path = "monitoring/static/js/async/68295.c7005d6a.js"
+      key = "monitoring/static/js/async/68295.c7005d6a.js"
+    },
+    {
+      path = "monitoring/static/js/async/68411.06e40c2b.js"
+      key = "monitoring/static/js/async/68411.06e40c2b.js"
+    },
+    {
+      path = "monitoring/static/js/async/68411.06e40c2b.js.LICENSE.txt"
+      key = "monitoring/static/js/async/68411.06e40c2b.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/68447.67de615f.js"
+      key = "monitoring/static/js/async/68447.67de615f.js"
+    },
+    {
+      path = "monitoring/static/js/async/68449.d3bad723.js"
+      key = "monitoring/static/js/async/68449.d3bad723.js"
+    },
+    {
+      path = "monitoring/static/js/async/68624.a12ce77b.js"
+      key = "monitoring/static/js/async/68624.a12ce77b.js"
+    },
+    {
+      path = "monitoring/static/js/async/68628.814b0145.js"
+      key = "monitoring/static/js/async/68628.814b0145.js"
+    },
+    {
+      path = "monitoring/static/js/async/68781.77b226ec.js"
+      key = "monitoring/static/js/async/68781.77b226ec.js"
+    },
+    {
+      path = "monitoring/static/js/async/68851.9485a372.js"
+      key = "monitoring/static/js/async/68851.9485a372.js"
+    },
+    {
+      path = "monitoring/static/js/async/68851.9485a372.js.LICENSE.txt"
+      key = "monitoring/static/js/async/68851.9485a372.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/69057.ea2fd72d.js"
+      key = "monitoring/static/js/async/69057.ea2fd72d.js"
+    },
+    {
+      path = "monitoring/static/js/async/69075.eaa9b03d.js"
+      key = "monitoring/static/js/async/69075.eaa9b03d.js"
+    },
+    {
+      path = "monitoring/static/js/async/69075.eaa9b03d.js.LICENSE.txt"
+      key = "monitoring/static/js/async/69075.eaa9b03d.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/69208.a750736f.js"
+      key = "monitoring/static/js/async/69208.a750736f.js"
+    },
+    {
+      path = "monitoring/static/js/async/69295.59f0f84a.js"
+      key = "monitoring/static/js/async/69295.59f0f84a.js"
+    },
+    {
+      path = "monitoring/static/js/async/70104.720ad971.js"
+      key = "monitoring/static/js/async/70104.720ad971.js"
+    },
+    {
+      path = "monitoring/static/js/async/70193.6b7f7235.js"
+      key = "monitoring/static/js/async/70193.6b7f7235.js"
+    },
+    {
+      path = "monitoring/static/js/async/70389.dc6417bf.js"
+      key = "monitoring/static/js/async/70389.dc6417bf.js"
+    },
+    {
+      path = "monitoring/static/js/async/70630.0cec19cd.js"
+      key = "monitoring/static/js/async/70630.0cec19cd.js"
+    },
+    {
+      path = "monitoring/static/js/async/70896.7942cdd2.js"
+      key = "monitoring/static/js/async/70896.7942cdd2.js"
+    },
+    {
+      path = "monitoring/static/js/async/70950.84da054d.js"
+      key = "monitoring/static/js/async/70950.84da054d.js"
+    },
+    {
+      path = "monitoring/static/js/async/70968.a3779b98.js"
+      key = "monitoring/static/js/async/70968.a3779b98.js"
+    },
+    {
+      path = "monitoring/static/js/async/71182.0d89d016.js"
+      key = "monitoring/static/js/async/71182.0d89d016.js"
+    },
+    {
+      path = "monitoring/static/js/async/7141.ad8aad88.js"
+      key = "monitoring/static/js/async/7141.ad8aad88.js"
+    },
+    {
+      path = "monitoring/static/js/async/71613.05db1b0c.js"
+      key = "monitoring/static/js/async/71613.05db1b0c.js"
+    },
+    {
+      path = "monitoring/static/js/async/71667.30d83f89.js"
+      key = "monitoring/static/js/async/71667.30d83f89.js"
+    },
+    {
+      path = "monitoring/static/js/async/71675.a0fc41d6.js"
+      key = "monitoring/static/js/async/71675.a0fc41d6.js"
+    },
+    {
+      path = "monitoring/static/js/async/71846.390464d0.js"
+      key = "monitoring/static/js/async/71846.390464d0.js"
+    },
+    {
+      path = "monitoring/static/js/async/71986.88c6bf1c.js"
+      key = "monitoring/static/js/async/71986.88c6bf1c.js"
+    },
+    {
+      path = "monitoring/static/js/async/72131.b75aab2f.js"
+      key = "monitoring/static/js/async/72131.b75aab2f.js"
+    },
+    {
+      path = "monitoring/static/js/async/72239.7907ae58.js"
+      key = "monitoring/static/js/async/72239.7907ae58.js"
+    },
+    {
+      path = "monitoring/static/js/async/72443.5ec7104c.js"
+      key = "monitoring/static/js/async/72443.5ec7104c.js"
+    },
+    {
+      path = "monitoring/static/js/async/7245.9b1f9221.js"
+      key = "monitoring/static/js/async/7245.9b1f9221.js"
+    },
+    {
+      path = "monitoring/static/js/async/73028.72d2ec43.js"
+      key = "monitoring/static/js/async/73028.72d2ec43.js"
+    },
+    {
+      path = "monitoring/static/js/async/73235.626e20b4.js"
+      key = "monitoring/static/js/async/73235.626e20b4.js"
+    },
+    {
+      path = "monitoring/static/js/async/73235.626e20b4.js.LICENSE.txt"
+      key = "monitoring/static/js/async/73235.626e20b4.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/73431.db032007.js"
+      key = "monitoring/static/js/async/73431.db032007.js"
+    },
+    {
+      path = "monitoring/static/js/async/73526.8bbc0ffb.js"
+      key = "monitoring/static/js/async/73526.8bbc0ffb.js"
+    },
+    {
+      path = "monitoring/static/js/async/7362.8d93311e.js"
+      key = "monitoring/static/js/async/7362.8d93311e.js"
+    },
+    {
+      path = "monitoring/static/js/async/73877.7b0863ae.js"
+      key = "monitoring/static/js/async/73877.7b0863ae.js"
+    },
+    {
+      path = "monitoring/static/js/async/73895.622eebd9.js"
+      key = "monitoring/static/js/async/73895.622eebd9.js"
+    },
+    {
+      path = "monitoring/static/js/async/73978.e588176c.js"
+      key = "monitoring/static/js/async/73978.e588176c.js"
+    },
+    {
+      path = "monitoring/static/js/async/73983.79adefe7.js"
+      key = "monitoring/static/js/async/73983.79adefe7.js"
+    },
+    {
+      path = "monitoring/static/js/async/73983.79adefe7.js.LICENSE.txt"
+      key = "monitoring/static/js/async/73983.79adefe7.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/74120.d3f0c9d2.js"
+      key = "monitoring/static/js/async/74120.d3f0c9d2.js"
+    },
+    {
+      path = "monitoring/static/js/async/7413.467b0bf9.js"
+      key = "monitoring/static/js/async/7413.467b0bf9.js"
+    },
+    {
+      path = "monitoring/static/js/async/74587.7242d7e6.js"
+      key = "monitoring/static/js/async/74587.7242d7e6.js"
+    },
+    {
+      path = "monitoring/static/js/async/74707.a818f306.js"
+      key = "monitoring/static/js/async/74707.a818f306.js"
+    },
+    {
+      path = "monitoring/static/js/async/74707.a818f306.js.LICENSE.txt"
+      key = "monitoring/static/js/async/74707.a818f306.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/74742.3c873292.js"
+      key = "monitoring/static/js/async/74742.3c873292.js"
+    },
+    {
+      path = "monitoring/static/js/async/74784.c2248024.js"
+      key = "monitoring/static/js/async/74784.c2248024.js"
+    },
+    {
+      path = "monitoring/static/js/async/75308.3f92647d.js"
+      key = "monitoring/static/js/async/75308.3f92647d.js"
+    },
+    {
+      path = "monitoring/static/js/async/75768.91febbfa.js"
+      key = "monitoring/static/js/async/75768.91febbfa.js"
+    },
+    {
+      path = "monitoring/static/js/async/76241.3297360c.js"
+      key = "monitoring/static/js/async/76241.3297360c.js"
+    },
+    {
+      path = "monitoring/static/js/async/76306.e28a1353.js"
+      key = "monitoring/static/js/async/76306.e28a1353.js"
+    },
+    {
+      path = "monitoring/static/js/async/76436.c4a5ca76.js"
+      key = "monitoring/static/js/async/76436.c4a5ca76.js"
+    },
+    {
+      path = "monitoring/static/js/async/76935.7721ea01.js"
+      key = "monitoring/static/js/async/76935.7721ea01.js"
+    },
+    {
+      path = "monitoring/static/js/async/77031.e7afa867.js"
+      key = "monitoring/static/js/async/77031.e7afa867.js"
+    },
+    {
+      path = "monitoring/static/js/async/77095.515bbab2.js"
+      key = "monitoring/static/js/async/77095.515bbab2.js"
+    },
+    {
+      path = "monitoring/static/js/async/77099.694f54e7.js"
+      key = "monitoring/static/js/async/77099.694f54e7.js"
+    },
+    {
+      path = "monitoring/static/js/async/77219.7650ddb8.js"
+      key = "monitoring/static/js/async/77219.7650ddb8.js"
+    },
+    {
+      path = "monitoring/static/js/async/77219.7650ddb8.js.LICENSE.txt"
+      key = "monitoring/static/js/async/77219.7650ddb8.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/77344.c0d0140a.js"
+      key = "monitoring/static/js/async/77344.c0d0140a.js"
+    },
+    {
+      path = "monitoring/static/js/async/77669.146129f1.js"
+      key = "monitoring/static/js/async/77669.146129f1.js"
+    },
+    {
+      path = "monitoring/static/js/async/7791.37de197d.js"
+      key = "monitoring/static/js/async/7791.37de197d.js"
+    },
+    {
+      path = "monitoring/static/js/async/7791.37de197d.js.LICENSE.txt"
+      key = "monitoring/static/js/async/7791.37de197d.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/77981.fd128195.js"
+      key = "monitoring/static/js/async/77981.fd128195.js"
+    },
+    {
+      path = "monitoring/static/js/async/78087.5a62946b.js"
+      key = "monitoring/static/js/async/78087.5a62946b.js"
+    },
+    {
+      path = "monitoring/static/js/async/78138.7e0c74ee.js"
+      key = "monitoring/static/js/async/78138.7e0c74ee.js"
+    },
+    {
+      path = "monitoring/static/js/async/78250.43b6f66f.js"
+      key = "monitoring/static/js/async/78250.43b6f66f.js"
+    },
+    {
+      path = "monitoring/static/js/async/78252.44b63dec.js"
+      key = "monitoring/static/js/async/78252.44b63dec.js"
+    },
+    {
+      path = "monitoring/static/js/async/78499.928be91f.js"
+      key = "monitoring/static/js/async/78499.928be91f.js"
+    },
+    {
+      path = "monitoring/static/js/async/78499.928be91f.js.LICENSE.txt"
+      key = "monitoring/static/js/async/78499.928be91f.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/78631.a6db412b.js"
+      key = "monitoring/static/js/async/78631.a6db412b.js"
+    },
+    {
+      path = "monitoring/static/js/async/78919.ead306b9.js"
+      key = "monitoring/static/js/async/78919.ead306b9.js"
+    },
+    {
+      path = "monitoring/static/js/async/78919.ead306b9.js.LICENSE.txt"
+      key = "monitoring/static/js/async/78919.ead306b9.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/79363.1e6a2c77.js"
+      key = "monitoring/static/js/async/79363.1e6a2c77.js"
+    },
+    {
+      path = "monitoring/static/js/async/79363.1e6a2c77.js.LICENSE.txt"
+      key = "monitoring/static/js/async/79363.1e6a2c77.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/79482.be608073.js"
+      key = "monitoring/static/js/async/79482.be608073.js"
+    },
+    {
+      path = "monitoring/static/js/async/79517.69d19eb4.js"
+      key = "monitoring/static/js/async/79517.69d19eb4.js"
+    },
+    {
+      path = "monitoring/static/js/async/79953.2dfe0612.js"
+      key = "monitoring/static/js/async/79953.2dfe0612.js"
+    },
+    {
+      path = "monitoring/static/js/async/80125.9d5b97ba.js"
+      key = "monitoring/static/js/async/80125.9d5b97ba.js"
+    },
+    {
+      path = "monitoring/static/js/async/80332.4c1d6b66.js"
+      key = "monitoring/static/js/async/80332.4c1d6b66.js"
+    },
+    {
+      path = "monitoring/static/js/async/80360.67b32b8a.js"
+      key = "monitoring/static/js/async/80360.67b32b8a.js"
+    },
+    {
+      path = "monitoring/static/js/async/80401.5925925c.js"
+      key = "monitoring/static/js/async/80401.5925925c.js"
+    },
+    {
+      path = "monitoring/static/js/async/80406.c6bbf2ee.js"
+      key = "monitoring/static/js/async/80406.c6bbf2ee.js"
+    },
+    {
+      path = "monitoring/static/js/async/80432.abeb973f.js"
+      key = "monitoring/static/js/async/80432.abeb973f.js"
+    },
+    {
+      path = "monitoring/static/js/async/80565.441480f1.js"
+      key = "monitoring/static/js/async/80565.441480f1.js"
+    },
+    {
+      path = "monitoring/static/js/async/80774.15816915.js"
+      key = "monitoring/static/js/async/80774.15816915.js"
+    },
+    {
+      path = "monitoring/static/js/async/81021.670346c8.js"
+      key = "monitoring/static/js/async/81021.670346c8.js"
+    },
+    {
+      path = "monitoring/static/js/async/81350.4eb89a4a.js"
+      key = "monitoring/static/js/async/81350.4eb89a4a.js"
+    },
+    {
+      path = "monitoring/static/js/async/81387.e9f3296b.js"
+      key = "monitoring/static/js/async/81387.e9f3296b.js"
+    },
+    {
+      path = "monitoring/static/js/async/81387.e9f3296b.js.LICENSE.txt"
+      key = "monitoring/static/js/async/81387.e9f3296b.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/81481.da5e152a.js"
+      key = "monitoring/static/js/async/81481.da5e152a.js"
+    },
+    {
+      path = "monitoring/static/js/async/81586.e29cd057.js"
+      key = "monitoring/static/js/async/81586.e29cd057.js"
+    },
+    {
+      path = "monitoring/static/js/async/81708.92582b94.js"
+      key = "monitoring/static/js/async/81708.92582b94.js"
+    },
+    {
+      path = "monitoring/static/js/async/82004.472b5b11.js"
+      key = "monitoring/static/js/async/82004.472b5b11.js"
+    },
+    {
+      path = "monitoring/static/js/async/82357.7ed19ece.js"
+      key = "monitoring/static/js/async/82357.7ed19ece.js"
+    },
+    {
+      path = "monitoring/static/js/async/82415.5dfd0267.js"
+      key = "monitoring/static/js/async/82415.5dfd0267.js"
+    },
+    {
+      path = "monitoring/static/js/async/82601.2b25facb.js"
+      key = "monitoring/static/js/async/82601.2b25facb.js"
+    },
+    {
+      path = "monitoring/static/js/async/82601.2b25facb.js.LICENSE.txt"
+      key = "monitoring/static/js/async/82601.2b25facb.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/82913.0c9bc5f3.js"
+      key = "monitoring/static/js/async/82913.0c9bc5f3.js"
+    },
+    {
+      path = "monitoring/static/js/async/83093.56c32821.js"
+      key = "monitoring/static/js/async/83093.56c32821.js"
+    },
+    {
+      path = "monitoring/static/js/async/8316.df6e9fdb.js"
+      key = "monitoring/static/js/async/8316.df6e9fdb.js"
+    },
+    {
+      path = "monitoring/static/js/async/8339.7e97c3ae.js"
+      key = "monitoring/static/js/async/8339.7e97c3ae.js"
+    },
+    {
+      path = "monitoring/static/js/async/8339.7e97c3ae.js.LICENSE.txt"
+      key = "monitoring/static/js/async/8339.7e97c3ae.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/83396.ceae836d.js"
+      key = "monitoring/static/js/async/83396.ceae836d.js"
+    },
+    {
+      path = "monitoring/static/js/async/8368.2fb3ddce.js"
+      key = "monitoring/static/js/async/8368.2fb3ddce.js"
+    },
+    {
+      path = "monitoring/static/js/async/83898.c572cdc9.js"
+      key = "monitoring/static/js/async/83898.c572cdc9.js"
+    },
+    {
+      path = "monitoring/static/js/async/84199.c57a7c9d.js"
+      key = "monitoring/static/js/async/84199.c57a7c9d.js"
+    },
+    {
+      path = "monitoring/static/js/async/8451.2c2bb692.js"
+      key = "monitoring/static/js/async/8451.2c2bb692.js"
+    },
+    {
+      path = "monitoring/static/js/async/8473.f9d59fd9.js"
+      key = "monitoring/static/js/async/8473.f9d59fd9.js"
+    },
+    {
+      path = "monitoring/static/js/async/8489.2d70b07b.js"
+      key = "monitoring/static/js/async/8489.2d70b07b.js"
+    },
+    {
+      path = "monitoring/static/js/async/85179.64625fbe.js"
+      key = "monitoring/static/js/async/85179.64625fbe.js"
+    },
+    {
+      path = "monitoring/static/js/async/85179.64625fbe.js.LICENSE.txt"
+      key = "monitoring/static/js/async/85179.64625fbe.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/85459.a0b3fb2e.js"
+      key = "monitoring/static/js/async/85459.a0b3fb2e.js"
+    },
+    {
+      path = "monitoring/static/js/async/85532.f69c0ada.js"
+      key = "monitoring/static/js/async/85532.f69c0ada.js"
+    },
+    {
+      path = "monitoring/static/js/async/85567.fe117e2b.js"
+      key = "monitoring/static/js/async/85567.fe117e2b.js"
+    },
+    {
+      path = "monitoring/static/js/async/85658.cd0fb0ba.js"
+      key = "monitoring/static/js/async/85658.cd0fb0ba.js"
+    },
+    {
+      path = "monitoring/static/js/async/85671.75179534.js"
+      key = "monitoring/static/js/async/85671.75179534.js"
+    },
+    {
+      path = "monitoring/static/js/async/85813.ed4f1a89.js"
+      key = "monitoring/static/js/async/85813.ed4f1a89.js"
+    },
+    {
+      path = "monitoring/static/js/async/85813.ed4f1a89.js.LICENSE.txt"
+      key = "monitoring/static/js/async/85813.ed4f1a89.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/85881.628d3965.js"
+      key = "monitoring/static/js/async/85881.628d3965.js"
+    },
+    {
+      path = "monitoring/static/js/async/85905.2c5158b9.js"
+      key = "monitoring/static/js/async/85905.2c5158b9.js"
+    },
+    {
+      path = "monitoring/static/js/async/86127.55074c80.js"
+      key = "monitoring/static/js/async/86127.55074c80.js"
+    },
+    {
+      path = "monitoring/static/js/async/8619.59a7ffaa.js"
+      key = "monitoring/static/js/async/8619.59a7ffaa.js"
+    },
+    {
+      path = "monitoring/static/js/async/8619.59a7ffaa.js.LICENSE.txt"
+      key = "monitoring/static/js/async/8619.59a7ffaa.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/86222.8243d105.js"
+      key = "monitoring/static/js/async/86222.8243d105.js"
+    },
+    {
+      path = "monitoring/static/js/async/8627.800cb5f4.js"
+      key = "monitoring/static/js/async/8627.800cb5f4.js"
+    },
+    {
+      path = "monitoring/static/js/async/86617.a0bfb2b2.js"
+      key = "monitoring/static/js/async/86617.a0bfb2b2.js"
+    },
+    {
+      path = "monitoring/static/js/async/8708.ab8ff876.js"
+      key = "monitoring/static/js/async/8708.ab8ff876.js"
+    },
+    {
+      path = "monitoring/static/js/async/87453.ce7bf7b2.js"
+      key = "monitoring/static/js/async/87453.ce7bf7b2.js"
+    },
+    {
+      path = "monitoring/static/js/async/87507.9e8775bd.js"
+      key = "monitoring/static/js/async/87507.9e8775bd.js"
+    },
+    {
+      path = "monitoring/static/js/async/87571.71a52701.js"
+      key = "monitoring/static/js/async/87571.71a52701.js"
+    },
+    {
+      path = "monitoring/static/js/async/87571.71a52701.js.LICENSE.txt"
+      key = "monitoring/static/js/async/87571.71a52701.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/87625.9835cdab.js"
+      key = "monitoring/static/js/async/87625.9835cdab.js"
+    },
+    {
+      path = "monitoring/static/js/async/87709.3c74a28e.js"
+      key = "monitoring/static/js/async/87709.3c74a28e.js"
+    },
+    {
+      path = "monitoring/static/js/async/87841.aeeb44fd.js"
+      key = "monitoring/static/js/async/87841.aeeb44fd.js"
+    },
+    {
+      path = "monitoring/static/js/async/87841.aeeb44fd.js.LICENSE.txt"
+      key = "monitoring/static/js/async/87841.aeeb44fd.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/87924.954e5553.js"
+      key = "monitoring/static/js/async/87924.954e5553.js"
+    },
+    {
+      path = "monitoring/static/js/async/88217.7f3ac612.js"
+      key = "monitoring/static/js/async/88217.7f3ac612.js"
+    },
+    {
+      path = "monitoring/static/js/async/88295.58ec3e18.js"
+      key = "monitoring/static/js/async/88295.58ec3e18.js"
+    },
+    {
+      path = "monitoring/static/js/async/88331.33d54523.js"
+      key = "monitoring/static/js/async/88331.33d54523.js"
+    },
+    {
+      path = "monitoring/static/js/async/88331.33d54523.js.LICENSE.txt"
+      key = "monitoring/static/js/async/88331.33d54523.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/88342.5a802834.js"
+      key = "monitoring/static/js/async/88342.5a802834.js"
+    },
+    {
+      path = "monitoring/static/js/async/88366.919e9b7d.js"
+      key = "monitoring/static/js/async/88366.919e9b7d.js"
+    },
+    {
+      path = "monitoring/static/js/async/88403.2879da05.js"
+      key = "monitoring/static/js/async/88403.2879da05.js"
+    },
+    {
+      path = "monitoring/static/js/async/8853.d085c1d9.js"
+      key = "monitoring/static/js/async/8853.d085c1d9.js"
+    },
+    {
+      path = "monitoring/static/js/async/88676.d6172fe7.js"
+      key = "monitoring/static/js/async/88676.d6172fe7.js"
+    },
+    {
+      path = "monitoring/static/js/async/88748.95778572.js"
+      key = "monitoring/static/js/async/88748.95778572.js"
+    },
+    {
+      path = "monitoring/static/js/async/88887.15d853c1.js"
+      key = "monitoring/static/js/async/88887.15d853c1.js"
+    },
+    {
+      path = "monitoring/static/js/async/88887.15d853c1.js.LICENSE.txt"
+      key = "monitoring/static/js/async/88887.15d853c1.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/89004.2da9a234.js"
+      key = "monitoring/static/js/async/89004.2da9a234.js"
+    },
+    {
+      path = "monitoring/static/js/async/89011.1409f7e5.js"
+      key = "monitoring/static/js/async/89011.1409f7e5.js"
+    },
+    {
+      path = "monitoring/static/js/async/89203.34787c62.js"
+      key = "monitoring/static/js/async/89203.34787c62.js"
+    },
+    {
+      path = "monitoring/static/js/async/89245.ce0f653c.js"
+      key = "monitoring/static/js/async/89245.ce0f653c.js"
+    },
+    {
+      path = "monitoring/static/js/async/89289.15879cb9.js"
+      key = "monitoring/static/js/async/89289.15879cb9.js"
+    },
+    {
+      path = "monitoring/static/js/async/89289.15879cb9.js.LICENSE.txt"
+      key = "monitoring/static/js/async/89289.15879cb9.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/89565.8d112c2a.js"
+      key = "monitoring/static/js/async/89565.8d112c2a.js"
+    },
+    {
+      path = "monitoring/static/js/async/89738.c33dc904.js"
+      key = "monitoring/static/js/async/89738.c33dc904.js"
+    },
+    {
+      path = "monitoring/static/js/async/89918.b058fd85.js"
+      key = "monitoring/static/js/async/89918.b058fd85.js"
+    },
+    {
+      path = "monitoring/static/js/async/90058.a8513089.js"
+      key = "monitoring/static/js/async/90058.a8513089.js"
+    },
+    {
+      path = "monitoring/static/js/async/90070.dac17c83.js"
+      key = "monitoring/static/js/async/90070.dac17c83.js"
+    },
+    {
+      path = "monitoring/static/js/async/90093.5cbde80d.js"
+      key = "monitoring/static/js/async/90093.5cbde80d.js"
+    },
+    {
+      path = "monitoring/static/js/async/9021.c20c7dd7.js"
+      key = "monitoring/static/js/async/9021.c20c7dd7.js"
+    },
+    {
+      path = "monitoring/static/js/async/90219.793088a0.js"
+      key = "monitoring/static/js/async/90219.793088a0.js"
+    },
+    {
+      path = "monitoring/static/js/async/9065.36448dc7.js"
+      key = "monitoring/static/js/async/9065.36448dc7.js"
+    },
+    {
+      path = "monitoring/static/js/async/90783.8aa44e6e.js"
+      key = "monitoring/static/js/async/90783.8aa44e6e.js"
+    },
+    {
+      path = "monitoring/static/js/async/90783.8aa44e6e.js.LICENSE.txt"
+      key = "monitoring/static/js/async/90783.8aa44e6e.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/90958.d5e2826a.js"
+      key = "monitoring/static/js/async/90958.d5e2826a.js"
+    },
+    {
+      path = "monitoring/static/js/async/91087.f4f6d9ab.js"
+      key = "monitoring/static/js/async/91087.f4f6d9ab.js"
+    },
+    {
+      path = "monitoring/static/js/async/91255.07bd817d.js"
+      key = "monitoring/static/js/async/91255.07bd817d.js"
+    },
+    {
+      path = "monitoring/static/js/async/91798.f0fc299d.js"
+      key = "monitoring/static/js/async/91798.f0fc299d.js"
+    },
+    {
+      path = "monitoring/static/js/async/91848.263708b3.js"
+      key = "monitoring/static/js/async/91848.263708b3.js"
+    },
+    {
+      path = "monitoring/static/js/async/92011.60786522.js"
+      key = "monitoring/static/js/async/92011.60786522.js"
+    },
+    {
+      path = "monitoring/static/js/async/92013.0ba738d1.js"
+      key = "monitoring/static/js/async/92013.0ba738d1.js"
+    },
+    {
+      path = "monitoring/static/js/async/92301.f7a5cfc6.js"
+      key = "monitoring/static/js/async/92301.f7a5cfc6.js"
+    },
+    {
+      path = "monitoring/static/js/async/92470.706d9c61.js"
+      key = "monitoring/static/js/async/92470.706d9c61.js"
+    },
+    {
+      path = "monitoring/static/js/async/9248.d343ad7b.js"
+      key = "monitoring/static/js/async/9248.d343ad7b.js"
+    },
+    {
+      path = "monitoring/static/js/async/93059.8ab8500d.js"
+      key = "monitoring/static/js/async/93059.8ab8500d.js"
+    },
+    {
+      path = "monitoring/static/js/async/93641.f5ea8a3d.js"
+      key = "monitoring/static/js/async/93641.f5ea8a3d.js"
+    },
+    {
+      path = "monitoring/static/js/async/93647.e7b80a1f.js"
+      key = "monitoring/static/js/async/93647.e7b80a1f.js"
+    },
+    {
+      path = "monitoring/static/js/async/93647.e7b80a1f.js.LICENSE.txt"
+      key = "monitoring/static/js/async/93647.e7b80a1f.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/94056.fbb7f497.js"
+      key = "monitoring/static/js/async/94056.fbb7f497.js"
+    },
+    {
+      path = "monitoring/static/js/async/94076.490b9f13.js"
+      key = "monitoring/static/js/async/94076.490b9f13.js"
+    },
+    {
+      path = "monitoring/static/js/async/94101.4c74aa2d.js"
+      key = "monitoring/static/js/async/94101.4c74aa2d.js"
+    },
+    {
+      path = "monitoring/static/js/async/94160.f059c8b3.js"
+      key = "monitoring/static/js/async/94160.f059c8b3.js"
+    },
+    {
+      path = "monitoring/static/js/async/94299.480dd293.js"
+      key = "monitoring/static/js/async/94299.480dd293.js"
+    },
+    {
+      path = "monitoring/static/js/async/94324.eb6b29d8.js"
+      key = "monitoring/static/js/async/94324.eb6b29d8.js"
+    },
+    {
+      path = "monitoring/static/js/async/94456.b9b1b5e8.js"
+      key = "monitoring/static/js/async/94456.b9b1b5e8.js"
+    },
+    {
+      path = "monitoring/static/js/async/94467.406289f2.js"
+      key = "monitoring/static/js/async/94467.406289f2.js"
+    },
+    {
+      path = "monitoring/static/js/async/94467.406289f2.js.LICENSE.txt"
+      key = "monitoring/static/js/async/94467.406289f2.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/94686.93a7d6b3.js"
+      key = "monitoring/static/js/async/94686.93a7d6b3.js"
+    },
+    {
+      path = "monitoring/static/js/async/9475.29254d18.js"
+      key = "monitoring/static/js/async/9475.29254d18.js"
+    },
+    {
+      path = "monitoring/static/js/async/9475.29254d18.js.LICENSE.txt"
+      key = "monitoring/static/js/async/9475.29254d18.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/9485.0b93e3c2.js"
+      key = "monitoring/static/js/async/9485.0b93e3c2.js"
+    },
+    {
+      path = "monitoring/static/js/async/94985.70b3f8c6.js"
+      key = "monitoring/static/js/async/94985.70b3f8c6.js"
+    },
+    {
+      path = "monitoring/static/js/async/95123.dce72fdf.js"
+      key = "monitoring/static/js/async/95123.dce72fdf.js"
+    },
+    {
+      path = "monitoring/static/js/async/95135.80580f3c.js"
+      key = "monitoring/static/js/async/95135.80580f3c.js"
+    },
+    {
+      path = "monitoring/static/js/async/95178.bc4b3415.js"
+      key = "monitoring/static/js/async/95178.bc4b3415.js"
+    },
+    {
+      path = "monitoring/static/js/async/9518.93b9e24a.js"
+      key = "monitoring/static/js/async/9518.93b9e24a.js"
+    },
+    {
+      path = "monitoring/static/js/async/95218.6ad3da80.js"
+      key = "monitoring/static/js/async/95218.6ad3da80.js"
+    },
+    {
+      path = "monitoring/static/js/async/95325.93077db6.js"
+      key = "monitoring/static/js/async/95325.93077db6.js"
+    },
+    {
+      path = "monitoring/static/js/async/95495.9f9f2b6a.js"
+      key = "monitoring/static/js/async/95495.9f9f2b6a.js"
+    },
+    {
+      path = "monitoring/static/js/async/95495.9f9f2b6a.js.LICENSE.txt"
+      key = "monitoring/static/js/async/95495.9f9f2b6a.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/95591.a0708881.js"
+      key = "monitoring/static/js/async/95591.a0708881.js"
+    },
+    {
+      path = "monitoring/static/js/async/95591.a0708881.js.LICENSE.txt"
+      key = "monitoring/static/js/async/95591.a0708881.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/9578.4ca38be7.js"
+      key = "monitoring/static/js/async/9578.4ca38be7.js"
+    },
+    {
+      path = "monitoring/static/js/async/95843.44399653.js"
+      key = "monitoring/static/js/async/95843.44399653.js"
+    },
+    {
+      path = "monitoring/static/js/async/95843.44399653.js.LICENSE.txt"
+      key = "monitoring/static/js/async/95843.44399653.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/95933.bf052b36.js"
+      key = "monitoring/static/js/async/95933.bf052b36.js"
+    },
+    {
+      path = "monitoring/static/js/async/96008.9f775b10.js"
+      key = "monitoring/static/js/async/96008.9f775b10.js"
+    },
+    {
+      path = "monitoring/static/js/async/9605.04c0b98a.js"
+      key = "monitoring/static/js/async/9605.04c0b98a.js"
+    },
+    {
+      path = "monitoring/static/js/async/96062.7e446830.js"
+      key = "monitoring/static/js/async/96062.7e446830.js"
+    },
+    {
+      path = "monitoring/static/js/async/96093.8660117a.js"
+      key = "monitoring/static/js/async/96093.8660117a.js"
+    },
+    {
+      path = "monitoring/static/js/async/96239.5249a026.js"
+      key = "monitoring/static/js/async/96239.5249a026.js"
+    },
+    {
+      path = "monitoring/static/js/async/96459.938d6174.js"
+      key = "monitoring/static/js/async/96459.938d6174.js"
+    },
+    {
+      path = "monitoring/static/js/async/96955.eb2fe38f.js"
+      key = "monitoring/static/js/async/96955.eb2fe38f.js"
+    },
+    {
+      path = "monitoring/static/js/async/96981.46663e95.js"
+      key = "monitoring/static/js/async/96981.46663e95.js"
+    },
+    {
+      path = "monitoring/static/js/async/97132.dc0c126f.js"
+      key = "monitoring/static/js/async/97132.dc0c126f.js"
+    },
+    {
+      path = "monitoring/static/js/async/97137.6782a53e.js"
+      key = "monitoring/static/js/async/97137.6782a53e.js"
+    },
+    {
+      path = "monitoring/static/js/async/97137.6782a53e.js.LICENSE.txt"
+      key = "monitoring/static/js/async/97137.6782a53e.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/97263.e3e753e9.js"
+      key = "monitoring/static/js/async/97263.e3e753e9.js"
+    },
+    {
+      path = "monitoring/static/js/async/97318.89b5213a.js"
+      key = "monitoring/static/js/async/97318.89b5213a.js"
+    },
+    {
+      path = "monitoring/static/js/async/97429.65a2eb89.js"
+      key = "monitoring/static/js/async/97429.65a2eb89.js"
+    },
+    {
+      path = "monitoring/static/js/async/97429.65a2eb89.js.LICENSE.txt"
+      key = "monitoring/static/js/async/97429.65a2eb89.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/async/97448.5d447d18.js"
+      key = "monitoring/static/js/async/97448.5d447d18.js"
+    },
+    {
+      path = "monitoring/static/js/async/97608.23491b05.js"
+      key = "monitoring/static/js/async/97608.23491b05.js"
+    },
+    {
+      path = "monitoring/static/js/async/97915.1bb9d6e9.js"
+      key = "monitoring/static/js/async/97915.1bb9d6e9.js"
+    },
+    {
+      path = "monitoring/static/js/async/98480.a919da49.js"
+      key = "monitoring/static/js/async/98480.a919da49.js"
+    },
+    {
+      path = "monitoring/static/js/async/98865.10f55171.js"
+      key = "monitoring/static/js/async/98865.10f55171.js"
+    },
+    {
+      path = "monitoring/static/js/async/98908.c4d5f683.js"
+      key = "monitoring/static/js/async/98908.c4d5f683.js"
+    },
+    {
+      path = "monitoring/static/js/async/99036.e9df39dd.js"
+      key = "monitoring/static/js/async/99036.e9df39dd.js"
+    },
+    {
+      path = "monitoring/static/js/async/99204.9f838adb.js"
+      key = "monitoring/static/js/async/99204.9f838adb.js"
+    },
+    {
+      path = "monitoring/static/js/async/99584.30e1ba68.js"
+      key = "monitoring/static/js/async/99584.30e1ba68.js"
+    },
+    {
+      path = "monitoring/static/js/index.66eb8101.js"
+      key = "monitoring/static/js/index.66eb8101.js"
+    },
+    {
+      path = "monitoring/static/js/lib-axios.3ce68a69.js"
+      key = "monitoring/static/js/lib-axios.3ce68a69.js"
+    },
+    {
+      path = "monitoring/static/js/lib-react.4a71e642.js"
+      key = "monitoring/static/js/lib-react.4a71e642.js"
+    },
+    {
+      path = "monitoring/static/js/lib-react.4a71e642.js.LICENSE.txt"
+      key = "monitoring/static/js/lib-react.4a71e642.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/js/lib-router.2d396e8c.js"
+      key = "monitoring/static/js/lib-router.2d396e8c.js"
+    },
+    {
+      path = "monitoring/static/js/lib-router.2d396e8c.js.LICENSE.txt"
+      key = "monitoring/static/js/lib-router.2d396e8c.js.LICENSE.txt"
+    },
+    {
+      path = "monitoring/static/media/codicon.dfc1b1db.ttf"
+      key = "monitoring/static/media/codicon.dfc1b1db.ttf"
+    },
+    {
+      path = "content/index.html"
+      key = "viewer/index.html"
+    },
+    {
+      path = "content/viewer.js"
+      key = "viewer/viewer.js"
+    },
+    {
+      path = "content/jstree.min.js"
+      key = "viewer/jstree.min.js"
+    },
+    {
+      path = "content/style.min.css"
+      key = "viewer/style.min.css"
+    },
+    {
+      path = "content/throbber.gif"
+      key = "viewer/throbber.gif"
+    },
+    {
+      path = "content/32px.png"
+      key = "viewer/32px.png"
+    },
+    {
+      path = "content/40px.png"
+      key = "viewer/40px.png"
+    },
+    {
+      path = "content/v2/cpu"
+      key = "viewer/v2/cpu"
+    },
+    {
+      path = "content/v2/cpu_view.js"
+      key = "viewer/v2/cpu_view.js"
+    },
+    {
+      path = "content/v2/disk_cell.js"
+      key = "viewer/v2/disk_cell.js"
+    },
+    {
+      path = "content/v2/disk_map.js"
+      key = "viewer/v2/disk_map.js"
+    },
+    {
+      path = "content/v2/index.html"
+      key = "viewer/v2/index.html"
+    },
+    {
+      path = "content/v2/man-green.png"
+      key = "viewer/v2/man-green.png"
+    },
+    {
+      path = "content/v2/man-orange.png"
+      key = "viewer/v2/man-orange.png"
+    },
+    {
+      path = "content/v2/man-red.png"
+      key = "viewer/v2/man-red.png"
+    },
+    {
+      path = "content/v2/man-yellow.png"
+      key = "viewer/v2/man-yellow.png"
+    },
+    {
+      path = "content/v2/net_view.js"
+      key = "viewer/v2/net_view.js"
+    },
+    {
+      path = "content/v2/network"
+      key = "viewer/v2/network"
+    },
+    {
+      path = "content/v2/node_group.js"
+      key = "viewer/v2/node_group.js"
+    },
+    {
+      path = "content/v2/node.js"
+      key = "viewer/v2/node.js"
+    },
+    {
+      path = "content/v2/node_map.js"
+      key = "viewer/v2/node_map.js"
+    },
+    {
+      path = "content/v2/nodes"
+      key = "viewer/v2/nodes"
+    },
+    {
+      path = "content/v2/node_view.js"
+      key = "viewer/v2/node_view.js"
+    },
+    {
+      path = "content/v2/overview"
+      key = "viewer/v2/overview"
+    },
+    {
+      path = "content/v2/overview.js"
+      key = "viewer/v2/overview.js"
+    },
+    {
+      path = "content/v2/pdisk.js"
+      key = "viewer/v2/pdisk.js"
+    },
+    {
+      path = "content/v2/pool_block.js"
+      key = "viewer/v2/pool_block.js"
+    },
+    {
+      path = "content/v2/pool_map.js"
+      key = "viewer/v2/pool_map.js"
+    },
+    {
+      path = "content/v2/runner.html"
+      key = "viewer/v2/runner.html"
+    },
+    {
+      path = "content/v2/stats.js"
+      key = "viewer/v2/stats.js"
+    },
+    {
+      path = "content/v2/storage"
+      key = "viewer/v2/storage"
+    },
+    {
+      path = "content/v2/storage_group.js"
+      key = "viewer/v2/storage_group.js"
+    },
+    {
+      path = "content/v2/storage.js"
+      key = "viewer/v2/storage.js"
+    },
+    {
+      path = "content/v2/storage_view.js"
+      key = "viewer/v2/storage_view.js"
+    },
+    {
+      path = "content/v2/tablet_cell.js"
+      key = "viewer/v2/tablet_cell.js"
+    },
+    {
+      path = "content/v2/tablet_map.js"
+      key = "viewer/v2/tablet_map.js"
+    },
+    {
+      path = "content/v2/tenant.js"
+      key = "viewer/v2/tenant.js"
+    },
+    {
+      path = "content/v2/tenants"
+      key = "viewer/v2/tenants"
+    },
+    {
+      path = "content/v2/tenant_view.js"
+      key = "viewer/v2/tenant_view.js"
+    },
+    {
+      path = "content/v2/throbber.gif"
+      key = "viewer/v2/throbber.gif"
+    },
+    {
+      path = "content/v2/util.js"
+      key = "viewer/v2/util.js"
+    },
+    {
+      path = "content/v2/vdisk.js"
+      key = "viewer/v2/vdisk.js"
+    },
+    {
+      path = "content/v2/viewer.css"
+      key = "viewer/v2/viewer.css"
+    },
+    {
+      path = "content/v2/viewer.js"
+      key = "viewer/v2/viewer.js"
+    },
+    {
+      path = "content/api/favicon-16x16.png"
+      key = "viewer/api/favicon-16x16.png"
+    },
+    {
+      path = "content/api/favicon-32x32.png"
+      key = "viewer/api/favicon-32x32.png"
+    },
+    {
+      path = "content/api/index.css"
+      key = "viewer/api/index.css"
+    },
+    {
+      path = "content/api/index.html"
+      key = "viewer/api/index.html"
+    },
+    {
+      path = "content/api/swagger-initializer.js"
+      key = "viewer/api/swagger-initializer.js"
+    },
+    {
+      path = "content/api/swagger-ui-bundle.js"
+      key = "viewer/api/swagger-ui-bundle.js"
+    },
+    {
+      path = "content/api/swagger-ui.css"
+      key = "viewer/api/swagger-ui.css"
+    },
+    {
+      path = "content/api/swagger-ui-standalone-preset.js"
+      key = "viewer/api/swagger-ui-standalone-preset.js"
+    },
+  ]
+}
+
+library("yaml") {
+  public_deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/yaml/as",
+  ]
+
+  deps = [
+    # "//ydb/core/viewer/protos",  # peerdir only
+  ]
+
+  sources = [ "yaml/yaml.cpp" ]
+}

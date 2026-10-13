@@ -1,0 +1,5 @@
+group("common") {
+  deps = [
+    # "//contrib/libs/grpc",
+  ]
+}

@@ -1,0 +1,22 @@
+library("counters") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+  ]
+
+  deps = [
+    # "//library/cpp/deprecated/enum_codegen",
+    "//ydb/core/base",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/core/sys_view/service",
+    # "//ydb/core/util",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "counters.cpp",
+    "proxy_counters.cpp",
+  ]
+}

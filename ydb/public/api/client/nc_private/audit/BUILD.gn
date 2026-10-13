@@ -1,0 +1,10 @@
+protobuf_library("audit") {
+  public_deps = [
+    "//contrib/libs/googleapis-common-protos",
+    "//ydb/public/api/client/nc_private/audit/v1/common",
+  ]
+
+  sources = [ "annotations.proto" ]
+
+  generate_grpc_services = true
+}

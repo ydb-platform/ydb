@@ -1,0 +1,12 @@
+library("backtrace") {
+  public_deps = [ "//library/cpp/yt/memory" ]
+
+  deps = [
+    # "//library/cpp/yt/string",
+  ]
+
+  sources = [
+    "backtrace.cpp",
+    "symbolizers/dynload/dynload_symbolizer.cpp",
+  ]
+}

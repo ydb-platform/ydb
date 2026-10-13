@@ -1,0 +1,29 @@
+library("account_lockout") {
+  sources = [ "account_lockout/account_lockout.cpp" ]
+}
+
+library("cache") {
+  sources = [ "cache/lru.cpp" ]
+}
+
+library("login") {
+  public_deps = [
+    ":account_lockout",
+    ":cache",
+    "//ydb/library/login/hashes_checker",
+    "//ydb/library/login/password_checker",
+    "//ydb/library/login/protos",
+  ]
+
+  deps = [
+    "//contrib/libs/jwt-cpp",
+    # "//contrib/libs/openssl",
+    # "//contrib/libs/protobuf",  # peerdir only
+    "//library/cpp/digest/argonish",
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//ydb/library/login/sasl",
+  ]
+
+  sources = [ "login.cpp" ]
+}

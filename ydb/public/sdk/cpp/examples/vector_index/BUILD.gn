@@ -1,0 +1,14 @@
+linked_executable("vector_index") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "main.cpp",
+    "vector_index.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

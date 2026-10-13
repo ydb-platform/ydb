@@ -1,0 +1,39 @@
+library("arrow") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//yql/essentials/minikql",
+  ]
+
+  deps = [
+    # "//ydb/public/lib/scheme_types",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "kqp_formats_arrow.cpp" ]
+}
+
+library("result_set_format") {
+  public_deps = [
+    ":arrow",
+    "//contrib/libs/apache/arrow",
+    "//ydb/library/yql/dq/runtime",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/utils",
+  ]
+
+  deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/library/mkql_proto",
+    # "//ydb/library/mkql_proto/protos",  # peerdir only
+    # "//ydb/library/yql/dq/proto",  # peerdir only
+    # "//ydb/public/lib/scheme_types",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/public/udf",  # peerdir only
+  ]
+
+  sources = [ "kqp_result_set_builders.cpp" ]
+}

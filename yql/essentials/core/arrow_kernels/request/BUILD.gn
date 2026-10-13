@@ -1,0 +1,17 @@
+library("request") {
+  public_deps = [
+    "//yql/essentials/ast",
+    "//yql/essentials/minikql",
+    "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/public/langver",
+  ]
+
+  deps = [
+    "//yql/essentials/core",
+    # "//yql/essentials/sql",  # peerdir only
+  ]
+
+  sources = [ "request.cpp" ]
+
+  serialize_enum_headers = [ "request.h" ]
+}

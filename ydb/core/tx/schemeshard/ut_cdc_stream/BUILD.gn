@@ -1,0 +1,24 @@
+unittest_executable("ut_cdc_stream") {
+  deps = [
+    "//library/cpp/json",
+    "//ydb/core/metering",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+  ]
+
+  sources = [ "ut_cdc_stream.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

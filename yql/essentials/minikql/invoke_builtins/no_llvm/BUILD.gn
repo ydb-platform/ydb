@@ -1,0 +1,124 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+_comp_gen_dir = "$target_gen_dir/yql/essentials/minikql/computation"
+_self_gen_dir = "$target_gen_dir/yql/essentials/minikql/invoke_builtins"
+
+copy("mkql_computation_node_codegen_h") {
+  sources = [
+    "//yql/essentials/minikql/computation/mkql_computation_node_codegen.h.txt",
+  ]
+  outputs = [ "$_comp_gen_dir/mkql_computation_node_codegen.h" ]
+}
+
+copy("mkql_llvm_base_h") {
+  sources = [ "//yql/essentials/minikql/computation/mkql_llvm_base.h.txt" ]
+  outputs = [ "$_comp_gen_dir/mkql_llvm_base.h" ]
+}
+
+copy("mkql_block_impl_codegen_h") {
+  sources =
+      [ "//yql/essentials/minikql/computation/mkql_block_impl_codegen.h.txt" ]
+  outputs = [ "$_comp_gen_dir/mkql_block_impl_codegen.h" ]
+}
+
+copy("mkql_builtins_codegen_h") {
+  sources = [ "../mkql_builtins_codegen.h.txt" ]
+  outputs = [ "$_self_gen_dir/mkql_builtins_codegen.h" ]
+}
+
+copy("mkql_builtins_codegen_llvm_h") {
+  sources = [ "../mkql_builtins_codegen_llvm.h.txt" ]
+  outputs = [ "$_self_gen_dir/mkql_builtins_codegen_llvm.h" ]
+}
+
+copy("mkql_builtins_impl_h") {
+  sources = [ "../mkql_builtins_impl.h.txt" ]
+  outputs = [ "$_self_gen_dir/mkql_builtins_impl.h" ]
+}
+
+copy("mkql_builtins_decimal_h") {
+  sources = [ "../mkql_builtins_decimal.h.txt" ]
+  outputs = [ "$_self_gen_dir/mkql_builtins_decimal.h" ]
+}
+
+config("_includes") {
+  include_dirs = [
+    target_gen_dir,
+    _comp_gen_dir,
+    _self_gen_dir,
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/codegen/llvm_stub",
+  ]
+}
+
+library("no_llvm") {
+  sources = [
+    "../mkql_builtins.cpp",
+    "../mkql_builtins.h",
+    "../mkql_builtins_abs.cpp",
+    "../mkql_builtins_add.cpp",
+    "../mkql_builtins_bitand.cpp",
+    "../mkql_builtins_bitnot.cpp",
+    "../mkql_builtins_bitor.cpp",
+    "../mkql_builtins_bitxor.cpp",
+    "../mkql_builtins_byteat.cpp",
+    "../mkql_builtins_codegen.cpp",
+    "../mkql_builtins_concat.cpp",
+    "../mkql_builtins_convert.cpp",
+    "../mkql_builtins_countbits.cpp",
+    "../mkql_builtins_dec.cpp",
+    "../mkql_builtins_decimal.cpp",
+    "../mkql_builtins_div.cpp",
+    "../mkql_builtins_equals.cpp",
+    "../mkql_builtins_find.cpp",
+    "../mkql_builtins_greater.cpp",
+    "../mkql_builtins_greater_or_equal.cpp",
+    "../mkql_builtins_impl.cpp",
+    "../mkql_builtins_inc.cpp",
+    "../mkql_builtins_invprestr.cpp",
+    "../mkql_builtins_less.cpp",
+    "../mkql_builtins_less_or_equal.cpp",
+    "../mkql_builtins_max.cpp",
+    "../mkql_builtins_min.cpp",
+    "../mkql_builtins_minus.cpp",
+    "../mkql_builtins_mod.cpp",
+    "../mkql_builtins_mul.cpp",
+    "../mkql_builtins_nanvl.cpp",
+    "../mkql_builtins_not_equals.cpp",
+    "../mkql_builtins_plus.cpp",
+    "../mkql_builtins_rotleft.cpp",
+    "../mkql_builtins_rotright.cpp",
+    "../mkql_builtins_shiftleft.cpp",
+    "../mkql_builtins_shiftright.cpp",
+    "../mkql_builtins_string_kernels.cpp",
+    "../mkql_builtins_sub.cpp",
+    "../mkql_builtins_substring.cpp",
+    "../mkql_builtins_with.cpp",
+  ]
+
+  defines = [ "MKQL_DISABLE_CODEGEN" ]
+
+  configs = [ ":_includes" ]
+
+  link_slot_provides = [ "minikql_codegen" ]
+
+  deps = [
+    ":mkql_block_impl_codegen_h",
+    ":mkql_builtins_codegen_h",
+    ":mkql_builtins_codegen_llvm_h",
+    ":mkql_builtins_decimal_h",
+    ":mkql_builtins_impl_h",
+    ":mkql_computation_node_codegen_h",
+    ":mkql_llvm_base_h",
+    "//yql/essentials/public/decimal",
+  ]
+
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/arrow",
+    "//yql/essentials/minikql/computation/no_llvm",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/types/binary_json",
+  ]
+}

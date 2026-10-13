@@ -1,0 +1,28 @@
+unittest_executable("ut_backup_collection") {
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/tx/replication/service",
+    "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "ut_backup_collection.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/schemeshard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

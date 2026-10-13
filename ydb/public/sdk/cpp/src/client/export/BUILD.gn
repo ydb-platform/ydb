@@ -1,0 +1,24 @@
+library("export") {
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    "//ydb/public/sdk/cpp/src/client/proto",
+  ]
+
+  sources = [
+    "export.cpp",
+    "out.cpp",
+  ]
+
+  serialize_enum_headers =
+      [ "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h" ]
+}

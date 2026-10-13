@@ -1,0 +1,34 @@
+library("mon_alloc") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/control/lib",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/tcmalloc",
+    "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
+    # "//library/cpp/cache",
+    # "//library/cpp/dwarf_backtrace",  # peerdir only
+    "//library/cpp/execprofile",
+    "//library/cpp/html/pcdata",
+    # "//library/cpp/lfalloc/alloc_profiler",  # peerdir only
+    "//library/cpp/lfalloc/dbg_info",
+    "//library/cpp/malloc/api",
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/base",
+    "//ydb/core/mon",
+    # "//ydb/library/actors/prof",
+    "//ydb/library/services",
+    # "//yql/essentials/utils/memory_profiling",  # peerdir only
+  ]
+
+  sources = [
+    "memory_info.cpp",
+    "monitor.cpp",
+    "profiler.cpp",
+    "stats.cpp",
+    "tcmalloc.cpp",
+  ]
+}

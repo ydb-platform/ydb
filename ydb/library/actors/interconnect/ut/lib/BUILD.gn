@@ -1,0 +1,30 @@
+group("lib") {
+  public_deps = [
+    ":tls",
+    # "//library/cpp/testing/unittest",
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/dnsresolver",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/interconnect/ut/protos",
+  ]
+}
+
+library("port_manager") {
+  testonly = true
+
+  deps = [
+    # ":lib",
+    "//library/cpp/testing/unittest",
+  ]
+
+  sources = [ "port_manager/util_port_manager.cpp" ]
+}
+
+library("tls") {
+  deps = [
+    # "//library/cpp/testing/common",
+  ]
+
+  sources = [ "tls/tls.cpp" ]
+}

@@ -1,0 +1,23 @@
+library("impl") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/change_exchange",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/tx/replication/service",
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  deps = [
+    "//ydb/core/persqueue/events",
+    # "//ydb/core/persqueue/writer",
+    "//ydb/core/tx/replication/ydb_proxy",
+  ]
+
+  sources = [
+    "local_partition_reader.cpp",
+    "table_writer.cpp",
+  ]
+}

@@ -1,0 +1,49 @@
+unittest_executable("ut") {
+  public_deps = [
+    "//library/cpp/logger",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/chunk_queue",
+    "//ydb/core/testlib",
+    "//ydb/library/grpc/server",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public:include",
+    "//ydb/public/sdk/cpp/src/client/topic/common",
+    "//ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public",
+  ]
+
+  deps = [
+    "//library/cpp/streams/zstd",
+    "//library/cpp/testing/gmock_in_unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/public/lib/json_value",  # peerdir only
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/codecs",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/impl",
+  ]
+
+  sources = [
+    "basic_usage_ut.cpp",
+    "common_ut.cpp",
+    "compress_executor_ut.cpp",
+    "compression_ut.cpp",
+    "read_session_ut.cpp",
+    "retry_policy_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/sdk/cpp/src/client/persqueue_public" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

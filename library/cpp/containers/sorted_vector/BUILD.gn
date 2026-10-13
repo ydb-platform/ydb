@@ -1,0 +1,3 @@
+library("sorted_vector") {
+  sources = [ "sorted_vector.cpp" ]
+}

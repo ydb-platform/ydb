@@ -1,0 +1,7 @@
+library("value_helpers") {
+  public_deps = [ "//ydb/public/api/protos" ]
+
+  deps = [ "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers" ]
+
+  sources = [ "helpers.cpp" ]
+}

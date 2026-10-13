@@ -1,0 +1,7 @@
+library("tvm") {
+  public_deps = [
+    # "//library/cpp/yt/memory",
+  ]
+
+  sources = [ "tvm_base.cpp" ]
+}

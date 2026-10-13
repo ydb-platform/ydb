@@ -1,0 +1,40 @@
+unittest_executable("large_results") {
+  deps = [
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",  # peerdir only
+    "//contrib/libs/fmt",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/federated_query",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/federated_query/common",
+    "//ydb/library/testlib/s3_recipe_helper",
+    "//ydb/library/yql/providers/s3/actors",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "kqp_scriptexec_results_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  test_depends_unbuilt = [
+    "//contrib/python/moto/bin",
+    "//ydb/tests/tools/s3_recipe",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

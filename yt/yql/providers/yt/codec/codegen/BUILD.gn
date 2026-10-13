@@ -1,0 +1,7 @@
+slot_interface_group("codegen") {
+  link_slot_interface = "yt_codegen"
+
+  link_slot_headers = [ "yt_codec_cg.h" ]
+
+  link_slot_flags_from = [ "yt_codec_cg.cpp" ]
+}

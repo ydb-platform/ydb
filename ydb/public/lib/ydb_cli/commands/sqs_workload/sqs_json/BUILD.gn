@@ -1,0 +1,10 @@
+library("sqs_json") {
+  public_deps = [
+    # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-sqs",
+  ]
+
+  deps = [ "//library/cpp/string_utils/url" ]
+
+  sources = [ "sqs_json_client.cpp" ]
+}

@@ -1,0 +1,19 @@
+library("partition_stats") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/mind:tenant_node_enumeration",  # peerdir only
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [
+    "partition_stats.cpp",
+    "top_partitions.cpp",
+  ]
+}

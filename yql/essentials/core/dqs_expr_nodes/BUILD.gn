@@ -1,0 +1,8 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//yql/essentials/core/expr_nodes_gen/gen.gni")
+
+generate_expr_nodes("dqs_expr_nodes") {
+    sources = [ "dqs_expr_nodes.json" ]
+    node_namespace = "NDq"
+}

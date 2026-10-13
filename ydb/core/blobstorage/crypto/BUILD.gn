@@ -1,0 +1,26 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+avx512_source_set("chacha_512") {
+  sources = [ "chacha_512/chacha_512.cpp" ]
+}
+
+library("crypto") {
+  public_deps = [
+    # "//ydb/library/actors/util",
+    ":chacha_512",
+  ]
+
+  deps = [
+    "//contrib/libs/t1ha",
+    # "//library/cpp/sse",
+  ]
+
+  sources = [
+    "chacha.cpp",
+    "chacha_vec.cpp",
+    "crypto.cpp",
+    "poly1305.cpp",
+    "poly1305_vec.cpp",
+    "secured_block.cpp",
+  ]
+}

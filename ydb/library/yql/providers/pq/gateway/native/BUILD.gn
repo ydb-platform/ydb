@@ -1,0 +1,28 @@
+library("native") {
+  public_deps = [
+    "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/pq/cm_client",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+    # "//ydb/library/yql/providers/pq/gateway/clients/local",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//yql/essentials/providers/common/metrics",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/future",
+    "//ydb/library/yql/providers/pq/gateway/clients/external",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/sdk/cpp/src/client/datastreams",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "yql_pq_gateway.cpp",
+    "yql_pq_gateway_factory.cpp",
+    "yql_pq_gateway_services.cpp",
+    "yql_pq_session.cpp",
+  ]
+}

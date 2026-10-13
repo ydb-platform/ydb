@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/state",
+    "//ydb/library/yql/providers/dq/api/protos",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/library/yql/providers/pq/task_meta",
+  ]
+
+  sources = [ "dq_state_load_plan_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/dq/state" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

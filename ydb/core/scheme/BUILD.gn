@@ -1,0 +1,32 @@
+library("scheme") {
+  public_deps = [
+    # "//library/cpp/deprecated/enum_codegen",
+    "//ydb/core/scheme/protos",
+    "//ydb/core/scheme_types",
+    "//ydb/library/aclib",
+    "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/scheme_types",
+    "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  deps = [
+    # "//library/cpp/charset/lite",  # peerdir only
+    "//library/cpp/containers/absl_flat_hash",
+    # "//library/cpp/containers/bitseq",  # peerdir only
+    "//library/cpp/lwtrace/mon",  # peerdir only
+    # "//library/cpp/yson",  # peerdir only
+    "//ydb/core/protos",
+    # "//ydb/library/pretty_types_print/protobuf",  # peerdir only
+  ]
+
+  sources = [
+    "scheme_borders.cpp",
+    "scheme_pathid.cpp",
+    "scheme_tablecell.cpp",
+    "scheme_tabledefs.cpp",
+    "scheme_type_info.cpp",
+    "scheme_types_defs.cpp",
+    "scheme_types_proto.cpp",
+  ]
+}

@@ -1,0 +1,10 @@
+library("network") {
+  public_deps = [
+    "//library/cpp/messagebus",
+    # "//yql/essentials/utils",
+  ]
+
+  deps = [ "//yql/essentials/utils/log" ]
+
+  sources = [ "bind_in_range.cpp" ]
+}

@@ -1,0 +1,14 @@
+library("events") {
+  public_deps = [
+    "//ydb/core/fq/libs/events",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//yql/essentials/public/issue/protos",  # peerdir only
+  ]
+
+  sources = [ "events.cpp" ]
+}

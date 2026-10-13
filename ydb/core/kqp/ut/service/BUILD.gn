@@ -1,0 +1,49 @@
+unittest_executable("service") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/iterator",
+    "//library/cpp/threading/local_executor",
+    "//ydb/core/base",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/shutdown",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/counters",
+    "//ydb/core/kqp/node_service",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/datashard",
+    "//ydb/public/lib/ut_helpers",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_document_api_ut.cpp",
+    "kqp_qs_queries_ut.cpp",
+    "kqp_qs_scripts_ut.cpp",
+    "kqp_service_ut.cpp",
+    "kqp_snapshot_readonly.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

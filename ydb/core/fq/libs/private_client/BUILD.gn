@@ -1,0 +1,32 @@
+library("private_client") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/fq/libs/control_plane_storage/proto",
+    # "//ydb/core/fq/libs/events",
+    "//ydb/core/fq/libs/grpc",
+    "//ydb/core/fq/libs/protos",
+    # "//ydb/core/fq/libs/shared_resources",
+    "//ydb/library/actors/core",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  deps = [
+    # "//library/cpp/protobuf/json",  # peerdir only
+    # "//ydb/core/fq/libs/control_plane_config",
+    # "//ydb/core/fq/libs/control_plane_config:events",
+    "//ydb/core/fq/libs/control_plane_config:service_id",  # peerdir only
+    # "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/services",
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "internal_service.cpp",
+    "loopback_service.cpp",
+    "private_client.cpp",
+  ]
+}

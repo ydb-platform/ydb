@@ -1,0 +1,8 @@
+library("hmac") {
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/string_utils/base64",
+  ]
+
+  sources = [ "hmac.cpp" ]
+}

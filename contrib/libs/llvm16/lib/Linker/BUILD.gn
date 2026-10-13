@@ -1,0 +1,15 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Linker") {
+    deps = [
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/Object",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "IRMover.cpp",
+        "LinkModules.cpp",
+    ]
+}

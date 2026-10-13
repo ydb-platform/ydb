@@ -1,0 +1,3 @@
+library("skip_list") {
+  sources = [ "skiplist.cpp" ]
+}

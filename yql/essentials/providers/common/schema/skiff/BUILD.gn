@@ -1,0 +1,11 @@
+library("skiff") {
+  public_deps = [ "//library/cpp/yson/node" ]
+
+  deps = [
+    # "//yql/essentials/providers/common/codec",
+    # "//yql/essentials/providers/common/schema/parser",
+    "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "yql_skiff_schema.cpp" ]
+}

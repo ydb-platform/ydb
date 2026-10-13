@@ -1,0 +1,36 @@
+library("actors") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/generic/connector/libcpp",
+    "//ydb/library/yql/providers/generic/proto",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+  ]
+
+  deps = [
+    # "//library/cpp/retry",
+    "//ydb/core/formats/arrow",
+    "//ydb/library/mkql_proto",
+    # "//ydb/library/yql/dq/runtime",
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials",
+    # "//yql/essentials/core",
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/structured_token",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "yql_generic_credentials_provider.cpp",
+    "yql_generic_lookup_actor.cpp",
+    "yql_generic_provider_factories.cpp",
+    "yql_generic_read_actor.cpp",
+  ]
+}

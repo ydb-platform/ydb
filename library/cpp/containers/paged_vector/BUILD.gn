@@ -1,0 +1,3 @@
+library("paged_vector") {
+  sources = [ "paged_vector.cpp" ]
+}

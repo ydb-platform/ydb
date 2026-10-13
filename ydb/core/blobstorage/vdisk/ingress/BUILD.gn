@@ -1,0 +1,20 @@
+library("ingress") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/groupinfo",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//library/cpp/lwtrace",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "blobstorage_ingress.cpp",
+    "blobstorage_ingress_matrix.cpp",
+    "blobstorage_ingress_partlayout.cpp",
+  ]
+}

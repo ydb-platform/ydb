@@ -1,0 +1,397 @@
+import("//build/gn/python.gni")
+
+config("public_config") {
+    include_dirs = [ "Include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-unused-variable",
+    ]
+    defines = [
+        "Py_BUILD_CORE",
+        "Py_BUILD_CORE_BUILTIN",
+        "USE_ZLIB_CRC32",
+        "PREFIX=\"/var/empty\"",
+        "EXEC_PREFIX=\"/var/empty\"",
+        "VERSION=\"3.13\"",
+        "VPATH=\"\"",
+        "PLATLIBDIR=\"lib\"",
+        "PLATFORM=\"linux\"",
+        "MULTIARCH=\"x86_64-linux-gnu\"",
+        "SOABI=\"cpython-313-x86_64-linux-gnu\"",
+    ]
+    include_dirs = [
+        ".",
+        "Include/internal",
+        "Include/internal/mimalloc",
+        "Modules/_decimal/libmpdec",
+        "Modules/_hacl/include",
+    ]
+}
+
+# CPython's _freeze_module tool: takes a (name, input.py, output.h) triple
+# and emits a C header containing the marshaled bytecode as
+# _Py_M__<sanitized_name>[]. It explicitly declares its own copies of the
+# _PyImport_Frozen* globals (see Programs/_freeze_module.c), so it must be
+# linked against the interpreter core *without* Python/frozen.c — that's
+# what :python3_core provides.
+contrib_tool("_freeze_module") {
+    # TODO: private target - hide by visibility.
+
+    sources = [ "Programs/_freeze_module.c" ]
+    deps = [ "//contrib/tools/python3:python3_core" ]
+    configs = [ ":private_config" ]
+}
+
+system_library("python3_core") {
+    # TODO: private target - hide by visibility.
+
+    deps = [
+        "//contrib/libs/blake2",
+        "//contrib/libs/expat",
+        "//contrib/libs/libbz2",
+        "//contrib/libs/libc_compat",
+        "//contrib/libs/lzma",
+        "//contrib/libs/openssl",
+        "//contrib/libs/zlib",
+        "//contrib/restricted/libffi",
+    ]
+
+    # Python/frozen.c вынесен в отдельную мишень :python3, чтобы
+    # потребители, которым нужно подменить набор frozen-модулей
+    # (например, наш bin/ с полностью вшитой stdlib), могли линковаться
+    # только с этим ядром, не получая дублей _PyImport_Frozen* символов.
+    sources = [
+        "Modules/_abc.c",
+        "Modules/_asynciomodule.c",
+        "Modules/_bisectmodule.c",
+        "Modules/_blake2/blake2b_impl.c",
+        "Modules/_blake2/blake2module.c",
+        "Modules/_blake2/blake2s_impl.c",
+        "Modules/_bz2module.c",
+        "Modules/_codecsmodule.c",
+        "Modules/_collectionsmodule.c",
+        "Modules/_contextvarsmodule.c",
+        "Modules/_csv.c",
+        "Modules/_ctypes/_ctypes.c",
+        "Modules/_ctypes/callbacks.c",
+        "Modules/_ctypes/callproc.c",
+        "Modules/_ctypes/cfield.c",
+        "Modules/_ctypes/stgdict.c",
+        "Modules/_datetimemodule.c",
+        "Modules/_decimal/_decimal.c",
+        "Modules/_decimal/libmpdec/basearith.c",
+        "Modules/_decimal/libmpdec/constants.c",
+        "Modules/_decimal/libmpdec/context.c",
+        "Modules/_decimal/libmpdec/convolute.c",
+        "Modules/_decimal/libmpdec/crt.c",
+        "Modules/_decimal/libmpdec/difradix2.c",
+        "Modules/_decimal/libmpdec/fnt.c",
+        "Modules/_decimal/libmpdec/fourstep.c",
+        "Modules/_decimal/libmpdec/io.c",
+        "Modules/_decimal/libmpdec/mpalloc.c",
+        "Modules/_decimal/libmpdec/mpdecimal.c",
+        "Modules/_decimal/libmpdec/mpsignal.c",
+        "Modules/_decimal/libmpdec/numbertheory.c",
+        "Modules/_decimal/libmpdec/sixstep.c",
+        "Modules/_decimal/libmpdec/transpose.c",
+        "Modules/_elementtree.c",
+        "Modules/_functoolsmodule.c",
+        "Modules/_hacl/Hacl_Hash_MD5.c",
+        "Modules/_hacl/Hacl_Hash_SHA1.c",
+        "Modules/_hacl/Hacl_Hash_SHA2.c",
+        "Modules/_hacl/Hacl_Hash_SHA3.c",
+        "Modules/_hashopenssl.c",
+        "Modules/_heapqmodule.c",
+        "Modules/_interpchannelsmodule.c",
+        "Modules/_interpqueuesmodule.c",
+        "Modules/_interpretersmodule.c",
+        "Modules/_io/_iomodule.c",
+        "Modules/_io/bufferedio.c",
+        "Modules/_io/bytesio.c",
+        "Modules/_io/fileio.c",
+        "Modules/_io/iobase.c",
+        "Modules/_io/stringio.c",
+        "Modules/_io/textio.c",
+        "Modules/_io/winconsoleio.c",
+        "Modules/_json.c",
+        "Modules/_localemodule.c",
+        "Modules/_lsprof.c",
+        "Modules/_lzmamodule.c",
+        "Modules/_multiprocessing/multiprocessing.c",
+        "Modules/_multiprocessing/posixshmem.c",
+        "Modules/_multiprocessing/semaphore.c",
+        "Modules/_opcode.c",
+        "Modules/_operator.c",
+        "Modules/_pickle.c",
+        "Modules/_posixsubprocess.c",
+        "Modules/_queuemodule.c",
+        "Modules/_randommodule.c",
+        "Modules/_sre/sre.c",
+        "Modules/_ssl.c",
+        "Modules/_stat.c",
+        "Modules/_statisticsmodule.c",
+        "Modules/_struct.c",
+        "Modules/_suggestions.c",
+        "Modules/_sysconfig.c",
+        "Modules/_testinternalcapi/pytime.c",
+        "Modules/_testinternalcapi/test_critical_sections.c",
+        "Modules/_testinternalcapi/test_lock.c",
+        "Modules/_testlimitedcapi/abstract.c",
+        "Modules/_testlimitedcapi/bytearray.c",
+        "Modules/_testlimitedcapi/bytes.c",
+        "Modules/_testlimitedcapi/complex.c",
+        "Modules/_testlimitedcapi/dict.c",
+        "Modules/_testlimitedcapi/eval.c",
+        "Modules/_testlimitedcapi/file.c",
+        "Modules/_testlimitedcapi/float.c",
+        "Modules/_testlimitedcapi/heaptype_relative.c",
+        "Modules/_testlimitedcapi/import.c",
+        "Modules/_testlimitedcapi/list.c",
+        "Modules/_testlimitedcapi/long.c",
+        "Modules/_testlimitedcapi/object.c",
+        "Modules/_testlimitedcapi/pyos.c",
+        "Modules/_testlimitedcapi/set.c",
+        "Modules/_testlimitedcapi/sys.c",
+        "Modules/_testlimitedcapi/tuple.c",
+        "Modules/_testlimitedcapi/unicode.c",
+        "Modules/_testlimitedcapi/vectorcall_limited.c",
+        "Modules/_threadmodule.c",
+        "Modules/_tracemalloc.c",
+        "Modules/_typingmodule.c",
+        "Modules/_weakref.c",
+        "Modules/_xxtestfuzz/_xxtestfuzz.c",
+        "Modules/_xxtestfuzz/fuzzer.c",
+        # Stub for the Yandex Arcadia __res module (see __res_stub.c). The
+        # patched init_importlib_external in Python/import.c hard-requires
+        # `import __res`, so a no-op implementation must be linked in.
+        "Modules/__res_stub.c",
+        "Modules/_zoneinfo.c",
+        "Modules/arraymodule.c",
+        "Modules/atexitmodule.c",
+        "Modules/binascii.c",
+        "Modules/cjkcodecs/_codecs_cn.c",
+        "Modules/cjkcodecs/_codecs_hk.c",
+        "Modules/cjkcodecs/_codecs_iso2022.c",
+        "Modules/cjkcodecs/_codecs_jp.c",
+        "Modules/cjkcodecs/_codecs_kr.c",
+        "Modules/cjkcodecs/_codecs_tw.c",
+        "Modules/cjkcodecs/multibytecodec.c",
+        "Modules/cmathmodule.c",
+        "Modules/config.c",
+        "Modules/errnomodule.c",
+        "Modules/faulthandler.c",
+        "Modules/fcntlmodule.c",
+        "Modules/gcmodule.c",
+        "Modules/getbuildinfo.c",
+        "Modules/getpath.c",
+        "Modules/grpmodule.c",
+        "Modules/itertoolsmodule.c",
+        "Modules/main.c",
+        "Modules/mathmodule.c",
+        "Modules/md5module.c",
+        "Modules/mmapmodule.c",
+        "Modules/posixmodule.c",
+        "Modules/pwdmodule.c",
+        "Modules/pyexpat.c",
+        "Modules/resource.c",
+        "Modules/rotatingtree.c",
+        "Modules/selectmodule.c",
+        "Modules/sha1module.c",
+        "Modules/sha2module.c",
+        "Modules/sha3module.c",
+        "Modules/signalmodule.c",
+        "Modules/socketmodule.c",
+        "Modules/symtablemodule.c",
+        "Modules/syslogmodule.c",
+        "Modules/termios.c",
+        "Modules/timemodule.c",
+        "Modules/unicodedata.c",
+        "Modules/zlibmodule.c",
+        "Objects/abstract.c",
+        "Objects/boolobject.c",
+        "Objects/bytearrayobject.c",
+        "Objects/bytes_methods.c",
+        "Objects/bytesobject.c",
+        "Objects/call.c",
+        "Objects/capsule.c",
+        "Objects/cellobject.c",
+        "Objects/classobject.c",
+        "Objects/codeobject.c",
+        "Objects/complexobject.c",
+        "Objects/descrobject.c",
+        "Objects/dictobject.c",
+        "Objects/enumobject.c",
+        "Objects/exceptions.c",
+        "Objects/fileobject.c",
+        "Objects/floatobject.c",
+        "Objects/frameobject.c",
+        "Objects/funcobject.c",
+        "Objects/genericaliasobject.c",
+        "Objects/genobject.c",
+        "Objects/iterobject.c",
+        "Objects/listobject.c",
+        "Objects/longobject.c",
+        "Objects/memoryobject.c",
+        "Objects/methodobject.c",
+        "Objects/moduleobject.c",
+        "Objects/namespaceobject.c",
+        "Objects/object.c",
+        "Objects/obmalloc.c",
+        "Objects/odictobject.c",
+        "Objects/picklebufobject.c",
+        "Objects/rangeobject.c",
+        "Objects/setobject.c",
+        "Objects/sliceobject.c",
+        "Objects/structseq.c",
+        "Objects/tupleobject.c",
+        "Objects/typeobject.c",
+        "Objects/typevarobject.c",
+        "Objects/unicodectype.c",
+        "Objects/unicodeobject.c",
+        "Objects/unionobject.c",
+        "Objects/weakrefobject.c",
+        "Parser/action_helpers.c",
+        "Parser/lexer/buffer.c",
+        "Parser/lexer/lexer.c",
+        "Parser/lexer/state.c",
+        "Parser/myreadline.c",
+        "Parser/parser.c",
+        "Parser/peg_api.c",
+        "Parser/pegen_errors.c",
+        "Parser/pegen.c",
+        "Parser/string_parser.c",
+        "Parser/token.c",
+        "Parser/tokenizer/file_tokenizer.c",
+        "Parser/tokenizer/helpers.c",
+        "Parser/tokenizer/readline_tokenizer.c",
+        "Parser/tokenizer/string_tokenizer.c",
+        "Parser/tokenizer/utf8_tokenizer.c",
+        "Python/_warnings.c",
+        "Python/asdl.c",
+        "Python/asm_trampoline.S",
+        "Python/assemble.c",
+        "Python/ast_opt.c",
+        "Python/ast_unparse.c",
+        "Python/ast.c",
+        "Python/bltinmodule.c",
+        "Python/bootstrap_hash.c",
+        "Python/brc.c",
+        "Python/ceval_gil.c",
+        "Python/ceval.c",
+        "Python/codecs.c",
+        "Python/compile.c",
+        "Python/context.c",
+        "Python/critical_section.c",
+        "Python/crossinterp.c",
+        "Python/dtoa.c",
+        "Python/dynamic_annotations.c",
+        "Python/dynload_shlib.c",
+        "Python/emscripten_trampoline.c",
+        "Python/errors.c",
+        "Python/fileutils.c",
+        "Python/flowgraph.c",
+        "Python/formatter_unicode.c",
+        "Python/frame.c",
+        "Python/future.c",
+        "Python/gc_free_threading.c",
+        "Python/gc_gil.c",
+        "Python/gc.c",
+        "Python/getargs.c",
+        "Python/getcompiler.c",
+        "Python/getcopyright.c",
+        "Python/getopt.c",
+        "Python/getplatform.c",
+        "Python/getversion.c",
+        "Python/hamt.c",
+        "Python/hashtable.c",
+        "Python/import.c",
+        "Python/importdl.c",
+        "Python/initconfig.c",
+        "Python/instruction_sequence.c",
+        "Python/instrumentation.c",
+        "Python/interpconfig.c",
+        "Python/intrinsics.c",
+        "Python/legacy_tracing.c",
+        "Python/lock.c",
+        "Python/marshal.c",
+        "Python/modsupport.c",
+        "Python/mysnprintf.c",
+        "Python/mystrtoul.c",
+        "Python/object_stack.c",
+        "Python/optimizer_analysis.c",
+        "Python/optimizer_symbols.c",
+        "Python/optimizer.c",
+        "Python/parking_lot.c",
+        "Python/pathconfig.c",
+        "Python/perf_jit_trampoline.c",
+        "Python/perf_trampoline.c",
+        "Python/preconfig.c",
+        "Python/pyarena.c",
+        "Python/pyctype.c",
+        "Python/pyfpe.c",
+        "Python/pyhash.c",
+        "Python/pylifecycle.c",
+        "Python/pymath.c",
+        "Python/pystate.c",
+        "Python/pystrcmp.c",
+        "Python/pystrhex.c",
+        "Python/pystrtod.c",
+        "Python/Python-ast.c",
+        "Python/Python-tokenize.c",
+        "Python/pythonrun.c",
+        "Python/pytime.c",
+        "Python/qsbr.c",
+        "Python/specialize.c",
+        "Python/structmember.c",
+        "Python/suggestions.c",
+        "Python/symtable.c",
+        "Python/sysmodule.c",
+        "Python/thread.c",
+        "Python/traceback.c",
+        "Python/tracemalloc.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+# --- Freeze the entire stdlib and embed it into :python3 ---------------------
+#
+# Replaces upstream Python/frozen.c (which only freezes importlib bootstrap
+# and a handful of startup modules) with a generated registry covering every
+# .py under contrib/tools/python3/Lib/. Any consumer linking :python3
+# automatically gets the full stdlib resolved through frozen imports — no
+# filesystem lookup required.
+#
+# Module enumeration happens at gen time via list_stdlib_modules.py; the
+# resulting list is mirrored to a JSON file that the reusable
+# `_python_freeze_modules` template (see //build/gn/python.gni) feeds to
+# the one-shot freezer driver.
+
+_stdlib_modules = exec_script(
+    "//build/gn/scripts/list_stdlib_modules.py",
+    [ rebase_path("//contrib/tools/python3/Lib") ],
+    "json"
+)
+
+_stdlib_modules_json = "$target_gen_dir/stdlib_modules.json"
+write_file(_stdlib_modules_json, _stdlib_modules, "json")
+
+python_freeze_modules("frozen_stdlib") {
+    modules_json = _stdlib_modules_json
+    mode = "full"
+    output = "$target_gen_dir/frozen_stdlib.c"
+    workdir = "$target_gen_dir/frozen_stdlib"
+}
+
+contrib_library("python3") {
+    sources = [ "$target_gen_dir/frozen_stdlib.c" ]
+    deps = [
+        ":python3_core",
+        ":frozen_stdlib",
+    ]
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

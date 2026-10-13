@@ -1,0 +1,8 @@
+group("default") {
+  testonly = true
+
+  deps = [
+    "//ydb/core/testlib",  # peerdir only
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+  ]
+}

@@ -1,0 +1,37 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("graph") {
+    public_deps = [
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/conversion",
+        "//contrib/restricted/boost/foreach",
+        "//contrib/restricted/boost/multi_index",
+        "//contrib/restricted/boost/parameter",
+        "//contrib/restricted/boost/property_map",
+        "//contrib/restricted/boost/tti",
+        "//contrib/restricted/boost/tuple",
+        "//contrib/restricted/boost/typeof",
+        "//contrib/restricted/boost/unordered",
+    ]
+
+    deps = [
+        "//contrib/restricted/boost/algorithm",
+        "//contrib/restricted/boost/function",
+        "//contrib/restricted/boost/integer",
+        "//contrib/restricted/boost/iterator",
+        "//contrib/restricted/boost/lexical_cast",
+        "//contrib/restricted/boost/property_tree",
+        "//contrib/restricted/boost/regex",
+        "//contrib/restricted/boost/spirit",
+        "//contrib/restricted/boost/xpressive",
+    ]
+
+    sources = [
+        "src/graphml.cpp",
+        "src/read_graphviz_new.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

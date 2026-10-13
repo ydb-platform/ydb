@@ -1,0 +1,66 @@
+library("purecalc_no_pg_wrapper") {
+  deps = [
+    # "//library/cpp/random_provider",
+    # "//library/cpp/time_provider",
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/core/langver",
+    # "//yql/essentials/core/peephole_opt",
+    # "//yql/essentials/core/services",  # peerdir only
+    "//yql/essentials/core/services/mounts",  # peerdir only
+    # "//yql/essentials/core/services:pipeline",
+    # "//yql/essentials/core/type_ann",
+    # "//yql/essentials/core/user_data",  # peerdir only
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator",
+    # "//yql/essentials/providers/common/arrow_resolve",
+    # "//yql/essentials/providers/common/codec",
+    # "//yql/essentials/providers/common/comp_nodes",
+    # "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/common/schema/expr",
+    # "//yql/essentials/providers/common/udf_resolve",
+    # "//yql/essentials/providers/config",
+    # "//yql/essentials/public/langver",  # peerdir only
+    # "//yql/essentials/public/purecalc/common",
+    # "//yql/essentials/sql",
+    # "//yql/essentials/sql/v1",
+    # "//yql/essentials/sql/v1/lexer/antlr4",
+    # "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+    # "//yql/essentials/sql/v1/proto_parser/antlr4",
+    # "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+    # "//yql/essentials/utils/backtrace",  # peerdir only
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "//yql/essentials/public/purecalc/common/compile_mkql.cpp",
+    "//yql/essentials/public/purecalc/common/fwd.cpp",
+    "//yql/essentials/public/purecalc/common/inspect_input.cpp",
+    "//yql/essentials/public/purecalc/common/interface.cpp",
+    "//yql/essentials/public/purecalc/common/logger_init.cpp",
+    "//yql/essentials/public/purecalc/common/names.cpp",
+    "//yql/essentials/public/purecalc/common/processor_mode.cpp",
+    "//yql/essentials/public/purecalc/common/program_factory.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/align_output_schema.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/extract_used_columns.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/output_columns_filter.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/replace_table_reads.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/root_to_blocks.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/type_annotation.cpp",
+    "//yql/essentials/public/purecalc/common/transformations/utils.cpp",
+    "//yql/essentials/public/purecalc/common/type_from_schema.cpp",
+    "//yql/essentials/public/purecalc/common/worker.cpp",
+    "//yql/essentials/public/purecalc/common/worker_factory.cpp",
+    "//yql/essentials/public/purecalc/common/wrappers.cpp",
+  ]
+
+  serialize_enum_headers =
+      [ "//yql/essentials/public/purecalc/common/interface.h" ]
+}

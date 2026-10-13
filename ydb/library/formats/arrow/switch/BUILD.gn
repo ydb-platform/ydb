@@ -1,0 +1,16 @@
+library("switch") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//contrib/libs/xxhash",
+    "//ydb/library/actors/core",
+    "//ydb/library/formats/arrow/validation",
+    # "//ydb/library/yverify_stream",
+    # "//yql/essentials/parser/pg_wrapper",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  sources = [
+    "compare.cpp",
+    "switch_type.cpp",
+  ]
+}

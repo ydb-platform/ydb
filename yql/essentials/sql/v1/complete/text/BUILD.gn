@@ -1,0 +1,6 @@
+library("text") {
+  sources = [
+    "case.cpp",
+    "word.cpp",
+  ]
+}

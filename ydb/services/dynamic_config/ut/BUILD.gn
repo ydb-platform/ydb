@@ -1,0 +1,29 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    "//ydb/services/cms",  # peerdir only
+    "//ydb/services/dynamic_config",  # peerdir only
+  ]
+
+  sources = [ "//ydb/services/dynamic_config/dynamic_config_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/services/dynamic_config",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

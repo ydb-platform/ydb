@@ -1,0 +1,25 @@
+library("ut_helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/replication/ydb_proxy",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    # "//ydb/core/testlib/pg",  # peerdir only
+    # "//ydb/core/tx/replication/service",
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "mock_service.cpp",
+    "test_table.cpp",
+    "test_topic.cpp",
+  ]
+}

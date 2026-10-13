@@ -1,0 +1,48 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/cms/console",
+    "//ydb/core/config/init",
+    "//ydb/core/driver_lib/run",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+  ]
+
+  sources = [
+    "//ydb/core/tablet/bootstrapper_ut.cpp",
+    "//ydb/core/tablet/pipe_tracker_ut.cpp",
+    "//ydb/core/tablet/resource_broker_ut.cpp",
+    "//ydb/core/tablet/tablet_counters_aggregator_ut.cpp",
+    "//ydb/core/tablet/tablet_counters_ut.cpp",
+    "//ydb/core/tablet/tablet_metrics_ut.cpp",
+    "//ydb/core/tablet/tablet_pipe_ut.cpp",
+    "//ydb/core/tablet/tablet_pipecache_ut.cpp",
+    "//ydb/core/tablet/tablet_req_blockbs_ut.cpp",
+    "//ydb/core/tablet/tablet_resolver_ut.cpp",
+    "//ydb/core/tablet/tablet_state_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tablet" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

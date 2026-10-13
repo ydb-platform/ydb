@@ -1,0 +1,11 @@
+library("bit_io") {
+  public_deps = [
+    # "//library/cpp/deprecated/accessors",
+  ]
+
+  sources = [
+    "bitinput.cpp",
+    "bitinput_impl.cpp",
+    "bitoutput.cpp",
+  ]
+}

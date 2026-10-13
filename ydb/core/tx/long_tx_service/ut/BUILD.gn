@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/long_tx_service",
+    "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/scheme_board",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [ "//ydb/core/tx/long_tx_service/long_tx_service_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/long_tx_service" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

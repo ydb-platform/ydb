@@ -1,0 +1,16 @@
+library("params") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  deps = [
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers",
+  ]
+
+  sources = [
+    "impl.cpp",
+    "params.cpp",
+  ]
+}

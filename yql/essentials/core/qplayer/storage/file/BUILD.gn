@@ -1,0 +1,12 @@
+library("file") {
+  public_deps = [
+    # "//yql/essentials/core/qplayer/storage/interface",
+  ]
+
+  deps = [
+    # "//library/cpp/digest/old_crc",
+    # "//yql/essentials/core/qplayer/storage/memory",
+  ]
+
+  sources = [ "yql_qstorage_file.cpp" ]
+}

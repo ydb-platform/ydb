@@ -1,0 +1,31 @@
+unittest_executable("perf") {
+  deps = [
+    "//library/cpp/threading/local_executor",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/library/workload/abstract",
+    "//ydb/library/workload/kv",
+    "//ydb/library/workload/stock",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_query_perf_ut.cpp",
+    "kqp_workload_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

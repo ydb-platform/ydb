@@ -1,0 +1,37 @@
+library("local_pq_client") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/pq/gateway/clients/local",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials",
+  ]
+
+  deps = [
+    # "//contrib/libs/grpc",
+    "//library/cpp/protobuf/interop",
+    # "//ydb/core/base",
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/grpc_services:topic_rpc",
+    # "//ydb/core/kqp/common",
+    "//ydb/library/services",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    # "//ydb/public/sdk/cpp/src/client/common_client",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/services/persqueue_v1",  # link slot
+    # "//ydb/services/persqueue_v1/actors",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "local_federated_topic_client.cpp",
+    "local_topic_client.cpp",
+    "local_topic_client_factory.cpp",
+    "local_topic_client_helpers.cpp",
+    "local_topic_read_session.cpp",
+    "local_topic_write_session.cpp",
+  ]
+}

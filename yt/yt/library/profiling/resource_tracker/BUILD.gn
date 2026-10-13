@@ -1,0 +1,15 @@
+library("resource_tracker") {
+  deps = [
+    # "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+    # "//yt/yt/core",
+    # "//yt/yt/library/profiling",
+    # "//yt/yt_proto/yt/core",  # peerdir only
+  ]
+
+  sources = [
+    "config.cpp",
+    "configure_resource_tracker.cpp",
+    "resource_tracker.cpp",
+  ]
+}

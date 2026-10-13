@@ -1,0 +1,5 @@
+group("filestore") {
+  public_deps = [
+    # "//ydb/core/filestore/core",  # peerdir only
+  ]
+}

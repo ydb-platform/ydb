@@ -1,0 +1,22 @@
+linked_executable("pdiskfit") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/getopt",
+    "//library/cpp/string_utils/parse_size",
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/ut_pdiskfit/lib",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/mon",  # peerdir only
+  ]
+
+  sources = [ "pdiskfit.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

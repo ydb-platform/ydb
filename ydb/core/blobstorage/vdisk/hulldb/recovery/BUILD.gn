@@ -1,0 +1,18 @@
+library("recovery") {
+  public_deps = [
+    "//ydb/core/blobstorage/vdisk/hulldb/barriers",
+    "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",
+    "//ydb/core/blobstorage/vdisk/hulldb/cache_block",
+    # "//ydb/core/blobstorage/vdisk/hulldb:_self",
+    "//ydb/core/blobstorage/vdisk/protos",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "hulldb_recovery.cpp" ]
+}

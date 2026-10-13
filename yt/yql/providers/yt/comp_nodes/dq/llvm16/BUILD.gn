@@ -1,0 +1,8 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//yt/yql/providers/yt/comp_nodes/dq/variant.gni")
+
+yt_comp_nodes_dq_variant("llvm16") {
+  codegen = true
+  link_slot_provides = [ "yt_codegen" ]
+}

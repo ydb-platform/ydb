@@ -1,0 +1,25 @@
+library("format") {
+  public_deps = [
+    "//yql/essentials/public/issue",
+    "//yql/essentials/sql/settings",
+    "//yql/essentials/sql/v1/lexer",
+    "//yql/essentials/sql/v1/proto_parser",
+  ]
+
+  deps = [
+    # "//library/cpp/protobuf/util",
+    # "//library/cpp/resource",
+    "//yql/essentials/core/sql_types",
+    # "//yql/essentials/parser/lexer_common",
+    # "//yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
+  ]
+
+  sources = [ "sql_format.cpp" ]
+
+  resources = [
+    {
+      path = "//yql/essentials/sql/v1/SQLv1Antlr4.g.in"
+      key = "SQLv1Antlr4.g.in"
+    },
+  ]
+}

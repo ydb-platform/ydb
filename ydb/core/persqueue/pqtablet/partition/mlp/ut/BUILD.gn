@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/pqtablet/partition/mlp",
+    "//ydb/core/persqueue/public/mlp/ut/common",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "//ydb/core/persqueue/pqtablet/partition/mlp/mlp_consumer_ut.cpp",
+    "//ydb/core/persqueue/pqtablet/partition/mlp/mlp_counters_ut.cpp",
+    "//ydb/core/persqueue/pqtablet/partition/mlp/mlp_dlq_mover_ut.cpp",
+    "//ydb/core/persqueue/pqtablet/partition/mlp/mlp_storage_ut.cpp",
+    "//ydb/core/persqueue/pqtablet/partition/mlp/mlp_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue/pqtablet/partition/mlp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

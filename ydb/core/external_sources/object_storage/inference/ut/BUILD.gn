@@ -1,0 +1,23 @@
+gtest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/gtest",
+    "//ydb/core/external_sources/object_storage",
+    "//ydb/core/external_sources/object_storage/inference",
+    "//ydb/core/tx/scheme_board",  # peerdir only
+    "//ydb/core/util/actorsys_test",
+    "//ydb/library/yql/providers/common/http_gateway:mock",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "arrow_inference_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

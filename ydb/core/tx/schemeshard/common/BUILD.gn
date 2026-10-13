@@ -1,0 +1,13 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/protos",
+    # "//ydb/core/scheme_types",
+  ]
+
+  deps = [
+    # "//yql/essentials/parser/pg_wrapper",
+    "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  sources = [ "validation.cpp" ]
+}

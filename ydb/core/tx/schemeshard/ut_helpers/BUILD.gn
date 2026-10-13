@@ -1,0 +1,65 @@
+library("ut_helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    # "//ydb/core/base",
+    "//ydb/core/blobstorage/base",
+    # "//ydb/core/cms/console",
+    # "//ydb/core/engine",
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/login",
+    "//ydb/library/ydb_issue/proto",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql:alloc",
+  ]
+
+  deps = [
+    # "//ydb/core/blockstore/core",
+    # "//ydb/core/engine/minikql",
+    # "//ydb/core/filestore/core",
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/proxy_service",
+    "//ydb/core/kqp/rm_service",
+    # "//ydb/core/metering",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/tx",  # peerdir only
+    # "//ydb/core/tx/columnshard/test_helper",
+    # "//ydb/core/tx/data_events",
+    "//ydb/core/tx/sequenceproxy",
+    "//ydb/core/tx/tx_allocator",
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    # "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/util",
+    "//ydb/library/login/protos",
+    # "//ydb/public/lib/deprecated/kicli",
+    # "//ydb/public/lib/scheme_types",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/services/metadata/ds_table",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "export_reboots_common.cpp",
+    "failing_mtpq.cpp",
+    "helpers.cpp",
+    "ls_checks.cpp",
+    "shred_helpers.cpp",
+    "test_env.cpp",
+  ]
+}

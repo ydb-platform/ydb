@@ -1,0 +1,18 @@
+library("operation") {
+  public_deps = [
+    "//contrib/libs/protobuf",
+    # "//library/cpp/threading/future",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  deps = [
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  sources = [
+    "operation.cpp",
+    "out.cpp",
+  ]
+}

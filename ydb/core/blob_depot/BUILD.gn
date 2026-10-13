@@ -1,0 +1,57 @@
+library("blob_depot") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/testing/group_overseer",
+    # "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/mind",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//ydb/core/wrappers",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "agent.cpp",
+    "assimilator.cpp",
+    "blob_depot.cpp",
+    "blocks.cpp",
+    "coro_tx.cpp",
+    "data.cpp",
+    "data_decommit.cpp",
+    "data_gc.cpp",
+    "data_load.cpp",
+    "data_mon.cpp",
+    "data_resolve.cpp",
+    "data_trash.cpp",
+    "data_uncertain.cpp",
+    "garbage_collection.cpp",
+    "given_id_range.cpp",
+    "group_metrics_exchange.cpp",
+    "mon_main.cpp",
+    "op_apply_config.cpp",
+    "op_commit_blob_seq.cpp",
+    "op_init_schema.cpp",
+    "op_load.cpp",
+    "s3.cpp",
+    "s3_delete.cpp",
+    "s3_scan.cpp",
+    "s3_upload.cpp",
+    "s3_write.cpp",
+    "space_monitor.cpp",
+    "testing.cpp",
+  ]
+
+  serialize_enum_headers = [ "schema.h" ]
+}

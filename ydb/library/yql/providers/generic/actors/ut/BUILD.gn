@@ -1,0 +1,29 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/ut/federated_query/common",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/providers/generic/actors",
+    "//ydb/library/yql/providers/generic/connector/libcpp:ut_helpers",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils/log",
+    "//yql/essentials/utils/log/proto",
+  ]
+
+  sources = [ "yql_generic_lookup_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/generic/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

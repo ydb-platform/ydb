@@ -1,0 +1,8 @@
+library("protobuf") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//contrib/libs/protoc",
+  ]
+
+  sources = [ "helpers.cpp" ]
+}

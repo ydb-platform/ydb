@@ -1,0 +1,35 @@
+library("config") {
+  public_deps = [
+    "//ydb/core/protos",
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [ "config.cpp" ]
+}
+
+library("request") {
+  public_deps = [
+    ":config",
+    "//library/cpp/threading/future",
+    "//ydb/core/base",
+    "//ydb/core/grpc_services/base",
+    # "//ydb/library/accessor",
+    # "//ydb/library/aclib",
+    "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    "//ydb/library/yql/public/ydb_issue",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",  # peerdir only
+    "//ydb/core/grpc_services/local_rpc",
+  ]
+
+  sources = [
+    "common.cpp",
+    "request_actor.cpp",
+    "request_actor_cb.cpp",
+  ]
+}

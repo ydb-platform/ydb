@@ -1,0 +1,5 @@
+library("cancellation") {
+  public_deps = [ "//library/cpp/threading/future" ]
+
+  sources = [ "cancellation_token.cpp" ]
+}

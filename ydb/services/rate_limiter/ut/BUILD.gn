@@ -1,0 +1,36 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/coordination",
+    "//ydb/public/sdk/cpp/src/client/rate_limiter",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/issue",
+    "//ydb/services/rate_limiter",  # peerdir only
+    "//ydb/services/ydb",
+  ]
+
+  sources = [ "//ydb/services/rate_limiter/rate_limiter_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/services/rate_limiter",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

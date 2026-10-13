@@ -1,0 +1,35 @@
+unittest_executable("ut_export_reboots_s3") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/hook",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/util",
+    "//ydb/core/wrappers:ut_helpers",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "ut_export_reboots_s3.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/schemeshard",  # peerdir only
+  ]
+
+  data = [ "//ydb/tests/supp/" ]
+
+  test_depends_unbuilt = [ "//ydb/tests/supp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

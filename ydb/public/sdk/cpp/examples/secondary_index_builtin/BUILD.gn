@@ -1,0 +1,19 @@
+linked_executable("secondary_index_builtin") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "main.cpp",
+    "secondary_index.cpp",
+    "secondary_index_create.cpp",
+    "secondary_index_drop.cpp",
+    "secondary_index_fill.cpp",
+    "secondary_index_select.cpp",
+    "secondary_index_select_join.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

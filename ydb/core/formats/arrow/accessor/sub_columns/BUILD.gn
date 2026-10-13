@@ -1,0 +1,47 @@
+library("sub_columns") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/sparsed",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/conclusion",
+    "//ydb/library/formats/arrow/protos",
+    "//ydb/services/bg_tasks/abstract",
+    "//ydb/services/metadata/abstract:request_features",
+    "//yql/essentials/minikql/jsonpath/parser",
+  ]
+
+  deps = [
+    "//contrib/libs/simdjson",
+    "//contrib/libs/xxhash",
+    "//library/cpp/json",  # peerdir only
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/formats/arrow/accessor/composite_serial",
+    "//ydb/library/formats/arrow",
+    "//ydb/library/formats/arrow/validation",
+    "//ydb/library/formats/arrow:modifier",  # peerdir only
+    "//ydb/library/signals",
+    "//yql/essentials/minikql/jsonpath",
+    "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [
+    "accessor.cpp",
+    "columns_storage.cpp",
+    "constructor.cpp",
+    "data_extractor.cpp",
+    "direct_builder.cpp",
+    "header.cpp",
+    "iterators.cpp",
+    "json_extractors.cpp",
+    "json_value_path.cpp",
+    "others_storage.cpp",
+    "partial.cpp",
+    "request.cpp",
+    "settings.cpp",
+    "signals.cpp",
+    "stats.cpp",
+  ]
+}

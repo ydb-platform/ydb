@@ -1,0 +1,14 @@
+library("cbo") {
+  public_deps = [ "//yql/essentials/core" ]
+
+  deps = [
+    # "//library/cpp/iterator",
+  ]
+
+  sources = [
+    "cbo_hints.cpp",
+    "cbo_optimizer_new.cpp",
+  ]
+
+  serialize_enum_headers = [ "cbo_optimizer_new.h" ]
+}

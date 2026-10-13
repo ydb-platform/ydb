@@ -1,0 +1,28 @@
+library("peephole") {
+  public_deps = [
+    # "//ydb/core/kqp/opt:helpers",
+  ]
+
+  deps = [
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/gateway:interface",
+    "//ydb/core/kqp/host:transform",
+    "//ydb/core/kqp/opt/physical",
+    # "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+    "//ydb/library/naming_conventions",
+    # "//ydb/library/yql/dq/opt",
+    "//ydb/library/yql/dq/type_ann",
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    "//yql/essentials/core/peephole_opt",
+    "//yql/essentials/core/services:pipeline",
+    "//yql/essentials/providers/common/transform",
+  ]
+
+  sources = [
+    "kqp_opt_peephole.cpp",
+    "kqp_opt_peephole_wide_read.cpp",
+    "kqp_opt_peephole_write_constraint.cpp",
+  ]
+}

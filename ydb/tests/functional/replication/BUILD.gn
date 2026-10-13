@@ -1,0 +1,18 @@
+unittest_executable("replication") {
+  deps = [
+    "//library/cpp/threading/local_executor",  # peerdir only
+    "//ydb/core/transfer/ut/common",
+    "//ydb/public/sdk/cpp/src/client/draft",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic",  # peerdir only
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "replication.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,13 @@
+library("lwtrace_probes") {
+  public_deps = [ "//library/cpp/lwtrace" ]
+
+  deps = [
+    # "//contrib/libs/grpc",  # peerdir only
+    # "//library/cpp/lwtrace/protos",  # peerdir only
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "blobstorage_probes.cpp" ]
+}

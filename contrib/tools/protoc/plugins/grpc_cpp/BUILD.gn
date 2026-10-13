@@ -1,0 +1,23 @@
+config("private_config") {
+    defines = [ "GRPC_USE_ABSL=0" ]
+    include_dirs = [
+        "//contrib/libs/grpc",
+        "//contrib/libs/grpc/include",
+    ]
+}
+
+contrib_tool("grpc_cpp") {
+    deps = [ "//contrib/libs/protoc" ]
+    sources = [
+        "//contrib/libs/grpc/src/compiler/cpp_generator.cc",
+        "//contrib/libs/grpc/src/compiler/cpp_plugin.cc",
+        "//contrib/libs/grpc/src/compiler/csharp_generator.cc",
+        "//contrib/libs/grpc/src/compiler/node_generator.cc",
+        "//contrib/libs/grpc/src/compiler/objective_c_generator.cc",
+        "//contrib/libs/grpc/src/compiler/php_generator.cc",
+        "//contrib/libs/grpc/src/compiler/proto_parser_helper.cc",
+        "//contrib/libs/grpc/src/compiler/python_generator.cc",
+        "//contrib/libs/grpc/src/compiler/ruby_generator.cc",
+    ]
+    configs = [ ":private_config" ]
+}

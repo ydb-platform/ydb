@@ -1,0 +1,21 @@
+library("adapter") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/bg_tasks/templates",
+  ]
+
+  sources = [ "adapter/adapter.cpp" ]
+}
+
+group("bg_tasks") {
+  public_deps = [
+    # ":adapter",
+    # "//ydb/core/tx/columnshard/bg_tasks/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/bg_tasks/events",  # peerdir only
+    # "//ydb/core/tx/columnshard/bg_tasks/manager",  # peerdir only
+    # "//ydb/core/tx/columnshard/bg_tasks/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/bg_tasks/session",  # peerdir only
+    # "//ydb/core/tx/columnshard/bg_tasks/templates",
+    # "//ydb/core/tx/columnshard/bg_tasks/transactions",  # peerdir only
+  ]
+}

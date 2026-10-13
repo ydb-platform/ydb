@@ -1,0 +1,62 @@
+unittest_executable("scheme") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/protobuf/interop",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/threading/local_executor",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/gateway/actors",
+    "//ydb/core/kqp/gateway/behaviour/resource_pool_classifier",
+    "//ydb/core/kqp/gateway:interface",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/workload_service/actors",
+    "//ydb/core/kqp/workload_service/ut/common",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/library/yql/utils/actor_log",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/yson_value",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
+    "//ydb/services/metadata",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/uuid",
+  ]
+
+  sources = [
+    "kqp_acl_ut.cpp",
+    "kqp_constraints_ut.cpp",
+    "kqp_scheme_fulltext_ut.cpp",
+    "kqp_scheme_type_info_ut.cpp",
+    "kqp_scheme_ut.cpp",
+    "kqp_user_management_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

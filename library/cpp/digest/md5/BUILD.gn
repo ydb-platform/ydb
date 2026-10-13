@@ -1,0 +1,8 @@
+library("md5") {
+  deps = [
+    "//contrib/libs/nayuki_md5",
+    "//library/cpp/string_utils/base64",
+  ]
+
+  sources = [ "md5.cpp" ]
+}

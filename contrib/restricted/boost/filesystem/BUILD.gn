@@ -1,0 +1,43 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    defines = [ "BOOST_FILESYSTEM_NO_CXX20_ATOMIC_REF" ]
+}
+
+contrib_library("filesystem") {
+    public_deps = [
+        "//contrib/restricted/boost/io",
+        "//contrib/restricted/boost/system",
+    ]
+
+    deps = [
+        "//contrib/restricted/boost/assert",
+        "//contrib/restricted/boost/atomic",
+        "//contrib/restricted/boost/config",
+        "//contrib/restricted/boost/container_hash",
+        "//contrib/restricted/boost/detail",
+
+        "//contrib/restricted/boost/iterator",
+        "//contrib/restricted/boost/predef",
+        "//contrib/restricted/boost/scope",
+        "//contrib/restricted/boost/smart_ptr",
+    ]
+
+    sources = [
+        "src/codecvt_error_category.cpp",
+        "src/directory.cpp",
+        "src/exception.cpp",
+        "src/operations.cpp",
+        "src/path_traits.cpp",
+        "src/path.cpp",
+        "src/portability.cpp",
+        "src/unique_path.cpp",
+        "src/utf8_codecvt_facet.cpp",
+        "src/windows_file_codecvt.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

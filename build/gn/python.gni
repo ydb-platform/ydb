@@ -1,0 +1,426 @@
+# Common
+
+template("group_with_inputs") {
+    action(target_name) {
+        forward_variables_from(invoker, "*", [ "testonly", "visibility" ])
+
+        assert(defined(inputs) || defined(sources), "Must provide inputs or sources.")
+        assert(defined(deps) || defined(public_deps), "Must provide deps or public_deps.")
+
+        script = "//build/gn/scripts/no_op.py"
+        outputs = [ "${target_out_dir}/${target_name}.inputs_checked" ]
+        args = rebase_path(outputs, root_build_dir)
+    }
+}
+
+# C extension
+#
+# Compiles a Python C extension as a `source_set` and arranges for it to
+# self-register as a builtin module once linked into any executable. A
+# small auto-generated `__register.c` declares an
+# __attribute__((constructor)) function that runs before main(); the
+# constructor calls PyImport_AppendInittab(module_name, init_func), so by
+# the time Py_Initialize() executes the extension is already in
+# `_PyImport_Inittab` and `import module_name` resolves to it without any
+# filesystem lookup.
+#
+# This is the GN counterpart of Arcadia's PY_REGISTER() macro: one local
+# declaration at the library, no central inittab to keep in sync. Since
+# this is a `source_set`, all object files (extension + shim) flow into
+# the final binary whole — the linker can't drop the constructor as
+# unreferenced.
+template("python_c_extension") {
+    assert(defined(invoker.module_name),
+           "python_c_extension requires module_name (e.g. 'markupsafe._speedups')")
+    assert(defined(invoker.init_func),
+           "python_c_extension requires init_func (e.g. 'PyInit__speedups')")
+    assert(defined(invoker.sources),
+           "python_c_extension requires sources (the extension's .c/.cpp files)")
+
+    _register_label = "${target_name}__register_gen"
+    _register_file = "${target_gen_dir}/${target_name}__register.c"
+
+    action(_register_label) {
+        script = "//build/gn/scripts/gen_py_extension_register.py"
+        outputs = [ _register_file ]
+        args = [
+            "--module-name", invoker.module_name,
+            "--init-func",   invoker.init_func,
+            "--output",      rebase_path(_register_file, root_build_dir),
+        ]
+    }
+
+    source_set(target_name) {
+        forward_variables_from(invoker, [
+            "configs",
+            "public_configs",
+            "testonly",
+            "visibility",
+        ])
+        sources = invoker.sources + [ _register_file ]
+        deps += [ ":${_register_label}" ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+        # Extensions use the public Python C API and need Python.h on the
+        # include path. The interpreter's public_config exposes Include/.
+        if (!defined(configs)) {
+            configs = []
+        }
+        configs += [ "//contrib/tools/python3:public_config" ]
+    }
+}
+
+# Library
+
+template("python_library") {
+    assert(defined(invoker.sources), "sources is required")
+
+    _labels = {
+        main_target = target_name
+        input_group = "${target_name}_input_group"
+        library_infos = "${target_name}.library_infos"
+    }
+
+    _files = {
+        library_infos = "${target_gen_dir}/${target_name}_library_infos.json"
+    }
+
+    library_deps = []
+    if (defined(invoker.library_deps)) {
+        library_deps = invoker.library_deps
+    }
+
+    _data_sources = []
+    _data_package_name = ""
+    if (defined(invoker.data_sources)) {
+        assert(defined(invoker.data_package_name), "data_package_name is required if data_sources are provided")
+        _data_sources = invoker.data_sources
+        _data_package_name = invoker.data_package_name
+    }
+
+    # Add the sources from the invoker
+    if (defined(invoker.source_root)) {
+        _source_root = invoker.source_root
+    } else {
+        _source_root = get_label_info(":$target_name", "dir")
+    }
+    _full_source_paths = []
+    foreach(source, invoker.sources) {
+        _full_source_paths += [ _source_root + "/" + source ]
+    }
+
+    _full_stub_paths = []
+    if (defined(invoker.stubs)) {
+        assert(defined(invoker.stubs_root), "stubs_root must be provided with stubs")
+        foreach(stub, invoker.stubs) {
+            _full_stub_paths += [ invoker.stubs_root + "/" + stub ]
+        }
+    }
+
+    _full_data_source_paths = []
+    foreach(data_source, _data_sources) {
+        _full_data_source_paths += [ rebase_path(data_source, root_build_dir) ]
+    }
+
+    _library_name = target_name
+    if (defined(invoker.library_name)) {
+        _library_name = invoker.library_name
+    }
+    group_with_inputs(_labels.input_group) {
+        forward_variables_from(invoker, [
+            "assert_no_deps",
+            "testonly",
+            "visibility",
+        ])
+
+        # Seed with the library_deps, and then add any other deps as well
+        deps = library_deps
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        source_root = _source_root
+        metadata = {
+            library_info = [
+                {
+                    library_name = _library_name
+                    source_root = rebase_path(source_root, root_build_dir)
+                    sources = invoker.sources
+                    data_package_name = _data_package_name
+                    data_sources = _full_data_source_paths
+
+                    if (defined(invoker.stubs)) {
+                        stubs_root = rebase_path(invoker.stubs_root, root_build_dir)
+                        stubs = invoker.stubs
+                    }
+                },
+            ]
+
+            # Collect library_info from any libraries that are needed.
+            library_info_barrier = library_deps
+        }
+        sources = _full_source_paths + _full_stub_paths
+    }
+
+    # Generate library_info.json file with all the library dependencies info
+    generated_file(_labels.library_infos) {
+        forward_variables_from(invoker, [ "assert_no_deps" ])
+        public_deps = [ ":${_labels.input_group}" ]
+        outputs = [ _files.library_infos ]
+        output_conversion = "json"
+        data_keys = [ "library_info" ]
+        walk_keys = [ "library_info_barrier" ]
+    }
+
+    # Compile each entry in `extension_sources` as a Python C extension whose
+    # builtin module name is "<library_name>.<basename>" and whose init
+    # function is the canonical "PyInit_<basename>". Each becomes a sibling
+    # subtarget that the public group below depends on, so any python_binary
+    # linking against this library pulls the extension's object files (and
+    # its auto-registration shim) in through standard GN transitive deps.
+    _extension_targets = []
+    if (defined(invoker.extension_sources)) {
+        foreach(_ext_src, invoker.extension_sources) {
+            _ext_stem = get_path_info(_ext_src, "name")
+            _ext_label = "${target_name}__ext_${_ext_stem}"
+            python_c_extension(_ext_label) {
+                module_name = "${_library_name}.${_ext_stem}"
+                init_func   = "PyInit_${_ext_stem}"
+                sources     = [ _source_root + "/" + _ext_src ]
+            }
+            _extension_targets += [ ":${_ext_label}" ]
+        }
+    }
+
+    group(target_name) {
+        forward_variables_from(invoker, [
+            "assert_no_deps",
+            "data_deps",
+        ])
+        public_deps = _extension_targets
+        if (!defined(deps)) {
+            deps = []
+        }
+        deps += [ ":${_labels.input_group}" ]
+    }
+}
+
+# Freeze pipeline (reusable)
+#
+# Internal building block shared by `:python3` (the canonical interpreter
+# library) and `python_binary()` (per-binary extras). Given a JSON file
+# listing modules to freeze, produces a single generated `.c` file with
+# all bytecode arrays + the chosen frozen table layout, ready to be added
+# to a `sources = ` list elsewhere.
+template("python_freeze_modules") {
+    assert(defined(invoker.modules_json),
+           "modules_json (path to JSON list) is required")
+    assert(defined(invoker.mode),
+           "mode = \"full\" or \"extras\" is required")
+    assert(defined(invoker.output),
+           "output (path of generated .c) is required")
+    assert(defined(invoker.workdir),
+           "workdir (intermediate header directory) is required")
+
+    _freeze_label = "//contrib/tools/python3:_freeze_module"
+    _freeze_bin = get_label_info(_freeze_label, "root_out_dir") + "/" +
+                  get_label_info(_freeze_label, "name")
+
+    action(target_name) {
+        forward_variables_from(invoker, [ "testonly", "visibility" ])
+        script = "//build/gn/scripts/freeze_all_modules.py"
+        inputs = [ invoker.modules_json ]
+        outputs = [ invoker.output ]
+        deps = [ _freeze_label ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+        args = [
+            "--mode",    invoker.mode,
+            "--freeze",  rebase_path(_freeze_bin, root_build_dir),
+            "--list",    rebase_path(invoker.modules_json, root_build_dir),
+            "--workdir", rebase_path(invoker.workdir, root_build_dir),
+            "--output",  rebase_path(invoker.output, root_build_dir),
+        ]
+    }
+}
+
+# Binary
+#
+# Produces a native ELF executable that bundles:
+#   - the CPython interpreter library `:python3` (already carries the
+#     frozen stdlib + builtin C modules);
+#   - a per-binary extra frozen-modules index that registers all .py
+#     files contributed by transitive python_library deps plus the
+#     binary's own `main_source`, installed via global constructor into
+#     `PyImport_FrozenModules`;
+#   - all C-extension `source_set`s pulled in through standard GN deps
+#     (these self-register through their own global constructors — see
+#     python_c_extension);
+#   - a generated `main()` that runs the configured main module under
+#     runpy._run_module_as_main, with an isolated PyConfig (empty
+#     sys.path, site_import = 0, use_environment = 0).
+template("python_binary") {
+    assert(defined(invoker.main_source), "main_source is required")
+
+    _main_module = "__binary_main__"
+    if (defined(invoker.main_module)) {
+        _main_module = invoker.main_module
+    }
+
+    # Mirror contrib_library: derive a unique output name from the source
+    # path so the ELF doesn't collide with same-named targets elsewhere in
+    # the tree (e.g. a `gen` directory under root_out_dir, or another
+    # python_binary("gen") in a different location).
+    _uniq = exec_script("//build/gn/scripts/unique_name.py",
+                        [ rebase_path(".", "//") ], "trim string")
+    _output_name = "${_uniq}_${target_name}"
+
+    _labels = {
+        library_infos = "${target_name}__library_infos"
+        modules_json  = "${target_name}__modules_json"
+        freeze        = "${target_name}__freeze"
+        main_c        = "${target_name}__main_c"
+    }
+    _files = {
+        library_infos = "${target_gen_dir}/${target_name}__library_infos.json"
+        modules_json  = "${target_gen_dir}/${target_name}__modules.json"
+        freeze_c      = "${target_gen_dir}/${target_name}__frozen_extras.c"
+        freeze_work   = "${target_gen_dir}/${target_name}__frozen_extras"
+        main_c        = "${target_gen_dir}/${target_name}__main.c"
+    }
+
+    # 1. Walk library_info metadata from python_library deps -> JSON.
+    generated_file(_labels.library_infos) {
+        if (defined(invoker.deps)) {
+            public_deps = invoker.deps
+        }
+        outputs = [ _files.library_infos ]
+        output_conversion = "json"
+        data_keys = [ "library_info" ]
+        walk_keys = [ "library_info_barrier" ]
+    }
+
+    # 2. Translate library_infos + main_source into the freeze input.
+    action(_labels.modules_json) {
+        script = "//build/gn/scripts/library_infos_to_module_list.py"
+        inputs = [ _files.library_infos, invoker.main_source ]
+        outputs = [ _files.modules_json ]
+        deps = [ ":${_labels.library_infos}" ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+        args = [
+            "--library-infos", rebase_path(_files.library_infos, root_build_dir),
+            "--main-source",   rebase_path(invoker.main_source, root_build_dir),
+            "--main-module",   _main_module,
+            "--output",        rebase_path(_files.modules_json, root_build_dir),
+        ]
+    }
+
+    # 3. Run the freezer against that list.
+    python_freeze_modules(_labels.freeze) {
+        modules_json = _files.modules_json
+        mode = "extras"
+        output = _files.freeze_c
+        workdir = _files.freeze_work
+        deps = [ ":${_labels.modules_json}" ]
+    }
+
+    # 4. Generate the executable's main() (runpy-based entry).
+    action(_labels.main_c) {
+        script = "//build/gn/scripts/gen_python_binary_main.py"
+        outputs = [ _files.main_c ]
+        args = [
+            "--main-module", _main_module,
+            "--output",      rebase_path(_files.main_c, root_build_dir),
+        ]
+    }
+
+    # 5. Build the ELF.
+    executable(target_name) {
+        forward_variables_from(invoker, [ "testonly", "visibility" ])
+        output_name = _output_name
+        sources = [ _files.main_c, _files.freeze_c ]
+        # NB: `executable` gets default deps/configs injected by
+        # build/gn/config/CONFIG.gn — use += so we don't clobber them.
+        deps += [
+            "//contrib/tools/python3",        # CPython + frozen stdlib
+            ":${_labels.main_c}",
+            ":${_labels.freeze}",
+        ]
+        if (defined(invoker.deps)) {
+            # Inherits transitive C-extension source_sets via python_library
+            # public_deps; nothing further to wire up.
+            deps += invoker.deps
+        }
+        configs += [ "//contrib/tools/python3:public_config" ]
+    }
+}
+
+# Action
+#
+# Invokes a python_binary as part of the build. Since python_binary is now
+# a native ELF rather than a .pyz, and GN's `action.script` insists on a
+# Python script, we route through //build/gn/scripts/run_binary.py which
+# execvp's the ELF with the requested args.
+
+template("_python_action") {
+    assert(defined(invoker.binary_label),
+           "The label of the python_binary() to invoke must be specified.")
+
+    _binary_label = invoker.binary_label
+    # executable() outputs land in root_out_dir; python_binary applies the
+    # same unique_name suffix that contrib_library does, so mirror that
+    # computation here from the binary's source dir.
+    _binary_out_dir = get_label_info(_binary_label, "root_out_dir")
+    _binary_name = get_label_info(_binary_label, "name")
+    _binary_dir = get_label_info(_binary_label, "dir")
+    _binary_uniq = exec_script("//build/gn/scripts/unique_name.py",
+                               [ rebase_path(_binary_dir, "//") ],
+                               "trim string")
+    _binary_path = "${_binary_out_dir}/${_binary_uniq}_${_binary_name}"
+
+    target(invoker.target_type, target_name) {
+        forward_variables_from(invoker, "*", [
+            "args",
+            "assert_no_deps",
+            "binary_label",
+            "deps",
+            "inputs",
+            "script",
+            "target_type",
+        ])
+        script = "//build/gn/scripts/run_binary.py"
+        # rebase_path strips one element for {{...}} substitutions; do it
+        # only on user args, the binary path is fixed at gen time.
+        args = [ rebase_path(_binary_path, root_build_dir) ]
+        if (defined(invoker.args)) {
+            args += invoker.args
+        }
+        if (defined(invoker.inputs)) {
+            inputs = invoker.inputs + [ _binary_path ]
+        } else {
+            inputs = [ _binary_path ]
+        }
+        deps = [ _binary_label ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+    }
+}
+
+template("python_action") {
+    _python_action(target_name) {
+        forward_variables_from(invoker, "*", [ "target_type" ])
+        target_type = "action"
+    }
+}
+
+template("python_action_foreach") {
+    _python_action(target_name) {
+        forward_variables_from(invoker, "*", [ "target_type" ])
+        target_type = "action_foreach"
+    }
+}

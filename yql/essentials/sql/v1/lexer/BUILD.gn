@@ -1,0 +1,14 @@
+library("lexer") {
+  public_deps = [ "//yql/essentials/parser/lexer_common" ]
+
+  deps = [
+    # "//yql/essentials/core/issue/protos",  # peerdir only
+    "//yql/essentials/public/issue",
+    # "//yql/essentials/sql/settings",
+    # "//yql/essentials/sql/v1/lexer/antlr4",
+    # "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "lexer.cpp" ]
+}

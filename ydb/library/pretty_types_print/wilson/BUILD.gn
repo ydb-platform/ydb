@@ -1,0 +1,7 @@
+library("wilson") {
+  deps = [
+    # "//ydb/library/actors/wilson",
+  ]
+
+  sources = [ "out.cpp" ]
+}

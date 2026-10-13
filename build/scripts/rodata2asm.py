@@ -16,7 +16,7 @@ def main():
     args.asm.write('global ' + args.symbol + '\n')
     args.asm.write('global ' + args.symbol + 'Size' + '\n')
     args.asm.write('SECTION .rodata ALIGN=16\n')
-    args.asm.write(args.symbol + ':\nincbin "' + args.rodata + '"\n')
+    args.asm.write(args.symbol + ':\nincbin "' + os.path.abspath(args.rodata) + '"\n')
     args.asm.write('align 4, db 0\n')
     args.asm.write(args.symbol + 'Size:\ndd ' + str(file_size) + '\n')
 

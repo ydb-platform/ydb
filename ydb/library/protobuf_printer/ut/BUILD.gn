@@ -1,0 +1,19 @@
+unittest_executable("ut") {
+  public_deps = [ "//ydb/public/api/protos/annotations" ]
+
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/protobuf_printer",
+  ]
+
+  sources = [
+    "//ydb/library/protobuf_printer/protobuf_printer_ut.cpp",
+    "test_proto.proto",
+  ]
+
+  include_dirs = [ "//ydb/library/protobuf_printer" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+
+  proto_imports = [ "//ydb/public/api/protos/annotations" ]
+}

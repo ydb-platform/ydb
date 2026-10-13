@@ -1,0 +1,20 @@
+library("common") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    "//ydb/services/metadata/request:config",
+  ]
+
+  deps = [
+    # "//ydb/public/api/protos",  # peerdir only
+  ]
+
+  sources = [
+    "config.cpp",
+    "events.cpp",
+    "service.cpp",
+  ]
+}

@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/ydb_cli/common",
+  ]
+
+  sources = [
+    "//ydb/public/lib/ydb_cli/common/cert_format_converter_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/config_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/csv_parser_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/duration_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/normalize_path_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/pg_dump_parser_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/recursive_remove_ut.cpp",
+    "print_utils_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/common" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

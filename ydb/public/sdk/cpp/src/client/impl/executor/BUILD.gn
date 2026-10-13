@@ -1,0 +1,7 @@
+library("executor") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types/executor",
+  ]
+
+  sources = [ "executor_impl.cpp" ]
+}

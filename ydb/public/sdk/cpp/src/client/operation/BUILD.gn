@@ -1,0 +1,20 @@
+library("operation") {
+  public_deps = [
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/client/types/operation",
+    "//ydb/public/sdk/cpp/src/library/operation_id",
+  ]
+
+  deps = [
+    "//ydb/public/sdk/cpp/src/client/export",
+    "//ydb/public/sdk/cpp/src/client/import",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/ss_tasks",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "operation.cpp" ]
+}

@@ -1,0 +1,16 @@
+config("private_config") {
+    include_dirs = [ "src" ]
+}
+
+contrib_library("hdr_histogram") {
+    sources = [
+        "src/hdr_encoding.c",
+        "src/hdr_histogram.c",
+        "src/hdr_interval_recorder.c",
+        "src/hdr_thread.c",
+        "src/hdr_time.c",
+        "src/hdr_writer_reader_phaser.c",
+    ]
+
+    configs = [ ":private_config" ]
+}

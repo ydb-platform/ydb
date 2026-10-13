@@ -1,0 +1,20 @@
+library("session") {
+  public_deps = [
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_locks:manager",
+    "//ydb/core/tx/columnshard/data_sharing/common/context",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/data_locks/locks",
+    "//ydb/core/tx/columnshard/engines",
+  ]
+
+  sources = [ "common.cpp" ]
+
+  serialize_enum_headers = [ "common.h" ]
+}

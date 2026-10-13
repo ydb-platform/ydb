@@ -1,0 +1,13 @@
+library("status") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+    "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers",
+    "//ydb/public/sdk/cpp/src/library/issue",
+  ]
+
+  deps = [ "//ydb/public/sdk/cpp/src/client/impl/internal/plain_status" ]
+
+  sources = [ "status.cpp" ]
+}

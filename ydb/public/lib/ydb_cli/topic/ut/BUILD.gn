@@ -1,0 +1,50 @@
+unittest_executable("ut") {
+  public_deps = [
+    "//library/cpp/logger",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/lib/ydb_cli/topic",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/types/operation",
+  ]
+
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/openssl",
+    "//contrib/libs/protobuf",
+    "//library/cpp/histogram/hdr",  # peerdir only
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",  # peerdir only
+    "//ydb/core/fq/libs/private_client",  # peerdir only
+    "//ydb/core/testlib",
+    "//ydb/library/aclib",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/experimental",  # peerdir only
+    "//ydb/public/lib/ydb_cli/commands",  # peerdir only
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "//ydb/public/lib/ydb_cli/topic/topic_read_ut.cpp",
+    "//ydb/public/lib/ydb_cli/topic/topic_write.cpp",
+    "//ydb/public/lib/ydb_cli/topic/topic_write_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/topic" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

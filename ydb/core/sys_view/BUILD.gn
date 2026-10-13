@@ -1,0 +1,217 @@
+library("compile_cache") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//library/cpp/protobuf/interop",
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/kqp/common/events",
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/sys_view/auth",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [ "compile_cache/compile_cache.cpp" ]
+}
+
+library("nodes") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/mind:tenant_node_enumeration",  # peerdir only
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [ "nodes/nodes.cpp" ]
+}
+
+library("pg_tables") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [ "pg_tables/pg_tables.cpp" ]
+}
+
+library("query_stats") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/sys_view/common",
+    # "//ydb/core/sys_view/service",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [
+    "query_stats/query_metrics.cpp",
+    "query_stats/query_stats.cpp",
+  ]
+}
+
+library("resource_pool_classifiers") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/kqp/gateway/behaviour/resource_pool_classifier",
+    # "//ydb/core/kqp/workload_service/actors",
+    "//ydb/core/kqp/workload_service/actors:scheme_actors",  # peerdir only
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/services/metadata",
+    # "//ydb/services/metadata/abstract",
+    # "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [ "resource_pool_classifiers/resource_pool_classifiers.cpp" ]
+}
+
+library("resource_pools") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/protobuf/json",
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/mind:tenant_node_enumeration",  # peerdir only
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/table_creator",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [ "resource_pools/resource_pools.cpp" ]
+}
+
+library("sessions") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/kqp/common/events",
+    # "//ydb/core/kqp/common/simple",
+    "//ydb/core/mind:tenant_node_enumeration",  # peerdir only
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [ "sessions/sessions.cpp" ]
+}
+
+library("streaming_queries") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    # "//ydb/core/scheme",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/protobuf/json",
+    "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/gateway/behaviour/streaming_query/common",
+    "//ydb/core/kqp/workload_service/actors",
+    "//ydb/core/sys_view/common",
+    "//ydb/library/query_actor",
+  ]
+
+  sources = [ "streaming_queries/streaming_queries.cpp" ]
+}
+
+library("sys_view") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    ":compile_cache",
+    ":nodes",
+    ":pg_tables",
+    ":query_stats",
+    ":resource_pool_classifiers",
+    ":resource_pools",
+    ":sessions",
+    ":streaming_queries",
+    ":tablets",
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/sys_view/auth",
+    # "//ydb/core/sys_view/common",
+    "//ydb/core/sys_view/partition_stats",
+    # "//ydb/core/sys_view/service",  # peerdir only
+    "//ydb/core/sys_view/show_create",
+    "//ydb/core/sys_view/storage",
+    # "//ydb/core/tx/schemeshard",  # peerdir only
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+    # "//ydb/core/wrappers",  # peerdir only
+  ]
+
+  sources = [ "scan.cpp" ]
+}
+
+library("tablets") {
+  public_deps = [
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/mind/hive",
+    "//ydb/core/sys_view/common",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  sources = [ "tablets/tablets.cpp" ]
+}

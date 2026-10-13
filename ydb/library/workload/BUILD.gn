@@ -1,0 +1,276 @@
+library("clickbench") {
+  deps = [
+    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/http/io",  # peerdir only
+    # "//library/cpp/resource",
+    # "//library/cpp/string_utils/csv",
+    # "//ydb/library/accessor",  # peerdir only
+    # "//ydb/library/workload/abstract",
+    "//ydb/library/workload/benchmark_base",
+    # "//ydb/library/yaml_json",
+  ]
+
+  sources = [
+    "clickbench/clickbench.cpp",
+    "clickbench/data_generator.cpp",
+    "clickbench/registrar.cpp",
+  ]
+
+  resources = [
+    {
+      path = "clickbench/click_bench_queries.sql"
+      key = "click_bench_queries.sql"
+    },
+    {
+      path = "clickbench/click_bench_queries_pg.sql"
+      key = "click_bench_queries_pg.sql"
+    },
+    {
+      path = "//ydb/tests/functional/clickbench/data/queries-deterministic.sql"
+      key = "queries-deterministic.sql"
+    },
+    {
+      path = "clickbench/click_bench_schema.yaml"
+      key = "click_bench_schema.yaml"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q0.result"
+      key = "click_bench_canonical/q0.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q1.result"
+      key = "click_bench_canonical/q1.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q2.result"
+      key = "click_bench_canonical/q2.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q3.result"
+      key = "click_bench_canonical/q3.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q4.result"
+      key = "click_bench_canonical/q4.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q5.result"
+      key = "click_bench_canonical/q5.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q6.result"
+      key = "click_bench_canonical/q6.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q7.result"
+      key = "click_bench_canonical/q7.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q8.result"
+      key = "click_bench_canonical/q8.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q9.result"
+      key = "click_bench_canonical/q9.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q10.result"
+      key = "click_bench_canonical/q10.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q11.result"
+      key = "click_bench_canonical/q11.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q12.result"
+      key = "click_bench_canonical/q12.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q13.result"
+      key = "click_bench_canonical/q13.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q14.result"
+      key = "click_bench_canonical/q14.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q15.result"
+      key = "click_bench_canonical/q15.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q16.result"
+      key = "click_bench_canonical/q16.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q17.result"
+      key = "click_bench_canonical/q17.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q18.result"
+      key = "click_bench_canonical/q18.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q19.result"
+      key = "click_bench_canonical/q19.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q20.result"
+      key = "click_bench_canonical/q20.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q21.result"
+      key = "click_bench_canonical/q21.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q22.result"
+      key = "click_bench_canonical/q22.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q23.result"
+      key = "click_bench_canonical/q23.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q24.result"
+      key = "click_bench_canonical/q24.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q25.result"
+      key = "click_bench_canonical/q25.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q26.result"
+      key = "click_bench_canonical/q26.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q27.result"
+      key = "click_bench_canonical/q27.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q28.result"
+      key = "click_bench_canonical/q28.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q29.result"
+      key = "click_bench_canonical/q29.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q30.result"
+      key = "click_bench_canonical/q30.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q31.result"
+      key = "click_bench_canonical/q31.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q32.result"
+      key = "click_bench_canonical/q32.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q33.result"
+      key = "click_bench_canonical/q33.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q34.result"
+      key = "click_bench_canonical/q34.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q35.result"
+      key = "click_bench_canonical/q35.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q36.result"
+      key = "click_bench_canonical/q36.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q37.result"
+      key = "click_bench_canonical/q37.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q38.result"
+      key = "click_bench_canonical/q38.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q39.result"
+      key = "click_bench_canonical/q39.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q40.result"
+      key = "click_bench_canonical/q40.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q41.result"
+      key = "click_bench_canonical/q41.result"
+    },
+    {
+      path = "clickbench/click_bench_canonical/q42.result"
+      key = "click_bench_canonical/q42.result"
+    },
+  ]
+}
+
+library("log") {
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/resource",
+    "//ydb/library/workload/abstract",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "log/log.cpp",
+    "log/registrar.cpp",
+  ]
+
+  serialize_enum_headers = [ "log/log.h" ]
+
+  resources = [
+    {
+      path = "log/select_queries.sql"
+      key = "workload_logs_select_queries.sql"
+    },
+  ]
+}
+
+library("mixed") {
+  deps = [ "//ydb/library/workload/abstract" ]
+
+  sources = [
+    "mixed/mixed.cpp",
+    "mixed/registrar.cpp",
+  ]
+
+  serialize_enum_headers = [ "mixed/mixed.h" ]
+}
+
+library("query") {
+  deps = [
+    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/json",  # peerdir only
+    # "//ydb/library/workload/abstract",
+    "//ydb/library/workload/benchmark_base",
+    # "//ydb/library/yaml_json",
+  ]
+
+  sources = [
+    "query/data_generator.cpp",
+    "query/query.cpp",
+    "query/registrar.cpp",
+  ]
+}
+
+group("workload") {
+  public_deps = [
+    ":clickbench",  # peerdir only
+    ":log",  # peerdir only
+    ":mixed",  # peerdir only
+    ":query",  # peerdir only
+    # "//ydb/library/workload/abstract",  # peerdir only
+    # "//ydb/library/workload/benchmark_base",
+    "//ydb/library/workload/kv",  # peerdir only
+    "//ydb/library/workload/stock",  # peerdir only
+    # "//ydb/library/workload/tpc_base",
+    "//ydb/library/workload/tpcds",  # peerdir only
+    "//ydb/library/workload/tpch",  # peerdir only
+    # "//ydb/public/lib/ydb_cli/commands",  # peerdir only
+  ]
+}

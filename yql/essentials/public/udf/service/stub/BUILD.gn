@@ -1,0 +1,7 @@
+library("stub") {
+  deps = [ "//yql/essentials/public/udf" ]
+
+  sources = [ "udf_service.cpp" ]
+
+  link_slot_provides = [ "YqlServicePolicy" ]
+}

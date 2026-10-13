@@ -1,0 +1,15 @@
+config("pack_tuple_private_config") {
+  cflags = [ "-mavx2" ]
+}
+
+linked_executable("pack_tuple") {
+  testonly = true
+
+  deps = [ "//ydb/library/yql/dq/comp_nodes/hash_join_utils/simd" ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+
+  configs = [ ":pack_tuple_private_config" ]
+}

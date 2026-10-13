@@ -1,0 +1,5 @@
+library("easy_parse") {
+  deps = [ "//library/cpp/json" ]
+
+  sources = [ "json_easy_parser.cpp" ]
+}

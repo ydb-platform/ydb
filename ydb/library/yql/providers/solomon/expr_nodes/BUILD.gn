@@ -1,0 +1,16 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//yql/essentials/core/expr_nodes_gen/gen.gni")
+
+generate_expr_nodes("gen") {
+    sources = [ "yql_solomon_expr_nodes.json" ]
+}
+
+library("expr_nodes") {
+    public_deps = [
+        ":gen",
+        "//yql/essentials/core/expr_nodes",
+        "//yql/essentials/providers/common/provider",
+    ]
+    sources = [ "yql_solomon_expr_nodes.cpp" ]
+}

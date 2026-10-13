@@ -1,0 +1,19 @@
+library("scheme") {
+  public_deps = [ "//library/cpp/json" ]
+
+  deps = [
+    "//contrib/libs/protobuf",
+    # "//library/cpp/string_utils/relaxed_escaper",
+  ]
+
+  sources = [
+    "scheme.cpp",
+    "scimpl_json_read.cpp",
+    "scimpl_json_write.cpp",
+    "scimpl_private.cpp",
+    "scimpl_protobuf.cpp",
+    "scimpl_select.rl6",
+  ]
+
+  serialize_enum_headers = [ "scheme.h" ]
+}

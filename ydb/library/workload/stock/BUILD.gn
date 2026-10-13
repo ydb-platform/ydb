@@ -1,0 +1,10 @@
+library("stock") {
+  public_deps = [ "//ydb/library/workload/abstract" ]
+
+  sources = [
+    "registrar.cpp",
+    "stock.cpp",
+  ]
+
+  serialize_enum_headers = [ "stock.h" ]
+}

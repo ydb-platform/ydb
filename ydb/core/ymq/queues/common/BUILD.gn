@@ -1,0 +1,13 @@
+library("common") {
+  public_deps = [
+    # "//ydb/core/ymq/base",
+    "//ydb/core/ymq/queues/fifo",
+    "//ydb/core/ymq/queues/std",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "db_queries_maker.cpp",
+    "queries.cpp",
+  ]
+}

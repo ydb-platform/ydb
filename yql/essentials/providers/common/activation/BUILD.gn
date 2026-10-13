@@ -1,0 +1,8 @@
+library("activation") {
+  deps = [
+    "//library/cpp/svnversion",
+    "//yql/essentials/providers/common/proto",
+  ]
+
+  sources = [ "yql_activation.cpp" ]
+}

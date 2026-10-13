@@ -1,0 +1,12 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("concept_check") {
+    public_deps = [
+        "//contrib/restricted/boost/preprocessor",
+        "//contrib/restricted/boost/type_traits",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

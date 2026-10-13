@@ -1,0 +1,12 @@
+group("yt_arrow_converter_interface") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/yson",
+    "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils",
+  ]
+
+  deps = [
+    # "//yql/essentials/public/udf",  # peerdir only
+  ]
+}

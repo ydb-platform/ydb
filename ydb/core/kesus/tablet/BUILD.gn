@@ -1,0 +1,91 @@
+linked_executable("quoter_performance_test") {
+  testonly = true
+
+  deps = [
+    ":tablet",
+    "//library/cpp/getopt",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/erasure",
+    "//ydb/core/metering",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "quoter_performance_test/main.cpp",
+    "ut_helpers.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}
+
+library("tablet") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+    # "//ydb/library/time_series_vec",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/protobuf/util",
+    "//ydb/core/actorlib_impl",
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/erasure",  # peerdir only
+    "//ydb/core/metering",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/util",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "events.cpp",
+    "probes.cpp",
+    "quoter_resource_tree.cpp",
+    "quoter_runtime.cpp",
+    "rate_accounting.cpp",
+    "schema.cpp",
+    "tablet.cpp",
+    "tablet_db.cpp",
+    "tablet_html.cpp",
+    "tablet_impl.cpp",
+    "tx_config_get.cpp",
+    "tx_config_set.cpp",
+    "tx_dummy.cpp",
+    "tx_init.cpp",
+    "tx_init_schema.cpp",
+    "tx_quoter_resource_add.cpp",
+    "tx_quoter_resource_delete.cpp",
+    "tx_quoter_resource_describe.cpp",
+    "tx_quoter_resource_update.cpp",
+    "tx_self_check.cpp",
+    "tx_semaphore_acquire.cpp",
+    "tx_semaphore_create.cpp",
+    "tx_semaphore_delete.cpp",
+    "tx_semaphore_describe.cpp",
+    "tx_semaphore_release.cpp",
+    "tx_semaphore_timeout.cpp",
+    "tx_semaphore_update.cpp",
+    "tx_session_attach.cpp",
+    "tx_session_destroy.cpp",
+    "tx_session_detach.cpp",
+    "tx_session_timeout.cpp",
+    "tx_sessions_describe.cpp",
+  ]
+}

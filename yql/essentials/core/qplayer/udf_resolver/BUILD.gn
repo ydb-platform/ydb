@@ -1,0 +1,15 @@
+library("udf_resolver") {
+  public_deps = [
+    "//yql/essentials/core",
+    # "//yql/essentials/core/qplayer/storage/interface",
+  ]
+
+  deps = [
+    "//contrib/libs/openssl",
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/ast",
+    "//yql/essentials/providers/common/schema/expr",
+  ]
+
+  sources = [ "yql_qplayer_udf_resolver.cpp" ]
+}

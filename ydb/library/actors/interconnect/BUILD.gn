@@ -1,0 +1,64 @@
+library("interconnect") {
+  public_deps = [
+    "//contrib/libs/xxhash",
+    "//library/cpp/containers/stack_vector",
+    "//library/cpp/digest/crc32c",
+    "//library/cpp/lwtrace",
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/monlib/metrics",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect/address",
+    "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/prof",
+    "//ydb/library/actors/protos",
+    "//ydb/library/actors/util",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    "//contrib/libs/ibdrv",
+    # "//contrib/libs/libc_compat",  # peerdir only
+    "//contrib/libs/openssl",
+    # "//contrib/libs/protobuf",
+    "//contrib/restricted/abseil-cpp-tstring",
+    "//library/cpp/json",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/monlib/service/pages/resources",  # peerdir only
+    "//library/cpp/monlib/service/pages/tablesorter",  # peerdir only
+    "//library/cpp/openssl/init",  # peerdir only
+    # "//library/cpp/packedtypes",  # peerdir only
+    # "//ydb/library/actors/dnscachelib",  # peerdir only
+    # "//ydb/library/actors/dnsresolver",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    "//ydb/library/actors/interconnect/mock",
+    "//ydb/library/actors/memory_log",
+  ]
+
+  sources = [
+    "interconnect_channel.cpp",
+    "interconnect_common.cpp",
+    "interconnect_counters.cpp",
+    "interconnect_handshake.cpp",
+    "interconnect_mon.cpp",
+    "interconnect_nameserver_dynamic.cpp",
+    "interconnect_nameserver_table.cpp",
+    "interconnect_proxy_wrapper.cpp",
+    "interconnect_resolve.cpp",
+    "interconnect_stream.cpp",
+    "interconnect_tcp_input_session.cpp",
+    "interconnect_tcp_proxy.cpp",
+    "interconnect_tcp_server.cpp",
+    "interconnect_tcp_session.cpp",
+    "interconnect_zc_processor.cpp",
+    "load.cpp",
+    "packet.cpp",
+    "poller/poller_actor.cpp",
+    "poller/poller_tcp.cpp",
+    "poller/poller_tcp_unit.cpp",
+    "poller/poller_tcp_unit_epoll.cpp",
+    "poller/poller_tcp_unit_select.cpp",
+    "rdma/cq_actor/cq_actor.cpp",
+    "subscription_manager.cpp",
+    "types.cpp",
+  ]
+}

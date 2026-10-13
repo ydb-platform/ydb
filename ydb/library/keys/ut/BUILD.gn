@@ -1,0 +1,14 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/keys",  # peerdir only
+  ]
+
+  sources = [ "//ydb/library/keys/default_keys_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/library/keys",  # peerdir only
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

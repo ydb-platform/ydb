@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/memory_controller",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",  # peerdir only
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/library/actors/testlib",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/memory_controller/memory_controller_ut.cpp",
+    "//ydb/core/memory_controller/memtable_collection_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/memory_controller" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

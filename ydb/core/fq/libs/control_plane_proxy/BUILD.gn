@@ -1,0 +1,91 @@
+library("actors") {
+  public_deps = [
+    "//contrib/libs/fmt",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/common",
+    "//ydb/core/fq/libs/compute/common",
+    # "//ydb/core/fq/libs/config",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/control_plane_config",
+    # "//ydb/core/fq/libs/control_plane_proxy/events",
+    # "//ydb/core/fq/libs/control_plane_proxy/utils",
+    "//ydb/core/fq/libs/control_plane_storage/events",
+    # "//ydb/core/fq/libs/rate_limiter/events",
+    "//ydb/core/fq/libs/signer",
+    "//ydb/library/actors/core",
+    # "//ydb/library/protobuf_printer",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//library/cpp/iterator",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    "//ydb/core/fq/libs/result_formatter",
+    # "//ydb/core/kqp/provider",
+    # "//ydb/library/db_pool/protos",  # peerdir only
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/fq",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "actors/control_plane_storage_requester_actor.cpp",
+    "actors/query_utils.cpp",
+    "actors/ydb_schema_query_actor.cpp",
+  ]
+
+  serialize_enum_headers = [ "actors/ydb_schema_query_actor.h" ]
+}
+
+library("control_plane_proxy") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/shared_resources",
+    # "//ydb/core/fq/libs/signer",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/security",
+  ]
+
+  deps = [
+    ":actors",
+    # "//contrib/libs/fmt",
+    "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/retry",
+    "//ydb/core/base",
+    # "//ydb/core/fq/libs/actors",  # peerdir only
+    # "//ydb/core/fq/libs/compute/ydb",  # peerdir only
+    "//ydb/core/fq/libs/compute/ydb/control_plane",
+    # "//ydb/core/fq/libs/compute/ydb:events",
+    # "//ydb/core/fq/libs/config",
+    "//ydb/core/fq/libs/control_plane_config",
+    "//ydb/core/fq/libs/control_plane_proxy/events",
+    "//ydb/core/fq/libs/control_plane_proxy/utils",
+    "//ydb/core/fq/libs/control_plane_storage",
+    # "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    "//ydb/core/fq/libs/quota_manager",
+    "//ydb/core/fq/libs/rate_limiter/events",
+    # "//ydb/core/fq/libs/result_formatter",
+    "//ydb/core/fq/libs/test_connection",
+    # "//ydb/core/fq/libs/test_connection:events",
+    "//ydb/core/fq/libs/ydb",
+    # "//ydb/core/mon",
+    "//ydb/library/folder_service",
+    "//ydb/library/protobuf_printer",
+    # "//ydb/library/ycloud/api",
+    "//ydb/library/ycloud/impl",
+    "//ydb/public/lib/fq",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "control_plane_proxy.cpp",
+    "probes.cpp",
+  ]
+}

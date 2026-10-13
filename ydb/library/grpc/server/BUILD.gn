@@ -1,0 +1,28 @@
+library("server") {
+  public_deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    # "//library/cpp/logger",
+    "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/monlib/dynamic_counters/percentile",
+    "//library/cpp/string_utils/quote",
+    # "//library/cpp/threading/future",
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/jaeger_tracing",
+    # "//ydb/library/actors/core",
+    "//ydb/library/protobuf_printer",
+    # "//ydb/public/sdk/cpp/src/client/resources",
+  ]
+
+  deps = [ "//library/cpp/time_provider" ]
+
+  sources = [
+    "event_callback.cpp",
+    "grpc_counters.cpp",
+    "grpc_request.cpp",
+    "grpc_server.cpp",
+  ]
+
+  serialize_enum_headers = [ "grpc_request_base.h" ]
+}

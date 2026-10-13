@@ -1,0 +1,19 @@
+unittest_executable("ut_auth") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/library/aclib",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/base/auth_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/base" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

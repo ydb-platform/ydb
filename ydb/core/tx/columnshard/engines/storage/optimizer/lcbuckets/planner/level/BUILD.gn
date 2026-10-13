@@ -1,0 +1,25 @@
+library("level") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow",
+    # "//ydb/services/bg_tasks/abstract",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "counters.cpp",
+    "one_layer.cpp",
+    "zero_level.cpp",
+  ]
+}

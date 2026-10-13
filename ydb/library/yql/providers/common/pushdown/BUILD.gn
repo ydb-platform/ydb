@@ -1,0 +1,19 @@
+library("pushdown") {
+  public_deps = [
+    "//yql/essentials/ast",
+    "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/core/expr_nodes_gen",
+    "//yql/essentials/utils/log",
+  ]
+
+  deps = [ "//yql/essentials/providers/common/provider" ]
+
+  sources = [
+    "collection.cpp",
+    "physical_opt.cpp",
+    "predicate_node.cpp",
+    "settings.cpp",
+    "type_ann.cpp",
+  ]
+}

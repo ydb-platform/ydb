@@ -1,0 +1,12 @@
+library("validator") {
+  public_deps = [ "//ydb/library/fyamlcpp" ]
+
+  sources = [
+    "configurators.cpp",
+    "validator.cpp",
+    "validator_builder.cpp",
+    "validator_checks.cpp",
+  ]
+
+  serialize_enum_headers = [ "validator_builder.h" ]
+}

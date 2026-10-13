@@ -1,0 +1,3 @@
+library("int128") {
+  sources = [ "int128.cpp" ]
+}

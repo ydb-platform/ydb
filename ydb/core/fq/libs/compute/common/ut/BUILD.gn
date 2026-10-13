@@ -1,0 +1,38 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "resources/plan.json"
+      key = "plan.json"
+    },
+    {
+      path = "resources/stat.json"
+      key = "stat.json"
+    },
+  ]
+}
+
+unittest_executable("ut") {
+  deps = [
+    ":ut_resources",
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/compute/common",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "config_ut.cpp",
+    "utils_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/fq/libs/compute/common" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

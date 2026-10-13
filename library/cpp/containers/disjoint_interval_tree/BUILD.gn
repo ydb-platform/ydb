@@ -1,0 +1,3 @@
+library("disjoint_interval_tree") {
+  sources = [ "disjoint_interval_tree.cpp" ]
+}

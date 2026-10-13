@@ -1,0 +1,78 @@
+config("private_config") {
+    cflags = [
+        "-Wno-overloaded-virtual",
+        "-Wno-unused-const-variable"
+    ]
+    defines = [ "HAVE_CONFIG_H" ]
+}
+
+executable("ragel6") {
+    deps = []
+    deps += [
+        "//contrib/libs/cxxsupp/libcxx",
+        "//contrib/tools/ragel5/aapl",
+    ]
+
+    sources = [
+        "cdcodegen.cpp",
+        "cdfflat.cpp",
+        "cdfgoto.cpp",
+        "cdflat.cpp",
+        "cdftable.cpp",
+        "cdgoto.cpp",
+        "cdipgoto.cpp",
+        "cdsplit.cpp",
+        "cdtable.cpp",
+        "common.cpp",
+        "cscodegen.cpp",
+        "csfflat.cpp",
+        "csfgoto.cpp",
+        "csflat.cpp",
+        "csftable.cpp",
+        "csgoto.cpp",
+        "csipgoto.cpp",
+        "cssplit.cpp",
+        "cstable.cpp",
+        "dotcodegen.cpp",
+        "fsmap.cpp",
+        "fsmattach.cpp",
+        "fsmbase.cpp",
+        "fsmgraph.cpp",
+        "fsmmin.cpp",
+        "fsmstate.cpp",
+        "gendata.cpp",
+        "gocodegen.cpp",
+        "gofflat.cpp",
+        "gofgoto.cpp",
+        "goflat.cpp",
+        "goftable.cpp",
+        "gogoto.cpp",
+        "goipgoto.cpp",
+        "gotable.cpp",
+        "gotablish.cpp",
+        "inputdata.cpp",
+        "javacodegen.cpp",
+        "main.cpp",
+        "mlcodegen.cpp",
+        "mlfflat.cpp",
+        "mlfgoto.cpp",
+        "mlflat.cpp",
+        "mlftable.cpp",
+        "mlgoto.cpp",
+        "mltable.cpp",
+        "parsedata.cpp",
+        "parsetree.cpp",
+        "rbxgoto.cpp",
+        "redfsm.cpp",
+        "rlparse.cpp",
+        "rlscan.cpp",
+        "rubycodegen.cpp",
+        "rubyfflat.cpp",
+        "rubyflat.cpp",
+        "rubyftable.cpp",
+        "rubytable.cpp",
+        "xmlcodegen.cpp",
+    ]
+
+    configs += [ ":private_config" ]
+}

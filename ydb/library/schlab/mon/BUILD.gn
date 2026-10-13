@@ -1,0 +1,60 @@
+library("mon") {
+  public_deps = [ "//library/cpp/monlib/service" ]
+
+  deps = [
+    # "//library/cpp/html/pcdata",
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    "//library/cpp/monlib/service/pages",
+    # "//library/cpp/resource",
+    "//ydb/library/schlab/schemu",
+  ]
+
+  sources = [ "mon.cpp" ]
+
+  resources = [
+    {
+      path = "static/css/bootstrap.min.css"
+      key = "schlab/css/bootstrap.min.css"
+    },
+    {
+      path = "static/css/scharm.css"
+      key = "schlab/css/scharm.css"
+    },
+    {
+      path = "static/css/schviz.css"
+      key = "schlab/css/schviz.css"
+    },
+    {
+      path = "static/js/jquery.min.js"
+      key = "schlab/js/jquery.min.js"
+    },
+    {
+      path = "static/js/bootstrap.min.js"
+      key = "schlab/js/bootstrap.min.js"
+    },
+    {
+      path = "static/js/d3-tip-0.8.0-alpha.1.js"
+      key = "schlab/js/d3-tip-0.8.0-alpha.1.js"
+    },
+    {
+      path = "static/js/d3.v4.min.js"
+      key = "schlab/js/d3.v4.min.js"
+    },
+    {
+      path = "static/js/scharm.js"
+      key = "schlab/js/scharm.js"
+    },
+    {
+      path = "static/js/schviz.js"
+      key = "schlab/js/schviz.js"
+    },
+    {
+      path = "static/js/scharm-test0.js"
+      key = "schlab/js/scharm-test0.js"
+    },
+    {
+      path = "static/scharm.html"
+      key = "schlab/scharm.html"
+    },
+  ]
+}

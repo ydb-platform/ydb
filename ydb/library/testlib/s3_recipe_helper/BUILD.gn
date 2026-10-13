@@ -1,0 +1,13 @@
+library("s3_recipe_helper") {
+  testonly = true
+
+  public_deps = [
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    "//library/cpp/testing/unittest",
+  ]
+
+  deps = [ "//library/cpp/testing/hook" ]
+
+  sources = [ "s3_recipe_helper.cpp" ]
+}

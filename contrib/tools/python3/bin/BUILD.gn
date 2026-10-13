@@ -1,0 +1,10 @@
+# Hermetic python3 binary.
+#
+# All of the stdlib is frozen into :python3 (see ../BUILD.gn for the freeze
+# pipeline), so this target only needs the entry point. python3_main.c
+# configures the interpreter in isolated mode with an empty sys.path —
+# every import is resolved through the frozen tables, never the filesystem.
+contrib_tool("python3") {
+    sources = [ "python3_main.c" ]
+    deps = [ "//contrib/tools/python3" ]
+}

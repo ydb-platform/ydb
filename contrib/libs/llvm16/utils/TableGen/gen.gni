@@ -1,0 +1,111 @@
+# GN counterpart of the RUN_PROGRAM(... utils/TableGen ...) recipes in
+# contrib/libs/llvm16/include/ya.make.
+#
+# Runs LLVM's TableGen over a `.td` file to produce a generated `.inc`
+# (e.g. `-gen-attrs` on llvm/IR/Attributes.td -> llvm/IR/Attributes.inc)
+# and exposes a public config carrying the include dir so that consumers'
+# `#include "llvm/IR/Attributes.inc"` resolves.
+#
+# The generated file name is NOT assumed to be "<td>.inc": across
+# contrib/libs/llvm16/include/ya.make a single .td feeds several recipes
+# with different flags and different outputs (`.inc`, `.h`, `.h.inc`), so
+# `out` is always the full explicit output path.
+#
+# `flags` is a free-form argument list: besides the ~two dozen `-gen-*`
+# modes, recipes carry extra options such as `-omit-comments`,
+# `-asmwriternum=1`, `-intrinsic-prefix=x86`, `-combiners=...`. Only
+# `--write-if-changed` (present in every recipe) is injected automatically.
+#
+# `includes` are TableGen's `-I` search paths for resolving `include`
+# directives inside `.td` files. They vary per recipe (see ya.make), so the
+# caller passes exactly the dirs that recipe needs — nothing is injected.
+#
+# Usage:
+#
+#   import("//contrib/libs/llvm16/utils/TableGen/gen.gni")
+#
+#   table_gen("gen_ir_attributes") {
+#       td    = "//contrib/libs/llvm16/include/llvm/IR/Attributes.td"
+#       flags = [ "-gen-attrs" ]
+#       out   = "llvm/IR/Attributes.inc"
+#       includes = [ "//contrib/libs/llvm16/include" ]
+#   }
+#
+# Then, on the target that includes the generated header:
+#
+#   deps    += [ ":gen_ir_attributes" ]
+#   configs += [ ":gen_ir_attributes_config" ]   # or public_configs
+#
+# The `_config` sibling adds the gen root to the include path; because the
+# output is written to `<target_gen_dir>/<out>`, the include root is exactly
+# `target_gen_dir`, so `#include "<out>"` finds it.
+template("table_gen") {
+    assert(defined(invoker.td), "table_gen requires `td` (the .td source)")
+    assert(defined(invoker.flags),
+           "table_gen requires `flags` (e.g. [ \"-gen-attrs\" ])")
+    assert(defined(invoker.out),
+           "table_gen requires `out` (full output path, e.g. \"llvm/IR/Attributes.inc\")")
+
+    _config_target = "${target_name}_config"
+
+    # The TableGen host tool. NB: the target sets output_name = "llvm-tblgen",
+    # and get_label_info() has no "output_name" selector (nor any way to read
+    # another target's output_name), so the binary name is hardcoded to match.
+    _tblgen_label = "//contrib/libs/llvm16/utils/TableGen:TableGen"
+    _tblgen_bin = rebase_path(
+            get_label_info(_tblgen_label, "root_out_dir") + "/llvm-tblgen",
+            root_build_dir)
+
+    _out_file = "$target_gen_dir/${invoker.out}"
+
+    config(_config_target) {
+        # Generated header lives at $target_gen_dir/<out>, so exposing
+        # target_gen_dir as an include root makes `#include "<out>"` resolve.
+        include_dirs = [ target_gen_dir ]
+    }
+
+    action(target_name) {
+        forward_variables_from(invoker, [ "testonly", "visibility" ])
+
+        script = "//build/gn/scripts/run.py"
+
+        inputs = [ invoker.td ]
+        if (defined(invoker.inputs)) {
+            inputs += invoker.inputs
+        }
+
+        outputs = [ _out_file ]
+
+        # Let GN track the .td's transitive includes for incremental builds;
+        # TableGen emits a Make-style depfile via `-d`.
+        depfile = "${_out_file}.d"
+
+        # -I search paths for TableGen's `include` directive resolution.
+        # Supplied by the caller per recipe; nothing is injected.
+        _include_args = []
+        if (defined(invoker.includes)) {
+            foreach(_inc, invoker.includes) {
+                _include_args += [
+                    "-I",
+                    rebase_path(_inc, root_build_dir),
+                ]
+            }
+        }
+
+        args = [ "./$_tblgen_bin" ] + _include_args + invoker.flags + [
+                   rebase_path(invoker.td, root_build_dir),
+                   "--write-if-changed",
+                   "-o",
+                   rebase_path(_out_file, root_build_dir),
+                   "-d",
+                   rebase_path(depfile, root_build_dir),
+               ]
+
+        deps = [ _tblgen_label ]
+        if (defined(invoker.deps)) {
+            deps += invoker.deps
+        }
+
+        public_configs = [ ":$_config_target" ]
+    }
+}

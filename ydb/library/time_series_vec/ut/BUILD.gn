@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",  # peerdir only
+    "//ydb/library/time_series_vec",
+  ]
+
+  sources = [ "//ydb/library/time_series_vec/time_series_vec_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/time_series_vec" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

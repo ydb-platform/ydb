@@ -1,0 +1,7 @@
+protobuf_library("schemeshard") {
+  sources = [ "operations.proto" ]
+
+  proto_transitive_headers = false
+
+  generate_grpc_services = true
+}

@@ -1,0 +1,10 @@
+linked_executable("example_01_ping_pong") {
+  deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=lfalloc" ]
+}

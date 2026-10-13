@@ -1,0 +1,16 @@
+library("tables") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/workload_service/common",
+    "//ydb/library/query_actor",
+    "//ydb/library/table_creator",
+  ]
+
+  sources = [ "table_queries.cpp" ]
+}

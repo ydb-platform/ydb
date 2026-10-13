@@ -1,0 +1,29 @@
+library("compressors") {
+  public_deps = [ "//yql/essentials/utils" ]
+
+  deps = [
+    # "//contrib/libs/brotli:common",
+    "//contrib/libs/brotli:dec",  # peerdir only
+    "//contrib/libs/brotli:enc",  # peerdir only
+    # "//contrib/libs/fmt",  # peerdir only
+    "//contrib/libs/libbz2",
+    "//contrib/libs/lz4",
+    "//contrib/libs/lzma",
+    # "//contrib/libs/poco/Util",  # peerdir only
+    "//contrib/libs/zlib",
+    "//contrib/libs/zstd",
+    "//ydb/core/util",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/udfs/common/clickhouse/client",
+  ]
+
+  sources = [
+    "brotli.cpp",
+    "bzip2.cpp",
+    "factory.cpp",
+    "gz.cpp",
+    "lz4io.cpp",
+    "xz.cpp",
+    "zstd.cpp",
+  ]
+}

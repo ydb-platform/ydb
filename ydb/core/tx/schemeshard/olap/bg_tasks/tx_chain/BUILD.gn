@@ -1,0 +1,26 @@
+library("tx_chain") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/bg_tasks/abstract",
+    "//ydb/core/tx/columnshard/bg_tasks/protos",
+    "//ydb/core/tx/schemeshard/olap/bg_tasks/protos",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+    # "//ydb/services/bg_tasks/abstract",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/tx/columnshard/bg_tasks/manager",
+    # "//ydb/core/tx/columnshard/bg_tasks/session",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_allocator_client",
+  ]
+
+  sources = [
+    "actor.cpp",
+    "common.cpp",
+    "session.cpp",
+    "status_channel.cpp",
+    "task.cpp",
+  ]
+}

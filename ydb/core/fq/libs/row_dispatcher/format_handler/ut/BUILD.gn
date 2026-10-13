@@ -1,0 +1,35 @@
+unittest_executable("ut") {
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/parsers",
+    "//ydb/core/testlib/actors",
+    "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    "//ydb/core/fq/libs/row_dispatcher/format_handler",
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/ut/common",  # peerdir only
+    "//ydb/core/fq/libs/row_dispatcher/format_handler:filters",
+    "//ydb/core/fq/libs/row_dispatcher/purecalc_compilation",
+    "//yql/essentials/minikql",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "format_handler_ut.cpp",
+    "topic_filter_ut.cpp",
+    "topic_parser_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/fq/libs/row_dispatcher/format_handler" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

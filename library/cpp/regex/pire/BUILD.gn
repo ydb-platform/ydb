@@ -1,0 +1,34 @@
+config("pire_public_config") {
+  cflags = [ "-Wno-deprecated-anon-enum-enum-conversion" ]
+}
+
+library("pire") {
+  public_deps = [
+    # "//library/cpp/charset/lite",
+  ]
+
+  deps = [
+    "//library/cpp/charset",  # peerdir only
+  ]
+
+  sources = [
+    "extraencodings.cpp",
+    "pcre2pire.cpp",
+    "pire/approx_matching.cpp",
+    "pire/classes.cpp",
+    "pire/easy.cpp",
+    "pire/encoding.cpp",
+    "pire/extra/capture.cpp",
+    "pire/extra/count.cpp",
+    "pire/extra/glyphs.cpp",
+    "pire/fsm.cpp",
+    "pire/half_final_fsm.cpp",
+    "pire/re_lexer.cpp",
+    "pire/re_parser.y",
+    "pire/read_unicode.cpp",
+    "pire/scanner_io.cpp",
+    "pire/scanners/null.cpp",
+  ]
+
+  public_configs = [ ":pire_public_config" ]
+}

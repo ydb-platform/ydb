@@ -1,0 +1,10 @@
+library("oldmodule") {
+  public_deps = [ "//library/cpp/messagebus" ]
+
+  deps = [ "//library/cpp/messagebus/actor" ]
+
+  sources = [
+    "module.cpp",
+    "startsession.cpp",
+  ]
+}

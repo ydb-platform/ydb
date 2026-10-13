@@ -1,0 +1,6 @@
+group("local") {
+  public_deps = [
+    "//ydb/library/yql/providers/pq/gateway/abstract",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+}

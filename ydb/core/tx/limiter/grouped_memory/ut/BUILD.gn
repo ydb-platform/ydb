@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/library/actors/core",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+  ]
+
+  sources = [ "ut_manager.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/limiter/grouped_memory" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

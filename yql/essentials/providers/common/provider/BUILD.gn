@@ -1,0 +1,20 @@
+library("provider") {
+  public_deps = [
+    # "//library/cpp/yson",
+    "//yql/essentials/ast",
+    "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+  ]
+
+  deps = [
+    # "//yql/essentials/core/type_ann",
+    "//yql/essentials/minikql",
+    # "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/public/udf",  # peerdir only
+  ]
+
+  sources = [
+    "yql_data_provider_impl.cpp",
+    "yql_provider.cpp",
+  ]
+}

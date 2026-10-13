@@ -1,0 +1,14 @@
+library("yson_helpers") {
+  public_deps = [
+    "//library/cpp/yson",
+    "//library/cpp/yson/node",
+  ]
+
+  deps = [
+    "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/common",
+  ]
+
+  sources = [ "yson_helpers.cpp" ]
+}

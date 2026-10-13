@@ -1,0 +1,23 @@
+library("vhost") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/protos",
+  ]
+
+  deps = [
+    "//library/cpp/logger",  # peerdir only
+    "//library/cpp/unified_agent_client",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",  # peerdir only
+    "//ydb/core/nbs/cloud/contrib/vhost",
+    "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+    # "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [
+    "server.cpp",
+    "vhost.cpp",
+  ]
+}

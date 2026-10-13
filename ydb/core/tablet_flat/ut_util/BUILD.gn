@@ -1,0 +1,21 @@
+unittest_executable("ut_util") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/tablet_flat",
+  ]
+
+  sources = [
+    "//ydb/core/tablet_flat/util_pool_ut.cpp",
+    "//ydb/core/tablet_flat/util_string_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tablet_flat" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

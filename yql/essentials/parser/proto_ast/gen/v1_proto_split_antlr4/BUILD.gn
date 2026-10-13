@@ -1,0 +1,96 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+import("//build/gn/antlr.gni")
+
+expand_template("grammar") {
+  sources = [ "//yql/essentials/sql/v1/SQLv1Antlr4.g.in" ]
+  output_dir = target_gen_dir
+  substitutions = [
+    "GRAMMAR_STRING_CORE_SINGLE=~(['\\\\]) | (BACKSLASH .)",
+    "GRAMMAR_STRING_CORE_DOUBLE=~([\"\\\\]) | (BACKSLASH .)",
+    "GRAMMAR_MULTILINE_COMMENT_CORE=.",
+  ]
+}
+
+expand_template("stg") {
+  sources = [ "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in" ]
+  substitutions = [ "ANTLR_PACKAGE_NAME=NSQLv1Generated" ]
+}
+
+_grammar_files = get_target_outputs(":grammar")
+
+antlr4_run("antlr4_proto") {
+  grammar = _grammar_files[0]
+  language = "Java"
+  templates_target = ":stg"
+  templates_dir = "$root_gen_dir/yql/essentials/parser/proto_ast"
+  extra_args = [ "-no-listener" ]
+
+  deps = [ ":grammar" ]
+}
+
+_name = "SQLv1Antlr4Parser"
+_proto = get_target_outputs(":antlr4_proto")
+
+_protoc = "//contrib/tools/protoc:protoc($tool_toolchain)"
+_cpp_styleguide = "//contrib/tools/protoc/plugins/cpp_styleguide($tool_toolchain)"
+
+action("protoc") {
+  script = "//build/gn/scripts/protoc.py"
+  sources = _proto
+  outputs = [
+    "$target_gen_dir/$_name.pb.cc",
+    "$target_gen_dir/$_name.pb.h",
+  ]
+  args = [ rebase_path("//", root_build_dir) ] + rebase_path(outputs, root_build_dir) + [
+    "--",
+    "./" + rebase_path(get_label_info(_protoc, "root_out_dir") + "/protoc", root_build_dir),
+    "-I", rebase_path("//", root_build_dir),
+    "-I", rebase_path("//contrib/libs/protobuf/src", root_build_dir),
+    "-I", rebase_path(root_gen_dir, root_build_dir),
+    "--fatal_warnings",
+    "--cpp_out", rebase_path(root_gen_dir),
+    "--cpp_styleguide_out", rebase_path(root_gen_dir),
+    "--plugin=protoc-gen-cpp_styleguide=" + rebase_path(get_label_info(_cpp_styleguide, "root_out_dir") + "/cpp_styleguide"),
+  ] + rebase_path(_proto, root_build_dir)
+  deps = [
+    ":antlr4_proto",
+    _protoc,
+    _cpp_styleguide,
+  ]
+}
+
+action("split") {
+  script = "//yql/essentials/parser/proto_ast/gen/multiproto.py"
+  inputs = get_target_outputs(":protoc")
+  outputs = [
+    "$target_gen_dir/$_name.pb.code0.cc",
+    "$target_gen_dir/$_name.pb.code1.cc",
+    "$target_gen_dir/$_name.pb.code2.cc",
+    "$target_gen_dir/$_name.pb.code3.cc",
+    "$target_gen_dir/$_name.pb.code4.cc",
+    "$target_gen_dir/$_name.pb.code5.cc",
+    "$target_gen_dir/$_name.pb.code6.cc",
+    "$target_gen_dir/$_name.pb.code7.cc",
+    "$target_gen_dir/$_name.pb.code8.cc",
+    "$target_gen_dir/$_name.pb.code9.cc",
+    "$target_gen_dir/$_name.pb.data.cc",
+    "$target_gen_dir/$_name.pb.classes.h",
+    "$target_gen_dir/$_name.pb.main.h",
+  ]
+  args = [
+    _name,
+    rebase_path(target_gen_dir, root_build_dir),
+    rebase_path(target_gen_dir, root_build_dir),
+  ]
+  deps = [ ":protoc" ]
+}
+
+library("v1_proto_split_antlr4") {
+  sources = get_target_outputs(":split")
+  public_deps = [
+    ":protoc",
+    ":split",
+    "//contrib/libs/protobuf",
+  ]
+}

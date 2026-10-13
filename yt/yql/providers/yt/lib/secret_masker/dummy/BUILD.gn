@@ -1,0 +1,7 @@
+library("dummy") {
+  public_deps = [
+    # "//yt/yql/providers/yt/lib/secret_masker",
+  ]
+
+  sources = [ "dummy_secret_masker.cpp" ]
+}

@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/fresh" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

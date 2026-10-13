@@ -1,0 +1,10 @@
+library("scheme") {
+  public_deps = [
+    # "//ydb/core/scheme_types",
+    "//ydb/library/formats/arrow/csv/converter",
+  ]
+
+  deps = [ "//ydb/core/formats/arrow" ]
+
+  sources = [ "scheme.cpp" ]
+}

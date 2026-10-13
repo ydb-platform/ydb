@@ -1,0 +1,45 @@
+library("iterator") {
+  public_deps = [
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/predicate",
+    # "//ydb/core/tx/columnshard/engines/reader/abstract",
+    # "//ydb/core/tx/columnshard/engines/reader/common",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    # "//ydb/core/tx/columnshard/resource_subscriber",
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    "//ydb/core/formats/arrow/program",
+    # "//ydb/core/tx/columnshard/blobs_action",  # peerdir only
+    # "//ydb/core/tx/columnshard/blobs_reader",
+    "//ydb/core/tx/columnshard/engines:filter",
+    # "//ydb/core/tx/conveyor/usage",
+    # "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow",
+    # "//yql/essentials/minikql:terminator",
+  ]
+
+  sources = [
+    "constructors.cpp",
+    "context.cpp",
+    "fetched_data.cpp",
+    "fetching.cpp",
+    "interval.cpp",
+    "iterator.cpp",
+    "merge.cpp",
+    "plain_read_data.cpp",
+    "scanner.cpp",
+    "source.cpp",
+  ]
+}

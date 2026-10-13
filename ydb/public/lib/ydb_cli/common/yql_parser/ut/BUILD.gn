@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/ydb_cli/common:yql_parser",
+  ]
+
+  sources = [ "//ydb/public/lib/ydb_cli/common/yql_parser/yql_parser_ut.cpp" ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/common/yql_parser" ]
+
+  data = [ "//yql/essentials/data/language/types.json" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

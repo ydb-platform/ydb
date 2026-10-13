@@ -1,0 +1,11 @@
+library("db_id_async_resolver") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "database_type.cpp" ]
+
+  serialize_enum_headers = [ "database_type.h" ]
+}

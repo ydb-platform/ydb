@@ -1,0 +1,12 @@
+unittest_executable("coordination") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/coordination",
+  ]
+
+  sources = [ "coordination_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

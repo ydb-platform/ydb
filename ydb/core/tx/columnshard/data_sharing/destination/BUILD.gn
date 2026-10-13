@@ -1,0 +1,5 @@
+group("destination") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",  # peerdir only
+  ]
+}

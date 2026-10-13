@@ -1,0 +1,25 @@
+library("gateway") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/yql/providers/dq/provider",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    # "//ydb/core/fq/libs/actors",  # peerdir only
+    # "//ydb/core/fq/libs/events",
+    "//ydb/core/fq/libs/graph_params/proto",
+    # "//ydb/core/fq/libs/read_rule",  # peerdir only
+    # "//ydb/core/fq/libs/shared_resources",  # peerdir only
+    "//ydb/core/fq/libs/tasks_packer",
+    # "//ydb/library/yql/providers/common/token_accessor/client",  # peerdir only
+    # "//ydb/library/yql/providers/dq/actors",  # peerdir only
+    # "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
+    # "//ydb/library/yql/providers/pq/proto",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//yql/essentials/providers/common/metrics",  # peerdir only
+    # "//yql/essentials/public/issue",  # peerdir only
+  ]
+
+  sources = [ "empty_gateway.cpp" ]
+}

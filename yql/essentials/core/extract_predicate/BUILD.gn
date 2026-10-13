@@ -1,0 +1,19 @@
+library("extract_predicate") {
+  public_deps = [
+    # "//yql/essentials/ast",
+    "//yql/essentials/core",
+  ]
+
+  deps = [
+    "//yql/essentials/core/services",  # peerdir only
+    "//yql/essentials/core/services:pipeline",
+    "//yql/essentials/core/type_ann",
+    # "//yql/essentials/utils",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "extract_predicate_dbg.cpp",
+    "extract_predicate_impl.cpp",
+  ]
+}

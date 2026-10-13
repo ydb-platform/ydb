@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("fusion") {
+    public_deps = [
+        "//contrib/restricted/boost/core",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

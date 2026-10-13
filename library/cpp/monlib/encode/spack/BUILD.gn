@@ -1,0 +1,22 @@
+library("spack") {
+  public_deps = [
+    "//library/cpp/monlib/encode",
+    "//library/cpp/monlib/metrics",
+  ]
+
+  deps = [
+    "//contrib/libs/lz4",
+    "//contrib/libs/xxhash",
+    "//contrib/libs/zlib",
+    "//contrib/libs/zstd",
+    "//library/cpp/monlib/encode/buffered",
+    "//library/cpp/monlib/exception",
+  ]
+
+  sources = [
+    "compression.cpp",
+    "spack_v1_decoder.cpp",
+    "spack_v1_encoder.cpp",
+    "varint.cpp",
+  ]
+}

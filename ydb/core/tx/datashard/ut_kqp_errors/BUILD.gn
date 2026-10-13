@@ -1,0 +1,34 @@
+unittest_executable("ut_kqp_errors") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/rm_service",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/library/ut",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/tx/datashard/datashard_ut_kqp_errors.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/datashard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,68 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/protobuf",
+    "//library/cpp/digest/md5",
+    "//library/cpp/json",
+    "//library/cpp/retry",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/discovery",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services",
+    "//ydb/core/kafka_proxy",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/ut/common",  # peerdir only
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/persqueue/writer",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/library/login/sasl",
+    "//ydb/library/testlib/service_mocks",
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/sdk/cpp/src/client/datastreams",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/services/ydb",
+  ]
+
+  sources = [
+    "actors_ut.cpp",
+    "kafka_test_client.cpp",
+    "metarequest_ut.cpp",
+    "test_server.cpp",
+    "ut_auth.cpp",
+    "ut_kafka_functions.cpp",
+    "ut_produce_actor.cpp",
+    "ut_protocol.cpp",
+    "ut_serialization.cpp",
+    "ut_transaction_actor.cpp",
+    "ut_transaction_coordinator.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/kafka_proxy" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

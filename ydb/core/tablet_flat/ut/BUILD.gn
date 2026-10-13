@@ -1,0 +1,103 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "//ydb/core/tablet_flat/test/data/002_full_part.pages"
+      key = "abi/002_full_part.pages"
+    },
+    {
+      path = "//ydb/core/tablet_flat/test/data/008_basics_db.redo"
+      key = "abi/008_basics_db.redo"
+    },
+  ]
+}
+
+unittest_executable("ut") {
+  deps = [
+    ":ut_resources",
+    "//library/cpp/json",
+    "//library/cpp/resource",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/time_provider",
+    "//ydb/core/base",
+    "//ydb/core/cms/console",
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/recovery",
+    "//ydb/core/tablet_flat/test/libs/exec",
+    "//ydb/core/tablet_flat/test/libs/rows",
+    "//ydb/core/tablet_flat/test/libs/table",
+    "//ydb/core/tablet_flat/test/libs/table:model",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/mkql_proto/protos",
+    "//ydb/library/yverify_stream",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/tablet_flat/flat_cxx_database_ut.cpp",
+    "//ydb/core/tablet_flat/flat_executor_database_ut.cpp",
+    "//ydb/core/tablet_flat/flat_executor_gclogic_ut.cpp",
+    "//ydb/core/tablet_flat/flat_executor_leases_ut.cpp",
+    "//ydb/core/tablet_flat/flat_executor_ut.cpp",
+    "//ydb/core/tablet_flat/flat_range_cache_ut.cpp",
+    "//ydb/core/tablet_flat/flat_row_versions_ut.cpp",
+    "//ydb/core/tablet_flat/flat_table_part_ut.cpp",
+    "//ydb/core/tablet_flat/shared_cache_s3fifo_ut.cpp",
+    "//ydb/core/tablet_flat/shared_cache_tiered_ut.cpp",
+    "//ydb/core/tablet_flat/shared_handle_ut.cpp",
+    "flat_test_db.cpp",
+    "ut_backup.cpp",
+    "ut_bloom.cpp",
+    "ut_btree_index_iter_charge.cpp",
+    "ut_btree_index_nodes.cpp",
+    "ut_charge.cpp",
+    "ut_comp_gen.cpp",
+    "ut_compaction.cpp",
+    "ut_compaction_multi.cpp",
+    "ut_datetime.cpp",
+    "ut_db_iface.cpp",
+    "ut_db_scheme.cpp",
+    "ut_decimal.cpp",
+    "ut_forward.cpp",
+    "ut_iterator.cpp",
+    "ut_memtable.cpp",
+    "ut_other.cpp",
+    "ut_pages.cpp",
+    "ut_part.cpp",
+    "ut_part_multi.cpp",
+    "ut_proto.cpp",
+    "ut_redo.cpp",
+    "ut_rename_table_column.cpp",
+    "ut_rowlocks.cpp",
+    "ut_sausage.cpp",
+    "ut_screen.cpp",
+    "ut_self.cpp",
+    "ut_shared_sausagecache.cpp",
+    "ut_shared_sausagecache_actor.cpp",
+    "ut_slice.cpp",
+    "ut_slice_loader.cpp",
+    "ut_stat.cpp",
+    "ut_vacuum.cpp",
+    "ut_versions.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tablet_flat" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

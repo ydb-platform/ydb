@@ -1,0 +1,22 @@
+library("abstract") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/engines/writer",
+    "//ydb/core/tx/columnshard/splitter:settings",
+    "//ydb/core/tx/tiering/tier",
+    "//ydb/library/accessor",
+    "//ydb/services/metadata/abstract",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/blobs_action/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/public/sdk/cpp/src/client/resources",  # peerdir only
+    # "//yql/essentials/core/expr_nodes",  # peerdir only
+  ]
+
+  sources = [ "abstract.cpp" ]
+}

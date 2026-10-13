@@ -1,0 +1,27 @@
+library("simple") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/ast",
+    "//yql/essentials/core/pg_settings",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/random_provider",
+    # "//ydb/library/yql/dq/actors",  # peerdir only
+  ]
+
+  sources = [
+    "helpers.cpp",
+    "kqp_event_ids.cpp",
+    "query_id.cpp",
+    "reattach.cpp",
+    "services.cpp",
+    "settings.cpp",
+    "temp_tables.cpp",
+  ]
+}

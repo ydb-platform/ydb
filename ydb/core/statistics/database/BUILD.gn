@@ -1,0 +1,22 @@
+library("database") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    # "//ydb/core/statistics",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/engine/minikql",  # peerdir only
+    "//ydb/core/grpc_services",  # peerdir only
+    # "//ydb/core/tablet",  # peerdir only
+    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/library/query_actor",
+    "//ydb/library/table_creator",
+    # "//ydb/public/lib/scheme_types",
+    # "//yql/essentials/core/minsketch",  # peerdir only
+  ]
+
+  sources = [ "database.cpp" ]
+}

@@ -1,0 +1,26 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/external_sources",
+    "//ydb/core/protos",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/external_sources/external_data_source_ut.cpp",
+    "//ydb/core/external_sources/external_source_builder_ut.cpp",
+    "//ydb/core/external_sources/iceberg_ddl_ut.cpp",
+    "//ydb/core/external_sources/object_storage_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/external_sources" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

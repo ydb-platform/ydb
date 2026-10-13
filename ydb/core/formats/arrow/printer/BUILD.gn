@@ -1,0 +1,12 @@
+library("printer") {
+  public_deps = [ "//ydb/library/formats/arrow/protos" ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    "//yql/essentials/core/arrow_kernels/request",
+    # "//yql/essentials/core/issue/protos",  # peerdir only
+    # "//yql/essentials/public/types",  # peerdir only
+  ]
+
+  sources = [ "printer.cpp" ]
+}

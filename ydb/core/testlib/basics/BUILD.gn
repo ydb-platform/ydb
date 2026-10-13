@@ -1,0 +1,84 @@
+library("basics") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//ydb/core/audit",
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/dsproxy/mock",
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/formats",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib/actors",
+    # "//ydb/core/tx/datashard",
+    "//ydb/core/tx/schemeshard",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/keys",  # peerdir only
+  ]
+
+  deps = [
+    # "//library/cpp/regex/pcre",  # peerdir only
+    # "//library/cpp/testing/unittest",  # peerdir only
+    # "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/client/server",
+    "//ydb/core/cms/console",
+    "//ydb/core/control",
+    "//ydb/core/mind",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/quoter",
+    "//ydb/core/quoter/public",
+    "//ydb/core/statistics/service",  # peerdir only
+    "//ydb/core/statistics/service:service_id",
+    "//ydb/core/sys_view/service",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx",
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/column_fetching",
+    "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/scheme_cache",
+    "//ydb/library/actors/dnsresolver",
+    # "//ydb/library/actors/interconnect/rdma",
+    # "//ydb/library/pdisk_io",
+    # "//ydb/services/kesus",  # peerdir only
+    # "//ydb/services/persqueue_cluster_discovery",  # peerdir only
+    # "//ydb/services/ydb",  # peerdir only
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/minikql/invoke_builtins/llvm16",  # link slot
+    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
+    # "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # link slot
+    # "//yt/yql/providers/yt/comp_nodes/llvm16",  # link slot
+  ]
+
+  sources = [
+    "appdata.cpp",
+    "helpers.cpp",
+    "runtime.cpp",
+    "services.cpp",
+  ]
+}
+
+group("default") {
+  testonly = true
+
+  deps = [
+    # ":basics",  # peerdir only
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+  ]
+}
+
+group("pg") {
+  testonly = true
+
+  deps = [
+    # ":basics",  # peerdir only
+    # "//yql/essentials/parser/pg_wrapper",  # link slot
+    # "//yql/essentials/sql/pg",  # link slot
+  ]
+}

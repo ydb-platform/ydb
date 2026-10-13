@@ -1,0 +1,68 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/case_insensitive_string",
+    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+  ]
+
+  sources = [
+    "//util/generic/adaptor_ut.cpp",
+    "//util/generic/algorithm_ut.cpp",
+    "//util/generic/array_ref_ut.cpp",
+    "//util/generic/array_size_ut.cpp",
+    "//util/generic/bitmap_ut.cpp",
+    "//util/generic/bitops_ut.cpp",
+    "//util/generic/buffer_ut.cpp",
+    "//util/generic/cast_ut.cpp",
+    "//util/generic/deque_ut.cpp",
+    "//util/generic/enum_cast_ut.cpp",
+    "//util/generic/explicit_type_ut.cpp",
+    "//util/generic/flags_ut.cpp",
+    "//util/generic/function_ref_ut.cpp",
+    "//util/generic/function_ut.cpp",
+    "//util/generic/guid_ut.cpp",
+    "//util/generic/hash_primes_ut.cpp",
+    "//util/generic/hash_ut.cpp",
+    "//util/generic/intrlist_ut.cpp",
+    "//util/generic/is_in_ut.cpp",
+    "//util/generic/iterator_range_ut.cpp",
+    "//util/generic/iterator_ut.cpp",
+    "//util/generic/lazy_value_ut.cpp",
+    "//util/generic/list_ut.cpp",
+    "//util/generic/map_ut.cpp",
+    "//util/generic/mapfindptr_ut.cpp",
+    "//util/generic/maybe_ut.cpp",
+    "//util/generic/mem_copy_ut.cpp",
+    "//util/generic/objects_counter_ut.cpp",
+    "//util/generic/overloaded_ut.cpp",
+    "//util/generic/ptr_ut.cpp",
+    "//util/generic/queue_ut.cpp",
+    "//util/generic/scope_ut.cpp",
+    "//util/generic/serialized_enum_ut.cpp",
+    "//util/generic/set_ut.cpp",
+    "//util/generic/singleton_ut.cpp",
+    "//util/generic/size_literals_ut.cpp",
+    "//util/generic/stack_ut.cpp",
+    "//util/generic/store_policy_ut.cpp",
+    "//util/generic/strbuf_ut.cpp",
+    "//util/generic/string_transparent_hash_ut.cpp",
+    "//util/generic/string_ut.cpp",
+    "//util/generic/typelist_ut.cpp",
+    "//util/generic/typetraits_ut.cpp",
+    "//util/generic/utility_ut.cpp",
+    "//util/generic/va_args_ut.cpp",
+    "//util/generic/vector_ut.cpp",
+    "//util/generic/xrange_ut.cpp",
+    "//util/generic/yexception_ut.c",
+    "//util/generic/yexception_ut.cpp",
+    "//util/generic/ylimits_ut.cpp",
+    "//util/generic/ymath_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  serialize_enum_headers = [ "//util/generic/enum_cast_ut.h" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

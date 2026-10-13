@@ -1,0 +1,13 @@
+library("charset") {
+  public_deps = [ "//library/cpp/charset/lite" ]
+
+  deps = [
+    # "//contrib/libs/libiconv",
+  ]
+
+  sources = [
+    "decodeunknownplane.cpp",
+    "iconv.cpp",
+    "wide.cpp",
+  ]
+}

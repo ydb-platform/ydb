@@ -1,0 +1,6 @@
+protobuf_library("annotations") {
+  sources = [
+    "sensitive.proto",
+    "validation.proto",
+  ]
+}

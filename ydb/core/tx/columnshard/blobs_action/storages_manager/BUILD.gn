@@ -1,0 +1,17 @@
+library("storages_manager") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_sharing/manager:shared_blobs",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_action/bs",
+    "//ydb/core/tx/columnshard/blobs_action/local",
+    "//ydb/core/tx/columnshard/blobs_action/tier",
+    "//ydb/core/wrappers",
+  ]
+
+  sources = [ "manager.cpp" ]
+}

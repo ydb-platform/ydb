@@ -1,0 +1,32 @@
+library("security") {
+  public_deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/string_utils/base64",
+    "//ydb/core/base",
+    "//ydb/core/mon",
+    "//ydb/core/protos",
+    "//ydb/core/security/certificate_check",
+    # "//ydb/core/security/ldap_auth_provider",
+    # "//ydb/core/security/token_manager",
+    "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/actor_client",
+    "//ydb/library/login/protos",
+    "//ydb/library/ncloud/impl",
+    "//ydb/library/security",
+    "//ydb/library/ycloud/api",
+    "//ydb/library/ycloud/impl",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",  # peerdir only
+    # "//library/cpp/openssl/io",  # peerdir only
+    # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/login",  # peerdir only
+  ]
+
+  sources = [
+    "login_shared_func.cpp",
+    "ticket_parser.cpp",
+  ]
+}

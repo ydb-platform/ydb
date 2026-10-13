@@ -1,0 +1,14 @@
+protobuf_library("nbs") {
+  sources = [ "blockstore.proto" ]
+
+  proto_transitive_headers = false
+
+  generate_grpc_services = true
+
+  extra_plugins = [
+    {
+      name = "config_proto_plugin"
+      target = "//ydb/core/config/tools/protobuf_plugin:config_proto_plugin"
+    },
+  ]
+}

@@ -1,0 +1,44 @@
+library("actors") {
+  public_deps = [
+    # "//library/cpp/monlib/encode",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/http",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/solomon/proto",
+    "//ydb/library/yql/utils/actors",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials",
+    # "//yql/essentials/minikql/computation",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    "//library/cpp/json/easy_parse",
+    "//library/cpp/monlib/encode/json",
+    "//library/cpp/protobuf/util",
+    # "//library/cpp/retry",
+    # "//ydb/core/base",
+    "//ydb/library/services",
+    # "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/actors/protos",
+    # "//ydb/library/yql/providers/solomon/events",
+    # "//ydb/library/yql/providers/solomon/scheme",
+    "//ydb/library/yql/providers/solomon/solomon_accessor/client",
+    # "//ydb/library/yql/utils/actor_log",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "dq_solomon_actors_util.cpp",
+    "dq_solomon_metrics_queue.cpp",
+    "dq_solomon_read_actor.cpp",
+    "dq_solomon_write_actor.cpp",
+  ]
+}

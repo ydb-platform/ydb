@@ -1,0 +1,9 @@
+config("private_config") {
+    cflags = [ "-Wno-unused-private-field" ]
+}
+
+contrib_tool("cpp_styleguide") {
+    deps = [ "//contrib/libs/protoc" ]
+    sources = [ "cpp_styleguide.cpp" ]
+    configs = [ ":private_config" ]
+}

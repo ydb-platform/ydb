@@ -1,0 +1,80 @@
+library("audit") {
+  public_deps = [
+    # "//library/cpp/cgiparam",
+    "//ydb/core/protos",
+    "//ydb/library/aclib",
+    "//ydb/library/actors/http",
+  ]
+
+  deps = [
+    # "//library/cpp/json",  # peerdir only
+    # "//library/cpp/protobuf/json",  # peerdir only
+    "//ydb/core/audit",
+    "//ydb/core/audit/audit_config",
+    "//ydb/core/base",
+    "//ydb/core/util",
+  ]
+
+  sources = [
+    "audit/audit.cpp",
+    "audit/audit_denylist.cpp",
+    "audit/url_matcher.cpp",
+  ]
+}
+
+library("mon") {
+  public_deps = [
+    # "//library/cpp/cgiparam",
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/monlib/service",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/monlib/service/pages/resources",
+    # "//library/cpp/monlib/service/pages/tablesorter",
+    "//ydb/core/base",
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    ":audit",
+    "//library/cpp/json",
+    # "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/metrics",
+    "//library/cpp/protobuf/json",
+    # "//library/cpp/string_utils/url",  # peerdir only
+    "//ydb/core/grpc_services/base",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
+    "//ydb/library/yql/public/ydb_issue",  # peerdir only
+    "//ydb/public/sdk/cpp/adapters/issue",
+  ]
+
+  sources = [
+    "crossref.cpp",
+    "mon.cpp",
+  ]
+}
+
+library("ut_utils") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/security",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/http",
+  ]
+
+  deps = [
+    # "//library/cpp/http/misc",
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "ut_utils/ut_utils.cpp" ]
+}

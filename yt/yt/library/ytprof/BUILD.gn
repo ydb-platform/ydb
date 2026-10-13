@@ -1,0 +1,35 @@
+library("ytprof") {
+  public_deps = [
+    # "//library/cpp/yt/memory",
+  ]
+
+  deps = [
+    # "//contrib/libs/libunwind",  # peerdir only
+    # "//contrib/libs/tcmalloc",
+    # "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
+    # "//contrib/restricted/abseil-cpp",
+    # "//library/cpp/resource",
+    # "//library/cpp/svnversion",
+    # "//library/cpp/yt/assert",
+    # "//library/cpp/yt/backtrace/cursors/frame_pointer",
+    # "//library/cpp/yt/backtrace/cursors/interop",
+    # "//library/cpp/yt/backtrace/cursors/libunwind",  # peerdir only
+    # "//library/cpp/yt/cpu_clock",
+    # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/threading",
+    # "//yt/yt/core",
+    # "//yt/yt/library/ytprof/api",
+    "//yt/yt/library/ytprof/proto",
+  ]
+
+  sources = [
+    "build_info.cpp",
+    "cpu_profiler.cpp",
+    "external_pprof.cpp",
+    "heap_profiler.cpp",
+    "profile.cpp",
+    "signal_safe_profiler.cpp",
+    "spinlock_profiler.cpp",
+    "symbolize_linux.cpp",
+  ]
+}

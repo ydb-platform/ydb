@@ -1,0 +1,43 @@
+unittest_executable("pushdown") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//contrib/libs/protobuf",
+    "//library/cpp/random_provider",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/expr_nodes",
+    "//ydb/library/yql/providers/common/db_id_async_resolver",
+    "//ydb/library/yql/providers/dq/common",
+    "//ydb/library/yql/providers/dq/expr_nodes",
+    "//ydb/library/yql/providers/generic/expr_nodes",
+    "//ydb/library/yql/providers/generic/proto",
+    "//ydb/library/yql/providers/generic/provider",
+    "//yql/essentials/ast",
+    "//yql/essentials/core",
+    "//yql/essentials/core/dq_integration",
+    "//yql/essentials/core/services",  # peerdir only
+    "//yql/essentials/core/services:pipeline",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/invoke_builtins/llvm16",  # peerdir only
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/transform",
+    "//yql/essentials/providers/common/udf_resolve",
+    "//yql/essentials/providers/result/provider",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "pushdown_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/generic/provider" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,30 @@
+library("ut_utils") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/logger",
+    # "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/chunk_queue",
+    "//ydb/core/testlib",
+    # "//ydb/library/grpc/server",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
+    # "//ydb/public/sdk/cpp/src/client/persqueue_public:include",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/topic/common",
+    # "//ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public",
+  ]
+
+  deps = [
+    # "//ydb/core/testlib/default",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/resources",
+  ]
+
+  sources = [
+    "data_plane_helpers.cpp",
+    "test_server.cpp",
+    "ut_utils.cpp",
+  ]
+}

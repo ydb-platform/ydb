@@ -1,0 +1,11 @@
+library("mkql_helpers") {
+  public_deps = [ "//yql/essentials/minikql" ]
+
+  deps = [
+    "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "mkql_helpers.cpp" ]
+}

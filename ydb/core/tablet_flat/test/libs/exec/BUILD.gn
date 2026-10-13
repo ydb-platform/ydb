@@ -1,0 +1,10 @@
+group("exec") {
+  testonly = true
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/blobstorage/dsproxy/mock",  # peerdir only
+    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/testlib/actors",  # peerdir only
+  ]
+}

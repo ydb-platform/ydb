@@ -1,0 +1,18 @@
+library("gmock_in_unittest") {
+  testonly = true
+
+  public_deps = [
+    "//contrib/restricted/googletest/googlemock",
+    # "//library/cpp/testing/gtest_extensions",
+  ]
+
+  deps = [
+    "//contrib/restricted/googletest/googletest",
+    "//library/cpp/testing/unittest",
+  ]
+
+  sources = [
+    "events.cpp",
+    "registration.cpp",
+  ]
+}

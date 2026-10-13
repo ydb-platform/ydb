@@ -1,0 +1,86 @@
+# Sources translated to C++ before they are compiled, by extension.
+# library() and contrib_library() take them in `sources`, as ya.make's SRCS
+# does, and compile what they translate to: the generated C++ gets the
+# target's own configs and deps. Only translators whose output the target
+# compiles itself (no headers for its dependents) belong here.
+#
+#   .rl6 -> ragel6, as ya's _SRC("rl6"): <source>.rl6.cpp
+#   .y, .ypp -> bison, as ya's _SRC("y"): <source>.y.cpp and <name>.h
+
+# The C++ that ragel6 writes for `sources` (.rl6), one <name>.rl6.cpp each in
+# the source's gen dir; flags as ya's RAGEL6_FLAGS (-CG2 for an optimized
+# build, -CT0 otherwise) plus -L -I<source root>.
+template("ragel6_sources") {
+  action_foreach(target_name) {
+    forward_variables_from(invoker, [ "visibility" ])
+
+    script = "//build/gn/scripts/run.py"
+    sources = invoker.sources
+    outputs = [ "{{source_gen_dir}}/{{source_file_part}}.cpp" ]
+
+    _ragel6 = "//contrib/tools/ragel6:ragel6($tool_toolchain)"
+    _flags = "-CT0"
+    if (build_type == "release") {
+      _flags = "-CG2"
+    }
+    args = [
+      "./" + rebase_path(get_label_info(_ragel6, "root_out_dir") + "/ragel6", root_build_dir),
+      _flags,
+      "-L",
+      "-I" + rebase_path("//", root_build_dir),
+      "-o",
+      "{{source_gen_dir}}/{{source_file_part}}.cpp",
+      "{{source}}",
+    ]
+
+    deps = [ _ragel6 ]
+  }
+}
+
+# The C++ that bison writes for `sources` (.y, .ypp), as ya does: one
+# <name>.y.cpp and its header <name>.h each, in the target's gen dir, whose
+# sources include the header by the config <target_name>_config; flags as
+# ya's BISON_FLAGS (-v).
+# TODO: the C++ skeletons (lalr1.cc ...) also write stack.hh, location.hh,
+# which ya's preprocess.py inlines into the header
+template("bison_sources") {
+  _cpp = "$target_gen_dir/{{source_file_part}}.cpp"
+  _h = "$target_gen_dir/{{source_name_part}}.h"
+  _bison = "//contrib/tools/bison:bison"
+  _m4 = "//contrib/tools/m4:m4"
+
+  action_foreach(target_name) {
+    forward_variables_from(invoker, [ "visibility" ])
+
+    script = "//build/gn/scripts/bison.py"
+    sources = invoker.sources
+    outputs = [
+      _cpp,
+      _h,
+    ]
+    args = [
+      "--bison",
+      "./" + rebase_path(get_label_info(_bison, "root_out_dir") + "/bison", root_build_dir),
+      "--m4",
+      "./" + rebase_path(get_label_info(_m4, "root_out_dir") + "/m4", root_build_dir),
+      "--data",
+      rebase_path("//contrib/tools/bison/data", root_build_dir),
+      "--output",
+      rebase_path(_cpp, root_build_dir),
+      "--header",
+      rebase_path(_h, root_build_dir),
+      "--flag=-v",
+      "{{source}}",
+    ]
+
+    deps = [
+      _bison,
+      _m4,
+    ]
+  }
+
+  config("${target_name}_config") {
+    include_dirs = [ target_gen_dir ]
+    visibility = [ ":*" ]
+  }
+}

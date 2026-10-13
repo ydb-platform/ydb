@@ -1,0 +1,8 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/library/actors/protos" ]
+
+  sources = [
+    "blobs.proto",
+    "events.proto",
+  ]
+}

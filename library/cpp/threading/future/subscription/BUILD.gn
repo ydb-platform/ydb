@@ -1,0 +1,12 @@
+library("subscription") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+  ]
+
+  sources = [
+    "subscription.cpp",
+    "wait_all.cpp",
+    "wait_all_or_exception.cpp",
+    "wait_any.cpp",
+  ]
+}

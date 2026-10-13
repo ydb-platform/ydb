@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",  # peerdir only
+    "//ydb/core/client/minikql_compile",
+    "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    "//ydb/core/client/server",  # peerdir only
+    "//ydb/core/engine",
+    "//ydb/core/tablet",  # peerdir only
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources =
+      [ "//ydb/core/client/minikql_compile/yql_expr_minikql_compile_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/client/minikql_compile" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=jemalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

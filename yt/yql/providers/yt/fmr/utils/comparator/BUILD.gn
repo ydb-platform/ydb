@@ -1,0 +1,16 @@
+library("comparator") {
+  public_deps = [
+    # "//library/cpp/yson",
+    # "//yt/yql/providers/yt/fmr/utils",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/yson",  # peerdir only
+    # "//yql/essentials/utils",  # peerdir only
+  ]
+
+  sources = [
+    "yql_yt_binary_yson_comparator.cpp",
+    "yql_yt_binary_yson_compare_impl.cpp",
+  ]
+}

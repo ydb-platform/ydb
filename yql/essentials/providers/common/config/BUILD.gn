@@ -1,0 +1,19 @@
+library("config") {
+  public_deps = [
+    # "//library/cpp/containers/sorted_vector",
+    "//library/cpp/string_utils/parse_size",
+    "//yql/essentials/core",
+  ]
+
+  deps = [
+    # "//library/cpp/string_utils/levenshtein_diff",
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core/expr_nodes",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "yql_configuration_transformer.cpp",
+    "yql_dispatch.cpp",
+  ]
+}

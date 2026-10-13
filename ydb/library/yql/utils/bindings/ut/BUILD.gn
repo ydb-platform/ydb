@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/utils/bindings",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "//ydb/library/yql/utils/bindings/utils_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/utils/bindings" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

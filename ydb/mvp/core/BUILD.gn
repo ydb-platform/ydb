@@ -1,0 +1,78 @@
+library("core") {
+  public_deps = [
+    ":protos",
+    # "//contrib/libs/googleapis-common-protos",
+    # "//contrib/libs/protobuf",
+    "//contrib/libs/yaml-cpp",
+    # "//library/cpp/deprecated/atomic",
+    "//library/cpp/getopt",
+    # "//library/cpp/json",
+    # "//library/cpp/monlib/encode",
+    "//library/cpp/monlib/encode/json",
+    # "//library/cpp/monlib/metrics",
+    "//library/cpp/protobuf/json",
+    # "//library/cpp/resource",
+    "//library/cpp/string_utils/base64",
+    "//ydb/core/viewer/json",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/library/protobuf_printer",
+    "//ydb/mvp/security/simple",
+    "//ydb/public/api/client/nc_private/iam/v1",
+    "//ydb/public/api/client/yc_private/iam",
+    "//ydb/public/api/client/yc_private/quota",
+    "//ydb/public/api/client/yc_private/resourcemanager",
+    "//ydb/public/api/client/yc_private/ydb/v1",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/deprecated/client",
+    "//ydb/public/sdk/cpp/src/client/datastreams",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    # "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    # "//ydb/public/sdk/cpp/src/library/issue",
+  ]
+
+  deps = [
+    "//contrib/libs/jwt-cpp",
+    "//library/cpp/lfalloc/alloc_profiler",
+    # "//library/cpp/lwtrace/protos",  # peerdir only
+    # "//library/cpp/string_utils/quote",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/util",
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/security",
+    "//ydb/public/api/client/nc_private",
+    "//ydb/public/api/client/yc_private/accessservice",
+    "//ydb/public/api/grpc",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+  ]
+
+  sources = [
+    "appdata.cpp",
+    "cache_policy.cpp",
+    "core_ydb.cpp",
+    "core_ydbc.cpp",
+    "filter.cpp",
+    "mapper.cpp",
+    "merger.cpp",
+    "mvp_mem_profiler.cpp",
+    "mvp_security_printer.cpp",
+    "mvp_startup_options.cpp",
+    "mvp_tokens.cpp",
+    "parser.cpp",
+    "reducer.cpp",
+  ]
+}
+
+protobuf_library("protos") {
+  sources = [ "protos/mvp.proto" ]
+}

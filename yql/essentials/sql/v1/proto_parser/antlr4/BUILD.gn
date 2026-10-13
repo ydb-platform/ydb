@@ -1,0 +1,11 @@
+library("antlr4") {
+  public_deps = [ "//yql/essentials/parser/proto_ast" ]
+
+  deps = [
+    "//yql/essentials/parser/proto_ast/antlr4",
+    "//yql/essentials/parser/proto_ast/gen/v1_antlr4",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "proto_parser.cpp" ]
+}

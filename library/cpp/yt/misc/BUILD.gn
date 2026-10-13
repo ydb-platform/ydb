@@ -1,0 +1,15 @@
+library("misc") {
+  public_deps = [
+    # "//library/cpp/iterator",
+    # "//library/cpp/yt/assert",
+    "//library/cpp/yt/exception",
+    # "//library/cpp/yt/memory",
+    # "//library/cpp/yt/string",
+  ]
+
+  sources = [
+    "guid.cpp",
+    "source_location.cpp",
+    "thread_name.cpp",
+  ]
+}

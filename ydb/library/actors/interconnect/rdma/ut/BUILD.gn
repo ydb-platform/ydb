@@ -1,0 +1,22 @@
+gtest_executable("ut") {
+  deps = [
+    "//contrib/libs/ibdrv",
+    "//library/cpp/testing/gtest",
+    "//ydb/library/actors/core",  # peerdir only
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/address",
+    "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/interconnect/rdma/ut/utils",  # peerdir only
+    "//ydb/library/actors/testlib",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "allocator_ut.cpp",
+    "ibv_ut.cpp",
+    "rdma_low_ut.cpp",
+    "utils.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,3 @@
+library("partition_index_generator") {
+  sources = [ "partition_index_generator.cpp" ]
+}

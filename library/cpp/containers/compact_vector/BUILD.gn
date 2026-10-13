@@ -1,0 +1,3 @@
+library("compact_vector") {
+  sources = [ "compact_vector.cpp" ]
+}

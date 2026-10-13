@@ -1,0 +1,49 @@
+library("mock") {
+  testonly = true
+
+  public_deps = [
+    # "//ydb/core/fq/libs/shared_resources/interface",
+    "//ydb/core/testlib/actors",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/json/yson",  # peerdir only
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    # "//library/cpp/protobuf/json",
+    # "//library/cpp/random_provider",  # peerdir only
+    # "//library/cpp/time_provider",  # peerdir only
+    # "//library/cpp/yson",  # peerdir only
+    # "//library/cpp/yson/node",  # peerdir only
+    # "//ydb/core/base",  # peerdir only
+    "//ydb/core/fq/libs/actors",
+    # "//ydb/core/fq/libs/common",  # peerdir only
+    "//ydb/core/fq/libs/db_id_async_resolver_impl",
+    # "//ydb/core/fq/libs/db_schema",  # peerdir only
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/http",
+    # "//ydb/library/mkql_proto",  # peerdir only
+    # "//ydb/library/yql/providers/clickhouse/provider",  # peerdir only
+    # "//ydb/library/yql/providers/dq/provider",  # peerdir only
+    # "//ydb/library/yql/providers/dq/worker_manager/interface",  # peerdir only
+    # "//ydb/library/yql/providers/ydb/provider",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
+    # "//yql/essentials/ast",  # peerdir only
+    # "//yql/essentials/core/dq_integration/transform",  # peerdir only
+    # "//yql/essentials/core/facade",  # peerdir only
+    "//yql/essentials/core/services/mounts",  # peerdir only
+    # "//yql/essentials/minikql/comp_nodes",  # peerdir only
+    # "//yql/essentials/providers/common/codec",  # peerdir only
+    # "//yql/essentials/providers/common/comp_nodes",  # peerdir only
+    # "//yql/essentials/providers/common/provider",  # peerdir only
+    # "//yql/essentials/providers/common/schema/mkql",  # peerdir only
+    # "//yql/essentials/providers/common/udf_resolve",  # peerdir only
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/public/issue/protos",  # peerdir only
+    # "//yql/essentials/sql/settings",  # peerdir only
+  ]
+
+  sources = [ "yql_mock.cpp" ]
+}

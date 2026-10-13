@@ -1,0 +1,14 @@
+library("common") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/conclusion",
+    # "//ydb/library/conclusion:generic",
+    "//ydb/library/yql/dq/actors/protos",
+  ]
+
+  deps = [
+    # "//yql/essentials/public/issue",  # peerdir only
+  ]
+
+  sources = [ "common.cpp" ]
+}

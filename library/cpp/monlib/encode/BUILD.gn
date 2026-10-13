@@ -1,0 +1,11 @@
+library("encode") {
+  public_deps = [ "//library/cpp/monlib/metrics" ]
+
+  sources = [
+    "encoder.cpp",
+    "encoder_state.cpp",
+    "format.cpp",
+  ]
+
+  serialize_enum_headers = [ "encoder_state_enum.h" ]
+}

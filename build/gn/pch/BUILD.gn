@@ -1,0 +1,99 @@
+template("shared_pch") {
+  _name = target_name
+  _compile = "${_name}_compile"
+  _object = get_path_info(invoker.source, "out_dir") + "/$_compile." +
+            get_path_info(invoker.source, "file") + ".o"
+  _pch = "$target_gen_dir/$_name.pch"
+
+  config("${_name}_private_config") {
+    visibility = [ ":*" ]
+    cflags = [ "-w" ]
+  }
+
+  source_set(_compile) {
+    visibility = [ ":*" ]
+    sources = [ invoker.source ]
+    cflags_cc = [
+      "-x",
+      "c++-header",
+      "-fpch-instantiate-templates",
+    ]
+    configs -= [ "//build/gn/config:yql_abi_current" ]
+    configs += [ ":${_name}_private_config" ]
+    deps = []
+    deps = platform_deps + [ "//contrib/libs/cxxsupp/libcxx" ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+  }
+
+  copy("${_name}_pch") {
+    visibility = [ ":*" ]
+    sources = [ _object ]
+    outputs = [ _pch ]
+    deps = [ ":$_compile" ]
+  }
+
+  action("${_name}_check") {
+    visibility = [ ":*" ]
+    script = "//build/gn/scripts/pch_check.py"
+    inputs = [ invoker.source ]
+    outputs = [ "$target_gen_dir/$_name.check.stamp" ]
+    depfile = "$target_gen_dir/$_name.check.d"
+    args = [
+      "--compile-commands",
+      "compile_commands.json",
+      "--root",
+      rebase_path("//", root_build_dir),
+      "--pch",
+      rebase_path(_pch, root_build_dir),
+      "--source",
+      rebase_path(invoker.source, "//"),
+      "--stamp",
+      rebase_path(outputs[0], root_build_dir),
+      "--depfile",
+      rebase_path(depfile, root_build_dir),
+    ]
+    deps = [ ":${_name}_pch" ]
+  }
+
+  config("${_name}_config") {
+    visibility = [ ":*" ]
+    cflags_cc = [
+      "-include-pch",
+      rebase_path(_pch, root_build_dir),
+    ]
+  }
+
+  group(_name) {
+    public_deps = [ ":${_name}_pch" ]
+    data_deps = [ ":${_name}_check" ]
+    public_configs = [ ":${_name}_config" ]
+  }
+}
+
+shared_pch("global") {
+  source = "global/global.cc"
+  deps = [
+    "//contrib/libs/protobuf",
+    "//contrib/restricted/abseil-cpp",
+    "//contrib/restricted/abseil-cpp-tstring",
+    "//library/cpp/lwtrace/protos:protos_codegen",
+    "//ydb/core/base/generated:generated_gen",
+    "//ydb/core/control/lib/generated:generated_gen",
+    "//ydb/core/protos:protos_codegen",
+    "//ydb/core/scheme/protos:protos_codegen",
+    "//ydb/library/aclib/protos:protos_codegen",
+    "//ydb/library/actors/protos:protos_codegen",
+    "//ydb/library/login/protos:protos_codegen",
+    "//ydb/library/mkql_proto/protos:protos_codegen",
+    "//ydb/library/services:services_codegen",
+    "//ydb/public/api/protos:protos_codegen",
+    "//yql/essentials/public/issue/protos:protos_codegen",
+    "//yql/essentials/public/types:types_codegen",
+  ]
+}
+
+shared_pch("contrib") {
+  source = "contrib/contrib.cc"
+}

@@ -1,0 +1,7 @@
+library("gtest_main") {
+  testonly = true
+
+  deps = [ "//library/cpp/testing/gtest" ]
+
+  sources = [ "main.cpp" ]
+}

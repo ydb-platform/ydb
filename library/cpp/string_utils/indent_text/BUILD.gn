@@ -1,0 +1,3 @@
+library("indent_text") {
+  sources = [ "indent_text.cpp" ]
+}

@@ -1,0 +1,12 @@
+library("tz_types") {
+  public_deps = [
+    "//library/cpp/type_info/tz",
+    "//library/cpp/yt/error",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/memory",  # peerdir only
+  ]
+
+  sources = [ "tz_types.cpp" ]
+}

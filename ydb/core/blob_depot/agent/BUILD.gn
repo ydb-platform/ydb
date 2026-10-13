@@ -1,0 +1,41 @@
+library("agent") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/blob_depot",
+    # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/util",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/protos",
+    "//ydb/core/wrappers",
+  ]
+
+  sources = [
+    "agent.cpp",
+    "blob_mapping_cache.cpp",
+    "blocks.cpp",
+    "channel_kind.cpp",
+    "comm.cpp",
+    "garbage.cpp",
+    "metrics.cpp",
+    "proxy.cpp",
+    "query.cpp",
+    "read.cpp",
+    "request.cpp",
+    "resolved_value.cpp",
+    "s3.cpp",
+    "status.cpp",
+    "storage_block.cpp",
+    "storage_check_integrity.cpp",
+    "storage_collect_garbage.cpp",
+    "storage_discover.cpp",
+    "storage_get.cpp",
+    "storage_get_block.cpp",
+    "storage_patch.cpp",
+    "storage_put.cpp",
+    "storage_range.cpp",
+    "storage_status.cpp",
+  ]
+}

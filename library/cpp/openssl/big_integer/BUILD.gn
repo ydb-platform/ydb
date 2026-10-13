@@ -1,0 +1,5 @@
+library("big_integer") {
+  deps = [ "//contrib/libs/openssl" ]
+
+  sources = [ "big_integer.cpp" ]
+}

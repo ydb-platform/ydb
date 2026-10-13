@@ -1,0 +1,20 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/helpers",
+    "//ydb/library/actors/interconnect",  # peerdir only
+    "//ydb/library/actors/testlib",  # peerdir only
+  ]
+
+  sources = [
+    "cpu_count_ut.cpp",
+    "harmonizer_ut.cpp",
+    "history_ut.cpp",
+    "shared_info_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/actors/core/harmonizer" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

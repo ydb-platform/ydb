@@ -1,0 +1,94 @@
+library("arrow") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//ydb/core/base",
+    # "//ydb/core/formats",
+    "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/core/formats/arrow/switch",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    "//ydb/library/formats/arrow",
+    "//ydb/library/formats/arrow/hash",
+    "//ydb/library/formats/arrow/protos",
+    "//ydb/library/formats/arrow/splitter",
+    # "//ydb/library/formats/arrow/switch",
+    # "//ydb/library/formats/arrow/transformer",
+    "//ydb/library/formats/arrow/validation",
+    "//ydb/library/formats/arrow:modifier",
+    "//ydb/library/services",
+    # "//ydb/library/yverify_stream",
+    "//ydb/services/bg_tasks/abstract",
+    "//ydb/services/metadata/abstract:request_features",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",
+    # "//ydb/core/formats/arrow/printer",  # peerdir only
+    # "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/common/result_set_format",  # peerdir only
+    "//ydb/core/kqp/common/result_set_format:arrow",
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/arrow_kernels",  # peerdir only
+    # "//ydb/library/formats/arrow/common",
+    # "//ydb/library/formats/arrow/simple_builder",
+    # "//ydb/services/metadata/abstract",  # peerdir only
+    # "//yql/essentials/core/arrow_kernels/request",  # peerdir only
+    # "//yql/essentials/minikql",
+    "//yql/essentials/public/issue/protos",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+  ]
+
+  sources = [
+    "accessor/abstract/accessor.cpp",
+    "accessor/abstract/common.cpp",
+    "accessor/abstract/constructor.cpp",
+    "accessor/abstract/request.cpp",
+    "accessor/plain/accessor.cpp",
+    "accessor/plain/constructor.cpp",
+    "accessor/plain/request.cpp",
+    "arrow_batch_builder.cpp",
+    "arrow_filter.cpp",
+    "arrow_helpers.cpp",
+    "arrow_helpers_minikql.cpp",
+    "arrow_type.cpp",
+    "common/adapter.cpp",
+    "common/container.cpp",
+    "converter.cpp",
+    "dictionary/conversion.cpp",
+    "dictionary/diff.cpp",
+    "dictionary/object.cpp",
+    "hash/calcer.cpp",
+    "permutations.cpp",
+    "process_columns.cpp",
+    "reader/batch_iterator.cpp",
+    "reader/heap.cpp",
+    "reader/merger.cpp",
+    "reader/position.cpp",
+    "reader/result_builder.cpp",
+    "rows/collection.cpp",
+    "rows/view.cpp",
+    "rows/view_v0.cpp",
+    "save_load/loader.cpp",
+    "save_load/saver.cpp",
+    "serializer/abstract.cpp",
+    "serializer/native.cpp",
+    "serializer/parsing.cpp",
+    "serializer/stream.cpp",
+    "serializer/utils.cpp",
+    "size_calcer.cpp",
+    "special_keys.cpp",
+    "splitter/scheme_info.cpp",
+    "splitter/simple.cpp",
+    "transformer/dictionary.cpp",
+  ]
+
+  serialize_enum_headers = [ "accessor/abstract/accessor.h" ]
+
+  plugins = [ "//ydb/core/formats/arrow/accessor" ]
+}

@@ -1,0 +1,18 @@
+library("splitter") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/library/conclusion",  # peerdir only
+  ]
+
+  sources = [
+    "similar_packer.cpp",
+    "stats.cpp",
+  ]
+
+  serialize_enum_headers = [ "stats.h" ]
+}

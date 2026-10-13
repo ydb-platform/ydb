@@ -1,0 +1,19 @@
+library("kesus") {
+  public_deps = [
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    # "//ydb/core/grpc_streaming",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/resources",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

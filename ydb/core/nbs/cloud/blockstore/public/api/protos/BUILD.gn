@@ -1,0 +1,19 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/core/nbs/cloud/storage/core/protos" ]
+
+  deps = [
+    # "//library/cpp/lwtrace/protos",  # peerdir only
+  ]
+
+  sources = [
+    "headers.proto",
+    "io.proto",
+  ]
+
+  extra_plugins = [
+    {
+      name = "validation"
+      target = "//ydb/public/lib/validation"
+    },
+  ]
+}

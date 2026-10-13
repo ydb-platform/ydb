@@ -1,0 +1,45 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/malloc/api",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/mind",
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "//ydb/core/mind/node_broker_ut.cpp",
+    "//ydb/core/mind/tenant_node_enumeration_ut.cpp",
+    "//ydb/core/mind/tenant_ut_local.cpp",
+    "//ydb/core/mind/tenant_ut_pool.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/mind" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

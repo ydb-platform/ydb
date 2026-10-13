@@ -1,0 +1,6 @@
+group("fds_mock") {
+  deps = [
+    # "//library/cpp/threading/future",
+    "//ydb/public/api/grpc",
+  ]
+}

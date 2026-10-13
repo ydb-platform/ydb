@@ -1,0 +1,6 @@
+library("stack_array") {
+  sources = [
+    "range_ops.cpp",
+    "stack_array.cpp",
+  ]
+}

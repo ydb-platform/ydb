@@ -1,0 +1,19 @@
+unittest_executable("sdk_credprovider") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
+    "//ydb/public/sdk/cpp/src/client/scheme",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "dummy_provider_ut.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,39 @@
+library("public") {
+  public_deps = [
+    ":utils",
+    # "//library/cpp/sliding_window",
+    "//ydb/core/grpc_services",
+    # "//ydb/core/kafka_proxy",
+    "//ydb/core/metering",
+    "//ydb/core/protos",
+    "//ydb/core/tx/scheme_board",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    # "//ydb/core/grpc_services/base",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "config.cpp",
+    "inflight_limiter.cpp",
+    "pq_database.cpp",
+    "pq_rl_helpers.cpp",
+    "write_id.cpp",
+  ]
+}
+
+library("utils") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # ":public",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [ "utils.cpp" ]
+}

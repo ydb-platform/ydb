@@ -1,0 +1,41 @@
+library("federated_topic") {
+  public_deps = [
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/topic/common",
+    # "//ydb/public/sdk/cpp/src/client/topic/impl",
+    # "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/disjoint_interval_tree",
+    # "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    # "//library/cpp/monlib/metrics",  # peerdir only
+    # "//library/cpp/string_utils/url",  # peerdir only
+    # "//library/cpp/threading/future",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/federated_topic/ut/fds_mock",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/persqueue/obfuscate",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/string_utils/helpers",
+  ]
+
+  sources = [
+    "impl/federated_deferred_commit.cpp",
+    "impl/federated_read_session.cpp",
+    "impl/federated_read_session_event.cpp",
+    "impl/federated_topic.cpp",
+    "impl/federated_topic_impl.cpp",
+    "impl/federated_write_session.cpp",
+    "impl/federation_observer.cpp",
+  ]
+
+  serialize_enum_headers = [ "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h" ]
+}

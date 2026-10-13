@@ -1,0 +1,36 @@
+unittest_executable("ut_external_blobs") {
+  deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/data_events",
+    "//ydb/core/tx/datashard",  # peerdir only
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/tx_proxy",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/ut",
+    "//ydb/public/sdk/cpp/src/client/result",
+  ]
+
+  sources =
+      [ "//ydb/core/tx/datashard/datashard_ut_ext_blobs_multiple_channels.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/datashard",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

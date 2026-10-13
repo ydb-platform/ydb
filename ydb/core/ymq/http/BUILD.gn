@@ -1,0 +1,31 @@
+library("http") {
+  public_deps = [
+    # "//library/cpp/cgiparam",
+    # "//library/cpp/http/server",
+    "//library/cpp/scheme",
+    "//ydb/core/protos",
+    "//ydb/core/ymq/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/http_proxy/authorization",
+  ]
+
+  deps = [
+    "//contrib/libs/libxml",
+    "//library/cpp/http/misc",
+    # "//library/cpp/protobuf/json",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/string_utils/url",
+    "//ydb/core/ymq/actor",
+    # "//ydb/library/http_proxy/error",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "http.cpp",
+    "parser.rl6",
+    "types.cpp",
+    "xml.cpp",
+    "xml_builder.cpp",
+  ]
+}

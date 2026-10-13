@@ -1,0 +1,7 @@
+library("lcs") {
+  public_deps = [
+    # "//library/cpp/containers/paged_vector",
+  ]
+
+  sources = [ "lcs_via_lis.cpp" ]
+}

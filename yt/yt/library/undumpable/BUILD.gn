@@ -1,0 +1,13 @@
+library("undumpable") {
+  deps = [
+    # "//library/cpp/yt/assert",
+    "//library/cpp/yt/memory",
+    "//library/cpp/yt/threading",
+    "//yt/yt/library/profiling",
+  ]
+
+  sources = [
+    "ref.cpp",
+    "undumpable.cpp",
+  ]
+}

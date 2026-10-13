@@ -1,0 +1,53 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/http/io",
+    "//library/cpp/http/server",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/client",  # peerdir only
+    "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    "//ydb/core/engine",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/test/libs/rows",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/locks",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/deprecated/kicli",
+  ]
+
+  sources = [
+    "//ydb/core/client/cancel_tx_ut.cpp",
+    "//ydb/core/client/flat_ut.cpp",
+    "//ydb/core/client/locks_ut.cpp",
+    "//ydb/core/client/object_storage_listing_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/client",  # peerdir only
+  ]
+
+  data = [ "//ydb/tests/supp/" ]
+
+  test_depends_unbuilt = [ "//ydb/tests/supp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

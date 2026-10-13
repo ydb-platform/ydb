@@ -1,0 +1,11 @@
+unittest_executable("row_table") {
+  deps = [ "//ydb/core/transfer/ut/common" ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "transfer_rowtable_ut.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

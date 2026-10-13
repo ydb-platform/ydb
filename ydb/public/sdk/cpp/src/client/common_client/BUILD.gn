@@ -1,0 +1,10 @@
+library("common_client") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+  ]
+
+  deps = [ "//ydb/public/sdk/cpp/src/client/impl/internal/common" ]
+
+  sources = [ "settings.cpp" ]
+}

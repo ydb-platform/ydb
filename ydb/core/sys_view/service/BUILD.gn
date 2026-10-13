@@ -1,0 +1,25 @@
+library("service") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/time_provider",
+    "//ydb/core/graph/api",
+    # "//ydb/core/sys_view/common",
+    # "//ydb/core/tablet",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/aclib/protos",  # peerdir only
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "db_counters.cpp",
+    "ext_counters.cpp",
+    "query_interval.cpp",
+    "sysview_service.cpp",
+  ]
+}

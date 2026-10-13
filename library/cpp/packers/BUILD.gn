@@ -1,0 +1,7 @@
+library("packers") {
+  sources = [
+    "packers.cpp",
+    "proto_packer.cpp",
+    "region_packer.cpp",
+  ]
+}

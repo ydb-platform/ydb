@@ -1,0 +1,23 @@
+library("tx_allocator") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//ydb/core/actorlib_impl",  # peerdir only
+    "//ydb/core/engine/minikql",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/interconnect",  # peerdir only
+  ]
+
+  sources = [
+    "txallocator.cpp",
+    "txallocator__reserve.cpp",
+    "txallocator__scheme.cpp",
+    "txallocator_impl.cpp",
+  ]
+}

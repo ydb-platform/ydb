@@ -1,0 +1,8 @@
+library("utils") {
+  deps = [
+    "//contrib/libs/protobuf",
+    # "//library/cpp/protobuf/json",  # peerdir only
+  ]
+
+  sources = [ "config_traverse.cpp" ]
+}

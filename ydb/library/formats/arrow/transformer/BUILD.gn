@@ -1,0 +1,8 @@
+library("transformer") {
+  public_deps = [ "//contrib/libs/apache/arrow" ]
+
+  sources = [
+    "abstract.cpp",
+    "composite.cpp",
+  ]
+}

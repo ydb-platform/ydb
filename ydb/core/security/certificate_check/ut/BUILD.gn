@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/testlib/default",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/security/certificate_check/cert_check_ut.cpp",
+    "//ydb/core/security/certificate_check/cert_utils_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/security/certificate_check" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

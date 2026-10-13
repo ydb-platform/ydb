@@ -1,0 +1,28 @@
+library("common") {
+  public_deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/base",
+    # "//ydb/core/kafka_proxy",
+    "//ydb/core/persqueue/public",
+    # "//ydb/core/persqueue/public/partition_key_range",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//ydb/library/logger",  # peerdir only
+  ]
+
+  sources = [
+    "actor.cpp",
+    "common_app.cpp",
+    "heartbeat.cpp",
+    "key.cpp",
+    "microseconds_sliding_window.cpp",
+    "percentiles.cpp",
+  ]
+
+  serialize_enum_headers = [ "sourceid_info.h" ]
+}

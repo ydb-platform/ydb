@@ -1,0 +1,10 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("CFGuard") {
+    deps = [
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/TargetParser",
+    ]
+
+    sources = [ "CFGuard.cpp" ]
+}

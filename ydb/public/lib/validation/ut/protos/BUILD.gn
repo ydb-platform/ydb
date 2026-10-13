@@ -1,0 +1,12 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/public/api/protos/annotations" ]
+
+  sources = [ "validation_test.proto" ]
+
+  extra_plugins = [
+    {
+      name = "validation"
+      target = "//ydb/public/lib/validation"
+    },
+  ]
+}

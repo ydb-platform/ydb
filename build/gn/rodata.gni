@@ -1,0 +1,27 @@
+import("//build/gn/yasm.gni")
+
+template("rodata_source_set") {
+    _gen_target_rodata = "${target_name}_gen_rodata"
+    _output = "{{source_gen_dir}}/{{source_name_part}}.asm"
+
+    action_foreach(_gen_target_rodata) {
+        script = "//build/scripts/rodata2asm.py"
+        sources = invoker.sources
+        outputs = [ "$_output" ]
+
+        args = [
+            "--elf",
+            "{{source_name_part}}",
+            "{{source}}",
+            "$_output",
+        ]
+    }
+
+    yasm_source_set(target_name) {
+        forward_variables_from(invoker, "*", [ "sources" ])
+
+        deps = [ ":$_gen_target_rodata" ]
+
+        sources = get_target_outputs(":$_gen_target_rodata")
+    }
+}

@@ -1,0 +1,10 @@
+contrib_library("jemalloc") {
+  deps = [
+    "//contrib/libs/jemalloc",
+    "//library/cpp/malloc/api",
+  ]
+
+  sources = [ "malloc-info.cpp" ]
+
+  link_slot_provides = [ "allocator" ]
+}

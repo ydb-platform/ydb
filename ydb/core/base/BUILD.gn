@@ -1,0 +1,120 @@
+config("base_public_config") {
+  cflags = [ "-Wno-deprecated-volatile" ]
+}
+
+library("base") {
+  public_deps = [
+    "//contrib/libs/protobuf",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/lwtrace",
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/random_provider",
+    # "//library/cpp/threading/light_rw_lock",
+    # "//library/cpp/time_provider",
+    "//ydb/core/base/generated",
+    # "//ydb/core/base/services",
+    # "//ydb/core/blobstorage",
+    "//ydb/core/control/lib",
+    "//ydb/core/erasure",
+    "//ydb/core/jaeger_tracing",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tx",
+    # "//ydb/core/util",
+    "//ydb/library/aclib",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/util",
+    "//ydb/library/actors/wilson",
+    # "//ydb/library/grpc/server",
+    "//ydb/library/login",
+    "//ydb/library/pdisk_io:device_type",
+    # "//ydb/library/yql/dq/actors",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/scheme_types",
+  ]
+
+  deps = [
+    "//contrib/libs/snowball",
+    # "//library/cpp/deprecated/atomic",  # peerdir only
+    "//library/cpp/dot_product",
+    "//library/cpp/dwarf_backtrace",
+    # "//library/cpp/l1_distance",
+    "//library/cpp/l2_distance",
+    "//library/cpp/logger",  # peerdir only
+    "//library/cpp/lwtrace/mon",  # peerdir only
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/audit/audit_config",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/nodewarden",
+    # "//ydb/core/debug",  # peerdir only
+    # "//ydb/core/graph/api",
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/tablet_flat",
+    "//ydb/library/actors/helpers",
+    "//ydb/library/actors/protos",
+    "//ydb/library/login/protos",
+    "//ydb/library/pretty_types_print/protobuf",  # peerdir only
+    "//ydb/library/services",
+    # "//ydb/library/wilson_ids",
+    "//ydb/library/ydb_issue",  # peerdir only
+    # "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/minikql:alloc",
+  ]
+
+  sources = [
+    "actor_activity_names.cpp",
+    "appdata.cpp",
+    "auth.cpp",
+    "backtrace.cpp",
+    "blobstorage.cpp",
+    "blobstorage_grouptype.cpp",
+    "blobstorage_relevance.cpp",
+    "board_lookup.cpp",
+    "board_publish.cpp",
+    "board_replica.cpp",
+    "boot_type.cpp",
+    "bridge.cpp",
+    "counters.cpp",
+    "domain.cpp",
+    "event_filter.cpp",
+    "feature_flags_service.cpp",
+    "fulltext.cpp",
+    "group_stat.cpp",
+    "kmeans_clusters.cpp",
+    "local_user_token.cpp",
+    "localdb.cpp",
+    "logoblob.cpp",
+    "path.cpp",
+    "pool_stats_collector.cpp",
+    "row_version.cpp",
+    "services_assert.cpp",
+    "statestorage.cpp",
+    "statestorage_event_filter.cpp",
+    "statestorage_guardian.cpp",
+    "statestorage_monitoring.cpp",
+    "statestorage_proxy.cpp",
+    "statestorage_replica.cpp",
+    "storage_pools.cpp",
+    "subdomain.cpp",
+    "table_index.cpp",
+    "tablet.cpp",
+    "tablet_killer.cpp",
+    "tablet_pipecache.cpp",
+    "tablet_status_checker.cpp",
+    "traceid.cpp",
+    "tx_processing.cpp",
+    "wilson_tracing_control.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "boot_type.h",
+    "memory_controller_iface.h",
+  ]
+
+  public_configs = [ ":base_public_config" ]
+}

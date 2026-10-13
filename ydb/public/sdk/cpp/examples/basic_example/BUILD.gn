@@ -1,0 +1,16 @@
+linked_executable("basic_example") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/query",
+  ]
+
+  sources = [
+    "basic_example.cpp",
+    "basic_example_data.cpp",
+    "main.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/config/tools/protobuf_plugin/ut/protos",
+    "//ydb/core/config/tools/protobuf_plugin:config_proto_plugin",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/config/tools/protobuf_plugin/ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/config/tools/protobuf_plugin" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

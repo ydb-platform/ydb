@@ -1,0 +1,11 @@
+library("analytics") {
+  deps = [
+    # ":protos",
+  ]
+
+  sources = [ "analytics.cpp" ]
+}
+
+protobuf_library("protos") {
+  sources = [ "protos/data.proto" ]
+}

@@ -1,0 +1,18 @@
+library("string") {
+  public_deps = [
+    "//library/cpp/yt/assert",
+    # "//library/cpp/yt/compact_containers",
+    # "//library/cpp/yt/containers",
+    "//library/cpp/yt/exception",
+    "//library/cpp/yt/misc",
+  ]
+
+  sources = [
+    "enum.cpp",
+    "format.cpp",
+    "format_string.cpp",
+    "guid.cpp",
+    "string.cpp",
+    "string_builder.cpp",
+  ]
+}

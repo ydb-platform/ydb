@@ -1,0 +1,14 @@
+config("private_config") {
+    cflags_c = [
+        "-std=c11",
+    ]
+}
+
+contrib_library("ssse3") {
+    sources = [
+        "codec_ssse3.c",
+        "lib.c",
+    ]
+
+    configs = [ ":private_config" ]
+}

@@ -1,0 +1,5 @@
+library("transform") {
+  public_deps = [ "//yql/essentials/minikql" ]
+
+  sources = [ "yql_dq_task_transform.cpp" ]
+}

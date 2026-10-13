@@ -1,0 +1,22 @@
+library("validators") {
+  public_deps = [
+    # "//library/cpp/deprecated/atomic",
+    "//ydb/core/protos",
+    "//ydb/public/api/protos",
+    "//yql/essentials/public/issue/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/tablet",
+    # "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "core_validators.cpp",
+    "registry.cpp",
+    "validator.cpp",
+    "validator_bootstrap.cpp",
+    "validator_nameservice.cpp",
+  ]
+}

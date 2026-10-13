@@ -1,0 +1,62 @@
+library("provider") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    "//ydb/library/yql/providers/common/token_accessor/client",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/dq_integration",
+    "//yql/essentials/providers/common/config",
+    "//yql/essentials/providers/common/gateway",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/providers/common/structured_token",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/monlib/metrics",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
+    # "//ydb/library/yql/dq/expr_nodes",
+    "//ydb/library/yql/dq/opt",
+    # "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    # "//ydb/library/yql/providers/dq/mkql",
+    "//ydb/library/yql/providers/solomon/actors",
+    "//ydb/library/yql/providers/solomon/common",
+    "//ydb/library/yql/providers/solomon/expr_nodes",
+    "//ydb/library/yql/providers/solomon/proto",
+    # "//ydb/library/yql/providers/solomon/scheme",
+    "//ydb/library/yql/providers/solomon/solomon_accessor/client",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials",  # peerdir only
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core/expr_nodes",
+    "//yql/essentials/providers/common/dq",
+    "//yql/essentials/providers/common/mkql",
+    "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/common/schema/expr",
+    "//yql/essentials/providers/common/transform",
+    # "//yql/essentials/providers/result/expr_nodes",
+    # "//yql/essentials/utils/log",
+    "//yt/yql/providers/ytflow/expr_nodes",
+    "//yt/yql/providers/ytflow/integration/interface",
+    "//yt/yql/providers/ytflow/integration/proto",
+  ]
+
+  sources = [
+    "yql_solomon_config.cpp",
+    "yql_solomon_datasink.cpp",
+    "yql_solomon_datasink_execution.cpp",
+    "yql_solomon_datasink_type_ann.cpp",
+    "yql_solomon_datasource.cpp",
+    "yql_solomon_datasource_execution.cpp",
+    "yql_solomon_datasource_type_ann.cpp",
+    "yql_solomon_dq_integration.cpp",
+    "yql_solomon_io_discovery.cpp",
+    "yql_solomon_load_meta.cpp",
+    "yql_solomon_logical_optimize.cpp",
+    "yql_solomon_mkql_compiler.cpp",
+    "yql_solomon_physical_optimize.cpp",
+    "yql_solomon_provider.cpp",
+    "yql_solomon_ytflow_integration.cpp",
+    "yql_solomon_ytflow_optimize.cpp",
+  ]
+}

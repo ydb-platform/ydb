@@ -1,0 +1,8 @@
+library("jwt") {
+  deps = [
+    "//contrib/libs/jwt-cpp",  # peerdir only
+    "//library/cpp/json",
+  ]
+
+  sources = [ "jwt.cpp" ]
+}

@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/union_copy_set",
+  ]
+
+  sources = [ "//ydb/library/union_copy_set/union_copy_set_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/union_copy_set" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

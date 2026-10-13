@@ -1,0 +1,5 @@
+group("yt_rpc_helpers") {
+  public_deps = [
+    # "//yt/cpp/mapreduce/interface",
+  ]
+}

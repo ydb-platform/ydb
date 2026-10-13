@@ -1,0 +1,30 @@
+protobuf_library("protos") {
+  public_deps = [ "//library/cpp/monlib/encode/legacy_protobuf/protos" ]
+
+  sources = [
+    "protos/shareplanner.proto",
+    "protos/shareplanner_history.proto",
+    "protos/shareplanner_sensors.proto",
+  ]
+}
+
+library("share") {
+  public_deps = [
+    ":protos",
+    "//library/cpp/lwtrace",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/encode/legacy_protobuf/protos",  # peerdir only
+    # "//ydb/library/analytics",  # peerdir only
+  ]
+
+  sources = [
+    "account.cpp",
+    "group.cpp",
+    "history.cpp",
+    "node.cpp",
+    "probes.cpp",
+    "shareplanner.cpp",
+  ]
+}

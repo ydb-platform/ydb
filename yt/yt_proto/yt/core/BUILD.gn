@@ -1,0 +1,22 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+protobuf_library("core") {
+    proto_public_include_dirs = [ "//yt" ]
+
+    sources = [
+        "bus/proto/bus.proto",
+        "crypto/proto/crypto.proto",
+        "misc/proto/bloom_filter.proto",
+        "misc/proto/error.proto",
+        "misc/proto/guid.proto",
+        "misc/proto/hyperloglog.proto",
+        "misc/proto/protobuf_helpers.proto",
+        "rpc/proto/rpc.proto",
+        "tracing/proto/span.proto",
+        "tracing/proto/tracing_ext.proto",
+        "yson/proto/protobuf_interop.proto",
+        "ytree/proto/attributes.proto",
+        "ytree/proto/request_complexity_limits.proto",
+        "ytree/proto/ypath.proto",
+    ]
+}

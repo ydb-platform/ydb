@@ -1,0 +1,8 @@
+library("interop") {
+  public_deps = [
+    # "//contrib/libs/libunwind",
+    # "//library/cpp/yt/backtrace/cursors/frame_pointer",
+  ]
+
+  sources = [ "interop_x86_64.cpp" ]
+}

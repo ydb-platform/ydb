@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base/services",
+    "//ydb/core/blobstorage/ddisk",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/util/actorsys_test",
+  ]
+
+  sources = [
+    "ddisk_actor_ut.cpp",
+    "segment_manager_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/ddisk" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,15 @@
+library("actors_factory") {
+  public_deps = [
+    "//ydb/core/fq/libs/protos",
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/s3/proto",
+  ]
+
+  deps = [ "//yql/essentials/providers/common/proto" ]
+
+  sources = [ "yql_s3_actors_factory.cpp" ]
+}

@@ -1,0 +1,13 @@
+library("mock") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/folder_service/proto",
+  ]
+
+  deps = [
+    "//ydb/library/folder_service",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+  ]
+
+  sources = [ "mock_folder_service_adapter.cpp" ]
+}

@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/metrics",
+    "//yql/essentials/core/issue/protos",
+  ]
+
+  sources = [
+    "metrics_ut.cpp",
+    "sanitize_label_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/fq/libs/metrics" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

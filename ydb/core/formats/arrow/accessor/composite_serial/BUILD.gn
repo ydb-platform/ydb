@@ -1,0 +1,15 @@
+library("composite_serial") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor:composite",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    "//ydb/core/formats/arrow/accessor/sparsed",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/prof",
+  ]
+
+  sources = [ "accessor.cpp" ]
+}

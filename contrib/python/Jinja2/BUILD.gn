@@ -1,0 +1,37 @@
+python_library("Jinja2") {
+    library_name = "jinja2"
+
+    source_root = "py3/jinja2"
+
+    library_deps = [
+        "//contrib/python/MarkupSafe",
+    ]
+
+    sources = [
+        "__init__.py",
+        "_identifier.py",
+        "async_utils.py",
+        "bccache.py",
+        "compiler.py",
+        "constants.py",
+        "debug.py",
+        "defaults.py",
+        "environment.py",
+        "exceptions.py",
+        "ext.py",
+        "filters.py",
+        "idtracking.py",
+        "lexer.py",
+        "loaders.py",
+        "meta.py",
+        "nativetypes.py",
+        "nodes.py",
+        "optimizer.py",
+        "parser.py",
+        "runtime.py",
+        "sandbox.py",
+        "tests.py",
+        "utils.py",
+        "visitor.py",
+    ]
+}

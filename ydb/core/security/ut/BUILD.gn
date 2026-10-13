@@ -1,0 +1,43 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/grpc_services",
+    "//ydb/core/security",
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/ldap_auth_provider",
+    "//ydb/core/security/token_manager",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/audit_helpers",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/util/actorsys_test",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/library/testlib/service_mocks",
+    "//ydb/library/testlib/service_mocks/ldap_mock",
+    "//ydb/library/ycloud/api",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/scheme",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "//ydb/core/security/audit_ut.cpp",
+    "//ydb/core/security/ticket_parser_ut.cpp",
+    "//ydb/core/security/ut_common.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/security" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

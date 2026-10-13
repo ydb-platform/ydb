@@ -1,0 +1,7 @@
+library("dns") {
+  sources = [
+    "cache.cpp",
+    "magic.cpp",
+    "thread.cpp",
+  ]
+}

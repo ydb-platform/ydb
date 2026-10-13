@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/time_provider",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/dq/actors",  # peerdir only
+    "//ydb/library/yql/dq/actors/compute",  # peerdir only
+    "//ydb/library/yql/providers/dq/actors",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/library/yql/providers/dq/actors/actors_ut.cpp",
+    "//ydb/library/yql/providers/dq/actors/grouped_issues_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/providers/dq/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,0 +1,20 @@
+library("coordination") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/driver" ]
+
+  deps = [
+    "//ydb/public/api/grpc",
+    # "//ydb/public/sdk/cpp/src/client/common_client",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/types/status",  # peerdir only
+  ]
+
+  sources = [
+    "coordination.cpp",
+    "proto_accessor.cpp",
+  ]
+
+  serialize_enum_headers = [ "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h" ]
+}

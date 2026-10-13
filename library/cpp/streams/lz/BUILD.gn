@@ -1,0 +1,19 @@
+config("lz_private_config") {
+  defines = [ "OPENSOURCE" ]
+}
+
+library("lz") {
+  deps = [
+    "//contrib/libs/fastlz",
+    "//contrib/libs/lz4",
+    "//contrib/libs/snappy",
+  ]
+
+  sources = [
+    "lz.cpp",
+    "lz4/lz4.cpp",
+    "snappy/snappy.cpp",
+  ]
+
+  configs = [ ":lz_private_config" ]
+}

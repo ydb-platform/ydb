@@ -1,0 +1,57 @@
+config("AVX2_algo_private_config") {
+  cflags = [ "-mavx2" ]
+}
+
+library("AVX2_algo") {
+  testonly = true
+
+  deps = [
+    # ":runtime_dispatching",
+  ]
+
+  sources = [ "AVX2_algo/avx2_algo.cpp" ]
+
+  configs = [ ":AVX2_algo_private_config" ]
+}
+
+library("Fallback_algo") {
+  testonly = true
+
+  deps = [
+    # ":runtime_dispatching",
+  ]
+
+  sources = [ "Fallback_algo/fallback_algo.cpp" ]
+}
+
+library("SSE42_algo") {
+  testonly = true
+
+  deps = [
+    # ":runtime_dispatching",
+  ]
+
+  sources = [ "SSE42_algo/sse42_algo.cpp" ]
+}
+
+linked_executable("main") {
+  testonly = true
+
+  deps = [ ":runtime_dispatching" ]
+
+  sources = [ "main/main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}
+
+group("runtime_dispatching") {
+  testonly = true
+
+  public_deps = [
+    ":AVX2_algo",  # peerdir only
+    ":Fallback_algo",  # peerdir only
+    ":SSE42_algo",  # peerdir only
+    # ":main",
+    # "//ydb/library/yql/dq/comp_nodes/hash_join_utils/simd",
+  ]
+}

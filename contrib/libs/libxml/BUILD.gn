@@ -1,0 +1,72 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-pointer-sign",
+        "-Wno-unused-but-set-variable",
+    ]
+    defines = [
+        "HAVE_CONFIG_H",
+        "ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS",
+    ]
+    include_dirs = [ "." ]
+}
+
+contrib_library("libxml") {
+    deps = [
+        "//contrib/libs/zlib",
+    ]
+
+    sources = [
+        "buf.c",
+        "c14n.c",
+        "catalog.c",
+        "chvalid.c",
+        "debugXML.c",
+        "dict.c",
+        "encoding.c",
+        "entities.c",
+        "error.c",
+        "globals.c",
+        "hash.c",
+        "HTMLparser.c",
+        "HTMLtree.c",
+        "legacy.c",
+        "list.c",
+        "nanoftp.c",
+        "nanohttp.c",
+        "parser.c",
+        "parserInternals.c",
+        "pattern.c",
+        "relaxng.c",
+        "SAX.c",
+        "SAX2.c",
+        "schematron.c",
+        "threads.c",
+        "tree.c",
+        "uri.c",
+        "valid.c",
+        "xinclude.c",
+        "xlink.c",
+        "xmlIO.c",
+        "xmlmemory.c",
+        "xmlmodule.c",
+        "xmlreader.c",
+        "xmlregexp.c",
+        "xmlsave.c",
+        "xmlschemas.c",
+        "xmlschemastypes.c",
+        "xmlstring.c",
+        "xmlunicode.c",
+        "xmlwriter.c",
+        "xpath.c",
+        "xpointer.c",
+        "xzlib.c",
+        # "yencoding.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

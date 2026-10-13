@@ -1,0 +1,6 @@
+protobuf_library("protos") {
+  sources = [
+    "blob_range.proto",
+    "snapshot.proto",
+  ]
+}

@@ -1,0 +1,5 @@
+library("crc32c") {
+  deps = [ "//contrib/libs/crcutil" ]
+
+  sources = [ "crc32c.cpp" ]
+}

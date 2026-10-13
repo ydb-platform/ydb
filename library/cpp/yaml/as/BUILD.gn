@@ -1,0 +1,3 @@
+group("as") {
+  public_deps = [ "//contrib/libs/yaml-cpp" ]
+}

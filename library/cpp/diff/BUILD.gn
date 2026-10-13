@@ -1,0 +1,11 @@
+library("diff") {
+  public_deps = [
+    # "//library/cpp/lcs",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_array",  # peerdir only
+  ]
+
+  sources = [ "diff.cpp" ]
+}

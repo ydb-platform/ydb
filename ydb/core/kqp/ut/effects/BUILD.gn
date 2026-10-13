@@ -1,0 +1,38 @@
+unittest_executable("effects") {
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/buffer",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/data_events",
+    "//ydb/core/tx/datashard",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_connection_ut.cpp",
+    "kqp_effects_ut.cpp",
+    "kqp_immediate_effects_ut.cpp",
+    "kqp_inplace_update_ut.cpp",
+    "kqp_overload_ut.cpp",
+    "kqp_reattach_ut.cpp",
+    "kqp_write_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

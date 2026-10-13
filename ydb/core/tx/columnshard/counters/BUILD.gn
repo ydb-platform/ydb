@@ -1,0 +1,54 @@
+library("counters") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/time_provider",
+    "//ydb/core/base",
+    "//ydb/core/kqp/compute_actor:events_stats",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/overload_manager",
+    "//ydb/core/tx/columnshard/resource_subscriber",
+    # "//ydb/core/tx/columnshard/resources",
+    "//ydb/core/tx/data_events/common",
+    # "//ydb/core/util",
+    "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/core/formats/arrow/program",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "background_controller.cpp",
+    "blobs_manager.cpp",
+    "column_tables.cpp",
+    "columnshard.cpp",
+    "common_data.cpp",
+    "counters_manager.cpp",
+    "duplicate_filtering.cpp",
+    "engine_logs.cpp",
+    "error_collector.cpp",
+    "histogram_borders.cpp",
+    "indexation.cpp",
+    "portion_index.cpp",
+    "portions.cpp",
+    "req_tracer.cpp",
+    "scan.cpp",
+    "splitter.cpp",
+    "writes_monitor.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "columnshard.h",
+    "scan.h",
+  ]
+}

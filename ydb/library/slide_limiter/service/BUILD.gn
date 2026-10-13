@@ -1,0 +1,15 @@
+library("service") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    "//ydb/library/signals",
+    "//ydb/library/slide_limiter/usage",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "service.cpp" ]
+}

@@ -1,0 +1,8 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+library("build_info") {
+    sources = [
+        "build_info_static.cpp",
+        "sandbox_static.cpp",
+    ]
+}

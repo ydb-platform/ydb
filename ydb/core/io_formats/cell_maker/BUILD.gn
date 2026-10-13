@@ -1,0 +1,24 @@
+library("cell_maker") {
+  public_deps = [
+    "//library/cpp/json",
+    "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+  ]
+
+  deps = [
+    "//contrib/libs/double-conversion",
+    "//library/cpp/json/yson",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/string_utils/quote",
+    # "//ydb/library/yverify_stream",
+    # "//yql/essentials/minikql/dom",
+    "//yql/essentials/public/decimal",
+    # "//yql/essentials/public/udf",
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    # "//yql/essentials/types/uuid",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "cell_maker.cpp" ]
+}

@@ -1,0 +1,7 @@
+library("normalization") {
+  sources = [
+    "generated/composition.cpp",
+    "generated/decomposition.cpp",
+    "normalization.cpp",
+  ]
+}

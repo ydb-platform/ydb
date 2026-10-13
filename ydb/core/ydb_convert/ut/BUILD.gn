@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/core/ydb_convert",
+    "//ydb/library/aclib",
+  ]
+
+  sources = [
+    "//ydb/core/ydb_convert/compression_ut.cpp",
+    "//ydb/core/ydb_convert/table_description_ut.cpp",
+    "//ydb/core/ydb_convert/ydb_convert_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/ydb_convert" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

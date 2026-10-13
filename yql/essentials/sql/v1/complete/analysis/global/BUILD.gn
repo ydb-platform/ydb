@@ -1,0 +1,27 @@
+library("global") {
+  public_deps = [ "//yql/essentials/sql/v1/complete/core" ]
+
+  deps = [
+    "//contrib/libs/re2",
+    # "//library/cpp/iterator",
+    "//library/cpp/yson/node",
+    "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",  # peerdir only
+    "//yql/essentials/parser/antlr_ast/gen/v1_antlr4",  # peerdir only
+    # "//yql/essentials/sql/v1/complete/antlr4",
+    "//yql/essentials/sql/v1/complete/syntax",
+    "//yql/essentials/sql/v1/complete/text",
+  ]
+
+  sources = [
+    "base_visitor.cpp",
+    "column.cpp",
+    "evaluate.cpp",
+    "function.cpp",
+    "global.cpp",
+    "input.cpp",
+    "named_node.cpp",
+    "narrowing_visitor.cpp",
+    "parse_tree.cpp",
+    "use.cpp",
+  ]
+}

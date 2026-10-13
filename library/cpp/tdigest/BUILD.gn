@@ -1,0 +1,10 @@
+library("tdigest") {
+  deps = [
+    # "//library/cpp/protobuf/runtime",  # peerdir only
+  ]
+
+  sources = [
+    "tdigest.cpp",
+    "tdigest.proto",
+  ]
+}

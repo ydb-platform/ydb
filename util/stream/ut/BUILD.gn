@@ -1,0 +1,30 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//util/stream/aligned_ut.cpp",
+    "//util/stream/buffer_ut.cpp",
+    "//util/stream/buffered_ut.cpp",
+    "//util/stream/direct_io_ut.cpp",
+    "//util/stream/file_ut.cpp",
+    "//util/stream/format_std_ut.cpp",
+    "//util/stream/format_ut.cpp",
+    "//util/stream/hex_ut.cpp",
+    "//util/stream/input_ut.cpp",
+    "//util/stream/ios_ut.cpp",
+    "//util/stream/labeled_ut.cpp",
+    "//util/stream/length_ut.cpp",
+    "//util/stream/mem_ut.cpp",
+    "//util/stream/multi_ut.cpp",
+    "//util/stream/printf_ut.cpp",
+    "//util/stream/str_ut.cpp",
+    "//util/stream/tokenizer_ut.cpp",
+    "//util/stream/walk_ut.cpp",
+    "//util/stream/zerocopy_output_ut.cpp",
+    "//util/stream/zlib_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

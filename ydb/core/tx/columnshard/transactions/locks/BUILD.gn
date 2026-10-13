@@ -1,0 +1,26 @@
+library("locks") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines/predicate",
+    # "//ydb/library/accessor",
+    # "//ydb/library/formats/arrow",
+    # "//ydb/services/bg_tasks/abstract",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_action/events",  # peerdir only
+    "//ydb/core/tx/columnshard/transactions/protos",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "dependencies.cpp",
+    "interaction.cpp",
+    "read_finished.cpp",
+    "read_start.cpp",
+    "write.cpp",
+  ]
+}

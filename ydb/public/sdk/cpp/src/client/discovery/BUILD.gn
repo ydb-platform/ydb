@@ -1,0 +1,7 @@
+library("discovery") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/driver" ]
+
+  deps = [ "//ydb/public/sdk/cpp/src/client/common_client/impl" ]
+
+  sources = [ "discovery.cpp" ]
+}

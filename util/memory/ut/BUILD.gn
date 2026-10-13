@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//util/memory/addstorage_ut.cpp",
+    "//util/memory/blob_ut.cpp",
+    "//util/memory/pool_ut.cpp",
+    "//util/memory/smallobj_ut.cpp",
+    "//util/memory/tempbuf_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

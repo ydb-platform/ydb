@@ -1,0 +1,42 @@
+unittest_executable("ut_index_build") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/metering",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/scheme",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [
+    "ut_fulltext_build.cpp",
+    "ut_index_build.cpp",
+    "ut_schemeshard_build_index_helpers.cpp",
+    "ut_vector_index_build.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

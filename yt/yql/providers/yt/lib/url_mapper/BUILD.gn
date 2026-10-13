@@ -1,0 +1,17 @@
+config("url_mapper_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("url_mapper") {
+  public_deps = [ "//library/cpp/regex/pcre" ]
+
+  deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/uri",
+    "//yql/essentials/providers/common/proto",
+  ]
+
+  sources = [ "yql_yt_url_mapper.cpp" ]
+
+  configs = [ ":url_mapper_private_config" ]
+}

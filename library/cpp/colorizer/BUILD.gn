@@ -1,0 +1,6 @@
+library("colorizer") {
+  sources = [
+    "colors.cpp",
+    "output.cpp",
+  ]
+}

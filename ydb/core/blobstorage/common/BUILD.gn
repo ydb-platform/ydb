@@ -1,0 +1,12 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/blobstorage",
+    "//ydb/core/control/lib",
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+  ]
+
+  sources = [ "immediate_control_defaults.cpp" ]
+}

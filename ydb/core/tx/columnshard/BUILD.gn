@@ -1,0 +1,290 @@
+library("background_controller") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/engines/changes/abstract",
+    "//ydb/core/tx/columnshard/engines/portions",
+  ]
+
+  deps = [ "//ydb/core/tx/columnshard/engines/changes/counters" ]
+
+  sources = [ "background_controller.cpp" ]
+}
+
+library("columnshard") {
+  public_deps = [
+    ":background_controller",
+    ":ev_ids",
+    ":write_actor",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/base",
+    # "//ydb/core/control/lib",
+    # "//ydb/core/formats/arrow",
+    "//ydb/core/protos",
+    # "//ydb/core/statistics",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    # "//ydb/core/tx",
+    # "//ydb/core/tx/columnshard/bg_tasks/events",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/blobs_action/events",
+    # "//ydb/core/tx/columnshard/column_fetching",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/data_accessor",
+    # "//ydb/core/tx/columnshard/data_locks:manager",
+    "//ydb/core/tx/columnshard/data_sharing/common/context",
+    "//ydb/core/tx/columnshard/data_sharing/common/session",
+    # "//ydb/core/tx/columnshard/data_sharing/initiator/controller",
+    # "//ydb/core/tx/columnshard/data_sharing/manager",
+    "//ydb/core/tx/columnshard/data_sharing/manager:shared_blobs",
+    "//ydb/core/tx/columnshard/data_sharing/modification:events",
+    "//ydb/core/tx/columnshard/data_sharing/modification:tasks",
+    "//ydb/core/tx/columnshard/data_sharing/protos",
+    "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/reader/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/tiering",
+    "//ydb/core/tx/columnshard/engines/writer",
+    # "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/columnshard/normalizer/abstract",
+    "//ydb/core/tx/columnshard/operations",
+    "//ydb/core/tx/columnshard/operations:events",
+    "//ydb/core/tx/columnshard/overload_manager",
+    # "//ydb/core/tx/columnshard/resource_subscriber",
+    "//ydb/core/tx/columnshard/subscriber/abstract:manager",
+    # "//ydb/core/tx/data_events",
+    # "//ydb/core/tx/data_events/common",
+    # "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/core/tx/locks",
+    # "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/priorities/usage",
+    # "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tiering",
+    # "//ydb/core/tx/time_cast",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+    # "//ydb/services/metadata",
+    # "//ydb/services/metadata/abstract",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    "//contrib/libs/fmt",
+    # "//contrib/libs/opentelemetry-proto",  # peerdir only
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/cache",
+    # "//library/cpp/json",
+    "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/protobuf/json",
+    # "//ydb/core/actorlib_impl",  # peerdir only
+    # "//ydb/core/base/generated",  # peerdir only
+    # "//ydb/core/control/lib/generated",  # peerdir only
+    # "//ydb/core/engine/minikql",
+    # "//ydb/core/formats",  # peerdir only
+    # "//ydb/core/grpc_services/cancelation/protos",  # peerdir only
+    "//ydb/core/kqp",  # peerdir only
+    # "//ydb/core/kqp/compute_actor",  # peerdir only
+    # "//ydb/core/kqp/compute_actor:events",
+    # "//ydb/core/mon",
+    # "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    "//ydb/core/tx/columnshard/backup/import/protos",
+    "//ydb/core/tx/columnshard/backup:async_jobs",
+    "//ydb/core/tx/columnshard/backup:iscan",
+    # "//ydb/core/tx/columnshard/bg_tasks",  # peerdir only
+    # "//ydb/core/tx/columnshard/bg_tasks/abstract",
+    "//ydb/core/tx/columnshard/bg_tasks/manager",
+    # "//ydb/core/tx/columnshard/bg_tasks:adapter",
+    # "//ydb/core/tx/columnshard/blobs_action",
+    # "//ydb/core/tx/columnshard/blobs_action/bs",
+    # "//ydb/core/tx/columnshard/blobs_action/common",
+    # "//ydb/core/tx/columnshard/blobs_action/protos",  # peerdir only
+    "//ydb/core/tx/columnshard/blobs_action/storages_manager",
+    "//ydb/core/tx/columnshard/blobs_reader",
+    "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    "//ydb/core/tx/columnshard/data_accessor/in_mem",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_locks",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_locks/locks",
+    "//ydb/core/tx/columnshard/data_reader",
+    # "//ydb/core/tx/columnshard/engines/predicate",
+    "//ydb/core/tx/columnshard/engines/reader/actor",
+    "//ydb/core/tx/columnshard/engines/reader/common",
+    "//ydb/core/tx/columnshard/engines/reader/plain_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/tracing",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch",
+    "//ydb/core/tx/columnshard/engines/writer:buffer",
+    "//ydb/core/tx/columnshard/export/protos",
+    "//ydb/core/tx/columnshard/export:common",
+    "//ydb/core/tx/columnshard/operations:batch_builder",
+    "//ydb/core/tx/columnshard/operations:slice_builder",  # peerdir only
+    # "//ydb/core/tx/columnshard/splitter",  # peerdir only
+    # "//ydb/core/tx/columnshard/subscriber",  # peerdir only
+    # "//ydb/core/tx/columnshard/subscriber/abstract:subscriber",
+    # "//ydb/core/tx/columnshard/subscriber/events:tables_erased",
+    "//ydb/core/tx/columnshard/subscriber/events:tx_completed",
+    "//ydb/core/tx/columnshard/tracing",
+    "//ydb/core/tx/columnshard/transactions/locks",
+    "//ydb/core/tx/columnshard/tx_reader",
+    # "//ydb/core/tx/conveyor/usage",
+    # "//ydb/core/tx/conveyor_composite/service",  # peerdir only
+    # "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/core/tx/general_cache/usage",  # peerdir only
+    # "//ydb/core/tx/priorities/service",  # peerdir only
+    # "//ydb/core/tx/tracing",  # peerdir only
+    # "//ydb/core/util",  # peerdir only
+    # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/chunks_limiter",  # peerdir only
+    "//ydb/library/formats/arrow/hash",
+    # "//ydb/library/slide_limiter/usage",
+    # "//ydb/library/yql/dq/actors",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/services/bg_tasks/abstract",
+    # "//yql/essentials/core/expr_nodes",  # peerdir only
+    # "//yql/essentials/core/issue/protos",  # peerdir only
+    "//yql/essentials/core/minsketch",
+  ]
+
+  sources = [
+    "backup/import/control.cpp",
+    "backup/import/import_actor.cpp",
+    "backup/import/session.cpp",
+    "backup/import/task.cpp",
+    "blob.cpp",
+    "blob_cache.cpp",
+    "blobs_action/transaction/tx_blobs_written.cpp",
+    "blobs_action/transaction/tx_draft.cpp",
+    "blobs_action/transaction/tx_gc_indexed.cpp",
+    "blobs_action/transaction/tx_remove_blobs.cpp",
+    "blobs_action/transaction/tx_write_index.cpp",
+    "columnshard.cpp",
+    "columnshard__init.cpp",
+    "columnshard__locks.cpp",
+    "columnshard__notify_tx_completion.cpp",
+    "columnshard__overload.cpp",
+    "columnshard__plan_step.cpp",
+    "columnshard__progress_tx.cpp",
+    "columnshard__propose_cancel.cpp",
+    "columnshard__propose_transaction.cpp",
+    "columnshard__scan.cpp",
+    "columnshard__statistics.cpp",
+    "columnshard__tx_abort.cpp",
+    "columnshard__write.cpp",
+    "columnshard__write_index.cpp",
+    "columnshard_impl.cpp",
+    "columnshard_private_events.cpp",
+    "columnshard_schema.cpp",
+    "columnshard_subdomain_path_id.cpp",
+    "columnshard_view.cpp",
+    "counters.cpp",
+    "data_sharing/destination/events/control.cpp",
+    "data_sharing/destination/events/status.cpp",
+    "data_sharing/destination/events/transfer.cpp",
+    "data_sharing/destination/session/destination.cpp",
+    "data_sharing/destination/transactions/tx_data_from_source.cpp",
+    "data_sharing/destination/transactions/tx_finish_ack_from_initiator.cpp",
+    "data_sharing/destination/transactions/tx_finish_from_source.cpp",
+    "data_sharing/destination/transactions/tx_start_from_initiator.cpp",
+    "data_sharing/manager/sessions.cpp",
+    "data_sharing/modification/transactions/tx_change_blobs_owning.cpp",
+    "data_sharing/source/events/control.cpp",
+    "data_sharing/source/events/transfer.cpp",
+    "data_sharing/source/session/cursor.cpp",
+    "data_sharing/source/session/source.cpp",
+    "data_sharing/source/transactions/tx_data_ack_to_source.cpp",
+    "data_sharing/source/transactions/tx_finish_ack_to_source.cpp",
+    "data_sharing/source/transactions/tx_start_source_cursor.cpp",
+    "data_sharing/source/transactions/tx_start_to_source.cpp",
+    "data_sharing/source/transactions/tx_write_source_cursor.cpp",
+    "defs.cpp",
+    "diagnostics/scan_diagnostics_actor.cpp",
+    "engines/reader/common_reader/constructor/read_metadata_shard.cpp",
+    "engines/reader/plain_reader/constructor/constructor.cpp",
+    "engines/reader/plain_reader/constructor/read_metadata.cpp",
+    "engines/reader/simple_reader/constructor/constructor.cpp",
+    "engines/reader/simple_reader/constructor/read_metadata.cpp",
+    "engines/reader/transaction/tx_internal_scan.cpp",
+    "engines/reader/transaction/tx_scan.cpp",
+    "engines/table_accessors.cpp",
+    "engines/writer/buffer/actor2.cpp",
+    "export/actor/export_actor.cpp",
+    "export/session/control.cpp",
+    "export/session/cursor.cpp",
+    "export/session/session.cpp",
+    "export/session/task.cpp",
+    "inflight_request_tracker.cpp",
+    "loading/stages.cpp",
+    "operations/manager_owner.cpp",
+    "operations/write_owner.cpp",
+    "tables_manager.cpp",
+    "tablet/ext_tx_base.cpp",
+    "tablet/write_queue.cpp",
+    "transactions/locks_db.cpp",
+    "transactions/operators/backup.cpp",
+    "transactions/operators/ev_write/abstract.cpp",
+    "transactions/operators/ev_write/primary.cpp",
+    "transactions/operators/ev_write/secondary.cpp",
+    "transactions/operators/ev_write/simple.cpp",
+    "transactions/operators/ev_write/sync.cpp",
+    "transactions/operators/propose_tx.cpp",
+    "transactions/operators/restore.cpp",
+    "transactions/operators/schema.cpp",
+    "transactions/operators/sharing.cpp",
+    "transactions/transactions/tx_add_sharding_info.cpp",
+    "transactions/transactions/tx_finish_async.cpp",
+    "transactions/tx_controller.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "backup/import/session.h",
+    "columnshard.h",
+    "columnshard_impl.h",
+    "export/session/session.h",
+    "transactions/tx_controller.h",
+  ]
+
+  plugins = [
+    "//ydb/core/tx/columnshard/backup",
+    "//ydb/core/tx/columnshard/data_sharing",
+    "//ydb/core/tx/columnshard/export",
+    "//ydb/core/tx/columnshard/normalizer",
+  ]
+
+  resources = [
+    {
+      path = "diagnostics/viz-global.js"
+      key = "viz-global.js"
+    },
+  ]
+}
+
+group("ev_ids") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/library/actors/core",
+  ]
+}
+
+library("write_actor") {
+  public_deps = [ "//ydb/core/tx/columnshard/engines/writer" ]
+
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/library/actors/core",
+    "//ydb/library/signals",
+  ]
+
+  sources = [ "write_actor.cpp" ]
+}

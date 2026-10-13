@@ -1,0 +1,6 @@
+group("rpc_request_settings") {
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/impl/endpoints",
+    "//ydb/public/sdk/cpp/src/library/time",
+  ]
+}

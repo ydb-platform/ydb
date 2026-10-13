@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",  # peerdir only
+    "//ydb/library/actors/helpers",
+    "//ydb/library/actors/interconnect",  # peerdir only
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [ "//ydb/library/actors/helpers/selfping_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/actors/helpers" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

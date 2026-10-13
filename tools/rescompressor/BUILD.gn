@@ -1,0 +1,7 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+executable("rescompressor") {
+  deps += [ "//library/cpp/resource" ]
+
+  sources = [ "main.cpp" ]
+}

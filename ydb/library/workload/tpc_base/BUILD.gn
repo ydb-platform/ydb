@@ -1,0 +1,27 @@
+library("tpc_base") {
+  public_deps = [ "//ydb/library/workload/benchmark_base" ]
+
+  deps = [
+    # "//library/cpp/colorizer",
+    # "//library/cpp/resource",
+    "//library/cpp/streams/factory/open_by_signature",
+    # "//ydb/library/accessor",  # peerdir only
+    # "//ydb/library/workload/abstract",
+    # "//ydb/public/lib/scheme_types",
+  ]
+
+  sources = [ "tpc_base.cpp" ]
+
+  serialize_enum_headers = [ "tpc_base.h" ]
+
+  resources = [
+    {
+      path = "//ydb/library/benchmarks/gen_queries/consts.yql"
+      key = "consts.yql"
+    },
+    {
+      path = "//ydb/library/benchmarks/gen_queries/consts_decimal.yql"
+      key = "consts_decimal.yql"
+    },
+  ]
+}

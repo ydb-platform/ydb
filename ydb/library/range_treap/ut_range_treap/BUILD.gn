@@ -1,0 +1,12 @@
+unittest_executable("ut_range_treap") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/range_treap",
+  ]
+
+  sources = [ "range_treap_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/range_treap" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

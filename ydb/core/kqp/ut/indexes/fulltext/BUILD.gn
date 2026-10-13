@@ -1,0 +1,30 @@
+unittest_executable("fulltext") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/threading/local_executor",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/tx/datashard",
+    "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
+    "//ydb/public/sdk/cpp/adapters/issue",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "kqp_indexes_fulltext_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

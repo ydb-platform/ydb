@@ -1,0 +1,10 @@
+library("formats") {
+  public_deps = [ "//ydb/core/scheme" ]
+
+  deps = [
+    # "//yql/essentials/parser/pg_wrapper",
+    "//yql/essentials/public/decimal",
+  ]
+
+  sources = [ "clickhouse_block.cpp" ]
+}

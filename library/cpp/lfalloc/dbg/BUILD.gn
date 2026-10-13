@@ -1,0 +1,10 @@
+contrib_library("dbg") {
+  deps = [
+    # "//library/cpp/lfalloc",
+    # "//library/cpp/malloc/api",  # peerdir only
+  ]
+
+  sources = [ "//library/cpp/lfalloc/lf_allocX64.cpp" ]
+
+  link_slot_provides = [ "allocator" ]
+}

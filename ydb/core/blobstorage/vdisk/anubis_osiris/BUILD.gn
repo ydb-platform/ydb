@@ -1,0 +1,32 @@
+library("anubis_osiris") {
+  public_deps = [
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/groupinfo",
+    # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/hulldb",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/random_provider",
+    "//ydb/core/blobstorage/backpressure",
+    "//ydb/core/blobstorage/vdisk/hulldb/barriers",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    "//ydb/core/protos",
+  ]
+
+  sources = [
+    "blobstorage_anubis.cpp",
+    "blobstorage_anubis_algo.cpp",
+    "blobstorage_anubis_osiris.cpp",
+    "blobstorage_anubisfinder.cpp",
+    "blobstorage_anubisproxy.cpp",
+    "blobstorage_anubisrunner.cpp",
+    "blobstorage_osiris.cpp",
+  ]
+}

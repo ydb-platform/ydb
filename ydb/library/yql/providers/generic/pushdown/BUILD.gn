@@ -1,0 +1,8 @@
+library("pushdown") {
+  public_deps = [
+    "//ydb/library/yql/providers/generic/connector/api/service/protos",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [ "yql_generic_match_predicate.cpp" ]
+}

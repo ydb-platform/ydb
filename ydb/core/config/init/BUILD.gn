@@ -1,0 +1,37 @@
+library("init") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/getopt/small",
+    "//library/cpp/svnversion",
+    "//ydb/core/base",
+    # "//ydb/core/config/validation",
+    "//ydb/core/driver_lib/cli_config_base",
+    # "//ydb/core/driver_lib/run:_self",
+    # "//ydb/core/driver_lib/run:config",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    "//ydb/library/yaml_config",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/config",
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+  ]
+
+  deps = [
+    # "//ydb/core/driver_lib/cli_base",  # peerdir only
+    "//ydb/library/yaml_json",
+    # "//yql/essentials/minikql",  # peerdir only
+    # "//yql/essentials/public/udf",  # peerdir only
+  ]
+
+  sources = [
+    "dummy.cpp",
+    "init.cpp",
+    "init_noop.cpp",
+  ]
+
+  serialize_enum_headers = [ "init.h" ]
+}

@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public/fetcher",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/scheme_board",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+  ]
+
+  sources = [ "//ydb/core/persqueue/public/fetcher/fetch_request_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/fetcher" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,14 @@
+unittest_executable("result") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  sources = [ "result_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

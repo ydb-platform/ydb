@@ -1,0 +1,16 @@
+library("breakpad") {
+  deps = [
+    # "//contrib/libs/breakpad/src",  # peerdir only
+    # "//contrib/libs/breakpad/src/client/linux",
+    # "//ydb/library/global_plugins",
+  ]
+
+  sources = [ "minidumps.cpp" ]
+
+  resources = [
+    {
+      path = "about.txt"
+      key = "internal_breakpad_about"
+    },
+  ]
+}

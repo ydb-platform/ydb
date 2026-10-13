@@ -1,0 +1,92 @@
+library("mind") {
+  public_deps = [
+    ":nameserver_table_builder",
+    ":tenant_node_enumeration",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/cms/console",
+    # "//ydb/core/engine/minikql",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/random_provider",
+    "//ydb/core/actorlib_impl",
+    # "//ydb/core/blobstorage",  # peerdir only
+    # "//ydb/core/blobstorage/crypto",  # peerdir only
+    # "//ydb/core/blobstorage/dsproxy/mock",  # peerdir only
+    # "//ydb/core/blobstorage/groupinfo",  # peerdir only
+    # "//ydb/core/blobstorage/incrhuge",  # peerdir only
+    # "//ydb/core/blobstorage/pdisk",  # peerdir only
+    # "//ydb/core/kesus/tablet",  # peerdir only
+    # "//ydb/core/keyvalue",  # peerdir only
+    # "//ydb/core/mind/bscontroller",  # peerdir only
+    "//ydb/core/mon",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/sys_view/processor",  # peerdir only
+    # "//ydb/core/tablet_flat/recovery",  # peerdir only
+    # "//ydb/core/test_tablet",  # peerdir only
+    # "//ydb/core/tx/replication/controller",  # peerdir only
+    "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    # "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "dynamic_nameserver.cpp",
+    "dynamic_nameserver_mon.cpp",
+    "labels_maintainer.cpp",
+    "lease_holder.cpp",
+    "local.cpp",
+    "node_broker.cpp",
+    "node_broker__extend_lease.cpp",
+    "node_broker__graceful_shutdown.cpp",
+    "node_broker__init_scheme.cpp",
+    "node_broker__load_state.cpp",
+    "node_broker__migrate_state.cpp",
+    "node_broker__register_node.cpp",
+    "node_broker__update_config.cpp",
+    "node_broker__update_config_subscription.cpp",
+    "node_broker__update_epoch.cpp",
+    "slot_indexes_pool.cpp",
+    "tenant_pool.cpp",
+    "tenant_slot_broker.cpp",
+    "tenant_slot_broker__alter_tenant.cpp",
+    "tenant_slot_broker__assign_free_slots.cpp",
+    "tenant_slot_broker__check_slot_status.cpp",
+    "tenant_slot_broker__init_scheme.cpp",
+    "tenant_slot_broker__load_state.cpp",
+    "tenant_slot_broker__update_config.cpp",
+    "tenant_slot_broker__update_node_location.cpp",
+    "tenant_slot_broker__update_pool_status.cpp",
+    "tenant_slot_broker__update_slot_status.cpp",
+  ]
+}
+
+library("nameserver_table_builder") {
+  public_deps = [ "//ydb/library/actors/interconnect" ]
+
+  deps = [ "//ydb/core/protos" ]
+
+  sources = [ "nameserver_table_builder.cpp" ]
+}
+
+library("tenant_node_enumeration") {
+  public_deps = [
+    # ":mind",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [ "//ydb/core/base" ]
+
+  sources = [ "tenant_node_enumeration.cpp" ]
+}

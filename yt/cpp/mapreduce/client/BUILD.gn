@@ -1,0 +1,62 @@
+library("client") {
+  public_deps = [
+    "//yt/cpp/mapreduce/common",
+    "//yt/cpp/mapreduce/http",
+    "//yt/cpp/mapreduce/interface",
+    "//yt/cpp/mapreduce/skiff",
+  ]
+
+  deps = [
+    "//library/cpp/digest/md5",
+    # "//library/cpp/iterator",
+    # "//library/cpp/json",
+    "//library/cpp/sighandler",
+    # "//library/cpp/threading/blocking_queue",
+    # "//library/cpp/threading/future",
+    # "//library/cpp/type_info",
+    # "//library/cpp/yson",
+    # "//library/cpp/yson/node",
+    # "//library/cpp/yt/assert",
+    "//library/cpp/yt/threading",
+    "//yt/cpp/mapreduce/http_client",
+    "//yt/cpp/mapreduce/interface/logging",
+    "//yt/cpp/mapreduce/io",
+    # "//yt/cpp/mapreduce/rpc_client",  # peerdir only
+    "//yt/yt/core",
+    "//yt/yt/core/http",
+    "//yt/yt/core/https",
+  ]
+
+  sources = [
+    "abortable_registry.cpp",
+    "batch_request_impl.cpp",
+    "client.cpp",
+    "client_reader.cpp",
+    "client_writer.cpp",
+    "dummy_job_profiler.cpp",
+    "file_fragment_writer.cpp",
+    "file_reader.cpp",
+    "file_writer.cpp",
+    "format_hints.cpp",
+    "init.cpp",
+    "lock.cpp",
+    "operation.cpp",
+    "operation_helpers.cpp",
+    "operation_preparer.cpp",
+    "operation_tracker.cpp",
+    "partition_reader.cpp",
+    "prepare_operation.cpp",
+    "py_helpers.cpp",
+    "retry_heavy_write_request.cpp",
+    "retryful_writer.cpp",
+    "retryful_writer_v2.cpp",
+    "retryless_writer.cpp",
+    "skiff.cpp",
+    "structured_table_formats.cpp",
+    "transaction.cpp",
+    "transaction_pinger.cpp",
+    "yt_poller.cpp",
+  ]
+
+  serialize_enum_headers = [ "structured_table_formats.h" ]
+}

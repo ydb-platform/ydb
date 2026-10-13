@@ -1,0 +1,11 @@
+library("local_rpc") {
+  public_deps = [ "//ydb/core/kqp/provider" ]
+
+  deps = [
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/library/ydb_issue",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [ "helper.cpp" ]
+}

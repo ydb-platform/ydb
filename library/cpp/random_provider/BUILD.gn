@@ -1,0 +1,3 @@
+library("random_provider") {
+  sources = [ "random_provider.cpp" ]
+}

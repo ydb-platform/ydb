@@ -1,0 +1,46 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/http/simple",
+    "//library/cpp/json",
+    "//library/cpp/retry",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/basics",
+    "//ydb/library/testlib/solomon_helpers",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/providers/common/ut_helpers",
+    "//ydb/library/yql/providers/solomon/actors",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/computation/llvm16",  # peerdir only
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/providers/common/comp_nodes",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "dq_solomon_write_actor_ut.cpp",
+    "ut_helpers.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/providers/solomon/actors" ]
+
+  test_depends_unbuilt = [
+    "//ydb/library/yql/tools/solomon_emulator/bin",
+    "//ydb/library/yql/tools/solomon_emulator/recipe",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

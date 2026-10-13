@@ -1,0 +1,11 @@
+library("linear_regression") {
+  public_deps = [
+    # "//library/cpp/accurate_accumulate",
+  ]
+
+  sources = [
+    "linear_regression.cpp",
+    "unimodal.cpp",
+    "welford.cpp",
+  ]
+}

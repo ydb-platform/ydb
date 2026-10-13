@@ -1,0 +1,31 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/core/tx/coordinator",
+    "//ydb/core/tx/coordinator/public",
+    "//ydb/public/api/grpc",
+  ]
+
+  sources = [
+    "//ydb/core/tx/coordinator/coordinator_ut.cpp",
+    "//ydb/core/tx/coordinator/coordinator_volatile_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/coordinator" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

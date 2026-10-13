@@ -1,0 +1,16 @@
+library("memory_log") {
+  public_deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/threading/queue",
+  ]
+
+  deps = [
+    "//contrib/libs/linuxvdso",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "memlog.cpp",
+    "mmap.cpp",
+  ]
+}

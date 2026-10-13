@@ -1,0 +1,26 @@
+unittest_executable("ut_blob_depot_fat") {
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/blob_depot",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/protos",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp",
+    "//ydb/core/blobstorage/ut_blobstorage/blob_depot_fat.cpp",
+    "//ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/ut_blobstorage" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,114 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/monlib/encode",
+    "//library/cpp/monlib/encode/json",
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/driver_lib/cli_config_base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/scheme",
+    "//ydb/core/security",  # peerdir only
+    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/ldap_auth_provider:test_utils",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/library/testlib/service_mocks/ldap_mock",
+    "//ydb/library/ut",
+    "//ydb/library/ydb_issue/proto",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/api/protos",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/lib/experimental",
+    "//ydb/public/lib/json_value",
+    "//ydb/public/lib/ut_helpers",
+    "//ydb/public/lib/ydb_cli/commands",  # peerdir only
+    "//ydb/public/lib/ydb_cli/commands/sdk_core_access",
+    "//ydb/public/lib/yson_value",
+    "//ydb/public/sdk/cpp/src/client/coordination",
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/export",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/extension_common",
+    "//ydb/public/sdk/cpp/src/client/extensions/solomon_stats",
+    "//ydb/public/sdk/cpp/src/client/import",
+    "//ydb/public/sdk/cpp/src/client/monitoring",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/grpc/client",
+    "//ydb/public/sdk/cpp/src/library/issue",
+    "//ydb/services/ydb",
+    "//yql/essentials/core/issue",
+    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/minikql/dom",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/jsonpath",  # peerdir only
+    "//yql/essentials/public/issue",
+    "//yql/essentials/public/udf",
+  ]
+
+  sources = [
+    "//ydb/services/ydb/ydb_bulk_upsert_olap_ut.cpp",
+    "//ydb/services/ydb/ydb_bulk_upsert_ut.cpp",
+    "//ydb/services/ydb/ydb_coordination_ut.cpp",
+    "//ydb/services/ydb/ydb_import_ut.cpp",
+    "//ydb/services/ydb/ydb_index_table_ut.cpp",
+    "//ydb/services/ydb/ydb_ldap_login_ut.cpp",
+    "//ydb/services/ydb/ydb_login_ut.cpp",
+    "//ydb/services/ydb/ydb_logstore_ut.cpp",
+    "//ydb/services/ydb/ydb_monitoring_ut.cpp",
+    "//ydb/services/ydb/ydb_object_storage_ut.cpp",
+    "//ydb/services/ydb/ydb_olapstore_ut.cpp",
+    "//ydb/services/ydb/ydb_query_ut.cpp",
+    "//ydb/services/ydb/ydb_read_rows_ut.cpp",
+    "//ydb/services/ydb/ydb_register_node_ut.cpp",
+    "//ydb/services/ydb/ydb_scripting_ut.cpp",
+    "//ydb/services/ydb/ydb_stats_ut.cpp",
+    "//ydb/services/ydb/ydb_table_ut.cpp",
+    "//ydb/services/ydb/ydb_ut.cpp",
+    "//ydb/services/ydb/ydb_whoami_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/services/ydb" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/signer",
+  ]
+
+  sources = [ "signer_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/signer" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

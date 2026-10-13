@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/syncer",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/syncer" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

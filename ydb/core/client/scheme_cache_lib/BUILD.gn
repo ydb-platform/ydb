@@ -1,0 +1,21 @@
+library("scheme_cache_lib") {
+  public_deps = [
+    # "//ydb/core/base",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+    # "//library/cpp/threading/future",  # peerdir only
+    "//ydb/core/client/minikql_compile:db_key_resolver",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/scheme",  # peerdir only
+    # "//ydb/core/tablet",  # peerdir only
+    # "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    # "//ydb/library/actors/core",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+  ]
+
+  sources = [ "yql_db_scheme_resolver.cpp" ]
+}

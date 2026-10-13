@@ -1,0 +1,112 @@
+library("server") {
+  public_deps = [
+    # "//library/cpp/monlib/service",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/uri",
+    "//ydb/core/base",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/mon",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/grpc/server",
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/library/services",
+    "//ydb/public/api/protos",
+    # "//ydb/public/lib/base",
+    # "//ydb/public/lib/deprecated/client",
+    # "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/services/persqueue_v1/actors",
+  ]
+
+  deps = [
+    # "//contrib/libs/grpc",
+    # "//library/cpp/deprecated/atomic",  # peerdir only
+    # "//library/cpp/json",
+    "//library/cpp/messagebus",
+    "//library/cpp/messagebus/protobuf",  # peerdir only
+    "//library/cpp/monlib/messagebus",
+    "//library/cpp/protobuf/json",
+    # "//library/cpp/protobuf/util",  # peerdir only
+    # "//library/cpp/random_provider",
+    # "//library/cpp/threading/future",  # peerdir only
+    # "//ydb/core/actorlib_impl",  # peerdir only
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/events",
+    "//ydb/core/client/metadata",
+    # "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    # "//ydb/core/cms",
+    # "//ydb/core/cms/console",
+    # "//ydb/core/engine",  # peerdir only
+    # "//ydb/core/engine/minikql",  # peerdir only
+    "//ydb/core/grpc_services",
+    # "//ydb/core/jaeger_tracing",
+    # "//ydb/core/keyvalue",  # peerdir only
+    # "//ydb/core/kqp/common",
+    # "//ydb/core/mind",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/persqueue",  # peerdir only
+    # "//ydb/core/persqueue/public",
+    # "//ydb/core/persqueue/public/cluster_tracker",
+    # "//ydb/core/persqueue/writer",  # peerdir only
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/scheme",
+    "//ydb/core/security",
+    # "//ydb/core/security/certificate_check",  # peerdir only
+    # "//ydb/core/test_tablet",
+    # "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/core/ydb_convert",  # peerdir only
+    # "//ydb/core/ymq/actor",  # peerdir only
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    "//ydb/library/actors/protos",
+    # "//ydb/library/protobuf_printer",
+    # "//ydb/library/wilson_ids",
+    # "//ydb/library/ydb_issue",
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/api/grpc/draft",  # peerdir only
+    # "//ydb/public/lib/deprecated/kicli",
+    # "//ydb/public/sdk/cpp/src/client/resources",
+    # "//ydb/services/persqueue_v1",  # link slot
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "//ydb/core/grpc_services/legacy/rpc_legacy.cpp",
+    "grpc_proxy_status.cpp",
+    "grpc_server.cpp",
+    "ic_nodes_cache_service.cpp",
+    "msgbus_blobstorage_config.cpp",
+    "msgbus_http_server.cpp",
+    "msgbus_server.cpp",
+    "msgbus_server_cms.cpp",
+    "msgbus_server_configdummy.cpp",
+    "msgbus_server_console.cpp",
+    "msgbus_server_drain_node.cpp",
+    "msgbus_server_fill_node.cpp",
+    "msgbus_server_hive_create_tablet.cpp",
+    "msgbus_server_ic_debug.cpp",
+    "msgbus_server_node_registration.cpp",
+    "msgbus_server_persqueue.cpp",
+    "msgbus_server_pq_metacache.cpp",
+    "msgbus_server_pq_metarequest.cpp",
+    "msgbus_server_pq_read_session_info.cpp",
+    "msgbus_server_proxy.cpp",
+    "msgbus_server_resolve_node.cpp",
+    "msgbus_server_scheme_initroot.cpp",
+    "msgbus_server_scheme_request.cpp",
+    "msgbus_server_tablet_counters.cpp",
+    "msgbus_server_tablet_state.cpp",
+    "msgbus_server_test_shard_request.cpp",
+    "msgbus_server_tx_request.cpp",
+    "msgbus_server_types.cpp",
+  ]
+}

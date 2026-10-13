@@ -1,0 +1,38 @@
+library("logical") {
+  public_deps = [
+    "//ydb/core/kqp/opt:helpers",
+    # "//yql/essentials/ast",
+    "//yql/essentials/core/cbo",
+  ]
+
+  deps = [
+    "//ydb/core/base",
+    # "//ydb/core/kqp/common",
+    "//ydb/core/kqp/opt/physical",
+    "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+    # "//ydb/library/yql/dq/common",  # peerdir only
+    "//ydb/library/yql/dq/opt",
+    # "//ydb/library/yql/providers/dq/common",
+    # "//yql/essentials/core",
+    "//yql/essentials/core/common_opt",
+    "//yql/essentials/core/extract_predicate",
+    "//yql/essentials/providers/common/transform",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "kqp_opt_cbo.cpp",
+    "kqp_opt_log.cpp",
+    "kqp_opt_log_effects.cpp",
+    "kqp_opt_log_extract.cpp",
+    "kqp_opt_log_helpers.cpp",
+    "kqp_opt_log_indexes.cpp",
+    "kqp_opt_log_join.cpp",
+    "kqp_opt_log_ranges.cpp",
+    "kqp_opt_log_ranges_predext.cpp",
+    "kqp_opt_log_sort.cpp",
+    "kqp_opt_log_sqlin.cpp",
+    "kqp_opt_log_sqlin_compact.cpp",
+  ]
+}

@@ -1,0 +1,6 @@
+group("common") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/data_sharing/common/context",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/common/session",  # peerdir only
+  ]
+}

@@ -1,0 +1,15 @@
+library("pg_dummy") {
+  deps = [
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/sql/settings",
+  ]
+
+  sources = [ "pg_sql_dummy.cpp" ]
+
+  link_slot_provides = [
+    "yql_pg_runtime",
+    "yql_pg_sql_translator",
+  ]
+}

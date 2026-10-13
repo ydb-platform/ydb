@@ -1,0 +1,9 @@
+library("cfg") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "cfg.cpp" ]
+}

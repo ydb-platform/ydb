@@ -1,0 +1,12 @@
+linked_executable("pq_read") {
+  deps = [
+    "//library/cpp/colorizer",  # peerdir only
+    "//library/cpp/getopt",
+    "//library/cpp/threading/future",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

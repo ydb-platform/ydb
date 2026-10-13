@@ -1,0 +1,9 @@
+library("api") {
+  public_deps = [
+    # "//library/cpp/yt/cpu_clock",
+    "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+  ]
+
+  sources = [ "api.cpp" ]
+}

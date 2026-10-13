@@ -1,0 +1,65 @@
+linked_executable("worker_node") {
+  deps = [
+    "//library/cpp/digest/md5",
+    "//library/cpp/getopt",
+    "//library/cpp/svnversion",
+    "//library/cpp/threading/future",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/spilling",
+    "//ydb/library/yql/dq/comp_nodes",
+    "//ydb/library/yql/dq/transform",
+    "//ydb/library/yql/providers/clickhouse/actors",
+    "//ydb/library/yql/providers/dq/actors",
+    "//ydb/library/yql/providers/dq/actors/yt",
+    "//ydb/library/yql/providers/dq/global_worker_manager",
+    "//ydb/library/yql/providers/dq/metrics",
+    "//ydb/library/yql/providers/dq/runtime",
+    "//ydb/library/yql/providers/dq/service",
+    "//ydb/library/yql/providers/dq/stats_collector",
+    "//ydb/library/yql/providers/dq/task_runner",
+    "//ydb/library/yql/providers/dq/worker_manager",
+    "//ydb/library/yql/providers/pq/async_io",
+    "//ydb/library/yql/providers/pq/gateway/native",
+    "//ydb/library/yql/providers/pq/proto",  # peerdir only
+    "//ydb/library/yql/providers/s3/actors",
+    "//ydb/library/yql/providers/ydb/actors",
+    "//ydb/library/yql/providers/ydb/comp_nodes",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/codecs",  # peerdir only
+    "//yql/essentials/core/dq_integration/transform",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/providers/common/comp_nodes",
+    "//yql/essentials/providers/common/proto",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/utils",  # peerdir only
+    "//yql/essentials/utils/backtrace",
+    "//yql/essentials/utils/failure_injector",
+    "//yql/essentials/utils/log",
+    "//yql/essentials/utils/log/proto",
+    "//yql/essentials/utils/network",
+    "//yt/cpp/mapreduce/client",  # peerdir only
+    "//yt/yql/providers/yt/codec/codegen",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq",
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/mkql_dq",
+    "//yt/yt/core",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

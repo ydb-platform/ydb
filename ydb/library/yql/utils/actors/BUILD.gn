@@ -1,0 +1,19 @@
+library("actors") {
+  public_deps = [
+    # "//library/cpp/retry",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/library/yql/providers/solomon/proto",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    # "//ydb/library/yql/providers/common/token_accessor/client",  # peerdir only
+    # "//yql/essentials/public/types",  # peerdir only
+  ]
+
+  sources = [
+    "http_sender_actor.cpp",
+    "rich_actor.cpp",
+  ]
+}

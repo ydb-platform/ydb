@@ -1,0 +1,20 @@
+library("utils") {
+  public_deps = [
+    # "//contrib/libs/grpc",
+    # "//library/cpp/logger",
+    # "//library/cpp/threading/future",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/topic/common",
+  ]
+
+  deps = [ "//ydb/public/sdk/cpp/src/library/string_utils/helpers" ]
+
+  sources = [
+    "describe.cpp",
+    "local_partition.cpp",
+    "managed_executor.cpp",
+    "setup.cpp",
+    "trace.cpp",
+  ]
+}

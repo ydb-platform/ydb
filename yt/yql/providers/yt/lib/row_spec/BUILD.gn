@@ -1,0 +1,23 @@
+library("row_spec") {
+  public_deps = [
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes_gen",
+    "//yql/essentials/providers/common/schema/expr",
+  ]
+
+  deps = [
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/core/issue",
+    # "//yql/essentials/providers/common/codec",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/schema",
+    "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/common",
+    # "//yt/yql/providers/yt/expr_nodes",
+    "//yt/yql/providers/yt/lib/schema",
+  ]
+
+  sources = [ "yql_row_spec.cpp" ]
+}

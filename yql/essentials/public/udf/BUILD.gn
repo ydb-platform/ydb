@@ -1,0 +1,38 @@
+library("udf") {
+  public_deps = [
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/atomic",
+    # "//library/cpp/deprecated/enum_codegen",
+    "//yql/essentials/public/decimal",
+    "//yql/essentials/public/types",
+    # "//yql/essentials/utils",
+  ]
+
+  deps = [ "//library/cpp/resource" ]
+
+  sources = [
+    "udf_allocator.cpp",
+    "udf_counter.cpp",
+    "udf_data_type.cpp",
+    "udf_helpers.cpp",
+    "udf_log.cpp",
+    "udf_registrator.cpp",
+    "udf_static_registry.cpp",
+    "udf_string.cpp",
+    "udf_type_builder.cpp",
+    "udf_type_inspection.cpp",
+    "udf_type_printer.cpp",
+    "udf_types.cpp",
+    "udf_validate.cpp",
+    "udf_value.cpp",
+    "udf_value_builder.cpp",
+    "udf_version.cpp",
+  ]
+
+  link_slot_interface = "YqlServicePolicy"
+
+  link_slot_headers = [
+    "udf_allocator.h",
+    "udf_terminator.h",
+  ]
+}

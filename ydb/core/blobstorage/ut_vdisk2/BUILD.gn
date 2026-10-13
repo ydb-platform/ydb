@@ -1,0 +1,33 @@
+unittest_executable("ut_vdisk2") {
+  deps = [
+    "//contrib/libs/xxhash",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/backpressure",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk/mock",
+    "//ydb/core/blobstorage/vdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/huge",
+    "//ydb/core/blobstorage/vdisk/hullop",
+    "//ydb/core/cms/console",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/tx/scheme_board",  # peerdir only
+    "//ydb/core/util",
+    "//ydb/core/util/actorsys_test",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+  ]
+
+  sources = [
+    "compaction.cpp",
+    "huge.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

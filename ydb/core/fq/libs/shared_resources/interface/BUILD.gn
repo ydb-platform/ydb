@@ -1,0 +1,7 @@
+library("interface") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [ "shared_resources.cpp" ]
+}

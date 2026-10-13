@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("type_index") {
+    public_deps = [
+        "//contrib/restricted/boost/container_hash",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

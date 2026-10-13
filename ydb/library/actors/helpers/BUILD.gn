@@ -1,0 +1,18 @@
+library("helpers") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//library/cpp/containers/stack_vector",
+    "//library/cpp/sliding_window",
+  ]
+
+  sources = [
+    "activeactors.cpp",
+    "collector_counters.cpp",
+    "pool_stats_collector.cpp",
+    "selfping_actor.cpp",
+  ]
+}

@@ -1,0 +1,7 @@
+library("interface") {
+  public_deps = [
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_yt_service_discovery.cpp" ]
+}

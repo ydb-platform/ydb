@@ -1,0 +1,11 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("IRReader") {
+    deps = [
+        "//contrib/libs/llvm16/lib/AsmParser",
+        "//contrib/libs/llvm16/lib/Bitcode:Reader",
+        "//contrib/libs/llvm16/lib/IR",
+    ]
+
+    sources = [ "IRReader.cpp" ]
+}

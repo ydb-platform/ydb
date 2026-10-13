@@ -1,0 +1,13 @@
+protobuf_library("v1") {
+  public_deps = [
+    "//contrib/libs/googleapis-common-protos",
+    "//ydb/public/api/client/nc_private",
+  ]
+
+  sources = [
+    "metadata.proto",
+    "operation.proto",
+  ]
+
+  generate_grpc_services = true
+}

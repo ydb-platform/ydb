@@ -1,0 +1,24 @@
+library("lwtrace") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/atomic",
+    "//library/cpp/lwtrace/protos",
+  ]
+
+  sources = [
+    "check.cpp",
+    "control.cpp",
+    "custom_action.cpp",
+    "kill_action.cpp",
+    "log_shuttle.cpp",
+    "perf.cpp",
+    "probes.cpp",
+    "shuttle.cpp",
+    "sleep_action.cpp",
+    "start.cpp",
+    "stderr_writer.cpp",
+    "symbol.cpp",
+    "trace.cpp",
+  ]
+}

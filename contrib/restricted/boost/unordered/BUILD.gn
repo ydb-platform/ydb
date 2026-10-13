@@ -1,0 +1,16 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("unordered") {
+    public_deps = [
+        "//contrib/restricted/boost/assert",
+        "//contrib/restricted/boost/container_hash",
+        "//contrib/restricted/boost/move",
+        "//contrib/restricted/boost/predef",
+        "//contrib/restricted/boost/throw_exception",
+        "//contrib/restricted/boost/tuple",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

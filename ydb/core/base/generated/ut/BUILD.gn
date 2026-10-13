@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base/generated",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "//ydb/core/base/generated/runtime_feature_flags_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/base/generated" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

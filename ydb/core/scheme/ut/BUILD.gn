@@ -1,0 +1,27 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
+    "//yql/essentials/minikql",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/scheme/scheme_borders_ut.cpp",
+    "//ydb/core/scheme/scheme_ranges_ut.cpp",
+    "//ydb/core/scheme/scheme_tablecell_ut.cpp",
+    "//ydb/core/scheme/scheme_types_proto_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/scheme" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

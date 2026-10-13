@@ -1,0 +1,35 @@
+library("complete") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//yql/essentials/parser/lexer_common",
+    "//yql/essentials/sql/v1/complete/core",
+    # "//yql/essentials/sql/v1/complete/name/service",
+    "//yql/essentials/sql/v1/complete/name/service/ranking",
+    "//yql/essentials/sql/v1/complete/text",
+    "//yql/essentials/sql/v1/lexer",
+  ]
+
+  deps = [
+    "//yql/essentials/core/issue",
+    "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",  # peerdir only
+    "//yql/essentials/parser/antlr_ast/gen/v1_antlr4",  # peerdir only
+    "//yql/essentials/sql/v1/complete/analysis/global",
+    "//yql/essentials/sql/v1/complete/antlr4",
+    # "//yql/essentials/sql/v1/complete/name/object/simple/static",
+    "//yql/essentials/sql/v1/complete/name/service/binding",
+    "//yql/essentials/sql/v1/complete/name/service/column",
+    # "//yql/essentials/sql/v1/complete/name/service/schema",
+    # "//yql/essentials/sql/v1/complete/name/service/static",
+    "//yql/essentials/sql/v1/complete/name/service/union",
+    "//yql/essentials/sql/v1/complete/syntax",
+  ]
+
+  sources = [
+    "analysis/local/cursor_token_context.cpp",
+    "analysis/local/local.cpp",
+    "analysis/local/parser_call_stack.cpp",
+    "configuration.cpp",
+    "name_mapping.cpp",
+    "sql_complete.cpp",
+  ]
+}

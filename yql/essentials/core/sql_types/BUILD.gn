@@ -1,0 +1,19 @@
+library("sql_types") {
+  public_deps = [
+    "//yql/essentials/core/issue",
+    # "//yql/essentials/public/decimal",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "match_recognize.cpp",
+    "normalize_name.cpp",
+    "simple_types.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "hopping.h",
+    "match_recognize.h",
+    "yql_atom_enums.h",
+  ]
+}

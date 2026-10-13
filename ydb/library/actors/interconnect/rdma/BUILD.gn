@@ -1,0 +1,23 @@
+library("rdma") {
+  public_deps = [
+    "//library/cpp/time_provider",
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    "//contrib/libs/ibdrv",
+    "//contrib/libs/protobuf",  # peerdir only
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/monlib/metrics",
+    "//ydb/library/actors/interconnect/address",
+  ]
+
+  sources = [
+    "ctx.cpp",
+    "ctx_open.cpp",
+    "link_manager.cpp",
+    "mem_pool.cpp",
+    "rdma.cpp",
+  ]
+}

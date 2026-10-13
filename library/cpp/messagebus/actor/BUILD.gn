@@ -1,0 +1,9 @@
+library("actor") {
+  public_deps = [ "//library/cpp/deprecated/atomic" ]
+
+  sources = [
+    "executor.cpp",
+    "thread_extra.cpp",
+    "what_thread_does.cpp",
+  ]
+}

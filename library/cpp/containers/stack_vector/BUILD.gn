@@ -1,0 +1,3 @@
+library("stack_vector") {
+  sources = [ "stack_vec.cpp" ]
+}

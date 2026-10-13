@@ -1,0 +1,11 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("utility") {
+    public_deps = [
+        "//contrib/restricted/boost/preprocessor",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

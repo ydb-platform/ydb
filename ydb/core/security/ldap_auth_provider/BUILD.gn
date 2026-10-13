@@ -1,0 +1,28 @@
+library("ldap_auth_provider") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    "//contrib/libs/openldap",
+    "//ydb/core/security",
+    "//ydb/core/util",
+    "//ydb/library/actors/core",
+    "//ydb/library/login/protos",
+  ]
+
+  sources = [
+    "ldap_auth_provider.cpp",
+    "ldap_auth_provider_linux.cpp",
+    "ldap_utils.cpp",
+  ]
+}
+
+library("test_utils") {
+  public_deps = [ "//ydb/core/security/certificate_check" ]
+
+  deps = [ "//ydb/core/protos" ]
+
+  sources = [ "test_utils/test_settings.cpp" ]
+}

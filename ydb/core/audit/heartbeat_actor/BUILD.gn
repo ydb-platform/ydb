@@ -1,0 +1,10 @@
+library("heartbeat_actor") {
+  deps = [
+    "//ydb/core/audit",
+    "//ydb/core/audit/audit_config",
+    "//ydb/library/actors/core",
+    "//ydb/library/yverify_stream",
+  ]
+
+  sources = [ "heartbeat_actor.cpp" ]
+}

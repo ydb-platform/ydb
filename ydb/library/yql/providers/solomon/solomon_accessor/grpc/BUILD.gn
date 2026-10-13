@@ -1,0 +1,7 @@
+protobuf_library("grpc") {
+  public_deps = [ "//contrib/libs/googleapis-common-protos" ]
+
+  sources = [ "data_service.proto" ]
+
+  generate_grpc_services = true
+}

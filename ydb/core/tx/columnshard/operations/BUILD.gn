@@ -1,0 +1,130 @@
+library("batch_builder") {
+  public_deps = [
+    # ":common",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/conveyor/usage",
+    # "//ydb/core/tx/data_events",
+  ]
+
+  deps = [
+    ":slice_builder",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/scheme",
+    "//ydb/core/tx/columnshard/data_reader",
+    "//ydb/core/tx/columnshard/engines/predicate",
+    # "//ydb/core/tx/columnshard/engines/writer",
+    "//ydb/core/tx/columnshard/engines/writer:buffer",
+    # "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/core/tx/data_events/common",
+    # "//ydb/library/conclusion",
+    # "//ydb/library/formats/arrow",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "batch_builder/builder.cpp",
+    "batch_builder/merger.cpp",
+    "batch_builder/restore.cpp",
+  ]
+}
+
+library("common") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+  ]
+
+  deps = [
+    # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/writer",  # peerdir only
+    # "//ydb/core/tx/conveyor/usage",  # peerdir only
+    # "//ydb/core/tx/data_events",  # peerdir only
+  ]
+
+  sources = [ "common/context.cpp" ]
+}
+
+library("events") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard:ev_ids",
+    # "//ydb/core/tx/data_events",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [ "//ydb/core/tx/columnshard/engines" ]
+
+  sources = [ "events.cpp" ]
+}
+
+library("operations") {
+  public_deps = [
+    ":common",
+    ":events",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/transactions/locks",
+    "//ydb/core/tx/data_events",
+    # "//ydb/core/tx/locks",
+    # "//ydb/library/accessor",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    ":batch_builder",
+    ":slice_builder",  # peerdir only
+    # "//library/cpp/time_provider",
+    "//ydb/core/base",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/blobs_action",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/data_reader",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/writer",
+    # "//ydb/core/tx/conveyor/usage",
+    "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/services/metadata",  # peerdir only
+  ]
+
+  sources = [
+    "manager.cpp",
+    "write.cpp",
+    "write_data.cpp",
+  ]
+}
+
+library("slice_builder") {
+  public_deps = [
+    ":common",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/conveyor/usage",
+    "//ydb/core/tx/data_events",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    ":events",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/writer",
+    "//ydb/core/tx/columnshard/engines/writer:buffer",
+    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard:write_actor",  # peerdir only
+  ]
+
+  sources = [
+    "slice_builder/builder.cpp",
+    "slice_builder/pack_builder.cpp",
+  ]
+}

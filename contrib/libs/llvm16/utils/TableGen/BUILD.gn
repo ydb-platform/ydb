@@ -1,0 +1,90 @@
+contrib_library("GlobalISel") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Support",
+        "//contrib/libs/llvm16/lib/TableGen",
+    ]
+
+    sources = [
+        "GlobalISel/CodeExpander.cpp",
+        "GlobalISel/GIMatchDag.cpp",
+        "GlobalISel/GIMatchDagEdge.cpp",
+        "GlobalISel/GIMatchDagInstr.cpp",
+        "GlobalISel/GIMatchDagOperands.cpp",
+        "GlobalISel/GIMatchDagPredicate.cpp",
+        "GlobalISel/GIMatchDagPredicateDependencyEdge.cpp",
+        "GlobalISel/GIMatchTree.cpp",
+    ]
+
+    configs = [ "//contrib/libs/llvm16:public_config" ]
+}
+
+contrib_tool("TableGen") {
+    output_name = "llvm-tblgen"
+
+    deps = [
+        ":GlobalISel",
+        "//contrib/libs/llvm16/lib/Support",
+        "//contrib/libs/llvm16/lib/TableGen",
+    ]
+
+    sources = [
+        "AsmMatcherEmitter.cpp",
+        "AsmWriterEmitter.cpp",
+        "AsmWriterInst.cpp",
+        "Attributes.cpp",
+        "CTagsEmitter.cpp",
+        "CallingConvEmitter.cpp",
+        "CodeEmitterGen.cpp",
+        "CodeGenDAGPatterns.cpp",
+        "CodeGenHwModes.cpp",
+        "CodeGenInstruction.cpp",
+        "CodeGenMapTable.cpp",
+        "CodeGenRegisters.cpp",
+        "CodeGenSchedule.cpp",
+        "CodeGenTarget.cpp",
+        "CompressInstEmitter.cpp",
+        "DAGISelEmitter.cpp",
+        "DAGISelMatcher.cpp",
+        "DAGISelMatcherEmitter.cpp",
+        "DAGISelMatcherGen.cpp",
+        "DAGISelMatcherOpt.cpp",
+        "DFAEmitter.cpp",
+        "DFAPacketizerEmitter.cpp",
+        "DXILEmitter.cpp",
+        "DecoderEmitter.cpp",
+        "DirectiveEmitter.cpp",
+        "DisassemblerEmitter.cpp",
+        "ExegesisEmitter.cpp",
+        "FastISelEmitter.cpp",
+        "GICombinerEmitter.cpp",
+        "GlobalISelEmitter.cpp",
+        "InfoByHwMode.cpp",
+        "InstrDocsEmitter.cpp",
+        "InstrInfoEmitter.cpp",
+        "IntrinsicEmitter.cpp",
+        "OptEmitter.cpp",
+        "OptParserEmitter.cpp",
+        "OptRSTEmitter.cpp",
+        "PredicateExpander.cpp",
+        "PseudoLoweringEmitter.cpp",
+        "RISCVTargetDefEmitter.cpp",
+        "RegisterBankEmitter.cpp",
+        "RegisterInfoEmitter.cpp",
+        "SDNodeProperties.cpp",
+        "SearchableTableEmitter.cpp",
+        "SubtargetEmitter.cpp",
+        "SubtargetFeatureInfo.cpp",
+        "TableGen.cpp",
+        "Types.cpp",
+        "VarLenCodeEmitterGen.cpp",
+        "WebAssemblyDisassemblerEmitter.cpp",
+        "X86DisassemblerTables.cpp",
+        "X86EVEX2VEXTablesEmitter.cpp",
+        "X86FoldTablesEmitter.cpp",
+        "X86MnemonicTables.cpp",
+        "X86ModRMFilters.cpp",
+        "X86RecognizableInstr.cpp",
+    ]
+
+    configs = [ "//contrib/libs/llvm16:public_config" ]
+}

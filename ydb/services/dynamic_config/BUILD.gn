@@ -1,0 +1,18 @@
+library("dynamic_config") {
+  public_deps = [
+    "//ydb/core/grpc_services/base",
+    "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",
+    # "//ydb/core/mind",  # peerdir only
+    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/public/api/grpc",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/resources",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

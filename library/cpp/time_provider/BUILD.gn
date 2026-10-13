@@ -1,0 +1,7 @@
+library("time_provider") {
+  sources = [
+    "monotonic.cpp",
+    "monotonic_provider.cpp",
+    "time_provider.cpp",
+  ]
+}

@@ -1,0 +1,67 @@
+library("abstract") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/engines/changes/compaction/common",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/library/accessor",
+  ]
+
+  sources = [ "abstract/merger.cpp" ]
+}
+
+library("compaction") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines/changes/abstract",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/library/formats/arrow/splitter",
+  ]
+
+  deps = [
+    ":abstract",
+    ":dictionary",  # peerdir only
+    ":sparsed",
+    # "//ydb/core/tx/columnshard/engines/changes/compaction/common",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/changes/compaction/plain",
+    "//ydb/core/tx/columnshard/engines/changes/compaction/sub_columns",  # peerdir only
+    # "//ydb/core/tx/columnshard/splitter",
+    # "//ydb/core/tx/tiering",  # peerdir only
+    # "//ydb/library/formats/arrow/simple_builder",
+  ]
+
+  sources = [ "merger.cpp" ]
+}
+
+library("dictionary") {
+  deps = [
+    ":abstract",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/core/formats/arrow/accessor/sparsed",
+    "//ydb/core/formats/arrow/accessor:composite",
+    "//ydb/core/formats/arrow/accessor:dictionary",
+    # "//ydb/core/formats/arrow/switch",
+    # "//ydb/core/tx/columnshard/engines/changes/compaction/common",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/portions",
+  ]
+
+  sources = [ "dictionary/logic.cpp" ]
+}
+
+library("sparsed") {
+  public_deps = [
+    # ":abstract",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/sparsed",
+  ]
+
+  deps = [
+    # "//ydb/core/formats/arrow/switch",
+    # "//ydb/core/tx/columnshard/engines/changes/compaction/common",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/portions",
+  ]
+
+  sources = [ "sparsed/logic.cpp" ]
+}

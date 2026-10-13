@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public/partition_index_generator",
+  ]
+
+  sources = [ "//ydb/core/persqueue/public/partition_index_generator/partition_index_generator_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/partition_index_generator" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

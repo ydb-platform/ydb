@@ -1,0 +1,50 @@
+library("provider") {
+  public_deps = [
+    # "//ydb/library/yql/providers/common/db_id_async_resolver",
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//yql/essentials/core",
+    # "//yql/essentials/providers/common/config",
+    "//yql/essentials/providers/common/proto",
+    # "//yql/essentials/utils/log",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/random_provider",  # peerdir only
+    # "//library/cpp/time_provider",  # peerdir only
+    # "//ydb/library/yql/dq/expr_nodes",
+    # "//ydb/library/yql/providers/clickhouse/expr_nodes",
+    "//ydb/library/yql/providers/clickhouse/proto",
+    # "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
+    # "//yql/essentials/ast",
+    # "//yql/essentials/core/dq_integration",
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/core/type_ann",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/comp_nodes",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/providers/common/dq",
+    # "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/providers/common/transform",
+  ]
+
+  sources = [
+    "yql_clickhouse_datasink.cpp",
+    "yql_clickhouse_datasink_execution.cpp",
+    "yql_clickhouse_datasink_type_ann.cpp",
+    "yql_clickhouse_datasource.cpp",
+    "yql_clickhouse_datasource_type_ann.cpp",
+    "yql_clickhouse_dq_integration.cpp",
+    "yql_clickhouse_io_discovery.cpp",
+    "yql_clickhouse_load_meta.cpp",
+    "yql_clickhouse_logical_opt.cpp",
+    "yql_clickhouse_mkql_compiler.cpp",
+    "yql_clickhouse_physical_opt.cpp",
+    "yql_clickhouse_provider.cpp",
+    "yql_clickhouse_settings.cpp",
+    "yql_clickhouse_util.cpp",
+  ]
+}

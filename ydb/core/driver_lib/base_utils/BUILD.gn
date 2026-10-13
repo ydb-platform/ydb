@@ -1,0 +1,23 @@
+library("base_utils") {
+  public_deps = [
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/getopt",
+    # "//library/cpp/string_utils/parse_size",
+    # "//library/cpp/svnversion",
+    "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/driver_lib/cli_config_base",
+    "//ydb/core/protos",
+    "//ydb/public/lib/deprecated/client",
+  ]
+
+  deps = [
+    # "//ydb/core/client/server",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+  ]
+
+  sources = [
+    "format_info.cpp",
+    "format_util.cpp",
+    "node_by_host.cpp",
+  ]
+}

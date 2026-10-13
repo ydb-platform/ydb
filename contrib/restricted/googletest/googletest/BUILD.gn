@@ -1,0 +1,24 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+    defines = [
+        "GTEST_HAS_POSIX_RE=0",
+        "GTEST_HAS_STD_WSTRING=1",
+        "GTEST_USES_RE2=1",
+    ]
+}
+
+config("private_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("googletest") {
+    public_deps = [ "//contrib/libs/re2" ]
+
+    sources = [ "src/gtest-all.cc" ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":private_config",
+        "//build/gn/config:no_warnings",
+    ]
+}

@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/http_proxy/authorization",
+    "//ydb/library/http_proxy/error",
+  ]
+
+  sources = [
+    "auth_helpers_ut.cpp",
+    "signature_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/http_proxy/authorization" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,8 @@
+group("optimizer") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/tiling",  # peerdir only
+  ]
+}

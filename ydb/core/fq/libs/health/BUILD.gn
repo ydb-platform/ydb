@@ -1,0 +1,18 @@
+library("health") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/config/protos",
+    # "//ydb/core/fq/libs/shared_resources",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//library/cpp/monlib/service/pages",
+    "//ydb/core/base",
+    "//ydb/core/mon",
+    "//ydb/public/sdk/cpp/src/client/discovery",
+  ]
+
+  sources = [ "health.cpp" ]
+}

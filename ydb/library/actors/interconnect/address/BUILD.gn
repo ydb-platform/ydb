@@ -1,0 +1,7 @@
+library("address") {
+  deps = [
+    # "//contrib/libs/libc_compat",  # peerdir only
+  ]
+
+  sources = [ "interconnect_address.cpp" ]
+}

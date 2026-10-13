@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/library/yql/providers/s3/provider",
+    "//yql/essentials/minikql/dom",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/library/yql/providers/s3/provider/yql_s3_listing_strategy_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/providers/s3/provider" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

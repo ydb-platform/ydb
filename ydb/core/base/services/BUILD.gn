@@ -1,0 +1,12 @@
+group("services") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/interconnect",  # peerdir only
+    # "//ydb/library/actors/protos",  # peerdir only
+  ]
+}

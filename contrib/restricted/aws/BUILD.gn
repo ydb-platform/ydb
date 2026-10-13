@@ -1,0 +1,780 @@
+config("public_config") {
+    include_dirs = [
+        "aws-c-auth/include",
+        "aws-c-cal/include",
+        "aws-c-common/generated/include",
+        "aws-c-common/include",
+        "aws-c-compression/include",
+        "aws-c-event-stream/include",
+        "aws-c-http/include",
+        "aws-c-io/include",
+        "aws-c-mqtt/include",
+        "aws-c-s3/include",
+        "aws-c-sdkutils/include",
+        "aws-checksums/include",
+        "aws-crt-cpp/include",
+        "s2n",
+        "s2n/api",
+    ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-implicit-function-declaration",
+        "-Wno-macro-redefined",
+        "-Wno-sign-compare",
+    ]
+    defines = [
+        "AWS_USE_EPOLL",
+        "CJSON_HIDE_SYMBOLS",
+        "HAVE_SYSCONF",
+        "INTEL_NO_ITTNOTIFY_API",
+    ]
+}
+
+config("common_private_config") {
+    defines = [
+        "AWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_PTHREAD_ATTR",
+        "AWS_PTHREAD_GETNAME_TAKES_3ARGS",
+        "AWS_PTHREAD_SETNAME_TAKES_2ARGS",
+        "USE_SIMD_ENCODING",
+    ]
+    include_dirs = [ "aws-c-common/source/external/libcbor" ]
+}
+
+config("io_private_config") {
+    defines = [
+        "USE_S2N",
+    ]
+}
+
+config("s2n_private_config") {
+    cflags = [
+        "-Wno-deprecated-declarations",
+        "-Wno-macro-redefined",
+    ]
+    defines = [
+        "S2N___RESTRICT__SUPPORTED",
+        "S2N_ATOMIC_SUPPORTED",
+        "S2N_CLOEXEC_SUPPORTED",
+        "S2N_CLOEXEC_XOPEN_SUPPORTED",
+        "S2N_CLONE_SUPPORTED",
+        "S2N_CPUID_AVAILABLE",
+        "S2N_DIAGNOSTICS_POP_SUPPORTED",
+        "S2N_DIAGNOSTICS_PUSH_SUPPORTED",
+        "S2N_EXECINFO_AVAILABLE",
+        "S2N_FALL_THROUGH_SUPPORTED",
+        "S2N_FEATURES_AVAILABLE",
+        "S2N_KTLS_SUPPORTED",
+        "S2N_KYBER512R3_AVX2_BMI2_SUPPORTED",
+        "S2N_KYBER512R3_AVX2_BMI2",
+        "S2N_KYBER512R3_M256_INTRINSICS_SUPPORTED",
+        "S2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX",
+        "S2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH",
+        "S2N_LIBCRYPTO_SUPPORTS_EVP_RC4",
+        "S2N_LIBCRYPTO_SUPPORTS_FLAG_NO_CHECK_TIME",
+        "S2N_LINUX_SENDFILE",
+        "S2N_MADVISE_SUPPORTED",
+        "S2N_STACKTRACE",
+    ]
+}
+
+contrib_library("auth") {
+    deps = [
+        ":cal",
+        ":common",
+        ":compression",
+        ":http",
+        ":io",
+        ":sdkutils",
+    ]
+
+    sources = [
+        "aws-c-auth/source/auth.c",
+        "aws-c-auth/source/aws_imds_client.c",
+        "aws-c-auth/source/aws_profile.c",
+        "aws-c-auth/source/aws_signing.c",
+        "aws-c-auth/source/credentials_provider_anonymous.c",
+        "aws-c-auth/source/credentials_provider_cached.c",
+        "aws-c-auth/source/credentials_provider_chain.c",
+        "aws-c-auth/source/credentials_provider_cognito.c",
+        "aws-c-auth/source/credentials_provider_default_chain.c",
+        "aws-c-auth/source/credentials_provider_delegate.c",
+        "aws-c-auth/source/credentials_provider_ecs.c",
+        "aws-c-auth/source/credentials_provider_environment.c",
+        "aws-c-auth/source/credentials_provider_imds.c",
+        "aws-c-auth/source/credentials_provider_process.c",
+        "aws-c-auth/source/credentials_provider_profile.c",
+        "aws-c-auth/source/credentials_provider_sso.c",
+        "aws-c-auth/source/credentials_provider_static.c",
+        "aws-c-auth/source/credentials_provider_sts_web_identity.c",
+        "aws-c-auth/source/credentials_provider_sts.c",
+        "aws-c-auth/source/credentials_provider_x509.c",
+        "aws-c-auth/source/credentials_utils.c",
+        "aws-c-auth/source/credentials.c",
+        "aws-c-auth/source/key_derivation.c",
+        "aws-c-auth/source/signable_chunk.c",
+        "aws-c-auth/source/signable_http_request.c",
+        "aws-c-auth/source/signable_trailer.c",
+        "aws-c-auth/source/signable.c",
+        "aws-c-auth/source/signing_config.c",
+        "aws-c-auth/source/signing_result.c",
+        "aws-c-auth/source/signing.c",
+        "aws-c-auth/source/sigv4_http_request.c",
+        "aws-c-auth/source/sso_token_utils.c",
+        "aws-c-auth/source/token_provider_sso_profile.c",
+        "aws-c-auth/source/token_provider_sso_session.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+contrib_library("cal") {
+    deps = [
+        ":common",
+        "//contrib/libs/openssl",
+    ]
+
+    sources = [
+        "aws-c-cal/source/cal.c",
+        "aws-c-cal/source/der.c",
+        "aws-c-cal/source/ecc.c",
+        "aws-c-cal/source/hash.c",
+        "aws-c-cal/source/hmac.c",
+        "aws-c-cal/source/rsa.c",
+        "aws-c-cal/source/symmetric_cipher.c",
+        "aws-c-cal/source/unix/openssl_aes.c",
+        "aws-c-cal/source/unix/openssl_platform_init.c",
+        "aws-c-cal/source/unix/openssl_rsa.c",
+        "aws-c-cal/source/unix/opensslcrypto_ecc.c",
+        "aws-c-cal/source/unix/opensslcrypto_hash.c",
+        "aws-c-cal/source/unix/opensslcrypto_hmac.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+avx_source_set("avx_checksums") {
+    sources = [ "aws-checksums/source/intel/intrin/crc64nvme_clmul.c" ]
+    configs = [ ":public_config" ]
+}
+
+avx512_source_set("avx512_checksums") {
+    sources = [
+        "aws-checksums/source/intel/intrin/crc32c_sse42_avx512.c",
+        "aws-checksums/source/intel/intrin/crc64nvme_avx512.c",
+    ]
+    configs = [ ":public_config" ]
+}
+
+contrib_library("checksums") {
+    deps = [
+        ":avx_checksums",
+        ":avx512_checksums",
+        ":common",
+    ]
+
+    sources = [
+        "aws-checksums/source/checksums.c",
+        "aws-checksums/source/crc_sw.c",
+        "aws-checksums/source/crc_util.c",
+        "aws-checksums/source/crc32.c",
+        "aws-checksums/source/crc64_sw.c",
+        "aws-checksums/source/crc64.c",
+        "aws-checksums/source/intel/asm/crc32c_sse42_asm.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+avx2_source_set("common_avx2") {
+    sources = [
+        "aws-c-common/source/arch/intel/encoding_avx2.c",
+    ]
+
+    configs = [ ":public_config" ]
+}
+
+contrib_library("common") {
+    deps = [
+        ":common_avx2",
+    ]
+
+    sources = [
+        "aws-c-common/source/allocator_sba.c",
+        "aws-c-common/source/allocator.c",
+        "aws-c-common/source/arch/intel/asm/cpuid.c",
+        "aws-c-common/source/arch/intel/cpuid.c",
+        "aws-c-common/source/array_list.c",
+        "aws-c-common/source/assert.c",
+        "aws-c-common/source/byte_buf.c",
+        "aws-c-common/source/cache.c",
+        "aws-c-common/source/cbor.c",
+        "aws-c-common/source/codegen.c",
+        "aws-c-common/source/command_line_parser.c",
+        "aws-c-common/source/common.c",
+        "aws-c-common/source/condition_variable.c",
+        "aws-c-common/source/date_time.c",
+        "aws-c-common/source/device_random.c",
+        "aws-c-common/source/encoding.c",
+        "aws-c-common/source/error.c",
+        "aws-c-common/source/external/cJSON.c",
+        "aws-c-common/source/external/libcbor/allocators.c",
+        "aws-c-common/source/external/libcbor/cbor.c",
+        "aws-c-common/source/external/libcbor/cbor/arrays.c",
+        "aws-c-common/source/external/libcbor/cbor/bytestrings.c",
+        "aws-c-common/source/external/libcbor/cbor/callbacks.c",
+        "aws-c-common/source/external/libcbor/cbor/common.c",
+        "aws-c-common/source/external/libcbor/cbor/encoding.c",
+        "aws-c-common/source/external/libcbor/cbor/floats_ctrls.c",
+        "aws-c-common/source/external/libcbor/cbor/internal/builder_callbacks.c",
+        "aws-c-common/source/external/libcbor/cbor/internal/encoders.c",
+        "aws-c-common/source/external/libcbor/cbor/internal/loaders.c",
+        "aws-c-common/source/external/libcbor/cbor/internal/memory_utils.c",
+        "aws-c-common/source/external/libcbor/cbor/internal/stack.c",
+        "aws-c-common/source/external/libcbor/cbor/internal/unicode.c",
+        "aws-c-common/source/external/libcbor/cbor/ints.c",
+        "aws-c-common/source/external/libcbor/cbor/maps.c",
+        "aws-c-common/source/external/libcbor/cbor/serialization.c",
+        "aws-c-common/source/external/libcbor/cbor/streaming.c",
+        "aws-c-common/source/external/libcbor/cbor/strings.c",
+        "aws-c-common/source/external/libcbor/cbor/tags.c",
+        "aws-c-common/source/fifo_cache.c",
+        "aws-c-common/source/file.c",
+        "aws-c-common/source/hash_table.c",
+        "aws-c-common/source/host_utils.c",
+        "aws-c-common/source/json.c",
+        "aws-c-common/source/lifo_cache.c",
+        "aws-c-common/source/linked_hash_table.c",
+        "aws-c-common/source/linux/file_direct_io.c",
+        "aws-c-common/source/linux/system_info.c",
+        "aws-c-common/source/log_channel.c",
+        "aws-c-common/source/log_formatter.c",
+        "aws-c-common/source/log_writer.c",
+        "aws-c-common/source/logging.c",
+        "aws-c-common/source/lru_cache.c",
+        "aws-c-common/source/math.c",
+        "aws-c-common/source/memtrace.c",
+        "aws-c-common/source/posix/clock.c",
+        "aws-c-common/source/posix/condition_variable.c",
+        "aws-c-common/source/posix/cross_process_lock.c",
+        "aws-c-common/source/posix/device_random.c",
+        "aws-c-common/source/posix/environment.c",
+        "aws-c-common/source/posix/file.c",
+        "aws-c-common/source/posix/mutex.c",
+        "aws-c-common/source/posix/process.c",
+        "aws-c-common/source/posix/rw_lock.c",
+        "aws-c-common/source/posix/system_info.c",
+        "aws-c-common/source/posix/system_resource_utils.c",
+        "aws-c-common/source/posix/thread.c",
+        "aws-c-common/source/posix/time.c",
+        "aws-c-common/source/priority_queue.c",
+        "aws-c-common/source/process_common.c",
+        "aws-c-common/source/ref_count.c",
+        "aws-c-common/source/ring_buffer.c",
+        "aws-c-common/source/statistics.c",
+        "aws-c-common/source/string.c",
+        "aws-c-common/source/system_info.c",
+        "aws-c-common/source/task_scheduler.c",
+        "aws-c-common/source/thread_scheduler.c",
+        "aws-c-common/source/thread_shared.c",
+        "aws-c-common/source/uri.c",
+        "aws-c-common/source/uuid.c",
+        "aws-c-common/source/xml_parser.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":common_private_config",
+        ":private_config",
+    ]
+}
+
+contrib_library("compression") {
+    deps = [
+        ":common",
+    ]
+
+    sources = [
+        "aws-c-compression/source/compression.c",
+        "aws-c-compression/source/huffman.c",
+        "aws-c-compression/source/huffman_testing.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+contrib_library("crt-cpp") {
+    deps = [
+        ":auth",
+        ":cal",
+        ":common",
+        ":event-stream",
+        ":http",
+        ":io",
+        ":mqtt",
+        ":s3",
+        ":sdkutils",
+    ]
+
+    sources = [
+        "aws-crt-cpp/source/Allocator.cpp",
+        "aws-crt-cpp/source/Api.cpp",
+        "aws-crt-cpp/source/auth/Credentials.cpp",
+        "aws-crt-cpp/source/auth/Sigv4Signing.cpp",
+        "aws-crt-cpp/source/crypto/Hash.cpp",
+        "aws-crt-cpp/source/crypto/HMAC.cpp",
+        "aws-crt-cpp/source/DateTime.cpp",
+        "aws-crt-cpp/source/endpoints/RuleEngine.cpp",
+        "aws-crt-cpp/source/external/cJSON.cpp",
+        "aws-crt-cpp/source/http/HttpConnection.cpp",
+        "aws-crt-cpp/source/http/HttpConnectionManager.cpp",
+        "aws-crt-cpp/source/http/HttpProxyStrategy.cpp",
+        "aws-crt-cpp/source/http/HttpRequestResponse.cpp",
+        "aws-crt-cpp/source/ImdsClient.cpp",
+        "aws-crt-cpp/source/io/Bootstrap.cpp",
+        "aws-crt-cpp/source/io/ChannelHandler.cpp",
+        "aws-crt-cpp/source/io/EventLoopGroup.cpp",
+        "aws-crt-cpp/source/io/HostResolver.cpp",
+        "aws-crt-cpp/source/io/Pkcs11.cpp",
+        "aws-crt-cpp/source/io/SocketOptions.cpp",
+        "aws-crt-cpp/source/io/Stream.cpp",
+        "aws-crt-cpp/source/io/TlsOptions.cpp",
+        "aws-crt-cpp/source/io/Uri.cpp",
+        "aws-crt-cpp/source/iot/Mqtt5Client.cpp",
+        "aws-crt-cpp/source/iot/MqttClient.cpp",
+        "aws-crt-cpp/source/iot/MqttCommon.cpp",
+        "aws-crt-cpp/source/JsonObject.cpp",
+        "aws-crt-cpp/source/mqtt/Mqtt5Client.cpp",
+        "aws-crt-cpp/source/mqtt/Mqtt5Packets.cpp",
+        "aws-crt-cpp/source/mqtt/MqttClient.cpp",
+        "aws-crt-cpp/source/StringUtils.cpp",
+        "aws-crt-cpp/source/Types.cpp",
+        "aws-crt-cpp/source/UUID.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}
+
+contrib_library("event-stream") {
+    deps = [
+        ":cal",
+        ":checksums",
+        ":common",
+        ":io",
+    ]
+
+    sources = [
+        "aws-c-event-stream/source/event_stream.c",
+        "aws-c-event-stream/source/event_stream_channel_handler.c",
+        "aws-c-event-stream/source/event_stream_rpc.c",
+        "aws-c-event-stream/source/event_stream_rpc_client.c",
+        "aws-c-event-stream/source/event_stream_rpc_server.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+contrib_library("http") {
+    deps = [
+        ":cal",
+        ":common",
+        ":compression",
+        ":io",
+    ]
+
+    sources = [
+        "aws-c-http/source/connection_manager.c",
+        "aws-c-http/source/connection_monitor.c",
+        "aws-c-http/source/connection.c",
+        "aws-c-http/source/h1_connection.c",
+        "aws-c-http/source/h1_decoder.c",
+        "aws-c-http/source/h1_encoder.c",
+        "aws-c-http/source/h1_stream.c",
+        "aws-c-http/source/h2_connection.c",
+        "aws-c-http/source/h2_decoder.c",
+        "aws-c-http/source/h2_frames.c",
+        "aws-c-http/source/h2_stream.c",
+        "aws-c-http/source/hpack_decoder.c",
+        "aws-c-http/source/hpack_encoder.c",
+        "aws-c-http/source/hpack_huffman_static.c",
+        "aws-c-http/source/hpack.c",
+        "aws-c-http/source/http.c",
+        "aws-c-http/source/http2_stream_manager.c",
+        "aws-c-http/source/proxy_connection.c",
+        "aws-c-http/source/proxy_strategy.c",
+        "aws-c-http/source/random_access_set.c",
+        "aws-c-http/source/request_response.c",
+        "aws-c-http/source/statistics.c",
+        "aws-c-http/source/strutil.c",
+        "aws-c-http/source/websocket_bootstrap.c",
+        "aws-c-http/source/websocket_decoder.c",
+        "aws-c-http/source/websocket_encoder.c",
+        "aws-c-http/source/websocket.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+contrib_library("io") {
+    deps = [
+        ":cal",
+        ":common",
+        ":s2n",
+    ]
+
+    sources = [
+        "aws-c-io/source/alpn_handler.c",
+        "aws-c-io/source/async_stream.c",
+        "aws-c-io/source/channel_bootstrap.c",
+        "aws-c-io/source/channel.c",
+        "aws-c-io/source/event_loop.c",
+        "aws-c-io/source/exponential_backoff_retry_strategy.c",
+        "aws-c-io/source/future.c",
+        "aws-c-io/source/host_resolver.c",
+        "aws-c-io/source/io.c",
+        "aws-c-io/source/linux/epoll_event_loop.c",
+        "aws-c-io/source/message_pool.c",
+        "aws-c-io/source/pem.c",
+        "aws-c-io/source/pkcs11_lib.c",
+        "aws-c-io/source/pkcs11_tls_op_handler.c",
+        "aws-c-io/source/posix/host_resolver.c",
+        "aws-c-io/source/posix/pipe.c",
+        "aws-c-io/source/posix/shared_library.c",
+        "aws-c-io/source/posix/socket.c",
+        "aws-c-io/source/retry_strategy.c",
+        "aws-c-io/source/s2n/s2n_tls_channel_handler.c",
+        "aws-c-io/source/socket_channel_handler.c",
+        "aws-c-io/source/socket_shared.c",
+        "aws-c-io/source/standard_retry_strategy.c",
+        "aws-c-io/source/statistics.c",
+        "aws-c-io/source/stream.c",
+        "aws-c-io/source/tls_channel_handler_shared.c",
+        "aws-c-io/source/tls_channel_handler.c",
+        "aws-c-io/source/tracing.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [
+        ":io_private_config",
+        ":private_config",
+    ]
+}
+
+contrib_library("mqtt") {
+    deps = [
+        ":common",
+        ":http",
+        ":io",
+    ]
+
+    sources = [
+        "aws-c-mqtt/source/client_channel_handler.c",
+        "aws-c-mqtt/source/client_impl_shared.c",
+        "aws-c-mqtt/source/client.c",
+        "aws-c-mqtt/source/fixed_header.c",
+        "aws-c-mqtt/source/mqtt_subscription_set.c",
+        "aws-c-mqtt/source/mqtt.c",
+        "aws-c-mqtt/source/mqtt311_decoder.c",
+        "aws-c-mqtt/source/mqtt311_listener.c",
+        "aws-c-mqtt/source/packets.c",
+        "aws-c-mqtt/source/request-response/protocol_adapter.c",
+        "aws-c-mqtt/source/request-response/request_response_client.c",
+        "aws-c-mqtt/source/request-response/request_response_subscription_set.c",
+        "aws-c-mqtt/source/request-response/subscription_manager.c",
+        "aws-c-mqtt/source/shared.c",
+        "aws-c-mqtt/source/topic_tree.c",
+        "aws-c-mqtt/source/v5/mqtt5_callbacks.c",
+        "aws-c-mqtt/source/v5/mqtt5_client.c",
+        "aws-c-mqtt/source/v5/mqtt5_decoder.c",
+        "aws-c-mqtt/source/v5/mqtt5_encoder.c",
+        "aws-c-mqtt/source/v5/mqtt5_listener.c",
+        "aws-c-mqtt/source/v5/mqtt5_options_storage.c",
+        "aws-c-mqtt/source/v5/mqtt5_to_mqtt3_adapter.c",
+        "aws-c-mqtt/source/v5/mqtt5_topic_alias.c",
+        "aws-c-mqtt/source/v5/mqtt5_types.c",
+        "aws-c-mqtt/source/v5/mqtt5_utils.c",
+        "aws-c-mqtt/source/v5/rate_limiters.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+avx2_source_set("avx2_s2n") {
+    sources = [
+        "s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_fips202x4_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_indcpa_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c",
+    ]
+    public_configs = [ ":public_config" ]
+    configs = [ ":s2n_private_config" ]
+}
+
+contrib_library("s2n") {
+    deps = [
+        ":avx2_s2n",
+        "//contrib/libs/openssl",
+    ]
+
+    sources = [
+        "s2n/crypto/s2n_aead_cipher_aes_gcm.c",
+        "s2n/crypto/s2n_aead_cipher_chacha20_poly1305.c",
+        "s2n/crypto/s2n_cbc_cipher_3des.c",
+        "s2n/crypto/s2n_cbc_cipher_aes.c",
+        "s2n/crypto/s2n_certificate.c",
+        "s2n/crypto/s2n_cipher.c",
+        "s2n/crypto/s2n_composite_cipher_aes_sha.c",
+        "s2n/crypto/s2n_crypto.c",
+        "s2n/crypto/s2n_dhe.c",
+        "s2n/crypto/s2n_drbg.c",
+        "s2n/crypto/s2n_ecc_evp.c",
+        "s2n/crypto/s2n_ecdsa.c",
+        "s2n/crypto/s2n_evp_signing.c",
+        "s2n/crypto/s2n_evp.c",
+        "s2n/crypto/s2n_fips.c",
+        "s2n/crypto/s2n_hash.c",
+        "s2n/crypto/s2n_hkdf.c",
+        "s2n/crypto/s2n_hmac.c",
+        "s2n/crypto/s2n_libcrypto.c",
+        "s2n/crypto/s2n_locking.c",
+        "s2n/crypto/s2n_openssl_x509.c",
+        "s2n/crypto/s2n_pkey.c",
+        "s2n/crypto/s2n_rsa_pss.c",
+        "s2n/crypto/s2n_rsa_signing.c",
+        "s2n/crypto/s2n_rsa.c",
+        "s2n/crypto/s2n_sequence.c",
+        "s2n/crypto/s2n_stream_cipher_null.c",
+        "s2n/crypto/s2n_stream_cipher_rc4.c",
+        "s2n/crypto/s2n_tls13_keys.c",
+        "s2n/error/s2n_errno.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_cbd.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_fips202.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_indcpa.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_kem.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_ntt_avx2.S",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_ntt.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_poly.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_polyvec.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_reduce.c",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_shuffle_avx2.S",
+        "s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c",
+        "s2n/pq-crypto/s2n_kyber_evp.c",
+        "s2n/pq-crypto/s2n_pq_random.c",
+        "s2n/pq-crypto/s2n_pq.c",
+        "s2n/stuffer/s2n_stuffer_base64.c",
+        "s2n/stuffer/s2n_stuffer_file.c",
+        "s2n/stuffer/s2n_stuffer_network_order.c",
+        "s2n/stuffer/s2n_stuffer_pem.c",
+        "s2n/stuffer/s2n_stuffer_text.c",
+        "s2n/stuffer/s2n_stuffer.c",
+        "s2n/tls/extensions/s2n_cert_status_response.c",
+        "s2n/tls/extensions/s2n_cert_status.c",
+        "s2n/tls/extensions/s2n_client_alpn.c",
+        "s2n/tls/extensions/s2n_client_cert_status_request.c",
+        "s2n/tls/extensions/s2n_client_cookie.c",
+        "s2n/tls/extensions/s2n_client_early_data_indication.c",
+        "s2n/tls/extensions/s2n_client_ems.c",
+        "s2n/tls/extensions/s2n_client_key_share.c",
+        "s2n/tls/extensions/s2n_client_max_frag_len.c",
+        "s2n/tls/extensions/s2n_client_pq_kem.c",
+        "s2n/tls/extensions/s2n_client_psk.c",
+        "s2n/tls/extensions/s2n_client_renegotiation_info.c",
+        "s2n/tls/extensions/s2n_client_sct_list.c",
+        "s2n/tls/extensions/s2n_client_server_name.c",
+        "s2n/tls/extensions/s2n_client_session_ticket.c",
+        "s2n/tls/extensions/s2n_client_signature_algorithms.c",
+        "s2n/tls/extensions/s2n_client_supported_groups.c",
+        "s2n/tls/extensions/s2n_client_supported_versions.c",
+        "s2n/tls/extensions/s2n_ec_point_format.c",
+        "s2n/tls/extensions/s2n_extension_list.c",
+        "s2n/tls/extensions/s2n_extension_type_lists.c",
+        "s2n/tls/extensions/s2n_extension_type.c",
+        "s2n/tls/extensions/s2n_key_share.c",
+        "s2n/tls/extensions/s2n_npn.c",
+        "s2n/tls/extensions/s2n_nst_early_data_indication.c",
+        "s2n/tls/extensions/s2n_psk_key_exchange_modes.c",
+        "s2n/tls/extensions/s2n_quic_transport_params.c",
+        "s2n/tls/extensions/s2n_server_alpn.c",
+        "s2n/tls/extensions/s2n_server_cert_status_request.c",
+        "s2n/tls/extensions/s2n_server_cookie.c",
+        "s2n/tls/extensions/s2n_server_early_data_indication.c",
+        "s2n/tls/extensions/s2n_server_ems.c",
+        "s2n/tls/extensions/s2n_server_key_share.c",
+        "s2n/tls/extensions/s2n_server_max_fragment_length.c",
+        "s2n/tls/extensions/s2n_server_psk.c",
+        "s2n/tls/extensions/s2n_server_renegotiation_info.c",
+        "s2n/tls/extensions/s2n_server_sct_list.c",
+        "s2n/tls/extensions/s2n_server_server_name.c",
+        "s2n/tls/extensions/s2n_server_session_ticket.c",
+        "s2n/tls/extensions/s2n_server_signature_algorithms.c",
+        "s2n/tls/extensions/s2n_server_supported_versions.c",
+        "s2n/tls/extensions/s2n_supported_versions.c",
+        "s2n/tls/s2n_aead.c",
+        "s2n/tls/s2n_alerts.c",
+        "s2n/tls/s2n_async_pkey.c",
+        "s2n/tls/s2n_auth_selection.c",
+        "s2n/tls/s2n_cbc.c",
+        "s2n/tls/s2n_change_cipher_spec.c",
+        "s2n/tls/s2n_cipher_preferences.c",
+        "s2n/tls/s2n_cipher_suites.c",
+        "s2n/tls/s2n_client_cert_verify.c",
+        "s2n/tls/s2n_client_cert.c",
+        "s2n/tls/s2n_client_finished.c",
+        "s2n/tls/s2n_client_hello_request.c",
+        "s2n/tls/s2n_client_hello.c",
+        "s2n/tls/s2n_client_key_exchange.c",
+        "s2n/tls/s2n_config.c",
+        "s2n/tls/s2n_connection.c",
+        "s2n/tls/s2n_crl.c",
+        "s2n/tls/s2n_crypto.c",
+        "s2n/tls/s2n_early_data_io.c",
+        "s2n/tls/s2n_early_data.c",
+        "s2n/tls/s2n_ecc_preferences.c",
+        "s2n/tls/s2n_encrypted_extensions.c",
+        "s2n/tls/s2n_establish_session.c",
+        "s2n/tls/s2n_fingerprint.c",
+        "s2n/tls/s2n_handshake_hashes.c",
+        "s2n/tls/s2n_handshake_io.c",
+        "s2n/tls/s2n_handshake_transcript.c",
+        "s2n/tls/s2n_handshake_type.c",
+        "s2n/tls/s2n_handshake.c",
+        "s2n/tls/s2n_kem_preferences.c",
+        "s2n/tls/s2n_kem.c",
+        "s2n/tls/s2n_kex.c",
+        "s2n/tls/s2n_key_log.c",
+        "s2n/tls/s2n_key_update.c",
+        "s2n/tls/s2n_ktls_io.c",
+        "s2n/tls/s2n_ktls.c",
+        "s2n/tls/s2n_next_protocol.c",
+        "s2n/tls/s2n_ocsp_stapling.c",
+        "s2n/tls/s2n_post_handshake.c",
+        "s2n/tls/s2n_prf.c",
+        "s2n/tls/s2n_protocol_preferences.c",
+        "s2n/tls/s2n_psk.c",
+        "s2n/tls/s2n_quic_support.c",
+        "s2n/tls/s2n_record_read_aead.c",
+        "s2n/tls/s2n_record_read_cbc.c",
+        "s2n/tls/s2n_record_read_composite.c",
+        "s2n/tls/s2n_record_read_stream.c",
+        "s2n/tls/s2n_record_read.c",
+        "s2n/tls/s2n_record_write.c",
+        "s2n/tls/s2n_recv.c",
+        "s2n/tls/s2n_renegotiate.c",
+        "s2n/tls/s2n_resume.c",
+        "s2n/tls/s2n_security_policies.c",
+        "s2n/tls/s2n_send.c",
+        "s2n/tls/s2n_server_cert_request.c",
+        "s2n/tls/s2n_server_cert.c",
+        "s2n/tls/s2n_server_done.c",
+        "s2n/tls/s2n_server_extensions.c",
+        "s2n/tls/s2n_server_finished.c",
+        "s2n/tls/s2n_server_hello_retry.c",
+        "s2n/tls/s2n_server_hello.c",
+        "s2n/tls/s2n_server_key_exchange.c",
+        "s2n/tls/s2n_server_new_session_ticket.c",
+        "s2n/tls/s2n_shutdown.c",
+        "s2n/tls/s2n_signature_algorithms.c",
+        "s2n/tls/s2n_signature_scheme.c",
+        "s2n/tls/s2n_tls.c",
+        "s2n/tls/s2n_tls13_certificate_verify.c",
+        "s2n/tls/s2n_tls13_handshake.c",
+        "s2n/tls/s2n_tls13_key_schedule.c",
+        "s2n/tls/s2n_tls13_secrets.c",
+        "s2n/tls/s2n_tls13.c",
+        "s2n/tls/s2n_x509_validator.c",
+        "s2n/utils/s2n_array.c",
+        "s2n/utils/s2n_atomic.c",
+        "s2n/utils/s2n_blob.c",
+        "s2n/utils/s2n_ensure.c",
+        "s2n/utils/s2n_fork_detection.c",
+        "s2n/utils/s2n_init.c",
+        "s2n/utils/s2n_io.c",
+        "s2n/utils/s2n_map.c",
+        "s2n/utils/s2n_mem.c",
+        "s2n/utils/s2n_random.c",
+        "s2n/utils/s2n_result.c",
+        "s2n/utils/s2n_rfc5952.c",
+        "s2n/utils/s2n_safety.c",
+        "s2n/utils/s2n_set.c",
+        "s2n/utils/s2n_socket.c",
+        "s2n/utils/s2n_timer.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":s2n_private_config" ]
+}
+
+contrib_library("s3") {
+    deps = [
+        ":auth",
+        ":cal",
+        ":checksums",
+        ":common",
+        ":http",
+        ":io",
+    ]
+
+    sources = [
+        "aws-c-s3/source/s3_auto_ranged_get.c",
+        "aws-c-s3/source/s3_auto_ranged_put.c",
+        "aws-c-s3/source/s3_buffer_pool.c",
+        "aws-c-s3/source/s3_checksum_stream.c",
+        "aws-c-s3/source/s3_checksums.c",
+        "aws-c-s3/source/s3_chunk_stream.c",
+        "aws-c-s3/source/s3_client.c",
+        "aws-c-s3/source/s3_copy_object.c",
+        "aws-c-s3/source/s3_default_meta_request.c",
+        "aws-c-s3/source/s3_endpoint.c",
+        "aws-c-s3/source/s3_list_objects.c",
+        "aws-c-s3/source/s3_list_parts.c",
+        "aws-c-s3/source/s3_meta_request.c",
+        "aws-c-s3/source/s3_paginator.c",
+        "aws-c-s3/source/s3_parallel_input_stream.c",
+        "aws-c-s3/source/s3_platform_info.c",
+        "aws-c-s3/source/s3_request_messages.c",
+        "aws-c-s3/source/s3_request.c",
+        "aws-c-s3/source/s3_util.c",
+        "aws-c-s3/source/s3.c",
+        "aws-c-s3/source/s3express_credentials_provider.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}
+
+contrib_library("sdkutils") {
+    deps = [
+        ":common",
+    ]
+
+    sources = [
+        "aws-c-sdkutils/source/aws_profile.c",
+        "aws-c-sdkutils/source/endpoints_regex.c",
+        "aws-c-sdkutils/source/endpoints_rule_engine.c",
+        "aws-c-sdkutils/source/endpoints_ruleset.c",
+        "aws-c-sdkutils/source/endpoints_standard_lib.c",
+        "aws-c-sdkutils/source/endpoints_types_impl.c",
+        "aws-c-sdkutils/source/endpoints_util.c",
+        "aws-c-sdkutils/source/partitions.c",
+        "aws-c-sdkutils/source/resource_name.c",
+        "aws-c-sdkutils/source/sdkutils.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

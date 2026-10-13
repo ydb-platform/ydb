@@ -1,0 +1,16 @@
+gtest_executable("server_restart") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/testing/gtest",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/query",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "main.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

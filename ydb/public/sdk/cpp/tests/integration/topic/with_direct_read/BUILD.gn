@@ -1,0 +1,36 @@
+gtest_executable("with_direct_read") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/restricted/googletest/googlemock",
+    "//contrib/restricted/googletest/googletest",
+    "//library/cpp/logger",
+    "//library/cpp/retry",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/impl/executor",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/topic/common",
+    "//ydb/public/sdk/cpp/src/client/topic/impl",
+    "//ydb/public/sdk/cpp/src/library/issue",
+    "//ydb/public/sdk/cpp/tests/integration/topic/setup",
+    "//ydb/public/sdk/cpp/tests/integration/topic/utils",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "//ydb/public/sdk/cpp/tests/integration/topic/basic_usage_it.cpp",
+    "//ydb/public/sdk/cpp/tests/integration/topic/describe_topic_it.cpp",
+    "//ydb/public/sdk/cpp/tests/integration/topic/direct_read_it.cpp",
+    "//ydb/public/sdk/cpp/tests/integration/topic/local_partition_it.cpp",
+    "//ydb/public/sdk/cpp/tests/integration/topic/topic_to_table_it.cpp",
+  ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

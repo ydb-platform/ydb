@@ -1,0 +1,21 @@
+config("private_config") {
+    cflags = [
+        "-Wno-invalid-offsetof",
+    ]
+    defines = [
+        "CRCUTIL_USE_MM_CRC32=1",
+    ]
+}
+
+contrib_library("crcutil") {
+    sources = [
+        "crc32c_sse4.cc", # sse4 for this file
+        "interface.cc",
+        "multiword_128_64_gcc_amd64_sse2.cc",
+        "multiword_64_64_gcc_amd64_asm.cc",
+        "multiword_64_64_gcc_i386_mmx.cc",
+        "multiword_64_64_intrinsic_i386_mmx.cc",
+    ]
+
+    configs = [ ":private_config" ]
+}

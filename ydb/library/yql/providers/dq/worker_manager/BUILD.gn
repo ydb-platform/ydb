@@ -1,0 +1,28 @@
+library("worker_manager") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/helpers",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/providers/dq/actors",
+    # "//ydb/library/yql/providers/dq/task_runner",
+    "//ydb/library/yql/providers/dq/task_runner_actor",
+    "//ydb/library/yql/providers/dq/worker_manager/interface",
+    # "//yql/essentials/minikql",
+  ]
+
+  deps = [
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/ydb_issue",  # peerdir only
+    # "//ydb/library/yql/dq/common",
+    # "//ydb/library/yql/providers/dq/api/grpc",  # peerdir only
+    # "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
+    "//ydb/library/yql/providers/dq/runtime",
+    # "//yql/essentials/providers/common/config",  # peerdir only
+    # "//yql/essentials/providers/common/gateway",  # peerdir only
+    # "//yql/essentials/providers/common/metrics",  # peerdir only
+    "//yql/essentials/utils/failure_injector",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "local_worker_manager.cpp" ]
+}

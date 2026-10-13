@@ -1,0 +1,3 @@
+group("simd") {
+  public_deps = [ "//library/cpp/digest/crc32c" ]
+}

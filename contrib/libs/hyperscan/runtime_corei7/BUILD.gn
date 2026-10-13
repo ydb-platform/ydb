@@ -1,0 +1,10 @@
+import("//contrib/libs/hyperscan/runtime.gni")
+
+hyperscan_runtime("runtime_corei7") {
+    prefix = "corei7"
+    defines = [
+        "HAVE_SSE41",
+        "HAVE_SSE42",
+        "HAVE_POPCOUNT_INSTR",
+    ]
+}

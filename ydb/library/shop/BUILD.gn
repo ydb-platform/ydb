@@ -1,0 +1,76 @@
+protobuf_library("protos") {
+  sources = [ "protos/shop.proto" ]
+}
+
+library("shop") {
+  public_deps = [
+    ":protos",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/atomic",
+    "//library/cpp/lwtrace",
+  ]
+
+  sources = [
+    "flowctl.cpp",
+    "probes.cpp",
+    "shop.cpp",
+  ]
+}
+
+linked_executable("sim_flowctl") {
+  deps = [
+    ":shop",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",
+    "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    "//library/cpp/monlib/service",
+    "//library/cpp/monlib/service/pages",
+    "//ydb/library/drr",
+  ]
+
+  sources = [ "sim_flowctl/flowctlmain.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}
+
+library("sim_shop_resources") {
+  resources = [
+    {
+      path = "sim_shop/one.pb.txt"
+      key = "one"
+    },
+    {
+      path = "sim_shop/two.pb.txt"
+      key = "two"
+    },
+  ]
+}
+
+linked_executable("sim_shop") {
+  public_deps = [ ":protos" ]
+
+  deps = [
+    ":shop",
+    ":sim_shop_resources",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",
+    "//library/cpp/lwtrace",
+    "//library/cpp/lwtrace/mon",
+    "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    "//library/cpp/monlib/service",
+    "//library/cpp/monlib/service/pages",
+    "//library/cpp/protobuf/util",
+    "//library/cpp/resource",
+    "//ydb/library/drr",
+  ]
+
+  sources = [
+    "sim_shop/config.proto",
+    "sim_shop/myshop.cpp",
+    "sim_shop/myshopmain.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

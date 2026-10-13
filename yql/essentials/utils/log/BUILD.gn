@@ -1,0 +1,24 @@
+library("log") {
+  public_deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/logger",
+    "//library/cpp/logger/global",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+    "//library/cpp/json",
+    "//yql/essentials/utils",
+    "//yql/essentials/utils/backtrace",
+    "//yql/essentials/utils/log/proto",
+  ]
+
+  sources = [
+    "context.cpp",
+    "format.cpp",
+    "fwd_backend.cpp",
+    "log.cpp",
+    "profile.cpp",
+    "tls_backend.cpp",
+  ]
+}

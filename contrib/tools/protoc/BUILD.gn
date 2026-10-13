@@ -1,0 +1,7 @@
+contrib_tool("protoc") {
+    deps = [ "//contrib/libs/protoc" ]
+
+    sources = [
+        "//contrib/libs/protoc/src/google/protobuf/compiler/main.cc",
+    ]
+}

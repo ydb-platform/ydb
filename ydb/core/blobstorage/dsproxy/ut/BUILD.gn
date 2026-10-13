@@ -1,0 +1,39 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/containers/stack_vector",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/dsproxy",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/query",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/util",
+  ]
+
+  sources = [
+    "dsproxy_counters_ut.cpp",
+    "dsproxy_discover_ut.cpp",
+    "dsproxy_get_block_ut.cpp",
+    "dsproxy_get_ut.cpp",
+    "dsproxy_patch_ut.cpp",
+    "dsproxy_put_ut.cpp",
+    "dsproxy_quorum_tracker_ut.cpp",
+    "dsproxy_request_reporting_ut.cpp",
+    "dsproxy_sequence_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/compstrat",
+    "//ydb/core/blobstorage/vdisk/hulldb:test",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/compstrat" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

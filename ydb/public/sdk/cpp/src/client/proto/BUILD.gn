@@ -1,0 +1,19 @@
+library("proto") {
+  public_deps = [
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/coordination",
+    # "//ydb/public/sdk/cpp/src/client/export",
+    # "//ydb/public/sdk/cpp/src/client/import",
+    # "//ydb/public/sdk/cpp/src/client/monitoring",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/topic:_self",
+  ]
+
+  deps = [
+    # "//ydb/public/api/grpc",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  sources = [ "accessor.cpp" ]
+}

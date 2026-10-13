@@ -1,0 +1,22 @@
+library("rpc_client") {
+  deps = [
+    # "//library/cpp/iterator",
+    # "//library/cpp/threading/future",
+    # "//library/cpp/yson/node",
+    # "//yt/cpp/mapreduce/client",
+    # "//yt/cpp/mapreduce/common",
+    # "//yt/cpp/mapreduce/http",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/cpp/mapreduce/interface/logging",
+    # "//yt/yt/client",
+    # "//yt/yt/core",
+  ]
+
+  sources = [
+    "client_impl.cpp",
+    "raw_batch_request.cpp",
+    "raw_client.cpp",
+    "rpc_parameters_serialization.cpp",
+    "wrap_rpc_error.cpp",
+  ]
+}

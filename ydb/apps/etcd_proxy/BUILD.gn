@@ -1,0 +1,33 @@
+linked_executable("etcd_proxy") {
+  deps = [
+    "//library/cpp/getopt",
+    "//library/cpp/monlib/metrics",
+    "//ydb/apps/etcd_proxy/service",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/grpc_services/base",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
+    "//ydb/library/grpc/server",
+    "//ydb/library/services",
+    "//ydb/public/api/grpc",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/discovery",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [
+    "main.cpp",
+    "proxy.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

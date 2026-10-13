@@ -1,0 +1,5 @@
+group("indexes") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",  # peerdir only
+  ]
+}

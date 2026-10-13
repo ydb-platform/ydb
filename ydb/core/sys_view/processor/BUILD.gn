@@ -1,0 +1,37 @@
+library("processor") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/monlib/service/pages",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/grpc_services/counters",
+    "//ydb/core/kqp/counters",
+    "//ydb/core/protos",
+    # "//ydb/core/sys_view/common",
+    "//ydb/core/sys_view/service",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx",
+    "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "db_counters.cpp",
+    "processor.cpp",
+    "processor_impl.cpp",
+    "schema.cpp",
+    "tx_aggregate.cpp",
+    "tx_collect.cpp",
+    "tx_configure.cpp",
+    "tx_init.cpp",
+    "tx_init_schema.cpp",
+    "tx_interval_metrics.cpp",
+    "tx_interval_summary.cpp",
+    "tx_top_partitions.cpp",
+  ]
+}

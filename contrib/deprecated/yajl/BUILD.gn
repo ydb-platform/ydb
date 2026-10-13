@@ -1,0 +1,14 @@
+library("yajl") {
+    sources = [
+        "src/yajl.c",
+        "src/yajl_buf.c",
+        "src/yajl_gen.c",
+        "src/yajl_parser.c",
+        "src/yajl_version.c",
+        "src/yajl_alloc.c",
+        "src/yajl_encode.c",
+        "src/yajl_lex.c",
+        "src/yajl_tree.c",
+        "yajl_parser.cpp",
+    ]
+}

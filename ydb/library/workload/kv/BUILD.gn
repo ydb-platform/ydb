@@ -1,0 +1,14 @@
+library("kv") {
+  public_deps = [ "//ydb/library/workload/abstract" ]
+
+  deps = [
+    # "//ydb/core/util",
+  ]
+
+  sources = [
+    "kv.cpp",
+    "registrar.cpp",
+  ]
+
+  serialize_enum_headers = [ "kv.h" ]
+}

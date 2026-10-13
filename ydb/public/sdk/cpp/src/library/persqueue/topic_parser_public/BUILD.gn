@@ -1,0 +1,3 @@
+library("topic_parser_public") {
+  sources = [ "topic_parser.cpp" ]
+}

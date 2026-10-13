@@ -1,0 +1,25 @@
+library("unittest") {
+  testonly = true
+
+  public_deps = [
+    "//library/cpp/dbg_output",
+    "//library/cpp/testing/common",
+  ]
+
+  deps = [
+    "//library/cpp/colorizer",
+    "//library/cpp/diff",
+    "//library/cpp/json",
+    "//library/cpp/testing/hook",
+  ]
+
+  sources = [
+    "checks.cpp",
+    "gtest.cpp",
+    "junit.cpp",
+    "plugin.cpp",
+    "registar.cpp",
+    "tests_data.cpp",
+    "utmain.cpp",
+  ]
+}

@@ -1,0 +1,29 @@
+import("//contrib/libs/llvm16/llvm.gni")
+import("//contrib/libs/llvm16/utils/TableGen/gen.gni")
+
+table_gen("RISCV") {
+    td = "//contrib/libs/llvm16/lib/Target/RISCV/RISCV.td"
+    flags = [ "-gen-riscv-target-def" ]
+    out = "llvm/TargetParser/RISCVTargetParserDef.inc"
+    includes = [
+        "//contrib/libs/llvm16/include",
+        "//contrib/libs/llvm16/lib/Target/RISCV",
+    ]
+}
+
+llvm_library("TargetParser") {
+    deps = [ ":RISCV" ]
+
+    sources = [
+        "AArch64TargetParser.cpp",
+        "ARMTargetParser.cpp",
+        "ARMTargetParserCommon.cpp",
+        "CSKYTargetParser.cpp",
+        "Host.cpp",
+        "LoongArchTargetParser.cpp",
+        "RISCVTargetParser.cpp",
+        "TargetParser.cpp",
+        "Triple.cpp",
+        "X86TargetParser.cpp",
+    ]
+}

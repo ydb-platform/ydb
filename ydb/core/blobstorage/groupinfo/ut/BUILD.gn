@@ -1,0 +1,29 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/vdisk/ingress",
+    "//ydb/core/erasure",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap_ut.cpp",
+    "//ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter_ut.cpp",
+    "//ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout_ut.cpp",
+    "//ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/groupinfo" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

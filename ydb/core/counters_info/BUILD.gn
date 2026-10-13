@@ -1,0 +1,23 @@
+library("counters_info") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//library/cpp/protobuf/json",
+    "//library/cpp/streams/zstd",
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/mon",  # peerdir only
+    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
+    # "//ydb/public/api/grpc",  # peerdir only
+    # "//ydb/public/api/protos",  # peerdir only
+    # "//yql/essentials/public/issue/protos",  # peerdir only
+  ]
+
+  sources = [ "counters_info.cpp" ]
+}

@@ -1,0 +1,12 @@
+library("download") {
+  deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/protobuf/util",
+    "//yql/essentials/core/file_storage/proto",
+  ]
+
+  sources = [
+    "download_config.cpp",
+    "download_stream.cpp",
+  ]
+}

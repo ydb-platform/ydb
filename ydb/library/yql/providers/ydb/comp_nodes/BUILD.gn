@@ -1,0 +1,26 @@
+library("comp_nodes") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//yql/essentials/core/dq_integration/transform",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//ydb/core/scheme",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/mkql_proto/protos",  # peerdir only
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/dq/actors/protos",  # peerdir only
+    "//ydb/library/yql/providers/ydb/proto",
+    # "//ydb/public/lib/experimental",
+    # "//ydb/public/sdk/cpp/adapters/issue",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/providers/common/structured_token",
+  ]
+
+  sources = [
+    "yql_kik_scan.cpp",
+    "yql_ydb_dq_transform.cpp",
+    "yql_ydb_factory.cpp",
+  ]
+}

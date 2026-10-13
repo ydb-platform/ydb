@@ -1,0 +1,5 @@
+library("arrow") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/client/result" ]
+
+  sources = [ "accessor.cpp" ]
+}

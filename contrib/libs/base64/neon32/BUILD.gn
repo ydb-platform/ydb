@@ -1,0 +1,12 @@
+config("private_config") {
+    cflags_c = [ "-std=c11" ]
+}
+
+contrib_library("neon32") {
+    sources = [
+        "codec_neon32.c",
+        "lib.c",
+    ]
+
+    configs = [ ":private_config" ]
+}

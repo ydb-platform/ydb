@@ -1,0 +1,20 @@
+library("interface") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/dq/api/grpc",
+    "//ydb/library/yql/providers/dq/api/protos",
+    # "//yql/essentials/providers/common/metrics",
+    "//yql/essentials/utils/log",
+  ]
+
+  deps = [ "//ydb/library/yql/providers/dq/common:attrs" ]
+
+  sources = [
+    "counters.cpp",
+    "events.cpp",
+    "worker_info.cpp",
+  ]
+}

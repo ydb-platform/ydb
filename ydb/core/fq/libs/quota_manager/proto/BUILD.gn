@@ -1,0 +1,3 @@
+protobuf_library("proto") {
+  sources = [ "quota_internal.proto" ]
+}

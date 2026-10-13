@@ -1,0 +1,13 @@
+library("impl") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//yt/yql/providers/yt/fmr/table_data_service/local/interface",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/fmr/utils",
+  ]
+
+  sources = [ "yql_yt_table_data_service_local.cpp" ]
+}

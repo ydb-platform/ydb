@@ -1,0 +1,12 @@
+contrib_library("Demangle") {
+    sources = [
+        "Demangle.cpp",
+        "DLangDemangle.cpp",
+        "ItaniumDemangle.cpp",
+        "MicrosoftDemangle.cpp",
+        "MicrosoftDemangleNodes.cpp",
+        "RustDemangle.cpp",
+    ]
+
+    configs = [ "//contrib/libs/llvm16:public_config" ]
+}

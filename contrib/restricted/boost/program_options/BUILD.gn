@@ -1,0 +1,31 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("program_options") {
+    public_deps = [
+        "//contrib/restricted/boost/any",
+        "//contrib/restricted/boost/config",
+        "//contrib/restricted/boost/function",
+        "//contrib/restricted/boost/iterator",
+        "//contrib/restricted/boost/lexical_cast",
+        "//contrib/restricted/boost/smart_ptr",
+        "//contrib/restricted/boost/tokenizer",
+    ]
+
+    sources = [
+        "src/cmdline.cpp",
+        "src/config_file.cpp",
+        "src/convert.cpp",
+        "src/options_description.cpp",
+        "src/parsers.cpp",
+        "src/positional_options.cpp",
+        "src/split.cpp",
+        "src/utf8_codecvt_facet.cpp",
+        "src/value_semantic.cpp",
+        "src/variables_map.cpp",
+        "src/winmain.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

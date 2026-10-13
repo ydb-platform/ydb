@@ -1,0 +1,14 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("AggressiveInstCombine") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "AggressiveInstCombine.cpp",
+        "TruncInstCombine.cpp",
+    ]
+}

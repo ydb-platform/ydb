@@ -1,0 +1,19 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+  ]
+
+  sources = [
+    "//util/network/address_ut.cpp",
+    "//util/network/endpoint_ut.cpp",
+    "//util/network/ip_ut.cpp",
+    "//util/network/poller_ut.cpp",
+    "//util/network/sock_ut.cpp",
+    "//util/network/socket_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,28 @@
+library("tools") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//ydb/public/lib/ydb_cli/common",
+    # "//ydb/public/sdk/cpp/src/client/driver",
+  ]
+
+  deps = [
+    # "//library/cpp/colorizer",  # peerdir only
+    # "//ydb/library/yverify_stream",
+    # "//ydb/public/lib/json_value",
+    "//ydb/public/lib/ydb_cli/commands/interactive/common",
+    "//ydb/public/lib/ydb_cli/commands/interactive/highlight",
+    # "//ydb/public/lib/ydb_cli/dump",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
+  ]
+
+  sources = [
+    "describe_tool.cpp",
+    "exec_query_tool.cpp",
+    "exec_shell_tool.cpp",
+    "list_directory_tool.cpp",
+    "tool_base.cpp",
+    "tool_interface.cpp",
+    "ydb_help_tool.cpp",
+  ]
+}

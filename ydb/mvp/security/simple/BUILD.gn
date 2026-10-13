@@ -1,0 +1,3 @@
+library("simple") {
+  sources = [ "security.cpp" ]
+}

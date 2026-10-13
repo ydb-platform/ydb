@@ -1,0 +1,39 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",  # peerdir only
+    "//contrib/libs/protobuf",
+    "//library/cpp/retry",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/tablet",  # peerdir only
+    "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/columnshard/counters",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
+    "//ydb/core/tx/columnshard/test_helper",  # peerdir only
+    "//ydb/core/tx/conveyor/usage",
+    "//ydb/core/tx/conveyor_composite/service",  # peerdir only
+    "//ydb/core/tx/conveyor_composite/usage",
+    "//ydb/library/actors/core",
+    "//ydb/library/signals",
+    "//yql/essentials/core/arrow_kernels/request",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "ut_simple.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/tx/conveyor_composite/service",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

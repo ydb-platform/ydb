@@ -1,0 +1,18 @@
+library("request_options") {
+  public_deps = [
+    # "//library/cpp/yson/node",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/yql/providers/yt/fmr/utils/comparator",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/future",  # peerdir only
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/utils",
+    # "//yt/cpp/mapreduce/common",
+  ]
+
+  sources = [ "yql_yt_request_options.cpp" ]
+
+  serialize_enum_headers = [ "yql_yt_request_options.h" ]
+}

@@ -1,0 +1,53 @@
+library("granule") {
+  deps = [
+    "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/normalizer/abstract",
+  ]
+
+  sources = [
+    "granule/clean_granule.cpp",
+    "granule/normalizer.cpp",
+  ]
+}
+
+group("normalizer") {
+  public_deps = [
+    ":granule",  # peerdir only
+    ":schema_version",  # peerdir only
+    ":tables",  # peerdir only
+    ":tablet",  # peerdir only
+    # "//ydb/core/tx/columnshard/normalizer/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/normalizer/insert_table",
+    "//ydb/core/tx/columnshard/normalizer/portion",  # peerdir only
+  ]
+}
+
+library("schema_version") {
+  deps = [
+    "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/normalizer/abstract",
+  ]
+
+  sources = [ "schema_version/version.cpp" ]
+}
+
+library("tables") {
+  deps = [
+    "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/normalizer/abstract",
+  ]
+
+  sources = [ "tables/normalizer.cpp" ]
+}
+
+library("tablet") {
+  deps = [
+    "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/normalizer/abstract",
+  ]
+
+  sources = [
+    "tablet/broken_txs.cpp",
+    "tablet/gc_counters.cpp",
+  ]
+}

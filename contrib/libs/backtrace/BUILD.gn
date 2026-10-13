@@ -1,0 +1,23 @@
+config("private_config") {
+    defines = [ "HAVE_CONFIG_H" ]
+    include_dirs = [ "." ]
+}
+
+contrib_library("backtrace") {
+    sources = [
+        "atomic.c",
+        "backtrace.c",
+        "dwarf.c",
+        "elf.c",
+        "fileline.c",
+        "mmap.c",
+        "mmapio.c",
+        "posix.c",
+        "print.c",
+        "simple.c",
+        "sort.c",
+        "state.c",
+    ]
+
+    configs = [ ":private_config" ]
+}

@@ -1,0 +1,11 @@
+library("system") {
+  public_deps = [
+    # "//library/cpp/yt/misc",
+  ]
+
+  sources = [
+    "env.cpp",
+    "exit.cpp",
+    "thread_id.cpp",
+  ]
+}

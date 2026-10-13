@@ -1,0 +1,32 @@
+config("fetch_private_config") {
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
+library("fetch") {
+  public_deps = [
+    "//library/cpp/http/misc",
+    "//library/cpp/mime/types",
+  ]
+
+  deps = [
+    "//contrib/libs/zlib",
+    "//library/cpp/charset",  # peerdir only
+    # "//library/cpp/charset/lite",
+    "//library/cpp/digest/md5",
+    "//library/cpp/logger",
+    "//library/cpp/uri",
+  ]
+
+  sources = [
+    "exthttpcodes.cpp",
+    "http_digest.cpp",
+    "http_socket.cpp",
+    "httpfsm.rl6",
+    "httpheader.cpp",
+    "httpload.cpp",
+  ]
+
+  serialize_enum_headers = [ "httpheader.h" ]
+
+  configs = [ ":fetch_private_config" ]
+}

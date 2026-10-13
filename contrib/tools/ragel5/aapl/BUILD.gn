@@ -1,0 +1,8 @@
+config("public_config") {
+    cflags = [ "-Wno-nontrivial-memcall" ]
+    include_dirs = [ "." ]
+}
+
+group("aapl") {
+    public_configs = [ ":public_config" ]
+}

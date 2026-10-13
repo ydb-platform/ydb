@@ -1,0 +1,100 @@
+library("alloc") {
+  public_deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    # "//yql/essentials/core/pg_settings",
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [ "//contrib/libs/apache/arrow" ]
+
+  sources = [
+    "aligned_page_pool.cpp",
+    "mkql_alloc.cpp",
+    "mkql_mem_info.cpp",
+  ]
+
+  link_slot_module_interfaces = [ "minikql_codegen" ]
+}
+
+library("minikql") {
+  public_deps = [
+    ":alloc",
+    ":terminator",
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/deprecated/enum_codegen",
+    "//library/cpp/type_info/tz",
+    "//yql/essentials/core/sql_types",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/public/decimal",
+    # "//yql/essentials/public/langver",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/utils",
+  ]
+
+  deps = [
+    "//contrib/libs/cctz",
+    # "//contrib/libs/cctz/tzdata",  # peerdir only
+    # "//library/cpp/enumbitset",  # peerdir only
+    # "//library/cpp/json",
+    "//library/cpp/monlib/dynamic_counters",  # peerdir only
+    # "//library/cpp/packedtypes",
+    # "//library/cpp/resource",
+    "//library/cpp/yson",
+    "//yql/essentials/core/issue",  # peerdir only
+    # "//yql/essentials/core/pg_settings",  # peerdir only
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/dom",
+    "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/public/issue",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    "//yql/essentials/types/uuid",
+    # "//yql/essentials/utils/memory_profiling",  # peerdir only
+  ]
+
+  sources = [
+    "compact_hash.cpp",
+    "mkql_block_map_join_utils.cpp",
+    "mkql_buffer.cpp",
+    "mkql_function_metadata.cpp",
+    "mkql_function_registry.cpp",
+    "mkql_node.cpp",
+    "mkql_node_builder.cpp",
+    "mkql_node_cast.cpp",
+    "mkql_node_printer.cpp",
+    "mkql_node_serialization.cpp",
+    "mkql_node_visitor.cpp",
+    "mkql_opt_literal.cpp",
+    "mkql_program_builder.cpp",
+    "mkql_rh_hash_utils.cpp",
+    "mkql_runtime_version.cpp",
+    "mkql_stats_registry.cpp",
+    "mkql_string_util.cpp",
+    "mkql_type_builder.cpp",
+    "mkql_type_ops.cpp",
+    "mkql_unboxed_value_stream.cpp",
+    "pack_num.cpp",
+    "primes.cpp",
+    "watermark_tracker.cpp",
+  ]
+
+  link_slot_interface = "minikql_codegen"
+
+  link_slot_headers = [ "codegen/codegen.h" ]
+}
+
+library("terminator") {
+  public_deps = [ "//yql/essentials/public/issue" ]
+
+  deps = [
+    # ":minikql",
+    "//yql/essentials/core/issue",
+  ]
+
+  sources = [ "mkql_terminator.cpp" ]
+
+  link_slot_module_interfaces = [ "minikql_codegen" ]
+}

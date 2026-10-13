@@ -1,0 +1,13 @@
+unittest_executable("decimal") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/library/decimal",
+  ]
+
+  sources = [
+    "yql_decimal_ut.cpp",
+    "yql_wide_int_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

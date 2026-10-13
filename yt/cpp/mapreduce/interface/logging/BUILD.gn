@@ -1,0 +1,14 @@
+library("logging") {
+  public_deps = [
+    "//library/cpp/yt/logging",
+    "//yt/yt/core",
+  ]
+
+  sources = [
+    "logger.cpp",
+    "structured.cpp",
+    "yt_log.cpp",
+  ]
+
+  serialize_enum_headers = [ "logger.h" ]
+}

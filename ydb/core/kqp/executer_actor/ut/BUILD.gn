@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "//ydb/core/kqp/executer_actor/kqp_executer_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/executer_actor" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

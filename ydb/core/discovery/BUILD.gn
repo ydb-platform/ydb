@@ -1,0 +1,16 @@
+library("discovery") {
+  public_deps = [
+    "//ydb/core/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [ "discovery.cpp" ]
+}

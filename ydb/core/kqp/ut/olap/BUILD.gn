@@ -1,0 +1,82 @@
+unittest_executable("olap") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib",
+    "//ydb/library/conclusion",
+    "//ydb/library/formats/arrow/simple_builder",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/hook",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/ut/olap/combinatory",  # peerdir only
+    "//ydb/core/kqp/ut/olap/helpers",  # peerdir only
+    "//ydb/core/statistics",
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/data_locks/locks",
+    "//ydb/core/tx/columnshard/data_sharing/common/context",
+    "//ydb/core/tx/columnshard/data_sharing/initiator/controller",
+    "//ydb/core/tx/columnshard/data_sharing/initiator/status",
+    "//ydb/core/tx/columnshard/engines/changes/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/scheme/abstract",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/core/util",
+    "//ydb/core/wrappers",
+    "//ydb/library/signals",
+    "//ydb/library/ut",
+    "//ydb/library/yql/dq/actors",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/public/lib/scheme_types",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/operation",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/ss_tasks",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "aggregations_ut.cpp",
+    "blobs_sharing_ut.cpp",
+    "clickbench_ut.cpp",
+    "dictionary_ut.cpp",
+    "kqp_olap_ut.cpp",
+    "locks_ut.cpp",
+    "optimizer_ut.cpp",
+    "sys_view_ut.cpp",
+    "tiering_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

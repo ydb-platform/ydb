@@ -1,0 +1,19 @@
+library("cache") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/keyvalue",
+    "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/events",
+    # "//ydb/core/persqueue/pqtablet/blob",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/cache",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/mon",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "pq_l2_cache.cpp" ]
+}

@@ -1,0 +1,37 @@
+import("//contrib/libs/llvm16/llvm.gni")
+
+llvm_library("Instrumentation") {
+    deps = [
+        "//contrib/libs/llvm16/lib/Analysis",
+        "//contrib/libs/llvm16/lib/Demangle",
+        "//contrib/libs/llvm16/lib/IR",
+        "//contrib/libs/llvm16/lib/MC",
+        "//contrib/libs/llvm16/lib/ProfileData",
+        "//contrib/libs/llvm16/lib/TargetParser",
+        "//contrib/libs/llvm16/lib/Transforms/Utils",
+    ]
+
+    sources = [
+        "AddressSanitizer.cpp",
+        "BoundsChecking.cpp",
+        "CGProfile.cpp",
+        "ControlHeightReduction.cpp",
+        "DataFlowSanitizer.cpp",
+        "GCOVProfiling.cpp",
+        "HWAddressSanitizer.cpp",
+        "IndirectCallPromotion.cpp",
+        "InstrOrderFile.cpp",
+        "InstrProfiling.cpp",
+        "Instrumentation.cpp",
+        "KCFI.cpp",
+        "MemorySanitizer.cpp",
+        "MemProfiler.cpp",
+        "PGOInstrumentation.cpp",
+        "PGOMemOPSizeOpt.cpp",
+        "PoisonChecking.cpp",
+        "SanitizerBinaryMetadata.cpp",
+        "SanitizerCoverage.cpp",
+        "ThreadSanitizer.cpp",
+        "ValueProfileCollector.cpp",
+    ]
+}

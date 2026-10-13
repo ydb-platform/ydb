@@ -1,0 +1,14 @@
+library("impl") {
+  public_deps = [
+    # "//library/cpp/random_provider",
+    # "//library/cpp/threading/future",
+    # "//yt/yql/providers/yt/fmr/job_factory/interface",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/fmr/request_options",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_job_factory_impl.cpp" ]
+}

@@ -1,0 +1,11 @@
+library("base") {
+  public_deps = [
+    # "//library/cpp/deprecated/enum_codegen",
+    # "//library/cpp/messagebus",
+    "//library/cpp/messagebus/protobuf",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "msgbus.cpp" ]
+}

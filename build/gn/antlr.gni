@@ -1,0 +1,109 @@
+template("antlr_run") {
+    assert(defined(invoker.version), "antlr_run requires `version` (3 or 4)")
+    assert(defined(invoker.grammar), "antlr_run requires `grammar`")
+    assert(defined(invoker.language),
+           "antlr_run requires `language` (e.g. \"Cpp\", \"protobuf\", \"Java\")")
+    assert(defined(invoker.templates_target),
+           "antlr_run requires `templates_target` (an expand_template target)")
+    # Gen-space directory antlr is run from: StringTemplate opens the backend
+    # template group as a path relative to the process cwd, so this must be the
+    # directory that holds the `org/...` tree. Where a target puts its .stg is
+    # its own choice — either the default mirror of the source layout under
+    # root_gen_dir, or (via expand_template's `output_dir`) a private copy under
+    # its own target_gen_dir, which is what targets sharing the same .stg.in
+    # must do to avoid declaring the same output file.
+    assert(defined(invoker.templates_dir),
+           "antlr_run requires `templates_dir` (gen dir holding the org/... template tree)")
+
+    if (invoker.version == 3) {
+        _jar = "//contrib/java/antlr/antlr3/antlr.jar"
+        _out_flag = "-fo"
+        _language_args = [ "-language", invoker.language ]
+        _config = "//contrib/libs/antlr3_cpp_runtime:generated_private_config"
+    } else {
+        assert(invoker.version == 4, "antlr_run: `version` must be 3 or 4")
+        _jar = "//contrib/java/antlr/antlr4/antlr.jar"
+        _out_flag = "-o"
+        _language_args = [ "-Dlanguage=" + invoker.language ]
+        _config = "//contrib/libs/antlr4_cpp_runtime:generated_private_config"
+    }
+    if (defined(invoker.jar)) {
+        _jar = invoker.jar
+    }
+
+    # "JsonPath.g" -> "JsonPath".
+    _name = get_path_info(invoker.grammar, "name")
+
+    if (invoker.language == "protobuf" || invoker.language == "Java") {
+        _outputs = [ "$target_gen_dir/${_name}Parser.proto" ]
+    } else if (invoker.language == "Cpp") {
+        _outputs = [
+            "$target_gen_dir/${_name}Parser.cpp",
+            "$target_gen_dir/${_name}Parser.h",
+            "$target_gen_dir/${_name}Lexer.cpp",
+            "$target_gen_dir/${_name}Lexer.h",
+        ]
+        # RUN_ANTLR4_CPP(... VISITOR): the visitor headers are real outputs that
+        # consumers include, so ninja must know who produces them.
+        if (defined(invoker.visitor) && invoker.visitor) {
+            _outputs += [
+                "$target_gen_dir/${_name}Visitor.h",
+                "$target_gen_dir/${_name}BaseVisitor.h",
+            ]
+        }
+    } else {
+        assert(false, "antlr_run: unknown language '${invoker.language}'")
+    }
+
+    _templates_dir = invoker.templates_dir
+
+    action(target_name) {
+        forward_variables_from(invoker, [ "deps", "visibility" ])
+
+        script = "//build/gn/scripts/run_in_dir.py"
+        outputs = _outputs
+        inputs = [ invoker.grammar, _jar ] +
+                 get_target_outputs(invoker.templates_target)
+
+        # TODO: run through a hermetic JDK (ya make uses build/platform/java/jdk)
+        # instead of `java` from $PATH.
+        #
+        args = [
+            rebase_path(_templates_dir),
+            "java", "-jar", rebase_path(_jar),
+            rebase_path(invoker.grammar),
+        ]
+        args += _language_args
+        args += [
+            "-lib", ".",
+            _out_flag, rebase_path(target_gen_dir),
+        ]
+        if (defined(invoker.visitor) && invoker.visitor) {
+            args += [ "-visitor" ]
+        }
+        if (defined(invoker.extra_args)) {
+            args += invoker.extra_args
+        }
+
+        if (!defined(deps)) {
+            deps = []
+        }
+        deps += [ invoker.templates_target ]
+
+        public_configs = [ _config ]
+    }
+}
+
+template("antlr3_run") {
+    antlr_run(target_name) {
+        forward_variables_from(invoker, "*")
+        version = 3
+    }
+}
+
+template("antlr4_run") {
+    antlr_run(target_name) {
+        forward_variables_from(invoker, "*")
+        version = 4
+    }
+}

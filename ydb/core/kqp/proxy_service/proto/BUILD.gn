@@ -1,0 +1,5 @@
+protobuf_library("proto") {
+  public_deps = [ "//ydb/public/api/protos" ]
+
+  sources = [ "result_set_meta.proto" ]
+}

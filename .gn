@@ -1,0 +1,3 @@
+buildconfig = "//build/gn/config/CONFIG.gn"
+
+export_compile_commands = [ "//*" ]

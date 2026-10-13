@@ -1,0 +1,41 @@
+library("local_pgwire") {
+  public_deps = [
+    "//library/cpp/string_utils/base64",
+    "//ydb/core/pgproxy",
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/draft",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/plain_status",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    # "//ydb/public/sdk/cpp/src/client/types/operation",
+    "//ydb/public/sdk/cpp/src/client/value",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/grpc_services",  # peerdir only
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/common/events",
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/executer_actor",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/scheme_cache",
+    "//ydb/core/ydb_convert",
+    "//ydb/library/services",
+    "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+    # "//ydb/services/persqueue_v1/actors",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+  ]
+
+  sources = [
+    "local_pgwire.cpp",
+    "local_pgwire_auth_actor.cpp",
+    "local_pgwire_connection.cpp",
+    "local_pgwire_util.cpp",
+    "pgwire_kqp_proxy.cpp",
+    "sql_parser.cpp",
+  ]
+}

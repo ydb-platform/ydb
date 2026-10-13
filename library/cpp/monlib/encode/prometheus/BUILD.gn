@@ -1,0 +1,15 @@
+library("prometheus") {
+  public_deps = [ "//library/cpp/monlib/encode" ]
+
+  deps = [
+    "//library/cpp/monlib/encode/buffered",
+    "//library/cpp/monlib/metrics",
+  ]
+
+  sources = [
+    "prometheus_decoder.cpp",
+    "prometheus_encoder.cpp",
+  ]
+
+  serialize_enum_headers = [ "prometheus.h" ]
+}

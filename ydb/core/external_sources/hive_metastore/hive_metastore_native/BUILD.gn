@@ -1,0 +1,13 @@
+library("hive_metastore_native") {
+  public_deps = [
+    # "//contrib/restricted/thrift",
+  ]
+
+  sources = [
+    "gen-cpp/FacebookService.cpp",
+    "gen-cpp/ThriftHiveMetastore.cpp",
+    "gen-cpp/fb303_types.cpp",
+    "gen-cpp/hive_metastore_constants.cpp",
+    "gen-cpp/hive_metastore_types.cpp",
+  ]
+}

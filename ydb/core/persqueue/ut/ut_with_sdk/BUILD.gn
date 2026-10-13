@@ -1,0 +1,46 @@
+unittest_executable("ut_with_sdk") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue",  # peerdir only
+    "//ydb/core/persqueue/common/proxy",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/pqrb",
+    "//ydb/core/persqueue/public/partition_key_range",
+    "//ydb/core/persqueue/ut/common",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+  ]
+
+  sources = [
+    "autoscaling_ut.cpp",
+    "balancing_ut.cpp",
+    "commitoffset_ut.cpp",
+    "describe_ut.cpp",
+    "mirrorer_autoscaling_ut.cpp",
+    "mirrorer_ut.cpp",
+    "topic_timestamp_ut.cpp",
+    "topic_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/persqueue",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

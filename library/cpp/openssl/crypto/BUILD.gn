@@ -1,0 +1,12 @@
+library("crypto") {
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/openssl/big_integer",
+    "//library/cpp/openssl/init",  # peerdir only
+  ]
+
+  sources = [
+    "rsa.cpp",
+    "sha.cpp",
+  ]
+}

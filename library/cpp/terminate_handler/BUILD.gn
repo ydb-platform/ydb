@@ -1,0 +1,6 @@
+library("terminate_handler") {
+  sources = [
+    "segv_handler.cpp",
+    "terminate_handler.cpp",
+  ]
+}

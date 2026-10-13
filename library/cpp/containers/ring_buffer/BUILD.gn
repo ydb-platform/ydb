@@ -1,0 +1,3 @@
+library("ring_buffer") {
+  sources = [ "ring_buffer.cpp" ]
+}

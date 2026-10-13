@@ -1,0 +1,5 @@
+contrib_library("nayuki_md5") {
+    sources = [
+        "md5-fast-x8664.S",
+    ]
+}

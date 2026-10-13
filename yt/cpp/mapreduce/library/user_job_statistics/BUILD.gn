@@ -1,0 +1,5 @@
+library("user_job_statistics") {
+  deps = [ "//yt/cpp/mapreduce/common" ]
+
+  sources = [ "user_job_statistics.cpp" ]
+}

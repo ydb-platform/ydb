@@ -1,0 +1,17 @@
+library("type_info") {
+  public_deps = [ "//library/cpp/yson_pull" ]
+
+  sources = [
+    "builder.cpp",
+    "error.cpp",
+    "type.cpp",
+    "type_complexity.cpp",
+    "type_equivalence.cpp",
+    "type_factory.cpp",
+    "type_info.cpp",
+    "type_io.cpp",
+    "type_list.cpp",
+  ]
+
+  serialize_enum_headers = [ "type_list.h" ]
+}

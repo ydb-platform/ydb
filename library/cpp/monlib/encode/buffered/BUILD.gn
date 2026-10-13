@@ -1,0 +1,11 @@
+library("buffered") {
+  public_deps = [
+    "//library/cpp/monlib/encode",
+    "//library/cpp/monlib/metrics",
+  ]
+
+  sources = [
+    "buffered_encoder_base.cpp",
+    "string_pool.cpp",
+  ]
+}

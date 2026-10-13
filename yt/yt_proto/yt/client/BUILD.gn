@@ -1,0 +1,36 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+protobuf_library("client") {
+    public_deps = [
+        "//yt/yt_proto/yt/core",
+    ]
+
+    sources = [
+        "api/rpc_proxy/proto/api_service.proto",
+        "api/rpc_proxy/proto/discovery_service.proto",
+        "bundle_controller/proto/bundle_controller_service.proto",
+        "cell_master/proto/cell_directory.proto",
+        "chaos_client/proto/replication_card.proto",
+        "chunk_client/proto/chunk_meta.proto",
+        "chunk_client/proto/chunk_spec.proto",
+        "chunk_client/proto/confirm_chunk_replica_info.proto",
+        "chunk_client/proto/data_statistics.proto",
+        "chunk_client/proto/read_limit.proto",
+        "discovery_client/proto/discovery_client_service.proto",
+        "hive/proto/cluster_directory.proto",
+        "hive/proto/timestamp_map.proto",
+        "job_proxy/proto/job_api_service.proto",
+        "misc/proto/signature.proto",
+        "misc/proto/workload.proto",
+        "node_tracker_client/proto/node_directory.proto",
+        "node_tracker_client/proto/node.proto",
+        "query_client/proto/query_statistics.proto",
+        "scheduler/proto/spec_patch.proto",
+        "table_chunk_format/proto/chunk_meta.proto",
+        "table_chunk_format/proto/column_meta.proto",
+        "table_chunk_format/proto/wire_protocol.proto",
+        "table_client/proto/versioned_io_options.proto",
+        "tablet_client/proto/lock_mask.proto",
+        "transaction_client/proto/timestamp_service.proto",
+    ]
+}

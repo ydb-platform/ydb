@@ -1,0 +1,15 @@
+library("events") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_action/protos",
+    "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard:ev_ids",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    "//ydb/core/tx/datashard",  # peerdir only
+  ]
+
+  sources = [ "delete_blobs.cpp" ]
+}

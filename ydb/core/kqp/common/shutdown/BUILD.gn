@@ -1,0 +1,14 @@
+library("shutdown") {
+  public_deps = [
+    "//library/cpp/deprecated/atomic",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "controller.cpp",
+    "events.cpp",
+    "state.cpp",
+  ]
+}

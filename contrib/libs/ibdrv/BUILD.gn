@@ -1,0 +1,13 @@
+config("public_config") {
+    cflags = [ "-Wno-deprecated-anon-enum-enum-conversion" ]
+    include_dirs = [ "include" ]
+}
+
+static_library("ibdrv") {
+    sources = [
+        "impl.cpp",
+        "symbols.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

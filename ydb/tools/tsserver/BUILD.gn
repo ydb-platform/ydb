@@ -1,0 +1,10 @@
+linked_executable("tsserver") {
+  deps = [
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/library/actors/interconnect",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

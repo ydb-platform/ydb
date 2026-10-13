@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/protobuf/util",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/load_test",
+    "//ydb/core/testlib/default",  # peerdir only
+  ]
+
+  sources = [ "group_test_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/load_test" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

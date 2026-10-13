@@ -1,0 +1,11 @@
+library("erasure") {
+  public_deps = [
+    # "//library/cpp/yt/misc",
+  ]
+
+  deps = [
+    "//yt/yt/core",  # peerdir only
+  ]
+
+  sources = [ "public.cpp" ]
+}

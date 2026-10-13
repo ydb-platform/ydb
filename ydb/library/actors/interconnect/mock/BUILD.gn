@@ -1,0 +1,8 @@
+library("mock") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [ "ic_mock.cpp" ]
+}

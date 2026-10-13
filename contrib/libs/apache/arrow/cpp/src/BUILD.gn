@@ -1,0 +1,14 @@
+import("//build/gn/flatbuffers.gni")
+
+flatbuffers_library("generated") {
+    flatc_flags = [ "--scoped-enums" ]
+
+    sources = [
+        "generated/feather.fbs",
+        "generated/File.fbs",
+        "generated/Message.fbs",
+        "generated/Schema.fbs",
+        "generated/SparseTensor.fbs",
+        "generated/Tensor.fbs",
+    ]
+}

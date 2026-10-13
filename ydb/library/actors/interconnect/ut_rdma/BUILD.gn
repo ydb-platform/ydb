@@ -1,0 +1,19 @@
+gtest_executable("ut_rdma") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/interconnect/rdma/ut/utils",
+    "//ydb/library/actors/interconnect/ut/lib",
+    "//ydb/library/actors/interconnect/ut/protos",
+    "//ydb/library/actors/testlib",  # peerdir only
+  ]
+
+  sources = [
+    "port_manager.cpp",
+    "rdma_xdc_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,15 @@
+group("client") {
+  public_deps = [
+    # "//ydb/core/client/metadata",
+    # "//ydb/core/client/minikql_compile",
+    # "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    # "//ydb/core/client/server",  # peerdir only
+  ]
+
+  deps = [
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/engine",  # peerdir only
+    # "//ydb/library/grpc/server",  # peerdir only
+    # "//ydb/public/lib/deprecated/kicli",  # peerdir only
+  ]
+}

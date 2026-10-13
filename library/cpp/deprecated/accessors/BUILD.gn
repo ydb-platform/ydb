@@ -1,0 +1,7 @@
+library("accessors") {
+  sources = [
+    "accessors.cpp",
+    "accessors_impl.cpp",
+    "memory_traits.cpp",
+  ]
+}

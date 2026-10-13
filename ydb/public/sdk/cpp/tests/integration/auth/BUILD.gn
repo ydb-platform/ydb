@@ -1,0 +1,18 @@
+gtest_executable("auth") {
+  deps = [
+    "//contrib/libs/jwt-cpp",  # peerdir only
+    "//library/cpp/testing/gtest",
+    "//ydb/public/sdk/cpp/src/client/common_client",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/common_client/impl",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [ "login_it.cpp" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

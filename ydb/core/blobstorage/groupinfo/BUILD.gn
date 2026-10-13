@@ -1,0 +1,22 @@
+library("groupinfo") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/blobstorage",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+  ]
+
+  deps = [
+    "//library/cpp/digest/crc32c",
+    # "//ydb/core/base/services",
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "blobstorage_groupinfo.cpp",
+    "blobstorage_groupinfo_blobmap.cpp",
+    "blobstorage_groupinfo_partlayout.cpp",
+  ]
+}

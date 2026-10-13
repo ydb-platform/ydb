@@ -1,0 +1,8 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("cityhash-1.0.2") {
+    sources = [ "city.cc" ]
+    public_configs = [ ":public_config" ]
+}

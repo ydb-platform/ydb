@@ -1,0 +1,71 @@
+config("ut_private_config") {
+  cflags = [ "-Wno-deprecated-volatile" ]
+}
+
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/benchmark",
+    "//library/cpp/testing/unittest",
+  ]
+
+  sources = [
+    "//util/system/align_ut.cpp",
+    "//util/system/atexit_ut.cpp",
+    "//util/system/backtrace_ut.cpp",
+    "//util/system/byteorder_ut.cpp",
+    "//util/system/compat_ut.cpp",
+    "//util/system/compiler_ut.c",
+    "//util/system/compiler_ut.cpp",
+    "//util/system/condvar_ut.cpp",
+    "//util/system/context_ut.cpp",
+    "//util/system/cpu_id_ut.cpp",
+    "//util/system/daemon_ut.cpp",
+    "//util/system/datetime_ut.cpp",
+    "//util/system/defaults_ut.c",
+    "//util/system/direct_io_ut.cpp",
+    "//util/system/env_ut.cpp",
+    "//util/system/error_ut.cpp",
+    "//util/system/event_ut.cpp",
+    "//util/system/execpath_ut.cpp",
+    "//util/system/file_ut.cpp",
+    "//util/system/filemap_ut.cpp",
+    "//util/system/flock_ut.cpp",
+    "//util/system/fs_ut.cpp",
+    "//util/system/fstat_ut.cpp",
+    "//util/system/getpid_ut.cpp",
+    "//util/system/guard_ut.cpp",
+    "//util/system/hi_lo_ut.cpp",
+    "//util/system/hostname_ut.cpp",
+    "//util/system/info_ut.cpp",
+    "//util/system/interrupt_signals_ut.cpp",
+    "//util/system/mem_info_ut.cpp",
+    "//util/system/mincore_ut.cpp",
+    "//util/system/mutex_ut.cpp",
+    "//util/system/nice_ut.cpp",
+    "//util/system/pipe_ut.cpp",
+    "//util/system/platform_ut.cpp",
+    "//util/system/progname_ut.cpp",
+    "//util/system/rusage_ut.cpp",
+    "//util/system/rwlock_ut.cpp",
+    "//util/system/sanitizers_ut.cpp",
+    "//util/system/shellcommand_ut.cpp",
+    "//util/system/shmat_ut.cpp",
+    "//util/system/spinlock_ut.cpp",
+    "//util/system/src_location_ut.cpp",
+    "//util/system/src_root_ut.cpp",
+    "//util/system/tempfile_ut.cpp",
+    "//util/system/thread_ut.cpp",
+    "//util/system/tls_ut.cpp",
+    "//util/system/type_name_ut.cpp",
+    "//util/system/types_ut.cpp",
+    "//util/system/unaligned_mem_ut.cpp",
+    "//util/system/user_ut.cpp",
+    "//util/system/yassert_ut.cpp",
+  ]
+
+  include_dirs = [ "//util" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+
+  configs = [ ":ut_private_config" ]
+}

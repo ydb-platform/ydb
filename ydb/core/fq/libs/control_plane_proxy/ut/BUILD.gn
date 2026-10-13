@@ -1,0 +1,41 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/control_plane_config",
+    "//ydb/core/fq/libs/control_plane_proxy",
+    "//ydb/core/fq/libs/control_plane_proxy/events",
+    "//ydb/core/fq/libs/control_plane_storage",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    "//ydb/core/fq/libs/quota_manager",
+    "//ydb/core/fq/libs/quota_manager/events",
+    "//ydb/core/fq/libs/quota_manager:ut_helpers",
+    "//ydb/core/fq/libs/rate_limiter/control_plane_service",
+    "//ydb/core/fq/libs/rate_limiter/events",
+    "//ydb/core/fq/libs/test_connection",
+    "//ydb/core/fq/libs/test_connection:events",
+    "//ydb/core/fq/libs/ydb",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/folder_service",
+    "//ydb/library/folder_service/mock",
+  ]
+
+  sources = [ "control_plane_proxy_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/control_plane_proxy" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

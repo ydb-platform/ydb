@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/json_value",
+    "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  sources = [ "//ydb/public/lib/json_value/ydb_json_value_ut.cpp" ]
+
+  include_dirs = [ "//ydb/public/lib/json_value" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

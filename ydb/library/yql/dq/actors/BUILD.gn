@@ -1,0 +1,17 @@
+library("actors") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/public/ydb_issue",
+    "//ydb/public/api/protos",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/utils",
+  ]
+
+  deps = [ "//yql/essentials/core/issue" ]
+
+  sources = [
+    "dq.cpp",
+    "dq_events_ids.cpp",
+  ]
+}

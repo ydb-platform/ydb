@@ -1,0 +1,38 @@
+library("service") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//ydb/core/base",
+    "//ydb/core/change_exchange",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    # "//ydb/core/tablet_flat",
+    "//ydb/core/tx/replication/common",
+    # "//ydb/core/tx/replication/ydb_proxy",
+    "//ydb/core/wrappers",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/fq/libs/row_dispatcher/events",  # peerdir only
+    "//ydb/core/fq/libs/row_dispatcher/purecalc_compilation",
+    "//ydb/core/io_formats/cell_maker",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/replication/ydb_proxy/local_proxy",  # peerdir only
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "base_table_writer.cpp",
+    "json_change_record.cpp",
+    "s3_writer.cpp",
+    "service.cpp",
+    "table_writer.cpp",
+    "topic_reader.cpp",
+    "worker.cpp",
+  ]
+
+  serialize_enum_headers = [ "worker.h" ]
+}

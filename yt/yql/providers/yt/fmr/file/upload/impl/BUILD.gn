@@ -1,0 +1,15 @@
+library("impl") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/file/upload/interface",
+    # "//yt/yql/providers/yt/fmr/request_options",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/yql/providers/yt/fmr/utils",
+    # "//yt/yql/providers/yt/gateway/lib",
+  ]
+
+  sources = [ "yql_yt_file_upload_impl.cpp" ]
+}

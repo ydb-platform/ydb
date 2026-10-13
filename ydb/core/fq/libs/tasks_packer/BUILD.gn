@@ -1,0 +1,7 @@
+library("tasks_packer") {
+  public_deps = [ "//ydb/library/yql/dq/proto" ]
+
+  deps = [ "//yql/essentials/utils" ]
+
+  sources = [ "tasks_packer.cpp" ]
+}

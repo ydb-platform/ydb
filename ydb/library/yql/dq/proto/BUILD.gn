@@ -1,0 +1,9 @@
+protobuf_library("proto") {
+  public_deps = [ "//ydb/library/actors/protos" ]
+
+  sources = [
+    "dq_state_load_plan.proto",
+    "dq_tasks.proto",
+    "dq_transport.proto",
+  ]
+}

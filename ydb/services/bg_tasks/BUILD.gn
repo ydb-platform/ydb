@@ -1,0 +1,6 @@
+group("bg_tasks") {
+  public_deps = [
+    # "//ydb/services/bg_tasks/abstract",  # peerdir only
+    # "//ydb/services/bg_tasks/protos",  # peerdir only
+  ]
+}

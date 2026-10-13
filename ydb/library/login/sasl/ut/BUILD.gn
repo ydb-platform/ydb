@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/login/sasl",
+  ]
+
+  sources = [ "//ydb/library/login/sasl/scram_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/login/sasl" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

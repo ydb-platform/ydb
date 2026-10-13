@@ -1,0 +1,10 @@
+library("config") {
+  public_deps = [
+    "//ydb/core/fq/libs/config/protos",
+    "//yql/essentials/public/issue",
+  ]
+
+  deps = [ "//yql/essentials/public/issue/protos" ]
+
+  sources = [ "yq_issue.cpp" ]
+}

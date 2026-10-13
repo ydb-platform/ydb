@@ -1,0 +1,34 @@
+unittest_executable("with_offset_ranges_mode_ut") {
+  deps = [
+    "//library/cpp/streams/zstd",
+    "//library/cpp/testing/gmock_in_unittest",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/public/lib/json_value",  # peerdir only
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/topic/impl",
+  ]
+
+  sources = [
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/basic_usage_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/common_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/compress_executor_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/read_session_ut.cpp",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/retry_policy_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

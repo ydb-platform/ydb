@@ -1,0 +1,17 @@
+library("bridge") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    "//ydb/core/grpc_services",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/jaeger_tracing",
+    # "//ydb/core/kesus/tablet",  # peerdir only
+    # "//ydb/public/api/grpc",  # peerdir only
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

@@ -1,0 +1,12 @@
+library("audit_helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/logger",
+    "//ydb/core/audit",
+  ]
+
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [ "audit_helper.cpp" ]
+}

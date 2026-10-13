@@ -1,0 +1,10 @@
+protobuf_library("quota") {
+  public_deps = [ "//contrib/libs/googleapis-common-protos" ]
+
+  sources = [
+    "quota.proto",
+    "quota_limit.proto",
+  ]
+
+  generate_grpc_services = true
+}

@@ -1,0 +1,47 @@
+library("abstract") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/data_accessor",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/engines/scheme",  # peerdir only
+  ]
+
+  sources = [
+    "abstract/abstract.cpp",
+    "abstract/context.cpp",
+  ]
+}
+
+group("actualizer") {
+  public_deps = [
+    # ":abstract",  # peerdir only
+    # ":common",  # peerdir only
+    # ":counters",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines",  # peerdir only
+  ]
+}
+
+library("common") {
+  deps = [
+    # "//ydb/core/tx/columnshard/engines/scheme/tiering",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "common/address.cpp" ]
+}
+
+library("counters") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/library/signals",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/core",  # peerdir only
+  ]
+
+  sources = [ "counters/counters.cpp" ]
+}

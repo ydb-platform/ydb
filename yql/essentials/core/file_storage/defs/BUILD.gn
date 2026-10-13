@@ -1,0 +1,8 @@
+library("defs") {
+  public_deps = [ "//library/cpp/uri" ]
+
+  sources = [
+    "downloader.cpp",
+    "provider.cpp",
+  ]
+}

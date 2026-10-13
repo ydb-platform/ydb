@@ -1,0 +1,14 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/compile_service:helpers",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "kqp_compile_cache_helpers_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/compile_service/helpers" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

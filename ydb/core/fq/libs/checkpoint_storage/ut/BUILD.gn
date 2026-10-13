@@ -1,0 +1,45 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/retry",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/checkpoint_storage",
+    "//ydb/core/fq/libs/checkpoint_storage/events",
+    "//ydb/core/fq/libs/checkpointing_common",
+    "//ydb/core/fq/libs/shared_resources",
+    "//ydb/core/fq/libs/ydb",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/security",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/minikql/comp_nodes",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "gc_ut.cpp",
+    "storage_service_ydb_ut.cpp",
+    "ydb_checkpoint_storage_ut.cpp",
+    "ydb_state_storage_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/fq/libs/checkpoint_storage" ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,15 @@
+library("interface") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//yql/essentials/core/file_storage",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/yql/providers/yt/fmr/request_options",
+  ]
+
+  deps = [
+    # "//yql/essentials/core",  # peerdir only
+    # "//yql/essentials/utils",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_job_preparer_interface.cpp" ]
+}

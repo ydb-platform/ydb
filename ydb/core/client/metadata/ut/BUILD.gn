@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/client/metadata",
+    "//ydb/core/scheme_types",
+    "//ydb/public/lib/scheme_types",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/invoke_builtins/llvm16",  # peerdir only
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "functions_metadata_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/client/metadata" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

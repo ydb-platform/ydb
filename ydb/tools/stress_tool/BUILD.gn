@@ -1,0 +1,68 @@
+library("lib") {
+  public_deps = [
+    # "//library/cpp/containers/stack_vector",
+    # "//library/cpp/getopt",
+    # "//library/cpp/json",
+    "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/dynamic_counters/percentile",
+    # "//ydb/core/base",
+    # "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/ddisk",
+    # "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/lwtrace_probes",
+    "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/load_test",
+    # "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet",
+    "//ydb/core/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/pdisk_io",
+    "//ydb/library/services",
+    # "//ydb/library/yverify_stream",
+    "//ydb/tools/stress_tool/proto",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+  ]
+
+  sources = [ "device_test_tool_trim_test.cpp" ]
+}
+
+linked_executable("ydb_stress_tool") {
+  deps = [
+    ":lib",
+    "//library/cpp/getopt",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/crypto",  # peerdir only
+    "//ydb/core/blobstorage/lwtrace_probes",  # peerdir only
+    "//ydb/core/blobstorage/pdisk",  # peerdir only
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/load_test",  # peerdir only
+    "//ydb/core/node_whiteboard",  # peerdir only
+    "//ydb/core/tablet",  # peerdir only
+    "//ydb/library/pdisk_io",  # peerdir only
+    "//ydb/tools/stress_tool/proto",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
+  ]
+
+  sources = [ "device_test_tool.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

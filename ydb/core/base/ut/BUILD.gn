@@ -1,0 +1,50 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/mind",
+    "//ydb/core/mind/bscontroller",
+    "//ydb/core/mind/hive",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",  # peerdir only
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/tx",
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/mediator",
+    "//ydb/public/api/protos",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/base/blobstorage_grouptype_ut.cpp",
+    "//ydb/core/base/localdb_ut.cpp",
+    "//ydb/core/base/logoblob_ut.cpp",
+    "//ydb/core/base/statestorage_guardian_impl_ut.cpp",
+    "//ydb/core/base/statestorage_ut.cpp",
+    "fulltext_ut.cpp",
+    "kmeans_ut.cpp",
+    "memory_stats_ut.cpp",
+    "path_ut.cpp",
+    "state_storage_follower_ids_ut.cpp",
+    "table_index_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/base" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

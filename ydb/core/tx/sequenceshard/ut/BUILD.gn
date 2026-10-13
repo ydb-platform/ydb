@@ -1,0 +1,28 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/erasure",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/sequenceshard",
+    "//ydb/core/tx/sequenceshard/public",
+  ]
+
+  sources = [
+    "//ydb/core/tx/sequenceshard/ut_helpers.cpp",
+    "//ydb/core/tx/sequenceshard/ut_sequenceshard.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/tx/sequenceshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

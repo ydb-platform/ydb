@@ -1,0 +1,15 @@
+library("bits_storage") {
+  public_deps = [ "//ydb/library/conclusion" ]
+
+  deps = [
+    "//ydb/core/protos",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "bitset.cpp",
+    "string.cpp",
+  ]
+}

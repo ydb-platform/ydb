@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public/codecs",
+  ]
+
+  sources = [ "codecs_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/codecs" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

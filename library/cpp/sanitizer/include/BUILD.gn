@@ -1,0 +1,9 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+config("public_config") {
+    include_dirs = [ "//contrib/libs/clang20-rt/include" ]
+}
+
+group("include") {
+    public_configs = [ ":public_config" ]
+}

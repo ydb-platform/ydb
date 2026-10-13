@@ -1,0 +1,16 @@
+library("pq_helpers") {
+  testonly = true
+
+  public_deps = [
+    "//ydb/core/testlib/actors",
+    "//ydb/library/yql/providers/pq/gateway/abstract",
+  ]
+
+  deps = [
+    # "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    "//ydb/library/testlib/common",
+  ]
+
+  sources = [ "mock_pq_gateway.cpp" ]
+}

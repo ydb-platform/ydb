@@ -112,6 +112,7 @@ enum class EResourceToBalance {
 };
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
+TString EResourceToBalanceName(EResourceToBalance value);
 
 enum class EGroupState {
     Active,

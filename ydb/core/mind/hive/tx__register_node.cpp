@@ -107,7 +107,22 @@ public:
                 itAvail->second.UpdateRestriction(itRestr->second);
             }
         }
+<<<<<<< HEAD
         node.BecomeConnecting();
+=======
+        if (node.BecomeConnecting() || localChanged) {
+            TStringBuilder details;
+            details << "previousState=" << TNodeInfo::EVolatileStateName(previousState);
+            if (localChanged && previousLocal) {
+                details << " previousLocal=" << previousLocal;
+            }
+            details << " domains=" << node.ServicedDomains
+                << " location=" << GetLocationString(node.Location)
+                << " tabletTypesAvailable=" << node.TabletAvailability.size();
+            Self->RecordNodeEvent(node, EHiveEventType::Registered,
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, std::move(details));
+        }
+>>>>>>> 0853d2d0a88 (EXT-2601 Hive: implement tablet events. Settings for event buffer size (#55755))
         return true;
     }
 

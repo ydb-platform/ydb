@@ -46,6 +46,17 @@ public:
                 node->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Statistics>(node->Statistics);
             }
+<<<<<<< HEAD
+=======
+            if (!node->IsDisconnected()) {
+                TStringBuilder details;
+                details << ReasonDetails << (ReasonDetails.empty() ? "" : " ") << "tablets=" << node->GetTabletsTotal();
+                if (node->IsAlive() && node->StartTime) {
+                    details << " uptime=" << (now - node->StartTime);
+                }
+                Self->RecordNodeEvent(*node, EHiveEventType::Killed, Reason, std::move(details));
+            }
+>>>>>>> 0853d2d0a88 (EXT-2601 Hive: implement tablet events. Settings for event buffer size (#55755))
             node->BecomeDisconnected();
             if (node->LocationAcquired) {
                 Self->RemoveRegisteredDataCentersNode(node->Location.GetDataCenterId(), node->Id);

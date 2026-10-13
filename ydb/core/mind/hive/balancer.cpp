@@ -365,7 +365,10 @@ protected:
             THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
             if (std::holds_alternative<TNodeInfo*>(result)) {
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
-                if (node != tablet->Node && Hive->IsTabletMoveExpedient(*tablet, *node)) {
+                const THive::TMoveExpediency expediency = node != tablet->Node
+                    ? Hive->CheckTabletMoveExpediency(*tablet, *node)
+                    : THive::TMoveExpediency{.Expedient = false};
+                if (expediency.Expedient) {
                     tablet->MakeBalancerDecision(now);
                     tablet->ActorsToNotifyOnRestart.emplace_back(SelfId()); // volatile settings, will not persist upon restart
                     ++KickInFlight;
@@ -375,7 +378,25 @@ protected:
                         {"tablet", tablet->ToString()},
                         {"sourceNodeId", tablet->Node->Id},
                         {"targetNodeId", node->Id});
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id));
+                    // what the decision was based on: FindBestNode picks the target by GetNodeUsageForTablet,
+                    // CheckTabletMoveExpediency compares the resource stdev over nodes before and after the move
+                    TStringBuilder details;
+                    details << "balancer=" << EBalancerTypeName(Settings.Type)
+                        << " resource=" << EResourceToBalanceName(Settings.ResourceToBalance)
+                        << " sourceUsage=" << Sprintf("%.3f", tablet->Node->GetNodeUsage(Settings.ResourceToBalance))
+                        << " targetUsage=" << Sprintf("%.3f", node->GetNodeUsage(Settings.ResourceToBalance))
+                        << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNodeUsageForTablet(*tablet))
+                        << " tabletWeight=" << Sprintf("%.3f", tablet->GetWeight(Settings.ResourceToBalance))
+                        << " tabletUsageImpact=" << Sprintf("%.3f", tablet->GetUsageImpact());
+                    if (expediency.Reason == EHiveEventReason::ResourceStDevImproved) {
+                        details << " stdevBefore=" << Sprintf("%.3f", expediency.StDevBefore)
+                            << " stdevAfter=" << Sprintf("%.3f", expediency.StDevAfter);
+                    }
+                    details << " movement=" << Movements;
+                    if (Settings.MaxMovements != 0) {
+                        details << "/" << Settings.MaxMovements;
+                    }
+                    Hive->RecordTabletMove(THive::TTabletMoveInfo(now, *tablet, tablet->Node->Id, node->Id), expediency.Reason, std::move(details));
                     Hive->Execute(Hive->CreateRestartTablet(tablet->GetFullTabletId(), node->Id));
                     UpdateProgress();
                 }

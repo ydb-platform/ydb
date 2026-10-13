@@ -7,6 +7,8 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+
 #include <library/cpp/json/json_writer.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
@@ -483,8 +485,8 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
 
         // The embeddings are 5 bytes long while the vector index expects 3-dimensional UINT8
         // vectors (4 bytes including the format byte), so building that index is bound to fail.
-        backup.AddDataFile("backup/Table", R"(1,"hello","one"
-2,"world","two"
+        backup.AddDataFile("backup/Table", R"(1,"hello%02","one"
+2,"world%02","two"
 )");
 
         TString importSettings = Sprintf(R"(
@@ -502,7 +504,19 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
 
         // The failed vector index build must not fail the whole import.
         auto response = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        const auto& entry = response.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        // The skipped index must be reported to the client as a warning even though the import succeeded.
+        bool sawSkippedIndexWarning = false;
+        for (const auto& issue : entry.GetIssues()) {
+            if (issue.message().Contains("Vector dimension mismatch")) {
+                UNIT_ASSERT(issue.severity() == NYql::TSeverityIds::S_WARNING);
+                sawSkippedIndexWarning = true;
+            }
+        }
+        UNIT_ASSERT_C(sawSkippedIndexWarning,
+            "expected a warning about the skipped vector index, got: " << entry.ShortDebugString());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/RestoredTable"), {
             NLs::PathExist,

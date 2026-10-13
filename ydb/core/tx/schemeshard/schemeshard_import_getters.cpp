@@ -1964,6 +1964,24 @@ private:
             if (lastKey == MetadataKey) {
                 continue;
             }
+            if (lastKey == Prefix + "_file") {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "YT file backups cannot be imported as tables");
+            }
+            // A neighboring backup may have the same prefix followed by an underscore.
+            // Select only exact decimal START_END suffixes; still reject invalid ranges.
+            TStringBuf suffix(lastKey);
+            if (!suffix.SkipPrefix(Prefix + "_")) {
+                continue;
+            }
+            const TStringBuf start = suffix.NextTok('_');
+            const auto decimal = [](TStringBuf value) {
+                return !value.empty() && std::all_of(value.begin(), value.end(), [](char c) {
+                    return c >= '0' && c <= '9';
+                });
+            };
+            if (!decimal(start) || !decimal(suffix)) {
+                continue;
+            }
             NBackup::NYt::TPartRange range;
             TString error;
             if (!NBackup::NYt::ParsePartKey(Prefix, lastKey, range, error)) {
@@ -2015,7 +2033,7 @@ private:
             return;
         }
         ResetRetries();
-        if (message.Body.size() != RangeEnd - Offset + 1 || message.Result.GetResult().GetETag() != CurrentETag) {
+        if (message.Body.size() != RangeEnd - Offset + 1 || message.Result.GetResult().c_str() != CurrentETag) {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "YT object changed or returned an invalid range");
         }
         TString error;

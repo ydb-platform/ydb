@@ -54,6 +54,8 @@ public:
     enum class EDataStatus {
         Ready,
         NeedInput,
+        // More buffered work is available, but the caller must yield its actor turn.
+        Yield,
         WaitingForCommit,
         Finished,
     };

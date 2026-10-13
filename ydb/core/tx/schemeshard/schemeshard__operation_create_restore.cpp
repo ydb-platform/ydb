@@ -41,6 +41,8 @@ struct TRestore {
         const auto& pathId = txState.TargetPathId;
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         const auto seqNo = context.SS->StartRound(txState);
+        auto shardSettings = restoreSettings;
+        shardSettings.ClearYtImportPlan();
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             const auto& idx = txState.Shards[i].Idx;
             const auto& shardId = context.SS->ShardInfos[idx].TabletID;
@@ -52,12 +54,11 @@ struct TRestore {
             );
 
             auto fillRestoreTask = [&](auto& restore) {
-                restore.CopyFrom(restoreSettings);
+                restore.CopyFrom(shardSettings);
                 restore.SetTableId(pathId.LocalPathId);
                 restore.SetShardNum(i);
                 if (restoreSettings.HasYtImportPlan()) {
                     // Keep the full plan on SchemeShard; each shard receives only its own object.
-                    restore.ClearYtImportPlan();
                     if (i < restoreSettings.GetYtImportPlan().PartsSize()) {
                         *restore.MutableYtImportPart() = restoreSettings.GetYtImportPlan().GetParts(i);
                     }

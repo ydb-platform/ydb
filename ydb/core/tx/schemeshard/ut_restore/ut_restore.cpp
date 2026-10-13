@@ -4183,7 +4183,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     Y_UNIT_TEST(YtRejectInvalidRanges) {
-        for (const auto& key : {"table_1_1", "table_0_18446744073709551615", "table_0_0_extra"}) {
+        for (const auto& key : {"table_1_1", "table_0_18446744073709551615", "table_2_1"}) {
             TTestBasicRuntime runtime;
             const auto id = RunYt(runtime, {{"/table_metadata.yson", YtMetadata()},
                 {TString("/") + key, YtPart({10})}}, YtImportRequest(), false, Ydb::StatusIds::CANCELLED);
@@ -4239,6 +4239,93 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, 100, "/MyRoot");
         const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(R"([[10u;["10"]];[100u;["100"]]])", content);
+    }
+
+    void YtRebootAfterDurableUpload(bool finalCheckpoint) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3Mock({{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_2", YtPart({10, 20, 30})}}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        TBlockEvents<TEvDataShard::TEvS3UploadRowsResponse> acknowledgements(runtime, [finalCheckpoint](auto& ev) {
+            const auto& response = *ev->Get();
+            return response.Record.GetStatus() == NKikimrTxDataShard::TError::OK &&
+                response.Info.DownloadState.HasYsonGzip() &&
+                response.Info.DownloadState.GetYsonGzip().GetFinished() == finalCheckpoint;
+        });
+        ui64 checkpointRows = Max<ui64>();
+        auto uploads = runtime.AddObserver<TEvDataShard::TEvS3UploadRowsRequest>([&](auto& ev) {
+            const auto& request = *ev->Get();
+            if (request.Info.DownloadState.HasYsonGzip() &&
+                request.Info.DownloadState.GetYsonGzip().GetFinished() == finalCheckpoint)
+            {
+                checkpointRows = request.Record.RowsSize();
+            }
+        });
+        TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
+        runtime.WaitFor("durable YT upload before acknowledgement", [&] { return !acknowledgements.empty(); });
+        const auto& response = *acknowledgements.front()->Get();
+        const ui64 tablet = response.Record.GetTabletID();
+        UNIT_ASSERT_GT(response.Info.DownloadState.GetYsonGzip().GetCommittedRows(), 0);
+        if (finalCheckpoint) {
+            UNIT_ASSERT_VALUES_EQUAL(checkpointRows, 0);
+        } else {
+            UNIT_ASSERT_GT(checkpointRows, 0);
+        }
+        acknowledgements.Stop().clear();
+        uploads.Remove();
+        RebootTablet(runtime, tablet, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 100);
+        TestGetImport(runtime, 100, "/MyRoot");
+        const auto content = ReadTable(runtime, tablet, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(R"([[10u;["10"]];[20u;["20"]];[30u;["30"]]])", content);
+    }
+
+    Y_UNIT_TEST(YtDataShardRebootBeforeUploadAck) {
+        YtRebootAfterDurableUpload(false);
+    }
+
+    Y_UNIT_TEST(YtDataShardRebootBeforeFinalCheckpointAck) {
+        YtRebootAfterDurableUpload(true);
+    }
+
+    Y_UNIT_TEST(YtRejectChangedPlannedPart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3Mock({{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_0", YtPart({10})}}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> restoreBlocker(runtime, [](auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+        });
+        TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
+        runtime.WaitFor("pinned YT restore plan", [&] { return !restoreBlocker.empty(); });
+        const auto& plan = restoreBlocker.front()->Get()->Record.GetTransaction(0).GetRestore().GetYtImportPlan();
+        UNIT_ASSERT(!plan.GetParts(0).GetETag().empty());
+        s3Mock.GetData()["/table_0_0"] = YtPart({20});
+        restoreBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, 100);
+        const auto issues = ImportIssues(runtime, 100, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "completed import plan");
+    }
+
+    Y_UNIT_TEST(YtIgnoreNeighboringBackupPrefixes) {
+        TTestBasicRuntime runtime;
+        RunYt(runtime, {
+            {"/table_metadata.yson", YtMetadata()}, {"/table_0_0", YtPart({10})},
+            {"/table_daily_metadata.yson", "invalid neighboring metadata"},
+            {"/table_daily_0_0", "invalid neighboring part"},
+            {"/table_2026_metadata.yson", "invalid numeric neighboring metadata"},
+            {"/table_2026_0_0", "invalid numeric neighboring part"}
+        }, YtImportRequest(), false);
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(R"([[10u;["10"]]])", content);
     }
 
     Y_UNIT_TEST(YtWrongRowCount) {

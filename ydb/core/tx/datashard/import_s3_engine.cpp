@@ -1674,7 +1674,13 @@ public:
         }
         AddRow = &addRow;
         BatchRows = BatchBytes = 0;
+        ui64 decompressedBytes = 0;
+        constexpr ui64 REPLAY_TURN_LIMIT = 256 * 1024;
         while (!Finished) {
+            if (decompressedBytes >= REPLAY_TURN_LIMIT) {
+                AddRow = nullptr;
+                return TDataResult{.Status = EDataStatus::Yield};
+            }
             if (Input.empty() && !DrainPending) {
                 if (Offset < Settings.ContentLength) {
                     break;
@@ -1707,6 +1713,7 @@ public:
             const int result = inflate(&Stream, Z_NO_FLUSH);
             InputPos += before - Stream.avail_in;
             const size_t produced = sizeof(output) - Stream.avail_out;
+            decompressedBytes += produced;
             DrainPending = Stream.avail_out == 0 && result != Z_STREAM_END;
             if (result != Z_OK && result != Z_STREAM_END && result != Z_BUF_ERROR) {
                 return Fail(TStringBuilder() << "invalid YT gzip stream: " << (Stream.msg ? Stream.msg : "inflate failed"));

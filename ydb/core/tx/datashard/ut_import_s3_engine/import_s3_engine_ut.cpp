@@ -354,6 +354,7 @@ std::expected<NKikimrBackup::TS3DownloadState, TString> ConsumeYt(
         auto result = engine.GetData(pool, CaptureRows(rows), {});
         if (!result) return std::unexpected(result.error());
         if (result->Status == IImportS3Engine::EDataStatus::Finished) return state;
+        if (result->Status == IImportS3Engine::EDataStatus::Yield) continue;
         if (result->Status == IImportS3Engine::EDataStatus::Ready) {
             const auto& batch = result->Batch;
             UNIT_ASSERT(batch.DownloadStateAfter.HasYsonGzip());
@@ -830,6 +831,9 @@ TImportOutcome ImportKeyValueParquet(
         }
 
         switch (data->Status) {
+        case IImportS3Engine::EDataStatus::Yield:
+            break;
+
         case IImportS3Engine::EDataStatus::NeedInput: {
             const auto range = engine->NextRange();
             if (!range) {
@@ -903,6 +907,9 @@ TBatchedImport ImportInBatches(
     for (ui32 step = 0; step < 1024 * 1024; ++step) {
         auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
         switch (data.Status) {
+        case IImportS3Engine::EDataStatus::Yield:
+            break;
+
         case IImportS3Engine::EDataStatus::NeedInput: {
             const auto range = ExtractValue(engine->NextRange());
             UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -986,6 +993,9 @@ TMaybe<TString> RunImport(IImportS3Engine& engine, const TString& source, const 
         }
 
         switch (data->Status) {
+        case IImportS3Engine::EDataStatus::Yield:
+            break;
+
         case IImportS3Engine::EDataStatus::NeedInput: {
             const auto range = engine.NextRange();
             if (!range) {
@@ -1312,6 +1322,48 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "first\nline");
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Key, "k3");
+    }
+
+    Y_UNIT_TEST(YtCommittedPrefixYieldsWithoutChangingDurableCursor) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        TEngineFixture fixture(scheme);
+        const auto source = YtGzip(TString("{key=k1;value=\"") + TString(2_MB, 'x') + "\"};{key=k2;value=new};");
+        auto engine = MakeYtEngine(fixture, source, 2, source.size(), 4_MB);
+        NKikimrBackup::TS3DownloadState durable;
+        durable.MutableYsonGzip()->SetVersion(1);
+        durable.MutableYsonGzip()->SetCommittedRows(1);
+        durable.MutableYsonGzip()->SetFinished(false);
+        AssertSuccess(engine->RestoreFromState(0, durable));
+        const auto range = ExtractValue(engine->NextRange());
+        AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+        TMemoryPool pool(256);
+        TVector<TDecodedRow> rows;
+        ui32 yields = 0;
+        for (;;) {
+            const auto data = ExtractValue(engine->GetData(pool, CaptureRows(rows), {}));
+            if (data.Status == IImportS3Engine::EDataStatus::Yield) {
+                ++yields;
+                UNIT_ASSERT(rows.empty());
+                UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, 0);
+                UNIT_ASSERT(!data.Batch.Checkpoint);
+                UNIT_ASSERT(!data.Batch.DownloadStateAfter.HasYsonGzip());
+                continue;
+            }
+            UNIT_ASSERT(data.Status == IImportS3Engine::EDataStatus::Ready);
+            UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, 1);
+            UNIT_ASSERT_VALUES_EQUAL(data.Batch.ProcessedBytesAfter, 0);
+            UNIT_ASSERT_VALUES_EQUAL(data.Batch.DownloadStateAfter.GetYsonGzip().GetCommittedRows(), 2);
+            AssertSuccess(engine->Commit(data.Batch.Id));
+            break;
+        }
+        UNIT_ASSERT(yields >= 4);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rows.front().Key, "k2");
+        UNIT_ASSERT_VALUES_EQUAL(rows.front().Value, "new");
+        const auto final = ExtractValue(ConsumeYt(*engine, source, rows));
+        UNIT_ASSERT(final.GetYsonGzip().GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
     }
 
     Y_UNIT_TEST(YtBinaryStringsAndLargeDecompression) {
@@ -1660,6 +1712,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             for (ui32 step = 0; step < 1024 && !finished; ++step) {
                 auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
                 switch (data.Status) {
+                case IImportS3Engine::EDataStatus::Yield:
+                    break;
+
                 case IImportS3Engine::EDataStatus::NeedInput: {
                     const auto range = ExtractValue(engine->NextRange());
                     UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -1733,6 +1788,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 1024; ++step) {
             auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -1813,6 +1871,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 1024 && !finished; ++step) {
             auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -1900,6 +1961,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 1024 && !finished; ++step) {
             auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -2207,6 +2271,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                 for (ui32 step = 0; step < 1024 && !committedRowGroup; ++step) {
                     auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
                     switch (data.Status) {
+                    case IImportS3Engine::EDataStatus::Yield:
+                        break;
+
                     case IImportS3Engine::EDataStatus::NeedInput:
                         feed(*engine);
                         break;
@@ -2260,6 +2327,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             for (ui32 step = 0; step < 1024 && !finished; ++step) {
                 auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
                 switch (data.Status) {
+                case IImportS3Engine::EDataStatus::Yield:
+                    break;
+
                 case IImportS3Engine::EDataStatus::NeedInput:
                     feed(*engine);
                     break;
@@ -2331,6 +2401,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 2048 && !finished; ++step) {
             data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -2446,6 +2519,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 8192 && !finished; ++step) {
             const auto data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -2502,6 +2578,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                 }
                 auto data = std::move(*dataResult);
                 switch (data.Status) {
+                case IImportS3Engine::EDataStatus::Yield:
+                    break;
+
                 case IImportS3Engine::EDataStatus::NeedInput: {
                     auto rangeResult = engine->NextRange();
                     if (!rangeResult) {
@@ -2584,6 +2663,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                 maxPendingBytes = Max(maxPendingBytes, engine->PendingBytes());
 
                 switch (data.Status) {
+                case IImportS3Engine::EDataStatus::Yield:
+                    break;
+
                 case IImportS3Engine::EDataStatus::NeedInput: {
                     const auto range = ExtractValue(engine->NextRange());
                     UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -2699,6 +2781,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 4096 && !finished; ++step) {
             data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
@@ -3282,6 +3367,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         for (ui32 step = 0; step < 2048 && !finished; ++step) {
             data = ExtractValue(engine->GetData(pool, addRow, addChecksum));
             switch (data.Status) {
+            case IImportS3Engine::EDataStatus::Yield:
+                break;
+
             case IImportS3Engine::EDataStatus::NeedInput: {
                 const auto range = ExtractValue(engine->NextRange());
                 UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);

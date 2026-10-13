@@ -817,6 +817,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 << ": cannot request source range: import engine needs input after exhausting source ranges");
         }
 
+        case IImportS3Engine::EDataStatus::Yield:
+            this->Send(this->SelfId(), new TEvents::TEvWakeup(ProcessTag));
+            return;
+
         case IImportS3Engine::EDataStatus::WaitingForCommit:
             return;
 

@@ -123,15 +123,31 @@ def candidate_models(harness, extra, found_in_config):
     return models
 
 
+def model_identity(harness, model):
+    """Normalize case and whitespace, preserving the provider namespace on both sides."""
+    harness = harness.strip().lower()
+    provider, separator, name = model.strip().lower().rpartition("/")
+    if not separator:
+        provider = {"codex": "openai", "claude": "anthropic"}.get(harness, harness)
+    return provider, name
+
+
 def same_as_main(harness, model, main):
-    """True when the model is the session model, also when one name is an alias contained in the other."""
+    """Exclude identical model IDs and Claude family aliases that may resolve to the main model."""
     if main is None:
         return False
-    left, right = model.lower(), main[1].lower()
-    if harness != main[0] and "/" not in left:
+    left, right = model_identity(harness, model), model_identity(*main)
+    if left[0] != right[0]:
         return False
-    left = left.split("/")[-1]
-    return left == right or left in right or right in left
+    if left[1] == right[1]:
+        return True
+    # Claude's floating family aliases are not independent of a pinned model in that family.
+    # Two concrete versions still require an exact match; arbitrary substrings are never aliases.
+    for alias_harness, alias, concrete in ((harness, left[1], right[1]), (main[0], right[1], left[1])):
+        if alias_harness.strip().lower() == "claude" and alias in ("opus", "sonnet", "haiku"):
+            if re.fullmatch(r"claude-" + alias + r"-\d+(?:-\d+)*", concrete):
+                return True
+    return False
 
 
 def build_command(spec, model, cwd, last, prompt):

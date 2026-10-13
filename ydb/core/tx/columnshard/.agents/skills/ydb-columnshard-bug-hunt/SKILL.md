@@ -51,4 +51,24 @@ The script reads the history with `git`; in a checkout of another version contro
    - row counts of arrays and filters, and allocation sizes;
    - new production-invokable asserts, that is asserts that abort the process in release builds.
 3. Start one read-only audit subagent with the audit prompt from `references/prompts.md` for every commit with `audit` = yes in `commits.tsv`; these touch the reader, conveyor, limiter, caches, blobs or arrow code. Do not audit them yourself instead: reviewer answers vary between runs, and in test runs a crash in a reader commit was found by one run and missed by the next; each fresh context is another chance.
-4. When `review_commits.py` is done, read `summary.tsv` and every answer. For a `refused` prompt, reword it as de
+4. When `review_commits.py` is done, read `summary.tsv` and every answer. For a `refused` prompt, clarify the concrete correctness failure and the authorized QA scope using [references/prompts.md](references/prompts.md), then retry once. If it is still refused or fails, record the gap and use the reviewer fallback from step 0. Keep the same task boundaries.
+5. Combine your findings and the reviewer answers into a candidate list. Record the suspected commit, mechanism, file:line evidence and an SQL trigger for each candidate; merge duplicate claims about the same defect.
+
+## Step 4. Verify candidates
+
+1. Give each candidate to a fresh read-only verifier using the verifier prompt in [references/prompts.md](references/prompts.md). Use `scripts/second_opinion.py` with the reviewer from step 0, or its subagent fallback.
+2. Check the verdict against the code: guards, thread ownership, lifetime, error handling and whether SQL can reach the path. Record `REAL`, `NOT REAL` or `UNCERTAIN` with decisive file:line evidence and any required config knobs or PRAGMAs.
+3. Keep rejected candidates and the reasons in the notes. For `REAL` and `UNCERTAIN` candidates, use the verifier's SQL test recipe in the next step; uncertainty alone is not a reproduced bug.
+
+## Step 5. Reproduce and review tests
+
+1. Follow [references/repro.md](references/repro.md) to write SQL-level KQP tests in `ydb/core/kqp/ut/olap/`. Respect its allowed APIs and config knobs; write tests, not production fixes.
+2. Confirm the predicted failure on the base and a passing result in a separate worktree with the suspected commit reverted. Check that the test reaches the intended path and data shape, and save commands, failure output and the revert result. Record unsuccessful attempts and stress-run counts for candidates that remain unproven.
+3. Have the reviewer from step 0 review the test-only diff with the test review prompt in [references/prompts.md](references/prompts.md). Address findings and rerun affected tests before delivery. Only reliable failing reproductions belong in the test PR.
+
+## Step 6. Search existing reports and deliver
+
+1. Follow [references/deliver.md](references/deliver.md) to search GitHub issues and the Tracker queues chosen by the user, including open and closed reports. Ask which queues to search when they have not been specified. Compare the mechanism, affected code and introducing commit before calling a result a duplicate; record links and any unavailable searches.
+2. Write the report with reproduced, unproven, rejected and out-of-scope findings, reproduction evidence and existing reports. Prepare a tests-only change containing only reliable reproductions.
+3. When requested, publish the tests as a draft PR and create the period's Tracker ticket following the delivery reference. Include the reproduction evidence, introducing commits, authors, report and test PR links; link only reports about the same defect. Report-only runs stop at local artifacts.
+4. Give the user the report path or link, test results, existing issue links, any created PR and ticket links, and remaining gaps.

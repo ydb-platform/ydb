@@ -1,7 +1,7 @@
 name: Prewarm-debug
 on:
-  schedule:
-    - cron: "0 * * * *"  # At minute 0
+  # schedule is off: hourly prewarm was taking runners.
+  # Re-enable when the pool is calm.
   workflow_dispatch:
 jobs:
   build_and_test:

@@ -656,6 +656,8 @@ void THive::BuildLocalConfig() {
 void THive::BuildCurrentConfig() {
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
+    CurrentConfig.SetTabletEventHistorySize(std::min(CurrentConfig.GetTabletEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
+    CurrentConfig.SetNodeEventHistorySize(std::min(CurrentConfig.GetNodeEventHistorySize(), MAX_EVENT_HISTORY_SIZE));
     TabletLimit.clear();
     for (const auto& tabletLimit : CurrentConfig.GetDefaultTabletLimit()) {
         TabletLimit.insert_or_assign(tabletLimit.GetType(), tabletLimit);
@@ -1258,6 +1260,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
             } else {
                 BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " preferred unavailable node " << node->Id);
                 tablet.BootState = TStringBuilder() << "Preferred unavailable node " << node->Id;
+                RecordTabletBootFailure(tablet, EHiveEventReason::PreferredNodeUnavailable, TStringBuilder() << "node=" << node->Id);
                 return TNoNodeFound();
             }
         }
@@ -1356,6 +1359,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
                     thereAreNodesWithManyStarts = true;
                     if (GetBootStrategy() == NKikimrConfig::THiveConfig::HIVE_BOOT_STRATEGY_BALANCED) {
                         tablet.BootState = BootStateTooManyStarting;
+                        RecordTabletBootFailure(tablet, EHiveEventReason::TooManyStarting);
                         return TTooManyTabletsStarting();
                     }
                 }
@@ -1411,44 +1415,53 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet, TNodeId su
 
         if (tablet.IsFollower() && debugState.LeaderNotRunning) {
             tablet.BootState = BootStateLeaderNotRunning;
+            RecordTabletBootFailure(tablet, EHiveEventReason::LeaderNotRunning);
             return TNoNodeFound();
         }
         if (debugState.NodesDead == nodesLeft) {
             tablet.BootState = BootStateAllNodesAreDead;
+            RecordTabletBootFailure(tablet, EHiveEventReason::AllNodesDead);
             return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesDead;
         if (debugState.NodesDown == nodesLeft) {
             tablet.BootState = BootStateAllNodesAreDeadOrDown;
+            RecordTabletBootFailure(tablet, EHiveEventReason::AllNodesDeadOrDown);
             return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesDown;
         if (debugState.NodesNotAllowed + debugState.NodesInDatacentersNotAllowed == nodesLeft) {
             tablet.BootState = BootStateNoNodesAllowedToRun;
+            RecordTabletBootFailure(tablet, EHiveEventReason::NoNodesAllowedToRun);
             return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesNotAllowed;
         nodesLeft -= debugState.NodesInDatacentersNotAllowed;
         if (debugState.NodesWithSomeoneFromOurFamily == nodesLeft) {
             tablet.BootState = BootStateWeFilledAllAvailableNodes;
+            RecordTabletBootFailure(tablet, EHiveEventReason::FamilyFilledAllNodes);
             return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesWithSomeoneFromOurFamily;
         if (debugState.NodesWithoutDomain == nodesLeft) {
             tablet.BootState = TStringBuilder() << "Can't find domain " << tablet.GetNodeFilter().GetEffectiveAllowedDomains();
+            RecordTabletBootFailure(tablet, EHiveEventReason::DomainNotFound, TStringBuilder() << "domains=" << tablet.GetNodeFilter().GetEffectiveAllowedDomains());
             return TNoNodeFound();
         }
         nodesLeft -= debugState.NodesWithoutDomain;
         if (tablet.IsFollower() && debugState.NodesFilledWithDatacenterFollowers == nodesLeft) {
             tablet.BootState = BootStateNotEnoughDatacenters;
+            RecordTabletBootFailure(tablet, EHiveEventReason::NotEnoughDatacenters);
             return TNoNodeFound();
         }
         if (debugState.NodesWithoutResources == nodesLeft) {
             tablet.BootState = BootStateNotEnoughResources;
+            RecordTabletBootFailure(tablet, EHiveEventReason::NotEnoughResources);
             return TNotEnoughResources();
         }
         if (debugState.NodesWithoutLocation == nodesLeft) {
             tablet.BootState = BootStateNodesLocationUnknown;
+            RecordTabletBootFailure(tablet, EHiveEventReason::NodesLocationUnknown);
             return TNoNodeFound();
         }
 
@@ -1597,9 +1610,9 @@ void THive::DeleteTablet(TTabletId tabletId) {
     auto it = Tablets.find(tabletId);
     if (it != Tablets.end()) {
         TLeaderTabletInfo& tablet(it->second);
-        tablet.BecomeStopped();
+        tablet.BecomeStopped(EHiveEventReason::Deleting);
         for (TFollowerTabletInfo& follower : tablet.Followers) {
-            follower.BecomeStopped();
+            follower.BecomeStopped(EHiveEventReason::Deleting);
         }
         ReportDeletedToWhiteboard(tablet);
         tablet.ReleaseAllocationUnits();
@@ -1786,7 +1799,11 @@ void THive::UpdateCounterTabletsDeleting() {
     }
 }
 
-void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
+void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo, EHiveEventReason reason, TString details) {
+    if (const TTabletInfo* tablet = FindTablet(moveInfo.Tablet)) {
+        RecordTabletEvent(*tablet, EHiveEventType::Moved, reason,
+            TStringBuilder() << "from=" << moveInfo.From << " to=" << moveInfo.To << (details.empty() ? "" : " ") << details);
+    }
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
     if (TabletMoveSamplesForLog.size() < MOVE_SAMPLES_PER_LOG_ENTRY) {
@@ -1820,52 +1837,52 @@ TResourceNormalizedValues THive::GetStDevResourceValues() const {
     return GetStDev(values);
 }
 
-bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
+THive::TMoveExpediency THive::CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const {
     if (!tablet.IsAlive()) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " to " << node.Id
                    << " is expedient because the tablet is not alive");
-        return true;
+        return {.Expedient = true, .Reason = EHiveEventReason::TabletNotAlive};
     }
     if (tablet.Node->Freeze) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is not expedient because the source node is freezed");
-        return false;
+        return {.Expedient = false};
     }
     if (node.Freeze) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is not expedient because the target node is freezed");
-        return false;
+        return {.Expedient = false};
     }
     if (tablet.Node->Down) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is expedient because the node is down");
-        return true;
+        return {.Expedient = true, .Reason = EHiveEventReason::SourceNodeDown};
     }
     if (!tablet.Node->IsAllowedToRunTablet(tablet)) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is expedient because the current node is unappropriate target for the tablet");
-        return true;
+        return {.Expedient = true, .Reason = EHiveEventReason::SourceNodeCannotRunTablet};
     }
     if (tablet.Node->Id == node.Id) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is not expedient because node is the same");
-        return false;
+        return {.Expedient = false};
     }
     if (tablet.Node->IsOverloaded() && !node.IsOverloaded()) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is forcefully expedient because source node is overloaded");
-        return true;
+        return {.Expedient = true, .Reason = EHiveEventReason::SourceNodeOverloaded};
     }
     if (GetSpreadNeighbours() && tablet.Node->GetTabletNeighboursCount(tablet) > node.GetTabletNeighboursCount(tablet)) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is expedient because it spreads neighbours");
-        return true;
+        return {.Expedient = true, .Reason = EHiveEventReason::SpreadNeighbours};
     }
 
     if (!GetCheckMoveExpediency()) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is forcefully expedient because of the setting");
-        return true;
+        return {.Expedient = true, .Reason = EHiveEventReason::ExpediencyCheckDisabled};
     }
 
     TVector<TResourceNormalizedValues> values;
@@ -1884,7 +1901,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
 
     if (oldNode == std::numeric_limits<std::size_t>::max()
             || newNode == std::numeric_limits<std::size_t>::max()) {
-        return false;
+        return {.Expedient = false};
     }
 
     auto tabletResources = tablet.GetResourceCurrentValues();
@@ -1908,7 +1925,7 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
                    << " is not expedient, beforeStDev " << beforeStDev << " afterStDev " << afterStDev);
     }
-    return result;
+    return {.Expedient = result, .Reason = EHiveEventReason::ResourceStDevImproved, .StDevBefore = before, .StDevAfter = after};
 }
 
 void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo *info, const NKikimrHive::TEvRequestHiveInfo &req) {
@@ -2910,7 +2927,7 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics),
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::DataCenter>(dataCenterId));
                     follower.InitTabletMetrics();
-                    follower.BecomeStopped();
+                    follower.BecomeStopped(EHiveEventReason::InitialState);
                     dataCenter.Followers[{tablet.Id, group.Id}].push_back(std::prev(tablet.Followers.end()));
                     BLOG_D("Created follower " << follower.GetFullTabletId() << " for dc " << dataCenterId);
                 }
@@ -2924,7 +2941,7 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
                             NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
                             NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics));
                 follower.InitTabletMetrics();
-                follower.BecomeStopped();
+                follower.BecomeStopped(EHiveEventReason::InitialState);
                 BLOG_D("Created follower " << follower.GetFullTabletId());
             }
 
@@ -2940,7 +2957,7 @@ void THive::CreateTabletFollowers(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db
         BLOG_D("Deleting follower " << follower.GetFullTabletId());
         db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Delete();
         db.Table<Schema::Metrics>().Key(tablet.Id, follower.Id).Delete();
-        follower.InitiateStop(sideEffects);
+        follower.InitiateStop(sideEffects, EHiveEventReason::FollowerRemoved);
         UpdateCounterTabletsTotal(-1);
     }
     tablet.Followers.erase(tablet.Followers.begin(), endIt);

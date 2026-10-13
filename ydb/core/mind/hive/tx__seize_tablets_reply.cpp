@@ -27,7 +27,7 @@ public:
             tablet.SetType(protoTabletInfo.GetTabletType());
             tablet.NodeId = 0;
             tablet.Node = nullptr;
-            tablet.BecomeStopped();
+            tablet.BecomeStopped(EHiveEventReason::Seized);
             tablet.KnownGeneration = protoTabletInfo.GetGeneration();
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
@@ -139,7 +139,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0));
                     follower.InitTabletMetrics();
-                    follower.BecomeStopped();
+                    follower.BecomeStopped(EHiveEventReason::InitialState);
                 }
             }
 

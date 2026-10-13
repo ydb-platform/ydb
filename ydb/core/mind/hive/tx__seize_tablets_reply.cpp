@@ -28,7 +28,7 @@ public:
             std::pair<ui64, ui64> owner(protoTabletInfo.GetTabletOwner().GetOwner(), protoTabletInfo.GetTabletOwner().GetOwnerIdx());
             TLeaderTabletInfo& tablet = Self->GetTablet(tabletId);
             // A repeated import must remove the previous resources before replacing tablet data.
-            tablet.BecomeStopped();
+            tablet.BecomeStopped(EHiveEventReason::Seized);
             tablet.SetType(protoTabletInfo.GetTabletType());
             tablet.KnownGeneration = protoTabletInfo.GetGeneration();
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
@@ -148,7 +148,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0));
                     follower.InitTabletMetrics();
-                    follower.BecomeStopped();
+                    follower.BecomeStopped(EHiveEventReason::InitialState);
                 }
             }
 

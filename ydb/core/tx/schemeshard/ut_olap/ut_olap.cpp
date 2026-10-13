@@ -601,6 +601,65 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
+    Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        for (const TString type : {"pgint2", "pgint4", "pgint8", "pgfloat4", "pgfloat8", "pgtext", "pgbool"}) {
+            const TString column = TStringBuilder() << "{ Name: \"value\" Type: \"" << type << "\" }";
+            const TString schema = TStringBuilder() << R"(
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                KeyColumnNames: "timestamp"
+                Columns )" << column;
+            const TExpectedResult rejected(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "Type '" << type << "' specified for column 'value' is not supported for column tables");
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"PgTable\" ColumnShardCount: 1 Schema { " << schema << " }", {rejected});
+            TestCreateOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"PgStore\" ColumnShardCount: 1 SchemaPresets { Name: \"default\" Schema { "
+                    << schema << " } }", {rejected});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore",
+                TStringBuilder() << R"(Name: "PgTable" ColumnShardCount: 1 Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    KeyColumnNames: "timestamp"
+                    Columns { Name: "data" Type: ")" << type << "\" } }",
+                {{NKikimrScheme::StatusSchemeError, TStringBuilder() << "Type '" << type
+                    << "' specified for column 'data' is not supported for column tables"}});
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"ColumnTable\" AlterSchema { AddColumns " << column << " }", {rejected});
+            TestAlterOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"OlapStore\" AlterSchemaPresets { Name: \"default\" AlterSchema { AddColumns "
+                    << column << " } }", {rejected});
+        }
+
+        TestLs(runtime, "/MyRoot/PgTable", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/PgStore", false, NLs::PathNotExist);
+
+        // Rejected additions must not prevent subsequent valid schema changes.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(CreateStore) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

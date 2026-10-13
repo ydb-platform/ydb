@@ -570,6 +570,7 @@ def get_target_triple(target):
             (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
 
             (target.is_zephyr_armv7_cortex_a35, 'arm-none-eabi'),
+            (target.is_rv32imc_zicsr_zifencei and (target.is_none or target.is_freertos), 'riscv32-esp-elf'),
         ],
     )
 
@@ -1358,6 +1359,8 @@ class GnuToolchain(Toolchain):
 
         if target.is_rv32imc_zicsr_zifencei:
             self.c_flags_platform.append('-march=rv32imc_zicsr_zifencei')
+            if self.tc.is_clang:
+                self.c_flags_platform.append('-mabi=ilp32')
 
         if target.is_riscv64_aw:
             self.c_flags_platform.append('-march=rv64gcxthead -mcmodel=medany -mabi=lp64d')
@@ -1836,6 +1839,14 @@ class Linker(object):
         if self.tc.is_gcc and (self.build.target.is_freertos or self.build.target.is_zephyr):
             return Linker.BFD
 
+        if (
+            self.tc.is_clang
+            and self.build.target.is_rv32imc_zicsr_zifencei
+            and (self.build.target.is_none or self.build.target.is_freertos)
+        ):
+            # The ESP Clang SDK uses GNU ld, including its linker map format.
+            return Linker.BFD
+
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
             return Linker.LLD
@@ -1900,6 +1911,10 @@ class LD(Linker):
                 self.llvm_ar_format = "gnu"
 
         self.ld_flags = []
+        if self.tc.is_clang and target.is_rv32imc_zicsr_zifencei:
+            self.ld_flags.append('--ld-path={}/esp-clang/bin/riscv32-esp-elf-clang-ld'.format(self.tc.name_marker))
+            if is_positive('NO_CXX_RTTI'):
+                self.ld_flags.append('-fno-rtti')
         if not self.build.is_release and target.is_linux:
             # TAXICOMMON-8548: deal with runtime env issues and enable in release builds too
             self.ld_flags.extend(['-Wl,--compress-debug-sections=zstd'])

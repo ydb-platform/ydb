@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(transport.cpp)
+SRCS(transport.cpp tvm.cpp)
 
 PEERDIR(
     contrib/libs/curl

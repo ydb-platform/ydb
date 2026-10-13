@@ -295,3 +295,50 @@ def test_ddl_init_only(service, tmp_path):
                             env=dict(os.environ, YQL_TOKEN='fqrun-test-yql-token'))
     assert result.returncode == 0, result.stderr.decode(errors='replace')
     assert not service.requests
+
+
+def tvm_ddl(service):
+    return local_ddl(service).replace('AUTH_METHOD = "NONE"', '''AUTH_METHOD = 'TVM',
+    TVM_SOURCE_ID = '2020001', TVM_DESTINATION_ID = '2020002', TVM_SECRET_NAME = 'tvm_secret' ''')
+
+
+def tvm_options(tmp_path, sql):
+    secret_file = tmp_path / 'tvm-secrets.json'
+    secret_file.write_text(json.dumps({'tvm_secret': 'test-tvm-source-secret'}))
+    return ddl_options(tmp_path, sql) + ('--secrets-file=' + str(secret_file), '--verbosity=3')
+
+
+def test_tvm_ddl_creates_connection_without_requesting_ticket(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql='SELECT 42 AS answer', extra=tvm_options(tmp_path, tvm_ddl(service)))
+    assert runner.wait(process) == 0, runner.output()
+    assert int(runner.rows()[0]['answer']) == 42
+    assert not service.requests
+    assert 'test-tvm-source-secret' not in runner.output()
+
+
+def test_tvm_stub_fails_explicitly_before_network(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql=profile_query('profiles_http'), extra=tvm_options(tmp_path, tvm_ddl(service)))
+    assert runner.wait(process) != 0, runner.output()
+    assert 'TVM ticket provider is not implemented' in runner.output()
+    assert not service.requests
+    assert 'test-tvm-source-secret' not in runner.output()
+
+
+@pytest.mark.parametrize('old,new,error', [
+    ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '0'", 'TVM_SOURCE_ID must'),
+    ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '4294967296'", 'TVM_SOURCE_ID must'),
+    ("TVM_DESTINATION_ID = '2020002'", "TVM_DESTINATION_ID = '-1'", 'TVM_DESTINATION_ID must'),
+    ("TVM_SECRET_NAME = 'tvm_secret'", "TVM_SECRET_NAME = 'missing'", 'not present in --secrets-file'),
+    ("AUTH_METHOD = 'TVM'", "AUTH_METHOD = 'NONE'", 'not supported'),
+    ("AUTH_METHOD = 'TVM'", "AUTH_METHOD = 'TVM', TOKEN_SECRET_NAME = 'other'", 'not supported'),
+    ("TVM_SOURCE_ID = '2020001',", '', 'TVM_SOURCE_ID requires key'),
+])
+def test_tvm_invalid_ddl(service, tmp_path, old, new, error):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql='SELECT 1', extra=tvm_options(tmp_path, tvm_ddl(service).replace(old, new)))
+    assert runner.wait(process) != 0, runner.output()
+    assert error in runner.output()
+    assert not service.requests
+    assert 'test-tvm-source-secret' not in runner.output()

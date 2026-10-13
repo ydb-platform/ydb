@@ -5,6 +5,7 @@
 #include <ydb/core/fq/libs/wasm_services/query/manifest.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 #include <ydb/core/fq/libs/common/external_service.h>
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/mock.grpc.pb.h>
 #include <ydb/udfs/wasm/profile/proto/schema/profile.pb.h>
@@ -43,6 +44,7 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <future>
 #include <mutex>
 
 using namespace NFq::NWasmServices;
@@ -363,6 +365,56 @@ TVector<TBinding> Bindings(const THttpMock& http, const TGrpcMock& grpc,
     TBinding profileGrpc = rpc;
     profileGrpc.Method = "/NFq.NWasmServices.NTest.MockService/Lookup";
     return {std::move(rest), std::move(rpc), std::move(profileHttp), std::move(profileGrpc)};
+}
+
+struct TTvmTestState {
+    std::atomic<bool> Pending{false};
+    std::atomic<bool> Fail{false};
+    std::atomic<size_t> Cancelled{0};
+    std::mutex Mutex;
+    TVector<TTvmCredentials> Calls;
+};
+
+class TTvmTestRequest final : public ITvmTicketRequest {
+    std::shared_ptr<TTvmTestState> State;
+    TString Ticket;
+    bool Cancelled = false;
+public:
+    TTvmTestRequest(std::shared_ptr<TTvmTestState> state, TString ticket)
+        : State(std::move(state)), Ticket(std::move(ticket)) {}
+    TTvmTicketResult Poll() override {
+        if (State->Pending)
+            return {};
+        return {.Status = State->Fail ? ETvmTicketStatus::Failed : ETvmTicketStatus::Ready, .Ticket = Ticket};
+    }
+    void Cancel() noexcept override {
+        if (!Cancelled) {
+            Cancelled = true;
+            ++State->Cancelled;
+        }
+    }
+};
+
+class TTvmTestProvider final : public ITvmTicketProvider {
+public:
+    std::shared_ptr<TTvmTestState> State = std::make_shared<TTvmTestState>();
+    TString Prefix = "test-service-ticket-";
+    std::shared_ptr<ITvmTicketRequest> Request(const TTvmCredentials& credentials, TInstant deadline) override {
+        UNIT_ASSERT(deadline > TInstant::Now());
+        std::lock_guard lock(State->Mutex);
+        State->Calls.push_back(credentials);
+        return std::make_shared<TTvmTestRequest>(State, Prefix + ToString(State->Calls.size()));
+    }
+    size_t Count() {
+        std::lock_guard lock(State->Mutex);
+        return State->Calls.size();
+    }
+};
+
+void SetTvm(TBinding& binding, std::shared_ptr<ITvmTicketProvider> provider) {
+    binding.Headers.clear();
+    binding.TvmProvider = std::move(provider);
+    binding.TvmCredentials = {2020001, 2020002, "test-tvm-source-secret"};
 }
 
 struct TWakeup {
@@ -694,7 +746,14 @@ struct TQueryTransformEnv {
             gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "profiles")->ResolveFunction({}, "Profile").GetValueSync();
         UNIT_ASSERT_STRING_CONTAINS(description.InvokeUrl, "profiles");
         UNIT_ASSERT_EXCEPTION(gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "missing"), yexception);
-        RegisterServiceTransforms(Factory, config);
+        if (binding.TvmProvider) {
+            entry->clear_auth();
+            auto* tvm = entry->mutable_tvm_auth();
+            tvm->set_source_id(binding.TvmCredentials.SourceId);
+            tvm->set_destination_id(binding.TvmCredentials.DestinationId);
+            tvm->set_secret(binding.TvmCredentials.Secret);
+        }
+        RegisterServiceTransforms(Factory, config, binding.TvmProvider);
         Setup.Execute([&](NYql::NDq::TFakeActor& actor) {
             using namespace NKikimr::NMiniKQL;
             auto* input =
@@ -1509,6 +1568,192 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         UNIT_ASSERT(parallelProfiles.Items[0].Error == EServiceError::None);
         UNIT_ASSERT(parallelProfiles.Items[1].Error == EServiceError::None);
         parallelEnv.Clean(parallelCall);
+    }
+
+    Y_UNIT_TEST(TvmTicketsAreAppliedPerCallForHttpAndGrpc) {
+        THttpMock http;
+        TGrpcMock grpc;
+        auto provider = std::make_shared<TTvmTestProvider>();
+        auto bindings = Bindings(http, grpc);
+        for (auto& binding : bindings)
+            SetTvm(binding, provider);
+        TEnv env(std::move(bindings));
+        size_t index = 0;
+        for (auto binding : {0u, 1u, 0u, 1u}) {
+            const auto call = env.Start(0, binding);
+            UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+            auto state = binding ? grpc.State : http.State;
+            auto request = state->Wait(index / 2);
+            UNIT_ASSERT(HasHeader(*request, binding ? "x-ya-service-ticket" : "X-Ya-Service-Ticket",
+                "test-service-ticket-" + ToString(index + 1)));
+            UNIT_ASSERT(!HasHeader(*request, "Authorization", "Bearer host-secret"));
+            state->Reply(index / 2, binding ? TString("answer") : Proto("answer"), binding ? 0 : 200);
+            auto result = env.Resume(call);
+            UNIT_ASSERT(result.Status == ECallStatus::Completed);
+            UNIT_ASSERT(!result.Data.Contains("test-service-ticket"));
+            UNIT_ASSERT(!result.Data.Contains("test-tvm-source-secret"));
+            env.Clean(call);
+            ++index;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(provider->Count(), 4);
+        std::lock_guard lock(provider->State->Mutex);
+        for (const auto& credentials : provider->State->Calls) {
+            UNIT_ASSERT_VALUES_EQUAL(credentials.SourceId, 2020001);
+            UNIT_ASSERT_VALUES_EQUAL(credentials.DestinationId, 2020002);
+            UNIT_ASSERT_VALUES_EQUAL(credentials.Secret, "test-tvm-source-secret");
+        }
+    }
+
+    Y_UNIT_TEST(TvmPendingAcquisitionDoesNotBlockUnauthenticatedOperations) {
+        THttpMock http;
+        TGrpcMock grpc;
+        auto provider = std::make_shared<TTvmTestProvider>();
+        provider->State->Pending = true;
+        auto bindings = Bindings(http, grpc);
+        SetTvm(bindings[1], provider);
+        TEnv env(std::move(bindings));
+        const auto waiting = env.Start(0, 1);
+        UNIT_ASSERT(env.Runtime->Poll(waiting).Status == ECallStatus::Waiting);
+        Eventually([&] { return provider->Count() == 1; });
+        const auto ready = env.Start(0, 0);
+        UNIT_ASSERT(env.Runtime->Poll(ready).Status == ECallStatus::Waiting);
+        http.State->Wait();
+        http.State->Reply(0, Proto("answer"), 200);
+        UNIT_ASSERT(env.Resume(ready).Status == ECallStatus::Completed);
+        env.Runtime->Drop(ready);
+        UNIT_ASSERT_VALUES_EQUAL(grpc.State->Count(), 0);
+        provider->State->Pending = false;
+        UNIT_ASSERT(HasHeader(*grpc.State->Wait(), "x-ya-service-ticket", "test-service-ticket-1"));
+        grpc.State->Reply(0, "answer", 0);
+        UNIT_ASSERT(env.Resume(waiting).Status == ECallStatus::Completed);
+        env.Clean(waiting);
+    }
+
+    Y_UNIT_TEST(TvmAcquisitionFailureAndInvalidTicketsNeverReachService) {
+        for (auto binding : {0u, 1u}) {
+            for (const TString& prefix : {TString("bad\r\nheader"), TString(MaxTvmTicketBytes, 'x')}) {
+                THttpMock http;
+                TGrpcMock grpc;
+                auto provider = std::make_shared<TTvmTestProvider>();
+                provider->Prefix = prefix;
+                provider->State->Pending = true;
+                auto bindings = Bindings(http, grpc);
+                SetTvm(bindings[binding], provider);
+                TEnv env(std::move(bindings));
+                const auto call = env.Start(0, binding);
+                UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+                Eventually([&] { return provider->Count() == 1; });
+                provider->State->Pending = false;
+                auto result = env.Resume(call);
+                UNIT_ASSERT(result.Status == ECallStatus::Failed);
+                UNIT_ASSERT(ReplyHeader(result, 0).Error == EClientError::Authentication);
+                UNIT_ASSERT_VALUES_EQUAL(http.State->Count() + grpc.State->Count(), 0);
+                env.Clean(call);
+            }
+            THttpMock http;
+            TGrpcMock grpc;
+            auto bindings = Bindings(http, grpc);
+            SetTvm(bindings[binding], CreateTvmTicketProvider());
+            std::promise<TResponseHeader> completion;
+            auto future = completion.get_future();
+            TTransport transport(std::move(bindings));
+            transport.Start(1, EOperationKind::Request, MakeRequest(binding, Proto("input")),
+                TInstant::Now() + TDuration::Seconds(10), [&](EOperationStatus status, TString response) {
+                    TResponseHeader header;
+                    TStringBuf body;
+                    UNIT_ASSERT(status == EOperationStatus::Failed);
+                    UNIT_ASSERT(ParseResponse(response, header, body));
+                    completion.set_value(header);
+                    return true;
+                });
+            UNIT_ASSERT(future.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+            UNIT_ASSERT(future.get().Error == EClientError::Authentication);
+            UNIT_ASSERT_VALUES_EQUAL(http.State->Count() + grpc.State->Count(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(TvmPendingAcquisitionCanBeCancelledOrExpire) {
+        for (auto binding : {0u, 1u}) {
+            for (bool expire : {false, true}) {
+                THttpMock http;
+                TGrpcMock grpc;
+                auto provider = std::make_shared<TTvmTestProvider>();
+                provider->State->Pending = true;
+                auto bindings = Bindings(http, grpc);
+                SetTvm(bindings[binding], provider);
+                TEnv env(std::move(bindings));
+                const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+                const auto call = env.Start(0, binding, 1, Proto("input"), deadline);
+                UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+                Eventually([&] { return provider->Count() == 1; });
+                if (expire)
+                    env.Runtime->Expire(deadline);
+                else
+                    env.Runtime->Cancel(call);
+                UNIT_ASSERT(env.AwaitTerminal(call).Status == ECallStatus::Cancelled);
+                Eventually([&] { return provider->State->Cancelled.load() == 1; });
+                UNIT_ASSERT_VALUES_EQUAL(http.State->Count() + grpc.State->Count(), 0);
+                env.Clean(call);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TvmConnectionCredentialsReachDqTransport) {
+        for (auto binding : {2u, 3u}) {
+            THttpMock http;
+            TGrpcMock grpc;
+            auto provider = std::make_shared<TTvmTestProvider>();
+            auto config = Bindings(http, grpc)[binding];
+            SetTvm(config, provider);
+            TQueryTransformEnv env(config);
+            env.Start();
+            auto state = binding == 2 ? http.State : grpc.State;
+            UNIT_ASSERT(HasHeader(*state->Wait(), binding == 2 ? "X-Ya-Service-Ticket" : "x-ya-service-ticket",
+                                  "test-service-ticket-1"));
+            state->Reply(0, binding == 2 ? TString(R"({"id":42,"name":"Ada","score":97,"version":1})") : GrpcProfilePayload(),
+                         binding == 2 ? 200 : 0);
+            Eventually([&] { return env.Output->Finished.load(); });
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(TvmCredentialsRequireProviderAndCannotOverrideHeaders) {
+        TBinding binding;
+        binding.Endpoint = "http://127.0.0.1:1";
+        SetTvm(binding, {});
+        UNIT_ASSERT_EXCEPTION(TTransport({binding}), yexception);
+        binding.TvmProvider = CreateTvmTicketProvider();
+        binding.Headers = {{"X-Ya-Service-Ticket", "override"}};
+        UNIT_ASSERT_EXCEPTION(TTransport({binding}), yexception);
+    }
+
+    Y_UNIT_TEST(TvmConnectionValidationAndSecretMasking) {
+        auto connection = TestServiceConnection();
+        auto& service = *connection.mutable_content()->mutable_setting()->mutable_external_service();
+        auto& tvm = *service.mutable_tvm_auth();
+        tvm.set_source_id(2020001);
+        tvm.set_destination_id(2020002);
+        tvm.set_secret("source-secret-for-validation");
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
+        service.clear_auth();
+        UNIT_ASSERT(NFq::GetMutableAuth(*connection.mutable_content()->mutable_setting()) == nullptr);
+        UNIT_ASSERT(!service.has_auth());
+        UNIT_ASSERT(NFq::ValidateExternalService(service, false).Empty());
+        UNIT_ASSERT(!NKikimr::SecureDebugString(connection).Contains("source-secret-for-validation"));
+        FederatedQuery::ExternalService resolved;
+        UNIT_ASSERT(google::protobuf::util::JsonStringToMessage(PrepareServiceConnection(connection, {}), &resolved).ok());
+        UNIT_ASSERT_VALUES_EQUAL(resolved.tvm_auth().secret(), tvm.secret());
+        for (auto header : {"X-Ya-Service-Ticket", "x-ya-service-ticket", "X-Ya-User-Ticket"}) {
+            (*service.mutable_headers())[header] = "override";
+            UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
+            service.clear_headers();
+        }
+        tvm.set_source_id(0);
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
+        tvm.set_source_id(2020001);
+        tvm.clear_secret();
+        UNIT_ASSERT(!NFq::ValidateExternalService(service, false).Empty());
     }
 
     Y_UNIT_TEST(HttpPostThroughWasmAndNativeHeaders) {

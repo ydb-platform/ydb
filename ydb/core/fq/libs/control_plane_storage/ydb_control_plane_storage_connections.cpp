@@ -49,6 +49,8 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
         break;
     case FederatedQuery::ConnectionSetting::kExternalService:
         setting.mutable_external_service()->clear_headers();
+        if (setting.external_service().has_tvm_auth())
+            setting.mutable_external_service()->mutable_tvm_auth()->clear_secret();
         break;
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         break;

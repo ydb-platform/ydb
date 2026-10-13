@@ -128,6 +128,9 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
             "login",
             "aws_region",
             "resource_id",
+            "tvm_source_id",
+            "tvm_destination_id",
+            "tvm_secret_name",
         };
         for (const auto& names : EDS_SECRETS_SETTINGS) {
             settings.insert(names.Name);
@@ -138,6 +141,7 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
     }();
     const static TMap<TStringBuf, TExternalDataSourceAuthFields> AuthMethodFields{
         {"NONE", TExternalDataSourceAuthFields{}},
+        {"TVM", TExternalDataSourceAuthFields({"tvm_source_id", "tvm_destination_id", "tvm_secret_name"}, {})},
         {"SERVICE_ACCOUNT", TExternalDataSourceAuthFields(
                                 {"service_account_id"},
                                 {
@@ -180,6 +184,11 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
     const auto sourceType = result.find("source_type");
     const bool currentIam = authMethod == "CURRENT_IAM" && sourceType != result.end() &&
         sourceType->second.GetLiteral() && *sourceType->second.GetLiteral() == "ExternalService";
+    if (authMethod == "TVM" && (sourceType == result.end() || !sourceType->second.GetLiteral() ||
+        *sourceType->second.GetLiteral() != "ExternalService")) {
+        ctx.Error() << "TVM authorization requires SOURCE_TYPE=ExternalService";
+        return false;
+    }
     // ExternalService resolves the caller's IAM token on the host. Like NONE,
     // it must not accept any explicit credential settings.
     auto it = AuthMethodFields.find(currentIam ? TString("NONE") : authMethod);

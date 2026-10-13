@@ -6,6 +6,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
+#include <util/string/ascii.h>
 
 #include <algorithm>
 #include <atomic>
@@ -86,6 +87,9 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
         ui32 Binding = 0;
         TString Payload;
         TString Body;
+        TString TvmTicket;
+        std::shared_ptr<ITvmTicketRequest> TicketRequest;
+        std::atomic<bool> GrpcStarted{false};
         TInstant Deadline;
         TInstant TimerDue;
         TCompletion Completion;
@@ -102,6 +106,8 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
         std::unique_ptr<grpc::GenericClientAsyncResponseReader> Reader;
 
         ~TRequest() {
+            if (TicketRequest)
+                TicketRequest->Cancel();
             if (Easy) {
                 curl_easy_cleanup(Easy);
             }
@@ -139,9 +145,22 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             for (auto& binding : bindings) {
                 TResolvedBinding resolved;
                 resolved.Bytes = binding.Endpoint.size() + binding.Method.size();
+                Y_ENSURE(binding.TvmProvider || (!binding.TvmCredentials.SourceId && !binding.TvmCredentials.DestinationId &&
+                         binding.TvmCredentials.Secret.empty()), "TVM credentials require a ticket provider");
+                if (binding.TvmProvider) {
+                    Y_ENSURE(binding.TvmCredentials.SourceId && binding.TvmCredentials.DestinationId &&
+                             !binding.TvmCredentials.Secret.empty() && binding.TvmCredentials.Secret.size() <= 4096,
+                             "Invalid TVM credentials");
+                    resolved.Bytes += MaxTvmTicketBytes + binding.TvmCredentials.Secret.size();
+                }
                 for (const auto& [name, value] : binding.Headers) {
                     Y_ENSURE(!name.empty() && name.find_first_of("\r\n:") == TString::npos && value.find_first_of("\r\n") == TString::npos,
                              "Invalid trusted transport header");
+                    if (binding.TvmProvider) {
+                        const auto lower = to_lower(name);
+                        Y_ENSURE(lower != "x-ya-service-ticket" && lower != "x-ya-user-ticket" && lower != "authorization",
+                                 "TVM authentication headers are host-owned");
+                    }
                     resolved.Bytes += name.size() + value.size() + 4;
                 }
                 Y_ENSURE(resolved.Bytes <= Limits.MaxPayloadBytes, "Binding exceeds transport quota");
@@ -238,7 +257,56 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             std::lock_guard lock(Mutex);
             Requests.erase(request->Handle);
         }
+        if (request->TicketRequest) {
+            request->TicketRequest->Cancel();
+            request->TicketRequest.reset();
+        }
         Notify(request->Completion, status, Response(code, error, nativeCode, body));
+    }
+
+    bool AcquireTicket(const std::shared_ptr<TRequest>& request) {
+        const auto& binding = Bindings[request->Binding].Config;
+        if (!binding.TvmProvider)
+            return true;
+        try {
+            if (!request->TicketRequest)
+                request->TicketRequest = binding.TvmProvider->Request(binding.TvmCredentials, request->Deadline);
+            Y_ENSURE(request->TicketRequest, "Missing TVM ticket request");
+            auto result = request->TicketRequest->Poll();
+            const auto& ticket = result.Ticket;
+            if (result.Status == ETvmTicketStatus::Pending)
+                return false;
+            if (result.Status == ETvmTicketStatus::Ready && !result.Ticket.empty() && result.Ticket.size() <= MaxTvmTicketBytes &&
+                std::all_of(ticket.begin(), ticket.end(), [](unsigned char c) { return c > 32 && c < 127; })) {
+                request->TvmTicket = std::move(result.Ticket);
+                request->TicketRequest.reset();
+                return true;
+            }
+        } catch (...) {
+            // Provider errors may contain credentials. Only return the fixed error code.
+        }
+        Finish(request, EOperationStatus::Failed, 0, EClientError::Authentication);
+        return false;
+    }
+
+    void StartGrpc(const std::shared_ptr<TRequest>& request) {
+        const auto& binding = Bindings[request->Binding];
+        const auto maxMicros = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::time_point::max().time_since_epoch()).count();
+        request->Context.set_deadline(std::chrono::system_clock::time_point(
+            std::chrono::microseconds(std::min<ui64>(request->Deadline.MicroSeconds(), maxMicros))));
+        for (const auto& [name, value] : binding.Config.Headers)
+            request->Context.AddMetadata(name, value);
+        if (!request->TvmTicket.empty())
+            request->Context.AddMetadata("x-ya-service-ticket", request->TvmTicket);
+        const grpc::Slice slice(request->Payload.data(), request->Payload.size());
+        request->GrpcRequest = grpc::ByteBuffer(&slice, 1);
+        request->Reader = binding.Stub->PrepareUnaryCall(&request->Context, binding.Config.Method, request->GrpcRequest, &Queue);
+        Y_ENSURE(request->Reader, "gRPC request preparation failed");
+        std::lock_guard lock(Mutex);
+        request->GrpcStarted = true;
+        request->Reader->StartCall();
+        request->Reader->Finish(&request->GrpcResponse, &request->GrpcStatus, request.get());
     }
 
     void AddHttp(TRequest& request) {
@@ -277,6 +345,11 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
             Y_ENSURE(headers, "curl header allocation failed");
             request.HttpHeaders = headers;
         }
+        if (!request.TvmTicket.empty()) {
+            auto* headers = curl_slist_append(request.HttpHeaders, ("X-Ya-Service-Ticket: " + request.TvmTicket).c_str());
+            Y_ENSURE(headers, "curl TVM header allocation failed");
+            request.HttpHeaders = headers;
+        }
         auto* headers = curl_slist_append(request.HttpHeaders, "Expect:");
         Y_ENSURE(headers, "curl header allocation failed");
         request.HttpHeaders = headers;
@@ -293,7 +366,7 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                 std::lock_guard lock(Mutex);
                 closing = Closing;
                 for (const auto& [_, request] : Requests) {
-                    if (request->Kind == EOperationKind::Timer || Bindings[request->Binding].Config.Protocol == EProtocol::Http) {
+                    if (request->Kind == EOperationKind::Timer || Bindings[request->Binding].Config.Protocol == EProtocol::Http || !request->GrpcStarted) {
                         requests.push_back(request);
                     }
                 }
@@ -313,8 +386,17 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                     }
                 } else if (!request->Easy) {
                     try {
-                        AddHttp(*request);
-                        active.emplace(request->Easy, request);
+                        if (!AcquireTicket(request))
+                            continue;
+                        // Acquisition is part of this operation's budget, including a ready ticket.
+                        if (request->Cancelled || TInstant::Now() >= request->Deadline)
+                            continue;
+                        if (Bindings[request->Binding].Stub) {
+                            StartGrpc(request);
+                        } else {
+                            AddHttp(*request);
+                            active.emplace(request->Easy, request);
+                        }
                     } catch (...) {
                         if (request->Easy) {
                             curl_multi_remove_handle(Multi, request->Easy);
@@ -487,29 +569,10 @@ struct TTransport::TImpl : std::enable_shared_from_this<TImpl> {
                     Accounting->Stats.ReservedBytes += reserve;
                 }
             }
-            if (!request->Cancelled && kind != EOperationKind::Timer && Bindings[request->Binding].Stub) {
-                const auto& binding = Bindings[request->Binding];
-                const auto maxMicros =
-                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::time_point::max().time_since_epoch())
-                        .count();
-                const auto micros = std::min<ui64>(deadline.MicroSeconds(), maxMicros);
-                request->Context.set_deadline(std::chrono::system_clock::time_point(std::chrono::microseconds(micros)));
-                for (const auto& [name, value] : binding.Config.Headers) {
-                    request->Context.AddMetadata(name, value);
-                }
-                const grpc::Slice slice(request->Payload.data(), request->Payload.size());
-                request->GrpcRequest = grpc::ByteBuffer(&slice, 1);
-                request->Reader = binding.Stub->PrepareUnaryCall(&request->Context, binding.Config.Method, request->GrpcRequest, &Queue);
-                Y_ENSURE(request->Reader, "gRPC request preparation failed");
-            }
             if (!request->Cancelled) {
                 // Preparation may throw: publish only after it succeeds, before CQ
                 // dispatch.
                 Requests.emplace(handle, request);
-            }
-            if (request->Reader) {
-                request->Reader->StartCall();
-                request->Reader->Finish(&request->GrpcResponse, &request->GrpcStatus, request.get());
             }
         }
         if (request->Cancelled) {

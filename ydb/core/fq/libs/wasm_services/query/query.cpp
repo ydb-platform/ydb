@@ -514,7 +514,10 @@ NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactory(
     return factory;
 }
 
-void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config) {
+void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config,
+    std::shared_ptr<ITvmTicketProvider> tvmProvider) {
+    if (!tvmProvider)
+        tvmProvider = CreateTvmTicketProvider();
     auto modules = DescribeModules(config);
     EnsureUdfHostIntrinsicsRegistered();
     NAsync::KeepAsyncHostIntrinsicsLinked();
@@ -536,7 +539,7 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
             prepared->BatchBytes = config.GetMaxBatchBytes();
         factory.RegisterOutputTransform<NYql::NProto::TFunctionTransform>(
             prepared->Manifest.Name,
-            [prepared](NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
+            [prepared, tvmProvider](NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
                 NJson::TJsonValue invocation;
                 Y_ENSURE(NJson::ReadJsonTree(settings.GetInvokeUrl(), &invocation, true) && invocation.IsMap(),
                          "Invalid WASM service invocation");
@@ -555,6 +558,11 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
                 binding.CaCertificate = service.ca_certificate();
                 for (const auto& [key, value] : service.headers())
                     binding.Headers.emplace_back(key, value);
+                if (service.has_tvm_auth()) {
+                    Y_ENSURE(tvmProvider->IsAvailable(), "TVM ticket provider is not implemented; source/destination credentials are supported, but ticket acquisition is a stub");
+                    binding.TvmProvider = tvmProvider;
+                    binding.TvmCredentials = {service.tvm_auth().source_id(), service.tvm_auth().destination_id(), service.tvm_auth().secret()};
+                }
                 if (service.auth().has_token())
                     binding.Headers.emplace_back(binding.Protocol == EProtocol::Http ? "Authorization" : "authorization",
                                                  "Bearer " + service.auth().token().token());

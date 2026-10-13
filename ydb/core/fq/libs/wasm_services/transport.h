@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wire.h"
+#include "tvm.h"
 
 #include <ydb/services/udf_store/wasm/async_runtime/runtime.h>
 
@@ -13,12 +14,14 @@ namespace NAsync = NKikimr::NUdfStore::NWasm::NAsync;
 enum class EProtocol { Http, Grpc };
 
 // Trusted, already resolved binding supplied by the owner, never by guest code.
-// Metadata/ACL resolution and refreshing credentials are not implemented here.
+// Metadata/ACL resolution belongs to FQ; TVM ticket refresh belongs to the provider.
 struct TBinding {
     EProtocol Protocol = EProtocol::Http;
     TString Endpoint;
     TString Method = "POST";
     TVector<std::pair<TString, TString>> Headers;
+    std::shared_ptr<ITvmTicketProvider> TvmProvider;
+    TTvmCredentials TvmCredentials;
     TString CaFile;
     TString CaCertificate;
     std::shared_ptr<grpc::ChannelCredentials> GrpcCredentials;

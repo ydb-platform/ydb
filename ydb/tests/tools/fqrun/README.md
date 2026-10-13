@@ -154,7 +154,8 @@ For gRPC, use `PROTOCOL='GRPC'`, `LOCATION='host:port'` and a fully qualified
 URL for HTTP. `CA_CERTIFICATE` accepts PEM trust roots, not a filesystem path.
 TLS verification cannot be disabled. Unknown properties and duplicate keys fail.
 
-`AUTH_METHOD` accepts `NONE`, `CURRENT_IAM` (the runner's `YQL_TOKEN`) or `TOKEN`.
+`AUTH_METHOD` accepts `NONE`, `CURRENT_IAM` (the runner's `YQL_TOKEN`), `TOKEN`,
+or `TVM` (see the provider-stub section below).
 For `TOKEN`, pass `--secrets-file=secrets.json`, a local JSON object:
 
 ```json
@@ -187,6 +188,52 @@ Initialization can run without a query (omit `-C`); with embedded metadata the
 connections last only for that runner invocation. Use `--hold` to keep the runner
 available, or an external `--cp-storage-db` for persistent metadata. Module loading
 still uses `WasmServices.Modules`; DDL does not register or download WASM.
+
+### TVM authorization (ticket provider stub)
+
+TVM connection metadata and transport integration are implemented. The default
+provider is **unavailable**: actual ticket acquisition will be added when the TVM
+client/API contract is supplied. Creating a connection succeeds; executing a
+query that uses it fails with `TVM ticket provider is not implemented`, before
+sending any request to the external service. No synthetic tickets or fallback
+unauthenticated calls are made.
+
+```sql
+CREATE EXTERNAL DATA SOURCE profiles_http WITH (
+    SOURCE_TYPE = 'ExternalService',
+    PROTOCOL = 'HTTP',
+    LOCATION = 'https://profiles.example.test/profile',
+    AUTH_METHOD = 'TVM',
+    TVM_SOURCE_ID = '2020001',
+    TVM_DESTINATION_ID = '2020002',
+    TVM_SECRET_NAME = 'profiles_tvm_secret'
+);
+```
+
+Pass `--secrets-file=secrets.json` with a JSON object mapping
+`profiles_tvm_secret` to the source application's secret. Source and destination
+must be nonzero uint32 IDs. TVM cannot be combined with token/IAM credentials.
+For protobuf connections use `external_service.tvm_auth { source_id: ...
+destination_id: ... secret: "..." }` instead of `external_service.auth`.
+The secret is a sensitive credential, omitted from ordinary connection reads and
+masked in diagnostic output. The local file is read at startup; changing its
+contents requires restarting and recreating the connection.
+
+`ITvmTicketProvider` in `ydb/core/fq/libs/wasm_services/tvm.h` is the integration
+point for the real client. It receives only source ID, destination ID, secret and
+deadline. Methods/paths are not inputs to TVM authorization and no TVM method
+allowlist is applied. Existing transport method settings remain independent.
+The provider must implement nonblocking acquisition, credential isolation,
+ticket caching/refresh, and cancellation of individual waiters. It can be injected
+into `RegisterServiceTransforms`; all transforms share that provider.
+
+The host obtains credentials for each network operation and adds
+`X-Ya-Service-Ticket` for HTTP or `x-ya-service-ticket` for gRPC. Acquisition counts
+towards the operation's deadline and memory/concurrency limits. Cancellation and
+shutdown detach pending waiters. Reserved TVM headers cannot be supplied through
+connection headers. Tickets and source secrets never enter WASM memory.
+Transport/DQ tests use an explicitly injected test provider; these are not a
+validation of a real TVM server or issuance protocol.
 
 ### Reproducible HTTP/gRPC example
 

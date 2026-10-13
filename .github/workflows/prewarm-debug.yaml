@@ -16,7 +16,7 @@ jobs:
           .github/config
     - name: Read branches from config
       id: set-branches
-      run: echo "branches=$(jq -c '.' .github/config/scheduled_trim_branches.json)" >> $GITHUB_OUTPUT
+      run: echo "branches=$(jq -c '.' .github/config/stable_tests_branches.json)" >> $GITHUB_OUTPUT
 
   build_and_test:
     needs: determine_branches

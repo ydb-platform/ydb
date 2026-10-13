@@ -28,6 +28,5 @@ jobs:
       test_targets: ydb/
       test_size: small,medium
       branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '') }}
-      # Temporary: do not use stable_tests_branches.json (mute/stress still need the full list).
-      branches_config_path: '.github/config/scheduled_trim_branches.json'
+      branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

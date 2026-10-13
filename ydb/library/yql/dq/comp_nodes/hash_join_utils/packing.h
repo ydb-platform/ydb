@@ -277,6 +277,10 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
                                start + block_size * block_rows);
 }
 
+#ifdef USE_X86_SIMD
+#pragma clang attribute push(__attribute__((target("avx2"))), apply_to=function)
+#endif
+
 template <class TTraits> struct SIMDPack {
     template <class T> using TSimd = typename TTraits::template TSimd8<T>;
 
@@ -732,6 +736,10 @@ template <class TTraits> struct SIMDPack {
                                    col_sizes, offsets, padded_size);
     }
 };
+
+#ifdef USE_X86_SIMD
+#pragma clang attribute pop
+#endif
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

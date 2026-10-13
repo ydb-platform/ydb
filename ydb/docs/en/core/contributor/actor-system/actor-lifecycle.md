@@ -192,6 +192,13 @@ Routing performs one service-to-actor lookup. Do not rely on chains of service
 aliases. A service name is stable only because application code maintains the
 mapping; failover must install the new mapping.
 
+Replacing one nonempty actor id with another, without clearing the mapping,
+does not make the service temporarily absent: a concurrent lookup may return
+the old or the new actor id, but not an empty id. This does not keep the old actor
+alive or guarantee event delivery. Lookups do not acquire the writer's lock;
+a missed lookup may retry if a replacement occurred during its scan, so lookup is not wait-free
+under continuous replacements.
+
 ## Mailboxes, pools, and executor behavior
 
 Mailbox serialization is the guarantee; a specific queue algorithm is not.

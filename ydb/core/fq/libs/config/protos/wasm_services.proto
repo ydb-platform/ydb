@@ -19,6 +19,10 @@ message TWasmServicesConfig {
     repeated TModule Modules = 8;
     // Conservative serialized input/output reservation, default 64 MiB.
     uint64 MaxBufferedBytes = 9;
+    // Shared native transport limits per FQ node, including TVM wait and cancellation.
+    // Zero selects defaults: 1024 operations and 256 MiB of conservative reservations.
+    uint64 MaxTransportOperations = 10;
+    uint64 MaxTransportBytes = 11;
 
     message TModule {
         string ModulePath = 1;

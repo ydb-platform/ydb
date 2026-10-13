@@ -15,6 +15,6 @@ TString ServiceConnectionKey(const TString& id);
 TString ServiceInvocationConnection(const TString& invocation);
 TString PrepareServiceConnection(const FederatedQuery::Connection& connection, const TString& currentIamToken);
 void RegisterServiceTransforms(NYql::NDq::TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config,
-    std::shared_ptr<ITvmTicketProvider> tvmProvider = {});
+    std::shared_ptr<ITvmTicketProvider> tvmProvider, ui32 userPool);
 
 } // namespace NFq::NWasmServices

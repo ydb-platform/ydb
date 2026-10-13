@@ -7,6 +7,8 @@
 
 #include <grpcpp/security/credentials.h>
 
+namespace NActors { class TActorSystem; }
+
 namespace NFq::NWasmServices {
 
 namespace NAsync = NKikimr::NUdfStore::NWasm::NAsync;
@@ -38,12 +40,31 @@ struct TTransportStats {
     ui64 ReservedBytes = 0;
 };
 
-// One curl multi worker and one gRPC CQ worker, not a thread per request.
-// Completion must enqueue an owner event, never enter WASM or destroy this
-// transport on an I/O worker. Destruction cancels and drains physical I/O.
+struct TTransportExecutorLimits {
+    ui64 MaxOperations = 1024;
+    ui64 MaxReservedBytes = 256ull << 20;
+};
+
+// One actor on the supplied user pool, shared by all transforms on the node.
+// No owned threads. Producers must stop before the actor system is destroyed.
+class TTransportExecutor {
+public:
+    static std::shared_ptr<TTransportExecutor> Create(NActors::TActorSystem* system, ui32 userPool,
+                                                     TTransportExecutorLimits limits = {});
+    TTransportStats Stats() const;
+
+private:
+    struct TImpl;
+    explicit TTransportExecutor(std::shared_ptr<TImpl> impl);
+    std::shared_ptr<TImpl> Impl_;
+    friend class TTransport;
+};
+
+// Completion must enqueue an owner event, never enter WASM. Destruction requests
+// cancellation; the shared executor retains credits through physical I/O cleanup.
 class TTransport final : public NAsync::ITransport {
 public:
-    explicit TTransport(TVector<TBinding> bindings, TTransportLimits limits = {});
+    TTransport(TVector<TBinding> bindings, std::shared_ptr<TTransportExecutor> executor, TTransportLimits limits = {});
     ~TTransport();
 
     TCancel Start(NAsync::THandle operation, NAsync::EOperationKind kind, TString request,

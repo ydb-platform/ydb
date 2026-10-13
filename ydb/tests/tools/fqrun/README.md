@@ -90,6 +90,8 @@ FederatedQueryConfig {
     MaxBatchBytes: 32768
     MaxBufferedRows: 65536
     MaxBufferedBytes: 67108864
+    MaxTransportOperations: 1024
+    MaxTransportBytes: 268435456
     CallTimeoutMs: 30000
   }
 }
@@ -102,6 +104,44 @@ gets a separate WASM compartment and async runtime, reusing the compiled module
 across rows/batches. Install matching artifacts on every compiling/executing node;
 the runner does not distribute modules or hot-reload them. Restart with the new
 module and matching manifest to update an adapter.
+
+### Execution and transport limits
+
+Transforms share a transport executor actor on the node's user pool
+(`appData->UserPoolId`), created once by `RegisterServiceTransforms`. They do not
+create dedicated transport threads. The actor starts requests and processes
+ready network events without waiting for responses: HTTP uses nonblocking
+`curl_multi_perform`, and gRPC completion polling uses `AsyncNext` with an
+immediate deadline. WASM resumes through its owning compute actor when data is
+ready. While requests are waiting, the user-pool thread is available to other
+work.
+
+The executor schedules a 5 ms timer only while operations remain active. Each
+turn visits at most 32 transport sessions, with at most 128 gRPC completions per
+poll, before yielding to the actor scheduler. Request preparation, transport
+progress and response processing therefore share the user pool's CPU budget.
+
+`MaxTransportOperations` and `MaxTransportBytes` in the configuration above are
+shared limits for all WASM service transports registered on the FQ node. Their
+defaults are 1024 operations and 256 MiB. Each individual transport also retains
+its limits of 128 operations and 64 MiB. Admission must fit both sets of limits;
+otherwise the operation fails immediately with `ResourceLimit`, without adding
+it to an unbounded waiting queue. Operations waiting for a TVM ticket or timer,
+and operations whose cancellation is still being cleaned up, consume credits.
+
+The byte limit reserves space conservatively for owned request, response and
+header buffers, including copies. It is not a hard process RSS limit: library
+allocations such as gRPC/TLS caches and WASM runtime memory are outside this
+accounting. `MaxBufferedBytes` remains a separate limit on each transform's
+buffered data. For example, the configuration above allows at most 256 MiB of
+transport reservations across the node, in addition to each transform's own
+buffering and WASM memory.
+
+Destroying a transform requests cancellation and does not join transport
+threads or wait for network completion. Credits are released only after the
+underlying operations have been cleaned up. Final actor-system shutdown drains
+gRPC completion queues on the teardown thread; ordinary query cancellation does
+not perform that blocking drain on the user pool.
 
 When WASM services are enabled, fqrun adds `EXTERNAL_SERVICE` to the local
 connection allowlist and uses real control-plane storage on its embedded YDB
@@ -212,6 +252,9 @@ wait remains subject to the operation's deadline and cancellation.
 mock provider as fqrun and a controlled clock. For both HTTP and gRPC it freezes
 the first ticket in `Pending`, completes a second request (with no TVM or an
 immediately ready TVM ticket), then advances the clock and completes the first.
+Transport tests run the executor on a user pool with a single thread, so an
+additional pool thread cannot hide blocking ticket acquisition. Separate tests
+exercise shared operation and byte quotas across transports.
 
 ```sql
 CREATE EXTERNAL DATA SOURCE profiles_http WITH (
@@ -239,8 +282,11 @@ point for the real client. It receives only source ID, destination ID, secret an
 deadline. Methods/paths are not inputs to TVM authorization and no TVM method
 allowlist is applied. Existing transport method settings remain independent.
 The provider must implement nonblocking acquisition, credential isolation,
-ticket caching/refresh, and cancellation of individual waiters. It can be injected
-into `RegisterServiceTransforms`; all transforms share that provider.
+ticket caching/refresh, and cancellation of individual waiters. Its `Request()`
+and `Poll()` execute on the user pool and must return promptly: waiting for a
+network reply, sleeping or blocking on a future would occupy a shared user-pool
+thread. It can be injected into `RegisterServiceTransforms`; all transforms
+share that provider.
 
 The host obtains credentials for each network operation and adds
 `X-Ya-Service-Ticket` for HTTP or `x-ya-service-ticket` for gRPC. Acquisition counts
@@ -349,3 +395,11 @@ These tests launch the actual fqrun binary against isolated local HTTP/gRPC mock
 including TLS, both modules, batching, cancellation, deadlines, invalid inputs and
 ordinary analytics with/without explicit backend selection. No installed ydbd or
 external service is required.
+
+Transport unit tests additionally cover progress on a single-thread user pool,
+delayed TVM tickets, shared operation/memory limits and release of reservations
+after cancellation:
+
+```bash
+./ya make --build relwithdebinfo -tA ydb/core/fq/libs/wasm_services/ut
+```

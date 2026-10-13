@@ -95,6 +95,16 @@ def test_profile(service, tmp_path, protocol, batch_rows):
     assert 'fqrun-example-token' not in runner.output()
 
 
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_shared_transport_memory_limit(service, tmp_path, protocol):
+    runner = Runner(tmp_path, service)
+    runner.config.write_text(runner.config.read_text().replace(
+        'WasmServices {', 'WasmServices { MaxTransportOperations: 1 MaxTransportBytes: 1', 1))
+    assert runner.wait(runner.start('profiles_' + protocol)) != 0, runner.output()
+    assert 'WASM service failed: error=1, detail=5' in runner.output()  # Transport / ResourceLimit
+    assert not service.requests
+
+
 def test_second_module(service, tmp_path):
     runner = Runner(tmp_path, service)
     assert runner.wait(runner.start('echo_http', (tmp_path / 'echo.sql').read_text())) == 0, runner.output()

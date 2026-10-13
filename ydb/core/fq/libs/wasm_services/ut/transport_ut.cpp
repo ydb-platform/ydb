@@ -13,6 +13,8 @@
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
+#include <ydb/library/actors/core/executor_thread_ctx.h>
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
@@ -80,6 +82,29 @@ template <class F> void Eventually(F condition) {
         UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for physical transport cleanup");
         Sleep(TDuration::MilliSeconds(5));
     }
+}
+
+class TSingleUserThreadRuntime : public NActors::TTestActorRuntimeBase {
+public:
+    TSingleUserThreadRuntime() : TTestActorRuntimeBase(1, true) {}
+protected:
+    void InitActorSystemSetup(NActors::TActorSystemSetup& setup, TNodeDataBase*) override {
+        setup.Executors[1].Reset(new NActors::TBasicExecutorPool(1, 1, 20, "User"));
+    }
+};
+
+struct TExecutorFixture {
+    TSingleUserThreadRuntime Runtime;
+    std::shared_ptr<TTransportExecutor> Executor;
+    explicit TExecutorFixture(TTransportExecutorLimits limits = {}) {
+        Runtime.Initialize();
+        Executor = TTransportExecutor::Create(Runtime.GetActorSystem(0), 1, limits);
+    }
+};
+
+std::shared_ptr<TTransportExecutor> TestExecutor() {
+    static TExecutorFixture fixture;
+    return fixture.Executor;
 }
 
 struct TExchange {
@@ -440,8 +465,9 @@ struct TEnv {
     std::unique_ptr<TRuntime> Runtime;
     TVector<THandle> Ready;
 
-    explicit TEnv(TVector<TBinding> bindings, TTransportLimits limits = {}, TStringBuf resource = "/fq_transport_coroutine.wasm") {
-        Transport = std::make_shared<TTransport>(std::move(bindings), limits);
+    explicit TEnv(TVector<TBinding> bindings, TTransportLimits limits = {}, TStringBuf resource = "/fq_transport_coroutine.wasm",
+                  std::shared_ptr<TTransportExecutor> executor = TestExecutor()) {
+        Transport = std::make_shared<TTransport>(std::move(bindings), std::move(executor), limits);
         EnsureUdfHostIntrinsicsRegistered();
         KeepAsyncHostIntrinsicsLinked();
         auto query = std::make_unique<TQueryCompartmentHandle>();
@@ -754,7 +780,7 @@ struct TQueryTransformEnv {
             tvm->set_destination_id(binding.TvmCredentials.DestinationId);
             tvm->set_secret(binding.TvmCredentials.Secret);
         }
-        RegisterServiceTransforms(Factory, config, binding.TvmProvider);
+        RegisterServiceTransforms(Factory, config, binding.TvmProvider, 1);
         Setup.Execute([&](NYql::NDq::TFakeActor& actor) {
             using namespace NKikimr::NMiniKQL;
             auto* input =
@@ -1363,7 +1389,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
             binding.Headers = {{"Content-Type", "application/json"}};
             if (trust)
                 binding.CaFile = server.CaFile.Name();
-            TTransport transport({binding});
+            TTransport transport({binding}, TestExecutor());
             auto reply = StartDirectHttp(transport, std::make_shared<TDirectReply>());
             if (serve)
                 server.ReplyOnce("{\"id\":42,\"name\":\"Ada\",\"score\":97,\"version\":1}");
@@ -1637,7 +1663,10 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
                 TGrpcMock grpc;
                 std::atomic<ui64> clockMs{0};
                 std::atomic<ui32> clockReads{0};
+                std::atomic<bool> onUserPool{true};
                 auto provider = CreateMockTvmTicketProvider(TDuration::Seconds(30), [&] {
+                    if (!NActors::TlsThreadContext || NActors::TlsThreadContext->PoolId() != 1)
+                        onUserPool = false;
                     ++clockReads;
                     return std::chrono::steady_clock::time_point(std::chrono::milliseconds(clockMs.load()));
                 });
@@ -1672,9 +1701,107 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
                                       "fqrun-mock-tvm-service-ticket"));
                 slowState->Reply(0, slowBinding ? TString("answer") : Proto("answer"), slowBinding ? 0 : 200);
                 UNIT_ASSERT(env.Resume(waiting).Status == ECallStatus::Completed);
+                UNIT_ASSERT(onUserPool);
                 env.Clean(waiting);
             }
         }
+    }
+
+    Y_UNIT_TEST(SharedExecutorMakesProgressAcrossTransportsOnOneUserThread) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TExecutorFixture fixture;
+        std::atomic<ui64> clockMs{0};
+        std::atomic<ui32> polls{0};
+        auto provider = CreateMockTvmTicketProvider(TDuration::Seconds(30), [&] {
+            ++polls;
+            return std::chrono::steady_clock::time_point(std::chrono::milliseconds(clockMs.load()));
+        });
+        auto bindings = Bindings(http, grpc);
+        SetTvm(bindings[1], provider);
+        TEnv slow(bindings, {}, "/fq_transport_coroutine.wasm", fixture.Executor);
+        TEnv fast(Bindings(http, grpc), {}, "/fq_transport_coroutine.wasm", fixture.Executor);
+        const auto waiting = slow.Start(0, 1);
+        UNIT_ASSERT(slow.Runtime->Poll(waiting).Status == ECallStatus::Waiting);
+        Eventually([&] { return polls.load() >= 2; });
+        const auto ready = fast.Start(0, 0);
+        UNIT_ASSERT(fast.Runtime->Poll(ready).Status == ECallStatus::Waiting);
+        http.State->Wait();
+        http.State->Reply(0, Proto("answer"), 200);
+        UNIT_ASSERT(fast.Resume(ready).Status == ECallStatus::Completed);
+        fast.Clean(ready);
+        UNIT_ASSERT_VALUES_EQUAL(grpc.State->Count(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().Operations, 1);
+        clockMs = 30000;
+        grpc.State->Wait();
+        grpc.State->Reply(0, "answer", 0);
+        UNIT_ASSERT(slow.Resume(waiting).Status == ECallStatus::Completed);
+        slow.Clean(waiting);
+        Eventually([&] { return fixture.Executor->Stats().Operations == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().ReservedBytes, 0);
+    }
+
+    Y_UNIT_TEST(SharedOperationQuotaIncludesTicketWaitAndRecoversAfterCancellation) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TExecutorFixture fixture({.MaxOperations = 1});
+        auto provider = std::make_shared<TTvmTestProvider>();
+        provider->State->Pending = true;
+        auto bindings = Bindings(http, grpc);
+        SetTvm(bindings[1], provider);
+        TEnv first(bindings, {}, "/fq_transport_coroutine.wasm", fixture.Executor);
+        TEnv second(Bindings(http, grpc), {}, "/fq_transport_coroutine.wasm", fixture.Executor);
+        const auto waiting = first.Start(0, 1);
+        UNIT_ASSERT(first.Runtime->Poll(waiting).Status == ECallStatus::Waiting);
+        Eventually([&] { return provider->Count() == 1; });
+        const auto rejected = second.Start(0, 0);
+        const auto failure = second.Runtime->Poll(rejected);
+        UNIT_ASSERT(failure.Status == ECallStatus::Failed);
+        UNIT_ASSERT(ReplyHeader(failure, 0).Error == EClientError::ResourceLimit);
+        second.Clean(rejected);
+        UNIT_ASSERT_VALUES_EQUAL(http.State->Count() + grpc.State->Count(), 0);
+        first.Runtime->Cancel(waiting);
+        first.Clean(waiting);
+        Eventually([&] { return fixture.Executor->Stats().Operations == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().ReservedBytes, 0);
+        const auto accepted = second.Start(0, 0);
+        UNIT_ASSERT(second.Runtime->Poll(accepted).Status == ECallStatus::Waiting);
+        http.State->Wait();
+        http.State->Reply(0, Proto("answer"), 200);
+        UNIT_ASSERT(second.Resume(accepted).Status == ECallStatus::Completed);
+        second.Clean(accepted);
+    }
+
+    Y_UNIT_TEST(SharedMemoryQuotaAppliesAcrossTransportsAndIsReleased) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TExecutorFixture fixture({.MaxOperations = 128, .MaxReservedBytes = 45000});
+        TTransportLimits limits;
+        limits.MaxPayloadBytes = 4096;
+        TEnv first(Bindings(http, grpc), limits, "/fq_transport_coroutine.wasm", fixture.Executor);
+        TEnv second(Bindings(http, grpc), limits, "/fq_transport_coroutine.wasm", fixture.Executor);
+        const auto waiting = first.Start(0, 0);
+        UNIT_ASSERT(first.Runtime->Poll(waiting).Status == ECallStatus::Waiting);
+        http.State->Wait();
+        const auto bytes = fixture.Executor->Stats().ReservedBytes;
+        UNIT_ASSERT(bytes > 22500 && bytes <= 45000);
+        const auto rejected = second.Start(0, 1);
+        const auto failure = second.Runtime->Poll(rejected);
+        UNIT_ASSERT(failure.Status == ECallStatus::Failed);
+        UNIT_ASSERT(ReplyHeader(failure, 0).Error == EClientError::ResourceLimit);
+        second.Clean(rejected);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().ReservedBytes, bytes);
+        UNIT_ASSERT_VALUES_EQUAL(grpc.State->Count(), 0);
+        first.Runtime->Cancel(waiting);
+        first.Clean(waiting);
+        Eventually([&] { return fixture.Executor->Stats().Operations == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().ReservedBytes, 0);
+        const auto accepted = second.Start(0, 1);
+        UNIT_ASSERT(second.Runtime->Poll(accepted).Status == ECallStatus::Waiting);
+        grpc.State->Wait();
+        grpc.State->Reply(0, "answer", 0);
+        UNIT_ASSERT(second.Resume(accepted).Status == ECallStatus::Completed);
+        second.Clean(accepted);
     }
 
     Y_UNIT_TEST(TvmAcquisitionFailureAndInvalidTicketsNeverReachService) {
@@ -1704,7 +1831,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
             SetTvm(bindings[binding], CreateTvmTicketProvider());
             std::promise<TResponseHeader> completion;
             auto future = completion.get_future();
-            TTransport transport(std::move(bindings));
+            TTransport transport(std::move(bindings), TestExecutor());
             transport.Start(1, EOperationKind::Request, MakeRequest(binding, Proto("input")),
                 TInstant::Now() + TDuration::Seconds(10), [&](EOperationStatus status, TString response) {
                     TResponseHeader header;
@@ -1770,10 +1897,10 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         TBinding binding;
         binding.Endpoint = "http://127.0.0.1:1";
         SetTvm(binding, {});
-        UNIT_ASSERT_EXCEPTION(TTransport({binding}), yexception);
+        UNIT_ASSERT_EXCEPTION(TTransport({binding}, TestExecutor()), yexception);
         binding.TvmProvider = CreateTvmTicketProvider();
         binding.Headers = {{"X-Ya-Service-Ticket", "override"}};
-        UNIT_ASSERT_EXCEPTION(TTransport({binding}), yexception);
+        UNIT_ASSERT_EXCEPTION(TTransport({binding}, TestExecutor()), yexception);
     }
 
     Y_UNIT_TEST(TvmConnectionValidationAndSecretMasking) {
@@ -2199,8 +2326,8 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         }
     }
 
-    Y_UNIT_TEST(NativeTimerUsesTheSharedWorker) {
-        TTransport transport({});
+    Y_UNIT_TEST(NativeTimerUsesTheSharedExecutor) {
+        TTransport transport({}, TestExecutor());
         const ui64 delay = 1000;
         auto completions = std::make_shared<TCompletions>();
         auto cancel = transport.Start(1, EOperationKind::Timer, TString(reinterpret_cast<const char*>(&delay), sizeof(delay)),
@@ -2218,7 +2345,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     Y_UNIT_TEST(MaximumNativeGrpcDeadlineDoesNotOverflow) {
         THttpMock http;
         TGrpcMock grpc;
-        TTransport transport(Bindings(http, grpc));
+        TTransport transport(Bindings(http, grpc), TestExecutor());
         auto completions = std::make_shared<TCompletions>();
         transport.Start(1, EOperationKind::Request, MakeRequest(1, Proto("input")), TInstant::Max(),
                         [completions](EOperationStatus status, TString) {
@@ -2236,7 +2363,7 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
     Y_UNIT_TEST(NativeDeadlineStopsBothClientsWithoutOwnerPolling) {
         THttpMock http;
         TGrpcMock grpc;
-        TTransport transport(Bindings(http, grpc));
+        TTransport transport(Bindings(http, grpc), TestExecutor());
         auto completions = std::make_shared<TCompletions>();
         const auto deadline = TInstant::Now() + TDuration::Seconds(1);
         for (ui32 binding = 0; binding < 2; ++binding) {
@@ -2255,10 +2382,34 @@ Y_UNIT_TEST_SUITE(TFqWasmTransportTest) {
         UNIT_ASSERT(http.State->Count() <= 1 && grpc.State->Count() <= 1);
     }
 
+    Y_UNIT_TEST(ActorSystemShutdownReleasesActiveRequestsAndCredits) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TExecutorFixture fixture;
+        TTransport transport(Bindings(http, grpc), fixture.Executor);
+        auto completions = std::make_shared<std::atomic<ui32>>(0);
+        for (ui32 binding = 0; binding < 2; ++binding) {
+            transport.Start(binding + 1, EOperationKind::Request, MakeRequest(binding, Proto("input")),
+                            TInstant::Now() + TDuration::Seconds(30), [completions](EOperationStatus, TString) {
+                                ++*completions;
+                                return true;
+                            });
+        }
+        http.State->Wait();
+        grpc.State->Wait();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().Operations, 2);
+        fixture.Runtime.GetActorSystem(0)->Cleanup();
+        // Hard teardown cannot notify owners whose actors have already stopped.
+        UNIT_ASSERT_VALUES_EQUAL(completions->load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(transport.Stats().Operations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().Operations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Executor->Stats().ReservedBytes, 0);
+    }
+
     Y_UNIT_TEST(TransportShutdownCancelsAndDrainsBothClients) {
         THttpMock http;
         TGrpcMock grpc;
-        auto transport = std::make_unique<TTransport>(Bindings(http, grpc));
+        auto transport = std::make_unique<TTransport>(Bindings(http, grpc), TestExecutor());
         auto completions = std::make_shared<TCompletions>();
         for (ui32 binding = 0; binding < 2; ++binding) {
             transport->Start(binding + 1, EOperationKind::Request, MakeRequest(binding, Proto("input")),

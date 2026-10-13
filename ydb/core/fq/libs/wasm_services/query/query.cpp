@@ -23,6 +23,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
+#include <mutex>
 
 namespace NFq::NWasmServices {
 namespace {
@@ -32,6 +33,20 @@ using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NUdfStore::NWasm;
 using namespace NYdb::NWasm::NServices;
 namespace NUdf = NYql::NUdf;
+
+struct TSharedTransport {
+    TTransportExecutorLimits Limits;
+    ui32 UserPool = 0;
+    std::mutex Mutex;
+    std::shared_ptr<TTransportExecutor> Executor;
+
+    std::shared_ptr<TTransportExecutor> Get() {
+        std::lock_guard lock(Mutex);
+        if (!Executor)
+            Executor = TTransportExecutor::Create(NActors::TActivationContext::ActorSystem(), UserPool, Limits);
+        return Executor;
+    }
+};
 
 struct TModuleDescription {
     TString Path;
@@ -198,8 +213,9 @@ class TServiceTransform final : public NActors::TActorBootstrapped<TServiceTrans
 
   public:
     TServiceTransform(std::shared_ptr<const TPreparedConfig> config, const TServiceMethod& method, TBinding binding,
+                      std::shared_ptr<TSharedTransport> sharedTransport,
                       IDqAsyncIoFactory::TOutputTransformArguments&& args)
-        : Config(std::move(config)), Method(method), Binding(std::move(binding)), Index(args.OutputIndex), Output(args.TransformOutput),
+        : Config(std::move(config)), Method(method), Binding(std::move(binding)), SharedTransport(std::move(sharedTransport)), Index(args.OutputIndex), Output(args.TransformOutput),
           Callback(args.Callback), Alloc(std::move(args.Alloc)), HolderFactory(args.HolderFactory)
     {
         Stats.Level = args.StatsLevel;
@@ -229,7 +245,7 @@ class TServiceTransform final : public NActors::TActorBootstrapped<TServiceTrans
             query->Resident = std::make_unique<TCompartmentResidentCache>(query->Compartment.get());
             TTransportLimits limits;
             limits.MaxPayloadBytes = Config->BatchBytes;
-            Transport = std::make_shared<TTransport>(TVector<TBinding>{Binding}, limits);
+            Transport = std::make_shared<TTransport>(TVector<TBinding>{Binding}, SharedTransport->Get(), limits);
             auto wasmAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
             Runtime = std::make_unique<NAsync::TRuntime>(std::move(query), std::move(wasmAlloc), Transport, NAsync::TLimits{},
                                                          [system = NActors::TActivationContext::ActorSystem(), owner = SelfId()] {
@@ -445,6 +461,7 @@ class TServiceTransform final : public NActors::TActorBootstrapped<TServiceTrans
     const std::shared_ptr<const TPreparedConfig> Config;
     const TServiceMethod& Method;
     const TBinding Binding;
+    const std::shared_ptr<TSharedTransport> SharedTransport;
     const ui64 Index;
     IDqOutputConsumer::TPtr Output;
     ICallbacks* const Callback;
@@ -515,10 +532,16 @@ NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactory(
 }
 
 void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config,
-    std::shared_ptr<ITvmTicketProvider> tvmProvider) {
+    std::shared_ptr<ITvmTicketProvider> tvmProvider, ui32 userPool) {
     if (!tvmProvider)
         tvmProvider = CreateTvmTicketProvider();
     auto modules = DescribeModules(config);
+    auto sharedTransport = std::make_shared<TSharedTransport>();
+    sharedTransport->UserPool = userPool;
+    if (config.GetMaxTransportOperations())
+        sharedTransport->Limits.MaxOperations = config.GetMaxTransportOperations();
+    if (config.GetMaxTransportBytes())
+        sharedTransport->Limits.MaxReservedBytes = config.GetMaxTransportBytes();
     EnsureUdfHostIntrinsicsRegistered();
     NAsync::KeepAsyncHostIntrinsicsLinked();
     for (auto& module : modules) {
@@ -539,7 +562,7 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
             prepared->BatchBytes = config.GetMaxBatchBytes();
         factory.RegisterOutputTransform<NYql::NProto::TFunctionTransform>(
             prepared->Manifest.Name,
-            [prepared, tvmProvider](NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
+            [prepared, tvmProvider, sharedTransport](NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
                 NJson::TJsonValue invocation;
                 Y_ENSURE(NJson::ReadJsonTree(settings.GetInvokeUrl(), &invocation, true) && invocation.IsMap(),
                          "Invalid WASM service invocation");
@@ -571,7 +594,7 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
                     options.pem_root_certs = service.ca_certificate();
                     binding.GrpcCredentials = service.insecure() ? grpc::InsecureChannelCredentials() : grpc::SslCredentials(options);
                 }
-                auto* actor = new TServiceTransform(prepared, method->second, std::move(binding), std::move(args));
+                auto* actor = new TServiceTransform(prepared, method->second, std::move(binding), sharedTransport, std::move(args));
                 return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
             });
     }

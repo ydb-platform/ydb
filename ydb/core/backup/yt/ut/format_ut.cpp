@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(YtBackupFormat) {
             UNIT_ASSERT_C(probe.Feed(TStringBuf(compressed).SubStr(index, 1), index + 1 == compressed.size(), error), error);
         }
         UNIT_ASSERT(probe.HasKey());
-        TSerializedCellVec key(probe.GetKey());
+        NKikimr::TSerializedCellVec key(probe.GetKey());
         UNIT_ASSERT_VALUES_EQUAL(key.GetCells().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(key.GetCells()[0].AsValue<ui64>(), 42);
     }

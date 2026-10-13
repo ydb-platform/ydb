@@ -2654,12 +2654,12 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(InnerJoinEqualNullsTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsAfterTupleKey) {
-        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), /*blockJoin=*/false);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKey, BlockJoin) {
+        Test(InnerJoinEqualNullsAfterTupleKeyTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild) {
-        Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), /*blockJoin=*/false);
+    Y_UNIT_TEST_TWIN(TestInnerJoinEqualNullsAfterTupleKeyLeftIsBuild, BlockJoin) {
+        Test(InnerJoinEqualNullsAfterTupleKeyLeftIsBuildTestData(), BlockJoin);
     }
 
     // arrow builders zero null slotsPoison

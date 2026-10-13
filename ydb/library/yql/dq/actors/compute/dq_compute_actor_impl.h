@@ -798,10 +798,16 @@ protected:
             FillStats(record.MutableStats(), /* last */ true);
         }
         TIssues finalIssues = issues;
-        if constexpr (TDerived::HasAsyncTaskRunner) {
-            if (State == NDqProto::COMPUTE_STATE_FINISHED && statusCode == NYql::NDqProto::StatusIds::SUCCESS) {
-                static_cast<TDerived*>(this)->AppendFinalWarnings(finalIssues);
-            }
+        if (State == NDqProto::COMPUTE_STATE_FINISHED && statusCode == NYql::NDqProto::StatusIds::SUCCESS) {
+            auto appendWarnings = [&finalIssues](auto& holders) {
+                for (auto& [index, holder] : holders) {
+                    finalIssues.AddIssues(holder.IssuesBuffer.TakeWarnings());
+                }
+            };
+            appendWarnings(SourcesMap);
+            appendWarnings(InputTransformsMap);
+            appendWarnings(SinksMap);
+            appendWarnings(OutputTransformsMap);
         }
         IssuesToMessage(finalIssues, record.MutableIssues());
 

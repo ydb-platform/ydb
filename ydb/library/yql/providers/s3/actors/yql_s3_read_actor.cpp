@@ -624,8 +624,7 @@ public:
             TString s3ErrorCode;
             TString message;
             const long httpCode = result.Content.HttpResponseCode;
-            const bool shortRead = httpCode == 206 &&
-                (result.Content.size() != static_cast<size_t>(range.Length) || result.CurlResponseCode == CURLE_PARTIAL_FILE);
+            const bool shortRead = result.CurlResponseCode == CURLE_PARTIAL_FILE;
             if (httpCode == 404) {
                 ParseS3ErrorResponse(result.Content.Extract(), s3ErrorCode, message);
             }
@@ -641,12 +640,14 @@ public:
             SubstGlobal(message, '\r', ' ');
             actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range,
                 BuildIssues(httpCode, s3ErrorCode, message), IsMissingS3Object(httpCode, s3ErrorCode)), 0, cookie));
-        } else if (result.Content.HttpResponseCode == 206 && result.Content.size() != static_cast<size_t>(range.Length)) {
+        } else if (result.Content.size() < static_cast<size_t>(range.Length) ||
+                   (result.Content.HttpResponseCode == 206 && result.Content.size() != static_cast<size_t>(range.Length))) {
             TIssues issues;
             issues.AddIssue(TIssue(TStringBuilder() << "S3 range ended early: expected " << range.Length
                 << " bytes, received " << result.Content.size()));
             actorSystem->Send(new IEventHandle(selfId, TActorId{},
-                new TEvS3Provider::TEvReadResult2(range, std::move(issues), false, true), 0, cookie));
+                new TEvS3Provider::TEvReadResult2(range, std::move(issues), false,
+                    result.Content.size() < static_cast<size_t>(range.Length)), 0, cookie));
         } else {
             actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
         }
@@ -1126,6 +1127,8 @@ public:
         ServerReturnedError = false;
         Issues.Clear();
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        ExpectedDownloadSize = RetryStuff->SizeLimit;
+        ReceivedDownloadSize = 0;
     }
 
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
@@ -1140,6 +1143,7 @@ public:
             HttpDataRps->Inc();
         }
         if (200L == HttpResponseCode || 206L == HttpResponseCode) {
+            ReceivedDownloadSize += ev->Get()->Result.size();
             if (IsPaused() || !DeferredDataParts.empty() || !InputBuffer.empty()) {
                 DeferredDataParts.push(std::move(ev->Release()));
                 if (DeferredQueueSize) {
@@ -1196,7 +1200,7 @@ public:
             Issues.AddIssue(TIssue{TStringBuilder() << "HTTP error code: " << HttpResponseCode});
         }
 
-        if (!Issues && !RetryStuff->IsCancelled() && RetryStuff->SizeLimit > 0 &&
+        if (!Issues && !RetryStuff->IsCancelled() && ReceivedDownloadSize < ExpectedDownloadSize &&
             (HttpResponseCode == 200 || HttpResponseCode == 206)) {
             CurlResponseCode = CURLE_PARTIAL_FILE;
             Issues.AddIssue(TIssue("S3 object ended before the expected number of bytes was read"));
@@ -1212,7 +1216,7 @@ public:
                 // can't retry here: fail download
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
-                FinishDecompressor(/* force */ true);
+                FinishDecompressor();
                 if (ReadSpec->MissingFilePolicy != EMissingFilePolicy::Fail &&
                     (IsMissingS3Object(HttpResponseCode, s3ErrorCode) ||
                      (CurlResponseCode == CURLE_PARTIAL_FILE && ProbeMissingObject()))) {
@@ -1450,7 +1454,7 @@ private:
         } catch (const TS3MissingFile&) {
             SkippedMissingFile = true;
             RetryStuff->Cancel();
-            FinishDecompressor(/* force */ true);
+            FinishDecompressor();
         } catch (const TDtorException&) {
             // Stop any activity instantly
             RetryStuff->Cancel();
@@ -1480,7 +1484,8 @@ private:
         if (issues) {
             OnFatalError(std::move(issues), FatalCode);
         } else {
-            Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit,
+            const auto splitSize = RetryStuff->SizeLimit + (SkippedMissingFile ? RetryStuff->Offset : 0);
+            Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), splitSize,
                 SkippedMissingFile ? Path : TString{}));
         }
     }
@@ -1552,6 +1557,8 @@ private:
     CURLcode CurlResponseCode = CURLE_OK;
     bool ServerReturnedError = false;
     bool SkippedMissingFile = false;
+    ui64 ExpectedDownloadSize = 0;
+    ui64 ReceivedDownloadSize = 0;
     TString ErrorText;
     TIssues Issues;
     NYql::NDqProto::StatusIds::StatusCode FatalCode = NYql::NDqProto::StatusIds::UNSPECIFIED;

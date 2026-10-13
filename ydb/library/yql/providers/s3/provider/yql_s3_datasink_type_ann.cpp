@@ -11,6 +11,9 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <util/generic/is_in.h>
+#include <util/string/ascii.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -351,10 +354,25 @@ private:
                     return true;
                 }
 
+                if (name == "onmissingfile") {
+                    // External-table settings also reach writes. Validate this
+                    // read policy without applying it to the output.
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+                    if (!IsIn({"fail"sv, "ignore"sv, "warn"sv}, to_lower(TString(value.Content())))) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
+                            "on_missing_file must be one of: fail, ignore, warn"));
+                        return false;
+                    }
+                    return true;
+                }
+
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern", "onmissingfile"}, validator, ctx)) {
                 return TStatus::Error;
             }
 

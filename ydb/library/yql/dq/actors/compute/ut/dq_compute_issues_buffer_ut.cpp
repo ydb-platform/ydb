@@ -82,6 +82,31 @@ Y_UNIT_TEST_SUITE(TIssuesBufferTest) {
         UNIT_ASSERT_STRINGS_EQUAL(dumps.at(0).Issues.begin()->GetMessage(), "issue3");
         UNIT_ASSERT_STRINGS_EQUAL(dumps.at(1).Issues.begin()->GetMessage(), "issue4");
     }
+
+    Y_UNIT_TEST(WarningsSurviveStateReportsAndTransientOverflow) {
+        TIssuesBuffer buffer(2);
+        buffer.Push({TIssue("warning1").SetCode(0, TSeverityIds::S_WARNING)});
+        buffer.Dump();
+        buffer.Push({TIssue("warning2").SetCode(0, TSeverityIds::S_WARNING)});
+        buffer.Push({TIssue("transient error1")});
+        buffer.Push({TIssue("transient error2")});
+        buffer.Dump();
+
+        const auto warnings = buffer.TakeWarnings();
+        UNIT_ASSERT_VALUES_EQUAL(warnings.Size(), 2);
+        UNIT_ASSERT_STRING_CONTAINS(warnings.ToString(), "warning1");
+        UNIT_ASSERT_STRING_CONTAINS(warnings.ToString(), "warning2");
+        UNIT_ASSERT(buffer.TakeWarnings().Empty());
+    }
+
+    Y_UNIT_TEST(FinalWarningsAreBoundedAcrossStateReports) {
+        TIssuesBuffer buffer(2);
+        for (ui32 i = 0; i < 10; ++i) {
+            buffer.Push({TIssue("warning").SetCode(0, TSeverityIds::S_WARNING)});
+            buffer.Dump();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer.TakeWarnings().Size(), 2);
+    }
 }
 
 } // namespace NYql::NDq

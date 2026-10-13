@@ -17,6 +17,7 @@
 #include <util/stream/str.h>
 
 #include <algorithm>
+#include <atomic>
 
 namespace NYql::NDq {
 namespace {
@@ -34,6 +35,14 @@ public:
     bool ShortReadThenMissing = false;
     bool ShortReadWithIssueThenMissing = false;
     bool RawPartialThenMissing = false;
+    bool ProbePresent = false;
+    bool ServeStreamBody = false;
+    long MissingHttpCode = 404;
+    long ShortReadHttpCode = 206;
+    TString MissingErrorCode = "NoSuchKey";
+    CURLcode TransportError = CURLE_OK;
+    ui32 FailChunk = 0;
+    ui32 ChunkCalls = 0;
     long StreamHttpCode = 0;
     ui32 RangeCalls = 0;
     std::vector<std::function<void()>> PendingChunks;
@@ -50,19 +59,21 @@ public:
         ++RangeCalls;
         UNIT_ASSERT_C(offset <= Body.size() && size <= Body.size() - offset, "invalid HTTP range " << offset << "+" << size);
         auto reply = [this, offset, size, callback = std::move(callback)] {
-            if (Missing || ((ShortReadThenMissing || ShortReadWithIssueThenMissing || RawPartialThenMissing) && RangeCalls > 1)) {
-                TResult result(TContent("<Error><Code>NoSuchKey</Code></Error>", 404));
+            const bool failedChunk = FailChunk && offset + size < Body.size() - 8 && ++ChunkCalls == FailChunk;
+            if (TransportError != CURLE_OK) {
+                callback(TResult(TransportError, {TIssue("transport failure")}));
+            } else if (Missing || failedChunk || ((ShortReadThenMissing || ShortReadWithIssueThenMissing || RawPartialThenMissing) && RangeCalls > 1 && !ProbePresent)) {
+                TResult result(TContent(TStringBuilder() << "<Error><Code>" << MissingErrorCode << "</Code></Error>", MissingHttpCode));
                 if (MissingWithIssue) {
                     result.Issues.AddIssue("HTTP 404");
                 }
                 callback(std::move(result));
-            } else if (ShortReadWithIssueThenMissing || RawPartialThenMissing) {
-                TResult result(TContent(Body.substr(offset, size - 1), 206));
-                result.CurlResponseCode = CURLE_PARTIAL_FILE;
-                result.Issues.AddIssue("partial transfer");
+            } else if ((ShortReadWithIssueThenMissing || RawPartialThenMissing) && RangeCalls == 1) {
+                // The real buffered gateway drops the HTTP status and body on a curl error.
+                TResult result(CURLE_PARTIAL_FILE, {TIssue("partial transfer")});
                 callback(std::move(result));
-            } else if (ShortReadThenMissing) {
-                callback(TResult(TContent(Body.substr(offset, size - 1), 206)));
+            } else if (ShortReadThenMissing && RangeCalls == 1) {
+                callback(TResult(TContent(Body.substr(offset, size - 1), ShortReadHttpCode)));
             } else {
                 callback(TResult(TContent(Body.substr(offset, size), 206)));
             }
@@ -75,11 +86,16 @@ public:
         }
     }
 
-    TCancelHook Download(TString, THeaders, size_t, size_t, TOnDownloadStart onStart, TOnNewDataPart, TOnDownloadFinish onFinish,
+    TCancelHook Download(TString, THeaders, size_t, size_t, TOnDownloadStart onStart, TOnNewDataPart onData, TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr&, IHttpRequestContext::TPtr) override {
         UNIT_ASSERT_C(StreamHttpCode, "unexpected streaming download");
         onStart(CURLE_OK, StreamHttpCode);
-        onFinish(CURLE_OK, {});
+        if (StreamHttpCode >= 300) {
+            onData(TCountedContent(TStringBuilder() << "<Error><Code>" << MissingErrorCode << "</Code></Error>", BufferSize, nullptr, {}, Max<size_t>()));
+        } else if (ServeStreamBody) {
+            onData(TCountedContent(TString(Body), BufferSize, nullptr, {}, Max<size_t>()));
+        }
+        onFinish(TransportError, TransportError == CURLE_OK ? TIssues{} : TIssues{TIssue("transport failure")});
         return {};
     }
 
@@ -96,6 +112,9 @@ public:
             reply();
         }
     }
+
+private:
+    std::shared_ptr<std::atomic_size_t> BufferSize = std::make_shared<std::atomic_size_t>(0);
 };
 
 NS3::TSource ParquetSource(ui64 parallelRowGroups = 0, bool selectColumn = true) {
@@ -171,6 +190,7 @@ struct TReadResult {
     std::vector<NDqProto::StatusIds::StatusCode> Errors;
     TString Issues;
     TString Warnings;
+    ui32 WarningCount = 0;
 };
 
 // All callbacks and observations run on the simulated actor runtime's single thread.
@@ -190,6 +210,9 @@ public:
                 auto* error = ev->Get<IDqComputeActorAsyncInput::TEvAsyncInputError>();
                 if (error->FatalCode == NDqProto::StatusIds::UNSPECIFIED) {
                     Result.Warnings += error->Issues.ToOneLineString();
+                    for (const auto& issue : error->Issues) {
+                        Result.WarningCount += issue.GetSeverity() == TSeverityIds::S_WARNING;
+                    }
                 } else {
                     Result.Errors.push_back(error->FatalCode);
                     Result.Issues += error->Issues.ToOneLineString();
@@ -213,12 +236,15 @@ public:
     }
 
     void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB,
-        IHTTPGateway::TRetryPolicy::TPtr retryPolicy = GetHTTPDefaultRetryPolicy()) {
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy = GetHTTPDefaultRetryPolicy(), ui32 fileCount = 1) {
+        IsParquet = source.GetFormat() == "parquet";
         NS3::TRange range;
-        auto* path = range.AddPaths();
-        path->SetName("file.parquet");
-        path->SetSize(gateway->Body.size());
-        path->SetRead(true);
+        for (ui32 i = 0; i < fileCount; ++i) {
+            auto* path = range.AddPaths();
+            path->SetName(TStringBuilder() << "file" << i << ".parquet");
+            path->SetSize(gateway->Body.size());
+            path->SetRead(true);
+        }
         TStringStream encodedRange;
         range.Save(&encodedRange);
         Execute([&](TFakeActor& actor) {
@@ -239,6 +265,9 @@ public:
             TMaybe<TInstant> watermark;
             TUnboxedValueBatch buffer;
             actor.DqAsyncInput->GetAsyncInputData(buffer, watermark, Result.Finished, 1_MB);
+            if (!IsParquet) {
+                Result.Rows += buffer.RowCount();
+            }
         });
     }
 
@@ -265,6 +294,7 @@ private:
 
     TTestActorRuntimeBase Runtime{1};
     const TActorId FakeActorId{0, "FakeActor"};
+    bool IsParquet = false;
 };
 
 TReadResult ReadFooter(const std::vector<i64>& sizes, ui64 parallelRowGroups = 0, bool selectColumn = true) {
@@ -537,6 +567,221 @@ Y_UNIT_TEST_SUITE(TS3TextMissingFile) {
         reader.ReadToEnd();
         UNIT_ASSERT_C(!reader.Result.Errors.empty(), "early EOF must fail if the object is still present");
         UNIT_ASSERT_GE(gateway->RangeCalls, 1);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3MissingFilePolicyMatrix) {
+    Y_UNIT_TEST(HealthyFilesAcrossPoliciesAndReaders) {
+        for (const TString format : {"raw", "parquet", "json_each_row"}) {
+            for (const TString policy : {"", "fail", "ignore", "warn"}) {
+                TParquetReader reader;
+                auto gateway = std::make_shared<TParquetGateway>();
+                gateway->Body = format == "parquet" ? MakeParquet(1) :
+                    format == "raw" ? TString("data") : TString("{\"data\":\"value\"}\n");
+                gateway->StreamHttpCode = 206;
+                gateway->ServeStreamBody = true;
+                auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                if (policy) {
+                    (*source.MutableSettings())["onmissingfile"] = policy;
+                }
+                reader.Start(gateway, source);
+                reader.ReadToEnd();
+                UNIT_ASSERT_C(reader.Result.Finished && reader.Result.Errors.empty(), format << ": " << policy << " " << reader.Result.Issues);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 1);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BufferedProbeMustConfirmMissingKey) {
+        for (const TString format : {"raw", "parquet"}) {
+            for (const TString policy : {"ignore", "warn"}) {
+                for (const auto [status, code] : {std::pair{403L, "AccessDenied"}, std::pair{404L, "NoSuchBucket"},
+                         std::pair{503L, "SlowDown"}, std::pair{200L, "NoSuchKey"}}) {
+                    TParquetReader reader;
+                    auto gateway = std::make_shared<TParquetGateway>();
+                    gateway->Body = MakeParquet(1);
+                    gateway->ShortReadWithIssueThenMissing = true;
+                    gateway->MissingHttpCode = status;
+                    gateway->MissingErrorCode = code;
+                    auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                    (*source.MutableSettings())["onmissingfile"] = policy;
+                    reader.Start(gateway, source, 200_MB, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+                    reader.ReadToEnd();
+                    UNIT_ASSERT_C(!reader.Result.Errors.empty(), format << ": " << policy << " probe status=" << status);
+                    UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls, 2);
+                    UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 0);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CompleteParquetRowGroupsSurviveLaterDisappearance) {
+        for (const TString policy : {"fail", "ignore", "warn"}) {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(3);
+            gateway->FailChunk = 2;
+            auto source = ParquetSource(1);
+            source.SetRowGroupReordering(false);
+            (*source.MutableSettings())["onmissingfile"] = policy;
+            reader.Start(gateway, source);
+            reader.ReadToEnd();
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.Errors.empty(), policy != "fail");
+            if (policy != "fail") {
+                UNIT_ASSERT(reader.Result.Finished);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, policy == "warn" ? 1 : 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MissingAtOpenAcrossPoliciesAndReaders) {
+        for (const TString format : {"raw", "parquet", "json_each_row"}) {
+            for (const TString policy : {"", "fail", "ignore", "warn"}) {
+                TParquetReader reader;
+                auto gateway = std::make_shared<TParquetGateway>();
+                gateway->Body = MakeParquet(1);
+                gateway->Missing = true;
+                gateway->StreamHttpCode = 404;
+                auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                if (policy) {
+                    (*source.MutableSettings())["onmissingfile"] = policy;
+                }
+                reader.Start(gateway, source);
+                reader.ReadToEnd();
+                const bool skip = policy == "ignore" || policy == "warn";
+                UNIT_ASSERT_VALUES_EQUAL_C(reader.Result.Errors.empty(), skip, format << ": " << policy << " " << reader.Result.Issues);
+                if (skip) {
+                    UNIT_ASSERT(reader.Result.Finished);
+                    UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, policy == "warn" ? 1 : 0);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PartialTransfersAcrossPoliciesAndBufferedReaders) {
+        for (const TString format : {"raw", "parquet"}) {
+            for (const TString policy : {"", "fail", "ignore", "warn"}) {
+                for (const ui32 responseKind : {0, 1, 2}) {
+                    TParquetReader reader;
+                    auto gateway = std::make_shared<TParquetGateway>();
+                    gateway->Body = MakeParquet(1);
+                    gateway->ShortReadWithIssueThenMissing = responseKind == 2;
+                    gateway->ShortReadThenMissing = responseKind != 2;
+                    gateway->ShortReadHttpCode = responseKind == 0 ? 200 : 206;
+                    auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                    if (policy) {
+                        (*source.MutableSettings())["onmissingfile"] = policy;
+                    }
+                    reader.Start(gateway, source);
+                    reader.ReadToEnd();
+                    const bool skip = policy == "ignore" || policy == "warn";
+                    UNIT_ASSERT_VALUES_EQUAL_C(reader.Result.Errors.empty(), skip, format << ": " << policy << " " << reader.Result.Issues);
+                    UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls, skip ? 2 : 1);
+                    if (skip) {
+                        UNIT_ASSERT(reader.Result.Finished);
+                        UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, policy == "warn" ? 1 : 0);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PresentObjectAfterShortReadStillFails) {
+        for (const TString format : {"raw", "parquet"}) {
+            for (const TString policy : {"ignore", "warn"}) {
+                TParquetReader reader;
+                auto gateway = std::make_shared<TParquetGateway>();
+                gateway->Body = MakeParquet(1);
+                gateway->ShortReadWithIssueThenMissing = true;
+                gateway->ProbePresent = true;
+                auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                (*source.MutableSettings())["onmissingfile"] = policy;
+                reader.Start(gateway, source);
+                reader.ReadToEnd();
+                UNIT_ASSERT_C(!reader.Result.Errors.empty(), format << ": " << policy);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 0);
+                UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls, 2);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OtherHttpErrorsAreNeverSkipped) {
+        for (const TString format : {"raw", "parquet", "json_each_row"}) {
+            for (const TString policy : {"ignore", "warn"}) {
+                for (const auto [status, code] : {std::pair{403L, "AccessDenied"}, std::pair{404L, "NoSuchBucket"}, std::pair{503L, "SlowDown"}}) {
+                    TParquetReader reader;
+                    auto gateway = std::make_shared<TParquetGateway>();
+                    gateway->Body = MakeParquet(1);
+                    gateway->Missing = true;
+                    gateway->MissingHttpCode = status;
+                    gateway->StreamHttpCode = status;
+                    gateway->MissingErrorCode = code;
+                    auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                    (*source.MutableSettings())["onmissingfile"] = policy;
+                    reader.Start(gateway, source, 200_MB, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+                    reader.ReadToEnd();
+                    UNIT_ASSERT_C(!reader.Result.Errors.empty(), format << ": " << policy << " status=" << status);
+                    UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 0);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TimeoutsAreNeverProbedOrSkipped) {
+        for (const TString format : {"raw", "parquet", "json_each_row"}) {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(1);
+            gateway->TransportError = CURLE_OPERATION_TIMEDOUT;
+            gateway->StreamHttpCode = 206;
+            auto source = format == "parquet" ? ParquetSource() : TextSource(format, "warn");
+            (*source.MutableSettings())["onmissingfile"] = "warn";
+            reader.Start(gateway, source, 200_MB, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+            reader.ReadToEnd();
+            UNIT_ASSERT(!reader.Result.Errors.empty());
+            UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls, format == "json_each_row" ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 0);
+        }
+    }
+
+    Y_UNIT_TEST(CorruptContentsAreNeverSkipped) {
+        for (const TString format : {"parquet", "json_each_row"}) {
+            for (const TString policy : {"ignore", "warn"}) {
+                TParquetReader reader;
+                auto gateway = std::make_shared<TParquetGateway>();
+                gateway->Body = "this is not valid file data";
+                gateway->StreamHttpCode = 206;
+                gateway->ServeStreamBody = true;
+                gateway->Missing = format == "json_each_row";
+                auto source = format == "parquet" ? ParquetSource() : TextSource(format, policy);
+                (*source.MutableSettings())["onmissingfile"] = policy;
+                reader.Start(gateway, source);
+                reader.ReadToEnd();
+                UNIT_ASSERT_C(!reader.Result.Errors.empty(), format << ": " << policy);
+                UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 0);
+                if (format == "json_each_row") {
+                    UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls, 0);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(WarningsAreBoundedPerReader) {
+        for (const TString format : {"raw", "parquet", "json_each_row"}) {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = MakeParquet(1);
+            gateway->Missing = true;
+            gateway->StreamHttpCode = 404;
+            auto source = format == "parquet" ? ParquetSource() : TextSource(format, "warn");
+            (*source.MutableSettings())["onmissingfile"] = "warn";
+            reader.Start(gateway, source, 200_MB, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(), 20);
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Finished && reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Result.WarningCount, 16);
+        }
     }
 }
 

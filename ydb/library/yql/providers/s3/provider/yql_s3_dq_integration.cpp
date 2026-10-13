@@ -364,6 +364,7 @@ public:
                 int sizeLimitIndex = -1;
                 int pathPatternIndex = -1;
                 int pathPatternVariantIndex = -1;
+                int onMissingFileIndex = -1;
                 for (size_t childInd = 0; childInd < readSettings->ChildrenSize();
                      ++childInd) {
                     auto keyName = readSettings->Child(childInd)->Head().Content();
@@ -373,10 +374,17 @@ public:
                         pathPatternIndex = childInd;
                     } else if (pathPatternVariantIndex == -1 && keyName == "pathpatternvariant") {
                         pathPatternVariantIndex = childInd;
+                    } else if (onMissingFileIndex == -1 && keyName == "onmissingfile") {
+                        onMissingFileIndex = childInd;
                     }
                 }
 
                 auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+                auto onMissingFile = emptyNode;
+                if (onMissingFileIndex != -1) {
+                    const auto& value = readSettings->Child(onMissingFileIndex)->Tail();
+                    onMissingFile = ctx.NewAtom(value.Pos(), value.IsAtom() ? value.Content() : value.Head().Content());
+                }
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
                         .World(s3ReadObject.World())
@@ -396,6 +404,7 @@ public:
                         .PathPatternVariant(
                             pathPatternVariantIndex != -1 ? readSettings->Child(pathPatternVariantIndex)->TailPtr()
                                                : emptyNode)
+                        .OnMissingFile(onMissingFile)
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
@@ -492,6 +501,9 @@ public:
                 if (pathPatternVariant.IsValid()) {
                     srcDesc.MutableSettings()->insert(
                         {"pathpatternvariant", pathPatternVariant.Cast().StringValue()});
+                }
+                if (const auto policy = sourceSettings.OnMissingFile().Maybe<TCoAtom>()) {
+                    srcDesc.MutableSettings()->insert({"onmissingfile", policy.Cast().StringValue()});
                 }
             }
 

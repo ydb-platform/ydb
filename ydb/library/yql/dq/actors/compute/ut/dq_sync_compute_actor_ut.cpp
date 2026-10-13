@@ -166,6 +166,7 @@ struct TMockSinkState: public TThrRefBase {
     std::atomic<ui64> SendDataCalls = 0;
     std::atomic<ui64> Rows = 0;
     std::atomic<bool> Finished = false;
+    bool WarnOnFinish = false;
 
     // Checkpointing.
     std::atomic<bool> DeferCommit = false;
@@ -240,6 +241,9 @@ private:
         State->Rows += batch.RowCount();
         batch.clear();
         if (finished) {
+            if (State->WarnOnFinish) {
+                Callbacks->OnAsyncOutputError(OutputIndex, {TIssue("sink warning").SetCode(0, TSeverityIds::S_WARNING)}, NDqProto::StatusIds::UNSPECIFIED);
+            }
             State->Finished = true;
             Callbacks->OnAsyncOutputFinished(OutputIndex);
         }
@@ -1697,6 +1701,27 @@ struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TSyncComputeActorTestFixture) { }
+
+    Y_UNIT_TEST_F(WarningReachesSuccessfulFinalState, TSyncComputeActorTestFixture) {
+        SinkState->WarnOnFinish = true;
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](TExprContext& ctx) {
+            return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        auto output = AddDummyInputChannel(task, InputChannelId);
+        AddMockSinkOutput(task);
+        auto actor = CreateTestSyncComputeActor(task, NDqProto::DQ_STATS_MODE_NONE);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        ui32 seqNo = 0;
+        SendFinish(actor, output, &seqNo);
+        auto finalState = ActorSystem.GrabEdgeEventIf<TEvDqCompute::TEvState>(EdgeActor, [](const auto& ev) {
+            return ev->Get()->Record.GetState() == NDqProto::COMPUTE_STATE_FINISHED;
+        });
+        UNIT_ASSERT(finalState->Get()->Record.GetStatusCode() == NDqProto::StatusIds::SUCCESS);
+        TIssues issues;
+        IssuesFromMessage(finalState->Get()->Record.GetIssues(), issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "sink warning");
+    }
 
     Y_UNIT_TEST_F(Basic, TSyncComputeActorTestFixture) {
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };

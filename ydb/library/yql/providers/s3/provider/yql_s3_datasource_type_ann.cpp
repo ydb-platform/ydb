@@ -303,7 +303,7 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 5, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 5, 9, ctx)) {
             return TStatus::Error;
         }
 

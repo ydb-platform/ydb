@@ -82,6 +82,7 @@ public:
         , AddPathIndex(addPathIndex)
         , SizeLimit(sizeLimit)
         , AllowLocalFiles(allowLocalFiles)
+        , MissingFilePolicy(missingFilePolicy)
         , Counters(counters)
         , TaskCounters(taskCounters)
         , FileSizeLimit(fileSizeLimit)
@@ -90,7 +91,6 @@ public:
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
         , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta) {
-        MissingFilePolicy = missingFilePolicy;
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -186,12 +186,13 @@ public:
         const TString requestId = CreateGuidAsString();
         const auto& authInfo = Credentials.GetAuthInfo();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
+        const ui64 expectedSize = std::min(object.GetSize(), SizeLimit);
         Gateway->Download(
             NS3Util::UrlEscapeRet(url),
             IHTTPGateway::MakeYcHeaders(requestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             0U,
-            std::min(object.GetSize(), SizeLimit),
-            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, object.GetPath()),
+            expectedSize,
+            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), requestId, std::placeholders::_1, id, object.GetPath(), expectedSize),
             {},
             RetryPolicy);
     }
@@ -307,19 +308,24 @@ private:
         FileQueueEvents.OnEventReceived(ev);
     }
     
-    static void OnDownloadFinished(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path) {
+    static void OnDownloadFinished(NActors::TActorSystem* actorSystem, NActors::TActorId selfId, const TString& requestId, IHTTPGateway::TResult&& result, size_t pathInd, const TString path, ui64 expectedSize) {
+        const long httpCode = result.Content.HttpResponseCode;
+        const bool shortRead = result.CurlResponseCode == CURLE_PARTIAL_FILE ||
+            ((httpCode == 200 || httpCode == 206) && !result.Issues && result.Content.size() < expectedSize);
+        if (shortRead && !result.Issues) {
+            result.Issues.AddIssue("S3 object ended before the expected number of bytes was read");
+        }
         if (!result.Issues) {
             actorSystem->Send(new NActors::IEventHandle(selfId, NActors::TActorId(), new TEvS3Provider::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
         } else {
             TString errorCode;
             TString message;
-            const long httpCode = result.Content.HttpResponseCode;
             if (httpCode == 404) {
                 ParseS3ErrorResponse(result.Content.Extract(), errorCode, message);
             }
             actorSystem->Send(new NActors::IEventHandle(selfId, NActors::TActorId(), new TEvS3Provider::TEvReadError(
                 std::move(result.Issues), requestId, pathInd, path, IsMissingS3Object(httpCode, errorCode),
-                result.CurlResponseCode == CURLE_PARTIAL_FILE && (httpCode == 200 || httpCode == 206))));
+                shortRead)));
         }
     }
 
@@ -435,9 +441,6 @@ private:
         }
         IngressStats.Splits++;
         DownloadInflight--;
-        if (FilesRemained) {
-            *FilesRemained = SubtractSaturating(*FilesRemained, 1);
-        }
         if (IsCurrentBatchEmpty && DownloadInflight == 0) {
             IsCurrentBatchEmpty = false;
         }

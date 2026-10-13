@@ -2,6 +2,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/mind/local.h>
+#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <util/generic/size_literals.h>
 #include "tablet_metrics.h"
@@ -189,7 +190,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
     Y_UNIT_TEST(OwnerOnlyUpdatesDoNotSuppressHiveRefresh) {
         for (bool ownerUpdates : {false, true}) {
             TTestBasicRuntime runtime;
-            runtime.Initialize(TTestActorRuntime::TEgg{});
+            runtime.Initialize(TAppPrepare().Unwrap());
             const auto launcher = runtime.AllocateEdgeActor();
             TResourceMetrics metrics(1, 0, launcher);
             metrics.Memory.Set(20_MB);
@@ -228,7 +229,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
 
     Y_UNIT_TEST(OwnerOnlyUpdatesRetainSendThrottling) {
         TTestBasicRuntime runtime;
-        runtime.Initialize(TTestActorRuntime::TEgg{});
+        runtime.Initialize(TAppPrepare().Unwrap());
         const auto launcher = runtime.AllocateEdgeActor();
         TResourceMetrics metrics(1, 0, launcher);
         metrics.Memory.Set(20_MB);

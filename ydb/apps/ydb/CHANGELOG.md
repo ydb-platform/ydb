@@ -1,3 +1,4 @@
+* Added `ydb import s3 --source-format yt` to import completed YT backups of strict, sorted static tables with unique keys into new row tables.
 * Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
 
 * Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.

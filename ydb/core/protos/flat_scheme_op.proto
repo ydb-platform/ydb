@@ -1564,6 +1564,23 @@ message TBackupTask {
     optional TEncryptionSettings EncryptionSettings = 19;
 }
 
+// Immutable source snapshot planned before creating the destination table.
+message TYtImportPart {
+    optional string ObjectKey = 1;
+    optional string ETag = 2;
+    optional uint64 ContentLength = 3;
+    optional uint64 StartRow = 4;
+    optional uint64 EndRow = 5;
+    optional bytes FirstKey = 6; // TSerializedCellVec primary key
+}
+
+message TYtImportPlan {
+    optional uint32 Version = 1;
+    repeated TYtImportPart Parts = 2;
+    optional string MetadataETag = 3;
+    optional uint64 MetadataContentLength = 4;
+}
+
 message TRestoreTask {
     optional string TableName = 1;
     optional uint64 TableId = 2;
@@ -1586,6 +1603,11 @@ message TRestoreTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 8;
+
+    optional TYtImportPlan YtImportPlan = 10; // SchemeShard only; removed in shard proposals
+    optional TYtImportPart YtImportPart = 11; // Exactly one selected source part
+    optional bool YtSource = 12; // Absent part means an empty YT table
+
 }
 
 message TPersQueueGroupAllocate {

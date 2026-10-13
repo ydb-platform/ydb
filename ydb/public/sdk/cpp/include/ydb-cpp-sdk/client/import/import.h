@@ -44,6 +44,13 @@ struct TImportItemProgress {
 };
 
 /// S3
+enum class EImportSourceFormat {
+    Ydb = 0 /* "ydb" */,
+    Yt = 1 /* "yt" */,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
 struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Settings>,
                                public TS3Settings<TImportFromS3Settings> {
     using TSelf = TImportFromS3Settings;
@@ -63,6 +70,8 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
         std::string SrcPath = {};
     };
 
+    // YT mode reads a completed static-table backup with gzip-compressed YSON data.
+    FLUENT_SETTING_DEFAULT(EImportSourceFormat, SourceFormat, EImportSourceFormat::Ydb);
     FLUENT_SETTING_VECTOR(TItem, Item);
     FLUENT_SETTING_OPTIONAL(std::string, Description);
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);

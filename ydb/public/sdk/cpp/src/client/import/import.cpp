@@ -79,6 +79,19 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
     Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
+    switch (metadata.settings().source_format()) {
+    case ImportFromS3Settings::SOURCE_FORMAT_UNSPECIFIED:
+    case ImportFromS3Settings::SOURCE_FORMAT_YDB:
+        Metadata_.Settings.SourceFormat(EImportSourceFormat::Ydb);
+        break;
+    case ImportFromS3Settings::SOURCE_FORMAT_YT:
+        Metadata_.Settings.SourceFormat(EImportSourceFormat::Yt);
+        break;
+    default:
+        Metadata_.Settings.SourceFormat(EImportSourceFormat::Unknown);
+        break;
+    }
+
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
     Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
@@ -280,6 +293,17 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
     auto request = MakeOperationRequest<ImportFromS3Request>(settings);
     Ydb::Import::ImportFromS3Settings& settingsProto = *request.mutable_settings();
     FillS3Settings(settingsProto, settings);
+
+    switch (settings.SourceFormat_) {
+    case EImportSourceFormat::Ydb:
+        // Keep the default request compatible with servers predating this setting.
+        break;
+    case EImportSourceFormat::Yt:
+        settingsProto.set_source_format(ImportFromS3Settings::SOURCE_FORMAT_YT);
+        break;
+    default:
+        throw TContractViolation("Unknown S3 import source format");
+    }
 
     for (const auto& item : settings.Item_) {
         if (!item.Src.empty() && !item.SrcPath.empty()) {

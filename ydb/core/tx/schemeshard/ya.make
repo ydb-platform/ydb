@@ -355,6 +355,7 @@ GENERATE_ENUM_SERIALIZATION_WITH_HEADER(schemeshard__monitoring.h)  # for ESweep
 
 PEERDIR(
     contrib/libs/protobuf
+    contrib/libs/zlib
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/iterator
@@ -366,6 +367,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/backup/common
     ydb/core/backup/regexp
+    ydb/core/backup/yt
     ydb/core/blob_depot
     ydb/core/blobstorage/base
     ydb/core/blockstore/core

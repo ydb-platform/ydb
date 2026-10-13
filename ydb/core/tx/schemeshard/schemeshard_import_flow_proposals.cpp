@@ -282,6 +282,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
         break;
     }
 
+    if (item.YtImportPlan) {
+        *task.MutableYtImportPlan() = *item.YtImportPlan;
+        task.SetYtSource(true);
+        task.SetValidateChecksums(false);
+        return propose;
+    }
+
     const auto* metadata = &item.Metadata;
     if (item.ParentIdx != Max<ui32>()) {
         Y_ABORT_UNLESS(item.ParentIdx < importInfo.Items.size());

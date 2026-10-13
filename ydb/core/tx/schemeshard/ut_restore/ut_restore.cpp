@@ -32,6 +32,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
+#include <library/cpp/yson/writer.h>
 #include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/hook/hook.h>
@@ -39,6 +40,8 @@
 #include <util/folder/path.h>
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
+#include <util/stream/str.h>
+#include <util/stream/zlib.h>
 
 #include <contrib/libs/double-conversion/double-conversion/ieee.h>
 #include <contrib/libs/zstd/include/zstd.h>
@@ -4105,6 +4108,144 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     TString ImportIssues(TTestBasicRuntime& runtime, ui64 id, Ydb::StatusIds::StatusCode status) {
         return NYql::IssuesFromMessageAsString(
             TestGetImport(runtime, id, "/MyRoot", status).GetResponse().GetEntry().GetIssues());
+    }
+
+    TString YtImportRequest(const TString& extra = "") {
+        return TStringBuilder() << R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                source_format: SOURCE_FORMAT_YT
+                items { source_prefix: "table" destination_path: "/MyRoot/Table" }
+        )" << extra << "}";
+    }
+
+    TString YtMetadata() {
+        return R"({schema=<strict=%true;unique_keys=%true>[
+            {name=key;type_v3=uint64;sort_order=ascending};
+            {name=value;type_v3={type_name=optional;item=utf8}}
+        ];user_attributes={}})";
+    }
+
+    TString YtPart(std::initializer_list<ui64> keys) {
+        TString binary;
+        TStringOutput output(binary);
+        NYson::TYsonWriter writer(&output, NYson::EYsonFormat::Binary, NYson::EYsonType::ListFragment);
+        for (ui64 key : keys) {
+            writer.OnListItem();
+            writer.OnBeginMap();
+            writer.OnKeyedItem("key");
+            writer.OnUint64Scalar(key);
+            writer.OnKeyedItem("value");
+            writer.OnStringScalar(ToString(key));
+            writer.OnEndMap();
+        }
+        TString compressed;
+        TStringOutput compressedOutput(compressed);
+        TZLibCompress gzip(TZLibCompress::TParams(&compressedOutput).SetType(ZLib::GZip));
+        gzip.Write(binary);
+        gzip.Finish();
+        return compressed;
+    }
+
+    ui64 RunYt(TTestBasicRuntime& runtime, THashMap<TString, TString>&& data, const TString& request,
+            bool enableDirectPartImport, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDirectPartImport);
+        return Run(runtime, env, std::move(data), request, expectedStatus);
+    }
+
+    Y_UNIT_TEST(YtRequiresFeatureFlag) {
+        TTestBasicRuntime runtime;
+        Run(runtime, {}, YtImportRequest(), false, Ydb::StatusIds::PRECONDITION_FAILED);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(YtEmptyTable) {
+        TTestBasicRuntime runtime;
+        RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}}, YtImportRequest(), false);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson("[]", content);
+    }
+
+    Y_UNIT_TEST(YtTwoPartsUseActualKeys) {
+        TTestBasicRuntime runtime;
+        RunYt(runtime, {
+            {"/table_metadata.yson", YtMetadata()},
+            {"/table_0_1", YtPart({10, 20})},
+            {"/table_2_3", YtPart({100, 200})}
+        }, YtImportRequest(), false);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(R"([[10u;["10"]];[20u;["20"]];[100u;["100"]];[200u;["200"]]])", content);
+    }
+
+    Y_UNIT_TEST(YtRejectInvalidRanges) {
+        for (const auto& key : {"table_1_1", "table_0_18446744073709551615", "table_0_0_extra"}) {
+            TTestBasicRuntime runtime;
+            const auto id = RunYt(runtime, {{"/table_metadata.yson", YtMetadata()},
+                {TString("/") + key, YtPart({10})}}, YtImportRequest(), false, Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT(!ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED).empty());
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+        }
+        for (const auto& key : {"table_0_2", "table_3_3"}) {
+            TTestBasicRuntime runtime;
+            RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}, {"/table_0_1", YtPart({10,20})},
+                {TString("/") + key, YtPart({100})}}, YtImportRequest(), false, Ydb::StatusIds::CANCELLED);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST(YtRejectNonIncreasingPartKeys) {
+        TTestBasicRuntime runtime;
+        auto id = RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}, {"/table_0_0", YtPart({20})},
+            {"/table_1_1", YtPart({10})}}, YtImportRequest(), false, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED), "strictly increasing");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(YtRejectUnsupportedSettings) {
+        for (const auto& extra : {"source_prefix: \"mapping\"", "exclude_regexps: \".*\"",
+                "index_population_mode: INDEX_POPULATION_MODE_IMPORT", "encryption_settings {}"}) {
+            TTestBasicRuntime runtime;
+            RunYt(runtime, {}, YtImportRequest(extra), false, Ydb::StatusIds::BAD_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(YtPlanSurvivesSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3Mock({{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_0", YtPart({10})}, {"/table_1_1", YtPart({100})}}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> restoreBlocker(runtime, [](auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+        });
+        TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
+        runtime.WaitFor("YT restore proposal", [&] { return !restoreBlocker.empty(); });
+        const auto& task = restoreBlocker.front()->Get()->Record.GetTransaction(0).GetRestore();
+        UNIT_ASSERT(task.HasYtImportPlan());
+        UNIT_ASSERT_VALUES_EQUAL(task.GetYtImportPlan().PartsSize(), 2);
+        // Planning must not read metadata again once the destination was created.
+        s3Mock.GetData()["/table_metadata.yson"] = "invalid metadata after planning";
+        restoreBlocker.Stop().clear();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 100);
+        TestGetImport(runtime, 100, "/MyRoot");
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(R"([[10u;["10"]];[100u;["100"]]])", content);
+    }
+
+    Y_UNIT_TEST(YtWrongRowCount) {
+        TTestBasicRuntime runtime;
+        auto id = RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}, {"/table_0_1", YtPart({10})}},
+            YtImportRequest(), false, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(!ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED).empty());
     }
 
     TString Utf8KeyValueScheme() {

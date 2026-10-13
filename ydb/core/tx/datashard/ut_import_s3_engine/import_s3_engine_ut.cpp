@@ -29,6 +29,8 @@
 #include <parquet/thrift_internal.h>
 #pragma GCC diagnostic pop
 #include <contrib/libs/zstd/include/zstd.h>
+#include <contrib/libs/zlib/zlib.h>
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/size_literals.h>
@@ -310,6 +312,64 @@ TString BuildEmptyParquet(bool includeValueColumn) {
     auto reader = std::make_shared<arrow::io::BufferReader>(buffer);
     UNIT_ASSERT_VALUES_EQUAL(parquet::ReadMetaData(reader)->num_row_groups(), 0);
     return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
+TString YtGzip(TStringBuf text) {
+    const auto rows = NYT::NodeFromYsonString(text, NYson::EYsonType::ListFragment);
+    const auto wrapped = NYT::NodeToYsonString(rows, NYson::EYsonFormat::Binary);
+    const auto input = TStringBuf(wrapped).SubStr(1, wrapped.size() - 2);
+    z_stream stream{};
+    UNIT_ASSERT_VALUES_EQUAL(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                                         16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY), Z_OK);
+    TString output;
+    output.resize(deflateBound(&stream, input.size()));
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+    stream.avail_in = input.size();
+    stream.next_out = reinterpret_cast<Bytef*>(output.Detach());
+    stream.avail_out = output.size();
+    UNIT_ASSERT_VALUES_EQUAL(deflate(&stream, Z_FINISH), Z_STREAM_END);
+    output.resize(stream.total_out);
+    deflateEnd(&stream);
+    return output;
+}
+
+IImportS3Engine::TPtr MakeYtEngine(const TEngineFixture& fixture, TStringBuf source,
+                                 ui64 expectedRows, ui32 rangeSize = 7, ui64 limit = 1_MB) {
+    TImportS3EngineSettings settings;
+    settings.YtSource = true;
+    settings.YtExpectedRows = expectedRows;
+    settings.ContentLength = source.size();
+    settings.ReadBatchSize = rangeSize;
+    settings.BufferSizeLimit = limit;
+    return ExtractValue(CreateImportS3Engine(settings, fixture.TableInfo, fixture.Scheme));
+}
+
+std::expected<NKikimrBackup::TS3DownloadState, TString> ConsumeYt(
+    IImportS3Engine& engine, const TString& source, TVector<TDecodedRow>& rows,
+    ui64 stopAfterBatches = Max<ui64>()) {
+    TMemoryPool pool(256);
+    NKikimrBackup::TS3DownloadState state;
+    ui64 batches = 0;
+    for (ui64 step = 0; step < source.size() * 4 + 100; ++step) {
+        auto result = engine.GetData(pool, CaptureRows(rows), {});
+        if (!result) return std::unexpected(result.error());
+        if (result->Status == IImportS3Engine::EDataStatus::Finished) return state;
+        if (result->Status == IImportS3Engine::EDataStatus::Ready) {
+            const auto& batch = result->Batch;
+            UNIT_ASSERT(batch.DownloadStateAfter.HasYsonGzip());
+            UNIT_ASSERT_VALUES_EQUAL(batch.ProcessedBytesAfter,
+                batch.DownloadStateAfter.GetYsonGzip().GetFinished() ? source.size() : 0);
+            state = batch.DownloadStateAfter;
+            AssertSuccess(engine.Commit(batch.Id));
+            if (++batches == stopAfterBatches) return state;
+            continue;
+        }
+        auto next = engine.NextRange();
+        if (!next) return std::unexpected(next.error());
+        UNIT_ASSERT(next->Status == IImportS3Engine::ENextRangeStatus::Ready);
+        AssertSuccess(engine.PutRange(next->Range, Slice(source, next->Range)));
+    }
+    return std::unexpected("YT engine did not finish");
 }
 
 TString ZstdCompress(TStringBuf source) {
@@ -1234,6 +1294,137 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
 }
 
 Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
+    Y_UNIT_TEST(YtBinaryGzipReplayAndFinalCheckpoint) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        TEngineFixture fixture(scheme);
+        const TString source = YtGzip("{key=k1;value=\"first\\nline\"};{key=k2;value=second};{key=k3;value=last};");
+        auto engine = MakeYtEngine(fixture, source, 3, 1);
+        TVector<TDecodedRow> rows;
+        const auto cursor = ExtractValue(ConsumeYt(*engine, source, rows, 1));
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT(!cursor.GetYsonGzip().GetFinished());
+        auto resumed = MakeYtEngine(fixture, source, 3, 2);
+        AssertSuccess(resumed->RestoreFromState(0, cursor));
+        const auto final = ExtractValue(ConsumeYt(*resumed, source, rows));
+        UNIT_ASSERT(final.GetYsonGzip().GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(final.GetYsonGzip().GetCommittedRows(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "first\nline");
+        UNIT_ASSERT_VALUES_EQUAL(rows[2].Key, "k3");
+    }
+
+    Y_UNIT_TEST(YtBinaryStringsAndLargeDecompression) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        scheme.MutableColumns(1)->SetTypeId(NScheme::NTypeIds::String);
+        TEngineFixture fixture(scheme);
+        const TString large(128_KB, 'x');
+        const auto source = YtGzip(TString("{key=k1;value=\"\\x00\\xff\\n\"};{key=k2;value=\"") + large + "\"};");
+        auto engine = MakeYtEngine(fixture, source, 2, 3);
+        TVector<TDecodedRow> rows;
+        const auto cursor = ExtractValue(ConsumeYt(*engine, source, rows));
+        UNIT_ASSERT(cursor.GetYsonGzip().GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, TString("\0\xff\n", 3));
+        UNIT_ASSERT_VALUES_EQUAL(rows[1].Value, large);
+    }
+
+    Y_UNIT_TEST(YtReplayAllRowsStillValidatesTrailerBeforeFinish) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        TEngineFixture fixture(scheme);
+        const auto source = YtGzip("{key=k1;value=v};{key=k2;value=v};");
+        auto engine = MakeYtEngine(fixture, source, 2, source.size());
+        TVector<TDecodedRow> rows;
+        const auto cursor = ExtractValue(ConsumeYt(*engine, source, rows, 1));
+        UNIT_ASSERT_VALUES_EQUAL(cursor.GetYsonGzip().GetCommittedRows(), 2);
+        UNIT_ASSERT(!cursor.GetYsonGzip().GetFinished());
+        TMemoryPool pool(256);
+        const auto finalBatch = ExtractValue(engine->GetData(pool, CaptureRows(rows), {}));
+        UNIT_ASSERT(finalBatch.Status == IImportS3Engine::EDataStatus::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(finalBatch.Batch.Rows, 0);
+        UNIT_ASSERT(finalBatch.Batch.DownloadStateAfter.GetYsonGzip().GetFinished());
+        // A restart after validating the trailer, before committing the final batch,
+        // replays all rows and must validate the trailer again.
+        auto resumed = MakeYtEngine(fixture, source, 2, 1);
+        AssertSuccess(resumed->RestoreFromState(0, cursor));
+        const auto finalCursor = ExtractValue(ConsumeYt(*resumed, source, rows));
+        UNIT_ASSERT(finalCursor.GetYsonGzip().GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
+        auto corrupt = source;
+        corrupt[corrupt.size() - 8] ^= 1;
+        auto corruptReplay = MakeYtEngine(fixture, corrupt, 2, 1);
+        AssertSuccess(corruptReplay->RestoreFromState(0, cursor));
+        UNIT_ASSERT(!ConsumeYt(*corruptReplay, corrupt, rows));
+    }
+
+    Y_UNIT_TEST(YtRejectCountsOrderingAndGzipCorruption) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        TEngineFixture fixture(scheme);
+        const auto valid = YtGzip("{key=k1;value=v};{key=k2;value=v};");
+        TVector<TString> bad = {
+            YtGzip("{key=k1;value=v};{key=k1;value=v};"),
+            YtGzip("{key=k2;value=v};{key=k1;value=v};"),
+            valid.substr(0, valid.size() - 1), valid + "x"
+        };
+        auto corrupt = valid;
+        corrupt[corrupt.size() - 8] ^= 1;
+        bad.push_back(corrupt);
+        for (const auto& source : bad) {
+            auto engine = MakeYtEngine(fixture, source, 2);
+            TVector<TDecodedRow> rows;
+            UNIT_ASSERT(!ConsumeYt(*engine, source, rows));
+        }
+        for (ui64 count : {1, 3}) {
+            auto engine = MakeYtEngine(fixture, valid, count);
+            TVector<TDecodedRow> rows;
+            UNIT_ASSERT(!ConsumeYt(*engine, valid, rows));
+        }
+    }
+
+    Y_UNIT_TEST(YtFailedRangeAndRejectedUploadReplay) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        TEngineFixture fixture(scheme);
+        const TString source = YtGzip("{key=k1;value=v};{key=k2;value=v};");
+        auto engine = MakeYtEngine(fixture, source, 2, 1);
+        auto first = ExtractValue(engine->NextRange());
+        AssertSuccess(engine->FailRange(first.Range));
+        auto retry = ExtractValue(engine->NextRange());
+        UNIT_ASSERT(first.Range == retry.Range);
+        AssertSuccess(engine->PutRange(retry.Range, Slice(source, retry.Range)));
+        TVector<TDecodedRow> rows;
+        const auto durable = ExtractValue(ConsumeYt(*engine, source, rows, 1));
+        TMemoryPool pool(256);
+        while (true) {
+            auto data = ExtractValue(engine->GetData(pool, CaptureRows(rows), {}));
+            if (data.Status == IImportS3Engine::EDataStatus::Ready) break;
+            auto next = ExtractValue(engine->NextRange());
+            AssertSuccess(engine->PutRange(next.Range, Slice(source, next.Range)));
+        }
+        rows.resize(1); // The last upload was rejected.
+        AssertSuccess(engine->RestoreFromState(0, durable));
+        ExtractValue(ConsumeYt(*engine, source, rows));
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rows.back().Key, "k2");
+    }
+
+    Y_UNIT_TEST(YtRejectOversizedDecompressedRowAndCursor) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        TEngineFixture fixture(scheme);
+        const auto source = YtGzip(TString("{key=k1;value=\"") + TString(4096, 'x') + "\"};");
+        auto engine = MakeYtEngine(fixture, source, 1, 7, 1024);
+        TVector<TDecodedRow> rows;
+        UNIT_ASSERT(!ConsumeYt(*engine, source, rows));
+        NKikimrBackup::TS3DownloadState state;
+        state.MutableYsonGzip()->SetVersion(1);
+        state.MutableYsonGzip()->SetCommittedRows(2);
+        UNIT_ASSERT(!engine->RestoreFromState(0, state));
+    }
+
     Y_UNIT_TEST(CsvSplitsRangesAndWaitsForCommit) {
         const TString source = "\"k1\",\"v1\"\n\"k2\",\"v2\"\n";
         TEngineFixture fixture;

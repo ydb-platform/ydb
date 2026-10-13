@@ -362,6 +362,10 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
         );
     }
 
+    if (item.YtImportPlan) {
+        record.Update(NIceDb::TUpdate<Schema::ImportItems::YtImportPlan>(item.YtImportPlan->SerializeAsString()));
+    }
+
     if (item.Topic) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Topic>(item.Topic->SerializeAsString())

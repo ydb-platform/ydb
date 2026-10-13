@@ -34,6 +34,12 @@ message ImportItemProgress {
 
 /// S3
 message ImportFromS3Settings {
+    enum SourceFormat {
+        SOURCE_FORMAT_UNSPECIFIED = 0; // YDB backup format
+        SOURCE_FORMAT_YDB = 1;
+        SOURCE_FORMAT_YT = 2; // Completed YT S3 export: metadata YSON and gzip YSON parts
+    }
+
     enum Scheme {
         UNSPECIFIED = 0;
         HTTP = 1;
@@ -121,6 +127,8 @@ message ImportFromS3Settings {
     // - Patterns are matched against the database object names stored in the backup listing.
     // - Object is excluded from import operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
+
+    SourceFormat source_format = 18;
 }
 
 message ImportFromS3Result {

@@ -224,6 +224,11 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromFsSettings& 
 
 template <>
 void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& settings) const {
+    if (settings.SourceFormat_ == NImport::EImportSourceFormat::Yt) {
+        // YT uses exact PREFIX_start_end keys, not directories containing scheme.pb.
+        ApplyItems(settings);
+        return;
+    }
 #if defined(_win32_)
     ApplyItems(settings);
 #else
@@ -305,6 +310,10 @@ TCommandImportFromS3::TCommandImportFromS3()
 void TCommandImportFromS3::Config(TConfig& config) {
     TCommandImportBase::Config(config);
 
+    config.Opts->AddLongOption("source-format", "Backup format: ydb (default) or yt (completed sorted static-table backup)")
+        .RequiredArgument("FORMAT").StoreResult(&SourceFormat).DefaultValue(SourceFormat)
+        .ChoicesWithCompletion({{"ydb", "YDB backup"}, {"yt", "YT static-table backup"}});
+
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
@@ -356,6 +365,18 @@ void TCommandImportFromS3::Config(TConfig& config) {
 void TCommandImportFromS3::Parse(TConfig& config) {
     TCommandImportBase::Parse(config);
 
+    if (SourceFormat == NImport::EImportSourceFormat::Unknown) {
+        throw TMisuseException() << "--source-format must be ydb or yt";
+    }
+    if (SourceFormat == NImport::EImportSourceFormat::Yt) {
+        if (Items.empty() || CommonSourcePrefix || CommonDestinationPath || !IncludePaths.empty() || ListObjectsInExistingExport) {
+            throw TMisuseException() << "YT import requires --item src=PREFIX,dst=TABLE and does not support --source-prefix, --destination-path, --include or --list";
+        }
+        if (!ExclusionPatterns.empty() || IndexPopulationMode != NImport::EIndexPopulationMode::Build) {
+            throw TMisuseException() << "YT import does not support --exclude or importing materialized indexes";
+        }
+    }
+
     ParseAwsProfile(config, "aws-profile");
     ParseAwsAccessKey(config, "access-key");
     ParseAwsSecretKey(config, "secret-key");
@@ -381,6 +402,7 @@ NImport::TImportFromS3Settings TCommandImportFromS3::MakeImportSettings() {
 
     FillS3Settings(settings);
     FillCommonImportSettings(settings);
+    settings.SourceFormat(SourceFormat);
 
     if (CommonSourcePrefix) {
         settings.SourcePrefix(CommonSourcePrefix);

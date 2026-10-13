@@ -1,0 +1,11 @@
+LIBRARY()
+SRCS(format.cpp)
+PEERDIR(
+    library/cpp/yson/node
+    ydb/core/protos
+    ydb/core/scheme
+    ydb/public/api/protos
+    yt/yt/core
+)
+END()
+RECURSE_FOR_TESTS(ut)

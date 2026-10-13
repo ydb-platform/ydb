@@ -118,6 +118,8 @@ struct TImportS3EngineSettings {
     ui64 BufferSizeLimit = 0;
     ui64 ZstdBlockSize = 0;
     bool ValidateChecksum = false;
+    bool YtSource = false;
+    ui64 YtExpectedRows = 0;
     TMaybe<NBackup::TEncryptionKey> EncryptionKey;
     TMaybe<NBackup::TEncryptionIV> EncryptionIV;
 };

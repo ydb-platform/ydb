@@ -28,6 +28,8 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 `--source-prefix PREFIX`: Source prefix for export in the bucket.
 
+`--source-format ydb|yt`: Backup format. The default is `ydb`. Use `yt` to import a completed YT static-table backup as described [below](#example-yt).
+
 ### Imported schema objects {#objects}
 
 `--destination-path PATH`: Destination folder for the objects being imported; defaults to the database root if not provided.
@@ -184,6 +186,25 @@ Importing one table that was exported using the `dir/my_table` path to the `dir1
   --include dir/my_table \
   --encryption-key-file ~/my_secret_key
 ```
+
+### Importing a YT static-table backup {#example-yt}
+
+Use `--source-format yt` with an explicit `--item` for each table. The source is the exact backup prefix: for example, `backups/orders` selects `backups/orders_metadata.yson` and gzip-compressed binary YSON data objects such as `backups/orders_0_999`. The numeric suffixes are inclusive source row ranges.
+
+```bash
+{{ ydb-cli }} -p quickstart import s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --source-format yt \
+  --item src=backups/orders,dst=orders
+```
+
+The cluster administrator must enable the `EnableImportFromYt` feature flag after upgrading all SchemeShard and DataShard hosts. Active YT imports must finish or be cancelled before those hosts are downgraded.
+
+The export must have completed successfully before import starts, and its objects must remain unchanged until import finishes. The destination table must not exist. A completed backup of an empty table may contain only the metadata object.
+
+This format currently supports strict schemas with unique, ascending, non-null keys. Supported column types are signed and unsigned integers, `bool`, `string`, `utf8`, `float`, and `double`; value columns may be optional. Floating-point keys, descending keys, complex types, computed columns, and aggregate columns are unsupported. YT user attributes are not imported as YDB permissions or table settings.
+
+Use explicit `--item` prefixes; recursive discovery with `--source-prefix`, `--include`, `--exclude`, and `--list` is unavailable for this format. Set the full destination in each `--item`; `--destination-path` is unavailable. Encrypted exports and importing materialized indexes are also unsupported. Gzip integrity validation is always enabled, including when `--skip-checksum-validation` is specified.
 
 ### Getting operation IDs {#example-list-oneline}
 

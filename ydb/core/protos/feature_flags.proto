@@ -445,4 +445,7 @@ message TFeatureFlags {
     // Enables memory of table partitions split/merge demands
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
+    // Enable only after all SchemeShard and DataShard hosts support YT import.
+    // Finish or cancel active YT imports before downgrading those hosts.
+    optional bool EnableImportFromYt = 362 [default = false];
 }

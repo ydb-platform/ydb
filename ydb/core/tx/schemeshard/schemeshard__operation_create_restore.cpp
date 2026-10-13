@@ -55,6 +55,13 @@ struct TRestore {
                 restore.CopyFrom(restoreSettings);
                 restore.SetTableId(pathId.LocalPathId);
                 restore.SetShardNum(i);
+                if (restoreSettings.HasYtImportPlan()) {
+                    // Keep the full plan on SchemeShard; each shard receives only its own object.
+                    restore.ClearYtImportPlan();
+                    if (i < restoreSettings.GetYtImportPlan().PartsSize()) {
+                        *restore.MutableYtImportPart() = restoreSettings.GetYtImportPlan().GetParts(i);
+                    }
+                }
             };
 
             if (sourcePath->IsTable()) {

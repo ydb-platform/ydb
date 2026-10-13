@@ -222,4 +222,8 @@ message TFeatureFlags {
     // RequireRestart: the in-memory counter is rebuilt from all FileStores at SchemeShard start,
     // the counter can be re-enabled, which requires restarting the SchemeShard tablet.
     optional bool DisableFileStoreSSDSystemSpaceAccounting = 302 [default = false, (RequireRestart) = true];
+    // Use optimized compaction selection strategy.
+    optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
+    // Skip StorageRatio calculation at compaction rank >= 10 while continuing compaction selection.
+    optional bool EnableHullCompStorageRatioHighRankSkip = 365 [default = false];
 }

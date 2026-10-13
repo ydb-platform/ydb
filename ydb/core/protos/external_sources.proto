@@ -60,4 +60,5 @@ message TObjectStorage {
     "/city=${city}/code=${code}/device_id=${device_id}"
     */
     repeated string partitioned_by = 5;
+    optional string on_missing_file = 6;
 }

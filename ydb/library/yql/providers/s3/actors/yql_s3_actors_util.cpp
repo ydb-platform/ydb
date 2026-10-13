@@ -7,6 +7,24 @@
 
 namespace NYql::NDq {
 
+EMissingFilePolicy ParseMissingFilePolicy(TStringBuf value) {
+    const TString normalized = to_lower(TString(value));
+    if (normalized.empty() || normalized == "fail") {
+        return EMissingFilePolicy::Fail;
+    }
+    if (normalized == "ignore") {
+        return EMissingFilePolicy::Ignore;
+    }
+    if (normalized == "warn") {
+        return EMissingFilePolicy::Warn;
+    }
+    ythrow yexception() << "on_missing_file must be one of: fail, ignore, warn";
+}
+
+bool IsMissingS3Object(long httpCode, TStringBuf s3ErrorCode) {
+    return httpCode == 404 && (s3ErrorCode.empty() || s3ErrorCode == "NoSuchKey");
+}
+
 bool ParseS3ErrorResponse(const TString& response, TString& errorCode, TString& message) {
     TS3Result s3Result(response);
     if (s3Result.Parsed && s3Result.IsError) {
@@ -68,8 +86,12 @@ TS3Result::TS3Result(const TString& body)
     if (Parsed) {
         if (const auto& root = Xml->Root(); root.Name() == "Error") {
             IsError = true;
-            S3ErrorCode = root.Node("Code", true).Value<TString>();
-            ErrorMessage = root.Node("Message", true).Value<TString>();
+            if (const auto code = root.Node("Code", true); !code.IsNull()) {
+                S3ErrorCode = code.Value<TString>();
+            }
+            if (const auto message = root.Node("Message", true); !message.IsNull()) {
+                ErrorMessage = message.Value<TString>();
+            }
         }
     }
 }

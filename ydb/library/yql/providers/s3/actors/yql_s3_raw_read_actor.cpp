@@ -62,7 +62,8 @@ public:
         ui64 fileQueueBatchSizeLimit,
         ui64 fileQueueBatchObjectCountLimit,
         ui64 fileQueueConsumersCountDelta,
-        bool allowLocalFiles)
+        bool allowLocalFiles,
+        EMissingFilePolicy missingFilePolicy)
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -89,6 +90,7 @@ public:
         , FileQueueBatchSizeLimit(fileQueueBatchSizeLimit)
         , FileQueueBatchObjectCountLimit(fileQueueBatchObjectCountLimit)
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta) {
+        MissingFilePolicy = missingFilePolicy;
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -243,6 +245,7 @@ private:
     STRICT_STFUNC_EXC(StateFunc,
         hFunc(TEvS3Provider::TEvReadResult, Handle);
         hFunc(TEvS3Provider::TEvReadError, Handle);
+        hFunc(TEvS3Provider::TEvRawMissingFileProbeResult, Handle);
         hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(TEvS3Provider::TEvAck, HandleAck);
@@ -308,7 +311,15 @@ private:
         if (!result.Issues) {
             actorSystem->Send(new NActors::IEventHandle(selfId, NActors::TActorId(), new TEvS3Provider::TEvReadResult(std::move(result.Content), requestId, pathInd, path)));
         } else {
-            actorSystem->Send(new NActors::IEventHandle(selfId, NActors::TActorId(), new TEvS3Provider::TEvReadError(std::move(result.Issues), requestId, pathInd, path)));
+            TString errorCode;
+            TString message;
+            const long httpCode = result.Content.HttpResponseCode;
+            if (httpCode == 404) {
+                ParseS3ErrorResponse(result.Content.Extract(), errorCode, message);
+            }
+            actorSystem->Send(new NActors::IEventHandle(selfId, NActors::TActorId(), new TEvS3Provider::TEvReadError(
+                std::move(result.Issues), requestId, pathInd, path, IsMissingS3Object(httpCode, errorCode),
+                result.CurlResponseCode == CURLE_PARTIAL_FILE && (httpCode == 200 || httpCode == 206))));
         }
     }
 
@@ -401,18 +412,82 @@ private:
             if (!ParseS3ErrorResponse(errorText, errorCode, message)) {
                 message = errorText;
             }
+            if (MissingFilePolicy != EMissingFilePolicy::Fail && IsMissingS3Object(httpCode, errorCode)) {
+                SkipMissingFile(path);
+                return;
+            }
             message = TStringBuilder{} << "Error while reading file " << path << ", details: " << message << ", request id: [" << requestId << "]";
             OnFatalError(BuildIssues(httpCode, errorCode, message), NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
         }
     }
 
+    void SkipMissingFile(const TString& path) {
+        LOG_W("TS3ReadActor", "Skipping missing S3 file " << path);
+        ++SkippedMissingFiles;
+        if (Counters) {
+            Counters->GetCounter("SkippedMissingFiles", true)->Inc();
+        }
+        if (MissingFilePolicy == EMissingFilePolicy::Warn && SkippedMissingFiles <= 16) {
+            TIssues warning;
+            warning.AddIssue(TIssue(TStringBuilder() << "Skipped missing S3 file " << path)
+                .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_WARNING));
+            OnRetriableError(warning);
+        }
+        IngressStats.Splits++;
+        DownloadInflight--;
+        if (FilesRemained) {
+            *FilesRemained = SubtractSaturating(*FilesRemained, 1);
+        }
+        if (IsCurrentBatchEmpty && DownloadInflight == 0) {
+            IsCurrentBatchEmpty = false;
+        }
+        TryStartDownload();
+        if (LastFileWasProcessed()) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        }
+    }
+
     void Handle(TEvS3Provider::TEvReadError::TPtr& result) {
-        ++CompletedFiles;
         auto id = result->Get()->PathIndex;
         const auto requestId = result->Get()->RequestId;
         const auto path = result->Get()->Path;
+        if (MissingFilePolicy != EMissingFilePolicy::Fail && result->Get()->MissingFile) {
+            ++CompletedFiles;
+            SkipMissingFile(path);
+            return;
+        }
+        if (MissingFilePolicy != EMissingFilePolicy::Fail && result->Get()->ShortRead) {
+            const auto& authInfo = Credentials.GetAuthInfo();
+            Gateway->Download(NS3Util::UrlEscapeRet(Url + path),
+                IHTTPGateway::MakeYcHeaders(CreateGuidAsString(), authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
+                0U, 1U,
+                [actorSystem = ActorSystem, self = SelfId(), error = result->Get()->Error, requestId, id, path](IHTTPGateway::TResult&& probe) mutable {
+                    TString errorCode;
+                    TString message;
+                    const long httpCode = probe.Content.HttpResponseCode;
+                    if (httpCode == 404) {
+                        ParseS3ErrorResponse(probe.Content.Extract(), errorCode, message);
+                    }
+                    actorSystem->Send(new NActors::IEventHandle(self, NActors::TActorId(), new TEvS3Provider::TEvRawMissingFileProbeResult(
+                        std::move(error), requestId, id, path, IsMissingS3Object(httpCode, errorCode))));
+                }, {}, RetryPolicy);
+            return;
+        }
+        ++CompletedFiles;
         LOG_W("TS3ReadActor", "Error while reading file " << path << ", details: ID: " << id << ", TEvReadError: " << result->Get()->Error.ToOneLineString() << ", request id: [" << requestId << "]");
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path << " with request id [" << requestId << "]", TIssues{result->Get()->Error});
+        OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+    }
+
+    void Handle(TEvS3Provider::TEvRawMissingFileProbeResult::TPtr& result) {
+        ++CompletedFiles;
+        const auto path = result->Get()->Path;
+        if (result->Get()->MissingFile) {
+            SkipMissingFile(path);
+            return;
+        }
+        auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << path
+            << " with request id [" << result->Get()->RequestId << "]", TIssues{result->Get()->Error});
         OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
 
@@ -497,6 +572,8 @@ private:
     const ui64 SizeLimit;
     TDuration CpuTime;
     const bool AllowLocalFiles;
+    EMissingFilePolicy MissingFilePolicy = EMissingFilePolicy::Fail;
+    ui64 SkippedMissingFiles = 0;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 
@@ -555,7 +632,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
     ui64 fileQueueConsumersCountDelta,
-    bool allowLocalFiles
+    bool allowLocalFiles,
+    EMissingFilePolicy missingFilePolicy
 ) {
     const auto actor = new TS3ReadActor(
         inputIndex,
@@ -583,7 +661,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         fileQueueBatchSizeLimit,
         fileQueueBatchObjectCountLimit,
         fileQueueConsumersCountDelta,
-        allowLocalFiles
+        allowLocalFiles,
+        missingFilePolicy
     );
 
     return {actor, actor};

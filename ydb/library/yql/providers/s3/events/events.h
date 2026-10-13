@@ -56,6 +56,8 @@ struct TEvS3Provider {
         EvDecompressDataRequest,
         EvDecompressDataResult,
         EvDecompressDataFinish,
+        EvMissingFileProbeResult,
+        EvRawMissingFileProbeResult,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NKikimr::TKikimrEvents::ES_S3_PROVIDER), "expect EvEnd < EventSpaceEnd(TEvents::ES_S3_PROVIDER)");
@@ -149,13 +151,14 @@ struct TEvS3Provider {
     };
 
     struct TEvFileFinished : public NActors::TEventLocal<TEvFileFinished, EvFileFinished> {
-        TEvFileFinished(size_t pathIndex, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 splitSize)
-            : PathIndex(pathIndex), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), SplitSize(splitSize) {
+        TEvFileFinished(size_t pathIndex, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 splitSize, TString skippedPath = {})
+            : PathIndex(pathIndex), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta), SplitSize(splitSize), SkippedPath(std::move(skippedPath)) {
         }
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
         const ui64 SplitSize;
+        const TString SkippedPath;
     };
 
     struct TEvReadError : public NActors::TEventLocal<TEvReadError, EvReadError> {
@@ -163,16 +166,37 @@ struct TEvS3Provider {
             TIssues&& error,
             const TString& requestId,
             size_t pathInd,
-            TString path)
+            TString path,
+            bool missingFile = false,
+            bool shortRead = false)
             : Error(std::move(error))
             , RequestId(requestId)
             , PathIndex(pathInd)
-            , Path(std::move(path)) { }
+            , Path(std::move(path))
+            , MissingFile(missingFile)
+            , ShortRead(shortRead) { }
 
         const TIssues Error;
         const TString RequestId;
         const size_t PathIndex;
         const TString Path;
+        const bool MissingFile;
+        const bool ShortRead;
+    };
+
+    struct TEvRawMissingFileProbeResult : public NActors::TEventLocal<TEvRawMissingFileProbeResult, EvRawMissingFileProbeResult> {
+        TEvRawMissingFileProbeResult(TIssues error, TString requestId, size_t pathIndex, TString path, bool missingFile)
+            : Error(std::move(error))
+            , RequestId(std::move(requestId))
+            , PathIndex(pathIndex)
+            , Path(std::move(path))
+            , MissingFile(missingFile) { }
+
+        const TIssues Error;
+        const TString RequestId;
+        const size_t PathIndex;
+        const TString Path;
+        const bool MissingFile;
     };
 
     struct TEvRetryEventFunc : public NActors::TEventLocal<TEvRetryEventFunc, EvRetry> {
@@ -250,16 +274,32 @@ struct TEvS3Provider {
             , Result(std::move(result))
         {}
 
-        TEvReadResult2(TReadRange readRange, TIssues&& issues)
+        TEvReadResult2(TReadRange readRange, TIssues&& issues, bool missingFile = false, bool shortRead = false)
             : ReadRange(readRange)
             , Failure(true)
             , Result("")
             , Issues(std::move(issues))
+            , MissingFile(missingFile)
+            , ShortRead(shortRead)
         {}
 
         const TReadRange ReadRange;
         const bool Failure;
         IHTTPGateway::TContent Result;
+        const TIssues Issues;
+        const bool MissingFile = false;
+        const bool ShortRead = false;
+    };
+
+    struct TEvMissingFileProbeResult : public NActors::TEventLocal<TEvMissingFileProbeResult, EvMissingFileProbeResult> {
+        TEvMissingFileProbeResult(long httpCode, TString s3ErrorCode, TIssues issues)
+            : HttpCode(httpCode)
+            , S3ErrorCode(std::move(s3ErrorCode))
+            , Issues(std::move(issues))
+        {}
+
+        const long HttpCode;
+        const TString S3ErrorCode;
         const TIssues Issues;
     };
 

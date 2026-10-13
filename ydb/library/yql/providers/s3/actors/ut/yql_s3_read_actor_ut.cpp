@@ -10,6 +10,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/schema.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/metadata.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/size_literals.h>
@@ -28,6 +29,12 @@ class TParquetGateway : public IHTTPGateway {
 public:
     TString Body;
     bool HoldChunks = false;
+    bool Missing = false;
+    bool MissingWithIssue = false;
+    bool ShortReadThenMissing = false;
+    bool ShortReadWithIssueThenMissing = false;
+    bool RawPartialThenMissing = false;
+    long StreamHttpCode = 0;
     ui32 RangeCalls = 0;
     std::vector<std::function<void()>> PendingChunks;
 
@@ -43,7 +50,22 @@ public:
         ++RangeCalls;
         UNIT_ASSERT_C(offset <= Body.size() && size <= Body.size() - offset, "invalid HTTP range " << offset << "+" << size);
         auto reply = [this, offset, size, callback = std::move(callback)] {
-            callback(TResult(TContent(Body.substr(offset, size), 206)));
+            if (Missing || ((ShortReadThenMissing || ShortReadWithIssueThenMissing || RawPartialThenMissing) && RangeCalls > 1)) {
+                TResult result(TContent("<Error><Code>NoSuchKey</Code></Error>", 404));
+                if (MissingWithIssue) {
+                    result.Issues.AddIssue("HTTP 404");
+                }
+                callback(std::move(result));
+            } else if (ShortReadWithIssueThenMissing || RawPartialThenMissing) {
+                TResult result(TContent(Body.substr(offset, size - 1), 206));
+                result.CurlResponseCode = CURLE_PARTIAL_FILE;
+                result.Issues.AddIssue("partial transfer");
+                callback(std::move(result));
+            } else if (ShortReadThenMissing) {
+                callback(TResult(TContent(Body.substr(offset, size - 1), 206)));
+            } else {
+                callback(TResult(TContent(Body.substr(offset, size), 206)));
+            }
         };
         // Footer reads include the trailer; column chunks end before it.
         if (HoldChunks && offset + size < Body.size() - 8) {
@@ -53,9 +75,11 @@ public:
         }
     }
 
-    TCancelHook Download(TString, THeaders, size_t, size_t, TOnDownloadStart, TOnNewDataPart, TOnDownloadFinish,
+    TCancelHook Download(TString, THeaders, size_t, size_t, TOnDownloadStart onStart, TOnNewDataPart, TOnDownloadFinish onFinish,
         const ::NMonitoring::TDynamicCounters::TCounterPtr&, IHttpRequestContext::TPtr) override {
-        UNIT_FAIL("unexpected streaming download");
+        UNIT_ASSERT_C(StreamHttpCode, "unexpected streaming download");
+        onStart(CURLE_OK, StreamHttpCode);
+        onFinish(CURLE_OK, {});
         return {};
     }
 
@@ -80,6 +104,19 @@ NS3::TSource ParquetSource(ui64 parallelRowGroups = 0, bool selectColumn = true)
     source.SetFormat("parquet");
     source.SetRowType(selectColumn ? R"(["StructType";[["ts";["DataType";"Timestamp"]]]])" : R"(["StructType";[]])");
     source.SetParallelRowGroupCount(parallelRowGroups);
+    return source;
+}
+
+NS3::TSource TextSource(TString format, TString policy) {
+    NS3::TSource source;
+    source.SetUrl("http://fake/");
+    source.SetFormat(format);
+    if (format != "raw") {
+        source.SetRowType(R"(["StructType";[["data";["DataType";"String"]]]])");
+    }
+    if (policy) {
+        (*source.MutableSettings())["onmissingfile"] = policy;
+    }
     return source;
 }
 
@@ -133,6 +170,7 @@ struct TReadResult {
     std::vector<i64> Values;
     std::vector<NDqProto::StatusIds::StatusCode> Errors;
     TString Issues;
+    TString Warnings;
 };
 
 // All callbacks and observations run on the simulated actor runtime's single thread.
@@ -141,6 +179,7 @@ public:
     TReadResult Result;
 
     TParquetReader() {
+        NDB::registerFormats();
         Runtime.AddLocalService(FakeActorId, TActorSetupCmd(new TFakeActor(
             std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()), TMailboxType::Simple, 0));
         Runtime.Initialize();
@@ -149,8 +188,12 @@ public:
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == IDqComputeActorAsyncInput::TEvAsyncInputError::EventType) {
                 auto* error = ev->Get<IDqComputeActorAsyncInput::TEvAsyncInputError>();
-                Result.Errors.push_back(error->FatalCode);
-                Result.Issues += error->Issues.ToOneLineString();
+                if (error->FatalCode == NDqProto::StatusIds::UNSPECIFIED) {
+                    Result.Warnings += error->Issues.ToOneLineString();
+                } else {
+                    Result.Errors.push_back(error->FatalCode);
+                    Result.Issues += error->Issues.ToOneLineString();
+                }
             } else if (ev->GetTypeRewrite() == TEvS3Provider::TEvNextRecordBatch::EventType) {
                 const auto& batch = ev->Get<TEvS3Provider::TEvNextRecordBatch>()->Batch;
                 Result.Rows += batch->num_rows();
@@ -169,7 +212,8 @@ public:
         Execute([](TFakeActor& actor) { actor.Terminate(); });
     }
 
-    void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB) {
+    void Start(std::shared_ptr<TParquetGateway> gateway, NS3::TSource source, ui64 dataInflight = 200_MB,
+        IHTTPGateway::TRetryPolicy::TPtr retryPolicy = GetHTTPDefaultRetryPolicy()) {
         NS3::TRange range;
         auto* path = range.AddPaths();
         path->SetName("file.parquet");
@@ -183,7 +227,7 @@ public:
             auto [input, inputActor] = CreateS3ReadActor(actor.TypeEnv, actor.HolderFactory,
                 std::shared_ptr<TScopedAlloc>(&actor.Alloc, [](TScopedAlloc*) {}), gateway, std::move(source),
                 0, TCollectStatsLevel::None, TTxId{}, {}, {}, {encodedRange.Str()}, FakeActorId,
-                CreateStructuredTokenCredentialsFactory(), GetHTTPDefaultRetryPolicy(), config, nullptr, nullptr,
+                CreateStructuredTokenCredentialsFactory(), retryPolicy, config, nullptr, nullptr,
                 std::make_shared<TGuaranteeQuotaManager>(dataInflight, dataInflight), false);
             actor.InitAsyncInput(input, inputActor);
         });
@@ -333,6 +377,166 @@ Y_UNIT_TEST_SUITE(TS3ParquetFooter) {
 
     Y_UNIT_TEST(FairShareMultiplicationOverflow) {
         CheckReaderCount(0, 5, ui64(1) << 63);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3ParquetMissingFile) {
+    Y_UNIT_TEST(FailByDefault) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquet(1);
+        gateway->Missing = true;
+        reader.Start(gateway, ParquetSource());
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(!reader.Result.Errors.empty(), "missing Parquet object must fail by default");
+    }
+
+    Y_UNIT_TEST(IgnoreMissingRange) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquet(1);
+        gateway->Missing = true;
+        auto source = ParquetSource();
+        (*source.MutableSettings())["onmissingfile"] = "ignore";
+        reader.Start(gateway, std::move(source));
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        UNIT_ASSERT(reader.Result.Finished);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 0);
+        UNIT_ASSERT(reader.Result.Warnings.empty());
+    }
+
+    Y_UNIT_TEST(WarnWhenShortRangeIsFollowedByMissingObject) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquet(1);
+        gateway->ShortReadThenMissing = true;
+        auto source = ParquetSource();
+        (*source.MutableSettings())["onmissingfile"] = "warn";
+        reader.Start(gateway, std::move(source));
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        UNIT_ASSERT(reader.Result.Finished);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Result.Rows, 0);
+        UNIT_ASSERT_GE(gateway->RangeCalls, 2);
+        UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+    }
+
+    Y_UNIT_TEST(WarnWhenPartialRangeErrorIsFollowedByMissingObject) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = MakeParquet(1);
+        gateway->ShortReadWithIssueThenMissing = true;
+        auto source = ParquetSource();
+        (*source.MutableSettings())["onmissingfile"] = "warn";
+        reader.Start(gateway, std::move(source));
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        UNIT_ASSERT(reader.Result.Finished);
+        UNIT_ASSERT_GE(gateway->RangeCalls, 2);
+        UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3TextMissingFile) {
+    Y_UNIT_TEST(RawIgnoreAndWarn) {
+        for (const TString& policy : {TString("ignore"), TString("warn")}) {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = "missing";
+            gateway->Missing = true;
+            reader.Start(gateway, TextSource("raw", policy));
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT(reader.Result.Finished);
+            if (policy == "warn") {
+                UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+            } else {
+                UNIT_ASSERT(reader.Result.Warnings.empty());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Raw404WithGatewayIssue) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = "missing";
+        gateway->Missing = true;
+        gateway->MissingWithIssue = true;
+        reader.Start(gateway, TextSource("raw", "warn"));
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        UNIT_ASSERT(reader.Result.Finished);
+        UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+    }
+
+    Y_UNIT_TEST(RawPartialReadWithMissingProbe) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = "missing";
+        gateway->RawPartialThenMissing = true;
+        gateway->MissingWithIssue = true;
+        reader.Start(gateway, TextSource("raw", "warn"));
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        UNIT_ASSERT(reader.Result.Finished);
+        UNIT_ASSERT_GE(gateway->RangeCalls, 2);
+        UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+    }
+
+    Y_UNIT_TEST(StructuredIgnoreAndWarn) {
+        for (const TString& policy : {TString("ignore"), TString("warn")}) {
+            TParquetReader reader;
+            auto gateway = std::make_shared<TParquetGateway>();
+            gateway->Body = "missing";
+            gateway->StreamHttpCode = 404;
+            reader.Start(gateway, TextSource("json_each_row", policy));
+            reader.ReadToEnd();
+            UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+            UNIT_ASSERT(reader.Result.Finished);
+            if (policy == "warn") {
+                UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+            } else {
+                UNIT_ASSERT(reader.Result.Warnings.empty());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StructuredAccessDeniedStillFails) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = "denied";
+        gateway->StreamHttpCode = 403;
+        reader.Start(gateway, TextSource("json_each_row", "ignore"));
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(!reader.Result.Errors.empty(), "403 must not be treated as a missing file");
+    }
+
+    Y_UNIT_TEST(StructuredEarlyEofAndMissingProbe) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = "missing";
+        gateway->Missing = true;
+        gateway->StreamHttpCode = 206;
+        reader.Start(gateway, TextSource("json_each_row", "warn"), 200_MB,
+            IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(reader.Result.Errors.empty(), reader.Result.Issues);
+        UNIT_ASSERT(reader.Result.Finished);
+        UNIT_ASSERT_GE(gateway->RangeCalls, 1);
+        UNIT_ASSERT_STRING_CONTAINS(reader.Result.Warnings, "Skipped missing S3 file");
+    }
+
+    Y_UNIT_TEST(StructuredEarlyEofWithExistingObjectFails) {
+        TParquetReader reader;
+        auto gateway = std::make_shared<TParquetGateway>();
+        gateway->Body = "present";
+        gateway->StreamHttpCode = 206;
+        reader.Start(gateway, TextSource("json_each_row", "ignore"), 200_MB,
+            IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+        reader.ReadToEnd();
+        UNIT_ASSERT_C(!reader.Result.Errors.empty(), "early EOF must fail if the object is still present");
+        UNIT_ASSERT_GE(gateway->RangeCalls, 1);
     }
 }
 

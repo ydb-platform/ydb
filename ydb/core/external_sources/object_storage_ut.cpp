@@ -23,6 +23,22 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Unknown attribute a");
     }
 
+    Y_UNIT_TEST(MissingFilePolicy) {
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "json_each_row"});
+        general.mutable_attributes()->insert({"on_missing_file", "WaRn"});
+
+        const auto content = source->Pack(schema, general);
+        const auto parameters = source->GetParameters(content);
+        UNIT_ASSERT_VALUES_EQUAL(parameters.at("on_missing_file").at(0), "warn");
+
+        (*general.mutable_attributes())["on_missing_file"] = "skip_all_errors";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException,
+            "on_missing_file must be one of: fail, ignore, warn");
+    }
+
     Y_UNIT_TEST(FailedValidation) {
         auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
         NKikimrExternalSources::TSchema schema;

@@ -63,6 +63,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 objectStorage.set_format(value);
             } else if (lowerKey == "compression") {
                 objectStorage.set_compression(value);
+            } else if (lowerKey == "on_missing_file") {
+                objectStorage.set_on_missing_file(to_lower(value));
             } else if (key.StartsWith("projection.") || key == "storage.location.template") {
                 objectStorage.mutable_projection()->insert({key, value});
             } else if (lowerKey == "partitioned_by") {
@@ -85,6 +87,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
             } else {
                 throw TExternalSourceException() << "Unknown attribute " << key;
             }
+        }
+
+        if (objectStorage.has_on_missing_file() && !IsIn({"fail"sv, "ignore"sv, "warn"sv}, objectStorage.on_missing_file())) {
+            throw TExternalSourceException() << "on_missing_file must be one of: fail, ignore, warn";
         }
 
         if (auto issues = Validate(schema, objectStorage, PathsLimit, general.location())) {
@@ -121,6 +127,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         if (objectStorage.compression()) {
             parameters["compression"] = {objectStorage.compression()};
+        }
+
+        if (objectStorage.has_on_missing_file()) {
+            parameters["on_missing_file"] = {objectStorage.on_missing_file()};
         }
 
         NSc::TValue projection;

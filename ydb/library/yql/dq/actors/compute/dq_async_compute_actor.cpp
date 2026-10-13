@@ -202,6 +202,12 @@ public:
 #undef DUMP_PREFIXED
     }
 
+    void AppendFinalWarnings(TIssues& issues) {
+        TIssues pending;
+        FillIssues(pending);
+        issues.AddIssues(WarningIssues);
+    }
+
 private:
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
         CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
@@ -227,10 +233,15 @@ private:
             }
         };
 
-        auto exhaustIssues = [&issues](auto& issuesHolder){
+        auto exhaustIssues = [this, &issues](auto& issuesHolder) {
             for (auto& [inputIndex, source]: issuesHolder) {
-            auto sourceIssues = source.IssuesBuffer.Dump();
+                auto sourceIssues = source.IssuesBuffer.Dump();
                 for (auto& issueInfo: sourceIssues) {
+                    for (const auto& issue : issueInfo.Issues) {
+                        if (issue.GetSeverity() == TSeverityIds::S_WARNING) {
+                            WarningIssues.AddIssue(issue);
+                        }
+                    }
                     issues.AddIssues(issueInfo.Issues);
                 }
             }
@@ -896,6 +907,7 @@ private:
     }
 
 private:
+    TIssues WarningIssues;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor = nullptr;
     NActors::TActorId TaskRunnerActorId;

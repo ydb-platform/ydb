@@ -1013,6 +1013,15 @@ protected:
 
         bool populateChannels = HandleComputeStats(ev);
 
+        if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+            auto* responseIssues = ResponseEv->Record.MutableResponse()->MutableIssues();
+            for (const auto& issue : state.GetIssues()) {
+                if (issue.severity() == NYql::TSeverityIds::S_WARNING) {
+                    responseIssues->Add()->CopyFrom(issue);
+                }
+            }
+        }
+
         switch (state.GetState()) {
             case NYql::NDqProto::COMPUTE_STATE_UNKNOWN: {
                 YQL_ENSURE(false, "unexpected state from " << computeActor << ", task: " << taskId);

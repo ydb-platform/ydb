@@ -814,6 +814,19 @@ public:
                     return true;
                 }
 
+                if (name == "onmissingfile"sv) {
+                    TStringBuf policy;
+                    if (!ExtractSettingValue(setting.Tail(), "on_missing_file"sv, format, {}, ctx, policy)) {
+                        return false;
+                    }
+                    if (!IsIn({"fail"sv, "ignore"sv, "warn"sv}, to_lower(TString(policy)))) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                            "on_missing_file must be one of: fail, ignore, warn"));
+                        return false;
+                    }
+                    return true;
+                }
+
                 if (name == "pathpattern"sv) {
                     TStringBuf unused;
                     if (!ExtractSettingValue(setting.Tail(), "path_pattern"sv, format, {}, ctx, unused)) {
@@ -854,7 +867,7 @@ public:
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression"sv, "partitionedby"sv, "projection"sv, "data.interval.unit"sv, "constraints"sv,
                                         "data.datetime.formatname"sv, "data.datetime.format"sv, "data.timestamp.formatname"sv, "data.timestamp.format"sv, "data.date.format"sv,
-                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
+                                        "readmaxbytes"sv, "csvdelimiter"sv, "directories"sv, "filepattern"sv, "onmissingfile"sv, "pathpattern"sv, "pathpatternvariant"sv }, validator, ctx))
             {
                 return TStatus::Error;
             }

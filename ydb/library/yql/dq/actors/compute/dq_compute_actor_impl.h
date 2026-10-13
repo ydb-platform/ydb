@@ -797,7 +797,13 @@ protected:
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             FillStats(record.MutableStats(), /* last */ true);
         }
-        IssuesToMessage(issues, record.MutableIssues());
+        TIssues finalIssues = issues;
+        if constexpr (TDerived::HasAsyncTaskRunner) {
+            if (State == NDqProto::COMPUTE_STATE_FINISHED && statusCode == NYql::NDqProto::StatusIds::SUCCESS) {
+                static_cast<TDerived*>(this)->AppendFinalWarnings(finalIssues);
+            }
+        }
+        IssuesToMessage(finalIssues, record.MutableIssues());
 
         if (ComputeActorSpan) {
             ComputeActorSpan.End();

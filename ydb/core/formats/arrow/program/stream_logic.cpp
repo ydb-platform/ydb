@@ -139,17 +139,28 @@ public:
 
         NYql::TExprContext ctx;
 
-        auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool));
-        b.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::And, blockBoolType, blockBoolType, blockBoolType);
-        b.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Or, blockBoolType, blockBoolType, blockBoolType);
+        auto boolType = ctx.template MakeType<NYql::TDataExprType>(NYql::EDataSlot::Bool);
+        auto blockBoolType = ctx.template MakeType<NYql::TBlockExprType>(boolType);
+        auto scalarBoolType = ctx.template MakeType<NYql::TScalarExprType>(boolType);
+        constexpr size_t kernelsPerOperation = 4;
+        const auto operations = {NYql::TKernelRequestBuilder::EBinaryOp::And, NYql::TKernelRequestBuilder::EBinaryOp::Or};
+        for (const auto op : operations) {
+            b.AddBinaryOp(op, blockBoolType, blockBoolType, blockBoolType);
+            b.AddBinaryOp(op, blockBoolType, scalarBoolType, blockBoolType);
+            b.AddBinaryOp(op, scalarBoolType, blockBoolType, blockBoolType);
+            b.AddBinaryOp(op, scalarBoolType, scalarBoolType, scalarBoolType);
+        }
         auto s = b.Serialize();
         Kernels = NYql::LoadKernels(s, *Registry, Factory);
-        AFL_VERIFY(Kernels.size() == 2);
+        AFL_VERIFY(Kernels.size() == operations.size() * kernelsPerOperation);
 
-        for (auto&& i : Kernels) {
-            arrow::compute::Arity arity(i->signature->in_types().size(), i->signature->is_varargs());
+        for (size_t operationIndex = 0; operationIndex < operations.size(); ++operationIndex) {
+            const auto& firstKernel = Kernels[operationIndex * kernelsPerOperation];
+            arrow::compute::Arity arity(firstKernel->signature->in_types().size(), firstKernel->signature->is_varargs());
             auto func = std::make_shared<arrow::compute::ScalarFunction>("local_function", arity, nullptr);
-            TStatusValidator::Validate(func->AddKernel(*i));
+            for (size_t shapeIndex = 0; shapeIndex < kernelsPerOperation; ++shapeIndex) {
+                TStatusValidator::Validate(func->AddKernel(*Kernels[operationIndex * kernelsPerOperation + shapeIndex]));
+            }
             Functions.push_back(func);
         }
     }

@@ -121,6 +121,14 @@ public:
         Context.MutableResources().AddConstantVerified(inputId, scalar);
     }
 
+    void AddInput(const ui32 inputId, const std::shared_ptr<arrow::Array>& array) {
+        AddArray(inputId, array);
+    }
+
+    void AddInput(const ui32 inputId, const std::shared_ptr<arrow::Scalar>& scalar) {
+        AddScalar(inputId, scalar);
+    }
+
     bool ProcessInput(const ui32 inputId) {
         const auto result = Processor.OnInputReady(inputId, Context, NodeContext);
         UNIT_ASSERT(result.IsSuccess());
@@ -157,6 +165,17 @@ void AssertAndResult(const std::shared_ptr<NAccessor::IChunkedArray>& predicate,
     test.AddArray(2, NKikimr::NKernels::UInt8VecToArray(allTrue));
     UNIT_ASSERT(!test.ProcessInput(1));
     UNIT_ASSERT(!test.ProcessInput(2));
+    test.AssertResult(expected);
+}
+
+template <class TInput>
+void AssertNullConstantWithInput(const NKikimr::NKernels::EOperation operation, const std::shared_ptr<TInput>& input,
+                                 const std::vector<std::optional<ui8>>& expected, const bool nullFirst) {
+    TStreamLogicTest test(expected.size(), {1, 2}, 3, operation);
+    test.AddScalar(1, arrow::MakeNullScalar(arrow::uint8()));
+    test.AddInput(2, input);
+    UNIT_ASSERT(!test.ProcessInput(nullFirst ? 1 : 2));
+    UNIT_ASSERT(!test.ProcessInput(nullFirst ? 2 : 1));
     test.AssertResult(expected);
 }
 }
@@ -248,14 +267,6 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         AssertAndResult(allNullDict, {std::nullopt, std::nullopt});
     }
 
-    Y_UNIT_TEST(NullConstantAndTruePreservesNull) {
-        TStreamLogicTest test(2, {1, 2}, 3, NKikimr::NKernels::EOperation::And);
-        test.AddScalar(1, arrow::MakeNullScalar(arrow::uint8()));
-        test.AddArray(2, NKikimr::NKernels::UInt8VecToArray({1, 1}));
-        UNIT_ASSERT(!test.ProcessInput(1));
-        UNIT_ASSERT(!test.ProcessInput(2));
-        test.AssertResult({std::nullopt, std::nullopt});
-    }
 
     Y_UNIT_TEST(NullIntermediateAndResultDoesNotFinishStream) {
         TStreamLogicTest test(2, {1, 2, 3}, 4, NKikimr::NKernels::EOperation::And);
@@ -300,6 +311,32 @@ Y_UNIT_TEST_SUITE(KernelLogic) {
         UNIT_ASSERT(!test.ProcessInput(1));
         UNIT_ASSERT(test.ProcessInput(2));
         test.AssertResult({1, 1});
+    }
+
+    Y_UNIT_TEST(NullConstantAndInputCombinations) {
+        for (const bool nullFirst : {true, false}) {
+            AssertNullConstantWithInput(NKikimr::NKernels::EOperation::And,
+                NKikimr::NKernels::UInt8VecToArray({1, 1}), {std::nullopt, std::nullopt}, nullFirst);
+            AssertNullConstantWithInput(NKikimr::NKernels::EOperation::And,
+                NKikimr::NKernels::UInt8VecToArray({1, 0}), {std::nullopt, 0}, nullFirst);
+            AssertNullConstantWithInput(NKikimr::NKernels::EOperation::And,
+                std::make_shared<arrow::UInt8Scalar>(1), {std::nullopt, std::nullopt}, nullFirst);
+        }
+        AssertNullConstantWithInput(NKikimr::NKernels::EOperation::And,
+            arrow::MakeNullScalar(arrow::uint8()), {std::nullopt, std::nullopt}, true);
+    }
+
+    Y_UNIT_TEST(NullConstantOrInputCombinations) {
+        for (const bool nullFirst : {true, false}) {
+            AssertNullConstantWithInput(NKikimr::NKernels::EOperation::Or,
+                NKikimr::NKernels::UInt8VecToArray({0, 0}), {std::nullopt, std::nullopt}, nullFirst);
+            AssertNullConstantWithInput(NKikimr::NKernels::EOperation::Or,
+                NKikimr::NKernels::UInt8VecToArray({0, 1}), {std::nullopt, 1}, nullFirst);
+            AssertNullConstantWithInput(NKikimr::NKernels::EOperation::Or,
+                std::make_shared<arrow::UInt8Scalar>(0), {std::nullopt, std::nullopt}, nullFirst);
+        }
+        AssertNullConstantWithInput(NKikimr::NKernels::EOperation::Or,
+            arrow::MakeNullScalar(arrow::uint8()), {std::nullopt, std::nullopt}, true);
     }
 };
 

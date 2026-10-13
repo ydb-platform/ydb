@@ -741,8 +741,7 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const bool modeChanged = currentInfo->EnableSingleDcMode != newInfo->EnableSingleDcMode
-            || (newInfo->EnableSingleDcMode && currentInfo->SurvivingDc != newInfo->SurvivingDc);
+        const bool modeChanged = newInfo->HasSingleDcModeChanged(*currentInfo);
 
         // Store the new policy before recreating the VDisk. Startup rebuilds all Hull and Syncer state.
         currentInfo = newInfo;

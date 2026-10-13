@@ -1363,6 +1363,11 @@ namespace NKikimr::NBsController {
         if (group->ErasureSpecies != TBlobStorageGroupType::ErasureMirror3dc || group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo) {
             throw TExError() << "single DC mode requires a physical mirror-3-dc group";
         }
+        if (cmd.GetEnableSingleDcMode() && (group->Topology->GetTotalFailRealmsNum() != 3
+                || group->Topology->GetNumFailDomainsPerFailRealm() != 3
+                || group->Topology->GetNumVDisksPerFailDomain() != 1)) {
+            throw TExError() << "single DC mode requires a 3x3x1 group geometry";
+        }
         if (cmd.GetEnableSingleDcMode() && (!cmd.HasSurvivingDc() || cmd.GetSurvivingDc() >= 3)) {
             throw TExError() << "SurvivingDc must be a fail realm index in [0, 3)";
         }

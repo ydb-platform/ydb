@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufresize.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
@@ -272,9 +274,15 @@ namespace NKikimr {
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
         if (ReplActorId && OrigEv->Get()->LogoBlobsSize) {
-            // The index is now applied; coalesce a new replication pass at the scheduler.
-            ctx.Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, ReplActorId,
-                ctx.SelfID, nullptr, 1));
+            // The index is now applied. Late SyncLog records can reveal missing canonical
+            // replicas after leaving single-DC mode; do not rescan the whole index for them.
+            auto update = std::make_unique<TEvReplSyncLogUpdate>();
+            NSyncLog::TFragmentReader fragment(OrigEv->Get()->Data);
+            fragment.ForEach([&](const NSyncLog::TLogoBlobRec* rec) {
+                update->Blobs.emplace_back(rec->LogoBlobID(), 0);
+            }, [](const NSyncLog::TBlockRec*) {}, [](const NSyncLog::TBarrierRec*) {},
+                [](const NSyncLog::TBlockRecV2*) {});
+            ctx.Send(ReplActorId, update.release());
         }
         Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});

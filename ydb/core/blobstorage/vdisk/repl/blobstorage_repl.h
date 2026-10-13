@@ -4,6 +4,7 @@
 #include "blobstorage_replctx.h"
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 #include <util/generic/fwd.h>
+#include <vector>
 
 namespace NKikimr {
 
@@ -92,6 +93,10 @@ namespace NKikimr {
     };
 
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
+
+    struct TEvReplSyncLogUpdate : TEventLocal<TEvReplSyncLogUpdate, TEvBlobStorage::EvReplSyncLogUpdate> {
+        std::vector<TLogoBlobID> Blobs;
+    };
 
     struct TUnreplicatedBlobRecord { // for monitoring purposes
         TIngress Ingress; // merged ingress from all the peers

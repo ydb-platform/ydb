@@ -128,3 +128,20 @@ Disk group reconfiguration is limited or totally impossible when a cluster's har
 * Reconfiguration only happens when part of a fail domain is down. However, the load previously handled by the failed hardware will be redistributed across the surviving hardware, remaining in the same fail domain.
 
 The load can be redistributed across all the hardware that is still running if the number of fail domains in a cluster exceeds the minimum amount required for creating storage groups by at least one. This means having 9 fail domains for `block-4-2` and 4 fail domains in each fail realm for `mirror-3-dc`, which is recommended.
+
+### Emergency single-DC recovery {#single-dc-recovery}
+
+Emergency single-DC mode is an explicitly enabled BlobStorage recovery policy for a physical `mirror-3-dc` group after the loss of two fail realms. It supports only the `3x3x1` geometry: three realms, three fail domains per realm, and one VDisk per fail domain. Group operations use the selected logical realm, so copies in that realm provide no redundancy across data centers.
+
+The BSC command `SetGroupSingleDcMode` identifies the group with `GroupId` and requires its expected `GroupGeneration` to reject stale configuration changes. `EnableSingleDcMode` must be explicitly set; enabling the mode also requires `SurvivingDc`, the zero-based realm index in the group's `Rings` (`0`, `1`, or `2`). `QueryBaseConfig` reports the current group generation and the slots' `FailRealmIdx`, `FailDomainIdx`, and `VDiskIdx`, which can be used to check the geometry and realm mapping. The controller rejects unsupported group types; when enabling, it also checks the geometry and selected realm. The realm is chosen explicitly; loss of a realm does not automatically enable this policy.
+
+Within the selected realm:
+
+- `Put`, `Block`, and `CollectGarbage` require acknowledgements from two of the three VDisks.
+- A data `Get` without disk restoration can return a single surviving copy. Establishing absence requires replies from all three VDisks; an unavailable VDisk must not be treated as proof of absence. Reads that restore copies on disk must also satisfy the write quorum.
+- `Range` and `Discover` inspect all three indexes. They return an error if an index is unavailable because it may contain a blob missing from the other indexes.
+- Syncer and GUID recovery use only participants in that realm. The startup GUID quorum requires two VDisks. Phantom deletion is disabled while the mode is enabled.
+
+Enabling or disabling the mode, or changing the selected realm while it is enabled, requires a [full VDisk restart](distributed-storage/node-warden.md#single-dc-policy). Startup rebuilds Hull barrier quorum rules and Syncer participants from the current group configuration. These policies remain fixed for that VDisk incarnation.
+
+To return to normal operation, set `EnableSingleDcMode` to `false` with the current expected generation. The restart restores ordinary quorum rules, and replication rebuilds canonical main replicas, including data written in emergency mode, on the returned realms. Disabling the mode alone does not establish restored redundancy; the data must be replicated. These rules describe BlobStorage group operations. Recovery of tablets and other cluster services remains a separate concern.

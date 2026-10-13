@@ -435,7 +435,9 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             return response.GetStatus(0).GetBaseConfig().GetGroup(0);
         };
         auto group = query();
+        UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), 9);
         UNIT_ASSERT(!group.GetEnableSingleDcMode());
+        UNIT_ASSERT(!group.HasSurvivingDc());
         auto checkServiceSet = [&] {
             const auto sender = env.Runtime->AllocateEdgeActor(0);
             const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, 0, GetPipeConfigWithRetries());
@@ -496,6 +498,61 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(!group.HasSurvivingDc());
         checkServiceSet();
     }
+
+    Y_UNIT_TEST(SingleDcModeRejectsUnsupportedGeometry) {
+        for (const auto [numFailRealms, numFailDomains, numVDisks] : {
+                std::tuple{3u, 4u, 1u}, std::tuple{4u, 3u, 1u}, std::tuple{3u, 3u, 2u}}) {
+            TEnvironmentSetup env(numFailRealms * numFailDomains, numFailRealms);
+            bool active = false;
+            env.Prepare("single-dc-geometry", [](TTestActorRuntime&) {}, active);
+            NKikimrBlobStorage::TConfigRequest request;
+            TVector<TEnvironmentSetup::TPDiskDefinition> pdisks;
+            for (ui32 disk = 0; disk < numVDisks; ++disk) {
+                pdisks.emplace_back("/dev/disk" + ToString(disk + 1), NKikimrBlobStorage::ROT, false, false, 0);
+            }
+            env.DefineBox(1, "test box", pdisks, env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, "mirror-3-dc");
+            auto *geometry = request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()->MutableGeometry();
+            geometry->SetNumFailRealms(numFailRealms);
+            geometry->SetNumFailDomainsPerFailRealm(numFailDomains);
+            geometry->SetNumVDisksPerFailDomain(numVDisks);
+            const auto setupResponse = env.Invoke(request);
+            UNIT_ASSERT_C(setupResponse.GetSuccess(), setupResponse.GetErrorDescription());
+
+            auto query = [&] {
+                NKikimrBlobStorage::TConfigRequest req;
+                req.AddCommand()->MutableQueryBaseConfig();
+                const auto response = env.Invoke(req);
+                UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+                UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).GetBaseConfig().GroupSize(), 1);
+                return response.GetStatus(0).GetBaseConfig().GetGroup(0);
+            };
+            const auto group = query();
+            UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), numFailRealms * numFailDomains * numVDisks);
+            UNIT_ASSERT(!group.GetEnableSingleDcMode());
+            UNIT_ASSERT(!group.HasSurvivingDc());
+
+            NKikimrBlobStorage::TConfigRequest enable;
+            auto *cmd = enable.AddCommand()->MutableSetGroupSingleDcMode();
+            cmd->SetGroupId(group.GetGroupId());
+            cmd->SetGroupGeneration(group.GetGroupGeneration());
+            cmd->SetEnableSingleDcMode(true);
+            cmd->SetSurvivingDc(0);
+            const auto response = env.Invoke(enable);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "3x3x1");
+            auto checkUnchanged = [&] {
+                const auto actual = query();
+                UNIT_ASSERT_VALUES_EQUAL(actual.GetGroupGeneration(), group.GetGroupGeneration());
+                UNIT_ASSERT(!actual.GetEnableSingleDcMode());
+                UNIT_ASSERT(!actual.HasSurvivingDc());
+            };
+            checkUnchanged();
+            RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+            checkUnchanged();
+        }
+    }
+
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {

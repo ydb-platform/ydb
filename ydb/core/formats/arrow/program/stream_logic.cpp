@@ -109,6 +109,12 @@ private:
     std::vector<std::shared_ptr<const arrow::compute::ScalarFunction>> Functions;
 
 public:
+    static TSpecFunctionsOperator& GetInstance() {
+        // Destroy the kernels before the global MiniKQL TLS wrapper.
+        static TSpecFunctionsOperator instance;
+        return instance;
+    }
+
     const std::shared_ptr<const arrow::compute::ScalarFunction>& GetANDKernel() const {
         return Functions[0];
     }
@@ -147,9 +153,9 @@ TStreamLogicProcessor::TStreamLogicProcessor(
     : TBase(std::move(input), { output }, EProcessorType::StreamLogic)
     , Operation(op) {
     if (Operation == NKernels::EOperation::And) {
-        Function = std::make_shared<TKernelFunction>(Singleton<TSpecFunctionsOperator>()->GetANDKernel());
+        Function = std::make_shared<TKernelFunction>(TSpecFunctionsOperator::GetInstance().GetANDKernel());
     } else if (Operation == NKernels::EOperation::Or) {
-        Function = std::make_shared<TKernelFunction>(Singleton<TSpecFunctionsOperator>()->GetORKernel());
+        Function = std::make_shared<TKernelFunction>(TSpecFunctionsOperator::GetInstance().GetORKernel());
     } else {
         AFL_VERIFY(false);
     }

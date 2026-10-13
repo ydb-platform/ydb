@@ -176,6 +176,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const TVector<TString>& prefixColumns);
 
+TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
+    const NKikimrSchemeOp::TTableDescription& baseTable,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
+
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);

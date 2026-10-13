@@ -4605,6 +4605,143 @@ state: STATE_ENABLED
         DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompactRelevance");
     }
 
+    // The backup is made with EnableCompactFulltextIndex=true, but is restored into a database
+    // where the flag is false. The fulltext index type is not stored in the backup: it is
+    // re-derived from the target database flag, so the restored index must be non-compact while
+    // the materialized index data is still loaded from the backup. The SchemeShard must survive
+    // this mismatch (no crash).
+    void IndexMaterializationCompactFlagMismatch(
+        TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port,
+        const TString& indexDesc, NKikimrSchemeOp::EIndexType expectedIndexType)
+    {
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            %s
+        )", indexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup made with the compact flag on.
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", s3Port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        // Sanity check: the backup was made with the compact flag on, so it contains the
+        // compact index impl tables.
+        const TVector<TString> indexColumns{"value"};
+        const auto srcIndexType = DescribePrivatePath(runtime, "/MyRoot/Table/index")
+            .GetPathDescription().GetTableIndex().GetType();
+        for (const auto& implTable : NTableIndex::GetImplTables(srcIndexType, indexColumns)) {
+            UNIT_ASSERT_C(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"),
+                "backup must contain the compact impl table " << implTable);
+        }
+
+        // Restore into a database without the compact flag: flip the flag and reboot the
+        // SchemeShard so that it re-reads it.
+        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(false);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/TableImported"
+              }
+              index_population_mode: INDEX_POPULATION_MODE_IMPORT
+            }
+        )", s3Port));
+        env.TestWaitNotification(runtime, txId);
+        const auto importResult = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        // The mismatch must not fail the import: the index is not restored but built from the
+        // restored table data, and the reason is reported in the import issues.
+        TString importIssues;
+        for (const auto& issue : importResult.GetResponse().GetEntry().GetIssues()) {
+            importIssues += issue.message();
+            importIssues += "\n";
+        }
+        UNIT_ASSERT_STRING_CONTAINS_C(importIssues, "it will be built from the table data",
+            "expected the built-index issue, got:\n" << importIssues);
+
+        const TString importedIndexPath = "/MyRoot/TableImported/index";
+        TestDescribeResult(DescribePrivatePath(runtime, importedIndexPath), {
+            NLs::PathExist,
+            NLs::IndexType(expectedIndexType),
+            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+
+        for (const auto& implTable : NTableIndex::GetImplTables(expectedIndexType, indexColumns)) {
+            TestDescribeResult(
+                DescribePrivatePath(runtime, TStringBuilder() << importedIndexPath << "/" << implTable),
+                {NLs::PathExist, NLs::IsTable});
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactBackupToNonCompactDb) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
+        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextCompact
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )", NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain);
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactRelevanceBackupToNonCompactDb) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
+        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextCompactRelevance
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )", NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+    }
+
     Y_UNIT_TEST(IndexMaterializationGlobalJson) {
         EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
         DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), false);

@@ -652,6 +652,8 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     , GroupGeneration(vdiskId.GroupGeneration)
     , Type(info->Type)
     , GroupSizeInUnits(info->GroupSizeInUnits)
+    , EnableSingleDcMode(info->EnableSingleDcMode)
+    , SurvivingDc(info->SurvivingDc)
     , Topology(info->Topology)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(info->EncryptionMode)
@@ -711,6 +713,10 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         res->DecommitStatus = group.GetDecommitStatus();
     }
     res->GroupSizeInUnits = group.GetGroupSizeInUnits();
+    res->EnableSingleDcMode = group.GetEnableSingleDcMode();
+    if (group.HasSurvivingDc()) {
+        res->SurvivingDc = group.GetSurvivingDc();
+    }
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());

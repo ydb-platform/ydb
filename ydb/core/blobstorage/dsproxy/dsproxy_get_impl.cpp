@@ -67,7 +67,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
             outResponse.LooksLikePhantom = PhantomCheck
-                ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
+                ? std::make_optional(!Info->EnableSingleDcMode
+                    && blobState.WholeSituation == TBlobState::ESituation::Absent)
                 : std::nullopt;
 
             // fill in keep/doNotKeep flags
@@ -78,7 +79,7 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
                 bool okay = true;
 
                 // extra validation code for phantom logic
-                if (PhantomCheck) {
+                if (PhantomCheck && !Info->EnableSingleDcMode) {
                     TSubgroupPartLayout possiblyPresent;
 
                     for (ui32 idxInSubgroup = 0; idxInSubgroup < blobState.Disks.size(); ++idxInSubgroup) {

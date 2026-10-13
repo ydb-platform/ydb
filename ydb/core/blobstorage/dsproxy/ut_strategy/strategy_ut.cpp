@@ -1,6 +1,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_blackboard.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_restore.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_restore.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_basic.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/null.h>
 #include <util/generic/overloaded.h>
@@ -310,6 +311,143 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
 }
 
 Y_UNIT_TEST_SUITE(DSProxyStrategyTest) {
+
+    Y_UNIT_TEST(SingleDcPutQuorum) {
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            for (ui32 failed = 0; failed <= 2; ++failed) {
+                TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+                info.Ref();
+                info.EnableSingleDcMode = true;
+                info.SurvivingDc = realm;
+                TGroupQueues queues(info.GetTopology());
+                queues.Ref();
+                TBlackboard board(&info, &queues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
+                const TString data(1000, 'x');
+                const TLogoBlobID id(5000, 1, 1, 0, data.size(), 0);
+                board.RegisterBlobForPut(id, 0);
+                std::vector<TRope> parts(info.Type.TotalPartCount());
+                ErasureSplit(TBlobStorageGroupType::CrcModeNone, info.Type, TRope(data), parts,
+                    nullptr, GetDefaultRcBufAllocator());
+                for (ui32 part = 0; part < parts.size(); ++part) {
+                    board.AddPartToPut(id, part, TRope(parts[part]));
+                }
+                TLogContext context(NKikimrServices::BS_PROXY, false);
+                TPut3dcStrategy strategy(TEvBlobStorage::TEvPut::TacticMaxThroughput, false);
+                UNIT_ASSERT(board.RunStrategy(context, strategy, {}) == EStrategyOutcome::IN_PROGRESS);
+                auto requests = std::move(board.GroupDiskRequests.PutsPending);
+                board.GroupDiskRequests.PutsPending.clear();
+                UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
+                ui32 index = 0;
+                for (const auto& request : requests) {
+                    UNIT_ASSERT_VALUES_EQUAL(info.GetVDiskId(request.OrderNumber).FailRealm, realm);
+                    TBlobStorageGroupInfo::TOrderNums subgroup;
+                    info.GetTopology().PickSubgroup(id.Hash(), subgroup);
+                    const auto position = std::find(subgroup.begin(), subgroup.end(), request.OrderNumber);
+                    UNIT_ASSERT(position != subgroup.end());
+                    UNIT_ASSERT_VALUES_EQUAL(request.Id.PartId(), (position - subgroup.begin()) % 3 + 1);
+                    if (index++ < failed) {
+                        board.AddErrorResponse(request.Id, request.OrderNumber, "Unavailable");
+                    } else {
+                        board.AddPutOkResponse(request.Id, request.OrderNumber);
+                    }
+                }
+                if (failed == 0) {
+                    TBlobStorageGroupInfo::TGroupVDisks expired = &info.GetTopology();
+                    UNIT_ASSERT(board[id].HasWrittenQuorum(info, expired));
+                    expired |= {&info.GetTopology(), info.GetVDiskId(requests[0].OrderNumber)};
+                    UNIT_ASSERT(board[id].HasWrittenQuorum(info, expired));
+                    expired |= {&info.GetTopology(), info.GetVDiskId(requests[1].OrderNumber)};
+                    UNIT_ASSERT(!board[id].HasWrittenQuorum(info, expired));
+                }
+                const auto outcome = board.RunStrategy(context, strategy, {});
+                UNIT_ASSERT(outcome == (failed < 2 ? EStrategyOutcome::DONE : EStrategyOutcome::ERROR));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SingleDcGetLastCopyAndUncertainAbsence) {
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            for (ui32 lastReply = 0; lastReply < 3; ++lastReply) {
+                TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+                info.Ref();
+                info.EnableSingleDcMode = true;
+                info.SurvivingDc = realm;
+                TGroupQueues queues(info.GetTopology());
+                queues.Ref();
+                TBlackboard board(&info, &queues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
+                const TString data(1000, 'x');
+                const TLogoBlobID id(5000, 1, 1, 0, data.size(), 0);
+                board.AddNeeded(id, 0, id.BlobSize());
+                TLogContext context(NKikimrServices::BS_PROXY, false);
+                const TNodeLayoutInfoPtr layout;
+                TMirror3dcBasicGetStrategy strategy(layout, false);
+                for (ui32 reply = 0; reply < 3; ++reply) {
+                    UNIT_ASSERT(board.RunStrategy(context, strategy, {}) == EStrategyOutcome::IN_PROGRESS);
+                    auto requests = std::move(board.GroupDiskRequests.GetsPending);
+                    board.GroupDiskRequests.GetsPending.clear();
+                    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+                    const auto& request = requests.front();
+                    UNIT_ASSERT_VALUES_EQUAL(info.GetVDiskId(request.OrderNumber).FailRealm, realm);
+                    if (reply < 2) {
+                        board.AddNoDataResponse(request.Id, request.OrderNumber);
+                    } else if (lastReply == 1) {
+                        board.AddErrorResponse(request.Id, request.OrderNumber, "Unavailable");
+                    } else if (lastReply == 2) {
+                        board.AddNoDataResponse(request.Id, request.OrderNumber);
+                    } else {
+                        board.AddResponseData(request.Id, request.OrderNumber, 0, TRope(data));
+                    }
+                }
+                const auto outcome = board.RunStrategy(context, strategy, {});
+                UNIT_ASSERT(outcome == (lastReply == 1 ? EStrategyOutcome::ERROR : EStrategyOutcome::DONE));
+                if (lastReply == 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(board.DoneBlobStates.at(id).Whole.Data.Read(0, data.size()).ConvertToString(), data);
+                } else if (lastReply == 2) {
+                    UNIT_ASSERT(board.DoneBlobStates.at(id).WholeSituation == TBlobState::ESituation::Absent);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SingleDcRestoreLastCopy) {
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+            info.Ref();
+            info.EnableSingleDcMode = true;
+            info.SurvivingDc = realm;
+            TGroupQueues queues(info.GetTopology());
+            queues.Ref();
+            TBlackboard board(&info, &queues, NKikimrBlobStorage::UserData, NKikimrBlobStorage::FastRead);
+            const TString data(1000, 'x');
+            const TLogoBlobID id(5000, 1, 1, 0, data.size(), 0);
+            board.AddNeeded(id, 0, id.BlobSize());
+            TLogContext context(NKikimrServices::BS_PROXY, false);
+            TMirror3dcGetWithRestoreStrategy strategy;
+            UNIT_ASSERT(board.RunStrategy(context, strategy, {}) == EStrategyOutcome::IN_PROGRESS);
+            auto gets = std::move(board.GroupDiskRequests.GetsPending);
+            board.GroupDiskRequests.GetsPending.clear();
+            UNIT_ASSERT_VALUES_EQUAL(gets.size(), 3);
+            ui32 index = 0;
+            for (const auto& request : gets) {
+                UNIT_ASSERT_VALUES_EQUAL(info.GetVDiskId(request.OrderNumber).FailRealm, realm);
+                if (++index == 3) {
+                    board.AddResponseData(request.Id, request.OrderNumber, 0, TRope(data));
+                } else {
+                    board.AddNoDataResponse(request.Id, request.OrderNumber);
+                }
+            }
+            UNIT_ASSERT(board.RunStrategy(context, strategy, {}) == EStrategyOutcome::IN_PROGRESS);
+            auto puts = std::move(board.GroupDiskRequests.PutsPending);
+            board.GroupDiskRequests.PutsPending.clear();
+            UNIT_ASSERT_VALUES_EQUAL(puts.size(), 2);
+            const auto& restored = puts.front();
+            UNIT_ASSERT_VALUES_EQUAL(info.GetVDiskId(restored.OrderNumber).FailRealm, realm);
+            UNIT_ASSERT_VALUES_EQUAL(restored.Buffer.ConvertToString(), data);
+            board.AddPutOkResponse(restored.Id, restored.OrderNumber);
+            UNIT_ASSERT(board.RunStrategy(context, strategy, {}) == EStrategyOutcome::DONE);
+            UNIT_ASSERT_VALUES_EQUAL(board.DoneBlobStates.at(id).Whole.Data.Read(0, data.size()).ConvertToString(), data);
+        }
+    }
 
     Y_UNIT_TEST(Restore_block42) {
         RunStrategyTest<TRestoreStrategy>(TBlobStorageGroupType::Erasure4Plus2Block);

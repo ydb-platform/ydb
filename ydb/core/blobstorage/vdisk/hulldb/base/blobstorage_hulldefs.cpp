@@ -111,10 +111,10 @@ namespace NKikimr {
             bool freshCompaction, bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
             ui32 hullSstSizeInChunksLevel, double hullCompReadBatchEfficiencyThreshold, TDuration hullCompStorageRatioCalcPeriod,
             TDuration hullCompStorageRatioMaxCalcDuration, ui32 hullCompLevel0MaxSstsAtOnce, ui32 hullCompSortedPartsNum,
-            bool freshChunkReservation, ui32 appendBlockSize, bool collectByCompleteDeletionBlock)
+            bool freshChunkReservation, ui32 appendBlockSize, bool collectByCompleteDeletionBlock, std::optional<ui32> survivingRealm)
         : VCtx(std::move(vctx))
         , VCfg(vcfg)
-        , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk))
+        , IngressCache(TIngressCache::Create(VCtx->Top, VCtx->ShortSelfVDisk, survivingRealm))
         , ChunkSize(chunkSize)
         , AppendBlockSize(appendBlockSize)
         , CompWorthReadSize(compWorthReadSize)

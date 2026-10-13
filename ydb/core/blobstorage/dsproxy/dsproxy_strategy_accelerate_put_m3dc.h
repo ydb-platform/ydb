@@ -2,6 +2,7 @@
 
 #include "dsproxy_strategy_base.h"
 #include "dsproxy_blackboard.h"
+#include "dsproxy_strategy_put_m3dc.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
@@ -32,6 +33,10 @@ public:
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
             const TAccelerationParams& accelerationParams) override {
+        if (info.EnableSingleDcMode) {
+            return TPut3dcStrategy(Tactic, EnableRequestMod3x3ForMinLatecy)
+                .ProcessSingleDc(logCtx, state, info, groupDiskRequests);
+        }
         Y_UNUSED(accelerationParams);
         // Find the unput parts and disks
         bool unresponsiveDisk = false;

@@ -2,6 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufresize.h>
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr {
@@ -247,12 +249,14 @@ namespace NKikimr {
             bool confirmSyncLogAlso,
             std::unique_ptr<TEvLocalSyncDataResult> result,
             TEvLocalSyncData::TPtr origEv,
-            TActorId syncLogActorId)
+            TActorId syncLogActorId,
+            TActorId replActorId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Result(std::move(result))
         , OrigEv(origEv)
         , Span(TWilson::VDiskInternals, std::move(OrigEv->TraceId), "VDisk.LoggedRecLocalSyncData")
         , SyncLogActorId(syncLogActorId)
+        , ReplActorId(replActorId)
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
@@ -269,6 +273,17 @@ namespace NKikimr {
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
+        if (ReplActorId && OrigEv->Get()->LogoBlobsSize) {
+            // The index is now applied. Late SyncLog records can reveal missing canonical
+            // replicas after leaving single-DC mode; do not rescan the whole index for them.
+            auto update = std::make_unique<TEvReplSyncLogUpdate>();
+            NSyncLog::TFragmentReader fragment(OrigEv->Get()->Data);
+            fragment.ForEach([&](const NSyncLog::TLogoBlobRec* rec) {
+                update->Blobs.emplace_back(rec->LogoBlobID(), 0);
+            }, [](const NSyncLog::TBlockRec*) {}, [](const NSyncLog::TBarrierRec*) {},
+                [](const NSyncLog::TBlockRecV2*) {});
+            ctx.Send(ReplActorId, update.release());
+        }
         Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
         TActivationContext::Send(std::unique_ptr<IEventHandle>(OrigEv->Forward(SyncLogActorId).Release()));

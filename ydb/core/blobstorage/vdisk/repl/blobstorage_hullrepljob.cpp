@@ -164,7 +164,7 @@ namespace NKikimr {
                     const TMemRecLogoBlob memRec = it.GetMemRec();
                     const TIngress ingress = memRec.GetIngress();
                     const auto parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
-                        StartKey) - ingress.LocalParts(topology.GType);
+                        StartKey, true) - ingress.LocalParts(topology.GType);
                     if (!parts.Empty() && barriers->Keep(StartKey, memRec, {}, allowKeepFlags,
                             true /*allowGarbageCollection*/).KeepData) {
                         ++ReplInfo->ItemsTotal;
@@ -195,7 +195,7 @@ namespace NKikimr {
             const TMemRecLogoBlob &memRec = it.GetMemRec();
             const TIngress &ingress = memRec.GetIngress();
             NMatrix::TVectorType parts = ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk,
-                key) - ingress.LocalParts(topology.GType);
+                key, true) - ingress.LocalParts(topology.GType);
             if (parts.Empty()) {
                 return false; // nothing to recover
             }
@@ -797,6 +797,9 @@ namespace NKikimr {
                 auto node = isPhantom.extract(id);
                 Y_VERIFY_S(node, ReplCtx->VCtx->VDiskLogPrefix);
                 auto [phantom, looksLikePhantom] = node.mapped();
+                if (GInfo->EnableSingleDcMode) {
+                    phantom = looksLikePhantom = false;
+                }
                 RecoveryMachine->ProcessPhantomBlob(partSet, parts, phantom, looksLikePhantom, ingress, *this);
                 if (phantom) {
                     Phantoms.push_back(id);

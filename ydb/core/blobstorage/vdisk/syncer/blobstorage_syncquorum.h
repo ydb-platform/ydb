@@ -38,16 +38,21 @@ namespace NKikimr {
         public:
             TQuorumTracker(const TVDiskIdShort &selfVDisk,
                            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                           bool includeMyFailDomain)
+                           bool includeMyFailDomain,
+                           std::optional<ui32> survivingRealm = std::nullopt)
                 : Top(std::move(top))
                 , MyFailDomainOrderNumber(Top->GetFailDomainOrderNumber(selfVDisk))
                 , IncludeMyFailDomain(includeMyFailDomain)
+                , SurvivingRealm(survivingRealm)
                 , SyncedDisks(Top.get())
                 , Erasure(Top->GType.GetErasure())
             {
             }
 
             void Update(const TVDiskIdShort &vdisk) {
+                if (!IsParticipant(vdisk)) {
+                    return;
+                }
                 Debug.Update(vdisk);
                 if (IncludeMyFailDomain || Top->GetFailDomainOrderNumber(vdisk) != MyFailDomainOrderNumber) {
                     SyncedDisks |= TBlobStorageGroupInfo::TGroupVDisks(Top.get(), vdisk);
@@ -55,8 +60,15 @@ namespace NKikimr {
             }
 
             bool HasQuorum() const {
+                if (SurvivingRealm) {
+                    return SyncedDisks.GetNumSetItems() >= 2;
+                }
                 const auto& checker = Top->GetQuorumChecker();
                 return checker.CheckQuorumForGroup(SyncedDisks);
+            }
+
+            bool IsParticipant(const TVDiskIdShort& vdisk) const {
+                return !SurvivingRealm || vdisk.FailRealm == *SurvivingRealm;
             }
 
             void Clear() {
@@ -78,6 +90,7 @@ namespace NKikimr {
             const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
             const ui32 MyFailDomainOrderNumber;
             const bool IncludeMyFailDomain;
+            const std::optional<ui32> SurvivingRealm;
             TQuorumTrackerDebug Debug;
             TBlobStorageGroupInfo::TGroupVDisks SyncedDisks;
 

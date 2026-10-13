@@ -27,6 +27,10 @@ namespace NKikimr {
             , FaultyDisks(&info->GetTopology())
         {}
 
+        bool HasPresentParts(const TBlobStorageGroupInfo *info) const {
+            return bool(PresentUnconditionally.GetInvolvedDisks(&info->GetTopology()) & ~FaultyDisks);
+        }
+
         void Output(IOutputStream& str, const TBlobStorageGroupInfo *info) const {
             str << "{FullId# " << FullId.ToString() << " PresentParts# ";
             PresentParts.Output(str, info->Type);
@@ -56,7 +60,10 @@ namespace NKikimr {
             Ingress.Merge(TIngress(result.GetIngress()));
             HasIngress = HasIngress && result.HasIngress();
 
-            if (result.HasIngress() && !id.PartId()) { // extract local parts from ingress when there is no specific part reply
+            if (result.HasIngress() && !id.PartId()
+                    && (!info->EnableSingleDcMode || status == NKikimrProto::OK)) {
+                // Extract local parts from ingress when there is no specific part reply.
+                // In recovery mode only a successful query establishes a usable copy.
                 TIngress ingress(result.GetIngress());
                 NMatrix::TVectorType parts = ingress.LocalParts(info->Type);
                 for (ui8 partIdx = parts.FirstPosition(); partIdx != parts.GetSize(); partIdx = parts.NextPosition(partIdx)) {
@@ -99,6 +106,33 @@ namespace NKikimr {
         }
 
         TBlobStorageGroupInfo::EBlobState GetBlobState(const TBlobStorageGroupInfo *info, bool *lostByIngress) const {
+            if (info->EnableSingleDcMode) {
+                TBlobStorageGroupInfo::TSubgroupVDisks active(&info->GetTopology());
+                for (ui32 diskIdx = 0; diskIdx < info->Type.BlobSubgroupSize(); ++diskIdx) {
+                    if (info->IsVDiskInActiveRealm(info->GetVDiskInSubgroup(diskIdx, FullId.Hash()))) {
+                        active |= TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology(), diskIdx);
+                    }
+                }
+                if (lostByIngress) {
+                    // Global ingress can still describe copies in the excluded realms. Only local
+                    // parts returned by the active realm establish presence in recovery mode.
+                    *lostByIngress = false;
+                }
+                if (!active) {
+                    return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+                }
+                const auto usable = active & ~FaultyDisks;
+                const auto present = PresentParts.GetInvolvedDisks(&info->GetTopology()) & usable;
+                if (present.GetNumSetItems() >= 2) {
+                    return TBlobStorageGroupInfo::EBS_FULL;
+                }
+                if (PresentUnconditionally.GetInvolvedDisks(&info->GetTopology()) & usable) {
+                    return TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
+                }
+                return FaultyDisks & active ? TBlobStorageGroupInfo::EBS_DISINTEGRATED
+                    : TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+            }
+
             const auto& checker = info->GetQuorumChecker();
             TBlobStorageGroupInfo::EBlobState state = checker.GetBlobState(PresentParts, FaultyDisks);
 

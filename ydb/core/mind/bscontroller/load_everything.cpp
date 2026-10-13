@@ -244,6 +244,10 @@ public:
                                                    std::get<2>(geom),
                                                    false /* ddisk, will fill in later */);
 
+                group.EnableSingleDcMode = groups.GetValueOrDefault<T::EnableSingleDcMode>();
+                if (groups.HaveValue<T::SurvivingDc>()) {
+                    group.SurvivingDc = groups.GetValue<T::SurvivingDc>();
+                }
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
                     group.VDisksInGroup.clear();

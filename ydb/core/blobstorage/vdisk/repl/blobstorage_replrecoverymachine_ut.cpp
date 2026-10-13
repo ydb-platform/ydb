@@ -83,6 +83,54 @@ namespace NKikimr {
             return replCtx;
         }
 
+        Y_UNIT_TEST(Mirror3dcRecoversCanonicalPartFromSurvivingRealm) {
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+            TVector<TVDiskID> vdisks;
+            auto replCtx = CreateReplCtx(vdisks, groupInfo);
+            const auto& topology = groupInfo->GetTopology();
+            TLogoBlobID id;
+            const TString data(64, 'x');
+            for (ui32 step = 1;; ++step) {
+                id = TLogoBlobID(1, 1, step, 0, data.size(), 0);
+                if (topology.GetIdxInSubgroup(replCtx->VCtx->ShortSelfVDisk, id.Hash()) == 0) {
+                    break;
+                }
+            }
+            const auto source = topology.GetVDiskInSubgroup(1, id.Hash());
+            const auto ingress = TIngress::CreateIngressWithLocal(&topology, source, TLogoBlobID(id, 2))
+                ->CopyWithoutLocal(groupInfo->Type);
+            UNIT_ASSERT(ingress.KnownParts(groupInfo->Type, 0).Empty());
+            UNIT_ASSERT(ingress.LocalParts(groupInfo->Type).Empty());
+            const auto parts = ingress.PartsWeMustHaveLocally(&topology, replCtx->VCtx->ShortSelfVDisk, id, true);
+            UNIT_ASSERT(parts == NMatrix::TVectorType::MakeOneHot(0, 3));
+
+            auto info = MakeIntrusive<TEvReplFinished::TInfo>();
+            info->WorkUnitsPlanned = id.BlobSize();
+            NRepl::TRecoveryMachine machine(replCtx, info);
+            machine.AddTask(id, parts, false, ingress);
+            NRepl::TRecoveryMachine::TPartSet partSet(id, groupInfo->Type);
+            partSet.AddData(1, TLogoBlobID(id, 2), NKikimrProto::OK, TRope(data));
+            NRepl::TRecoveryMachine::TRecoveredBlobsQueue recovered;
+            struct {
+                void AddUnreplicatedBlobRecord(const NRepl::TRecoveryMachine::TPartSet&, TIngress, bool) {
+                    UNIT_FAIL("the surviving mirror part must restore the missing canonical replica");
+                }
+                void DropUnreplicatedBlobRecord(const TLogoBlobID&) {}
+                void AddPhantomBlobRecord(const NRepl::TRecoveryMachine::TPartSet&, TIngress,
+                        NMatrix::TVectorType) {
+                    UNIT_FAIL("a blob in the surviving realm is not a phantom");
+                }
+            } processor;
+            machine.Recover(partSet, recovered, processor);
+            UNIT_ASSERT_VALUES_EQUAL(recovered.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(info->ItemsRecovered, 1);
+            UNIT_ASSERT(recovered.front().LocalParts == parts);
+            TRopeArena arena(TRopeArenaBackend::Allocate);
+            const TRope expected = TDiskBlob::Create(id.BlobSize(), 1, groupInfo->Type.TotalPartCount(),
+                TRope(data), arena, EBlobHeaderMode::OLD_HEADER, std::nullopt);
+            UNIT_ASSERT_EQUAL(recovered.front().Data, expected);
+        }
+
         Y_UNIT_TEST(BasicFunctionality) {
             TRopeArena arena(&TRopeArenaBackend::Allocate);
             TVector<TVDiskID> vdisks;

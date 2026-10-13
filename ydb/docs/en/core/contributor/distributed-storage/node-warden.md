@@ -45,6 +45,10 @@ When reviewing restart or replacement logic, trace both the old actor's outstand
 
 NodeWarden's local DDisk listing reports both DDisk and PB service IDs for each local DDisk slot. This is a local inventory; it does not describe which tablet owns a [logical direct block group](direct-block-groups.md) or which slots that group claims.
 
+### Single-DC recovery policy {#single-dc-policy}
+
+Changes to the [emergency single-DC policy](../distributed-storage.md#single-dc-recovery) replace the full VDisk actor. Enabling or disabling the mode, or changing the selected realm while it is enabled, requires a restart rather than an ordinary group-generation update. The replacement reads the current group configuration and reconstructs Hull barrier quorum rules and Syncer participants at startup. These policies remain fixed for that VDisk incarnation; a generation update must not change them within a running actor.
+
 ## Source and Test Map
 
 | Task | Source |

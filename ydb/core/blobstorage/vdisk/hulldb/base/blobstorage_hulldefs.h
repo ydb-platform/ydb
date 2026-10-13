@@ -170,7 +170,8 @@ namespace NKikimr {
                 ui32 hullCompSortedPartsNum,
                 bool freshChunkReservation = false,
                 ui32 appendBlockSize = 4096,
-                bool collectByCompleteDeletionBlock = false
+                bool collectByCompleteDeletionBlock = false,
+                std::optional<ui32> survivingRealm = std::nullopt
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

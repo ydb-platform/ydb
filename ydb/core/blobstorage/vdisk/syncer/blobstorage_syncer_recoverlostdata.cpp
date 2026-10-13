@@ -7,6 +7,8 @@
 #include "blobstorage_syncquorum.h"
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 
+#include <util/generic/hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 
 using namespace NKikimrServices;
@@ -46,10 +48,11 @@ namespace NKikimr {
     public:
         TSyncFullRecoverState(const TString& logPrefix,
                               const TVDiskIdShort &self,
-                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top)
+                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+                              std::optional<ui32> survivingRealm = std::nullopt)
             : VDiskLogPrefix(logPrefix)
             , Neighbors(self, top)
-            , QuorumTracker(self, top, false)
+            , QuorumTracker(self, top, false, survivingRealm)
             , Sublog(false, self.ToString() + ": ")
         {}
 
@@ -64,7 +67,7 @@ namespace NKikimr {
 
         void RunFullSync(std::function<void(TVDiskInfo<TPeerState>&)> func) {
             for (auto &x : Neighbors) {
-                if (!x.MyFailDomain)
+                if (!x.MyFailDomain && QuorumTracker.IsParticipant(x.VDiskIdShort))
                     func(x);
             }
         }
@@ -104,7 +107,12 @@ namespace NKikimr {
 
         TIntrusivePtr<TSyncerContext> SyncerCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        TSyncFullRecoverState State;
+        std::unique_ptr<TSyncFullRecoverState> State;
+        THashSet<TActorId> RecoveryProxies;
+        THashSet<TActorId> FinishedProxies;
+        bool FullSyncRunning = false;
+        bool DrainingProxies = false;
+        bool RestartAfterLocalWork = false;
         const TActorId CommitterId;
         const TActorId NotifyId;
         const TVDiskEternalGuid Guid;
@@ -122,13 +130,17 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // UTILITIES
         ////////////////////////////////////////////////////////////////////////
-        void StopAllRunningProxy(const TActorContext &ctx) {
+        void StopAllRunningProxy(const TActorContext &ctx, bool drain = false) {
             const TString& logPrefix = SyncerCtx->VCtx->VDiskLogPrefix;
-            auto stopFunc = [&ctx, &logPrefix] (TVDiskInfo<TPeerState>& x) {
+            auto stopFunc = [&ctx, &logPrefix, drain] (TVDiskInfo<TPeerState>& x) {
                 Y_VERIFY_S(x.Get().ProxyId, logPrefix);
-                ctx.Send(x.Get().ProxyId, new NActors::TEvents::TEvPoisonPill());
+                if (drain) {
+                    ctx.Send(x.Get().ProxyId, new TEvCancelSyncerRecovery);
+                } else {
+                    ctx.Send(x.Get().ProxyId, new NActors::TEvents::TEvPoisonPill());
+                }
             };
-            State.NotifyAliveProxies(stopFunc);
+            State->NotifyAliveProxies(stopFunc);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -146,18 +158,24 @@ namespace NKikimr {
                                                                  JobCtx, vd, aid);
                 auto actorId = ctx.Register(proxyActor);
                 x.Get().SetProxyId(actorId);
+                RecoveryProxies.insert(actorId);
             };
 
-            State.RunFullSync(runProxyForVDisk);
+            FullSyncRunning = true;
+            State->RunFullSync(runProxyForVDisk);
             Become(&TThis::FullSyncStateFunc);
         }
 
         void Handle(TEvSyncerFullSyncedWithPeer::TPtr &ev, const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerFullSyncedWithPeer"));
+            if (DrainingProxies || !RecoveryProxies.erase(ev->Sender)) {
+                return;
+            }
+            FinishedProxies.erase(ev->Sender);
             auto *msg = ev->Get();
-            State.FullSyncedWithPeer(msg->VDiskId);
-            if (State.GotQuorum()) {
-                StopAllRunningProxy(ctx);
+            State->FullSyncedWithPeer(msg->VDiskId);
+            if (State->GotQuorum()) {
+                StopAllRunningProxy(ctx, true);
                 CallOsiris(ctx);
             }
         }
@@ -166,6 +184,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSyncerFullSyncedWithPeer, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvents::TEvGone, Handle)
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -177,6 +196,7 @@ namespace NKikimr {
             // data into Hull Db, but we don't want this data to sync back to other VDisks.
             // This is done by skeleton, because it have access to all Lsn positions (CurrentLsn,
             // AllocLsnForSyncLogLock, etc). Selected Lsn goes back to us via TEvOsirisDone reply.
+            FullSyncRunning = false;
             ctx.Send(SyncerCtx->SkeletonId, new TEvCallOsiris());
             Become(&TThis::WaitOsirisStateFunc);
         }
@@ -184,7 +204,11 @@ namespace NKikimr {
         void Handle(TEvOsirisDone::TPtr &ev, const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvOsirisDone"));
             DbBirthLsn = ev->Get()->DbBirthLsn;
-            WriteFinalLocally(ctx);
+            if (RestartAfterLocalWork) {
+                RestartFullSync(ctx);
+            } else {
+                WriteFinalLocally(ctx);
+            }
         }
 
         STRICT_STFUNC(WaitOsirisStateFunc,
@@ -192,6 +216,7 @@ namespace NKikimr {
             HFunc(TEvOsirisDone, Handle)
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvents::TEvGone, Handle)
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -207,13 +232,18 @@ namespace NKikimr {
         void HandleFinalLocally(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerCommitDone"));
             Y_UNUSED(ev);
-            Finish(ctx);
+            if (RestartAfterLocalWork) {
+                RestartFullSync(ctx);
+            } else {
+                Finish(ctx);
+            }
         }
 
         STRICT_STFUNC(WriteFinalLocallyStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSyncerCommitDone, HandleFinalLocally)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
         )
 
@@ -240,19 +270,69 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // BlobStorage Group reconfiguration
         ////////////////////////////////////////////////////////////////////////
+        void DrainRecoveryProxies(const TActorContext& ctx) {
+            for (const auto& aid : FinishedProxies) {
+                RecoveryProxies.erase(aid);
+            }
+            FinishedProxies.clear();
+            for (const auto& aid : RecoveryProxies) {
+                ctx.Send(aid, new TEvCancelSyncerRecovery);
+            }
+        }
+
+        void RestartFullSync(const TActorContext& ctx) {
+            DrainRecoveryProxies(ctx);
+            if (!RecoveryProxies.empty()) {
+                DrainingProxies = true;
+                FullSyncRunning = true;
+                return;
+            }
+            State = std::make_unique<TSyncFullRecoverState>(SyncerCtx->VCtx->VDiskLogPrefix,
+                SyncerCtx->VCtx->ShortSelfVDisk, SyncerCtx->VCtx->Top,
+                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt);
+            RecoveryProxies.clear();
+            DrainingProxies = false;
+            RestartAfterLocalWork = false;
+            RunFullSync(ctx);
+        }
+
+        void Handle(TEvents::TEvGone::TPtr& ev, const TActorContext& ctx) {
+            if (DrainingProxies) {
+                RecoveryProxies.erase(ev->Sender);
+            } else if (RecoveryProxies.contains(ev->Sender)) {
+                FinishedProxies.insert(ev->Sender);
+            }
+            if (DrainingProxies && RecoveryProxies.empty()) {
+                RestartFullSync(ctx);
+            }
+        }
+
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            // save new Group Info
-            auto msg = ev->Get();
+            auto* msg = ev->Get();
+            const bool policyChanged = GInfo->EnableSingleDcMode != msg->NewInfo->EnableSingleDcMode
+                || GInfo->SurvivingDc != msg->NewInfo->SurvivingDc;
             GInfo = msg->NewInfo;
-            // recreate JobCtx
             JobCtx = TSjCtx::Create(SyncerCtx, GInfo);
-            // reconfigure alive proxies
-            const TString& logPrefix = SyncerCtx->VCtx->VDiskLogPrefix;
-            auto reconfigureFunc = [&ctx, &msg, &logPrefix] (TVDiskInfo<TPeerState>& x) {
-                Y_VERIFY_S(x.Get().ProxyId, logPrefix);
-                ctx.Send(x.Get().ProxyId, msg->Clone());
-            };
-            State.NotifyAliveProxies(reconfigureFunc);
+            if (policyChanged) {
+                if (FullSyncRunning) {
+                    DrainingProxies = true;
+                    DrainRecoveryProxies(ctx);
+                    if (RecoveryProxies.empty()) {
+                        RestartFullSync(ctx);
+                    }
+                } else {
+                    // Osiris and local GUID writes are allowed to finish before
+                    // restarting recovery under the new participant policy.
+                    RestartAfterLocalWork = true;
+                }
+                return;
+            }
+            if (!DrainingProxies) {
+                auto reconfigureFunc = [&ctx, msg] (TVDiskInfo<TPeerState>& x) {
+                    ctx.Send(x.Get().ProxyId, msg->Clone());
+                };
+                State->NotifyAliveProxies(reconfigureFunc);
+            }
         }
 
     public:
@@ -268,7 +348,9 @@ namespace NKikimr {
             : TActorBootstrapped<TSyncerRecoverLostDataActor>()
             , SyncerCtx(sc)
             , GInfo(info)
-            , State(SyncerCtx->VCtx->VDiskLogPrefix, SyncerCtx->VCtx->ShortSelfVDisk, SyncerCtx->VCtx->Top)
+            , State(std::make_unique<TSyncFullRecoverState>(SyncerCtx->VCtx->VDiskLogPrefix,
+                SyncerCtx->VCtx->ShortSelfVDisk, SyncerCtx->VCtx->Top,
+                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt))
             , CommitterId(committerId)
             , NotifyId(notifyId)
             , Guid(guid)

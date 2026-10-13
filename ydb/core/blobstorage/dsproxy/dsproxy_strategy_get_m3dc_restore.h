@@ -20,6 +20,40 @@ namespace NKikimr {
                 return EStrategyOutcome::DONE;
             }
 
+            if (info.EnableSingleDcMode) {
+                if (!info.SurvivingDc || *info.SurvivingDc >= NumRings) {
+                    return EStrategyOutcome::Error("Invalid surviving realm for mirror-3-dc");
+                }
+                PrepareGets(logCtx, state, groupDiskRequests, &info);
+                if (!RestoreWholeFromMirror(state)) {
+                    bool pending = false;
+                    bool error = false;
+                    for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+                        const auto& disk = state.Disks[diskIdx];
+                        if (info.GetVDiskId(disk.OrderNumber).FailRealm != *info.SurvivingDc) {
+                            continue;
+                        }
+                        const auto situation = disk.DiskParts[diskIdx % NumRings].Situation;
+                        pending |= situation == TBlobState::ESituation::Unknown;
+                        error |= situation == TBlobState::ESituation::Error;
+                    }
+                    if (pending) {
+                        return EStrategyOutcome::IN_PROGRESS;
+                    }
+                    if (error) {
+                        return EStrategyOutcome::Error("Unable to establish blob absence in surviving realm");
+                    }
+                    state.WholeSituation = TBlobState::ESituation::Absent;
+                    return EStrategyOutcome::DONE;
+                }
+                const auto outcome = TPut3dcStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput, false)
+                    .ProcessSingleDc(logCtx, state, info, groupDiskRequests);
+                if (outcome == EStrategyOutcome::DONE) {
+                    state.WholeSituation = TBlobState::ESituation::Present;
+                }
+                return outcome;
+            }
+
             // The way to check disk status:
             // Send reads to all disks
             PrepareGets(logCtx, state, groupDiskRequests);
@@ -70,9 +104,14 @@ namespace NKikimr {
         }
 
     private:
-        static void PrepareGets(TLogContext& logCtx, TBlobState& state, TGroupDiskRequests& groupDiskRequests) {
+        static void PrepareGets(TLogContext& logCtx, TBlobState& state, TGroupDiskRequests& groupDiskRequests,
+                const TBlobStorageGroupInfo* singleDcInfo = nullptr) {
             const TIntervalVec<i32> needed(0, state.Id.BlobSize()); // we need to query this interval
             for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+                if (singleDcInfo && singleDcInfo->GetVDiskId(state.Disks[diskIdx].OrderNumber).FailRealm
+                        != *singleDcInfo->SurvivingDc) {
+                    continue;
+                }
                 TBlobState::TDisk& disk = state.Disks[diskIdx];
                 const ui32 partIdx = diskIdx % NumRings;
                 TBlobState::TDiskPart& diskPart = disk.DiskParts[partIdx];

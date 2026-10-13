@@ -57,6 +57,9 @@ namespace NKikimr {
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
                 TBlackboard &blackboard, TGroupDiskRequests& groupDiskRequests,
                 const TAccelerationParams& accelerationParams) override {
+            if (info.EnableSingleDcMode && (!info.SurvivingDc || *info.SurvivingDc >= NumRings)) {
+                return EStrategyOutcome::Error("Invalid surviving realm for mirror-3-dc");
+            }
             if (state.WholeSituation == TBlobState::ESituation::Present) {
                 return EStrategyOutcome::DONE;
             }
@@ -84,7 +87,9 @@ namespace NKikimr {
             // create an array defining order in which we traverse the disks
             TStackVec<ui32, TypicalDisksInGroup> diskIdxList;
             for (ui32 i = 0; i < state.Disks.size(); ++i) {
-                diskIdxList.push_back(i);
+                if (!info.EnableSingleDcMode || info.GetVDiskId(state.Disks[i].OrderNumber).FailRealm == *info.SurvivingDc) {
+                    diskIdxList.push_back(i);
+                }
             }
 
             // calculate distance (in relative units) to the disk from our node
@@ -144,6 +149,19 @@ namespace NKikimr {
                         break;
                 }
                 situations.push_back(diskPart.Situation);
+            }
+
+            if (info.EnableSingleDcMode) {
+                if (requested) {
+                    return EStrategyOutcome::IN_PROGRESS;
+                }
+                for (const auto situation : situations) {
+                    if (situation != TBlobState::ESituation::Absent && situation != TBlobState::ESituation::Lost) {
+                        return EStrategyOutcome::Error("Unable to establish blob absence in surviving realm");
+                    }
+                }
+                state.WholeSituation = TBlobState::ESituation::Absent;
+                return EStrategyOutcome::DONE;
             }
 
             if (!info.GetQuorumChecker().CheckFailModelForSubgroup(failed)) {

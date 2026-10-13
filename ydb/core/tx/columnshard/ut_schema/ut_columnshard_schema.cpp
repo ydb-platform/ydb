@@ -23,6 +23,7 @@
 #include <ydb/services/metadata/service.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/generic/scope.h>
 #include <util/system/hostname.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -609,7 +610,18 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const bool standalone
 
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { columnToRead }));
-        auto rb = reader.ReadAll();
+        std::shared_ptr<arrow::RecordBatch> rb;
+        if (expectedReadResult == EExpectedResult::ERROR) {
+            // The misconfigured S3 endpoint fails in the real DNS/HTTP client.
+            // Let that response arrive before exhausting simulated events.
+            const bool wasFast = runtime.SetFastSimulatedTime(false);
+            Y_DEFER {
+                runtime.SetFastSimulatedTime(wasFast);
+            };
+            rb = reader.ReadAll();
+        } else {
+            rb = reader.ReadAll();
+        }
         if (expectedReadResult == EExpectedResult::ERROR) {
             UNIT_ASSERT(reader.IsError());
             specRowsBytes.emplace_back(0, 0);

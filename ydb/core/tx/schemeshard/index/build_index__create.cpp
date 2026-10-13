@@ -414,11 +414,23 @@ private:
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex: {
+            const bool isHnsw = index.type_case()
+                == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
+            if (isHnsw && !Self->EnableHnswIndex) {
+                explain = "HNSW index support is disabled (EnableHnswIndex)";
+                return false;
+            }
+            const auto& requestedSettings = isHnsw
+                ? index.global_hnsw_index().vector_settings()
+                : index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            buildInfo.IndexType = isHnsw
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
 
             if (buildInfo.IsRebuild) {
@@ -429,12 +441,16 @@ private:
                 const auto* existingDesc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
                     &existingIndex->SpecializedIndexDescription);
                 if (!existingDesc) {
-                    explain = "REBUILD INDEX is only supported for vector_kmeans_tree indexes";
+                    explain = "REBUILD INDEX is only supported for vector indexes";
+                    return false;
+                }
+                if (existingIndex->Type != buildInfo.IndexType) {
+                    explain = "REBUILD INDEX cannot change index type";
                     return false;
                 }
                 vectorIndexKmeansTreeDescription = *existingDesc;
                 // Merge user-provided settings over existing ones
-                const auto& userSettings = index.global_vector_kmeans_tree_index().vector_settings();
+                const auto& userSettings = requestedSettings;
                 if (userSettings.has_settings()) {
                     const auto& userVectorSettings = userSettings.settings();
                     const auto& existingVectorSettings = existingDesc->GetSettings().settings();
@@ -453,26 +469,40 @@ private:
                 }
                 vectorIndexKmeansTreeDescription.MutableSettings()->MergeFrom(userSettings);
             } else {
-                *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+                *vectorIndexKmeansTreeDescription.MutableSettings() = requestedSettings;
             }
 
-            if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+            auto& treeSettings = *vectorIndexKmeansTreeDescription.MutableSettings();
+            using TValidate = bool (*)(const Ydb::Table::KMeansTreeSettings&, TString&);
+            const TValidate validatePartial = isHnsw
+                ? NKikimr::NKMeans::ValidateHnswSettingsPartial
+                : static_cast<TValidate>(NKikimr::NKMeans::ValidateSettingsPartial);
+            const TValidate validate = isHnsw
+                ? NKikimr::NKMeans::ValidateHnswSettings
+                : static_cast<TValidate>(NKikimr::NKMeans::ValidateSettings);
+            if (!validatePartial(treeSettings, explain)) {
                 return false;
             }
-
-            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
-                ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
-                const bool isPrefixed = index.index_columns().size() > 1;
-                NKikimr::NKMeans::AutoSelectKMeansSettings(*vectorIndexKmeansTreeDescription.MutableSettings(), rowCount, isPrefixed);
-                if (isPrefixed) {
-                    vectorIndexKmeansTreeDescription.MutableSettings()->set_adaptive_clusters(true);
+            if (!validate(treeSettings, explain)) {
+                if (isHnsw) {
+                    if (!NKikimr::NKMeans::AutoSelectHnswSettings(treeSettings,
+                            tableInfo->GetStats().Aggregated.DataSize, explain)) {
+                        return false;
+                    }
+                } else {
+                    const ui64 rowCount = tableInfo->GetStats().Aggregated.RowCount;
+                    const bool isPrefixed = index.index_columns().size() > 1;
+                    NKikimr::NKMeans::AutoSelectKMeansSettings(treeSettings, rowCount, isPrefixed);
+                    if (isPrefixed) {
+                        treeSettings.set_adaptive_clusters(true);
+                    }
                 }
             }
 
-            const auto& kmSettings = vectorIndexKmeansTreeDescription.GetSettings();
+            const auto& kmSettings = treeSettings;
             const auto& vectorSettings = kmSettings.settings();
             const bool needVectorAutodetect = NKikimr::NKMeans::NeedsVectorSettingsAutoSelect(vectorSettings);
-            if (!NKikimr::NKMeans::ValidateSettings(kmSettings, explain) && !needVectorAutodetect) {
+            if (!validate(kmSettings, explain) && !needVectorAutodetect) {
                 return false;
             }
 

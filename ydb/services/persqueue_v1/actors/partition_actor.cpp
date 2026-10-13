@@ -1628,7 +1628,9 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     event->Record.SetPartition(Partition.Partition);
     event->Record.SetOffset(ReadOffset);
     event->Record.SetCookie(++WaitDataCookie);
-    ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
+    const bool storedData = ReadOffset < EndOffset;
+    const TDuration hasDataWait = storedData ? WAIT_STORED_DATA : (WAIT_DATA - WAIT_DELTA);
+    ui64 deadline = (ctx.Now() + hasDataWait).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
     event->Record.SetSessionId(Session);

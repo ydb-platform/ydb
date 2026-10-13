@@ -1711,13 +1711,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
 
 
-        auto putRecordResult = client.PutRecord("/Root/" + streamName, {"", "key", ""}).ExtractValueSync();
-        Cerr << putRecordResult.GetResult().DebugString() << Endl;
-
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
-        UNIT_ASSERT_VALUES_EQUAL_C(putRecordResult.GetStatus(), EStatus::SUCCESS, putRecordResult.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "0");
-
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
 
         {
@@ -1728,6 +1721,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_status(),
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
         }
+
+        auto putRecordResult = client.PutRecord("/Root/" + streamName, {"", "key", ""}).ExtractValueSync();
+        Cerr << putRecordResult.GetResult().DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putRecordResult.GetStatus(), EStatus::SUCCESS, putRecordResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "0");
 
         auto session = pqClient.CreateReadSession(NYdb::NPersQueue::TReadSessionSettings()
                                                           .ConsumerName("user1")

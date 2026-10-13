@@ -103,7 +103,7 @@
             "name":"topic.read.bytes",
             "topic":"test-counters-stream"
           },
-        "value":265
+        "value":270
       },
       {
         "kind":"RATE",

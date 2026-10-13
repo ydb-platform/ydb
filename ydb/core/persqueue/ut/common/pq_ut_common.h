@@ -276,6 +276,7 @@ struct TTabletPreparationParameters {
 struct TConsumerPreparationParameters {
     TString Name;
     bool Important = false;
+    std::optional<ui64> AvailabilityPeriodMs;
     std::optional<uint32_t> MetricsLevel;
     std::optional<TString> MonitoringProjectId;
 

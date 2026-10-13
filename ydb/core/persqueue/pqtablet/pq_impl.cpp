@@ -2073,6 +2073,7 @@ void TPersQueue::HandleReadRequest(
                                        cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
                                        bytes,
                                        cmd.GetReadToBlobEnd(),
+                                       !AppData(ctx)->FeatureFlags.GetEnableTopicReadPriorRetention(),
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
                                        cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
                                        clientDC,

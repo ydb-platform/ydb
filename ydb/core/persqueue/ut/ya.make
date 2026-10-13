@@ -44,6 +44,7 @@ SRCS(
     partitioning_keys_manager_ut.cpp
     pq_ut.cpp
     partition_ut.cpp
+    read_retention_ut.cpp
     partitiongraph_ut.cpp
     pqtablet_ut.cpp
     sourceid_ut.cpp

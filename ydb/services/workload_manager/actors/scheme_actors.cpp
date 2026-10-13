@@ -42,7 +42,9 @@ public:
 
     void StartPoolFetchRequest() const {
         LOG_D("Start pool fetching");
-        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, Event->Get()->UserToken, WorkloadManagerConfig));
+        // Right after the default pool is created the scheme cache may still hold the negative entry, so it is synced
+        Register(CreatePoolFetcherActor(SelfId(), Event->Get()->DatabaseId, Event->Get()->PoolId, Event->Get()->UserToken, WorkloadManagerConfig,
+            DefaultPoolCreated));
     }
 
     void Handle(TEvPrivate::TEvFetchPoolResponse::TPtr& ev) {
@@ -128,11 +130,12 @@ private:
 
 class TPoolFetcherActor : public TSchemeActorBase<TPoolFetcherActor> {
 public:
-    TPoolFetcherActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TPoolFetcherActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool syncVersion)
         : ReplyActorId(replyActorId)
         , DatabaseId(databaseId)
         , PoolId(poolId)
         , UserToken(userToken)
+        , SyncVersion(syncVersion)
     {}
 
     void DoBootstrap() {
@@ -191,6 +194,7 @@ protected:
         );
         event->ResultSet[0].Access |= NACLib::SelectRow;
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        event->ResultSet[0].SyncVersion = SyncVersion;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
 
@@ -236,6 +240,7 @@ private:
     const TString DatabaseId;
     const TString PoolId;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const bool SyncVersion;
 
     NResourcePool::TPoolSettings PoolConfig;
     NKikimrProto::TPathID PathId;
@@ -628,11 +633,11 @@ IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bool defaul
     return new TPoolResolverActor(std::move(event), defaultPoolExists, workloadManagerConfig);
 }
 
-IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig) {
+IActor* CreatePoolFetcherActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig, bool syncVersion) {
     if (workloadManagerConfig.GetEnabled()) {
         return new TStaticPoolFetcherActor(replyActorId, databaseId, poolId, workloadManagerConfig);
     }
-    return new TPoolFetcherActor(replyActorId, databaseId, poolId, userToken);
+    return new TPoolFetcherActor(replyActorId, databaseId, poolId, userToken, syncVersion);
 }
 
 IActor* CreatePoolCreatorActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl) {

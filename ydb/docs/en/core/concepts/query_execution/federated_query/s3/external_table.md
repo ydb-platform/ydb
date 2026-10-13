@@ -25,8 +25,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
   DATA_SOURCE="bucket",
   LOCATION="folder",
   FORMAT="csv_with_names",
-  COMPRESSION="gzip",
-  ON_MISSING_FILE="warn"
+  COMPRESSION="gzip"
 );
 ```
 
@@ -37,9 +36,6 @@ Where:
 - `folder` - path within the bucket containing the data;
 - `csv_with_names` - one of the [permitted data storage formats](formats.md);
 - `gzip` - one of the [permitted compression algorithms](formats.md#compression).
-- `warn` - skip an object that disappears during a read and report a warning. Use `ignore` to skip without a warning or `fail` (the default) to fail the query.
-
-With `ignore` or `warn`, rows already read from an object before it disappears may remain in the result. Queries and `INSERT ... SELECT` can therefore return incomplete data when an object is skipped. Other read errors, including access denied and invalid file contents, still fail the query.
 
 You can also specify [format settings](external_data_source.md#format_settings).
 

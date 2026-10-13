@@ -1,7 +1,6 @@
 |Setting name|Description|Possible values|
 |----|----|---|
 |`file_pattern`|File name template|File name template string. Wildcards `*` are supported.|
-|`on_missing_file`|What to do when an object disappears while a query reads it|`fail` (default), `ignore`, or `warn`. `warn` skips the object and reports a warning.|
 |`data.interval.unit`|Unit for parsing `Interval` type|`MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS`, `WEEKS`|
 |`data.datetime.format_name`|Predefined format in which `Datetime` data is stored|`POSIX`, `ISO`|
 |`data.datetime.format`|Strftime-like template which defines how `Datetime` data is stored|Formatting string, for example: `%Y-%m-%dT%H-%M`|

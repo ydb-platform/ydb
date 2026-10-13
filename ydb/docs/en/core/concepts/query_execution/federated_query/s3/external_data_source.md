@@ -89,8 +89,6 @@ Where:
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.
 * `format_settings` — optional [format settings](#format_settings)
 
-For a direct SQL read, add `ON_MISSING_FILE = "ignore"` or `ON_MISSING_FILE = "warn"` to the same `WITH` clause to skip objects that disappear during the read. The default is `"fail"`. With `warn`, the query also reports a warning. Rows already read from a skipped object may remain in the result, so the result may be incomplete.
-
 ### Data Schema Description {#schema}
 
 The data schema description consists of a set of fields:

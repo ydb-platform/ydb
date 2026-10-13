@@ -206,7 +206,17 @@ public:
 
             events[i].Operation = op;
 
-            events[i].Result = RetErrnoToContextError(ioEvents[i].res, "ioEvents[].res");
+            const i64 completedBytes = ioEvents[i].res;
+            events[i].Result = RetErrnoToContextError(completedBytes, "ioEvents[].res");
+            // A successful read/write must transfer the entire requested buffer.
+            // In particular, EOF and positive short I/O must not acknowledge data
+            // that was never read or persisted.
+            if (events[i].Result == EIoResult::Ok
+                    && (op->GetType() == IAsyncIoOperation::EType::PRead
+                        || op->GetType() == IAsyncIoOperation::EType::PWrite)
+                    && static_cast<ui64>(completedBytes) != op->GetSize()) {
+                events[i].Result = EIoResult::IOError;
+            }
 
             events[i].Operation->ExecCallback(&events[i]);
 

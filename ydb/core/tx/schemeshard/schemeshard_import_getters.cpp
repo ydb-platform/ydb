@@ -1795,6 +1795,8 @@ class TYtSchemeGetter : public TGetterFromS3<TYtSchemeGetter>, public IActorExce
     static constexpr ui64 CHUNK_BYTES = 64 * 1024;
     static constexpr ui64 MAX_METADATA_BYTES = 16 * 1024 * 1024;
     static constexpr ui64 MAX_FIRST_ROW_BYTES = 16 * 1024 * 1024;
+    // Column source plans are bounded independently of destination shard quotas.
+    static constexpr ui64 MAX_COLUMN_SOURCE_PARTS = 35'000;
 
 public:
     TYtSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, ui64 maxParts)
@@ -1995,8 +1997,10 @@ private:
             if (!NBackup::NYt::ParsePartKey(Prefix, lastKey, range, error)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, error);
             }
-            if (ui64(Plan.PartsSize()) >= MaxParts) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "YT import exceeds initial partition limit");
+            const bool columnDestination = ImportInfo->GetS3Settings().destination_store_type() == Ydb::Table::STORE_TYPE_COLUMN;
+            if (ui64(Plan.PartsSize()) >= (columnDestination ? MAX_COLUMN_SOURCE_PARTS : MaxParts)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, columnDestination
+                    ? "YT import exceeds source part limit" : "YT import exceeds initial partition limit");
             }
             auto* part = Plan.AddParts();
             part->SetObjectKey(lastKey);

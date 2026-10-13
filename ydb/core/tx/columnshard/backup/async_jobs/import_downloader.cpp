@@ -258,7 +258,7 @@ private:
     THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     TImportDownloaderCounters Counters;
     TMaybe<NKikimrSchemeOp::TYtImportPlan> YtPlan;
-    int PartIndex = 0;
+    size_t PartIndex = 0;
 };
 
 std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId,

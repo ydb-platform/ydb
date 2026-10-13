@@ -200,7 +200,7 @@ Use `--source-format yt` with an explicit `--item` for each table. The source is
   --item src=backups/orders,dst=orders
 ```
 
-By default, this creates a row table. Add `--destination-store column` to create a column table. Column imports currently create one ColumnShard for the whole table; after a shard restart, data is replayed from the beginning. The exporter does not save YT's `optimize_for` attribute, so the destination type is selected explicitly.
+By default, this creates a row table. Add `--destination-store column` to create a column table. Column imports accept up to 35,000 data objects per table and currently create one ColumnShard for the whole table; after a shard restart, data is replayed from the beginning. The exporter does not save YT's `optimize_for` attribute, so the destination type is selected explicitly.
 
 The cluster administrator must enable the `EnableImportFromYt` feature flag after upgrading all SchemeShard, DataShard, and ColumnShard hosts. Column imports also require `EnableColumnTablesBackup`. Active YT imports must finish or be cancelled before those hosts are downgraded.
 

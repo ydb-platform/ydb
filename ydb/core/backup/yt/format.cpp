@@ -80,6 +80,7 @@ namespace NKikimr::NBackup::NYt {
             Check(!key || (type.Id != Ydb::Type::FLOAT && type.Id != Ydb::Type::DOUBLE), "Floating point YT keys are unsupported");
             auto* column = schema.Table.add_columns();
             column->set_name(name);
+            column->set_not_null(!nullable);
             auto* target = column->mutable_type();
             if (nullable) {
                 target = target->mutable_optional_type()->mutable_item();

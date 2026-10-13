@@ -85,8 +85,8 @@ namespace NYdb::NConsoleClient {
         }
 
         Y_UNIT_TEST(RejectsInvalidDestination) {
-            UNIT_ASSERT_EXCEPTION(ParseImportSettings({"--source-format", "yt", "--destination-store", "invalid"}), TMisuseException);
-            UNIT_ASSERT_EXCEPTION(ParseImportSettings({"--source-format", "yt", "--destination-store", ""}), TMisuseException);
+            UNIT_ASSERT_EXCEPTION(ParseImportSettings({"--source-format", "yt", "--destination-store", "invalid"}), NLastGetopt::TUsageException);
+            UNIT_ASSERT_EXCEPTION(ParseImportSettings({"--source-format", "yt", "--destination-store", ""}), NLastGetopt::TUsageException);
         }
     } // Y_UNIT_TEST_SUITE(ImportYtSource)
 

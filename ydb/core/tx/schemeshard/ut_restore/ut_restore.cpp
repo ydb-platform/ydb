@@ -4129,7 +4129,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         ];user_attributes={}})";
     }
 
-    TString YtPart(std::initializer_list<ui64> keys) {
+    TString YtPart(std::initializer_list<ui64> keys, bool nullValues = false) {
         TString binary;
         TStringOutput output(binary);
         NYson::TYsonWriter writer(&output, NYson::EYsonFormat::Binary, NYson::EYsonType::ListFragment);
@@ -4139,7 +4139,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             writer.OnKeyedItem("key");
             writer.OnUint64Scalar(key);
             writer.OnKeyedItem("value");
-            writer.OnStringScalar(ToString(key));
+            if (nullValues) {
+                writer.OnEntity();
+            } else {
+                writer.OnStringScalar(ToString(key));
+            }
             writer.OnEndMap();
         }
         TString compressed;
@@ -4365,10 +4369,22 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return Run(runtime, env, std::move(data), YtImportRequest("destination_store_type: STORE_TYPE_COLUMN"), expectedStatus);
     }
 
-    void CheckYtColumnRows(TTestBasicRuntime& runtime, std::initializer_list<ui64> expected) {
+    void CheckYtColumnRows(TTestBasicRuntime& runtime, std::initializer_list<ui64> expected, bool nullValues = false) {
         const auto describe = DescribePath(runtime, "/MyRoot/Table");
         const auto& path = describe.GetPathDescription();
         UNIT_ASSERT(path.HasColumnTableDescription());
+        const auto& columns = path.GetColumnTableDescription().GetSchema().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        for (const auto& column : columns) {
+            if (column.GetName() == "key") {
+                UNIT_ASSERT(column.GetNotNull());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetName(), "value");
+                UNIT_ASSERT(!column.GetNotNull());
+            }
+        }
+    }
+
         const auto& shards = path.GetColumnTableDescription().GetSharding().GetColumnShards();
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
         NTxUT::TShardReader reader(runtime, shards.Get(0), path.GetSelf().GetPathId(), NOlap::TSnapshot::Zero());
@@ -4386,7 +4402,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             for (ui64 key : expected) {
                 UNIT_ASSERT(!keys->IsNull(index));
                 UNIT_ASSERT_VALUES_EQUAL(keys->Value(index), key);
-                UNIT_ASSERT_VALUES_EQUAL(values->GetString(index), ToString(key));
+                UNIT_ASSERT_VALUES_EQUAL(values->IsNull(index), nullValues);
+                if (!nullValues) {
+                    UNIT_ASSERT_VALUES_EQUAL(values->GetString(index), ToString(key));
+                }
                 ++index;
             }
         }
@@ -4397,6 +4416,83 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         RunYtColumn(runtime, {{"/table_metadata.yson", YtMetadata()},
             {"/table_0_1", YtPart({10, 20})}, {"/table_2_3", YtPart({100, 200})}});
         CheckYtColumnRows(runtime, {10, 20, 100, 200});
+    }
+
+    Y_UNIT_TEST(YtColumnNullableValue) {
+        TTestBasicRuntime runtime;
+        RunYtColumn(runtime, {{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_1", YtPart({10, 20}, true)}});
+        CheckYtColumnRows(runtime, {10, 20}, true);
+    }
+
+    Y_UNIT_TEST(YtColumnLaterPartFailureCanBeCleanedUp) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        ui32 persistedBatches = 0;
+        auto acknowledgements = runtime.AddObserver<NColumnShard::TEvPrivate::TEvBackupImportRecordBatchResult>([&](auto&) {
+            ++persistedBatches;
+        });
+        const auto id = Run(runtime, env, {{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_1", YtPart({10, 20})}, {"/table_2_3", YtPart({100})}},
+            YtImportRequest("destination_store_type: STORE_TYPE_COLUMN"), Ydb::StatusIds::CANCELLED);
+        acknowledgements.Remove();
+        UNIT_ASSERT_GT(persistedBatches, 0);
+        const auto issues = ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "table_2_3");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "row count does not match planned range");
+        // Import cancellation retains its destination; explicit cleanup must not be blocked by restore state.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
+        TestForgetImport(runtime, id + 1, "/MyRoot", id);
+        TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, DropColumnTableRequest(id + 2, "/MyRoot", "Table"));
+        TestModificationResults(runtime, id + 2, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, id + 2);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    Y_UNIT_TEST(YtColumnSourcePartsDoNotCountAsDestinationShards) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        TSchemeLimits limits;
+        limits.MaxShardsInPath = 1;
+        SetSchemeshardSchemaLimits(runtime, limits);
+        Run(runtime, env, {{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_1", YtPart({10, 20})}, {"/table_2_3", YtPart({100, 200})}},
+            YtImportRequest("destination_store_type: STORE_TYPE_COLUMN"));
+        CheckYtColumnRows(runtime, {10, 20, 100, 200});
+    }
+
+    Y_UNIT_TEST(YtColumnRequiredValuePreservesNotNull) {
+        TTestBasicRuntime runtime;
+        const TString metadata = R"({schema=<strict=%true;unique_keys=%true>[
+            {name=key;type_v3=uint64;sort_order=ascending};
+            {name=value;type_v3=utf8}
+        ];user_attributes={}})";
+        RunYtColumn(runtime, {{"/table_metadata.yson", metadata}, {"/table_0_0", YtPart({10})}});
+        const auto describe = DescribePath(runtime, "/MyRoot/Table");
+        const auto& path = describe.GetPathDescription();
+        UNIT_ASSERT(path.HasColumnTableDescription());
+        const auto& columns = path.GetColumnTableDescription().GetSchema().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        for (const auto& column : columns) {
+            UNIT_ASSERT(column.GetName() == "key" || column.GetName() == "value");
+            UNIT_ASSERT(column.GetNotNull());
+        }
+    Y_UNIT_TEST(YtRowSourcePartsRespectDestinationShardLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        TSchemeLimits limits;
+        limits.MaxShardsInPath = 1;
+        SetSchemeshardSchemaLimits(runtime, limits);
+        // The source limit is checked during asynchronous planning, after the import was admitted.
+        const auto id = Run(runtime, env, {{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_1", YtPart({10, 20})}, {"/table_2_3", YtPart({100, 200})}},
+            YtImportRequest("destination_store_type: STORE_TYPE_ROW"), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED), "initial partition limit");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(YtColumnEmptyTable) {

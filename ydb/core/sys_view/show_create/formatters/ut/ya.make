@@ -3,6 +3,7 @@ UNITTEST()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/sys_view/show_create/formatters
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 )
 

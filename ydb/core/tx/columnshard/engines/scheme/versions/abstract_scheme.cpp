@@ -98,6 +98,22 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
 #endif
 
     NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
+    if (mType != NEvWrite::EModificationType::Delete) {
+        for (const auto columnId : GetIndexInfo().GetSetNotNullColumnIds()) {
+            const auto& column = GetIndexInfo().GetColumnFeaturesVerified(columnId);
+            const auto values = incomingBatch->GetColumnByName(column.GetColumnName());
+            if (!values || values->null_count()) {
+                return TConclusionStatus::Fail("SET NOT NULL is in progress for column '" + column.GetColumnName() + "'");
+            }
+            if (const auto exists = incomingBatch->GetColumnByName("$$EXISTS::" + column.GetColumnName())) {
+                if (exists->type_id() != arrow::Type::BOOL ||
+                    static_cast<const arrow::BooleanArray&>(*exists).true_count() != incomingBatch->num_rows()) {
+                    return TConclusionStatus::Fail("SET NOT NULL requires an unconditional value for column '" +
+                        column.GetColumnName() + "'");
+                }
+            }
+        }
+    }
     std::vector<std::shared_ptr<arrow::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;
@@ -106,7 +122,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             return TConclusionStatus::Success();
         }
         const auto& incomingColumn = incomingBatch->column(incomingIdx);
-        const auto hasNull = NArrow::HasNulls(incomingColumn);
+        const bool hasNull = incomingColumn->null_count() != 0;
         const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
         const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {

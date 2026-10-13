@@ -12,6 +12,46 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetNotNullTest) {
+    Y_UNIT_TEST_TWIN(ColumnTableAdmissionFeatureFlag, Enabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTableSetNotNull(Enabled);
+        TestCreateColumnTable(runtime, 100, "/MyRoot", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "key"
+            }
+        )");
+        env.TestWaitNotification(runtime, 100);
+        TestAlterColumnTable(runtime, 102, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "value" NotNull: true } }
+        )", {NKikimrScheme::StatusSchemeError});
+        TestAlterColumnTable(runtime, 103, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AlterColumns { Name: "value" SetNotNullInProgress: true } }
+        )", {NKikimrScheme::StatusSchemeError});
+        auto response = TestSetColumnConstraint(runtime, 101, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/ColumnTable", {"value"});
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), Enabled ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNSUPPORTED,
+            response.ShortDebugString());
+        if constexpr (Enabled) {
+            env.TestWaitNotification(runtime, 101);
+        }
+        auto description = DescribePath(runtime, "/MyRoot/ColumnTable");
+        const auto& columns = description.GetPathDescription().GetColumnTableDescription().GetSchema().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        for (const auto& column : columns) {
+            if (column.GetName() == "value") {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetNotNull(), Enabled);
+                UNIT_ASSERT(!column.GetSetNotNullInProgress());
+            }
+        }
+    }
+
     Y_UNIT_TEST(BasicRequest) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

@@ -118,6 +118,15 @@ bool TOperationsManager::HasWriteOperations(const TInternalPathId pathId) const 
     return false;
 }
 
+bool TOperationsManager::HasWriteOperationsBeforeSchema(const TInternalPathId pathId, ui64 schemaVersion) const {
+    for (const auto& [_, operation] : Operations) {
+        if (operation->GetPathId().InternalPathId == pathId && operation->GetSchemaVersion() < schemaVersion) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
     for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
         if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {

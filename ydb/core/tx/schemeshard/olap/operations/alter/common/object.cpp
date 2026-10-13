@@ -18,6 +18,11 @@ TConclusion<std::shared_ptr<ISSEntityUpdate>> TColumnTableEntity::DoRestoreUpdat
     NKikimrSchemeOp::TModifyScheme mScheme;
     *mScheme.MutableAlterColumnTable() = *tableInfo->AlterData->AlterBody;
     mScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
+    // Restore the guard of the already accepted internal constraint transition.
+    if (const auto* lockId = ssContext.SS->LockedPaths.FindPtr(GetPathId())) {
+        mScheme.SetInternal(true);
+        mScheme.MutableLockGuard()->SetOwnerTxId(ui64(*lockId));
+    }
     TUpdateInitializationContext uContext(&context.GetOriginalEntity(), context.GetSSOperationContext(), &mScheme, context.GetTxId());
     return DoCreateUpdateImpl(uContext);
 }

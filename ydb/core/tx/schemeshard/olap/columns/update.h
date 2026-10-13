@@ -19,9 +19,11 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NAccessor::TRequestedConstructorContainer>, AccessorConstructor);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
     YDB_READONLY_DEF(std::optional<bool>, NotNull);
+    YDB_READONLY_DEF(std::optional<bool>, SetNotNullInProgress);
 
 public:
-    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors);
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors,
+        bool allowConstraintChanges = false);
 };
 
 class TOlapColumnBase {
@@ -32,6 +34,7 @@ private:
     YDB_READONLY_DEF(NScheme::TTypeInfo, Type);
     YDB_READONLY_DEF(TString, StorageId);
     YDB_FLAG_ACCESSOR(NotNull, false);
+    YDB_FLAG_ACCESSOR(SetNotNullInProgress, false);
     YDB_ACCESSOR_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
@@ -76,7 +79,8 @@ private:
     YDB_READONLY_DEF(TVector<TString>, PrimaryKeyColumnNames);
 public:
     bool Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys = false);
-    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
+    bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors,
+        bool allowConstraintChanges = false);
 };
 
 }

@@ -428,7 +428,11 @@ class TestRescaling(StreamingTestBase):
         partitions_count = 8
         query_name = entity_name("pq_source_continuation_scale_up_and_down")
         inp, out, _ = self.get_io_names(
-            kikimr, query_name, local_topics, entity_name, partitions_count=partitions_count,
+            kikimr,
+            query_name,
+            local_topics,
+            entity_name,
+            partitions_count=partitions_count,
         )
         client = self.get_ydb_client(kikimr, local_topics)
 

@@ -1,5 +1,7 @@
 PY3_PROGRAM(federated_queries)
 
+STYLE_PYTHON()
+
 PY_SRCS(
     __main__.py
 )

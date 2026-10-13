@@ -662,7 +662,8 @@ private:
 
             i64 startTime;
             if (!TryFromString(*startTimeString, startTime)) {
-                YT_TLOG_WARNING("Failed to parse start time from request metadata")
+                YT_TLOG_WARNING("Malformed start time")
+                    .With("MalformedStartTime", *startTimeString)
                     .With("RequestId", RequestId_);
                 return;
             }

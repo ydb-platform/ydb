@@ -1,10 +1,9 @@
 #pragma once
 #include "factories.h"
 
-#include <ydb/core/kqp/runtime/kqp_program_builder.h>
+#include <ydb/core/kqp/runtime/common/kqp_program_builder.h>
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
-
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -1922,7 +1922,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckVDiskReplicationStatus(true);
     }
 
-    void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true) {
+    void CheckPDiskControllerStatuses(bool groups, bool whiteboardAvailable = true, TStringBuf pdisksSort = {}) {
         // Controller statuses are joined by NodeId/PDiskId even when GUIDs differ.
         // The response keeps the Whiteboard disk identity and the BSC statuses.
         TPortManager tp;
@@ -2048,7 +2048,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     for (ui32 pdiskId : {1, 2, 3, 4, 5, 6}) {
                         auto* pdisk = record.AddPDiskStateInfo();
                         pdisk->SetPDiskId(pdiskId);
-                        pdisk->SetPath(Sprintf("/dev/whiteboard-%u", pdiskId));
+                        pdisk->SetPath(Sprintf("/dev/whiteboard-%u", groups ? pdiskId : 7 - pdiskId));
                         pdisk->SetState(NKikimrBlobStorage::TPDiskState::Normal);
                         if (groups) {
                             pdisk->SetTotalSize(2048);
@@ -2067,6 +2067,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         TString path = groups ? "/storage/groups?fields_required=VDisk,PDisk,Read" :
             "/viewer/json/nodes?type=static&fields_required=NodeId,PDisks&offload_merge=false";
+        if (!groups && pdisksSort) {
+            path += "&pdisks_sort=";
+            path += pdisksSort;
+        }
         if (!whiteboardAvailable) {
             path += "&timeout=100";
         }
@@ -2086,6 +2090,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         }
         const auto& items = json.GetMap().at(groups ? "StorageGroups" : "Nodes").GetArray();
         UNIT_ASSERT_VALUES_EQUAL(items.size(), groups ? groupCount : 1);
+        std::vector<ui32> pdiskIds;
         for (const auto& item : items) {
             const auto& disks = item.GetMap().at(groups ? "VDisks" : "PDisks").GetArray();
             UNIT_ASSERT_VALUES_EQUAL(disks.size(), groups ? 1 : 6);
@@ -2103,7 +2108,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     const auto& whiteboard = groups ? fields.at("Whiteboard").GetMap() : fields;
                     pdiskId = whiteboard.at("PDiskId").GetUInteger();
                     UNIT_ASSERT_VALUES_EQUAL(whiteboard.at("State").GetString(), "Normal");
-                    UNIT_ASSERT_VALUES_EQUAL(fields.at("Path").GetString(), Sprintf("/dev/whiteboard-%u", pdiskId));
+                    UNIT_ASSERT_VALUES_EQUAL(fields.at("Path").GetString(), Sprintf("/dev/whiteboard-%u", groups ? pdiskId : 7 - pdiskId));
+                    if (!groups) {
+                        pdiskIds.push_back(pdiskId);
+                    }
                     if (pdiskId == 1) {
                         UNIT_ASSERT_VALUES_EQUAL(fields.at("Guid").GetString(), "1001");
                     } else if (pdiskId == 5) {
@@ -2134,10 +2142,23 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 }
             }
         }
+        if (!groups) {
+            const std::array<ui32, 6> expected = pdisksSort == "PDiskId"
+                ? std::array<ui32, 6>{1, 2, 3, 4, 5, 6}
+                : std::array<ui32, 6>{6, 5, 4, 3, 2, 1};
+            UNIT_ASSERT_VALUES_EQUAL(pdiskIds.size(), expected.size());
+            for (size_t i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(pdiskIds[i], expected[i]);
+            }
+        }
     }
 
     Y_UNIT_TEST(NodesPagePDiskControllerStatuses) {
         CheckPDiskControllerStatuses(false);
+    }
+
+    Y_UNIT_TEST(NodesPagePDiskSortById) {
+        CheckPDiskControllerStatuses(false, true, "PDiskId");
     }
 
     Y_UNIT_TEST(StorageGroupsPDiskControllerStatuses) {

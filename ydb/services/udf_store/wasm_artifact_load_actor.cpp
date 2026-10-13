@@ -17,6 +17,8 @@
 
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NUdfStore {
 
 void TWasmArtifactLoadActor::Bootstrap() {
@@ -350,9 +352,9 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
             TStringBuilder() << "wasm:" << Name_,
             Name_,
             std::move(module));
-        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TWasmArtifactLoadActor: registered wasm UDF '" << Name_
-            << "' with libraries=[" << JoinSeq(",", ParsedManifest_.RequiredLibraries) << "]";
+        YDB_LOG_INFO("TWasmArtifactLoadActor: registered wasm UDF with libraries",
+            {"name", Name_},
+            {"requiredLibraries", JoinSeq(",", ParsedManifest_.RequiredLibraries)});
         Send(ReplyTo_, new TEvReadBodyResponse(true, Name_, EUdfType::WASM));
         PassAway();
     } catch (const std::exception& ex) {
@@ -361,8 +363,8 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
 }
 
 void TWasmArtifactLoadActor::ReplyError(const TString& message) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-        << "TWasmArtifactLoadActor: " << message;
+    YDB_LOG_ERROR("TWasmArtifactLoadActor",
+        {"message", message});
     Send(ReplyTo_, new TEvReadBodyResponse(false, Name_, EUdfType::WASM, message));
     PassAway();
 }

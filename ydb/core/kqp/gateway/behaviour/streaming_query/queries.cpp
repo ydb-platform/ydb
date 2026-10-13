@@ -1,10 +1,6 @@
 #include "manager.h"
 #include "queries.h"
 
-#include <library/cpp/protobuf/interop/cast.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/retry/retry_policy.h>
-
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
@@ -14,10 +10,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -33,8 +29,11 @@
 #include <yql/essentials/core/sql_types/hopping.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-#include <fmt/format.h>
+#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/retry/retry_policy.h>
 
+#include <fmt/format.h>
 #include <google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY

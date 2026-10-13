@@ -112,11 +112,6 @@ namespace {
         with_lock (fixture.AccessServiceMock.MetadataMutex) {
             capturedService = fixture.AccessServiceMock.CapturedAuthenticateService;
         }
-        if (capturedService.empty()) {
-            with_lock (fixture.AccessServiceMockV2.MetadataMutex) {
-                capturedService = fixture.AccessServiceMockV2.CapturedAuthenticateService;
-            }
-        }
         return capturedService;
     }
 

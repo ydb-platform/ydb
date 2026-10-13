@@ -16,7 +16,6 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 import yatest.common
 
-
 logger = logging.getLogger(__name__)
 
 _DOCKER_COMPOSE_FILE_PATH = "ydb/tests/fq/yt/yt_integration/yt_in_docker/docker-compose.yml"
@@ -96,10 +95,17 @@ class YtClient:
         """Discover the running container name for this project."""
         compose_file = self._get_compose_file_abs_path()
         cmd = [
-            "docker", "compose",
-            "-f", compose_file,
-            "-p", self._compose_project_name,
-            "ps", "--format", "{{.Name}}", "--filter", "status=running",
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "-p",
+            self._compose_project_name,
+            "ps",
+            "--format",
+            "{{.Name}}",
+            "--filter",
+            "status=running",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
         if result.returncode != 0:
@@ -112,10 +118,15 @@ class YtClient:
     def _resolve_rpc_proxy_address(self) -> str:
         compose_file = self._get_compose_file_abs_path()
         cmd = [
-            "docker", "compose",
-            "-f", compose_file,
-            "-p", self._compose_project_name,
-            "port", "yt", "8443",
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "-p",
+            self._compose_project_name,
+            "port",
+            "yt",
+            "8443",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
         if result.returncode != 0:
@@ -129,10 +140,15 @@ class YtClient:
     def _resolve_proxy_url(self) -> str:
         compose_file = self._get_compose_file_abs_path()
         cmd = [
-            "docker", "compose",
-            "-f", compose_file,
-            "-p", self._compose_project_name,
-            "port", "yt", "80",
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "-p",
+            self._compose_project_name,
+            "port",
+            "yt",
+            "80",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
         if result.returncode != 0:
@@ -159,7 +175,8 @@ class YtClient:
         for attempt in range(60):
             result = self._run_yt_cli(
                 ["get", "//sys/tablet_cell_bundles/default/@health"],
-                check=False, timeout=10,
+                check=False,
+                timeout=10,
             )
             if "good" in result.stdout:
                 logger.info("Tablet bundle healthy after %d attempts", attempt + 1)
@@ -172,7 +189,8 @@ class YtClient:
         try:
             self._run_yt_cli(
                 ["set", "//sys/accounts/tmp/@resource_limits/tablet_count", "1000"],
-                check=True, timeout=30,
+                check=True,
+                timeout=30,
             )
         except Exception as e:
             logger.warning("Failed to configure cluster (tablet count limit): %s", e)
@@ -273,12 +291,7 @@ class YtClient:
 
         ``columns`` maps column name to YT type string, e.g. ``{"key": "string", "value": "int64"}``.
         """
-        attributes = {
-            "schema": [
-                {"name": name, "type": col_type}
-                for name, col_type in columns.items()
-            ]
-        }
+        attributes = {"schema": [{"name": name, "type": col_type} for name, col_type in columns.items()]}
         self._api_call(
             "create",
             params={"path": path, "type": "table"},
@@ -304,7 +317,8 @@ class YtClient:
         try:
             self._run_yt_cli(
                 ["unmount-table", "--sync", path],
-                check=True, timeout=60,
+                check=True,
+                timeout=60,
             )
         except Exception:
             pass
@@ -331,23 +345,33 @@ class YtClient:
         )
         self._run_yt_cli(
             ["create", "table", path, "--attributes", attrs],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
         if tablet_count != 1:
             self._run_yt_cli(["reshard-table", path, "--tablet-count", str(tablet_count)], check=True, timeout=timeout)
         self._run_yt_cli(
             ["mount-table", path, "--sync"],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
 
     def insert_rows(self, path: str, rows: List[Dict[str, Any]], timeout: int = 120) -> None:
         """Insert rows into a mounted dynamic table via JSON newline-delimited format."""
         if not rows:
             return
-        data = "\n".join(json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()}) for row in rows) + "\n"
+        data = (
+            "\n".join(
+                json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()})
+                for row in rows
+            )
+            + "\n"
+        )
         self._run_yt_cli(
             ["insert-rows", "--format=json", path],
-            input_data=data, check=True, timeout=timeout,
+            input_data=data,
+            check=True,
+            timeout=timeout,
         )
 
     def write_table(self, path: str, rows: List[Dict[str, Any]], timeout: int = 120) -> None:
@@ -356,7 +380,9 @@ class YtClient:
         data = "\n".join(json.dumps(row) for row in rows) + "\n"
         self._run_yt_cli(
             ["write-table", "--format=json", path],
-            input_data=data, check=True, timeout=timeout,
+            input_data=data,
+            check=True,
+            timeout=timeout,
         )
 
     def read_table(self, path: str) -> List[Dict[str, Any]]:
@@ -375,7 +401,8 @@ class YtClient:
         """Read a single attribute value using yt CLI (returns raw stdout)."""
         result = self._run_yt_cli(
             ["get", path],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
         return result.stdout.strip()
 
@@ -401,26 +428,30 @@ class YtClient:
         if as_json:
             self._run_yt_cli(
                 ["set", "--format", "json", path, json.dumps(value)],
-                check=True, timeout=timeout,
+                check=True,
+                timeout=timeout,
             )
         else:
             self._run_yt_cli(
                 ["set", path, str(value)],
-                check=True, timeout=timeout,
+                check=True,
+                timeout=timeout,
             )
 
     def create_node(self, path: str, type_: str, timeout: int = 60) -> None:
         """Create a node of the given type at the specified path."""
         self._run_yt_cli(
             ["create", type_, path],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
 
     def download(self, path: str, timeout: int = 60) -> str:
         """Download content from a file node."""
         result = self._run_yt_cli(
             ["download", path],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
         return result.stdout
 
@@ -430,7 +461,8 @@ class YtClient:
         """Create a queue consumer at the given path."""
         self._run_yt_cli(
             ["create", "queue_consumer", path],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
 
     def register_consumer(
@@ -444,7 +476,8 @@ class YtClient:
         vital_flag = "--vital" if vital else "--non-vital"
         self._run_yt_cli(
             ["register-queue-consumer", queue_path, consumer_path, vital_flag],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
 
     def list_queue_consumer_registrations(
@@ -455,7 +488,8 @@ class YtClient:
         """List queue consumer registrations for a queue."""
         return self._run_yt_cli(
             ["list-queue-consumer-registrations", "--queue-path", queue_path],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
 
     def get_queue_status(self, queue_path: str, timeout: int = 60) -> str:
@@ -479,13 +513,23 @@ class YtClient:
 
         Returns a list of parsed row dicts (one JSON object per line in output).
         """
-        result = self._run_yt_cli([
-            "pull-queue-consumer", consumer_path, queue_path,
-            "--partition-index", str(partition_index),
-            "--offset", str(offset),
-            "--max-row-count", str(max_row_count),
-            "--format", "json",
-        ], check=True, timeout=timeout)
+        result = self._run_yt_cli(
+            [
+                "pull-queue-consumer",
+                consumer_path,
+                queue_path,
+                "--partition-index",
+                str(partition_index),
+                "--offset",
+                str(offset),
+                "--max-row-count",
+                str(max_row_count),
+                "--format",
+                "json",
+            ],
+            check=True,
+            timeout=timeout,
+        )
         return self._parse_json_lines(result.stdout)
 
     def advance_queue_consumer(
@@ -503,18 +547,28 @@ class YtClient:
         ``old_offset`` is the current consumer offset (used for optimistic
         concurrency control by the Queue Agent); defaults to 0.
         """
-        self._run_yt_cli([
-            "advance-queue-consumer", consumer_path, queue_path,
-            "--partition-index", str(partition_index),
-            "--old-offset", str(old_offset),
-            "--new-offset", str(new_offset),
-        ], check=True, timeout=timeout)
+        self._run_yt_cli(
+            [
+                "advance-queue-consumer",
+                consumer_path,
+                queue_path,
+                "--partition-index",
+                str(partition_index),
+                "--old-offset",
+                str(old_offset),
+                "--new-offset",
+                str(new_offset),
+            ],
+            check=True,
+            timeout=timeout,
+        )
 
     def create_queue_producer(self, path: str, timeout: int = 60) -> None:
         """Create a queue producer at the given path."""
         self._run_yt_cli(
             ["create", "queue_producer", path],
-            check=True, timeout=timeout,
+            check=True,
+            timeout=timeout,
         )
 
     def create_queue_producer_session(
@@ -525,12 +579,19 @@ class YtClient:
         timeout: int = 60,
     ) -> None:
         """Create a queue producer session."""
-        self._run_yt_cli([
-            "create-queue-producer-session",
-            "--queue-path", queue_path,
-            "--producer-path", producer_path,
-            "--session-id", session_id,
-        ], check=True, timeout=timeout)
+        self._run_yt_cli(
+            [
+                "create-queue-producer-session",
+                "--queue-path",
+                queue_path,
+                "--producer-path",
+                producer_path,
+                "--session-id",
+                session_id,
+            ],
+            check=True,
+            timeout=timeout,
+        )
 
     def push_queue_producer(
         self,
@@ -549,16 +610,29 @@ class YtClient:
         Otherwise *input_data* is used as-is (raw YSON or other format).
         """
         if rows is not None:
-            input_data = "\n".join(
-                json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()})
-                for row in rows
-            ) + "\n"
-        self._run_yt_cli([
-            "push-queue-producer", producer_path, queue_path,
-            "--session-id", session_id,
-            "--epoch", str(epoch),
-            "--input-format", input_format,
-        ], input_data=input_data, check=True, timeout=timeout)
+            input_data = (
+                "\n".join(
+                    json.dumps({("$" + key if key.startswith("$") else key): value for key, value in row.items()})
+                    for row in rows
+                )
+                + "\n"
+            )
+        self._run_yt_cli(
+            [
+                "push-queue-producer",
+                producer_path,
+                queue_path,
+                "--session-id",
+                session_id,
+                "--epoch",
+                str(epoch),
+                "--input-format",
+                input_format,
+            ],
+            input_data=input_data,
+            check=True,
+            timeout=timeout,
+        )
 
     def pull_queue(
         self,
@@ -571,10 +645,18 @@ class YtClient:
 
         Returns a list of parsed row dicts (one JSON object per line in output).
         """
-        result = self._run_yt_cli([
-            "pull-queue", queue_path,
-            "--offset", str(offset),
-            "--partition-index", str(partition_index),
-            "--format", "json",
-        ], check=True, timeout=timeout)
+        result = self._run_yt_cli(
+            [
+                "pull-queue",
+                queue_path,
+                "--offset",
+                str(offset),
+                "--partition-index",
+                str(partition_index),
+                "--format",
+                "json",
+            ],
+            check=True,
+            timeout=timeout,
+        )
         return self._parse_json_lines(result.stdout)

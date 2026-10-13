@@ -25,7 +25,6 @@ from ydb.tests.tools.fq_runner.kikimr_utils import YQV1_VERSION_NAME, YQV2_VERSI
 from ydb.tests.fq.s3.s3_helpers import S3
 from library.recipes import common as recipes_common
 
-
 MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
 S3_PID_FILE = "s3.pid"
 

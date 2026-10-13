@@ -633,4 +633,7 @@ message TTableServiceConfig {
     // Overridable per query via PRAGMA ydb.UseScalarHashJoinForMap.
     // Only the legacy optimizer honors it, NewRBO ignores it for now.
     optional bool UseScalarHashJoinForMap = 153 [default = false, (InvalidateCompileCache) = true];
+
+    // Allows to collect point predicates for each valid index and use them for index lookup join if applicable.
+    optional bool EnableLookupJoinPointPrefixes = 154 [default = false, (InvalidateCompileCache) = true];
 };

@@ -11,13 +11,13 @@ SRCS(
     config_helpers.cpp
     config_parser.cpp
     config_parser.h
-    factories.h
     factories.cpp
+    factories.h
     grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
-    main.h
     main.cpp
+    main.h
     run.cpp
     run.h
     service_initializer.cpp
@@ -75,9 +75,8 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kqp
     ydb/core/kqp/federated_query/actors
-    ydb/services/scheme_secret
-    ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
+    ydb/core/kqp/script_executions/finalization
     ydb/core/load_test
     ydb/core/log_backend
     ydb/core/memory_controller
@@ -86,10 +85,7 @@ PEERDIR(
     ydb/core/mind/address_classification
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
-    ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
-    ydb/core/subsystems/inmemory_metrics_monitoring
     ydb/core/mon
-    ydb/core/subsystems/actor_system_monitoring
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
@@ -107,6 +103,9 @@ PEERDIR(
     ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
+    ydb/core/subsystems/actor_system_monitoring
+    ydb/core/subsystems/inmemory_metrics_monitoring
+    ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
     ydb/core/tablet
@@ -116,14 +115,14 @@ PEERDIR(
     ydb/core/transfer
     ydb/core/tx
     ydb/core/tx/columnshard
+    ydb/core/tx/columnshard/column_fetching
+    ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/conveyor/service
     ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
-    ydb/core/tx/general_cache
-    ydb/core/tx/columnshard/data_accessor/cache_policy
-    ydb/core/tx/columnshard/column_fetching
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
+    ydb/core/tx/general_cache
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
@@ -159,9 +158,9 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
-    ydb/library/yql/providers/pq/cm_client
     ydb/library/slide_limiter/service
     ydb/library/slide_limiter/usage
+    ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
@@ -174,6 +173,7 @@ PEERDIR(
     ydb/services/datastreams
     ydb/services/deprecated/persqueue_v0
     ydb/services/discovery
+    ydb/services/distributed_storage
     ydb/services/dynamic_config
     ydb/services/fq
     ydb/services/kesus
@@ -182,16 +182,16 @@ PEERDIR(
     ydb/services/maintenance
     ydb/services/metadata
     ydb/services/metadata/ds_table
-    ydb/services/udf_store
-    ydb/services/udf_store/compile_controller
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
-    ydb/services/distributed_storage
+    ydb/services/scheme_secret
     ydb/services/tablet
     ydb/services/test_shard
+    ydb/services/udf_store
+    ydb/services/udf_store/compile_controller
     ydb/services/view
     ydb/services/workload_manager/service
     ydb/services/ydb
@@ -215,7 +215,6 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/libs/storage/volume
-
         ydb/services/nbs
     )
 ENDIF()

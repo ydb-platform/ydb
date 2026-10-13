@@ -1227,7 +1227,7 @@ protected:
             if (!std::binary_search(numbers.begin(), numbers.end(), number)) {
                 const auto* field = type->FindFieldByNumber(number);
                 YT_VERIFY(field);
-                YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+                YPathStack_.Push(field->GetYsonName());
                 THROW_ERROR_EXCEPTION("Missing required field %v",
                     YPathStack_.GetHumanReadablePath())
                     .With("ypath", YPathStack_.GetPath())
@@ -1244,7 +1244,7 @@ protected:
         for (auto index = 0; index + 1 < std::ssize(numbers); ++index) {
             if (numbers[index] == numbers[index + 1]) {
                 const auto* field = type->GetFieldByNumber(numbers[index]);
-                YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+                YPathStack_.Push(field->GetYsonName());
                 THROW_ERROR_EXCEPTION("Duplicate field %v",
                     YPathStack_.GetHumanReadablePath())
                     .With("ypath", YPathStack_.GetPath())
@@ -1741,7 +1741,7 @@ private:
             typeEntry.NonRequiredFieldNumbers.push_back(number);
         }
         FieldStack_.emplace_back(field);
-        YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+        YPathStack_.Push(field->GetYsonName());
 
         TryWriteCustomlyConvertibleType();
     }
@@ -2364,7 +2364,7 @@ private:
     void OnKeyedItem(const TProtobufField* field)
     {
         Consumer_->OnKeyedItem(field->GetYsonName());
-        YPathStack_.PushLiteral(std::string(field->GetYsonName()));
+        YPathStack_.Push(field->GetYsonName());
     }
 
     void OnKeyedItem(TStringBuf key)

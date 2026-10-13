@@ -92,6 +92,20 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
         break;
     }
 
+    switch (metadata.settings().destination_store_type()) {
+        case Ydb::Table::STORE_TYPE_UNSPECIFIED:
+            break;
+        case Ydb::Table::STORE_TYPE_ROW:
+            Metadata_.Settings.DestinationStoreType(EImportDestinationStoreType::Row);
+            break;
+        case Ydb::Table::STORE_TYPE_COLUMN:
+            Metadata_.Settings.DestinationStoreType(EImportDestinationStoreType::Column);
+            break;
+        default:
+            Metadata_.Settings.DestinationStoreType(EImportDestinationStoreType::Unknown);
+            break;
+    }
+
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
     Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
@@ -303,6 +317,19 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
         break;
     default:
         throw TContractViolation("Unknown S3 import source format");
+    }
+
+    if (settings.DestinationStoreType_) {
+        switch (*settings.DestinationStoreType_) {
+            case EImportDestinationStoreType::Row:
+                settingsProto.set_destination_store_type(Ydb::Table::STORE_TYPE_ROW);
+                break;
+            case EImportDestinationStoreType::Column:
+                settingsProto.set_destination_store_type(Ydb::Table::STORE_TYPE_COLUMN);
+                break;
+            default:
+                throw TContractViolation("Unknown S3 import destination store type");
+        }
     }
 
     for (const auto& item : settings.Item_) {

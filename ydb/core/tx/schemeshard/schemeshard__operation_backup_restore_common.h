@@ -720,20 +720,29 @@ public:
 
         if (TxType == TTxState::TxRestore && Transaction.GetRestore().GetYtSource()) {
             const auto& task = Transaction.GetRestore();
-            if (!task.HasYtImportPlan() || task.GetYtImportPlan().GetVersion() != 1 || !path->IsTable()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "YT restore requires a row table and a version 1 source plan");
+            if (!task.HasYtImportPlan() || task.GetYtImportPlan().GetVersion() != 1 || (!path->IsTable() && !path->IsColumnTable())) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "YT restore requires a table and a version 1 source plan");
                 return result;
             }
-            const auto& parts = task.GetYtImportPlan().GetParts();
-            const auto& partitions = context.SS->Tables.at(path.Base()->PathId)->GetPartitions();
-            if (partitions.size() != Max<size_t>(1, parts.size())) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, "YT destination partitions changed after import planning");
-                return result;
-            }
-            for (size_t i = 0; i + 1 < partitions.size(); ++i) {
-                if (partitions[i]->EndOfRange != parts[i + 1].GetFirstKey()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "YT destination partition keys changed after import planning");
+            if (path->IsColumnTable()) {
+                const auto table = context.SS->ColumnTables.at(path.Base()->PathId).GetPtr();
+                if (table->GetPartitions().size() != 1) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "YT column import requires exactly one destination ColumnShard");
                     return result;
+                }
+            } else {
+                const auto& parts = task.GetYtImportPlan().GetParts();
+                const auto& partitions = context.SS->Tables.at(path.Base()->PathId)->GetPartitions();
+                if (partitions.size() != Max<size_t>(1, parts.size())) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed, "YT destination partitions changed after import planning");
+                    return result;
+                }
+                for (size_t i = 0; i + 1 < partitions.size(); ++i) {
+                    if (partitions[i]->EndOfRange != parts[i + 1].GetFirstKey()) {
+                        result->SetError(NKikimrScheme::StatusPreconditionFailed, "YT destination partition keys changed after import planning");
+                        return result;
+                    }
                 }
             }
         }

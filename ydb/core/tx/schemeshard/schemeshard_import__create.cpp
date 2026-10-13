@@ -303,6 +303,21 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
             {
                 auto settings = request.GetRequest().GetImportFromS3Settings();
+                switch (settings.destination_store_type()) {
+                case Ydb::Table::STORE_TYPE_UNSPECIFIED:
+                case Ydb::Table::STORE_TYPE_ROW:
+                case Ydb::Table::STORE_TYPE_COLUMN:
+                    break;
+                default:
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "Unknown import destination store type");
+                }
+                if (settings.destination_store_type() != Ydb::Table::STORE_TYPE_UNSPECIFIED &&
+                    settings.source_format() != Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT)
+                {
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                        "destination_store_type is supported only for YT imports");
+                }
+
                 switch (settings.source_format()) {
                 case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_UNSPECIFIED:
                 case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YDB:
@@ -311,6 +326,12 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     if (!AppData()->FeatureFlags.GetEnableImportFromYt()) {
                         return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
                             "YT import is disabled by feature flag EnableImportFromYt");
+                    }
+                    if (settings.destination_store_type() == Ydb::Table::STORE_TYPE_COLUMN &&
+                        !AppData()->FeatureFlags.GetEnableColumnTablesBackup())
+                    {
+                        return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Column import is disabled by feature flag EnableColumnTablesBackup");
                     }
                     if (!settings.source_prefix().empty() || !settings.destination_path().empty() ||
                         settings.has_encryption_settings() || !settings.exclude_regexps().empty() ||

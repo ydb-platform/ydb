@@ -51,6 +51,13 @@ enum class EImportSourceFormat {
     Unknown = std::numeric_limits<int>::max(),
 };
 
+enum class EImportDestinationStoreType {
+    Row = 0 /* "row" */,
+    Column = 1 /* "column" */,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
 struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Settings>,
                                public TS3Settings<TImportFromS3Settings> {
     using TSelf = TImportFromS3Settings;
@@ -72,6 +79,8 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
 
     // YT mode reads a completed static-table backup with gzip-compressed YSON data.
     FLUENT_SETTING_DEFAULT(EImportSourceFormat, SourceFormat, EImportSourceFormat::Ydb);
+    // YT imports only; absence selects a row table.
+    FLUENT_SETTING_OPTIONAL(EImportDestinationStoreType, DestinationStoreType);
     FLUENT_SETTING_VECTOR(TItem, Item);
     FLUENT_SETTING_OPTIONAL(std::string, Description);
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);

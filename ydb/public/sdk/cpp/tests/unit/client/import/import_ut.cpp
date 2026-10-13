@@ -83,11 +83,12 @@ namespace NYdb::inline Dev::NImport {
             TDriver driver(TDriverConfig().SetEndpoint(server.Endpoint));
             TImportClient client(driver);
 
-            const auto check = [&](const TImportFromS3Settings& settings, auto expected) {
+            const auto check = [&](const TImportFromS3Settings& settings, auto expected, Ydb::Table::StoreType expectedStore = Ydb::Table::STORE_TYPE_UNSPECIFIED) {
                 const auto result = client.ImportFromS3(settings).GetValueSync();
                 UNIT_ASSERT_C(result.Status().IsSuccess(), result.Status().GetIssues().ToString());
                 const auto request = server.Service.GetRequest();
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(request.settings().source_format()), static_cast<int>(expected));
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(request.settings().destination_store_type()), static_cast<int>(expectedStore));
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items_size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items(0).source_prefix(), "backup/with_underscores");
                 UNIT_ASSERT_VALUES_EQUAL(request.settings().items(0).destination_path(), "/Root/restored");
@@ -105,6 +106,12 @@ namespace NYdb::inline Dev::NImport {
             auto yt = settings;
             yt.SourceFormat(EImportSourceFormat::Yt);
             check(yt, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT);
+            auto row = yt;
+            row.DestinationStoreType(EImportDestinationStoreType::Row);
+            check(row, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT, Ydb::Table::STORE_TYPE_ROW);
+            auto column = yt;
+            column.DestinationStoreType(EImportDestinationStoreType::Column);
+            check(column, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT, Ydb::Table::STORE_TYPE_COLUMN);
         }
 
         Y_UNIT_TEST(ParseMetadataSourceFormats) {
@@ -130,6 +137,36 @@ namespace NYdb::inline Dev::NImport {
                 UNIT_ASSERT_VALUES_EQUAL(response.Metadata().Settings.Item_.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(response.Metadata().Settings.Item_[0].Src, "backup/prefix");
             }
+        }
+
+        Y_UNIT_TEST(ParseMetadataDestinationStoreTypes) {
+            const std::pair<Ydb::Table::StoreType, std::optional<EImportDestinationStoreType>> cases[] = {
+                {Ydb::Table::STORE_TYPE_UNSPECIFIED, std::nullopt},
+                {Ydb::Table::STORE_TYPE_ROW, EImportDestinationStoreType::Row},
+                {Ydb::Table::STORE_TYPE_COLUMN, EImportDestinationStoreType::Column},
+                {static_cast<Ydb::Table::StoreType>(12345), EImportDestinationStoreType::Unknown},
+            };
+            for (const auto& [wire, expected] : cases) {
+                Ydb::Import::ImportFromS3Metadata metadata;
+                metadata.mutable_settings()->set_destination_store_type(wire);
+                Ydb::Operations::Operation operation;
+                operation.set_ready(true);
+                operation.set_status(Ydb::StatusIds::SUCCESS);
+                operation.mutable_metadata()->PackFrom(metadata);
+                TImportFromS3Response response(TStatus(EStatus::SUCCESS, {}), std::move(operation));
+                UNIT_ASSERT(response.Metadata().Settings.DestinationStoreType_ == expected);
+            }
+        }
+
+        Y_UNIT_TEST(RejectInvalidDestinationStoreTypeBeforeRpc) {
+            TServer server;
+            TDriver driver(TDriverConfig().SetEndpoint(server.Endpoint));
+            TImportClient client(driver);
+            for (const auto store : {EImportDestinationStoreType::Unknown, static_cast<EImportDestinationStoreType>(-1)}) {
+                const auto settings = TImportFromS3Settings().DestinationStoreType(store);
+                UNIT_ASSERT_EXCEPTION(client.ImportFromS3(settings), TContractViolation);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(server.Service.GetRequestCount(), 0);
         }
 
         Y_UNIT_TEST(RejectInvalidSourceFormatBeforeRpc) {

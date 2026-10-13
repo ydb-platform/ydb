@@ -32,6 +32,8 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 ### Imported schema objects {#objects}
 
+`--destination-store row|column`: Destination table type for `--source-format yt`. The default is `row`. Native YDB backups preserve their table type and do not accept this option.
+
 `--destination-path PATH`: Destination folder for the objects being imported; defaults to the database root if not provided.
 
 `--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
@@ -198,7 +200,9 @@ Use `--source-format yt` with an explicit `--item` for each table. The source is
   --item src=backups/orders,dst=orders
 ```
 
-The cluster administrator must enable the `EnableImportFromYt` feature flag after upgrading all SchemeShard and DataShard hosts. Active YT imports must finish or be cancelled before those hosts are downgraded.
+By default, this creates a row table. Add `--destination-store column` to create a column table. Column imports currently create one ColumnShard for the whole table; after a shard restart, data is replayed from the beginning. The exporter does not save YT's `optimize_for` attribute, so the destination type is selected explicitly.
+
+The cluster administrator must enable the `EnableImportFromYt` feature flag after upgrading all SchemeShard, DataShard, and ColumnShard hosts. Column imports also require `EnableColumnTablesBackup`. Active YT imports must finish or be cancelled before those hosts are downgraded.
 
 The export must have completed successfully before import starts, and its objects must remain unchanged until import finishes. The destination table must not exist. A completed backup of an empty table may contain only the metadata object.
 

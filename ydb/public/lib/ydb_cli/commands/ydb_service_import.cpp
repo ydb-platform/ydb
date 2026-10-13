@@ -314,6 +314,10 @@ void TCommandImportFromS3::Config(TConfig& config) {
         .RequiredArgument("FORMAT").StoreResult(&SourceFormat).DefaultValue(SourceFormat)
         .ChoicesWithCompletion({{"ydb", "YDB backup"}, {"yt", "YT static-table backup"}});
 
+    config.Opts->AddLongOption("destination-store", "YT destination table type: row (default) or column; requires --source-format yt")
+        .RequiredArgument("STORE").StoreResult(&DestinationStore)
+        .ChoicesWithCompletion({{"row", "Row table"}, {"column", "Column table"}});
+
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
@@ -368,6 +372,14 @@ void TCommandImportFromS3::Parse(TConfig& config) {
     if (SourceFormat == NImport::EImportSourceFormat::Unknown) {
         throw TMisuseException() << "--source-format must be ydb or yt";
     }
+    if (config.ParseResult->Has("destination-store")) {
+        if (SourceFormat != NImport::EImportSourceFormat::Yt) {
+            throw TMisuseException() << "--destination-store requires --source-format yt";
+        }
+        if (DestinationStore != "row" && DestinationStore != "column") {
+            throw TMisuseException() << "--destination-store must be row or column";
+        }
+    }
     if (SourceFormat == NImport::EImportSourceFormat::Yt) {
         if (Items.empty() || CommonSourcePrefix || CommonDestinationPath || !IncludePaths.empty() || ListObjectsInExistingExport) {
             throw TMisuseException() << "YT import requires --item src=PREFIX,dst=TABLE and does not support --source-prefix, --destination-path, --include or --list";
@@ -403,6 +415,11 @@ NImport::TImportFromS3Settings TCommandImportFromS3::MakeImportSettings() {
     FillS3Settings(settings);
     FillCommonImportSettings(settings);
     settings.SourceFormat(SourceFormat);
+    if (DestinationStore) {
+        settings.DestinationStoreType(DestinationStore == "column"
+            ? NImport::EImportDestinationStoreType::Column
+            : NImport::EImportDestinationStoreType::Row);
+    }
 
     if (CommonSourcePrefix) {
         settings.SourcePrefix(CommonSourcePrefix);

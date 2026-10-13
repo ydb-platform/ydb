@@ -1830,6 +1830,14 @@ private:
     void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
         if (statusCode == Ydb::StatusIds::SUCCESS) {
             auto& item = ImportInfo->Items.at(ItemIdx);
+            if (ImportInfo->GetS3Settings().destination_store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+                Schema.Table.set_store_type(Ydb::Table::STORE_TYPE_COLUMN);
+                Schema.Table.clear_partitions();
+                Schema.Table.clear_partitioning_settings();
+                Schema.Table.mutable_partitioning_settings()->set_min_partitions_count(1);
+            } else {
+                Schema.Table.set_store_type(Ydb::Table::STORE_TYPE_ROW);
+            }
             item.Table = std::move(Schema.Table);
             item.YtImportPlan = std::move(Plan);
         }

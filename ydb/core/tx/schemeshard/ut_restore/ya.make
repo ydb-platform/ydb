@@ -20,6 +20,7 @@ PEERDIR(
     library/cpp/yson
     library/cpp/string_utils/quote
     ydb/core/kqp/ut/common
+    ydb/core/tx/columnshard/test_helper
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
     ydb/core/wrappers/ut_helpers

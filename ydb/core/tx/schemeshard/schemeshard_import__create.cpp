@@ -1910,22 +1910,29 @@ private:
 
         case EState::BuildIndexes:
             if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
-                item.Issue = *issue;
-                Cancel(*importInfo, itemIdx, "issues during index building");
-                Self->EraseEncryptionKey(db, *importInfo);
+                // One unsuccessful index build must not fail the whole import: skip that index
+                // and continue with the remaining ones. Nothing has to be cleaned up here - a
+                // rejected build rolls back everything it created on its own.
+                LOG_W("TImport::TTxProgress: skipping an index that failed to build"
+                    << ": info# " << importInfo->ToString()
+                    << ", item# " << item.ToString(itemIdx)
+                    << ", issue# " << *issue);
+                if (item.Issue) {
+                    item.Issue += "\n";
+                }
+                item.Issue += *issue;
+            }
+            if (item.Table) {
+                ++item.NextIndexIdx;
+            }
+            if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
+                AllocateTxId(*importInfo, itemIdx);
+            } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                       AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                item.State = EState::CreateChangefeed;
+                AllocateTxId(*importInfo, itemIdx);
             } else {
-                if (item.Table) {
-                    ++item.NextIndexIdx;
-                }
-                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
-                    AllocateTxId(*importInfo, itemIdx);
-                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
-                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
-                    item.State = EState::CreateChangefeed;
-                    AllocateTxId(*importInfo, itemIdx);
-                } else {
-                    item.State = EState::Done;
-                }
+                item.State = EState::Done;
             }
             break;
 

@@ -14,6 +14,12 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
+// MiniKQL filters the true twin under sanitizers because that variant normally enables LLVM.
+// BlockJoin is not an LLVM toggle, so use the generic YDB helper that registers both variants.
+#undef Y_UNIT_TEST_TWIN
+#undef Y_UNIT_TEST_QUAD
+#include <ydb/library/testlib/helpers.h>
+
 #include <arrow/util/bit_util.h>
 
 #include <bit>

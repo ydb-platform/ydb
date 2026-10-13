@@ -51,14 +51,16 @@ The script reads the history with `git`; in a checkout of another version contro
    - row counts of arrays and filters, and allocation sizes;
    - new production-invokable asserts, that is asserts that abort the process in release builds.
 3. Start one read-only audit subagent with the audit prompt from `references/prompts.md` for every commit with `audit` = yes in `commits.tsv`; these touch the reader, conveyor, limiter, caches, blobs or arrow code. Do not audit them yourself instead: reviewer answers vary between runs, and in test runs a crash in a reader commit was found by one run and missed by the next; each fresh context is another chance.
-4. When `review_commits.py` is done, read `summary.tsv` and every answer. For a `refused` prompt, clarify the concrete correctness failure and the authorized QA scope using [references/prompts.md](references/prompts.md), then retry once. If it is still refused or fails, record the gap and use the reviewer fallback from step 0. Keep the same task boundaries.
+4. When the reviews finish, read `summary.tsv` and every answer. If a reviewer refuses the QA request, explain the suspected bug in plain language and retry once; see [references/prompts.md](references/prompts.md) for examples. If the review still cannot run, note the missing review and use the fallback from step 0.
 5. Combine your findings and the reviewer answers into a candidate list. Record the suspected commit, mechanism, file:line evidence and an SQL trigger for each candidate; merge duplicate claims about the same defect.
 
-## Step 4. Verify candidates
+## Step 4. Check candidates before writing tests
 
-1. Give each candidate to a fresh read-only verifier using the verifier prompt in [references/prompts.md](references/prompts.md). Use `scripts/second_opinion.py` with the reviewer from step 0, or its subagent fallback.
-2. Check the verdict against the code: guards, thread ownership, lifetime, error handling and whether SQL can reach the path. Record `REAL`, `NOT REAL` or `UNCERTAIN` with decisive file:line evidence and any required config knobs or PRAGMAs.
-3. Keep rejected candidates and the reasons in the notes. For `REAL` and `UNCERTAIN` candidates, use the verifier's SQL test recipe in the next step; uncertainty alone is not a reproduced bug.
+Have a fresh reviewer check each claim for false positives before spending time on a SQL reproducer. An existing guard, an object's lifetime or an unreachable code path may rule out the suspected bug.
+
+1. Give each candidate to a fresh read-only reviewer using the verifier prompt in [references/prompts.md](references/prompts.md). Use `scripts/second_opinion.py` with the reviewer from step 0, or its subagent fallback.
+2. Ask the reviewer to trace the failure through the code, check what might prevent it, and explain how SQL could trigger it. Record `REAL`, `NOT REAL` or `UNCERTAIN`, the supporting file:line evidence and any required config knobs or PRAGMAs.
+3. Save rejected claims with the reasons they were rejected. Take the remaining candidates and their SQL test recipes to the next step. A reviewer verdict is provisional until a test reproduces the failure.
 
 ## Step 5. Reproduce and review tests
 

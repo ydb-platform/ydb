@@ -103,6 +103,6 @@ class TestColumnTableNotNullRolling(NotNullChecks, RollingDowngradeAndUpgradeFix
         self.create_table()
         self.set_not_null()
         self.configure_feature(False)
-        self.cluster.overwrite_configs(self.config)
+        self.cluster.overwrite_configs(self.config.full_config)
         for step, _ in enumerate(self.roll(), start=3):
             self.check_constraint(step)

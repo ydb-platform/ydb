@@ -446,7 +446,11 @@ message TFeatureFlags {
     optional bool EnableSplitMergeDemandTracking = 360 [default = false];
     optional bool EnableStreamingQuerySchemeOperations = 361 [default = true];
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
+    // Use optimized compaction selection strategy.
+    optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
+    // Skip StorageRatio calculation at compaction rank >= 10 while continuing compaction selection.
+    optional bool EnableHullCompStorageRatioHighRankSkip = 365 [default = false];
     // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
     // Existing TTL settings continue to execute when the flag is disabled.
-    optional bool EnableColumnShardExtendedTtlTypes = 364 [default = false];
+    optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
 }

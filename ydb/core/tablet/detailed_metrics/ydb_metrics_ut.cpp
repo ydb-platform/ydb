@@ -3,12 +3,16 @@
 
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_detailed_datashard.pb.h>
+#include <ydb/core/sys_view/common/db_counters.h>
+#include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -852,12 +856,18 @@ R"json(
     }
 
     /**
-     * Verify that the "ydb" group sums the leader and every follower of a tablet,
-     * while the LeaderOnly metrics come from the leader alone.
+     * Verify that the "ydb" group and the per-database counters sum the leader and every
+     * follower of a tablet, while the LeaderOnly metrics come from the leader alone.
      */
     Y_UNIT_TEST(DataShardMetricsWithFollowers) {
         TTestBasicRuntime runtime(1);
-        runtime.Initialize(TAppPrepare().Unwrap());
+        TAppPrepare app;
+        app.SetEnableDbCounters(true);
+        runtime.Initialize(app.Unwrap());
+
+        // Sinks for the per-database counters and the database watches
+        runtime.RegisterService(NSysView::MakeSysViewServiceID(runtime.GetNodeId(0)), runtime.AllocateEdgeActor());
+        runtime.RegisterService(MakeSchemeCacheID(), runtime.AllocateEdgeActor());
 
         TActorId leaderAggregatorId = InitializeTabletCountersAggregator(runtime);
         TActorId followerAggregatorId = InitializeTabletCountersAggregator(runtime, true /* follower */);
@@ -874,8 +884,8 @@ R"json(
 
         auto ydbCounters = runtime.GetAppData(0).Counters->FindSubgroup("counters", "ydb");
         UNIT_ASSERT(ydbCounters);
-        auto value = [](const NMonitoring::TDynamicCounterPtr& group, const TString& name) {
-            auto counter = group->FindNamedCounter("name", name);
+        auto value = [](const NMonitoring::TDynamicCounterPtr& group, const TString& name, const TString& label = "name") {
+            auto counter = group->FindNamedCounter(label, name);
             UNIT_ASSERT_C(counter, name);
             return counter->Val();
         };
@@ -895,6 +905,42 @@ R"json(
             samples += snapshot->Value(i);
         }
         UNIT_ASSERT_VALUES_EQUAL(samples, 3);
+
+        // Per-database counters: one registration per role
+        THashMap<NKikimrSysView::EDbCountersService, TIntrusivePtr<NSysView::IDbCounters>> registered;
+        for (int i = 0; i < 2; ++i) {
+            TAutoPtr<IEventHandle> handle;
+            auto* ev = runtime.GrabEdgeEvent<NSysView::TEvSysView::TEvRegisterDbCounters>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->PathId, TPathId(1113, 1001));
+            registered[ev->Service] = ev->Counters;
+        }
+        UNIT_ASSERT(registered.contains(NKikimrSysView::TABLETS));
+        UNIT_ASSERT(registered.contains(NKikimrSysView::TABLETS_FOLLOWERS));
+
+        // The processor side: the followers first, then the leaders, which map both roles
+        auto external = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto followers = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto transfer = [&](NKikimrSysView::EDbCountersService service, TIntrusivePtr<NSysView::IDbCounters> target) {
+            NSysView::TDbServiceCounters counters;
+            registered[service]->ToProto(counters);
+            target->FromProto(counters);
+        };
+        transfer(NKikimrSysView::TABLETS_FOLLOWERS,
+            CreateTabletDbCounters(nullptr, followers, MakeHolder<TExecutorCounters>()));
+        transfer(NKikimrSysView::TABLETS,
+            CreateTabletDbCounters(external, MakeIntrusive<NMonitoring::TDynamicCounters>(),
+                MakeHolder<TExecutorCounters>(), followers));
+
+        UNIT_ASSERT_VALUES_EQUAL(value(external, "table.datashard.read.rows"), 90045006);
+        UNIT_ASSERT_VALUES_EQUAL(value(external, "table.datashard.row_count"), 1001);
+
+        // Both followers of the tablet count: 2 * 1001
+        auto followerDataShard = followers->FindSubgroup("type", "DataShard");
+        UNIT_ASSERT(followerDataShard);
+        auto followerExecutor = followerDataShard->FindSubgroup("category", "executor");
+        UNIT_ASSERT(followerExecutor);
+        UNIT_ASSERT_VALUES_EQUAL(value(followerExecutor, "SUM(DbUniqueRowsTotal)", "sensor"), 2002);
     }
 
     /**

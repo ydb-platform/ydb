@@ -196,6 +196,7 @@ jobs:
             -DUSE_IDN=static ^
             -DUSE_ICONV=static ^
             -DUSE_MSVC_LINKER=yes ^
+            --host-platform-flag=USE_MSVC_LINKER=yes ^
             -DYQL_LANGUAGE_SERVER_VERSION=%VERSION% ^
             --output="%RUNNER_TEMP%\yql-language-server-%PLATFORM%" ^
             --stat ^

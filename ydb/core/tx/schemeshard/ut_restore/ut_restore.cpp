@@ -4383,8 +4383,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 UNIT_ASSERT(!column.GetNotNull());
             }
         }
-    }
-
         const auto& shards = path.GetColumnTableDescription().GetSharding().GetColumnShards();
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
         NTxUT::TShardReader reader(runtime, shards.Get(0), path.GetSelf().GetPathId(), NOlap::TSnapshot::Zero());
@@ -4450,6 +4448,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestModificationResults(runtime, id + 2, {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, id + 2);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
+    }
+
     Y_UNIT_TEST(YtColumnSourcePartsDoNotCountAsDestinationShards) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -4480,6 +4480,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             UNIT_ASSERT(column.GetName() == "key" || column.GetName() == "value");
             UNIT_ASSERT(column.GetNotNull());
         }
+    }
+
     Y_UNIT_TEST(YtRowSourcePartsRespectDestinationShardLimit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());

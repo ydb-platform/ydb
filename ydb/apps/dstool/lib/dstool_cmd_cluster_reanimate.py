@@ -1,6 +1,8 @@
+from concurrent.futures import CancelledError, FIRST_COMPLETED, ThreadPoolExecutor, wait
 import json
 from pathlib import Path
 import sys
+import threading
 import time
 
 from ydb.apps.dstool.lib import common
@@ -8,10 +10,10 @@ from ydb.apps.dstool.lib import common
 
 description = '''Evict ERROR VDisks of a storage pool in a DC, group by group.
 For each group, sort matching current VDisks by logical position. Evict the first
-three disks, then evict the first and second again, then evict each remaining
-disk once in order, starting with the fourth.
+three disks as a batch, repeat that batch, then evict each remaining disk once
+in order, starting with the fourth. --inflight limits concurrent groups.
 Skip groups with fewer than three matching disks.
-Refresh the generation before each eviction and wait for the slot to change.
+Wait for all slots in a batch to change before starting the next batch.
 --dry-run only prints the plan and can be passed before or after the subcommand.
 '''
 
@@ -28,9 +30,11 @@ def add_options(p):
                    help='Print the plan without evicting VDisks')
     p.add_argument('--pool', required=True, help='Exact storage pool name, including :media suffix')
     p.add_argument('--dc', required=True, help='Source data center')
+    p.add_argument('--inflight', type=positive, default=1,
+                   help='Maximum concurrently relocating groups (default: 1)')
     p.add_argument('--timeout', type=positive, default=300, help='Seconds to wait for each relocation')
     p.add_argument('--poll-interval', type=positive, default=5, help='Seconds between placement checks')
-    p.add_argument('--state-dir', type=Path, help='New directory for per-step evidence')
+    p.add_argument('--state-dir', type=Path, help='New directory for per-batch evidence')
     common.add_ignore_degraded_group_check_option(p)
     common.add_ignore_failure_model_group_check_option(p)
 
@@ -83,7 +87,7 @@ def make_plan(rows, dcs, group_id, dc):
         return selected, []
     if len({position(row) for row in selected}) != len(selected):
         raise common.QueryError('Multiple current VDisks at the same logical position')
-    return selected, [0, 1, 2, 0, 1] + list(range(3, len(selected)))
+    return selected, [[0, 1, 2], [0, 1, 2]] + [[index] for index in range(3, len(selected))]
 
 
 def current_disk(rows, group_id, wanted, pool):
@@ -97,12 +101,14 @@ def current_disk(rows, group_id, wanted, pool):
     return row
 
 
-def evict(args, row):
+def evict(args, rows):
     request = common.create_bsc_request(args)
-    command = request.Command.add().ReassignGroupDisk
-    for field in ('GroupId', 'GroupGeneration', 'FailRealmIdx', 'FailDomainIdx', 'VDiskIdx'):
-        setattr(command, field, row[field])
-    # Keep the generation fixed across transport retries: do not evict a replacement twice.
+    for row in rows:
+        command = request.Command.add().ReassignGroupDisk
+        for field in ('GroupId', 'GroupGeneration', 'FailRealmIdx', 'FailDomainIdx', 'VDiskIdx'):
+            setattr(command, field, row[field])
+    # BSC advances the generation on commit, so all commands use the snapshot's
+    # generation. Keep it fixed across transport retries to avoid evicting twice.
     response = common.invoke_bsc_request(request)
     if not common.is_successful_bsc_response(response):
         raise common.QueryError('VDisk reassignment failed: %s' % response)
@@ -113,17 +119,24 @@ def write_evidence(directory, name, data):
         (directory / name).write_text(json.dumps(data, indent=2), encoding='utf-8')
 
 
-def wait_for_move(args, group_id, wanted, before, step):
+def check_stopped(stop):
+    if stop.is_set():
+        raise CancelledError()
+
+
+def wait_for_move(args, group_id, wanted, before, step, stop):
     deadline = time.monotonic() + args.timeout
     while True:
+        check_stopped(stop)
         rows, _ = fetch_disks()
-        after = current_disk(rows, group_id, wanted, args.pool)
-        if slot(after) != slot(before):
-            return after
+        after = [current_disk(rows, group_id, key, args.pool) for key in wanted]
+        if all(slot(new) != slot(old) for old, new in zip(before, after)):
+            return rows, after
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise common.QueryError('Step %d: slot did not change; relocation may still be in progress' % step)
-        time.sleep(min(args.poll_interval, remaining))
+            raise common.QueryError('Group %d, batch %d: not all slots changed; relocations may still be in progress'
+                                    % (group_id, step))
+        stop.wait(min(args.poll_interval, remaining))
 
 
 def run(args):
@@ -136,48 +149,92 @@ def run(args):
         return
     if args.state_dir and not args.dry_run:
         args.state_dir.mkdir()
-    skipped = 0
-    completed = 0
-    for group_id in group_ids:
+    stop = threading.Event()
+
+    def run_group(group_id):
+        check_stopped(stop)
         print('Group %d' % group_id, flush=True)
-        rows, dcs = ((initial_disks, initial_dcs) if args.dry_run or group_id == group_ids[0]
-                     else fetch_disks())
+        rows, dcs = (initial_disks, initial_dcs) if args.dry_run else fetch_disks()
         group_disks = [row for row in rows if row['GroupId'] == group_id and row['PoolName'] == args.pool]
         if not group_disks:
             print('Skipping group %d: no current VDisks' % group_id, flush=True)
-            skipped += 1
-            continue
+            return False
         selected, order = make_plan(group_disks, dcs, group_id, args.dc)
         if not order:
             print('Skipping group %d: %d ERROR VDisks in %s; need at least 3'
                   % (group_id, len(selected), args.dc), flush=True)
-            skipped += 1
-            continue
-        print('Order: ' + ' -> '.join(str(index + 1) for index in order), flush=True)
+            return False
+        print('Order: ' + ' -> '.join(','.join(str(index + 1) for index in batch) for batch in order), flush=True)
         for index, row in enumerate(selected, 1):
             print('%d: %s slot=%s' % (index, row['VDiskId'], slot(row)), flush=True)
         if args.dry_run:
-            for step, index in enumerate(order, 1):
-                print('Step %d, VDisk %d: evict %s' % (step, index + 1, selected[index]['VDiskId']))
-            print('Actual execution refreshes VDisk IDs before each step.')
-            continue
+            for step, batch in enumerate(order, 1):
+                ids = ['[%08x:_:%u:%u:%u]' % (group_id, *position(selected[index])) for index in batch]
+                print('Batch %d: evict %s' % (step, ', '.join(ids)))
+            print('Actual execution waits for all batch slots to change before the next batch.')
+            return True
         group_dir = args.state_dir / ('group-%d' % group_id) if args.state_dir else None
         if group_dir:
             group_dir.mkdir()
         write_evidence(group_dir, 'plan.json', dict(selected=selected, order=order))
-        for step, index in enumerate(order, 1):
-            wanted = position(selected[index])
-            rows, _ = fetch_disks()
-            before = current_disk(rows, group_id, wanted, args.pool)
-            print('Step %d/%d, VDisk %d: evict %s from %s'
-                  % (step, len(order), index + 1, before['VDiskId'], slot(before)), flush=True)
+        # Reuse the final polling snapshot as the next batch's starting point.
+        for step, batch in enumerate(order, 1):
+            check_stopped(stop)
+            wanted = [position(selected[index]) for index in batch]
+            before = [current_disk(rows, group_id, key, args.pool) for key in wanted]
+            print('Group %d, batch %d/%d, VDisks %s'
+                  % (group_id, step, len(order), ','.join(str(index + 1) for index in batch)), flush=True)
+            for row in before:
+                print('  evict %s from %s' % (row['VDiskId'], slot(row)), flush=True)
             write_evidence(group_dir, '%d-before.json' % step, before)
             # Stop on an ambiguous result; an accepted eviction may still be in progress.
+            check_stopped(stop)
             evict(args, before)
-            after = wait_for_move(args, group_id, wanted, before, step)
-            print('Moved to %s, status=%s' % (slot(after), after['VSlotStatus']), flush=True)
+            rows, after = wait_for_move(args, group_id, wanted, before, step, stop)
+            for row in after:
+                print('Group %d: moved to %s, status=%s' % (group_id, slot(row), row['VSlotStatus']), flush=True)
             write_evidence(group_dir, '%d-after.json' % step, after)
-        completed += 1
+        return True
+
+    if args.dry_run:
+        planned = sum(run_group(group_id) for group_id in group_ids)
+        print('Planned: %d; skipped: %d; inflight: %d'
+              % (planned, len(group_ids) - planned, args.inflight), flush=True)
+        return
+
+    def guarded_group(group_id):
+        try:
+            return run_group(group_id)
+        except CancelledError:
+            return None
+        except BaseException:
+            stop.set()
+            raise
+
+    completed = skipped = 0
+    pending = iter(group_ids)
+    active = set()
+    with ThreadPoolExecutor(max_workers=args.inflight) as executor:
+        try:
+            while True:
+                while len(active) < args.inflight and not stop.is_set():
+                    group_id = next(pending, None)
+                    if group_id is None:
+                        break
+                    active.add(executor.submit(guarded_group, group_id))
+                if not active:
+                    break
+                done, active = wait(active, return_when=FIRST_COMPLETED)
+                for future in done:
+                    result = future.result()
+                    if result is True:
+                        completed += 1
+                    elif result is False:
+                        skipped += 1
+                print('Completed: %d; skipped: %d; active: %d/%d'
+                      % (completed, skipped, len(active), args.inflight), flush=True)
+        finally:
+            stop.set()
     print('Completed: %d; skipped: %d; total: %d' % (completed, skipped, len(group_ids)), flush=True)
 
 

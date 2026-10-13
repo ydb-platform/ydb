@@ -7,7 +7,7 @@ description: "Use to hunt bugs in ColumnShard commits merged in a date range, or
 
 This is quality assurance of our own code, not security research or penetration testing: no exploits, no attacks on deployments. We write failing tests instead of fixes because the commit authors have the context to fix the code. Every prompt to a subagent or to another harness says so: copy the framing from [references/prompts.md](references/prompts.md); the scripts add it themselves.
 
-Run `scripts/*` from this skill directory with paths to the worktree; run `./ya` from the worktree root. The repository entrypoints are [AGENTS.md](../../../AGENTS.md) and [CLAUDE.md](../../../CLAUDE.md).
+Run `scripts/*` from this skill directory with paths to the worktree; run `./ya` from the worktree root.
 
 ## Inputs
 

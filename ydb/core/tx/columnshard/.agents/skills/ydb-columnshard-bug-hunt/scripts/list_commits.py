@@ -58,18 +58,23 @@ def git(repo, *args):
 
 
 def parse_numstat(text):
+    """Parse --numstat -z, checking both paths of a rename without expanding its file count."""
     files, added, deleted, tests_only, audit = 0, 0, 0, True, False
-    for line in text.splitlines():
-        parts = line.split("\t")
+    records = iter(text.split("\0"))
+    for record in records:
+        parts = record.split("\t", 2)
         if len(parts) != 3:
             continue
         files += 1
         added += int(parts[0]) if parts[0].isdigit() else 0
         deleted += int(parts[1]) if parts[1].isdigit() else 0
-        if not TEST_DIR.search(parts[2]):
-            tests_only = False
-            if any(parts[2].startswith(prefix) for prefix in AUDIT_PATHS):
-                audit = True
+        # A rename has an empty path field followed by the old and new paths as separate records.
+        paths = [parts[2]] if parts[2] else [next(records), next(records)]
+        for path in paths:
+            if not TEST_DIR.search(path):
+                tests_only = False
+                if any(path.startswith(prefix) for prefix in AUDIT_PATHS):
+                    audit = True
     return files, added, deleted, tests_only and files > 0, audit
 
 
@@ -90,11 +95,11 @@ def list_commits(repo, ref, since, until, paths):
     if first > last:
         raise ValueError("--since is after --until")
     log = git(repo, "log", "--no-merges", "--format=%H%x09%cs%x09%an%x09%s",
-              "--since={}T00:00:00+00:00".format(first), "--until={}T23:59:59+00:00".format(last), ref, "--", *paths)
+              "--since-as-filter={}T00:00:00+00:00".format(first), "--until={}T23:59:59+00:00".format(last), ref, "--", *paths)
     rows = []
     for line in log.splitlines():
         sha, date, author, subject = line.split("\t", 3)
-        numstat = git(repo, "show", "--numstat", "--format=", sha)
+        numstat = git(repo, "show", "--numstat", "-z", "--format=", sha)
         files, added, deleted, tests_only, audit = parse_numstat(numstat)
         rows.append([sha[:11], date, author, pr_number(subject), str(files), str(added), str(deleted),
                      "yes" if tests_only else "no", "yes" if audit else "no", subject])

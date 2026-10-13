@@ -21,6 +21,8 @@ import subprocess
 import sys
 import tempfile
 
+from process_runner import run_process
+
 DEFAULT_ENV = os.path.join("~", ".config", "ydb-columnshard-bug-hunt", "env.json")
 
 FRAMING = (
@@ -82,8 +84,7 @@ def ask(reviewer, cwd, prompt, timeout):
         last = os.path.join(tmp, "last.txt")
         argv = build_command(reviewer, cwd, last, prompt)
         try:
-            proc = subprocess.run(argv, input=prompt if reviewer["stdin"] else None, cwd=cwd,
-                                  capture_output=True, text=True, timeout=timeout)
+            proc = run_process(argv, cwd, prompt if reviewer["stdin"] else None, timeout)
         except subprocess.TimeoutExpired:
             return "failed", "", "timeout after {} s".format(timeout)
         except OSError as error:

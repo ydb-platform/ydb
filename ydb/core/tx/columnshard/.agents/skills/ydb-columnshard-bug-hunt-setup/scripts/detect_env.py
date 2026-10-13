@@ -26,6 +26,12 @@ import subprocess
 import sys
 import tempfile
 
+# Both companion skills use the same reviewer process lifecycle.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                               "ydb-columnshard-bug-hunt", "scripts"))
+
+from process_runner import run_process  # noqa: E402
+
 SMOKE_PROMPT = "Reply with the single word OK."
 DEFAULT_OUT = os.path.join("~", ".config", "ydb-columnshard-bug-hunt", "env.json")
 
@@ -165,8 +171,7 @@ def run_prompt(spec, model, cwd, prompt, timeout):
         last = os.path.join(tmp, "last.txt")
         argv = build_command(spec, model, cwd, last, prompt)
         try:
-            proc = subprocess.run(argv, input=prompt if spec["stdin"] else None, cwd=cwd,
-                                  capture_output=True, text=True, timeout=timeout)
+            proc = run_process(argv, cwd, prompt if spec["stdin"] else None, timeout)
         except subprocess.TimeoutExpired:
             return 124, "", "timeout after {} s".format(timeout)
         except OSError as error:

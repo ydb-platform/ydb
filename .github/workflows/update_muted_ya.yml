@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Optional: comma-separated branches instead of stable_tests_branches.json. Empty = use stable_tests_branches.json from WORKFLOW_CHECKOUT_REF.'
+        description: 'Optional: comma-separated branches instead of scheduled_trim_branches.json. Empty = use scheduled_trim_branches.json from WORKFLOW_CHECKOUT_REF.'
         required: false
         default: ''
       build_types:
@@ -18,7 +18,8 @@ on:
 env:
   # workflow_dispatch: branch selected in UI. schedule: repository default branch.
   WORKFLOW_CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.repository.default_branch }}
-  BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
+  # Temporary: main + current stable + previous stable. Full list stays in stable_tests_branches.json for mute grace / stress.
+  BRANCHES_CONFIG_PATH: .github/config/scheduled_trim_branches.json
   MUTE_BUILD_TYPES_CONFIG_PATH: .github/config/mute_config.json
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   PR_BRANCH_PREFIX: update-muted-ya

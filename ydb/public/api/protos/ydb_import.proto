@@ -36,9 +36,10 @@ message ImportItemProgress {
 /// S3
 message ImportFromS3Settings {
     enum SourceFormat {
-        SOURCE_FORMAT_UNSPECIFIED = 0; // YDB backup format
-        SOURCE_FORMAT_YDB = 1;
+        SOURCE_FORMAT_YDB = 0; // Default, including requests that omit source_format
         SOURCE_FORMAT_YT = 2; // Completed YT S3 export: metadata YSON and gzip YSON parts
+        reserved 1;
+        reserved "SOURCE_FORMAT_UNSPECIFIED";
     }
 
     enum Scheme {

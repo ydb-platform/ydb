@@ -221,7 +221,7 @@ namespace NKikimr::NBackup::NYt {
     class TRowDecoder::TImpl: public ::NYT::NYson::TYsonConsumerBase {
     public:
         TImpl(const TSchema& schema, TCallback callback, size_t maxRowBytes)
-            : Schema_(schema)
+            : Columns_(schema.Columns)
             , Callback_(std::move(callback))
             , MaxRowBytes_(maxRowBytes)
             , Parser_(this, ::NYT::NYson::EYsonType::ListFragment, Config(maxRowBytes))
@@ -245,20 +245,20 @@ namespace NKikimr::NBackup::NYt {
             InRow_ = true;
             ExpectRow_ = false;
             Bytes_ = 0;
-            Row_.Storage.assign(Schema_.Columns.size(), TString());
-            Row_.Cells.assign(Schema_.Columns.size(), TCell());
-            Seen_.assign(Schema_.Columns.size(), false);
+            Row_.Storage.assign(Columns_.size(), TString());
+            Row_.Cells.assign(Columns_.size(), TCell());
+            Seen_.assign(Columns_.size(), false);
         }
         void OnKeyedItem(TStringBuf key) override {
             Check(InRow_ && !Pending_, "Unexpected row field");
-            Index_ = Schema_.Columns.size();
-            for (size_t index = 0; index < Schema_.Columns.size(); ++index) {
-                if (Schema_.Columns[index].Name == key) {
+            Index_ = Columns_.size();
+            for (size_t index = 0; index < Columns_.size(); ++index) {
+                if (Columns_[index].Name == key) {
                     Index_ = index;
                     break;
                 }
             }
-            Check(Index_ < Schema_.Columns.size(), "Unknown YT row field");
+            Check(Index_ < Columns_.size(), "Unknown YT row field");
             Check(!Seen_[Index_], "Duplicate YT row field");
             Seen_[Index_] = true;
             Pending_ = true;
@@ -266,14 +266,14 @@ namespace NKikimr::NBackup::NYt {
         void OnEndMap() override {
             Check(InRow_ && !Pending_, "Incomplete YT row");
             for (size_t index = 0; index < Seen_.size(); ++index) {
-                Check(Seen_[index] || Schema_.Columns[index].Nullable, "Missing required YT field");
+                Check(Seen_[index] || Columns_[index].Nullable, "Missing required YT field");
             }
             TString error;
             Check(Callback_(Row_, error), error.empty() ? TStringBuf("YT row rejected") : TStringBuf(error));
             InRow_ = false;
         }
         void OnEntity() override {
-            Check(Pending_ && Schema_.Columns[Index_].Nullable, "Null in required YT column");
+            Check(Pending_ && Columns_[Index_].Nullable, "Null in required YT column");
             Pending_ = false;
         }
         void OnStringScalar(TStringBuf value) override {
@@ -354,7 +354,7 @@ namespace NKikimr::NBackup::NYt {
 
         Ydb::Type::PrimitiveTypeId Type() {
             Check(InRow_ && Pending_, "YT row must be a map");
-            return Schema_.Columns[Index_].Type;
+            return Columns_[Index_].Type;
         }
         void Store(TStringBuf bytes) {
             Check(bytes.size() <= MaxRowBytes_ - Bytes_, "YT row exceeds memory limit");
@@ -386,7 +386,7 @@ namespace NKikimr::NBackup::NYt {
         }
 
     private:
-        TSchema Schema_;
+        TVector<TColumn> Columns_;
         TCallback Callback_;
         size_t MaxRowBytes_;
         ::NYT::NYson::TYsonParser Parser_;

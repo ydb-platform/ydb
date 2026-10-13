@@ -19,6 +19,7 @@ PEERDIR(
     library/cpp/streams/zstd
     library/cpp/yson
     library/cpp/string_utils/quote
+    ydb/core/cms/console
     ydb/core/kqp/ut/common
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/schemeshard/ut_helpers

@@ -5,7 +5,6 @@
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/backup/yt/format.h>
-#include <contrib/libs/zlib/zlib.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -1811,12 +1810,6 @@ public:
         Plan.SetVersion(1);
     }
 
-    ~TYtSchemeGetter() {
-        if (InflateInitialized) {
-            inflateEnd(&Inflate);
-        }
-    }
-
     bool OnUnhandledException(const std::exception& ex) override {
         Reply(Ydb::StatusIds::BAD_REQUEST, ex.what());
         return true;
@@ -1860,13 +1853,30 @@ private:
     }
 
     void Retry() {
-        if (Stage == EStage::List) {
-            SendList();
-        } else if (AwaitGet) {
+        switch (Request) {
+        case ERequest::MetadataHead:
+            HeadObject(MetadataKey, false);
+            break;
+        case ERequest::MetadataGet:
+        case ERequest::PartGet:
             SendGet();
-        } else {
-            HeadObject(Stage == EStage::Metadata ? MetadataKey : Plan.GetParts(PartIdx).GetObjectKey(), false);
+            break;
+        case ERequest::List:
+            SendList();
+            break;
         }
+    }
+
+    void StartPart() {
+        const auto& part = Plan.GetParts(PartIdx);
+        CurrentRequestKey = part.GetObjectKey();
+        CurrentETag = part.GetETag();
+        CurrentLength = part.GetContentLength();
+        Offset = 0;
+        RangeEnd = Min(CurrentLength, CHUNK_BYTES) - 1;
+        Probe = MakeHolder<NBackup::NYt::TFirstKeyProbe>(Schema, MAX_FIRST_ROW_BYTES);
+        Request = ERequest::PartGet;
+        SendGet();
     }
 
     void Handle(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -1881,83 +1891,12 @@ private:
         }
         CurrentLength = object.GetContentLength();
         CurrentETag = object.GetETag();
-        Offset = 0;
-        if (Stage == EStage::Metadata) {
-            if (CurrentLength > MAX_METADATA_BYTES) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "YT metadata exceeds size limit");
-            }
-            Plan.SetMetadataETag(CurrentETag);
-            Plan.SetMetadataContentLength(CurrentLength);
-            RangeEnd = CurrentLength - 1;
-        } else {
-            auto* part = Plan.MutableParts(PartIdx);
-            // A listing/HEAD mismatch means the export is still changing.
-            if ((!part->GetETag().empty() && part->GetETag() != CurrentETag) || part->GetContentLength() != CurrentLength) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "YT part changed during planning");
-            }
-            part->SetETag(CurrentETag);
-            if (InflateInitialized) {
-                inflateEnd(&Inflate);
-            }
-            Inflate = {};
-            InflateInitialized = inflateInit2(&Inflate, 16 + MAX_WBITS) == Z_OK;
-            if (!InflateInitialized) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot initialize YT gzip decoder");
-            }
-            DecodedBytes = 0;
-            GotFirstRow = false;
-            Decoder = MakeHolder<NBackup::NYt::TRowDecoder>(Schema, [this](const NBackup::NYt::TDecodedRow& row, TString& error) {
-                if (GotFirstRow) {
-                    return true;
-                }
-                TVector<TCell> cells;
-                auto* split = Schema.Table.mutable_partition_at_keys()->add_split_points();
-                auto* tuple = split->mutable_type()->mutable_tuple_type();
-                auto* value = split->mutable_value();
-                for (ui32 columnIdx : Schema.KeyColumns) {
-                    const auto& cell = row.Cells[columnIdx];
-                    cells.push_back(cell);
-                    const auto type = Schema.Columns[columnIdx].Type;
-                    tuple->add_elements()->mutable_optional_type()->mutable_item()->set_type_id(type);
-                    auto* item = value->add_items();
-                    switch (type) {
-                    case Ydb::Type::BOOL: item->set_bool_value(cell.AsValue<bool>()); break;
-                    case Ydb::Type::INT8: item->set_int32_value(cell.AsValue<i8>()); break;
-                    case Ydb::Type::INT16: item->set_int32_value(cell.AsValue<i16>()); break;
-                    case Ydb::Type::INT32: item->set_int32_value(cell.AsValue<i32>()); break;
-                    case Ydb::Type::INT64: item->set_int64_value(cell.AsValue<i64>()); break;
-                    case Ydb::Type::UINT8: item->set_uint32_value(cell.AsValue<ui8>()); break;
-                    case Ydb::Type::UINT16: item->set_uint32_value(cell.AsValue<ui16>()); break;
-                    case Ydb::Type::UINT32: item->set_uint32_value(cell.AsValue<ui32>()); break;
-                    case Ydb::Type::UINT64: item->set_uint64_value(cell.AsValue<ui64>()); break;
-                    case Ydb::Type::STRING: item->set_bytes_value(cell.Data(), cell.Size()); break;
-                    case Ydb::Type::UTF8: item->set_text_value(cell.Data(), cell.Size()); break;
-                    default: error = "Unsupported YT primary key type"; return false;
-                    }
-                }
-                if (PartIdx) {
-                    TSerializedCellVec previous(Plan.GetParts(PartIdx - 1).GetFirstKey());
-                    for (size_t i = 0; i < cells.size(); ++i) {
-                        const auto& column = Schema.Description.GetColumns(Schema.KeyColumns[i]);
-                        const int comparison = CompareTypedCells(previous.GetCells()[i], cells[i], NScheme::TTypeInfo(column.GetTypeId()));
-                        if (comparison < 0) {
-                            break;
-                        }
-                        if (comparison > 0 || i + 1 == cells.size()) {
-                            error = "YT part keys must be strictly increasing";
-                            return false;
-                        }
-                    }
-                } else {
-                    Schema.Table.mutable_partition_at_keys()->clear_split_points();
-                }
-                Plan.MutableParts(PartIdx)->SetFirstKey(TSerializedCellVec::Serialize(cells));
-                GotFirstRow = true;
-                return true;
-            });
-            RangeEnd = Min(CurrentLength, CHUNK_BYTES) - 1;
+        if (CurrentLength > MAX_METADATA_BYTES) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "YT metadata exceeds size limit");
         }
-        AwaitGet = true;
+        Offset = 0;
+        RangeEnd = CurrentLength - 1;
+        Request = ERequest::MetadataGet;
         SendGet();
     }
 
@@ -2002,6 +1941,9 @@ private:
                 return Reply(Ydb::StatusIds::BAD_REQUEST, columnDestination
                     ? "YT import exceeds source part limit" : "YT import exceeds initial partition limit");
             }
+            if (object.GetSize() <= 0 || object.GetETag().empty()) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "YT listed part has no content or ETag");
+            }
             auto* part = Plan.AddParts();
             part->SetObjectKey(lastKey);
             part->SetETag(object.GetETag().data(), object.GetETag().size());
@@ -2029,14 +1971,11 @@ private:
             nextRow = part.GetEndRow() + 1;
         }
         if (!Plan.PartsSize()) {
-            Schema.Table.set_uniform_partitions(1);
             Reply();
             return;
         }
-        Stage = EStage::Part;
         PartIdx = 0;
-        AwaitGet = false;
-        HeadObject(Plan.GetParts(PartIdx).GetObjectKey(), false);
+        StartPart();
     }
 
     void Handle(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -2049,44 +1988,36 @@ private:
             return Reply(Ydb::StatusIds::BAD_REQUEST, "YT object changed or returned an invalid range");
         }
         TString error;
-        if (Stage == EStage::Metadata) {
+        if (Request == ERequest::MetadataGet) {
             if (!NBackup::NYt::ParseMetadata(message.Body, Schema, error)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, error);
             }
             Schema.Table.mutable_partitioning_settings()->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
             Schema.Table.mutable_partitioning_settings()->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-            Stage = EStage::List;
-            AwaitGet = false;
+            for (const auto index : Schema.KeyColumns) {
+                KeyTypes.emplace_back(Schema.Description.GetColumns(index).GetTypeId());
+            }
+            Request = ERequest::List;
             SendList();
             return;
         }
-        Inflate.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(message.Body.data()));
-        Inflate.avail_in = message.Body.size();
-        char output[CHUNK_BYTES];
-        while (Inflate.avail_in && !GotFirstRow) {
-            Inflate.next_out = reinterpret_cast<Bytef*>(output);
-            Inflate.avail_out = sizeof(output);
-            const int status = inflate(&Inflate, Z_NO_FLUSH);
-            const size_t size = sizeof(output) - Inflate.avail_out;
-            DecodedBytes += size;
-            if (DecodedBytes > MAX_FIRST_ROW_BYTES || (status != Z_OK && status != Z_STREAM_END)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Invalid or oversized first YT gzip row");
-            }
-            if (!Decoder->Feed(TStringBuf(output, size), error)) {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, error);
-            }
-            if (status == Z_STREAM_END && !GotFirstRow) {
-                if (!Decoder->Finish(error) || !GotFirstRow) {
-                    return Reply(Ydb::StatusIds::BAD_REQUEST, error.empty() ? "YT part contains no rows" : error);
+        if (!Probe->Feed(message.Body, RangeEnd + 1 == CurrentLength, error)) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, error);
+        }
+        if (Probe->HasKey()) {
+            auto* part = Plan.MutableParts(PartIdx);
+            part->SetFirstKey(Probe->GetKey());
+            if (PartIdx) {
+                const TSerializedCellVec previous(Plan.GetParts(PartIdx - 1).GetFirstKey());
+                const TSerializedCellVec current(part->GetFirstKey());
+                if (CompareTypedCellVectors(previous.GetCells().data(), current.GetCells().data(), KeyTypes.data(), KeyTypes.size()) >= 0) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, "YT part keys must be strictly increasing");
                 }
             }
-        }
-        if (GotFirstRow) {
             if (++PartIdx == ui32(Plan.PartsSize())) {
                 Reply();
             } else {
-                AwaitGet = false;
-                HeadObject(Plan.GetParts(PartIdx).GetObjectKey(), false);
+                StartPart();
             }
             return;
         }
@@ -2109,7 +2040,7 @@ private:
     }
 
 private:
-    enum class EStage { Metadata, List, Part };
+    enum class ERequest { MetadataHead, MetadataGet, List, PartGet };
     TImportInfo::TPtr ImportInfo;
     TActorId ReplyTo;
     ui32 ItemIdx;
@@ -2118,19 +2049,15 @@ private:
     TString MetadataKey;
     NBackup::NYt::TSchema Schema;
     NKikimrSchemeOp::TYtImportPlan Plan;
-    EStage Stage = EStage::Metadata;
+    ERequest Request = ERequest::MetadataHead;
     TString Marker;
     ui32 PartIdx = 0;
-    bool AwaitGet = false;
     TString CurrentETag;
     ui64 CurrentLength = 0;
     ui64 Offset = 0;
     ui64 RangeEnd = 0;
-    ui64 DecodedBytes = 0;
-    bool GotFirstRow = false;
-    THolder<NBackup::NYt::TRowDecoder> Decoder;
-    z_stream Inflate = {};
-    bool InflateInitialized = false;
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    THolder<NBackup::NYt::TFirstKeyProbe> Probe;
 };
 
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv, ui64 maxParts) {

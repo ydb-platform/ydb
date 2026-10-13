@@ -94,6 +94,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
+        if (item.YtImportPlan) {
+            // The source plan defines the layout independently of the default table profile.
+            tableDesc.ClearUniformPartitionsCount();
+            tableDesc.ClearSplitBoundary();
+            // Planned source keys already have the internal split-boundary encoding.
+            for (size_t i = 1; i < item.YtImportPlan->PartsSize(); ++i) {
+                tableDesc.AddSplitBoundary()->SetSerializedKeyPrefix(item.YtImportPlan->GetParts(i).GetFirstKey());
+            }
+        }
+
         if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table,
                 ss->EnableCompactFulltextIndex, status, error)) {
             return nullptr;

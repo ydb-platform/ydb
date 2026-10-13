@@ -6,6 +6,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -4190,6 +4191,56 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         NKqp::CompareYson(R"([[[[["100";["100"]];["200";["200"]]];%false]]])", shards[1]);
     }
 
+    Y_UNIT_TEST(YtCompositeKeysUseSerializedSplitBoundaries) {
+        const TString metadata = R"({schema=<strict=%true;unique_keys=%true>[
+            {name=key;type_v3=string;sort_order=ascending};
+            {name=ordinal;type_v3=int64;sort_order=ascending};
+            {name=value;type_v3={type_name=optional;item=utf8}}
+        ];user_attributes={}})";
+        const auto part = [](std::initializer_list<std::pair<TString, i64>> keys) {
+            TString binary;
+            TStringOutput output(binary);
+            NYson::TYsonWriter writer(&output, NYson::EYsonFormat::Binary, NYson::EYsonType::ListFragment);
+            for (const auto& [key, ordinal] : keys) {
+                writer.OnListItem();
+                writer.OnBeginMap();
+                writer.OnKeyedItem("key");
+                writer.OnStringScalar(key);
+                writer.OnKeyedItem("ordinal");
+                writer.OnInt64Scalar(ordinal);
+                writer.OnKeyedItem("value");
+                writer.OnStringScalar(TStringBuilder() << key << ":" << ordinal);
+                writer.OnEndMap();
+            }
+            TString compressed;
+            TStringOutput compressedOutput(compressed);
+            TZLibCompress gzip(TZLibCompress::TParams(&compressedOutput).SetType(ZLib::GZip));
+            gzip.Write(binary);
+            gzip.Finish();
+            return compressed;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* profiles = notification->Record.MutableConfig()->MutableTableProfilesConfig();
+        auto* policy = profiles->AddPartitioningPolicies();
+        policy->SetName("uniform-default");
+        policy->SetUniformPartitionsCount(3);
+        auto* profile = profiles->AddTableProfiles();
+        profile->SetName("default");
+        profile->SetPartitioningPolicy("uniform-default");
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(notification));
+        // The source plan must override the default profile's three uniform partitions.
+        Run(runtime, env, {{"/table_metadata.yson", metadata},
+            {"/table_0_1", part({{"a", -10}, {"a", -1}})},
+            {"/table_2_3", part({{"a", 0}, {"b", -100}})}}, YtImportRequest());
+        const auto shards = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        NKqp::CompareYson(R"([[[[["a";"-10";["a:-10"]];["a";"-1";["a:-1"]]];%false]]])", shards[0]);
+        NKqp::CompareYson(R"([[[[["a";"0";["a:0"]];["b";"-100";["b:-100"]]];%false]]])", shards[1]);
+    }
+
     Y_UNIT_TEST(YtRejectInvalidRanges) {
         for (const auto& key : {"table_1_1", "table_0_18446744073709551615", "table_2_1"}) {
             TTestBasicRuntime runtime;
@@ -4316,6 +4367,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(YtDataShardRebootBeforeFinalCheckpointAck) {
         YtRebootAfterDurableUpload(true);
+    }
+
+    Y_UNIT_TEST(YtRejectPartChangedBetweenListingAndProbe) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportFromYt(true);
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3Mock({{"/table_metadata.yson", YtMetadata()},
+            {"/table_0_0", YtPart({10})}}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        TBlockEvents<NWrappers::NExternalStorage::TEvGetObjectRequest> probe(runtime, [](const auto& ev) {
+            return ev->Get()->Request.GetKey() == "table_0_0";
+        });
+        TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
+        runtime.WaitFor("pinned YT first-key GET", [&] { return !probe.empty(); });
+        UNIT_ASSERT(!probe.front()->Get()->Request.GetIfMatch().empty());
+        s3Mock.GetData()["/table_0_0"] = YtPart({20});
+        probe.Stop().Unblock();
+        env.TestWaitNotification(runtime, 100);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, 100, Ydb::StatusIds::CANCELLED), "changed");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(YtRejectChangedPlannedPart) {

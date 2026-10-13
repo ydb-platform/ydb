@@ -55,4 +55,18 @@ namespace NKikimr::NBackup::NYt {
         THolder<TImpl> Impl_;
     };
 
+    // A bounded probe of the first decoded row; full stream integrity is checked during restore.
+    class TFirstKeyProbe {
+    public:
+        TFirstKeyProbe(const TSchema& schema, size_t maxBytes = 16 * 1024 * 1024);
+        ~TFirstKeyProbe();
+        bool Feed(TStringBuf compressed, bool last, TString& error);
+        bool HasKey() const;
+        const TString& GetKey() const;
+
+    private:
+        class TImpl;
+        THolder<TImpl> Impl_;
+    };
+
 } // namespace NKikimr::NBackup::NYt

@@ -3,6 +3,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/node/node_io.h>
 
+#include <util/stream/str.h>
+#include <util/stream/zlib.h>
+
 using namespace NKikimr::NBackup::NYt;
 
 namespace {
@@ -17,6 +20,14 @@ namespace {
         auto rows = NYT::NodeFromYsonString(text, NYson::EYsonType::ListFragment);
         TString binary = NYT::NodeToYsonString(rows, NYson::EYsonFormat::Binary);
         return binary.substr(1, binary.size() - 2);
+    }
+    TString Gzip(TStringBuf data) {
+        TString result;
+        TStringOutput output(result);
+        TZLibCompress compressor(TZLibCompress::TParams(&output).SetType(ZLib::GZip));
+        compressor.Write(data);
+        compressor.Finish();
+        return result;
     }
 } // namespace
 
@@ -133,5 +144,40 @@ Y_UNIT_TEST_SUITE(YtBackupFormat) {
         TRowDecoder truncated(schema, [](const TDecodedRow&, TString&) { return true; });
         UNIT_ASSERT(truncated.Feed(TStringBuf(input).SubStr(0, input.size() - 2), error));
         UNIT_ASSERT(!truncated.Finish(error));
+    }
+    Y_UNIT_TEST(FirstKeyProbeChunkedGzip) {
+        const auto schema = Schema("{name=k;type_v3=uint64;sort_order=ascending};{name=v;type_v3=string}");
+        const auto compressed = Gzip(Binary("{k=42u;v=hello};{k=100u;v=world}"));
+        TString error;
+        TFirstKeyProbe probe(schema);
+        for (size_t index = 0; index < compressed.size() && !probe.HasKey(); ++index) {
+            UNIT_ASSERT_C(probe.Feed(TStringBuf(compressed).SubStr(index, 1), index + 1 == compressed.size(), error), error);
+        }
+        UNIT_ASSERT(probe.HasKey());
+        TSerializedCellVec key(probe.GetKey());
+        UNIT_ASSERT_VALUES_EQUAL(key.GetCells().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(key.GetCells()[0].AsValue<ui64>(), 42);
+    }
+    Y_UNIT_TEST(FirstKeyProbeRejectsTruncatedAndEmptyGzip) {
+        const auto schema = Schema("{name=k;type_v3=uint64;sort_order=ascending}");
+        TString error;
+        TFirstKeyProbe truncated(schema);
+        const auto compressed = Gzip(Binary("{k=42u}"));
+        UNIT_ASSERT(!truncated.Feed(TStringBuf(compressed).SubStr(0, 10), true, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "truncated");
+        TFirstKeyProbe empty(schema);
+        UNIT_ASSERT(!empty.Feed(Gzip(""), true, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "no rows");
+    }
+    Y_UNIT_TEST(FirstKeyProbeBoundsCompressedAndDecodedInput) {
+        const auto schema = Schema("{name=k;type_v3=uint64;sort_order=ascending};{name=v;type_v3=string}");
+        TString error;
+        TFirstKeyProbe decoded(schema, 256);
+        const auto large = Gzip(Binary(TString("{k=42u;v=\"") + TString(1024, 'x') + "\"}"));
+        UNIT_ASSERT(!decoded.Feed(large, true, error));
+        UNIT_ASSERT(!error.empty());
+        TFirstKeyProbe compressed(schema, 8);
+        UNIT_ASSERT(!compressed.Feed(large, false, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "bounded source read");
     }
 } // Y_UNIT_TEST_SUITE(YtBackupFormat)

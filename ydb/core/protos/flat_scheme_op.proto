@@ -1577,8 +1577,8 @@ message TYtImportPart {
 message TYtImportPlan {
     optional uint32 Version = 1;
     repeated TYtImportPart Parts = 2;
-    optional string MetadataETag = 3;
-    optional uint64 MetadataContentLength = 4;
+    reserved 3, 4;
+    reserved "MetadataETag", "MetadataContentLength";
 }
 
 message TRestoreTask {
@@ -1604,7 +1604,7 @@ message TRestoreTask {
 
     optional TEncryptionSettings EncryptionSettings = 8;
 
-    optional TYtImportPlan YtImportPlan = 10; // SchemeShard only; removed in shard proposals
+    optional TYtImportPlan YtImportPlan = 10; // Row-shard proposals carry only YtImportPart
     optional TYtImportPart YtImportPart = 11; // Exactly one selected source part
     optional bool YtSource = 12; // Absent part means an empty YT table
 

@@ -319,7 +319,6 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 switch (settings.source_format()) {
-                case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_UNSPECIFIED:
                 case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YDB:
                     break;
                 case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT:

@@ -80,7 +80,6 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
     Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
     switch (metadata.settings().source_format()) {
-    case ImportFromS3Settings::SOURCE_FORMAT_UNSPECIFIED:
     case ImportFromS3Settings::SOURCE_FORMAT_YDB:
         Metadata_.Settings.SourceFormat(EImportSourceFormat::Ydb);
         break;

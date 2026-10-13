@@ -1,6 +1,7 @@
 LIBRARY()
-SRCS(format.cpp)
+SRCS(format.cpp first_key.cpp)
 PEERDIR(
+    contrib/libs/zlib
     library/cpp/yson/node
     ydb/core/protos
     ydb/core/scheme

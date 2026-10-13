@@ -99,10 +99,10 @@ namespace NYdb::inline Dev::NImport {
                                       .Bucket("backup-bucket")
                                       .AppendItem({"backup/with_underscores", "/Root/restored"})
                                       .ClientTimeout(TDuration::Seconds(5));
-            check(settings, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_UNSPECIFIED);
+            check(settings, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YDB);
             auto explicitYdb = settings;
             explicitYdb.SourceFormat(EImportSourceFormat::Ydb);
-            check(explicitYdb, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_UNSPECIFIED);
+            check(explicitYdb, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YDB);
             auto yt = settings;
             yt.SourceFormat(EImportSourceFormat::Yt);
             check(yt, Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT);
@@ -117,7 +117,7 @@ namespace NYdb::inline Dev::NImport {
         Y_UNIT_TEST(ParseMetadataSourceFormats) {
             using TProto = Ydb::Import::ImportFromS3Settings;
             const std::pair<TProto::SourceFormat, EImportSourceFormat> cases[] = {
-                {TProto::SOURCE_FORMAT_UNSPECIFIED, EImportSourceFormat::Ydb},
+                {static_cast<TProto::SourceFormat>(1), EImportSourceFormat::Unknown},
                 {TProto::SOURCE_FORMAT_YDB, EImportSourceFormat::Ydb},
                 {TProto::SOURCE_FORMAT_YT, EImportSourceFormat::Yt},
                 {static_cast<TProto::SourceFormat>(12345), EImportSourceFormat::Unknown},

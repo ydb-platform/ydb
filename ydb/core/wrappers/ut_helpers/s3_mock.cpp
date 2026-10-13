@@ -171,24 +171,31 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
     return true;
 }
 
-TString BuildContentXML(const TString& path, size_t size) {
+struct TListedObject {
+    TString Key;
+    size_t Size;
+    TString ETag;
+};
+
+TString BuildContentXML(const TListedObject& object) {
     return Sprintf(R"(
                 <Contents>
                     <Key>%s</Key>
                     <Size>%zu</Size>
+                    <ETag>%s</ETag>
                 </Contents>
-        )", path.c_str(), size);
+        )", object.Key.c_str(), object.Size, object.ETag.c_str());
 }
 
-TString BuildContentListXML(const TVector<std::pair<TString, size_t>>& objects) {
+TString BuildContentListXML(const TVector<TListedObject>& objects) {
     TString result;
-    for (const auto& [path, size] : objects) {
-        result += BuildContentXML(path, size);
+    for (const auto& object : objects) {
+        result += BuildContentXML(object);
     }
     return result;
 }
 
-TString BuildListObjectsXML(const TVector<std::pair<TString, size_t>>& objects, const TStringBuf bucketName) {
+TString BuildListObjectsXML(const TVector<TListedObject>& objects, const TStringBuf bucketName) {
     return Sprintf(R"(<?xml version="1.0" encoding="UTF-8"?>
             <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
                 <Name>%s</Name>
@@ -205,7 +212,7 @@ bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf buc
     params.Output << "HTTP/1.1 200 Ok\r\n";
     THttpHeaders headers;
 
-    TVector<std::pair<TString, size_t>> objects;
+    TVector<TListedObject> objects;
     TString bucketPrefix(bucketName);
     if (!bucketPrefix.EndsWith('/')) {
         bucketPrefix += '/';
@@ -213,7 +220,7 @@ bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf buc
     const TString keyPrefix = TStringBuilder() << bucketPrefix << prefix;
     for (const auto& [key, value] : Parent->Data) {
         if (key.StartsWith(keyPrefix)) {
-            objects.emplace_back(key.substr(bucketPrefix.size()), value.size());
+            objects.push_back({key.substr(bucketPrefix.size()), value.size(), MD5::Data(value)});
         }
     }
 

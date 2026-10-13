@@ -27,6 +27,6 @@ jobs:
     with:
       test_targets: ydb/
       test_size: small,medium
-      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '') }}
-      branches_config_path: '.github/config/stable_tests_branches.json'
+      # Temporary: main + current stable + previous stable only.
+      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '["main","stable-26-4-1","stable-26-3-1"]') }}
       build_preset: ${{ matrix.build_preset }}

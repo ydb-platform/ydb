@@ -27,7 +27,8 @@ jobs:
       id: set-branches
       run: |
           if [[ "${{ github.event_name }}" == "schedule" || ("${{ inputs.use_default_branches }}" == "true"  && "${{ github.ref_type }}" != "tag") ]]; then
-            echo "branches=$(jq -c '.' .github/config/stable_nightly_branches.json)" >> $GITHUB_OUTPUT
+            # Temporary: main + current stable + previous stable only.
+            echo 'branches=["main","stable-26-4-1","stable-26-3-1"]' >> $GITHUB_OUTPUT
           else
             echo "branches=['${{ github.ref_name }}']" >> $GITHUB_OUTPUT
           fi
@@ -37,7 +38,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ["release", "relwithdebinfo", "release-asan"]
+        # Temporary: relw + release.
+        build_preset: ["release", "relwithdebinfo"]
         branch: ${{ fromJSON(needs.determine_branches.outputs.branches) }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}

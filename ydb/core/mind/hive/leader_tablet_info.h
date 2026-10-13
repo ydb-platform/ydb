@@ -251,7 +251,7 @@ public:
 
     TFollowerTabletInfo& SpawnFollower(TFollowerGroup& followerGroup) {
         TFollowerTabletInfo& follower = AddFollower(followerGroup);
-        follower.BecomeStopped();
+        follower.BecomeStopped(EHiveEventReason::InitialState);
         return follower;
     }
 

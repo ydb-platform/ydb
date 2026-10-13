@@ -247,17 +247,17 @@ class TestRescaling(StreamingTestBase):
 
             self._restart_query(kikimr, query_name, expected_readers_before, scale_up, added_slots)
             check_reading("after")
+            self._stop_query(kikimr, query_name)
+            if scale_up:
+                kikimr.cluster.unregister_and_stop_slots(added_slots)
+                added_slots.clear()
+                kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
+            self._resume_query(kikimr, query_name, expected_readers_before, expect_growth=False)
+            check_reading("scale_down" if scale_up else "second_restart")
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
-    @pytest.mark.parametrize(
-        "scale_up",
-        [
-            False,
-            pytest.param(True, marks=pytest.mark.skip(reason="Rescaling queries with aggregations is not supported")),
-        ],
-        ids=["restart", "scale_up"],
-    )
+    @pytest.mark.parametrize("scale_up", [False, True], ids=["restart", "scale_up"])
     def test_pq_source_rescaling_hopping_closed_window(
         self,
         kikimr: Kikimr,
@@ -525,8 +525,6 @@ class TestRescaling(StreamingTestBase):
                 self.input_topic,
                 set_min_active_partitions=partitions_count,
             )
-            self._resume_query(kikimr, query_name, expected_readers_before, expect_growth=True)
-
             expected = [f"data_{partition_id}" for partition_id in range(partitions_count)]
             for partition_id, value in enumerate(expected):
                 client.topic_write(
@@ -534,6 +532,7 @@ class TestRescaling(StreamingTestBase):
                     [json.dumps({"value": value})],
                     partition_id=partition_id,
                 )
+            self._resume_query(kikimr, query_name, expected_readers_before, expect_growth=True)
             actual = client.topic_read(self.output_topic, self.consumer_name, len(expected))
             assert sorted(actual) == sorted(expected), (actual, expected)
             self.wait_completed_checkpoints(kikimr, query_name)
@@ -602,14 +601,7 @@ class TestRescaling(StreamingTestBase):
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)
 
-    @pytest.mark.parametrize(
-        "scale_up",
-        [
-            False,
-            pytest.param(True, marks=pytest.mark.skip(reason="Rescaling queries with aggregations is not supported")),
-        ],
-        ids=["restart", "scale_up"],
-    )
+    @pytest.mark.parametrize("scale_up", [False, True], ids=["restart", "scale_up"])
     def test_pq_source_rescaling_hopping_open_window(
         self,
         kikimr: Kikimr,
@@ -702,5 +694,75 @@ class TestRescaling(StreamingTestBase):
             )
             self.wait_completed_checkpoints(kikimr, query_name)
             self._check_downstream_tasks(kikimr, query_name, readers_before, tasks_before)
+        finally:
+            self._cleanup_query(kikimr, query_name, added_slots)
+
+    @pytest.mark.parametrize(
+        "kikimr,use_in_memory",
+        [
+            ({"enable_streaming_aggregation": True}, True),
+            ({"enable_streaming_aggregation": True, "enable_streaming_aggregation_advanced": True}, False),
+        ],
+        indirect=["kikimr"],
+        ids=["in_memory", "table_binding"],
+    )
+    def test_pq_source_rescaling_preserves_streaming_aggregation(self, kikimr, entity_name, use_in_memory):
+        """Keep checkpointed sums and aggregation parallelism across scale-up and scale-down."""
+        partitions_count = 100
+        query_name = entity_name("rescale_streaming_aggregation")
+        table_name = entity_name("aggregation_output")
+        inp, _, _ = self.get_io_names(kikimr, query_name, True, entity_name, partitions_count=partitions_count)
+        kikimr.ydb_client.query(f"CREATE TABLE `{table_name}` (key String NOT NULL, value Int64, PRIMARY KEY (key));")
+        kikimr.ydb_client.query(f'''
+            CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
+                PRAGMA ydb.UseInMemoryStreamingAggregation = "{str(use_in_memory).lower()}";
+                $input = SELECT key, value FROM {inp} WITH (
+                    FORMAT = json_each_row, SCHEMA (key String NOT NULL, value Int64 NOT NULL)
+                );
+                UPSERT INTO `{table_name}` SELECT key, SUM(value) AS value FROM $input GROUP BY key;
+            END DO;
+        ''')
+        added_slots = []
+        try:
+            self._wait_started(kikimr, query_name)
+            self._wait_reader_count(kikimr, query_name)
+            # Wait for the same asynchronously published counters used by the other rescaling tests.
+            assert wait_for(
+                lambda: self.get_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count") > 6,
+                timeout_seconds=60,
+                step_seconds=1,
+            )
+            tasks_before = self.get_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count")
+            for phase in range(4):
+                if phase:
+                    self._stop_query(kikimr, query_name)
+                    if phase == 1:
+                        added_slots.extend(kikimr.cluster.register_and_start_slots(kikimr.get_database_name(), count=3))
+                        kikimr.cluster.wait_tenant_up(kikimr.get_database_name(), token="root@builtin")
+                    elif phase == 2:
+                        kikimr.cluster.unregister_and_stop_slots(added_slots)
+                        added_slots.clear()
+                    kikimr.wait_kqp_node_count(len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
+                    self._resume_query(kikimr, query_name, 6, expect_growth=phase == 1)
+                    self._check_downstream_tasks(kikimr, query_name, 6, tasks_before)
+                self._write_and_checkpoint(
+                    kikimr,
+                    query_name,
+                    {
+                        partition: [json.dumps({"key": str(partition % 10), "value": 1})]
+                        for partition in range(partitions_count)
+                    },
+                )
+                expected = [(str(key), (phase + 1) * 10) for key in range(10)]
+
+                def matches():
+                    rows = kikimr.ydb_client.query(f"SELECT key, value FROM `{table_name}` ORDER BY key;")[0].rows
+                    actual = [(row["key"].decode(), row["value"]) for row in rows]
+                    return actual == expected
+
+                assert wait_for(
+                    matches, timeout_seconds=120, step_seconds=1
+                ), f"Aggregation state lost in phase {phase}"
+                self.wait_completed_checkpoints(kikimr, query_name)
         finally:
             self._cleanup_query(kikimr, query_name, added_slots)

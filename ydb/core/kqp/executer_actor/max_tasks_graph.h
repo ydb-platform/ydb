@@ -42,6 +42,7 @@ public:
     void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
 
     void AddTask(const TTask& task, std::optional<TNodeId> node);
+    void FixStageTasksCount(const TStageId& stage);
 
     void EstimateTasksResources();
 

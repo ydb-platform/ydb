@@ -9,6 +9,7 @@ SRCS(
     kqp_compute_actor_creation_ut.cpp
     kqp_executer_stats_ut.cpp
     kqp_executer_ut.cpp
+    kqp_graph_replanning_ut.cpp
     kqp_tasks_graph_ut.cpp
     max_tasks_graph_ut.cpp
 )

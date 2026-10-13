@@ -2169,7 +2169,8 @@ protected:
                 }
             }
 
-            if (hasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+            if (hasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()
+                && !AppData()->FeatureFlags.GetEnableStreamingQueryReplanning()) {
                 auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
                     Request.QueryPhysicalGraph);
                 const auto taskCount = mutableGraph->TasksSize();

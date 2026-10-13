@@ -1,5 +1,6 @@
 #include "kqp_pq_topic_resolver.h"
 #include "kqp_executer.h"
+#include "kqp_graph_replanning.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -21,6 +22,11 @@ namespace NKikimr::NKqp {
 using namespace NActors;
 
 namespace {
+
+TString MakeTopicKey(const TString& endpoint, const TString& database, const TString& topicPath) {
+    return TStringBuilder() << endpoint.size() << ":" << endpoint
+        << database.size() << ":" << database << topicPath;
+}
 
 // Per-cluster partition counts for one topic.
 struct TTopicClusterPartitions {
@@ -44,7 +50,7 @@ enum EPqResolverPrivateEv {
 struct TEvTopicDescribeResult
     : public TEventLocal<TEvTopicDescribeResult, EvTopicDescribeResult>
 {
-    // On success: topic key (Endpoint + "|" + TopicPath) and per-cluster data.
+    // On success: topic key (endpoint, database, topic path) and per-cluster data.
     TString TopicKey;
     TTopicClusterPartitions ClusterPartitions;
     // On error: ErrorMessage is non-empty.
@@ -74,7 +80,7 @@ struct TPqTopicResolverSource {
 // __ydb_partition_id predicate are skipped — their ReadRanges are authoritative.
 TVector<TPqTopicResolverSource> CollectPqSources(
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,
-    const TString& database)
+    const TString& database, bool discoverPruned)
 {
     TVector<TPqTopicResolverSource> result;
     for (const auto& tx : transactions) {
@@ -98,7 +104,7 @@ TVector<TPqTopicResolverSource> CollectPqSources(
             const bool usedPartitionPredicate =
                 extSrc.GetSettings().UnpackTo(&topicSourceProto)
                 && topicSourceProto.GetUsedPartitionPredicate();
-            if (usedPartitionPredicate) {
+            if (usedPartitionPredicate && !discoverPruned) {
                 continue;
             }
 
@@ -134,13 +140,16 @@ public:
         TVector<TPqTopicResolverSource> sources,
         THashMap<TString, TString> secureParams,
         NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
-        std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
+        std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph,
+        TPqSourcePlanningSnapshot sourceTemplates, ui32 maxTasksPerStage)
         : Owner(owner)
         , TxId(txId)
         , Sources(std::move(sources))
         , SecureParams(std::move(secureParams))
         , PqGatewayFactory(std::move(pqGatewayFactory))
         , QueryPhysicalGraph(std::move(queryPhysicalGraph))
+        , SourceTemplates(std::move(sourceTemplates))
+        , MaxTasksPerStage(maxTasksPerStage)
     {}
 
     void Bootstrap() {
@@ -181,12 +190,16 @@ private:
         }
 
         // Store per-cluster partition counts for this topic, keyed by the topic's
-        // unique identifier (Endpoint + "|" + TopicPath). When multiple topics are
+        // unique identifier (endpoint, database, topic path). When multiple topics are
         // in the query each gets its own entry in this map.
         TopicClusterPartitions[ev->Get()->TopicKey] = std::move(ev->Get()->ClusterPartitions);
 
         if (--Pending == 0) {
-            PatchAndDie();
+            if (QueryPhysicalGraph) {
+                PatchAndDie();
+            } else {
+                PlanAndDie();
+            }
         }
     }
 
@@ -215,12 +228,9 @@ private:
             {"topicPath", src.TopicPath},
             {"sessionId", sessionId});
 
-        // Build a key that uniquely identifies this topic among all topics in
-        // the query. Combining Endpoint and TopicPath is sufficient: topics on
-        // different clusters have different endpoints, and within a single
-        // cluster topic paths are unique (including when the endpoint is empty
-        // for local clusters).
-        TString topicKey = src.Endpoint + "|" + src.TopicPath;
+        // Include the database: relative topic paths can be equal in different
+        // databases served by the same endpoint.
+        TString topicKey = MakeTopicKey(src.Endpoint, src.DatabaseForClusterConfig, src.TopicPath);
 
         gateway->DescribeFederatedTopic(sessionId, src.Cluster, src.Database, src.TopicPath, token)
             .Subscribe(
@@ -247,6 +257,21 @@ private:
                             new TEvTopicDescribeResult(TString(ex.what())));
                     }
                 });
+    }
+
+    void PlanAndDie() {
+        try {
+            for (auto& [stageId, source] : SourceTemplates) {
+                NYql::NPq::NProto::TDqPqTopicSource settings;
+                YQL_ENSURE(source.GetSettings().UnpackTo(&settings), "Invalid PQ source settings");
+                const auto key = MakeTopicKey(settings.GetEndpoint(), settings.GetDatabase(), settings.GetTopicPath());
+                const auto& snapshot = TopicClusterPartitions.at(key);
+                RefreshPqSourcePartitions(source, snapshot.ByClusterName, snapshot.MaxPartitionsCount, MaxTasksPerStage);
+            }
+            ReplyOkAndDie();
+        } catch (const std::exception& e) {
+            ReplyErrorAndDie(e.what());
+        }
     }
 
     // Patch all PQ tasks in the physical graph:
@@ -283,8 +308,7 @@ private:
                         continue;
                     }
 
-                    TString topicKey =
-                        topicSource.GetEndpoint() + "|" + topicSource.GetTopicPath();
+                    TString topicKey = MakeTopicKey(topicSource.GetEndpoint(), topicSource.GetDatabase(), topicSource.GetTopicPath());
                     auto it = TopicClusterPartitions.find(topicKey);
                     if (it == TopicClusterPartitions.end()) {
                         break;
@@ -374,7 +398,9 @@ private:
     }
 
     void ReplyOkAndDie() {
-        Send(Owner, new TEvKqpExecuter::TEvPqTopicResolveStatus());
+        auto* ev = new TEvKqpExecuter::TEvPqTopicResolveStatus();
+        ev->Snapshot = std::move(SourceTemplates);
+        Send(Owner, ev);
         PassAway();
     }
 
@@ -397,8 +423,10 @@ private:
     NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
+    TPqSourcePlanningSnapshot SourceTemplates;
+    ui32 MaxTasksPerStage = 0;
     ui32 Pending = 0;
-    // Maps topic key (Endpoint + "|" + TopicPath) to per-cluster partition
+    // Maps topic key (endpoint, database, topic path) to per-cluster partition
     // counts. Populated as describe responses arrive; consumed in PatchAndDie().
     THashMap<TString, TTopicClusterPartitions> TopicClusterPartitions;
 };
@@ -414,13 +442,35 @@ NActors::IActor* CreateKqpPqTopicResolver(
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph)
 {
-    auto sources = CollectPqSources(transactions, database);
+    auto sources = CollectPqSources(transactions, database, !queryPhysicalGraph);
+    TPqSourcePlanningSnapshot sourceTemplates;
+    ui32 maxTasksPerStage = 0;
+    if (!queryPhysicalGraph) {
+        ui32 txId = 0;
+        ui32 stageBase = 0;
+        for (const auto& tx : transactions) {
+            if (const auto query = tx.Body->GetPreparedQuery()) {
+                maxTasksPerStage = query->GetPhysicalQuery().GetMaxTasksPerStage();
+            }
+            ui32 stageIdx = 0;
+            for (const auto& stage : tx.Body->GetStages()) {
+                if (stage.SourcesSize() && stage.GetSources(0).HasExternalSource()
+                    && stage.GetSources(0).GetExternalSource().GetType() == "PqSource")
+                {
+                    sourceTemplates.emplace(NYql::NDq::TStageId(txId, stageBase + stageIdx), stage.GetSources(0).GetExternalSource());
+                }
+                ++stageIdx;
+            }
+            stageBase += tx.Body->StagesSize();
+            ++txId;
+        }
+    }
     return new TKqpPqTopicResolver(
         owner, txId,
         std::move(sources),
         std::move(secureParams),
         std::move(pqGatewayFactory),
-        std::move(queryPhysicalGraph));
+        std::move(queryPhysicalGraph), std::move(sourceTemplates), maxTasksPerStage);
 }
 
 } // namespace NKikimr::NKqp

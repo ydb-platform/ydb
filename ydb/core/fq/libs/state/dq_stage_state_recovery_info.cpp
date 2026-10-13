@@ -111,6 +111,68 @@ TGuard<TScopedAlloc> TGraphStateContext::BindAllocator() const {
     return Env->BindAllocator();
 }
 
+TStageStateInfo AnalyzeStageProgram(const NYql::NDqProto::TProgram& program,
+    const TString& raw, const TGraphStateContext& context)
+{
+    const auto guard = context.BindAllocator();
+    const auto& env = context.GetTypeEnvironment();
+    TStageStateInfo stage;
+    stage.RuntimeVersion = program.GetRuntimeVersion();
+    YQL_ENSURE(stage.RuntimeVersion == NYql::NDqProto::RUNTIME_VERSION_YQL_1_0, "Unsupported program runtime for recovery");
+    const auto root = DeserializeRuntimeNode(raw, env);
+    if (root.IsImmediate() && root.GetStaticType()->IsStruct()) {
+        if (const auto* programStruct = AS_VALUE(TStructLiteral, root); const auto index = programStruct->GetType()->FindMemberIndex("Program")) {
+            if (const auto* type = programStruct->GetValue(*index).GetStaticType(); type->IsStream()) {
+                if (const auto* item = static_cast<const TStreamType*>(type)->GetItemType(); item->IsVariant()) {
+                    const auto* underlying = static_cast<const TVariantType*>(item)->GetUnderlyingType();
+                    YQL_ENSURE(underlying->IsTuple(), "Expected tuple of stage output types");
+
+                    const auto* outputs = static_cast<const TTupleType*>(underlying);
+                    stage.OutputTypes.reserve(outputs->GetElementsCount());
+                    for (ui32 i = 0; i < outputs->GetElementsCount(); ++i) {
+                        stage.OutputTypes.emplace_back(outputs->GetElementType(i));
+                    }
+                } else {
+                    stage.OutputTypes.emplace_back(item);
+                }
+            }
+        }
+    }
+
+    TExploringNodeVisitor explorer;
+    explorer.Walk(root.GetNode(), env);
+    for (const auto* node : explorer.GetNodes()) {
+        if (!node->GetType()->IsCallable()) {
+            continue;
+        }
+
+        const auto& callable = static_cast<const TCallable&>(*node);
+        const TStringBuf name = callable.GetType()->GetName();
+        if (IsStatefulOperator(name)) {
+            stage.StatefulOperators.push_back(&callable);
+        } else if (name == "DqWatermarkGenerator") {
+            stage.HasWatermarkGenerator = true;
+        }
+    }
+    return stage;
+}
+
+TString GetStreamingAggregationIdentity(const NKikimr::NMiniKQL::TCallable& callable) {
+    YQL_ENSURE(callable.GetType()->GetName() == "KqpStreamingAggregation", "Expected streaming aggregation");
+    YQL_ENSURE(callable.GetInputsCount() >= 12, "Invalid streaming aggregation program");
+    const auto binding = callable.GetInput(8);
+    if (!binding.IsImmediate() || !binding.GetStaticType()->IsTuple()) {
+        return {};
+    }
+    const auto* tuple = AS_VALUE(TTupleLiteral, binding);
+    YQL_ENSURE(tuple->GetValuesCount() == 2, "Invalid streaming aggregation output table binding");
+    const auto path = tuple->GetValue(0);
+    YQL_ENSURE(path.IsImmediate() && path.GetStaticType()->IsData(), "Invalid streaming aggregation output table path");
+    const TString table(AS_VALUE(TDataLiteral, path)->AsValue().AsStringRef());
+    YQL_ENSURE(!table.empty(), "Empty streaming aggregation output table path");
+    return table;
+}
+
 //// TGraphStateInfo
 
 TGraphStateInfo::TGraphStateInfo(const NProto::TGraphParams& graph, const TGraphStateContext& context)
@@ -118,7 +180,6 @@ TGraphStateInfo::TGraphStateInfo(const NProto::TGraphParams& graph, const TGraph
     , Context(&context)
 {
     const auto guard = Context->BindAllocator();
-    const auto& env = Context->GetTypeEnvironment();
 
     THashMap<ui32, size_t> stages;
     THashMap<ui32, TStringBuf> programs;
@@ -150,41 +211,8 @@ TGraphStateInfo::TGraphStateInfo(const NProto::TGraphParams& graph, const TGraph
 
             programs.emplace(stage.StageId, *program);
 
-            const auto root = DeserializeRuntimeNode(*program, env);
-            if (root.IsImmediate() && root.GetStaticType()->IsStruct()) {
-                if (const auto* programStruct = AS_VALUE(TStructLiteral, root); const auto index = programStruct->GetType()->FindMemberIndex("Program")) {
-                    if (const auto* type = programStruct->GetValue(*index).GetStaticType(); type->IsStream()) {
-                        if (const auto* item = static_cast<const TStreamType*>(type)->GetItemType(); item->IsVariant()) {
-                            const auto* underlying = static_cast<const TVariantType*>(item)->GetUnderlyingType();
-                            YQL_ENSURE(underlying->IsTuple(), "Expected tuple of stage output types");
-
-                            const auto* outputs = static_cast<const TTupleType*>(underlying);
-                            stage.OutputTypes.reserve(outputs->GetElementsCount());
-                            for (ui32 i = 0; i < outputs->GetElementsCount(); ++i) {
-                                stage.OutputTypes.emplace_back(outputs->GetElementType(i));
-                            }
-                        } else {
-                            stage.OutputTypes.emplace_back(item);
-                        }
-                    }
-                }
-            }
-
-            TExploringNodeVisitor explorer;
-            explorer.Walk(root.GetNode(), env);
-            for (const auto* node : explorer.GetNodes()) {
-                if (!node->GetType()->IsCallable()) {
-                    continue;
-                }
-
-                const auto& callable = static_cast<const TCallable&>(*node);
-                const TStringBuf name = callable.GetType()->GetName();
-                if (IsStatefulOperator(name)) {
-                    stage.StatefulOperators.push_back(&callable);
-                } else if (name == "DqWatermarkGenerator") {
-                    stage.HasWatermarkGenerator = true;
-                }
-            }
+            stage = AnalyzeStageProgram(task.GetProgram(), *program, context);
+            stage.StageId = task.GetStageId();
         }
 
         auto& stage = Stages[it->second];

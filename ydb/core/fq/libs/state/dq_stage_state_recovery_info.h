@@ -51,6 +51,11 @@ private:
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> Env;
 };
 
+// Returned MiniKQL nodes live in context's type environment.
+TStageStateInfo AnalyzeStageProgram(const NYql::NDqProto::TProgram& program,
+    const TString& raw, const TGraphStateContext& context);
+TString GetStreamingAggregationIdentity(const NKikimr::NMiniKQL::TCallable& callable);
+
 class TGraphStateInfo {
     using TGraphPtr = const NProto::TGraphParams*;
     using TContextPtr = const TGraphStateContext*;

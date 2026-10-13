@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_task_planning.h"
+
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
@@ -139,6 +141,7 @@ struct TEvKqpExecuter {
     {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         NYql::TIssues Issues;
+        TPqSourcePlanningSnapshot Snapshot;
     };
 
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,

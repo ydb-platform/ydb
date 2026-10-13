@@ -307,12 +307,14 @@ private:
         }
 
         auto& evPhysicalGraph = ev->Get()->PhysicalGraph;
-        if (PhysicalGraph) {
+        if (ev->Get()->Reason != TEvSaveScriptPhysicalGraphRequest::EReason::UnchangedRestore) {
+            evPhysicalGraph.SetZeroCheckpointSaved(false);
+        } else if (PhysicalGraph) {
             // If zero checkpoint was done on previous query execution, now checkpointing will continue without zero checkpoint
             evPhysicalGraph.SetZeroCheckpointSaved(PhysicalGraph->GetZeroCheckpointSaved());
-        } else {
-            PhysicalGraph = evPhysicalGraph;
         }
+        // ZeroCheckpointDone must confirm the graph actually being executed.
+        PhysicalGraph = evPhysicalGraph;
 
         SavePhysicalGraphState.Sender = ev->Sender;
         SavePhysicalGraphState.GraphsToSave.emplace(true, std::move(evPhysicalGraph));

@@ -1213,6 +1213,9 @@ message TQueryPhysicalGraph {
     optional TPreparedQuery PreparedQuery = 1;
     repeated TTask Tasks = 2;
     optional bool ZeroCheckpointSaved = 3;
+    // Automatic graph transitions must preserve compatible operator state even
+    // if a restart happens before the new graph's zero checkpoint is saved.
+    optional bool RequiresCompatibleStateRecovery = 4;
 }
 
 /// KQP workload manager Events

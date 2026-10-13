@@ -34,6 +34,7 @@ public:
     TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config);
     TMaybe<TInstant> OutputStartTime;
     TCheckpointProviderIntegrations ProviderIntegrations;
+    bool RequireCompatibleStateRecovery = false;
 
 private:
     YDB_ACCESSOR(TDuration, CheckpointingPeriod, DefaultCheckpointingPeriod);

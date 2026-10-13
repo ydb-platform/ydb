@@ -104,6 +104,11 @@ public:
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
+<<<<<<< HEAD
+=======
+    // diagnostics only: newest events of this node, constructed on the first event, see THive::RecordNodeEvent
+    TEventHistory EventHistory;
+>>>>>>> 0853d2d0a88 (EXT-2601 Hive: implement tablet events. Settings for event buffer size (#55755))
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -225,7 +230,7 @@ public:
                 }
             }
             for (const auto& t : TabletsToRestart) {
-                t->BecomeStopped();
+                t->BecomeStopped(EHiveEventReason::NodeDisconnected);
             }
             Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
             Local = TActorId();

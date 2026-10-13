@@ -262,9 +262,9 @@ public:
                     if (BootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                         // Make sure any running tablets are stopped
                         for (TFollowerTabletInfo& follower : tablet->Followers) {
-                            follower.InitiateStop(SideEffects);
+                            follower.InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                         }
-                        tablet->InitiateStop(SideEffects);
+                        tablet->InitiateStop(SideEffects, EHiveEventReason::BootingSuppressed);
                     }
 
                     if (tablet->State == ETabletState::StoppingInGroupAssignment) {
@@ -401,11 +401,17 @@ public:
         tablet.AssignDomains(ObjectDomain, AllowedDomains);
         tablet.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
         tablet.BalancerPolicy = BalancerPolicy;
+<<<<<<< HEAD
+=======
+        tablet.IsBackup = IsBackup;
+        Self->RecordTabletEvent(tablet, EHiveEventType::Created, EHiveEventReason::OwnerRequest,
+            TStringBuilder() << "type=" << TTabletTypes::TypeToStr(tablet.Type) << " channels=" << BoundChannels.size());
+>>>>>>> 0853d2d0a88 (EXT-2601 Hive: implement tablet events. Settings for event buffer size (#55755))
 
         TDomainInfo* domain = Self->FindDomain(ObjectDomain);
         if (domain && domain->Stopped) {
             tablet.State = ETabletState::Stopped;
-            tablet.BecomeStopped();
+            tablet.BecomeStopped(EHiveEventReason::TenantStopped);
             tablet.StoppedByTenant = true;
         }
 

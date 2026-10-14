@@ -204,6 +204,15 @@ namespace NKikimr::NStorage {
             if (error) {
                 // we already have an error, do nothing more
             } else if (!incoming.HasBridgePileId()) {
+                // peer is not bridge-capable; this is allowed only until the cluster gets converted to bridged one
+                if (!StorageConfig || !StorageConfig->HasClusterState()) {
+                    YDB_LOG_DEBUG("Accepting connection from not bridge-capable peer",
+                        {"marker", "NWDCC07"},
+                        {"peerNodeId", peerNodeId});
+                    Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, {}), 0,
+                        ev->Cookie);
+                    return;
+                }
                 error = "missing mandatory peer bridge pile id";
             } else if (const auto value = TBridgePileId::FromProto(&incoming, &decltype(incoming)::GetBridgePileId);
                     peerBridgePileId && peerBridgePileId != value) {
@@ -292,6 +301,20 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(BridgeInfo);
 
+            if (!StorageConfig->HasClusterState() || !config.HasClusterState()) {
+                // at least one of parties runs config of the cluster not yet converted to bridged one; this is possible
+                // only for single-pile configuration and the party with older config will catch up through the
+                // config exchange
+                std::optional<TString> error;
+                if (StorageConfig->HasClusterState() && StorageConfig->GetGeneration() <= config.GetGeneration()) {
+                    error = "peer storage config is not bridged one while having newer generation";
+                } else if (config.HasClusterState() && config.GetGeneration() <= StorageConfig->GetGeneration()) {
+                    error = "local storage config is not bridged one while having newer generation";
+                }
+                ExchangeConfigs(incoming, outgoing);
+                return error;
+            }
+
             // obtain cluster state from other party and check if they are the same as the one we have; this may trigger
             // generation sync (but still would return error)
             if (auto error = ValidateClusterState(config)) {
@@ -341,6 +364,14 @@ namespace NKikimr::NStorage {
                 }
             }
 
+            ExchangeConfigs(incoming, outgoing);
+
+            return error;
+        }
+
+        void ExchangeConfigs(const NKikimrBlobStorage::TConnectivityPayload& incoming,
+                NKikimrBlobStorage::TConnectivityPayload *outgoing) {
+            const NKikimrBlobStorage::TStorageConfig& config = incoming.GetStorageConfig();
             if (StorageConfig) {
                 if (config.GetGeneration() < StorageConfig->GetGeneration()) {
                     outgoing->MutableStorageConfig()->CopyFrom(*StorageConfig);
@@ -351,8 +382,6 @@ namespace NKikimr::NStorage {
                     UpdateLocalConfig(incoming);
                 }
             }
-
-            return error;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////

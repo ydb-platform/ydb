@@ -6,6 +6,8 @@
 
 #include <ydb/core/protos/bridge.pb.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     struct TBridgeInfo {
@@ -23,6 +25,7 @@ namespace NKikimr {
         const TPile *SelfNodePile = nullptr; // a reference to pile this node belongs to
         const TPile *PrimaryPile = nullptr; // a reference to the primary pile
         const TPile *BeingPromotedPile = nullptr; // a reference to the pile being promoted, or nullptr if none are promoted
+        bool IsImplicit = false; // the cluster is not converted to bridged one yet, this is synthesized single-pile state
 
         using TPtr = std::shared_ptr<const TBridgeInfo>;
 
@@ -74,6 +77,24 @@ namespace NKikimr {
         }
 
         bool IsSameClusterState(const NKikimrBridge::TClusterState& x, const NKikimrBridge::TClusterState& y);
+
+        // Resolve pile index of a node by its (optional) pile name against the list of configured pile names. A node
+        // without pile name belongs to the only pile when there is exactly one configured (this is the case of the
+        // cluster converted from non-bridged one). Returns nullopt when pile can't be resolved.
+        std::optional<size_t> ResolvePileIndex(const NKikimrConfig::TBridgeConfig& bridgeConfig,
+            const std::optional<TString>& pileName);
+
+        // Obtain pile in which group with designated pile id must be placed. Groups without pile id (which are not
+        // bridged ones) are placed in the only pile of single-pile cluster (this is the case of the cluster converted
+        // from non-bridged one); they can't be placed anywhere in multi-pile cluster.
+        inline TBridgePileId GetPlacementPileId(TBridgePileId groupPileId, const TBridgeInfo *bridgeInfo) {
+            return groupPileId || !bridgeInfo || bridgeInfo->Piles.size() != 1
+                ? groupPileId
+                : TBridgePileId::FromPileIndex(0);
+        }
+
+        // Generate implicit cluster state for the cluster with single pile that has not been converted yet.
+        NKikimrBridge::TClusterState MakeImplicitSinglePileClusterState();
 
     }
 

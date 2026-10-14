@@ -310,7 +310,7 @@ namespace NKikimr::NStorage {
         THashMap<ui32, TNodeIdentifier> AllNodeIds;
         THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
-        std::optional<TString> SelfNodeBridgePileName;
+        TBridgePileId SelfNodeBridgePileId;
         THashSet<std::tuple<TString, ui32>> Hosts;
 
         // scatter tasks
@@ -434,6 +434,8 @@ namespace NKikimr::NStorage {
         void ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList);
 
         TBridgePileId ResolveNodePileId(const TNodeLocation& location);
+        TBridgePileId ResolveNodePileIdForConfig(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeLocation& location);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding to peer nodes

@@ -69,6 +69,13 @@ public:
 
         ops->Send(ActorId, status.Release());
 
+        // the previous controller (or session) might not have handled them
+        for (const auto& [id, record] : DataEnded) {
+            auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
+            ev->Record.CopyFrom(record);
+            ops->Send(ActorId, ev.Release());
+        }
+
         TVector<TRowVersion> versionsWithoutTxId;
         for (const auto& [version, _] : PendingTxId) {
             versionsWithoutTxId.push_back(version);
@@ -118,6 +125,7 @@ public:
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
 
         ActorIdToWorkerId.erase(it->second);
+        DataEnded.erase(id);
         Workers.erase(it);
     }
 
@@ -129,6 +137,7 @@ public:
         // actor already stopped
         SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
 
+        DataEnded.erase(it->second);
         Workers.erase(it->second);
         ActorIdToWorkerId.erase(it);
     }
@@ -153,6 +162,7 @@ public:
             record.AddChildPartitionsIds(id);
         }
 
+        DataEnded[id] = record;
         ops->Send(ActorId, ev.Release());
     }
 
@@ -267,6 +277,7 @@ private:
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
 
+    THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
     THashSet<TWorkerId> WorkersWithHeartbeat;

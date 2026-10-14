@@ -186,13 +186,18 @@ def resolve_formatter(root):
     return binary
 
 
-def format_files(root, files, style, binary, fix):
+def format_files(root, files, style, binary, fix, progress=None):
     failed = False
     for start in range(0, len(files), 32):
+        batch = [root / path for path in files[start : start + 32]]
+        before = [path.read_bytes() for path in batch] if fix else []
         command = [binary, '--style=file:' + str(style)]
         command += ['-i'] if fix else ['--dry-run', '--Werror', '--ferror-limit=1']
-        command += [str(root / path) for path in files[start : start + 32]]
+        command += [str(path) for path in batch]
         failed |= subprocess.run(command, cwd=root).returncode != 0
+        changed = sum(path.read_bytes() != content for path, content in zip(batch, before))
+        if progress is not None:
+            progress(len(batch), changed)
     return int(failed)
 
 
@@ -239,6 +244,8 @@ def main(argv=None):
 
     binary = resolve_formatter(ROOT)
     failed = False
+    total = sum(len(files) for files in groups.values())
+    checked = formatted = 0
     for folder, files in groups.items():
         if not files:
             continue
@@ -249,7 +256,26 @@ def main(argv=None):
             f'with {style.relative_to(ROOT)}',
             flush=True,
         )
-        failed |= format_files(ROOT, files, style, binary, args.fix) != 0
+        folder_checked = folder_formatted = 0
+
+        def report_progress(batch_checked, batch_formatted):
+            nonlocal checked, formatted, folder_checked, folder_formatted
+            checked += batch_checked
+            formatted += batch_formatted
+            folder_checked += batch_checked
+            folder_formatted += batch_formatted
+            message = f'Checked {folder_checked} / {len(files)} files in {folder}'
+            overall = f'overall {checked} / {total} checked'
+            if args.fix:
+                message += f'; formatted {folder_formatted}'
+                overall += f', {formatted} formatted'
+            print(f'{message} ({overall})', flush=True)
+
+        failed |= format_files(ROOT, files, style, binary, args.fix, report_progress) != 0
+
+    status = 'Finished with errors' if failed else 'Finished'
+    counts = f'{formatted} formatted / {checked} checked files' if args.fix else f'{checked} / {total} files checked'
+    print(f'{status}: {counts}.', flush=True)
 
     return int(failed)
 

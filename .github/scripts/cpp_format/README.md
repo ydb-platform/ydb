@@ -178,6 +178,13 @@ formatter resource as Ya's style tests. `--list` does not resolve or download th
 formatter. To reuse a previously resolved Ya binary offline, set
 `YDB_CLANG_FORMAT` to its executable path.
 
+After each batch of up to 32 files, `--fix` and `--check` log checked/total
+counts for the current root and the whole run. `--fix` also counts files whose
+contents actually changed, ending with a summary such as
+`Finished: 12 formatted / 534 checked files.` Checked counts include files in
+batches that reported errors; those runs end with `Finished with errors` and a
+nonzero exit status. `--list` continues to print only file paths.
+
 Exit status is 0 on success, 1 on formatting failures, and 2 for configuration or
 invocation errors.
 

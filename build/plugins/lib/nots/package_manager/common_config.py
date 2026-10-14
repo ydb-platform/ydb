@@ -14,6 +14,7 @@ T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-se
 
 logger = logging.getLogger(__name__)
 _reported_ignored_fields = set()
+_reported_workspace_overrides = set()
 
 # npm range syntax: partial versions, comparators, unions and hyphen ranges.
 _NUM = r"(?:0|[1-9][0-9]*)"
@@ -144,6 +145,12 @@ def load_common_config(pj, sources_root, include_settings=False):
                         )
                     )
 
+    for name, spec in pj.data.get("peerDependencies", {}).items():
+        if spec.startswith("file:"):
+            raise ValueError(
+                "peerDependencies {}: file: не поддерживается; укажите semver, workspace: или catalog:".format(name)
+            )
+    warn_workspace_overrides(join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm"))), pj.data, pj.path)
     for name, spec in pj.dependencies_iter():
         if isinstance(spec, str) and spec.startswith("catalog:"):
             group = spec[len("catalog:") :]
@@ -252,10 +259,14 @@ def validate_pnpm_settings(data):
 
 def rebase_pnpm_settings(settings, source_dir, target_dir):
     result = copy.deepcopy(settings)
+    if os.path.abspath(source_dir) == os.path.abspath(target_dir):
+        return result
 
     def rebase(value, patch=False):
-        match = re.match(r"^(workspace:|file:|link:)(\.\.?/.*)$", value)
-        if not patch and not match:
+        match = re.match(r"^(workspace:|file:|link:)(.*)$", value)
+        if not patch and (
+            not match or os.path.isabs(match[2]) or (match[1] == "workspace:" and not re.match(r"^\.\.?/", match[2]))
+        ):
             return value
         relative = os.path.relpath(
             os.path.normpath(os.path.join(source_dir, value if patch else match[2])), target_dir
@@ -275,12 +286,62 @@ def rebase_pnpm_settings(settings, source_dir, target_dir):
     return result
 
 
+def warn_workspace_overrides(settings, manifest=None, owner=None):
+    """Warn during the staged migration; do not reject existing workspace overrides."""
+    manifest = manifest or {}
+    dependencies = {}
+    for section in ("devDependencies", "dependencies", "optionalDependencies"):
+        dependencies.update(manifest.get(section, {}))
+    names = []
+    for name, value in settings.get("overrides", {}).items():
+        resolved = dependencies.get(value[1:]) if value.startswith("$") else value
+        if resolved and resolved.startswith("workspace:"):
+            names.append(name)
+    key = (owner, tuple(names))
+    if names and key not in _reported_workspace_overrides:
+        _reported_workspace_overrides.add(key)
+        # TODO(FBP-3521): reject workspace overrides after the file: migration.
+        logger.warning(
+            "%s: overrides %s используют устаревающий workspace: протокол; перейдите на file: протокол",
+            owner,
+            ", ".join(names),
+        )
+
+
+def normalize_workspace_override_paths(settings, directory, root, original_overrides=None):
+    """Temporary compatibility until FBP-3521 removes workspace overrides."""
+    result = copy.deepcopy(settings)
+    prefix = os.path.relpath(root, directory).replace(os.sep, "/")
+    for name, value in result.get("overrides", {}).items():
+        match = re.match(r"^workspace:(\.\.?/.*)$", value)
+        if match:
+            original = (original_overrides or {}).get(name)
+            if (
+                original
+                and original.startswith("workspace:")
+                and os.path.normpath(os.path.join(directory, original[len("workspace:") :]))
+                == os.path.normpath(os.path.join(directory, match[1]))
+            ):
+                result["overrides"][name] = original
+                continue
+            relative = os.path.relpath(os.path.normpath(os.path.join(directory, match[1])), root).replace(os.sep, "/")
+            # TODO(FBP-3521): remove the unsimplified path through the Arcadia root.
+            result["overrides"][name] = "workspace:" + prefix + "/" + relative
+    return result
+
+
 def workspace_settings_paths(settings):
-    specs = list(settings.get("overrides", {}).values())
+    overrides = list(settings.get("overrides", {}).values())
+    specs = list(overrides)
     for extension in settings.get("packageExtensions", {}).values():
         for section in ("dependencies", "optionalDependencies", "peerDependencies"):
             specs.extend(extension.get(section, {}).values())
-    return [spec[len("workspace:") :] for spec in specs if re.match(r"^workspace:\.\.?/", spec)]
+    paths = [spec[len("workspace:") :] for spec in specs if re.match(r"^workspace:\.\.?/", spec)]
+    for spec in overrides:
+        if not spec.startswith("file:"):
+            continue
+        paths.append(spec[len("file:") :])
+    return paths
 
 
 def validate_config_paths(settings, directory, root):

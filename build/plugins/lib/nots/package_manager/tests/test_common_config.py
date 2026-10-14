@@ -206,7 +206,7 @@ def test_shared_pnpm_settings(tmp_path):
     pj, _ = fixture(
         tmp_path,
         """catalogs: {project/common: {colors: 1.4.0}}
-overrides: {colors: 'workspace:./replacement'}
+overrides: {colors: 'file:./replacement'}
 packageExtensions: {colors: {dependencies: {extra: 'file:./extra'}, peerDependenciesMeta: {react: {optional: true}}}}
 patchedDependencies: {colors: patches/colors.patch}
 peerDependencyRules: {ignoreMissing: [react], allowAny: [foo], allowedVersions: {bar: '2'}}
@@ -217,11 +217,11 @@ peerDependencyRules: {ignoreMissing: [react], allowAny: [foo], allowedVersions: 
     filename, _, settings = load_common_config(pj, str(tmp_path), include_settings=True)
     assert filename == "project/common.yaml"
     rebased = rebase_pnpm_settings(settings, "/build/project", "/build/project/pkg")
-    assert rebased["overrides"] == {"colors": "workspace:../replacement"}
+    assert rebased["overrides"] == {"colors": "file:../replacement"}
     assert rebased["packageExtensions"]["colors"]["dependencies"] == {"extra": "file:../extra"}
     assert rebased["patchedDependencies"] == {"colors": "../patches/colors.patch"}
     assert rebased["peerDependencyRules"] == settings["peerDependencyRules"]
-    assert settings["overrides"]["colors"] == "workspace:./replacement"
+    assert settings["overrides"]["colors"] == "file:./replacement"
 
 
 @pytest.mark.parametrize(
@@ -245,9 +245,7 @@ def test_invalid_pnpm_settings(tmp_path, settings):
 def test_common_inputs_ignore_workspace_override_peer_configs(tmp_path):
     from build.plugins.lib.nots.package_manager.common_config import common_config_inputs
 
-    pj, _ = fixture(
-        tmp_path, "catalogs: {project/common: {colors: 1.4.0}}\noverrides: {colors: 'workspace:./replacement'}"
-    )
+    pj, _ = fixture(tmp_path, "catalogs: {project/common: {colors: 1.4.0}}\noverrides: {colors: 'file:./replacement'}")
     peer = tmp_path / "project/replacement"
     peer.mkdir()
     (peer / "package.json").write_text(json.dumps({"nots": {"commonConfigPath": "../peer.yaml"}}))
@@ -319,7 +317,9 @@ def test_local_force_legacy_deploy_requires_boolean(value):
         select_pnpm_settings({"forceLegacyDeploy": value})
 
 
-@pytest.mark.parametrize("common,local,expected", [(None, None, None), (2000, None, 2000), (2000, 500, 500), (2000, 0, 0)])
+@pytest.mark.parametrize(
+    "common,local,expected", [(None, None, None), (2000, None, 2000), (2000, 500, 500), (2000, 0, 0)]
+)
 def test_peers_suffix_max_length_merge(tmp_path, common, local, expected):
     from build.plugins.lib.nots.package_manager.common_config import (
         join_pnpm_settings,
@@ -424,15 +424,203 @@ def test_scalar_types_come_from_shared_policy(tmp_path, monkeypatch):
     monkeypatch.setattr(common_config, "PNPM_SETTINGS", tuple(key for key in schema if key != "catalogs"))
     pj, _ = fixture(
         tmp_path,
-        "catalogs: {project/common: {colors: 1.4.0}}\n"
-        "futureBoolean: true\nfutureInteger: 12\nfutureList: [common]",
+        "catalogs: {project/common: {colors: 1.4.0}}\n" "futureBoolean: true\nfutureInteger: 12\nfutureList: [common]",
     )
     settings = common_config.load_common_config(pj, str(tmp_path), include_settings=True)[2]
     assert settings == {"futureBoolean": True, "futureInteger": 12, "futureList": ["common"]}
     assert common_config.rebase_pnpm_settings(settings, "/source", "/target") == settings
     assert common_config.join_pnpm_settings(settings, {"futureBoolean": False, "futureList": ["local"]}) == {
-        "futureBoolean": False, "futureInteger": 12, "futureList": ["common", "local"]
+        "futureBoolean": False,
+        "futureInteger": 12,
+        "futureList": ["common", "local"],
     }
     for key, value in (("futureBoolean", "true"), ("futureInteger", -1), ("futureList", True)):
         with pytest.raises(ValueError, match=key):
             common_config.select_pnpm_settings({key: value})
+
+
+@pytest.mark.parametrize("relative", ["./replacement", "./unused/../replacement", "replacement"])
+def test_common_file_overrides_are_rebased_for_injected_dependencies(tmp_path, relative):
+    from build.plugins.lib.nots.package_manager.common_config import (
+        rebase_pnpm_settings,
+        workspace_settings_paths,
+    )
+
+    pj, config = fixture(
+        tmp_path, "catalogs: {project/common: {colors: 1.4.0}}\noverrides: {colors: 'file:" + relative + "'}"
+    )
+    _, _, settings = load_common_config(pj, str(tmp_path), include_settings=True)
+    peers = rebase_pnpm_settings(settings, str(config.parent), str(Path(pj.path).parent))
+    assert workspace_settings_paths(peers) == ["../replacement"]
+    generated = rebase_pnpm_settings(settings, "/build/project", "/build/project/pkg")
+    assert generated["overrides"] == {"colors": "file:../replacement"}
+    assert settings["overrides"] == {"colors": "file:" + relative}
+
+
+def test_local_file_override_keeps_spelling():
+    from build.plugins.lib.nots.package_manager.common_config import rebase_pnpm_settings
+
+    settings = {"overrides": {"colors": "file:../pkg/../replacement"}}
+    result = rebase_pnpm_settings(settings, "/build/project/pkg", "/build/project/pkg")
+    assert result == settings
+    assert result is not settings
+
+
+def test_common_file_override_in_current_directory():
+    from build.plugins.lib.nots.package_manager.common_config import rebase_pnpm_settings
+
+    settings = {"overrides": {"colors": "file:../replacement"}}
+    assert rebase_pnpm_settings(settings, "/build/pkg", "/build/pkg") == {
+        "overrides": {"colors": "file:../replacement"}
+    }
+
+
+@pytest.mark.parametrize("local", [False, True])
+def test_override_only_peers_are_available_without_dependencies(tmp_path, local):
+    from build.plugins.lib.nots.package_manager.package_manager import PackageManager
+
+    pj, _ = fixture(tmp_path, "overrides: {foo: 'file:./replacement'}")
+    pj.data.pop("dependencies")
+    if local:
+        pj.data["pnpm"] = {"overrides": {"foo": "file:../local"}}
+    pj.write()
+    for peer_name in ("replacement", "local"):
+        peer = tmp_path / "project" / peer_name
+        peer.mkdir()
+        (peer / "ya.make").write_text("TS_PACKAGE()\nEND()")
+    pm = PackageManager(
+        str(tmp_path / "build"),
+        str(tmp_path / "build/project/pkg"),
+        str(Path(pj.path).parent),
+        sources_root=str(tmp_path),
+    )
+    assert pm.get_local_peers_from_package_json() == ["project/local" if local else "project/replacement"]
+
+
+@pytest.mark.parametrize("common", [False, True])
+@pytest.mark.parametrize("value", ["workspace:../replacement", "workspace:*", "$colors"])
+def test_workspace_overrides_warn_without_rejection(tmp_path, caplog, common, value):
+    pj, _ = fixture(tmp_path, "overrides: {colors: '" + value + "'}" if common else "catalogs: {}")
+    pj.data["dependencies"] = {"colors": "workspace:../replacement"}
+    if not common:
+        pj.data["pnpm"] = {"overrides": {"colors": value}}
+    load_common_config(pj, str(tmp_path))
+    load_common_config(pj, str(tmp_path))
+    warnings = [record for record in caplog.records if "перейдите на file: протокол" in record.message]
+    assert len(warnings) == 1
+
+
+@pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies"])
+def test_file_dependencies_add_tier0_peers(tmp_path, section):
+    from build.plugins.lib.nots.package_manager.package_manager import PackageManager
+
+    pj, _ = fixture(tmp_path, "catalogs: {}")
+    pj.data.pop("dependencies")
+    pj.data[section] = {
+        "replacement": "file:../replacement",
+        "archive": "file:../archive.tgz",
+        "plain": "file:../plain",
+    }
+    pj.write()
+    peer = tmp_path / "project/replacement"
+    peer.mkdir()
+    (peer / "ya.make").write_text("TS_PACKAGE()\nEND()")
+    plain = tmp_path / "project/plain"
+    plain.mkdir()
+    (plain / "package.json").write_text('{"name":"plain"}')
+    pm = PackageManager(
+        str(tmp_path / "build"),
+        str(tmp_path / "build/project/pkg"),
+        str(Path(pj.path).parent),
+        sources_root=str(tmp_path),
+    )
+    assert pm.get_local_peers_from_package_json() == ["project/replacement"]
+
+
+def test_file_peer_dependencies_are_not_supported(tmp_path):
+    pj, _ = fixture(tmp_path)
+    pj.data["peerDependencies"] = {"peer": "file:../peer"}
+    with pytest.raises(ValueError, match="peerDependencies peer: file: не поддерживается"):
+        load_common_config(pj, str(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "value", ["workspace:../replacement", "workspace:../pkg/../replacement", "workspace:../../project/replacement"]
+)
+def test_temporary_workspace_override_path_through_arcadia_root(value):
+    from build.plugins.lib.nots.package_manager.common_config import normalize_workspace_override_paths
+
+    settings = {"overrides": {"legacy": value, "file": "file:../file-peer"}}
+    result = normalize_workspace_override_paths(settings, "/build/project/pkg", "/build")
+    assert result == {"overrides": {"legacy": "workspace:../../project/replacement", "file": "file:../file-peer"}}
+    assert settings["overrides"]["legacy"] == value
+    assert normalize_workspace_override_paths(result, "/build/project/pkg", "/build") == result
+
+
+@pytest.mark.parametrize("value", ["workspace:../replacement", "workspace:../pkg/../replacement"])
+def test_preserve_unchanged_workspace_override_path(value):
+    from build.plugins.lib.nots.package_manager.common_config import normalize_workspace_override_paths
+
+    settings = {"overrides": {"legacy": value}}
+    assert (
+        normalize_workspace_override_paths(settings, "/build/project/pkg", "/build", settings["overrides"]) == settings
+    )
+
+
+def test_recompute_moved_workspace_override_path():
+    from build.plugins.lib.nots.package_manager.common_config import normalize_workspace_override_paths
+
+    settings = {"overrides": {"legacy": "workspace:../replacement"}}
+    assert (
+        normalize_workspace_override_paths(
+            settings, "/build/project/pkg", "/build", {"legacy": "workspace:./replacement"}
+        )["overrides"]["legacy"]
+        == "workspace:../../project/replacement"
+    )
+
+
+@pytest.mark.parametrize("section", ["dependencies", "devDependencies", "optionalDependencies", "overrides"])
+def test_absolute_file_dependency_is_not_a_build_peer(tmp_path, section):
+    from types import SimpleNamespace
+    from build.plugins.lib.nots.package_manager.package_manager import PackageManager
+
+    pj, _ = fixture(tmp_path)
+    peer = tmp_path / "project/peer"
+    peer.mkdir()
+    (peer / "ya.make").write_text("TS_PACKAGE()\nEND()")
+    (peer / "pnpm-workspace.yaml").write_text("packages: []\n")
+    dependencies = {"peer": "file:" + str(peer)}
+    if section == "overrides":
+        pj.data["pnpm"] = {"overrides": dependencies}
+    else:
+        pj.data[section] = dependencies
+    pm = SimpleNamespace(
+        sources_path=str(tmp_path / "project/pkg"),
+        sources_root=str(tmp_path),
+        build_path=str(tmp_path / "build/project/pkg"),
+        module_path="project/pkg",
+        load_package_json_from_dir=lambda _: pj,
+    )
+    assert PackageManager.get_local_peers_from_package_json(pm) == []
+
+
+@pytest.mark.parametrize("selector", ["foo@^1", "foo>bar@^1", "@scope/foo@^1>@scope/bar@^2"])
+def test_file_override_selector_is_not_a_peer_name(tmp_path, selector):
+    from types import SimpleNamespace
+    from build.plugins.lib.nots.package_manager.package_manager import PackageManager
+
+    pj, _ = fixture(tmp_path)
+    pj.data["pnpm"] = {"overrides": {selector: "file:../replacement"}}
+    peer = tmp_path / "project/replacement"
+    peer.mkdir()
+    (peer / "package.json").write_text(json.dumps({"name": "replacement"}))
+    (peer / "ya.make").write_text("TS_PACKAGE()\nEND()")
+    pm = SimpleNamespace(
+        sources_path=str(tmp_path / "project/pkg"),
+        sources_root=str(tmp_path),
+        build_path=str(tmp_path / "build/project/pkg"),
+        module_path="project/pkg",
+        load_package_json_from_dir=lambda _: pj,
+    )
+    assert PackageManager.get_local_peers_from_package_json(pm) == ["project/replacement"]
+    assert pj.data["pnpm"]["overrides"] == {selector: "file:../replacement"}

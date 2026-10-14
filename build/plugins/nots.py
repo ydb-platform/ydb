@@ -902,8 +902,8 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
         )
         outs.append(b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_LAYER_FILENAME)))
 
-    if has_deps:
-        local_peers = pm.get_local_peers_from_package_json()
+    local_peers = pm.get_local_peers_from_package_json()
+    if local_peers:
         unit.onpeerdir(local_peers)
         # build_workspace imports catalogs from prepared direct peer workspaces.
         ins.extend(b_rooted(build_ws_config_path(peer)) for peer in local_peers)
@@ -911,6 +911,8 @@ def _prepare_deps_configure(unit: ymake.Unit) -> None:
             # The cached injected snapshot must contain built workspace peers,
             # not their source/pre-build state.
             unit.ondepends(local_peers)
+            __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS_LATE_OUTS}")
+    if has_deps:
         unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
         unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
@@ -1141,8 +1143,12 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
     if _use_hermetic_node_modules(unit):
         _configure_hermetic_node_modules(unit)
 
+    local_peers = pm.get_local_peers_from_package_json()
+    if local_peers:
+        unit.onpeerdir(local_peers)
+        __set_append(unit, "_NODE_MODULES_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
+
     if has_deps:
-        unit.onpeerdir(pm.get_local_peers_from_package_json())
         nm_bundle_needed = _node_modules_bundle_needed(unit, pm.module_path)
         if nm_bundle_needed:
             bundle_args = "--nm-bundle yes"

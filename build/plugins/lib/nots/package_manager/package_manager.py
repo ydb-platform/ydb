@@ -94,7 +94,15 @@ class PackageManager(object):
                 settings, os.path.join(self.sources_root, os.path.dirname(config_path)), self.sources_path
             )
         settings = join_pnpm_settings(settings, local_settings)
-        peers.extend(os.path.normpath(os.path.join(self.module_path, p)) for p in workspace_settings_paths(settings))
+        candidates = workspace_settings_paths(settings)
+        candidates.extend(spec[len("file:") :] for _, spec in pj.dependencies_iter() if spec.startswith("file:"))
+        for relative in candidates:
+            if os.path.isabs(relative):
+                continue
+            source_peer = os.path.normpath(os.path.join(self.sources_path, relative))
+            build_peer = os.path.normpath(os.path.join(self.build_path, relative))
+            if os.path.isfile(os.path.join(source_peer, "ya.make")) or os.path.isfile(build_ws_config_path(build_peer)):
+                peers.append(os.path.normpath(os.path.join(self.module_path, relative)))
         return sorted(set(peers))
 
     def _tarballs_store_path(self, pkg, store_path):

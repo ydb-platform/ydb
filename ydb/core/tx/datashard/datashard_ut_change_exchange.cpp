@@ -12,6 +12,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
@@ -3357,6 +3358,88 @@ Y_UNIT_TEST_SUITE(Cdc) {
         const auto& record = doneResponse->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record;
         RebootTablet(runtime, record.GetTablePathId().GetOwnerId(), edgeActor);
         WaitFor(runtime, [&]{ return done; }, "done");
+    }
+
+    // https://github.com/ydb-platform/ydb/issues/18806
+    // A storage error inside the initial scan must not be reported as a completed scan.
+    Y_UNIT_TEST(InitialScanStorageError) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        // move rows out of the memtable, so the scan has to load pages
+        const auto shards = GetTableShards(server, edgeActor, "/Root/Table");
+        CompactTable(runtime, shards.at(0), ResolveTableId(server, edgeActor, "/Root/Table"), false);
+
+        bool scanStarted = false;
+        ui32 failedLoads = 0;
+        TVector<NKikimrTxDataShard::TEvCdcStreamScanResponse::EStatus> responses;
+        auto observer = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCdcStreamScanRequest:
+                scanStarted = true;
+                break;
+            case TEvDataShard::EvCdcStreamScanResponse:
+                responses.push_back(ev->Get<TEvDataShard::TEvCdcStreamScanResponse>()->Record.GetStatus());
+                break;
+            case NSharedCache::TEvResult::EventType:
+                // fail the first page load of the scan (e.g. NODATA from a degraded group)
+                if (scanStarted && !failedLoads && runtime.FindActorName(ev->GetRecipientRewrite()) == "TABLET_OPS_HOST_A") {
+                    auto* msg = ev->Get<NSharedCache::TEvResult>();
+                    ev = new IEventHandle(ev->Recipient, ev->Sender,
+                        new NSharedCache::TEvResult(msg->PageCollection, NKikimrProto::NODATA, msg->Cookie),
+                        0, ev->Cookie);
+                    ++failedLoads;
+                }
+                break;
+            }
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+        WaitFor(runtime, [&]{
+            return failedLoads && Find(responses, NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED) != responses.end();
+        }, "aborted scan");
+        observer.Remove();
+
+        // a marker row written after the changefeed is ready
+        ExecSQL(server, edgeActor, "UPSERT INTO `/Root/Table` (key, value) VALUES (4, 40);");
+
+        // the resumed scan and the marker can be written in any order
+        TVector<TString> records;
+        for (int i = 0; i < 60; ++i) {
+            records.clear();
+            for (const auto& [_, data] : GetRecords(runtime, edgeActor, "/Root/Table/Stream", 0)) {
+                records.push_back(data);
+            }
+            if (records.size() >= 4) {
+                break;
+            }
+            SimulateSleep(server, TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), 4, "initial scan rows lost: " << JoinSeq(" ", records));
+        for (const auto* key : {"[1]", "[2]", "[3]", "[4]"}) {
+            UNIT_ASSERT_C(AnyOf(records, [&](const auto& r) { return r.Contains(key); }),
+                "missing key " << key << ": " << JoinSeq(" ", records));
+        }
     }
 
     Y_UNIT_TEST(InitialScanUpdatedRows) {

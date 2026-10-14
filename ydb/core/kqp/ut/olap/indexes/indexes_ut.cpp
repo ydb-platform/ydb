@@ -4157,11 +4157,13 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
         ExecQuery(kikimr, true, R"(
             --!syntax_v1
@@ -4179,11 +4181,25 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         )");
         {
             auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            // Insert portions are not ngram-indexed. Two overlapping bulks plus the probe rows
+            // make compaction emit indexed portions a bloom deny can skip.
             auto result = session.ExecuteQuery(R"(
+                $rows = ListMap(ListFromRange(10, 100010), ($x) -> { RETURN AsStruct($x AS item); });
+                UPSERT INTO `/Root/complexLikeNgram` (id, message)
+                SELECT item AS id, Utf8("pad") AS message FROM AS_TABLE($rows);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = session.ExecuteQuery(R"(
+                $rows = ListMap(ListFromRange(10, 100010), ($x) -> { RETURN AsStruct($x AS item); });
+                UPSERT INTO `/Root/complexLikeNgram` (id, message)
+                SELECT item AS id, Utf8("pad") AS message FROM AS_TABLE($rows);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            result = session.ExecuteQuery(R"(
                 UPSERT INTO `/Root/complexLikeNgram` (id, message) VALUES
                     (1, "xxaaabbbxx"),
                     (2, "xxbbbaaaxx"),
-                    (3, "nomatch")
+                    (3, "nomatch");
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -4192,6 +4208,14 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             ALTER OBJECT `/Root/complexLikeNgram` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
         )");
         csController->WaitActualization(TDuration::Seconds(10));
+        {
+            auto* runtime = kikimr.GetTestServer().GetRuntime();
+            auto indexBytes = GetServiceCounters(runtime->GetAppData().Counters, "tablets")
+                                  ->GetSubgroup("type", "ColumnShard")
+                                  ->GetSubgroup("category", "app")
+                                  ->GetCounter("SUM(ColumnShard/IndexBytes)", false);
+            csController->WaitCondition(TDuration::Seconds(30), [&]() { return indexBytes->Val() > 0; });
+        }
 
         auto query = [&](const bool flag, const TString& predicate) {
             return TStringBuilder()
@@ -4214,7 +4238,12 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         const intptr_t skippedAfterOff = csController->GetIndexesSkippingOnSelect().Val();
         run(query(true, "message LIKE '%zzz%qqq%'"));
         UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > skippedAfterOff,
-            "flag on should skip portions the bloom can deny");
+            TStringBuilder() << "flag on should skip portions the bloom can deny"
+                             << " skippedOff=" << skippedOff
+                             << " skippedAfterOff=" << skippedAfterOff
+                             << " skippedOn=" << csController->GetIndexesSkippingOnSelect().Val()
+                             << " approved=" << csController->GetIndexesApprovedOnSelect().Val()
+                             << " noData=" << csController->GetIndexesSkippedNoData().Val());
         UNIT_ASSERT_GE(skippedAfterOff, skippedOff);
 
         const intptr_t beforeIlike = csController->GetIndexesSkippingOnSelect().Val();

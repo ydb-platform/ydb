@@ -6,6 +6,7 @@
 #include "graph_optimization.h"
 #include "header.h"
 #include "index.h"
+#include "kernel_logic.h"
 #include "original.h"
 #include "reserve.h"
 #include "stream_logic.h"
@@ -616,13 +617,32 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     }
     auto dataNode = GetProducerVerified(calc->GetInput().front().GetColumnId());
     auto constNode = GetProducerVerified(calc->GetInput().back().GetColumnId());
+    // Ignore-case kernels on Utf8 are fed ToString(column) and ToString(literal).
+    // The ngram index is on the original column, and the literal bytes are unchanged.
+    const auto unwrapToString = [this](TGraphNode* node) -> TGraphNode* {
+        if (node->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
+            return node;
+        }
+        const auto inner = node->GetProcessorAs<TCalculationProcessor>();
+        if (!inner->GetKernelLogic() || inner->GetKernelLogic()->GetClassName() != TToStringKernel::GetClassNameStatic() ||
+            inner->GetInput().size() != 1) {
+            return node;
+        }
+        return GetProducerVerified(inner->GetInput().front().GetColumnId());
+    };
     if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
-        return false;
+        constNode = unwrapToString(constNode);
+        if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+            return false;
+        }
     }
     if (!calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
     std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
+    if (!dataAddr) {
+        dataAddr = GetOriginalAddress(unwrapToString(dataNode));
+    }
     if (!dataAddr) {
         return false;
     }

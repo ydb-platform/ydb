@@ -126,12 +126,38 @@ struct TLikeMatch {
     TString Escape;
 };
 
+// Re2.Match on Utf8 is `FlatMap(Member, ($item) -> Just(ToString($item)))`.
+// The hint must use the column itself so the ngram index sees the original bytes.
+TExprNode::TPtr ColumnMember(const TExprNode::TPtr& node, const TExprNode* lambdaArg) {
+    if (!node || !lambdaArg) {
+        return {};
+    }
+    if (node->IsCallable("Member") && node->ChildrenSize() >= 2 && node->Child(0) == lambdaArg) {
+        return node;
+    }
+    if (!node->IsCallable("FlatMap") || node->ChildrenSize() < 2 || !node->Child(1)->IsLambda()) {
+        return {};
+    }
+    const auto* lambda = node->Child(1);
+    if (lambda->ChildrenSize() < 2 || lambda->Head().ChildrenSize() < 1) {
+        return {};
+    }
+    const auto* body = lambda->Child(1);
+    if (body->IsCallable("Just") && body->ChildrenSize() >= 1) {
+        body = body->Child(0);
+    }
+    if (!body->IsCallable("ToString") || body->ChildrenSize() < 1 || body->Child(0) != lambda->Head().Child(0)) {
+        return {};
+    }
+    return ColumnMember(node->ChildPtr(0), lambdaArg);
+}
+
 std::optional<TLikeMatch> ParseLikeMatch(const TExprNode& node, const TExprNode* lambdaArg) {
     if (!node.IsCallable("Apply") || node.ChildrenSize() < 2 || !IsRe2MatchUdf(node.Head())) {
         return std::nullopt;
     }
-    auto column = node.ChildPtr(node.ChildrenSize() - 1);
-    if (!column->IsCallable("Member") || column->ChildrenSize() < 2 || !lambdaArg || column->Child(0) != lambdaArg) {
+    auto column = ColumnMember(node.ChildPtr(node.ChildrenSize() - 1), lambdaArg);
+    if (!column) {
         return std::nullopt;
     }
 
@@ -152,6 +178,14 @@ std::optional<TLikeMatch> ParseLikeMatch(const TExprNode& node, const TExprNode*
     match.Column = column;
     if (!ExtractLiteral(*patternApply->Child(1), match.Pattern, match.Utf8)) {
         return std::nullopt;
+    }
+    if (const TTypeAnnotationNode* columnType = column->GetTypeAnn()) {
+        if (columnType->GetKind() == ETypeAnnotationKind::Optional) {
+            columnType = columnType->Cast<TOptionalExprType>()->GetItemType();
+        }
+        if (columnType->GetKind() == ETypeAnnotationKind::Data) {
+            match.Utf8 = columnType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Utf8;
+        }
     }
     if (patternApply->ChildrenSize() >= 3) {
         bool escapeUtf8 = false;
@@ -206,8 +240,17 @@ const TTypeAnnotationNode* BoolType(TExprContext& ctx, const bool optional) {
     return boolType;
 }
 
+// SetTypeAnn marks the node TypeComplete and later passes will not visit its children.
+// An unannotated atom under that node stays Initial, and the constraint transformer
+// then returns Repeat+restart forever.
+TExprNode::TPtr MakeAnnotatedAtom(TExprContext& ctx, const TPositionHandle pos, const TStringBuf value) {
+    auto atom = ctx.NewAtom(pos, value, TNodeFlags::Default);
+    atom->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+    return atom;
+}
+
 TExprNode::TPtr MakeFalse(TExprContext& ctx, const TPositionHandle pos) {
-    auto node = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "false", TNodeFlags::Default)});
+    auto node = ctx.NewCallable(pos, "Bool", {MakeAnnotatedAtom(ctx, pos, "false")});
     node->SetTypeAnn(BoolType(ctx, false));
     return node;
 }
@@ -226,12 +269,17 @@ TExprNode::TPtr MakeHint(const TLikeMatch& match, const TString& op, const TStri
                          const TExprNode::TPtr& falseNode, TPushdownOptions& options) {
     const TTypeAnnotationNode* memberType = match.Column->GetTypeAnn();
     const bool optionalMember = memberType && memberType->GetKind() == ETypeAnnotationKind::Optional;
-    auto literal = ctx.NewCallable(pos, match.Utf8 ? "Utf8" : "String", {ctx.NewAtom(pos, bytes)});
+    auto literal = ctx.NewCallable(pos, match.Utf8 ? "Utf8" : "String", {MakeAnnotatedAtom(ctx, pos, bytes)});
     literal->SetTypeAnn(ctx.MakeType<TDataExprType>(match.Utf8 ? EDataSlot::Utf8 : EDataSlot::String));
     // Reuse the match column node so the hint sees the same row argument.
     auto compare = ctx.NewCallable(pos, op, {match.Column, literal});
-    compare->SetTypeAnn(BoolType(ctx, optionalMember));
+    // Ignore-case kernels return Bool even when an argument is optional.
+    const bool optionalResult = optionalMember && !op.EndsWith("IgnoreCase");
+    compare->SetTypeAnn(BoolType(ctx, optionalResult));
     options.IndexOnlyHints.insert(compare.Get());
+    if (!optionalResult) {
+        return compare;
+    }
     auto coalesce = ctx.NewCallable(pos, "Coalesce", {compare, falseNode});
     coalesce->SetTypeAnn(BoolType(ctx, false));
     return coalesce;

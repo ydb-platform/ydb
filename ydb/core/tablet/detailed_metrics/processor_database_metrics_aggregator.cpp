@@ -8,6 +8,8 @@
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/monlib/metrics/metric_type.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
@@ -53,12 +55,21 @@ namespace NKikimr {
 
         // The widest ui64: values at max width keep the estimate value-independent
         constexpr ui64 JSON_VALUE_BYTES = 20;
+        // ,"":"" per label
+        constexpr ui64 JSON_LABEL_BYTES = 6;
+        // ,{"kind":"","labels":{}} less the comma that JSON_LABEL_BYTES counts for the first label
+        constexpr ui64 JSON_SERIES_BYTES = 23;
+        // ,"value":
+        constexpr ui64 JSON_SCALAR_BYTES = 9;
+        // ,"hist":{"bounds":[],"buckets":[],"inf":} less the commas that 2 per bound count
+        // for the first bound and bucket
+        constexpr ui64 JSON_HISTOGRAM_BYTES = 39;
 
         // ,"name":"value" per label (HEM_UNSAFE escapes no path character)
         ui64 JsonLabelBytes(const TSubgroupPath& labels) {
             ui64 bytes = 0;
             for (const auto& [name, value] : labels) {
-                bytes += name.size() + value.size() + 6;
+                bytes += name.size() + value.size() + JSON_LABEL_BYTES;
             }
             return bytes;
         }
@@ -75,7 +86,8 @@ namespace NKikimr {
             void OnCounter(
                 const TString& labelName, const TString& labelValue,
                 const NMonitoring::TCounterForPtr* counter) override {
-                Add(counter->ForDerivative() ? "RATE" : "GAUGE", labelName, labelValue, 9 + JSON_VALUE_BYTES);
+                Add(counter->ForDerivative() ? NMonitoring::EMetricType::RATE : NMonitoring::EMetricType::GAUGE,
+                    labelName, labelValue, JSON_SCALAR_BYTES + JSON_VALUE_BYTES);
             }
 
             void OnHistogram(
@@ -83,11 +95,12 @@ namespace NKikimr {
                 NMonitoring::IHistogramSnapshotPtr snapshot, bool derivative) override {
                 // The explicit histograms end with +Inf, written as "inf"
                 const ui32 bounds = snapshot->Count() - 1;
-                ui64 bytes = 39 + 2 * bounds + (bounds + 1) * JSON_VALUE_BYTES;
+                ui64 bytes = JSON_HISTOGRAM_BYTES + 2 * bounds + (bounds + 1) * JSON_VALUE_BYTES;
                 for (ui32 i = 0; i < bounds; ++i) {
                     bytes += FloatToString(snapshot->UpperBound(i), PREC_NDIGITS, 10).size();
                 }
-                Add(derivative ? "HIST_RATE" : "HIST", labelName, labelValue, bytes);
+                Add(derivative ? NMonitoring::EMetricType::HIST_RATE : NMonitoring::EMetricType::HIST,
+                    labelName, labelValue, bytes);
             }
 
             void OnGroupBegin(const TString&, const TString&, const NMonitoring::TDynamicCounters*) override {
@@ -103,8 +116,11 @@ namespace NKikimr {
             TJsonSize Size;
 
         private:
-            void Add(TStringBuf kind, const TString& labelName, const TString& labelValue, ui64 valueBytes) {
-                Size.Bytes += 23 + kind.size() + GroupLabelBytes + labelName.size() + labelValue.size() + 6 + valueBytes;
+            void Add(
+                NMonitoring::EMetricType type, const TString& labelName, const TString& labelValue,
+                ui64 valueBytes) {
+                Size.Bytes += JSON_SERIES_BYTES + NMonitoring::MetricTypeToStr(type).size() + GroupLabelBytes
+                    + labelName.size() + labelValue.size() + JSON_LABEL_BYTES + valueBytes;
                 ++Size.Series;
             }
 

@@ -1413,7 +1413,7 @@ namespace Tests {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
             const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(rmConfig, nullptr, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(rmConfig, nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
 
@@ -1512,7 +1512,12 @@ namespace Tests {
             }
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, *Settings->AppConfig);
+            // The memory of the queries is in the compute scheduler or in the resource manager, which takes the flag
+            // from the app data: the flag may be set in the feature flags of the settings as well
+            auto schedulerAppConfig = *Settings->AppConfig;
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(
+                Runtime->GetAppData(nodeIdx).FeatureFlags.GetEnableComputeSchedulerMemory());
+            Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
 
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
                 Settings->AppConfig->MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);

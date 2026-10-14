@@ -21,6 +21,12 @@ public:
         return Enabled;
     }
 
+    // FeatureFlags.EnableComputeSchedulerMemory: the memory of the queries is limited by the scheduler, otherwise - by the
+    // resource manager, as before. Unlike the CPU, fixed on the start: otherwise the memory would be accounted by both.
+    bool IsMemoryEnabled() const {
+        return MemoryEnabled;
+    }
+
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
 
@@ -63,6 +69,7 @@ private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 
     std::atomic<bool> Enabled;
+    const bool MemoryEnabled;
 
     TRWMutex Mutex;
     struct TQueryState {

@@ -17,12 +17,12 @@ NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, st
     std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
     bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking);
 
-// Per query (per tx on a node), IS THREAD SAFE, implemented by TQueryQuotaManager in the cpp: the mediator between the
-// query's tx and the node resources - the execution units are taken from the resource manager, the memory from the
-// compute scheduler (see NScheduler::TSchedulableMemory). It holds the execution units and the external memory of the
-// started tasks, see AllocateTasks(); the task and channel quota managers keep it alive and take Memory from it through
-// AllocateQuota() and FreeQuota(). GetCurrentQuota() is what the query holds: Memory + ExternalMemory. Keeps the
-// statistics of the tx for the out-of-memory reports, see MemoryConsumptionDetails().
+// Per query (per tx on a node), IS THREAD SAFE: the mediator between the query's tx and the node resources. Implemented
+// in the cpp twice, see CreateQueryQuotaManager(): by TQueryQuotaManager, which takes everything from the resource
+// manager, and by TSchedulerQueryQuotaManager, which takes the execution units from the resource manager and the memory
+// from the compute scheduler (see NScheduler::TSchedulableMemory). It holds the execution units and the external memory
+// of the started tasks, see AllocateTasks(); the task and channel quota managers keep it alive and take Memory from it
+// through AllocateQuota() and FreeQuota(). GetCurrentQuota() is what the query holds: Memory + ExternalMemory.
 // Called from compute actors and from the channel service (under its locks), so it must never wait for an actor: its
 // own state is atomics, and the resource manager calls it makes take short mutexes (resource manager, resource broker)
 // and at most post events.
@@ -41,7 +41,11 @@ public:
 
 using TQueryQuotaManagerPtr = std::shared_ptr<IQueryQuotaManager>;
 
-// Without the memory (no compute scheduler) the memory is only accounted in the statistics, but not limited.
+// The memory is taken from the resource manager, see FeatureFlags.EnableComputeSchedulerMemory
+TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx);
+
+// The memory is taken from the compute scheduler. Without the memory (no compute scheduler) the memory is only
+// accounted in the statistics, but not limited.
 // TODO: taskMemory is a stub - the footprint of a compute actor outside of its MKQL quota isn't measured, so a fixed
 //       amount of memory is charged for every execution unit instead.
 TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx, NScheduler::TSchedulableMemoryPtr memory,

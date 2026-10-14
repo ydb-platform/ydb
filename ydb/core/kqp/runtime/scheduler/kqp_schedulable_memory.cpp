@@ -177,6 +177,11 @@ i64 TSchedulableMemory::GetAvailability() const {
     return availability;
 }
 
+bool IsMemoryScheduled() {
+    const auto& scheduler = AppData()->KqpComputeScheduler;
+    return scheduler && scheduler->IsMemoryEnabled();
+}
+
 TSchedulableMemoryPtr CreateSchedulableMemory(const TQueryPtr& query, const NHdrf::TDatabaseId& databaseId,
     const NHdrf::TPoolId& poolId, double elasticMemoryPercent)
 {

@@ -326,7 +326,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetUseBatchPool(UserRequestContext->UseBatchPool);
 
     if (UserRequestContext->PoolConfig.has_value()) {
-        // Only for the nodes of the older versions - the memory limit of the pool is taken by the compute scheduler from the pool config
+        // Only for the nodes without FeatureFlags.EnableComputeSchedulerMemory (or of the older versions) - otherwise the
+        // memory limit of the pool is taken by the compute scheduler from the pool config
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
@@ -572,9 +573,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
     auto& task = TasksGraph.GetTask(taskId);
     auto* taskDesc = SerializeTaskForExecution(task);
 
-    if (!QueryQuotaManager) {
+    if (!QueryQuotaManager && NScheduler::IsMemoryScheduled()) {
+        // the pool limits the memory in the scheduler, not in the resource manager
         QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
-            ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, Database,
+            ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, /* memoryPoolPercent */ 100.0, Database,
             CaFactory_->GetVerboseMemoryLimitException()),
             NScheduler::CreateSchedulableMemory(
                 Query,
@@ -582,6 +584,17 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
                 UserRequestContext->PoolId,
                 CaFactory_->ElasticMemoryPercent),
             CaFactory_->TaskMemory.load());
+    }
+
+    if (!QueryQuotaManager) {
+        double memoryPoolPercent = 100;
+        if (UserRequestContext->PoolConfig.has_value()) {
+            memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
+        }
+
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
+            ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
+            CaFactory_->GetVerboseMemoryLimitException()));
     }
 
     if (ArrayBufferMinFillPercentage) {

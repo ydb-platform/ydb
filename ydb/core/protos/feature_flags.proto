@@ -457,4 +457,7 @@ message TFeatureFlags {
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
+    // The memory of the KQP queries is accounted and limited by the compute scheduler (the limit comes from the memory
+    // controller) instead of the resource manager. Read on the node start.
+    optional bool EnableComputeSchedulerMemory = 370 [default = true];
 }

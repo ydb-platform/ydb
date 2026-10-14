@@ -420,9 +420,12 @@ private:
         //         the tablets and the other services of the queries (queue_kqp_resource_manager, e.g. the vector index
         //         levels cache) - the queues are limited by TResourceBrokerConfig as well.
         //       The explicit limit of the resource broker (TResourceBrokerConfig::ResourceLimit) is taken as it is.
+        //       Without the registered consumer (see FeatureFlags.EnableComputeSchedulerMemory) nothing is taken out.
         ui64 activitiesLimitBytes = ResourceBrokerSelfConfig.LimitBytes
             ? ResourceBrokerSelfConfig.LimitBytes // for backward compatibility
-            : SafeDiff(GetActivitiesLimitBytes(Config, hardLimitBytes), GetQueryExecutionLimitBytes(Config, hardLimitBytes));
+            : Collections.contains(EMemoryConsumerKind::QueryExecution)
+                ? SafeDiff(GetActivitiesLimitBytes(Config, hardLimitBytes), GetQueryExecutionLimitBytes(Config, hardLimitBytes))
+                : GetActivitiesLimitBytes(Config, hardLimitBytes);
 
         TVector<TConsumerState> consumers(::Reserve(Consumers.size() + Collections.size()));
         ui64 consumersConsumption = 0;
@@ -716,7 +719,8 @@ private:
         TResourceBrokerConfig config{
             .LimitBytes = activitiesLimitBytes,
             .QueueLimits = {
-                // The services other than the queries, see TKqpResourceManager
+                // All the queries or, with FeatureFlags.EnableComputeSchedulerMemory, the services other than the
+                // queries, see TKqpResourceManager
                 {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionIndexationQueue, GetColumnTablesCompactionIndexationQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionTtlQueue, GetColumnTablesTtlQueueLimitBytes(Config, hardLimitBytes)},
@@ -732,19 +736,20 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        // A registered query execution consumer (the compute scheduler) reports the consumption itself and gets
-        // the limit, otherwise the global page pool is the only known part of it.
-        const ui64 queryExecutionLimit = GetQueryExecutionLimitBytes(Config, hardLimitBytes);
-        if (!Collections.contains(EMemoryConsumerKind::QueryExecution)) {
+        if (Collections.contains(EMemoryConsumerKind::QueryExecution)) {
+            // the registered query execution consumer (the compute scheduler) reports the consumption itself and gets
+            // the limit, see FeatureFlags.EnableComputeSchedulerMemory
+            memoryStats.SetQueryExecutionLimit(GetQueryExecutionLimitBytes(Config, hardLimitBytes));
+        } else {
             ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
             YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
                 {"consumption", HumanReadableBytes(queryExecutionConsumption)},
-                {"limit", HumanReadableBytes(queryExecutionLimit)});
+                {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
             Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(queryExecutionLimit);
+            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
             memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
+            memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
         }
-        memoryStats.SetQueryExecutionLimit(queryExecutionLimit);
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
         ApplyResourceBrokerConfig(config);

@@ -498,13 +498,14 @@ Y_UNIT_TEST(MemTable) {
     UNIT_ASSERT_GT(server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Consumption")->Val(), static_cast<i64>(1_KB));
 }
 
-Y_UNIT_TEST(ResourceBroker) {
+Y_UNIT_TEST_TWIN(ResourceBroker, EnableComputeSchedulerMemory) {
     using namespace NResourceBroker;
 
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetQueryExecutionLimitPercent(15);
@@ -523,14 +524,16 @@ Y_UNIT_TEST(ResourceBroker) {
 
     InitRoot(server, sender);
 
-    // The queue of the queries is now only for the services other than the queries (see TKqpResourceManager), its
-    // limit is still the one of the query execution; the query execution is taken out of the activities limit
+    // With the memory in the compute scheduler the queue of the queries is only for the services other than the queries
+    // (see TKqpResourceManager), its limit is still the one of the query execution; the query execution is taken out of
+    // the activities limit
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 150_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 150_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 300_MB - 150_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(),
+        EnableComputeSchedulerMemory ? 300_MB - 150_MB : 300_MB);
 
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), senderSubscriber, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true)));
@@ -543,7 +546,8 @@ Y_UNIT_TEST(ResourceBroker) {
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(sender);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 75_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 150_MB - 75_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(),
+        EnableComputeSchedulerMemory ? 150_MB - 75_MB : 150_MB);
 
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(senderSubscriber);
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
@@ -555,13 +559,14 @@ Y_UNIT_TEST(ResourceBroker) {
     UNIT_ASSERT_VALUES_EQUAL(config->Get()->QueueConfig->GetLimit().GetMemory(), 13_MB);
 }
 
-Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
+Y_UNIT_TEST_TWIN(ResourceBroker_ConfigLimit, EnableComputeSchedulerMemory) {
     using namespace NResourceBroker;
 
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false);
+    serverSettings.AppConfig->MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetQueryExecutionLimitPercent(15);
@@ -583,13 +588,14 @@ Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
 
     InitRoot(server, sender);
 
-    // The explicit limit of the queue of the queries is kept for the services other than the queries, but it doesn't
-    // override the limit of the query execution anymore
+    // With the memory in the compute scheduler the explicit limit of the queue of the queries is kept for the services
+    // other than the queries, but it doesn't override the limit of the query execution anymore
     runtime.SimulateSleep(TDuration::Seconds(2));
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 999_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 75_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(),
+        EnableComputeSchedulerMemory ? 75_MB : 999_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 1000_MB);
 
     server->ProcessMemoryInfo->CGroupLimit = 200_MB;
@@ -597,7 +603,8 @@ Y_UNIT_TEST(ResourceBroker_ConfigLimit) {
     runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
     config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 999_MB);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 30_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(),
+        EnableComputeSchedulerMemory ? 30_MB : 999_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/ActivitiesLimitBytes")->Val(), 1000_MB);
 
     // ensure that other settings are not affected:

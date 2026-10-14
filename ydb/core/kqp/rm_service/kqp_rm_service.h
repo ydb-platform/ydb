@@ -31,24 +31,40 @@ namespace NRm {
 using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>;
 
 /// resources request
-// The memory of the queries is accounted and limited by the compute scheduler (see IQueryQuotaManager), here is
-// only the memory of the other node services: e.g. the vector index levels cache and the row dispatcher.
 struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
     ui64 Memory = 0;
-    // The caller can do without the memory (see NYql::NDq::IMemoryQuotaManager::AllocateQuota), so it is refused
-    // once it would take the node total past the spilling threshold, even when the memory is there
+    ui64 ExternalMemory = 0;
+    // Read by AllocateResources only and applies to Memory only: the caller can do without it (see
+    // NYql::NDq::IMemoryQuotaManager::AllocateQuota), so it is refused once it would take the node total or the
+    // pool of the tx past the spilling threshold (GetMemoryAvailability() < Memory), even when the memory is there
     bool Optional = false;
 
     TString ToString() const {
         TStringBuilder res;
-        res << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory;
+        res << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
+            << ", ExternalMemory: " << ExternalMemory;
         if (Optional) {
             res << ", Optional: 1";
         }
         res << " }";
         return res;
     }
+};
+
+class TMemoryResourceCookie : public TAtomicRefCount<TMemoryResourceCookie> {
+public:
+    // Limit - Used - OverLimit of the owning TMemoryResource, i.e. the bytes left before the spilling
+    // threshold (negative = over the threshold, |value| is the overuse). Written under the resource
+    // manager lock, read lock-free by compute actors, see TTxState::GetMemoryAvailability.
+    std::atomic<i64> MemoryAvailability{std::numeric_limits<i64>::max()};
+};
+
+// The cookies a tx reads its memory availability from: the node total and, for a tx with a resource pool,
+// the pool resource. Handed out by the resource manager when the tx is constructed, see TTxState.
+struct TMemoryResourceCookies {
+    TIntrusivePtr<TMemoryResourceCookie> Total;
+    TIntrusivePtr<TMemoryResourceCookie> Pool;
 };
 
 class IKqpResourceManager;
@@ -61,10 +77,17 @@ public:
     const ui64 TxId;
     const TInstant CreatedAt;
     const TString PoolId;
+    const double MemoryPoolPercent;
     const TString Database;
+    const bool MemoryPoolLimited;
     const bool CollectBacktrace;
+    // Attached at construction and never written again, so that GetMemoryAvailability() can be read from any
+    // thread without a lock, see IKqpResourceManager::GetMemoryResourceCookies
+    const TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
+    const TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
 
     std::atomic<ui64> TxScanQueryMemory = 0;
+    std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
     std::atomic<ui64> TxResourceBrokerTaskId = 0;
     std::atomic<ui64> TxMaxAllocationSize = 0;
@@ -80,14 +103,45 @@ public:
     std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
-    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId,
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
         const TString& database, bool collectBacktrace);
     ~TTxState();
+
+private:
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+        const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies);
+
+public:
+    // The key of a resource pool in the resource manager, the one rule for the tx and for the cookie hand-out
+    // that runs before the tx exists (IKqpResourceManager::GetMemoryResourceCookies)
+    static std::pair<TString, TString> MakePoolId(const TString& database, const TString& poolId) {
+        return std::make_pair(database, poolId);
+    }
+
+    std::pair<TString, TString> MakePoolId() const {
+        return MakePoolId(Database, PoolId);
+    }
+
+    bool HasMemoryPoolLimit() const {
+        return MemoryPoolLimited;
+    }
+
+    // Node level memory availability of this tx: the minimum over the node total and the pool resource,
+    // see TMemoryResourceCookie. The cookies are attached at construction, nothing to synchronize here.
+    // Unlimited only with a resource manager that hands out no cookies (test stubs).
+    i64 GetMemoryAvailability() const {
+        i64 result = TotalMemoryCookie ? TotalMemoryCookie->MemoryAvailability.load() : std::numeric_limits<i64>::max();
+        if (PoolMemoryCookie) {
+            result = std::min(result, PoolMemoryCookie->MemoryAvailability.load());
+        }
+        return result;
+    }
 
     TKqpResourcesRequest FreeResourcesRequest() const {
         return TKqpResourcesRequest{
             .ExecutionUnits=TxExecutionUnits.load(),
-            .Memory=TxScanQueryMemory.load()};
+            .Memory=TxScanQueryMemory.load(),
+            .ExternalMemory=TxExternalDataQueryMemory.load()};
     }
 
     TString ToString() const {
@@ -99,14 +153,16 @@ public:
             << ", Database: " << Database;
 
         if (!PoolId.empty()) {
-            res << ", PoolId: " << PoolId;
+            res << ", PoolId: " << PoolId
+                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent);
         }
 
         if (CollectBacktrace) {
             backtraceLock.lock();
         }
 
-        res << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
+        res << ", tx initially granted memory: " << HumanReadableSize(TxExternalDataQueryMemory.load(), SF_BYTES)
+            << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
             << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocationSize.load(), SF_BYTES)
             << ", tx last failed memory allocation: " << HumanReadableSize(TxFailedAllocationSize.load(), SF_BYTES)
             << ", tx total execution units: " << TxExecutionUnits.load()
@@ -156,6 +212,12 @@ public:
             Counters->RmExtraMemFree->Inc();
         }
 
+        auto prevExternalMemory = TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        if (prevExternalMemory < resources.ExternalMemory) {
+            return false;
+        }
+        Counters->RmExternalMemory->Sub(resources.ExternalMemory);
+
         auto prevMemory = TxScanQueryMemory.fetch_sub(resources.Memory);
         if (prevMemory < resources.Memory) {
             return false;
@@ -178,6 +240,9 @@ public:
 
         TxScanQueryMemory.fetch_add(resources.Memory);
         Counters->RmMemory->Add(resources.Memory);
+
+        TxExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
+        Counters->RmExternalMemory->Add(resources.ExternalMemory);
 
         if (resources.ExecutionUnits > 0) {
             Counters->RmOnStartAllocs->Inc();
@@ -236,7 +301,8 @@ struct TKqpRMAllocateResult {
 /// local resources snapshot
 struct TKqpLocalNodeResources {
     ui32 ExecutionUnits = 0;
-    ui64 Memory = 0; // the memory left for the queries, see TEvQueryMemoryState
+    ui64 Memory = 0;
+    ui64 ExternalMemory = 0;
 };
 
 struct TPlannerPlacingOptions {
@@ -252,6 +318,10 @@ public:
     virtual ~IKqpResourceManager() = default;
 
     virtual const TIntrusivePtr<TKqpCounters>& GetCounters() const = 0;
+
+    // The spilling cookies for a new tx: the node total and, with a resource pool, the pool resource (created on
+    // its first use). Called by the TTxState constructor, the cookies then stay with the tx for its whole life.
+    virtual TMemoryResourceCookies GetMemoryResourceCookies(const TString& database, const TString& poolId, double memoryPoolPercent) = 0;
 
     virtual TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
@@ -289,8 +359,9 @@ struct TResourceSnapshotState {
     TVector<ui32> InitialBoardNodeIds;
 };
 
-// The memory of the queries on the node - pushed by the compute scheduler, which accounts and limits it.
-// Published to the other nodes and used for the local placement of the tasks.
+// With the feature flag EnableComputeSchedulerMemory the memory of the queries is accounted and limited by the compute
+// scheduler, which pushes its state: then it's published to the other nodes and used for the local placement of the
+// tasks instead of the memory of the resource manager (which keeps only the memory of the node services).
 struct TEvQueryMemoryState : public TEventLocal<TEvQueryMemoryState, TKqpResourceManagerEvents::EvQueryMemoryState> {
     TEvQueryMemoryState(ui64 limit, ui64 usage)
         : Limit(limit)
@@ -326,7 +397,7 @@ struct TKqpProxySharedResources {
 };
 
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
-    TIntrusivePtr<TKqpCounters> counters,
+    TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
     ui32 nodeId = 0, TDuration warmupDeadline = TDuration::Zero());
 

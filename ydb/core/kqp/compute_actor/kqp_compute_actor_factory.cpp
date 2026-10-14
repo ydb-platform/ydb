@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_memory.h>
 #include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 
 #include <atomic>
@@ -101,9 +102,11 @@ public:
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
 
-        // The query node exists for the memory accounting anyway - the CPU is accounted only when the scheduler is enabled
+        // With the memory scheduled the query node exists for the memory accounting anyway - the CPU is accounted only
+        // when the scheduler is enabled. Otherwise there is no query node without the enabled scheduler.
         const auto& scheduler = AppData()->KqpComputeScheduler;
-        const NScheduler::NHdrf::NDynamic::TQueryPtr cpuQuery = scheduler && scheduler->IsEnabled() ? args.Query : nullptr;
+        const NScheduler::NHdrf::NDynamic::TQueryPtr cpuQuery =
+            !NScheduler::IsMemoryScheduled() || scheduler->IsEnabled() ? args.Query : nullptr;
 
         NScheduler::TSchedulableOptions schedulableOptions {
             .Query = cpuQuery,

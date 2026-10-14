@@ -94,12 +94,17 @@ namespace NKikimr {
 
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
 
-    // Bound SyncLog bookkeeping independently of replication/token wait time.
-    // Larger dirty sets are covered by a new full index scan.
-    constexpr size_t MaxReplSyncLogUpdates = 64 * 1024;
+    // Limit exact index lookups to one bounded classification quantum.
+    constexpr size_t ReplSyncLogBatchSize = 1024;
 
     struct TEvReplSyncLogUpdate : TEventLocal<TEvReplSyncLogUpdate, TEvBlobStorage::EvReplSyncLogUpdate> {
+        THullDsSnap Snapshot;
         std::vector<TLogoBlobID> Blobs;
+        std::unique_ptr<IEventHandle> Reply;
+
+        explicit TEvReplSyncLogUpdate(THullDsSnap snapshot)
+            : Snapshot(std::move(snapshot))
+        {}
     };
 
     struct TUnreplicatedBlobRecord { // for monitoring purposes

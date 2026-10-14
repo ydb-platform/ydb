@@ -37,6 +37,8 @@ namespace NKikimr {
             size_t SnapshotRequests = 0;
             size_t StartedPlans = 0;
             size_t StartedNotifications = 0;
+            size_t SyncReplies = 0;
+            bool RequireSyncReplyBeforeDone = false;
             bool DeliverStartedPlans = false;
             bool SchedulerBootstrapped = false;
             std::vector<TEvReplFinished::TInfoPtr> FinishedPlans;
@@ -109,11 +111,20 @@ namespace NKikimr {
                         if (!DeliverStartedPlans) {
                             return TTestActorRuntimeBase::EEventAction::DROP;
                         }
+                    } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvLocalSyncDataResult
+                            && ev->Recipient == ReplSkeletonId) {
+                        UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvLocalSyncDataResult>()->Status, NKikimrProto::OK);
+                        UNIT_ASSERT_VALUES_EQUAL(ev->Sender, SkeletonId);
+                        ++SyncReplies;
+                        return TTestActorRuntimeBase::EEventAction::DROP;
                     } else if (ev->GetTypeRewrite() == TEvQueryReplToken::EventType) {
                         // Keep the scheduler waiting for its token when checking that actual
                         // recovery work revokes readiness before any network/data I/O starts.
                         return TTestActorRuntimeBase::EEventAction::DROP;
                     } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvReplDone && ev->Recipient == ReplSkeletonId) {
+                        if (RequireSyncReplyBeforeDone) {
+                            UNIT_ASSERT(SyncReplies);
+                        }
                         DoneNotifications.push_back(ev->Cookie);
                         return TTestActorRuntimeBase::EEventAction::DROP;
                     }
@@ -166,14 +177,13 @@ namespace NKikimr {
                 return id;
             }
 
-            void SendOverflow() {
+            std::vector<TLogoBlobID> HealthyUpdates(ui32 count, ui64 tabletId = 2) {
                 std::vector<TLogoBlobID> updates;
-                updates.reserve(MaxReplSyncLogUpdates + 1);
-                for (ui32 step = 1; step <= MaxReplSyncLogUpdates + 1; ++step) {
-                    // Changed records can already have disappeared from the index through GC.
-                    updates.emplace_back(999, 1, step, 0, 64, 0);
+                for (ui32 step = 1; step <= count; ++step) {
+                    updates.emplace_back(tabletId, 1, step, 0, 64, 0);
+                    AddHealthyBlob(updates.back());
                 }
-                SendUpdate(std::move(updates));
+                return updates;
             }
 
             void DispatchUntil(std::function<bool()> condition) {
@@ -186,12 +196,18 @@ namespace NKikimr {
             }
 
             void SendUpdate(std::vector<TLogoBlobID> blobs) {
-                auto update = std::make_unique<TEvReplSyncLogUpdate>();
+                auto update = std::make_unique<TEvReplSyncLogUpdate>(HullDs->GetIndexSnapshot());
                 update->Blobs = std::move(blobs);
+                auto result = std::make_unique<TEvLocalSyncDataResult>(NKikimrProto::OK,
+                    TAppData::TimeProvider->Now(), nullptr, nullptr);
+                const ui32 channel = result->GetChannelToSend();
+                update->Reply = std::make_unique<IEventHandle>(ReplSkeletonId, SkeletonId, result.release(),
+                    IEventHandle::MakeFlags(channel, 0));
                 Runtime.Send(new IEventHandle(ReplId, SkeletonId, update.release()));
             }
 
             void Wakeup() {
+                DispatchUntil([&] { return !Wakeups.empty(); });
                 UNIT_ASSERT_VALUES_EQUAL(Wakeups.size(), 1);
                 const ui64 tag = Wakeups.front();
                 Wakeups.pop_front();
@@ -250,111 +266,136 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(localData->Data, data);
             localData->CalculateSizesFromData();
             UNIT_ASSERT(localData->LogoBlobsSize > 0);
+
+            // Deferring the local ACK must also bound batches after timeout or
+            // disconnection: a new job cannot start while this batch is pending.
+            UNIT_ASSERT(!task.Terminate(NSyncer::TSyncerJobTask::TSyncStatusVal::Timeout).Die);
+            UNIT_ASSERT(!task.Terminate(NSyncer::TSyncerJobTask::TSyncStatusVal::DroppedConnection).Die);
+            auto result = std::make_unique<TEvLocalSyncDataResult>(NKikimrProto::OK,
+                TAppData::TimeProvider->Now(), nullptr, nullptr);
+            TEvLocalSyncDataResult::TPtr ack = static_cast<TEvLocalSyncDataResult::THandle*>(
+                new IEventHandle(env.SkeletonId, env.SkeletonId, result.release()));
+            UNIT_ASSERT(task.Handle(ack).Die);
         }
 
-        Y_UNIT_TEST(HealthySyncLogChecksOnlyChangedBlobs) {
+        Y_UNIT_TEST(HealthySyncLogDoesNotReplan) {
             TReplTestEnv env;
-            std::vector<TLogoBlobID> blobs;
-            for (ui32 step = 1; step <= 2048; ++step) {
-                blobs.emplace_back(1, 1, step, 0, 64, 0);
-                env.AddHealthyBlob(blobs.back());
-            }
+            const auto blobs = env.HealthyUpdates(2048);
             env.Start();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
             env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
-            UNIT_ASSERT(env.SnapshotRequests > 1);
-            UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 0);
-            UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
-            UNIT_ASSERT(env.Wakeups.empty());
-
+            const size_t snapshots = env.SnapshotRequests;
+            UNIT_ASSERT(snapshots > 1);
             for (size_t batch = 0; batch < 3; ++batch) {
-                const size_t snapshots = env.SnapshotRequests;
-                env.SendUpdate({blobs[batch], blobs[batch]});
-                env.SendUpdate({blobs[batch + 1]});
-                env.Wakeup();
-                env.DispatchUntil([&] { return env.FinishedPlans.size() == batch + 2; });
-                UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - snapshots, 1);
-                UNIT_ASSERT_VALUES_EQUAL(env.FinishedPlans.back()->ItemsPlanned, 0);
+                env.SendUpdate({blobs[batch], blobs[batch], blobs[batch + 1]});
+                env.DispatchUntil([&] { return env.SyncReplies == batch + 1; });
+                UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests, snapshots);
+                UNIT_ASSERT_VALUES_EQUAL(env.FinishedPlans.size(), 1);
                 UNIT_ASSERT(env.Wakeups.empty());
             }
             UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
         }
 
-        Y_UNIT_TEST(SyncLogUpdateDuringInitialScanIsRetained) {
+        Y_UNIT_TEST(HealthySyncLogAboveOldLimitNeverScansUnchangedIndex) {
             TReplTestEnv env;
-            const TLogoBlobID id(1, 1, 1, 0, 64, 0);
-            env.AddHealthyBlob(id);
-            env.OnSnapshot = [&] { env.SendUpdate({id}); };
+            env.HealthyUpdates(2048);
             env.Start();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
+            env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
             const size_t snapshots = env.SnapshotRequests;
-            env.Wakeup();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 2; });
-            env.DispatchUntil([&] { return !env.DoneNotifications.empty() && env.DoneNotifications.back() == 0; });
-            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - snapshots, 1);
-            UNIT_ASSERT_VALUES_EQUAL(env.DoneNotifications.size(), 1);
-            UNIT_ASSERT(env.Wakeups.empty());
-        }
-
-        Y_UNIT_TEST(SyncLogOverflowFallsBackToFullScan) {
-            TReplTestEnv env;
-            for (ui32 step = 1; step <= 2048; ++step) {
-                env.AddHealthyBlob(TLogoBlobID(2, 1, step, 0, 64, 0));
-            }
-            env.Start();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
-            const size_t fullScanSnapshots = env.SnapshotRequests;
-            env.SendOverflow();
-            // This update arrives after the overflow has discarded its ID set. The
-            // pending full scan must still find it without expanding that set again.
+            // An unrelated missing record exposes any accidental full scan. It
+            // must only be discovered once its own SyncLog notification arrives.
             const TLogoBlobID missing = env.AddMissingCanonicalBlob(1);
+            const auto updates = env.HealthyUpdates(65537, 3);
+            UNIT_ASSERT(!env.GInfo->EnableSingleDcMode);
+            for (size_t batch = 0; batch < 3; ++batch) {
+                env.SendUpdate(updates);
+                env.DispatchUntil([&] { return env.SyncReplies == batch + 1; });
+                UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests, snapshots);
+                UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 0);
+                UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
+                UNIT_ASSERT(env.Wakeups.empty());
+            }
             env.SendUpdate({missing});
-            env.DeliverStartedPlans = true;
             env.Wakeup();
-            env.DispatchUntil([&] { return env.StartedNotifications == 1; });
-            UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 1);
-            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - fullScanSnapshots, fullScanSnapshots);
+            env.DispatchUntil([&] { return env.StartedPlans == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - snapshots, 1);
             UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(env.ReplCtx->MonGroup.ReplItemsRemaining()), 1u);
         }
 
-        Y_UNIT_TEST(SyncLogUpdateBehindOverflowScanCursorIsRetained) {
+        Y_UNIT_TEST(SyncLogClassificationYieldsBeforeAcknowledgingBatch) {
             TReplTestEnv env;
-            for (ui32 step = 1; step <= 2048; ++step) {
-                env.AddHealthyBlob(TLogoBlobID(2, 1, step, 0, 64, 0));
-            }
             env.Start();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
             env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
-            const size_t fullScanSnapshots = env.SnapshotRequests;
-            env.DoneNotifications.clear();
-            env.SendOverflow();
+            bool replySent = false;
+            env.Runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvLocalSyncDataResult) {
+                    replySent = true;
+                }
+                return false;
+            });
+            env.SendUpdate(env.HealthyUpdates(ReplSyncLogBatchSize * 3));
+            bool inspected = false;
+            // SendUpdate has already queued the first processing quantum. Send
+            // through the mailbox so the probe runs after it, before the next one.
+            env.Runtime.Send(new IEventHandle(env.ReplId, env.SkeletonId,
+                new TEvReplInvoke([&](const TUnreplicatedBlobRecords&, TString) {
+                    UNIT_ASSERT(!replySent);
+                    inspected = true;
+                })), 0, true);
+            env.DispatchUntil([&] { return env.SyncReplies == 1; });
+            UNIT_ASSERT(inspected);
+            UNIT_ASSERT(env.Wakeups.empty());
+        }
+
+        Y_UNIT_TEST(SyncLogClassificationContinuesWhileAwaitingReplicationToken) {
+            TReplTestEnv env;
+            env.Start();
+            env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
+            const auto missing = env.AddMissingCanonicalBlob(1);
+            env.DeliverStartedPlans = true;
+            env.SendUpdate({missing});
+            env.Wakeup();
+            env.DispatchUntil([&] { return env.StartedNotifications == 1; });
+            env.DispatchUntil([&] { return env.SyncReplies == 1; });
+            const size_t snapshots = env.SnapshotRequests;
+            const auto updates = env.HealthyUpdates(65537, 3);
+            env.SendUpdate(updates);
+            env.DispatchUntil([&] { return env.SyncReplies == 2; });
+            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests, snapshots);
+            UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.DoneNotifications.size(), 1);
+        }
+
+        Y_UNIT_TEST(SyncLogUpdateBehindInitialScanCursorIsRetained) {
+            TReplTestEnv env;
+            env.HealthyUpdates(2048);
             env.OnSnapshot = [&] {
-                // The second snapshot resumes after the first 1023 keys. Insert
-                // an older key now so the ongoing full scan cannot see it.
                 env.OnSnapshot = [&] { env.SendUpdate({env.AddMissingCanonicalBlob(1)}); };
             };
-            env.Wakeup();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 2; });
-            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - fullScanSnapshots, fullScanSnapshots);
+            env.Start();
+            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
+            env.DispatchUntil([&] { return env.SyncReplies == 1; });
             UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 0);
+            UNIT_ASSERT(env.DoneNotifications.empty());
             const size_t snapshots = env.SnapshotRequests;
             env.DeliverStartedPlans = true;
             env.Wakeup();
             env.DispatchUntil([&] { return env.StartedNotifications == 1; });
             UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - snapshots, 1);
-            UNIT_ASSERT(env.DoneNotifications.empty()); // no premature phantom-only completion
         }
 
-        Y_UNIT_TEST(PendingFullScanDoesNotReportPhantomOnlyCompletion) {
+        Y_UNIT_TEST(PendingClassificationDoesNotReportPhantomOnlyCompletion) {
             TReplTestEnv env;
-            env.AddHealthyBlob(TLogoBlobID(2, 1, 1, 0, 64, 0));
-            env.OnSnapshot = [&] { env.SendOverflow(); };
+            std::vector<TLogoBlobID> collected;
+            for (ui32 step = 1; step <= 65537; ++step) {
+                collected.emplace_back(1, 1, step, 0, 64, 0);
+            }
+            env.RequireSyncReplyBeforeDone = true;
+            env.OnSnapshot = [&] { env.SendUpdate(std::move(collected)); };
             env.Start();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
-            env.Wakeup();
-            env.DispatchUntil([&] { return env.FinishedPlans.size() == 2; });
-            env.DispatchUntil([&] { return !env.DoneNotifications.empty() && env.DoneNotifications.back() == 0; });
-            UNIT_ASSERT_VALUES_EQUAL(env.DoneNotifications.size(), 1);
+            env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(env.SyncReplies, 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests, 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.DoneNotifications.front(), 0);
             UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
             UNIT_ASSERT(env.Wakeups.empty());
         }
@@ -383,6 +424,7 @@ namespace NKikimr {
             env.AddHealthyBlob(id);
             env.Start();
             env.SendUpdate({id});
+            env.DispatchUntil([&] { return env.SyncReplies == 1; });
             UNIT_ASSERT(env.Wakeups.empty());
             env.Runtime.Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, env.ReplId,
                 env.SkeletonId, nullptr, 0));

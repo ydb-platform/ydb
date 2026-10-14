@@ -50,11 +50,6 @@ namespace NKikimr {
         TVDiskID TargetVDiskId;
         TActorId TargetActorId;
 
-        void Die(const TActorContext& ctx) {
-            ctx.Send(NotifyId, new TEvents::TEvGone);
-            TActorBootstrapped<TSyncerRLDFullSyncProxyActor>::Die(ctx);
-        }
-
         void Bootstrap(const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): START", TargetVDiskId.ToString().data()));
             CreateAndRunTask(ctx);

@@ -178,7 +178,6 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSyncerFullSyncedWithPeer, Handle)
             HFunc(TEvVGenerationChange, Handle)
-            IgnoreFunc(TEvents::TEvGone)
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -205,7 +204,6 @@ namespace NKikimr {
             HFunc(TEvOsirisDone, Handle)
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
             HFunc(TEvVGenerationChange, Handle)
-            IgnoreFunc(TEvents::TEvGone)
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -228,7 +226,6 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSyncerCommitDone, HandleFinalLocally)
             HFunc(TEvVGenerationChange, Handle)
-            IgnoreFunc(TEvents::TEvGone)
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
         )
 

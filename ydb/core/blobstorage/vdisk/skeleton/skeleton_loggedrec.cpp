@@ -276,16 +276,23 @@ namespace NKikimr {
         if (ReplActorId && OrigEv->Get()->LogoBlobsSize) {
             // The index is now applied. Late SyncLog records can reveal missing canonical
             // replicas after leaving single-DC mode; do not rescan the whole index for them.
-            auto update = std::make_unique<TEvReplSyncLogUpdate>();
+            auto update = std::make_unique<TEvReplSyncLogUpdate>(hull.GetIndexSnapshot());
             NSyncLog::TFragmentReader fragment(OrigEv->Get()->Data);
             fragment.ForEach([&](const NSyncLog::TLogoBlobRec* rec) {
                 update->Blobs.emplace_back(rec->LogoBlobID(), 0);
             }, [](const NSyncLog::TBlockRec*) {}, [](const NSyncLog::TBarrierRec*) {},
                 [](const NSyncLog::TBlockRecV2*) {});
+            // The syncer can produce its next batch once classification has consumed
+            // this one, independently of replication progress or token availability.
+            const ui32 channel = Result->GetChannelToSend();
+            update->Reply = std::make_unique<IEventHandle>(OrigEv->Sender, ctx.SelfID, Result.release(),
+                IEventHandle::MakeFlags(channel, 0), OrigEv->Cookie);
             ctx.Send(ReplActorId, update.release());
         }
         Span.EndOk();
-        SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
+        if (Result) {
+            SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
+        }
         TActivationContext::Send(std::unique_ptr<IEventHandle>(OrigEv->Forward(SyncLogActorId).Release()));
     }
 

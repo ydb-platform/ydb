@@ -492,17 +492,23 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::Terminate(ESyncStatus status) {
+            if (Phase == ETerminated) {
+                // A timeout or disconnect already requested termination; the local
+                // write must still finish before another job may replace this one.
+                return TSjOutcome::Nothing();
+            }
             Y_VERIFY_S(Phase == EWaitLocal || Phase == EWaitRemote || Phase == EStart,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
                 "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
             Sublog.Log() << "Terminate: status# " << status << "\n";
+            const bool waitForLocal = Phase == EWaitLocal;
             Phase = ETerminated;
             Current.LastSyncStatus = status;
 
             // we can get job timeout or session disconnect during local write;
             // we have to wait until this write is finished (to avoid generating infinite writes)
-            if (Phase == EWaitLocal) {
+            if (waitForLocal) {
                 // do nothing, wait for TEvLocalSyncDataResult
                 return TSjOutcome::Nothing();
             } else {

@@ -129,10 +129,11 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        const auto makeQuery = [](TStringBuf left, TStringBuf right) {
+        const auto makeQuery = [](TStringBuf left, TStringBuf right, bool useScalarHashJoin = true) {
             return TStringBuilder() << R"(
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.UseBlockHashJoin='true';
+                PRAGMA ydb.UseScalarHashJoin=')" << (useScalarHashJoin ? "true" : "false") << R"(';
                 PRAGMA ydb.OptShuffleElimination='true';
                 PRAGMA ydb.OptShuffleEliminationWithMap='true';
                 PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
@@ -152,6 +153,10 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         const TString scalarAst = explain(scalarQuery);
         UNIT_ASSERT_C(scalarAst.Contains("ScalarHashJoin"), scalarAst);
         UNIT_ASSERT_C(!scalarAst.Contains("BlockHashJoin"), scalarAst);
+
+        const TString disabledAst = explain(makeQuery("L", "R", false));
+        UNIT_ASSERT_C(disabledAst.Contains("BlockHashJoin"), disabledAst);
+        UNIT_ASSERT_C(!disabledAst.Contains("ScalarHashJoin"), disabledAst);
 
         const TString blockAst = explain(makeQuery("CL", "CR"));
         UNIT_ASSERT_C(blockAst.Contains("BlockHashJoin"), blockAst);

@@ -1531,7 +1531,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool useScalarHashJoin
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1912,7 +1913,7 @@ TExprBase DqBuildHashJoin(
             if (useBlockHashJoin) {
                 const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
-                if (DqCanUseScalarHashJoin(join, ctx)) {
+                if (useScalarHashJoin && DqCanUseScalarHashJoin(join, ctx)) {
                     hashJoin = Build<TDqPhyHashJoin>(ctx, join.Pos())
                         .LeftInput(leftInputArg)
                         .RightInput(rightInputArg)

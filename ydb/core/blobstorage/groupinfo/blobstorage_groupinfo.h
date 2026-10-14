@@ -369,6 +369,11 @@ public:
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
     std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }
     TBridgePileId GetBridgePileId() const { return BridgePileId; }
+    // inline pile is the bridged group that serves as one of its own piles (this is the case for groups of the cluster
+    // converted from non-bridged one), so it has both the bridge proxy part and its own topology with VDisks
+    bool IsInlinePile() const { return IsBridged() && BridgeProxyGroupId == GroupID; }
+    // generate info of the inline pile as seen by its own DS proxy, that is the same group without bridge proxy part
+    TIntrusivePtr<TBlobStorageGroupInfo> MakeInlinePileView() const;
 
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
@@ -479,6 +484,9 @@ private:
     friend class NBlobMapper::TMirror3dcMapper;
     const TFailDomain& GetFailDomain(const TVDiskID& vdisk) const;
     const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const;
+
+    struct TInlinePileViewTag {};
+    TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag);
 
 public:
     // blobstorage group id

@@ -96,11 +96,21 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
         auto *msg = ev->Get();
+        if (const auto& info = msg->Info; info && !info->IsBridged() && info->GetBridgeProxyGroupId() == info->GroupID) {
+            // this is the view of the inline pile and it comes from the bridge proxy put in front of us
+            InlinePileBridgeProxyId = ev->Sender;
+        }
         ApplyGroupInfo(std::move(msg->Info), std::move(msg->NodeLayoutInfo), std::move(msg->StoragePoolCounters));
     }
 
     void TBlobStorageGroupProxy::ApplyGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
             TNodeLayoutInfoPtr nodeLayoutInfo, TIntrusivePtr<TStoragePoolCounters>&& counters) {
+        if (info && info->IsInlinePile()) {
+            // node warden puts bridge proxy in front of this one for inline pile and feeds us with the pile view only;
+            // morphing into forwarder would make bridge proxy loop requests to itself
+            Y_DEBUG_ABORT("inline pile group info delivered to DS proxy GroupId# %" PRIu32, info->GroupID.GetRawId());
+            info = info->MakeInlinePileView();
+        }
         if (info && info->IsBridged()) {
             const TActorId serviceId = MakeBlobStorageProxyID(info->GroupID);
             BridgeProxyId = RegisterWithSameMailbox(CreateBridgeProxyActor(std::move(info)));

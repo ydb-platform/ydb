@@ -7,6 +7,8 @@
 
 namespace NKikimr {
 
-    IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info);
+    // innerProxyId is the DS proxy serving inline pile of this group (when the group is an inline pile one); bridge proxy
+    // takes ownership over the inner proxy and keeps its configuration up to date
+    IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId = {});
 
 } // NKikimr

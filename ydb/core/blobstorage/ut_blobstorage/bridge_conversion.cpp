@@ -1,4 +1,5 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 namespace {
 
@@ -31,8 +32,8 @@ namespace {
             : Env(env)
         {}
 
-        void Write(ui32 groupId) {
-            const TActorId edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        void Write(ui32 groupId, ui32 nodeId = 1) {
+            const TActorId edge = Env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
             const TString data = TStringBuilder() << "data for step " << Step;
             const TLogoBlobID id(100500, 1, Step++, 0, data.size(), 0);
             Env.Runtime->WrapInActorContext(edge, [&] {
@@ -43,8 +44,8 @@ namespace {
             Written.emplace_back(groupId, id, data);
         }
 
-        void CheckAll() {
-            const TActorId edge = Env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        void CheckAll(ui32 nodeId = 1) {
+            const TActorId edge = Env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
             for (const auto& [groupId, id, data] : Written) {
                 Env.Runtime->WrapInActorContext(edge, [&] {
                     SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
@@ -99,6 +100,42 @@ namespace {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
+    // move one of the group's VDisks to another PDisk; this also bumps the group generation
+    void ReassignOneDisk(TEnvironmentSetup& env, ui32 groupId) {
+        const auto baseConfig = env.FetchBaseConfig();
+        const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == groupId) {
+                target = &vslot;
+                break;
+            }
+        }
+        UNIT_ASSERT(target);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+        reassign->SetGroupId(groupId);
+        reassign->SetGroupGeneration(target->GetGroupGeneration());
+        reassign->SetFailRealmIdx(target->GetFailRealmIdx());
+        reassign->SetFailDomainIdx(target->GetFailDomainIdx());
+        reassign->SetVDiskIdx(target->GetVDiskIdx());
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // turn the group into an inline pile one: it becomes bridged group with single pile being the group itself
+    void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group) {
+        const auto groupId = TGroupId::FromProto(group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+        auto *state = group->MutableBridgeGroupState();
+        state->ClearPile();
+        auto *pile = state->AddPile();
+        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+        pile->SetGroupGeneration(group->GetGroupGeneration());
+        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+        groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+        TBridgePileId::FromPileIndex(0).CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+    }
+
     std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> GetPoolGroups(
             const NKikimrBlobStorage::TBaseConfig& baseConfig, ui64 storagePoolId) {
         std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> res;
@@ -144,29 +181,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         checker.CheckAll();
 
         // reassign one disk of the original group to check that self-heal machinery is able to place it
-        {
-            const auto baseConfig = env.FetchBaseConfig();
-            const NKikimrBlobStorage::TBaseConfig::TVSlot *target = nullptr;
-            ui32 groupGeneration = 0;
-            for (const auto& vslot : baseConfig.GetVSlot()) {
-                if (vslot.GetGroupId() == groupId) {
-                    target = &vslot;
-                    groupGeneration = vslot.GetGroupGeneration();
-                    break;
-                }
-            }
-            UNIT_ASSERT(target);
-
-            NKikimrBlobStorage::TConfigRequest request;
-            auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
-            reassign->SetGroupId(groupId);
-            reassign->SetGroupGeneration(groupGeneration);
-            reassign->SetFailRealmIdx(target->GetFailRealmIdx());
-            reassign->SetFailDomainIdx(target->GetFailDomainIdx());
-            reassign->SetVDiskIdx(target->GetVDiskIdx());
-            const auto response = env.Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-        }
+        ReassignOneDisk(env, groupId);
         env.Sim(TDuration::Minutes(1));
         checker.Write(groupId);
         checker.CheckAll();
@@ -178,6 +193,89 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             env.Sim(TDuration::Seconds(30));
             checker.Write(groupId);
             checker.CheckAll();
+        }
+    }
+
+    // Conversion of the group into inline pile one is emulated by patching group info delivered to node wardens, so this
+    // test checks only the proxy machinery: bridge proxy must be put in front of the running DS proxy and route requests
+    // of the inline pile into it, and newly started proxies must be set up the same way.
+    Y_UNIT_TEST(InlinePileProxy) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        checker.CheckAll();
+
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        bool converted = false;
+        ui32 numInnerPuts = 0; // puts issued by the bridge proxy to the DS proxy of the inline pile
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvControllerNodeServiceSetUpdate:
+                    if (converted) {
+                        auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                        for (auto& group : *record.MutableServiceSet()->MutableGroups()) {
+                            if (group.GetGroupID() == groupId && group.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+                                MakeInlinePile(&group);
+                            }
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvUpdateGroupInfo:
+                    if (auto *msg = ev->Get<TEvBlobStorage::TEvUpdateGroupInfo>(); converted &&
+                            msg->GroupId.GetRawId() == groupId && msg->GroupInfo) {
+                        MakeInlinePile(&*msg->GroupInfo);
+                    }
+                    break;
+
+                case TEvBlobStorage::EvNodeWardenQueryCacheResult:
+                    if (auto *msg = ev->Get<NStorage::TEvNodeWardenQueryCacheResult>(); converted &&
+                            msg->Key == Sprintf("G%08" PRIx32, groupId) && msg->GenerationValue) {
+                        auto& [generation, value] = *msg->GenerationValue;
+                        NKikimrBlobStorage::TGroupInfo group;
+                        UNIT_ASSERT(group.ParseFromString(value));
+                        MakeInlinePile(&group);
+                        UNIT_ASSERT(group.SerializeToString(&value));
+                    }
+                    break;
+
+                case TEvBlobStorage::EvPut:
+                    if (auto *msg = ev->Get<TEvBlobStorage::TEvPut>(); msg->ForceGroupGeneration &&
+                            msg->Id.TabletID() == 100500) {
+                        ++numInnerPuts;
+                    }
+                    break;
+            }
+            return true;
+        };
+
+        auto checkThroughBridgeProxy = [&](ui32 nodeId) {
+            const ui32 prev = numInnerPuts;
+            checker.Write(groupId, nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(numInnerPuts, prev + 1);
+            checker.CheckAll(nodeId);
+        };
+
+        // bump group generation to make BSC distribute the (patched) group info to running proxies and VDisks
+        converted = true;
+        ReassignOneDisk(env, groupId);
+        env.Sim(TDuration::Minutes(1));
+        checkThroughBridgeProxy(1);
+
+        // newly started proxies must also be bridged ones
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            Cerr << "*** restarting node " << nodeId << " with inline pile group" << Endl;
+            env.RestartNode(nodeId);
+            env.Sim(TDuration::Seconds(30));
+            checkThroughBridgeProxy(nodeId);
         }
     }
 

@@ -20,6 +20,7 @@ namespace NKikimr {
     class TBridgedBlobStorageProxyActor : public TActorBootstrapped<TBridgedBlobStorageProxyActor> {
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
         TGroupId GroupId;
+        TActorId InnerProxyId; // DS proxy of the inline pile, if this group is an inline pile one
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -661,10 +662,13 @@ namespace NKikimr {
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
 
     public:
-        TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info)
+        TBridgedBlobStorageProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId)
             : Info(std::move(info))
             , GroupId(Info->GroupID)
-        {}
+            , InnerProxyId(innerProxyId)
+        {
+            Y_ABORT_UNLESS(Info->IsInlinePile() == static_cast<bool>(InnerProxyId));
+        }
 
         void Bootstrap() {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ true));
@@ -700,6 +704,9 @@ namespace NKikimr {
         void PassAway() override {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
+            if (InnerProxyId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, InnerProxyId, SelfId(), nullptr, 0));
+            }
             TActorBootstrapped::PassAway();
         }
 
@@ -763,8 +770,13 @@ namespace NKikimr {
             const auto [it1, inserted1] = request->CookiesInFlight.insert(cookie);
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
-            // send event
-            SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
+            // send event; inline pile is served by inner proxy, as the service id of this group points to us
+            if (groupId == GroupId) {
+                Y_ABORT_UNLESS(InnerProxyId);
+                Send(InnerProxyId, ev.release(), 0, cookie, request->Span.GetTraceId());
+            } else {
+                SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
+            }
             ++request->ResponsesPending;
         }
 
@@ -956,7 +968,19 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
-            auto prevInfo = std::exchange(Info, std::move(ev->Get()->Info));
+            auto *msg = ev->Get();
+            if (InnerProxyId) {
+                // inner proxy has to see its group as an ordinary pile one
+                Y_ABORT_UNLESS(!msg->Info || msg->Info->IsInlinePile());
+                Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(
+                    msg->Info ? msg->Info->MakeInlinePileView() : nullptr, msg->NodeLayoutInfo, msg->StoragePoolCounters));
+                if (!msg->Info) {
+                    // keep current configuration; the inner proxy waits for the new one, and subrequests are sent with
+                    // forced group generation anyway
+                    return;
+                }
+            }
+            auto prevInfo = std::exchange(Info, std::move(msg->Info));
             Y_ABORT_UNLESS(prevInfo);
             Y_ABORT_UNLESS(Info);
             if (prevInfo->GroupGeneration < Info->GroupGeneration) {
@@ -1018,8 +1042,8 @@ namespace NKikimr {
         }
     };
 
-    IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info) {
-        return new TBridgedBlobStorageProxyActor(std::move(info));
+    IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId) {
+        return new TBridgedBlobStorageProxyActor(std::move(info), innerProxyId);
     }
 
 } // NKikimr

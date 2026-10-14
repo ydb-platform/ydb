@@ -7,6 +7,7 @@
 #include "hulldb_compstrat_test_context.h"
 #include "hulldb_compstrat_ratio_test_iterators.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -266,6 +267,46 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, 1);
         }
 
+        Y_UNIT_TEST(HighRankStorageRatioSkipUsesIcbControl) {
+            constexpr ui32 level0Boundary = HullCompLevel0MaxSstsAtOnce * (Level0UseDreg ? 2 : 1);
+            const TString controlName = "VDiskControls.HullCompStorageRatioSkipRank";
+            for (bool enableOptimization : {false, true}) {
+                for (ui32 skipRank : {3u, 10u}) {
+                    const ui32 skipChunks = level0Boundary * skipRank;
+                    for (const auto& [chunks, expectedInvocationsWhenEnabled] : {
+                            std::make_pair(skipChunks - 1, 1u),
+                            std::make_pair(skipChunks, 0u),
+                            std::make_pair(skipChunks + 1, 0u)}) {
+                        TPriorityTestEnv env;
+                        env.AddSst(0, chunks);
+                        auto hullCtx = env.Contexts.GetHullCtx();
+                        hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioOptimization(enableOptimization);
+                        TControlBoard icb;
+                        icb.RegisterSharedControl(hullCtx->VCfg->HullCompStorageRatioSkipRank, controlName);
+                        UNIT_ASSERT_VALUES_EQUAL(ui64(hullCtx->VCfg->HullCompStorageRatioSkipRank), 0);
+
+                        auto checkSelection = [&](ui64 expectedInvocations) {
+                            TTask task;
+                            UNIT_ASSERT(env.Select(task) == NHullComp::ActCompactSsts);
+                            UNIT_ASSERT(task.SelectStrategy == NHullComp::ESelectStrategy::BalanceLevel);
+                            UNIT_ASSERT_VALUES_EQUAL(task.Priority.MaxRank, chunks / double(level0Boundary));
+                            UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, 1);
+                            UNIT_ASSERT_VALUES_EQUAL(hullCtx->StorageRatioGroup.StorageRatioInvocations().Val(),
+                                expectedInvocations);
+                        };
+
+                        checkSelection(1); // Zero leaves calculation enabled at any rank.
+                        TAtomic previousValue = 0;
+                        icb.SetValue(controlName, skipRank, previousValue);
+                        checkSelection(1 + expectedInvocationsWhenEnabled);
+                        icb.SetValue(controlName, skipRank + 1, previousValue);
+                        checkSelection(2 + expectedInvocationsWhenEnabled);
+                        icb.SetValue(controlName, 0, previousValue);
+                        checkSelection(3 + expectedInvocationsWhenEnabled);
+                    }
+                }
+            }
+        }
 
         Y_UNIT_TEST(Test1) {
             STR << "Building LevelIndex\n";

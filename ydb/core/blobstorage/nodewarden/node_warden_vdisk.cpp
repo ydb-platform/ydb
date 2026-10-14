@@ -203,6 +203,7 @@ namespace NKikimr::NStorage {
         vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
         vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
+        vdiskConfig->HullCompStorageRatioSkipRank = HullCompStorageRatioSkipRank;
         vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
         vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
         vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;

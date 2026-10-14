@@ -3254,9 +3254,8 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
     }
 
     auto setPlan = [&serializerCtx](auto txId, const auto& tx, auto& txProto) {
-        // A transaction without stages - an unsafe truncate - has nothing to draw, and the
-        // consumers of the plan list skip transactions whose plan is empty.
-        if (tx.Stages().Empty()) {
+        // Unsafe truncate runs in a separate executer and has no DQ execution plan.
+        if (tx.Stages().Empty() || GetTableTruncateSettings(tx)) {
             return;
         }
 

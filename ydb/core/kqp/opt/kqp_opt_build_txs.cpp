@@ -577,13 +577,51 @@ TVector<TDqPhyPrecompute> PrecomputeInputs(const TDqStage& stage) {
     return result;
 }
 
-std::optional<TString> GetUnsafeTruncatePath(const TKqlQuery& query) {
+TMaybeNode<TKqlUnsafeTruncate> GetUnsafeTruncate(const TKqlQuery& query) {
     for (const auto& effect : query.Effects()) {
         if (auto truncate = effect.Maybe<TKqlUnsafeTruncate>()) {
-            return TString(truncate.Cast().TablePath().Value());
+            return truncate;
         }
     }
-    return std::nullopt;
+    return {};
+}
+
+TKqpSinkEffect BuildTableTruncateEffect(const TKqlUnsafeTruncate& truncate, TExprContext& ctx) {
+    const auto pos = truncate.Pos();
+    const auto* rowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
+    const auto rows = Build<TCoList>(ctx, pos)
+        .ListType(ExpandType(pos, *ctx.MakeType<TListExprType>(rowType), ctx))
+        .Done();
+
+    TDqStageSettings stageSettings;
+    stageSettings.PartitionMode = TDqStageSettings::EPartitionMode::Single;
+
+    // The sink carries the operation in the physical plan. Its executer needs no input rows.
+    const auto stage = Build<TDqStage>(ctx, pos)
+        .Inputs().Build()
+        .Program()
+            .Args({})
+            .Body<TCoToFlow>().Input(rows).Build()
+            .Build()
+        .Outputs()
+            .Add<TDqSink>()
+                .Index().Build("0")
+                .DataSink<TKqpTableSink>()
+                    .Category().Build(KqpTableTruncateSinkName)
+                    .Cluster().Build("db")
+                    .Build()
+                .Settings<TKqpTableTruncateSettings>()
+                    .TablePath(truncate.TablePath())
+                    .Build()
+                .Build()
+            .Build()
+        .Settings(stageSettings.BuildNode(ctx, pos))
+        .Done();
+
+    return Build<TKqpSinkEffect>(ctx, pos)
+        .Stage(stage)
+        .SinkIndex().Build("0")
+        .Done();
 }
 
 class TKqpBuildTxsTransformer : public TSyncTransformerBase {
@@ -658,23 +696,30 @@ public:
 
         TKqlQuery query(inputExpr);
 
-        // A block holding nothing but an unsafe truncate. There are no stages to build, so BuildTx
-        // is bypassed - it asserts on empty stage lists - and the transaction is assembled here.
-        // Appending it now is what puts it at its statement position among the data transactions.
-        if (auto truncatePath = GetUnsafeTruncatePath(query)) {
+        if (auto truncate = GetUnsafeTruncate(query)) {
             // The truncate must be the only effect so that no other operations are discarded.
             YQL_ENSURE(query.Results().Empty() && query.Effects().Size() == 1,
                 "Unsafe truncate block must contain only the truncate effect, got "
                     << query.Results().Size() << " results and " << query.Effects().Size() << " effects");
 
+            const auto effects = Build<TExprList>(ctx, query.Pos())
+                .Add(BuildTableTruncateEffect(truncate.Cast(), ctx))
+                .Done();
+            const auto sinkQuery = Build<TKqlQuery>(ctx, query.Pos())
+                .Results().Build()
+                .Effects(effects)
+                .Done();
+            auto tx = BuildTx(KqpCtx->Config->GetEnableIndexStreamWrite() ? sinkQuery.Ptr() : effects.Ptr(),
+                ctx, /* isPrecompute */ false);
+            if (!tx) {
+                return TStatus::Error;
+            }
+
+            // Truncate has its own transaction and is never deferred as a regular table write.
             TKqpPhyTxSettings txSettings;
             txSettings.Type = EPhysicalTxType::Generic;
-            txSettings.UnsafeTruncatePath = *truncatePath;
-
             BuildCtx->PhysicalTxs.emplace_back(Build<TKqpPhysicalTx>(ctx, query.Pos())
-                .Stages().Build()
-                .Results().Build()
-                .ParamBindings().Build()
+                .InitFrom(tx.Cast())
                 .Settings(txSettings.BuildNode(ctx, query.Pos()))
                 .Done());
 

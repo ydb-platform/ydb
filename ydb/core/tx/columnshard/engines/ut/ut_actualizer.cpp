@@ -1,3 +1,4 @@
+#include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
@@ -9,6 +10,8 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/storage.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
+
+#include <ydb/library/formats/arrow/size_calcer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -26,9 +29,19 @@ const TString Tier2 = NColumnShard::NTiers::TExternalStorageId("/Root/tier2").Ge
 const TDuration Tier1EvictAfter = TDuration::Hours(1);
 const TDuration Tier2EvictAfter = TDuration::Hours(2);
 
-TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization) {
+TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization,
+    const std::optional<TString>& sparseDefault = {}) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(PkColumnId);
+    if (sparseDefault) {
+        auto column = NArrow::NTest::TTestColumn("payload", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)).CreateColumn(2);
+        *column.MutableDefaultValue() =
+            TColumnDefaultScalarValue(std::make_shared<arrow::StringScalar>(std::string(*sparseDefault))).SerializeToProto();
+        NArrow::NAccessor::TConstructorContainer accessor(std::make_shared<NArrow::NAccessor::NSparsed::TConstructor>());
+        *column.MutableDataAccessorConstructor() = accessor.SerializeToProto();
+        *proto.AddColumns() = column;
+        *proto.AddColumns() = NArrow::NTest::TTestColumn("absent", NScheme::TTypeInfo(NScheme::NTypeIds::Int64)).CreateColumn(3);
+    }
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(version);
     proto.MutableOptions()->SetSchemeNeedActualization(schemeNeedActualization);
@@ -220,6 +233,45 @@ public:
     }
 };
 
+class TActualizationBatchTestEnv {
+public:
+    const std::shared_ptr<TSchemaObjectsCache> Cache = std::make_shared<TSchemaObjectsCache>();
+    const std::shared_ptr<IStoragesManager> Storages = TTestStoragesManager::GetInstance();
+    const std::shared_ptr<NDataLocks::TManager> Locks = std::make_shared<NDataLocks::TManager>();
+    const std::shared_ptr<TController> Controller = std::make_shared<TController>();
+    TVersionedIndex Index;
+
+    explicit TActualizationBatchTestEnv(const std::optional<TString>& sparseDefault = {}) {
+        Index.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false, sparseDefault)));
+        Index.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true, sparseDefault)));
+    }
+
+    TPortionEvictionFeatures Features(const bool repair) const {
+        const auto original = Index.GetSchemaVerified(1);
+        TPortionEvictionFeatures result(original, repair ? original : Index.GetLastSchema(), IStoragesManager::DefaultStorageId);
+        result.SetTargetTierName(IStoragesManager::DefaultStorageId);
+        result.SetRebuildDecimalPrimaryKey(repair);
+        return result;
+    }
+
+    TTieringProcessContext Context(const ui64 memoryLimit = MemoryLimit) const {
+        return TTieringProcessContext(memoryLimit, TSaverContext(Storages), Locks, Index, NColumnShard::TEngineLogsCounters(), Controller);
+    }
+
+    static TPortionInfo::TConstPtr Portion(const ui64 id, const bool historical, const ui32 rows = 1000) {
+        return NTest::MakeTestCompactedPortion(
+            TestPathId, id, 10, 19, rows, TSnapshot(1, 1), historical ? std::make_optional(TSnapshot(10, 1)) : std::nullopt);
+    }
+
+    static auto BuildLock(const TTTLColumnEngineChanges& task) {
+        struct TTestChanges: TTTLColumnEngineChanges {
+            using TColumnEngineChanges::BuildDataLock;
+        };
+
+        return (task.*&TTestChanges::BuildDataLock)();
+    }
+};
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
@@ -290,6 +342,86 @@ Y_UNIT_TEST_SUITE(TSchemeActualizerTests) {
 }
 
 Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
+    Y_UNIT_TEST(HistoricalRepairDoesNotHideActiveSchemaActualization) {
+        for (const bool repairFirst : { false, true }) {
+            TActualizationBatchTestEnv env;
+            auto context = env.Context();
+            for (ui32 i = 0; i < 4; ++i) {
+                const bool repair = (i % 2 == 0) == repairFirst;
+                UNIT_ASSERT_EQUAL(context.AddPortion(env.Portion(i + 1, repair), env.Features(repair), {}),
+                    TTieringProcessContext::EAddPortionResult::SUCCESS);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().size(), 1);   // same storage address
+            const auto& tasks = context.GetTasks().begin()->second;
+            UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 2);
+            for (const auto& constructor : tasks) {
+                const auto& task = *constructor.GetTask();
+                UNIT_ASSERT_VALUES_EQUAL(constructor.GetPortionsCount(), 2);
+                const auto lock = env.BuildLock(task);
+                for (const auto& portion : task.GetPortionsInfo()) {
+                    UNIT_ASSERT_VALUES_EQUAL(portion->IsRemovedFor(TSnapshot(20, 1)), task.IsKeyRebuild());
+                    UNIT_ASSERT_VALUES_EQUAL(!!lock->IsLocked(*portion, NDataLocks::ELockCategory::Scan), task.IsKeyRebuild());
+                    UNIT_ASSERT(lock->IsLocked(*portion, NDataLocks::ELockCategory::Actualization));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SeparatedTasksShareStorageLimit) {
+        TActualizationBatchTestEnv env;
+        auto features = env.Features(true);
+        for (ui32 i = 0; i < 15; ++i) {
+            env.Controller->StartActualization(features.GetRWAddress());
+        }
+        auto context = env.Context();
+        UNIT_ASSERT_EQUAL(context.AddPortion(env.Portion(1, true), env.Features(true), {}), TTieringProcessContext::EAddPortionResult::SUCCESS);
+        UNIT_ASSERT_EQUAL(
+            context.AddPortion(env.Portion(2, false), env.Features(false), {}), TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED);
+        UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().begin()->second.size(), 1);
+        // Another repair portion still fits without using a new slot.
+        UNIT_ASSERT_EQUAL(context.AddPortion(env.Portion(3, true), env.Features(true), {}), TTieringProcessContext::EAddPortionResult::SUCCESS);
+    }
+
+    Y_UNIT_TEST(RepairMemoryIncludesDenseDefaultsAndRetainedOutput) {
+        const TString defaultValue(1024, 'x');
+        TActualizationBatchTestEnv env(defaultValue);
+        const auto portion = env.Portion(1, true, 4096);
+        const auto features = env.Features(true);
+        const auto loader = features.GetTargetScheme()->GetColumnLoaderVerified(2);
+        const auto sparse = loader->BuildDefaultAccessor(portion->GetRecordsCount());
+        UNIT_ASSERT(sparse->GetValueRawBytes() < defaultValue.size());
+        const auto dense =
+            NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*loader->GetDefaultValue(), portion->GetRecordsCount()));
+        const ui64 denseBytes = NArrow::GetArrayMemorySize(dense->data());
+        auto predictor = TTTLColumnEngineChanges::BuildMemoryPredictor();
+        const auto first = predictor->AddPortion(portion, features);
+        UNIT_ASSERT(first > 3 * denseBytes);   // simultaneous restored, combined and reordered buffers
+        const auto second = predictor->PredictMemory(portion, features);
+        UNIT_ASSERT(second - first >= denseBytes);   // previous output stays alive
+        UNIT_ASSERT_VALUES_EQUAL(predictor->AddPortion(portion, features), second);
+
+        auto context = env.Context(second - 1);
+        for (ui32 id = 1; id <= 2; ++id) {
+            UNIT_ASSERT_EQUAL(
+                context.AddPortion(env.Portion(id, true, 4096), env.Features(true), {}), TTieringProcessContext::EAddPortionResult::SUCCESS);
+        }
+        const auto& tasks = context.GetTasks().begin()->second;
+        UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 2);   // split before exceeding the budget
+        for (const auto& task : tasks) {
+            UNIT_ASSERT_VALUES_EQUAL(task.GetMemoryUsage(), first);
+            UNIT_ASSERT_VALUES_EQUAL(task.GetTask()->CalcMemoryForUsage(), first);
+        }
+    }
+
+    Y_UNIT_TEST(OrdinaryActualizationKeepsMemoryEstimate) {
+        TActualizationBatchTestEnv env;
+        auto predictor = TTTLColumnEngineChanges::BuildMemoryPredictor();
+        const auto portion = env.Portion(1, false);
+        const auto features = env.Features(false);
+        UNIT_ASSERT_VALUES_EQUAL(predictor->AddPortion(portion, features), portion->GetTotalBlobBytes() + portion->GetTotalRawBytes());
+        UNIT_ASSERT_VALUES_EQUAL(predictor->AddPortion(portion, features), 2 * portion->GetTotalBlobBytes() + portion->GetTotalRawBytes());
+    }
+
     Y_UNIT_TEST(LateStartQueuesLoadedPortionsWithoutCriticalSchema) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());

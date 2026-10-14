@@ -8,9 +8,44 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 
+#include <ydb/library/formats/arrow/replace_key.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
 
 namespace NKikimr::NOlap {
+
+ui64 TTTLColumnEngineChanges::TMemoryPredictor::AddPortion(
+    const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features) {
+    SumBlobsMemory += portionInfo->GetTotalBlobBytes();
+    ui64 workingMemory = portionInfo->GetTotalRawBytes();
+    if (features.GetRebuildDecimalPrimaryKey()) {
+        const ui64 rows = portionInfo->GetRecordsCount();
+        // RawBytes describes stored values, not the dense arrays produced when
+        // sparse/absent columns are restored. Include every column, even defaults
+        // and MVCC columns, and add variable-width payloads from the stored data.
+        ui64 denseMemory = portionInfo->GetTotalRawBytes();
+        for (const auto columnId : features.GetTargetScheme()->GetColumnIds()) {
+            const auto loader = features.GetTargetScheme()->GetColumnLoaderVerified(columnId);
+            const auto& type = loader->GetField()->type();
+            denseMemory += (rows + 7) / 8 + 256;   // validity bitmap and array/buffer metadata
+            if (const auto fixed = std::dynamic_pointer_cast<arrow::FixedWidthType>(type)) {
+                denseMemory += (rows * fixed->bit_width() + 7) / 8;
+            } else {
+                denseMemory += (rows + 1) * sizeof(ui64);   // offsets, including large binary
+                if (const auto value = std::dynamic_pointer_cast<arrow::BaseBinaryScalar>(loader->GetDefaultValue()); value && value->is_valid) {
+                    denseMemory += rows * value->value->size();
+                }
+            }
+        }
+        // Input accessors, combined arrays, reordered arrays and serialization /
+        // accessor reconstruction may coexist. Sorting also keeps row references
+        // and UInt64 permutation buffers. Output blobs accumulate across portions.
+        workingMemory = 4 * denseMemory + rows * (sizeof(NArrow::TRawReplaceKey) + 2 * sizeof(ui64));
+        SumOutputMemory += 2 * denseMemory;
+    }
+    MaxWorkingMemory = Max(MaxWorkingMemory, workingMemory);
+    return SumBlobsMemory + SumOutputMemory + MaxWorkingMemory;
+}
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);

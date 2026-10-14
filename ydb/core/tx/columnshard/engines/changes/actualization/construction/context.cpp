@@ -41,44 +41,48 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         std::vector<TTaskConstructor> tasks = { buildNewTask() };
         it = Tasks.emplace(features.GetRWAddress(), std::move(tasks)).first;
     }
-    if (!it->second.back().CanTakePortionInTx(info, VersionedIndex)) {
-        if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
-            it->second.emplace_back(buildNewTask());
-        } else {
+    // Keep the shared per-storage task limit, but never mix physical repair
+    // (Any lock) with ordinary actualization (readers may still use its input).
+    TTaskConstructor* task = nullptr;
+    for (auto candidate = it->second.rbegin(); candidate != it->second.rend(); ++candidate) {
+        if (!candidate->GetPortionsCount() || candidate->GetTask()->IsKeyRebuild() == features.GetRebuildDecimalPrimaryKey()) {
+            task = &*candidate;
+            break;
+        }
+    }
+    const bool txLimit = task && !task->CanTakePortionInTx(info, VersionedIndex);
+    const bool memoryLimit = task && task->GetPortionsCount() && features.NeedRewrite() &&
+                             task->GetMemoryPredictor()->PredictMemory(info, features) > MemoryUsageLimit;
+    if (!task || txLimit || memoryLimit) {
+        if (!Controller->IsNewTaskAvailable(it->first, it->second.size())) {
             return EAddPortionResult::TASK_LIMIT_EXCEEDED;
         }
-        if (dWait) {
+        it->second.emplace_back(buildNewTask());
+        task = &it->second.back();
+        if (dWait && txLimit) {
+            features.OnSkipPortionWithTxLimit(Counters, *dWait);
+        }
+        if (dWait && memoryLimit) {
             features.OnSkipPortionWithProcessMemory(Counters, *dWait);
         }
     }
     if (features.NeedRewrite()) {
-        if (MemoryUsageLimit <= it->second.back().GetMemoryUsage()) {
-            if (Controller->IsNewTaskAvailable(it->first, it->second.size())) {
-                it->second.emplace_back(buildNewTask());
-            } else {
-                return EAddPortionResult::TASK_LIMIT_EXCEEDED;
-            }
-            if (dWait) {
-                features.OnSkipPortionWithTxLimit(Counters, *dWait);
-            }
-        }
-        it->second.back().MutableMemoryUsage() = it->second.back().GetMemoryPredictor()->AddPortion(info);
+        task->MutableMemoryUsage() = task->GetMemoryPredictor()->AddPortion(info, features);
     }
-    it->second.back().TakePortionInTx(info, VersionedIndex);
+    task->TakePortionInTx(info, VersionedIndex);
     if (features.GetTargetTierName() == NTiering::NCommon::DeleteTierName) {
         AFL_VERIFY(dWait);
         Counters.OnPortionToDrop(info->GetTotalBlobBytes(), *dWait);
-        it->second.back().GetTask()->AddPortionToRemove(info);
-        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())(
-            "f", it->first.DebugString());
+        task->GetTask()->AddPortionToRemove(info);
+        AFL_VERIFY(!task->GetTask()->GetPortionsToEvictCount())("rw", features.GetRWAddress().DebugString())("f", it->first.DebugString());
     } else {
         if (!dWait) {
             AFL_VERIFY(features.GetRebuildDecimalPrimaryKey() || features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
         } else {
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }
-        it->second.back().GetTask()->AddPortionToEvict(info, std::move(features));
-        AFL_VERIFY(!it->second.back().GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())(
+        task->GetTask()->AddPortionToEvict(info, std::move(features));
+        AFL_VERIFY(!task->GetTask()->GetPortionsToRemove().HasPortions())("rw", features.GetRWAddress().DebugString())(
             "f", it->first.DebugString());
     }
     return EAddPortionResult::SUCCESS;

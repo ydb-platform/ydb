@@ -1,6 +1,7 @@
 #include <ydb/tests/functional/federation_test/common_functions.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/grpc/include/grpcpp/grpcpp.h>
+#include <util/string/cast.h>
 
 
 using namespace NYdb;
@@ -172,9 +173,17 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
             UNIT_ASSERT(mirroredMessages.size() < writtenPayloads.size());
             for (auto& [offset, data] : mirroredMessages) {
                 Cerr << "Offset=" << offset << " mirrored: " << data.substr(0, 10) << ", size=" << data.size() << Endl;
-                Cerr << "Offset=" << offset << " written: " << writtenPayloads[offset].substr(0, 10) << ", size=" << writtenPayloads[offset].size() << Endl;
+                // The source topic has 1s retention and is fully cleaned several times
+                // during the run, so source offsets are reused. The mirrorer preserves
+                // the (reused) source offset, therefore a mirrored offset cannot be used
+                // as an index into writtenPayloads. Match messages by their "msg-N" prefix.
+                UNIT_ASSERT_C(data.StartsWith("msg-"), "Unexpected mirrored payload at offset " << offset << ": " << data.substr(0, 30));
+                const size_t sep = data.find(':');
+                UNIT_ASSERT_C(sep != TString::npos && sep > 4, "Malformed mirrored payload at offset " << offset);
+                const size_t index = FromString<size_t>(data.substr(4, sep - 4));
+                UNIT_ASSERT_C(index < writtenPayloads.size(), "Mirrored message index " << index << " is out of range at offset " << offset);
+                UNIT_ASSERT_EQUAL(writtenPayloads[index], data);
                 Cerr << "~~~~~~~~~~~~~" << Endl;
-                UNIT_ASSERT_EQUAL(writtenPayloads[offset], data);
             }
         }
     }

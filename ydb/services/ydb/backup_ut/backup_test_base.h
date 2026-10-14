@@ -55,6 +55,8 @@ protected:
     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
     YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
 
+    TString Table0Path = "/Root/RecursiveFolderProcessing/Table0";
+
     TString DebugListDir(const TString& path) { // Debug listing for specified dir
         auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
         TStringBuilder l;
@@ -196,7 +198,7 @@ private:
         const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
 
         auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
+            CREATE TABLE `{table0_path}` (
                 key Uint32 NOT NULL,
                 value String,
                 PRIMARY KEY (key)
@@ -222,7 +224,7 @@ private:
                 STORE = {store}
                 {partition_count}
             );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
+        )sql", "table0_path"_a = Table0Path.c_str(), "store"_a = isOlap ? "COLUMN" : "ROW",
         "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 

@@ -238,7 +238,7 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::SwitchToWorkWhenGoodToGo() {
         Y_ABORT_UNLESS(Sessions);
-        if (Sessions->GoodToGo(*Topology, ForceWaitAllDrives)) {
+        if (Sessions->GoodToGo(*Info, ForceWaitAllDrives)) {
             YDB_LOG_INFO("-> StateWork",
                 {"group", GroupId},
                 {"marker", "DSP11"});
@@ -282,7 +282,7 @@ namespace NKikimr {
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
-        } else if (!msg->IsConnected && CurrentStateFunc() == &TThis::StateWork && !Sessions->GoodToGo(*Topology, false)) {
+        } else if (!msg->IsConnected && CurrentStateFunc() == &TThis::StateWork && !Sessions->GoodToGo(*Info, false)) {
             SetStateEstablishingSessions();
         }
 

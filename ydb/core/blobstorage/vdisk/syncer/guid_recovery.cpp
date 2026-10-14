@@ -640,8 +640,7 @@ namespace NKikimr {
             TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
             const TActorId CommitterId;
             const TActorId NotifyId;
-            const TLocalSyncerState LocallyRecoveredState;
-            std::unique_ptr<TDecisionMaker> DecisionMaker;
+            TDecisionMaker DecisionMaker;
             THashSet<TActorId> SurveyProxies;
             std::unique_ptr<TDecision> Decision;
             EPhase Phase = PhaseNotSet;
@@ -667,7 +666,7 @@ namespace NKikimr {
                     SurveyProxies.insert(actorId);
                 };
 
-                DecisionMaker->RunSurveyOfAllVDisks(runProxyForVDisk);
+                DecisionMaker.RunSurveyOfAllVDisks(runProxyForVDisk);
                 Become(&TThis::ObtainGuidQuorumFunc);
                 Phase = PhaseObtainGuid;
             }
@@ -675,18 +674,8 @@ namespace NKikimr {
             void HandleObtainGuidQuorumMode(TEvVGenerationChange::TPtr &ev,
                                             const TActorContext &ctx) {
                 const auto& info = ev->Get()->NewInfo;
-                const bool policyChanged = GInfo->EnableSingleDcMode != info->EnableSingleDcMode
-                    || GInfo->SurvivingDc != info->SurvivingDc;
+                Y_DEBUG_ABORT_UNLESS(!info->HasSingleDcModeChanged(*GInfo));
                 GInfo = info;
-                if (policyChanged) {
-                    DecisionMaker->AbandomOngoingRequests(ctx);
-                    SurveyProxies.clear();
-                    DecisionMaker = std::make_unique<TDecisionMaker>(VCtx->VDiskLogPrefix,
-                        VCtx->ShortSelfVDisk, GInfo->PickTopology(), LocallyRecoveredState,
-                        GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt);
-                    Bootstrap(ctx);
-                    return;
-                }
 
                 // reconfigure every proxy that hasn't returned a value yet
                 const TString& logPrefix = VCtx->VDiskLogPrefix;
@@ -700,7 +689,7 @@ namespace NKikimr {
                 auto call = [&reconfigureProxy, msg = ev->Get()] (TVDiskInfo<TNeighborVDiskState>& x) {
                     reconfigureProxy(std::unique_ptr<TEvVGenerationChange>(msg->Clone()), x);
                 };
-                DecisionMaker->ReconfigureAllWorkingProxies(call);
+                DecisionMaker.ReconfigureAllWorkingProxies(call);
             }
 
             STRICT_STFUNC(ObtainGuidQuorumFunc,
@@ -722,12 +711,12 @@ namespace NKikimr {
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: ObtainedFromPeer: " << msg->ToString();
                 });
-                DecisionMaker->SetResponse(msg->VDiskId, msg->Guid, msg->State);
-                if (DecisionMaker->GotQuorum()) {
+                DecisionMaker.SetResponse(msg->VDiskId, msg->Guid, msg->State);
+                if (DecisionMaker.GotQuorum()) {
                     // kill actors that didn't respond
-                    DecisionMaker->AbandomOngoingRequests(ctx);
+                    DecisionMaker.AbandomOngoingRequests(ctx);
                     // reach a verdict and save it
-                    Decision = std::make_unique<TDecision>(DecisionMaker->ReachAVerdict());
+                    Decision = std::make_unique<TDecision>(DecisionMaker.ReachAVerdict());
 
                     // log result of guid recovery
                     auto pri = NActors::NLog::PRI_INFO;
@@ -887,7 +876,7 @@ namespace NKikimr {
                     case PhaseNotSet:
                         break;
                     case PhaseObtainGuid:
-                        DecisionMaker->AbandomOngoingRequests(ctx);
+                        DecisionMaker.AbandomOngoingRequests(ctx);
                         break;
                     case PhaseFirstRun:
                         ctx.Send(FirstRunActorId, new TEvents::TEvPoisonPill());
@@ -921,12 +910,11 @@ namespace NKikimr {
                 , GInfo(std::move(info))
                 , CommitterId(committerId)
                 , NotifyId(notifyId)
-                , LocallyRecoveredState(locallyRecoveredState)
-                , DecisionMaker(std::make_unique<TDecisionMaker>(VCtx->VDiskLogPrefix,
+                , DecisionMaker(VCtx->VDiskLogPrefix,
                                 VCtx->ShortSelfVDisk,
                                 GInfo->PickTopology(),
                                 locallyRecoveredState,
-                                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt))
+                                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt)
                 , Decision()
                 , ReadOnly(readOnly)
             {}

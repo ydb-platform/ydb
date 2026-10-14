@@ -126,6 +126,15 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
                         updates.push_back(std::move(event));
                         return false;
                     }
+                } else if (event->GetTypeRewrite() == NStorage::TEvNodeWardenQueryCacheResult::EventType
+                        && event->GetRecipientRewrite().NodeId() == targetNode) {
+                    // BSC also publishes group updates through the distributed cache.
+                    // Keep that path from restarting the VDisk before RecentGroup arrives.
+                    const auto *msg = event->Get<NStorage::TEvNodeWardenQueryCacheResult>();
+                    if (msg->Key == Sprintf("G%08" PRIx32, groupId) && msg->GenerationValue
+                            && std::get<0>(*msg->GenerationValue) > previousGeneration) {
+                        return false;
+                    }
                 } else if (event->GetTypeRewrite() == TEvBlobStorage::TEvVCheckReadiness::EventType
                         && event->Recipient == serviceId && !readinessEdges.contains(event->Sender)) {
                     return false;
@@ -146,6 +155,7 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
             env.Sim(TDuration::Seconds(1));
             UNIT_ASSERT(recentGroup);
             UNIT_ASSERT_VALUES_EQUAL(recentGroup->GetEnableSingleDcMode(), enable);
+            UNIT_ASSERT_VALUES_EQUAL(frontActor(), previousActor);
 
             const auto nextInfo = TBlobStorageGroupInfo::Parse(*recentGroup, nullptr, nullptr);
             auto readiness = std::make_unique<TEvBlobStorage::TEvVCheckReadiness>();

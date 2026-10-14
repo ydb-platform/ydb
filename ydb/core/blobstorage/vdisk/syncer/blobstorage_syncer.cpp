@@ -730,21 +730,11 @@ namespace NKikimr {
             Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()),
                 SyncerCtx->VCtx->VDiskLogPrefix);
 
-            const bool policyChanged = GInfo->EnableSingleDcMode != msg->NewInfo->EnableSingleDcMode
-                || GInfo->SurvivingDc != msg->NewInfo->SurvivingDc;
+            Y_DEBUG_ABORT_UNLESS(!msg->NewInfo->HasSingleDcModeChanged(*GInfo));
             GInfo = msg->NewInfo;
             // reconfigure scheduler
             if (SchedulerId) {
                 ctx.Send(SchedulerId, msg->Clone());
-            }
-            if (policyChanged) {
-                for (const auto& aid : PropagatorIds) {
-                    ctx.Send(aid, new TEvents::TEvPoisonPill);
-                    ActiveActors.Erase(aid);
-                }
-                PropagatorIds.clear();
-                RunPropagators(ctx);
-                return;
             }
             // reconfigure propagators
             for (const auto &aid : PropagatorIds) {

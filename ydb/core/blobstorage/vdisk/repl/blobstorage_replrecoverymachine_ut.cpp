@@ -84,7 +84,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(Mirror3dcRecoversCanonicalPartFromSurvivingRealm) {
-            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1, 3, 3);
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1u, 3u, 3u);
             TVector<TVDiskID> vdisks;
             auto replCtx = CreateReplCtx(vdisks, groupInfo);
             const auto& topology = groupInfo->GetTopology();

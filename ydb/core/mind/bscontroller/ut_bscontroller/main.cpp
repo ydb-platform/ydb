@@ -511,6 +511,12 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 pdisks.emplace_back("/dev/disk" + ToString(disk + 1), NKikimrBlobStorage::ROT, false, false, 0);
             }
             env.DefineBox(1, "test box", pdisks, env.GetNodes(), request);
+            if (numVDisks > 1) {
+                // Distinguish physical devices within the same node and fail domain.
+                for (auto& drive : *request.MutableCommand(0)->MutableDefineHostConfig()->MutableDrive()) {
+                    drive.SetDiskScope(drive.GetPath());
+                }
+            }
             env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, "mirror-3-dc");
             auto *geometry = request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()->MutableGeometry();
             geometry->SetNumFailRealms(numFailRealms);

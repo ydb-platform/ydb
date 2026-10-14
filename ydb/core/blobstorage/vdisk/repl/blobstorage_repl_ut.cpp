@@ -1,4 +1,5 @@
 #include "blobstorage_repl.h"
+#include "blobstorage_replbroker.h"
 
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
@@ -13,30 +14,48 @@
 namespace NKikimr {
     namespace {
 
+        class TReplSkeleton : public TActor<TReplSkeleton> {
+        public:
+            TReplSkeleton()
+                : TActor(&TReplSkeleton::StateFunc)
+            {}
+
+            STFUNC(StateFunc) {
+                UNIT_FAIL("Unexpected skeleton event " << ev->GetTypeRewrite());
+            }
+        };
+
         struct TReplTestEnv {
             TTestBasicRuntime Runtime;
             TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
             std::shared_ptr<TReplCtx> ReplCtx;
             TIntrusivePtr<THullDs> HullDs;
             TActorId SkeletonId;
+            TActorId ReplSkeletonId;
             TActorId ReplId;
             ui64 NextLsn = 1;
             size_t SnapshotRequests = 0;
             size_t StartedPlans = 0;
+            size_t StartedNotifications = 0;
+            bool DeliverStartedPlans = false;
             bool SchedulerBootstrapped = false;
             std::vector<TEvReplFinished::TInfoPtr> FinishedPlans;
+            std::vector<ui64> DoneNotifications;
             std::deque<ui64> Wakeups;
             std::function<void()> OnSnapshot;
 
             explicit TReplTestEnv(bool paused = false) {
                 Runtime.Initialize(TAppPrepare().Unwrap());
                 SkeletonId = Runtime.AllocateEdgeActor();
+                // DispatchEvents hides events already queued at edge actors. Use an
+                // ordinary mailbox for notifications consumed by the observer below.
+                ReplSkeletonId = Runtime.Register(new TReplSkeleton);
                 TVector<TActorId> disks;
                 for (ui32 i = 0; i < 9; ++i) {
                     disks.push_back(Runtime.AllocateEdgeActor());
                 }
                 GInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc,
-                    1, 3, 3, &disks);
+                    1u, 3u, 3u, &disks);
                 const TVDiskID self = GInfo->GetVDiskId(0);
                 auto base = TVDiskConfig::TBaseInfo::SampleForTests();
                 base.VDiskIdShort = TVDiskIdShort(self);
@@ -45,8 +64,8 @@ namespace NKikimr {
                 config->ReplPlanQuantum = TDuration::Zero();
                 auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), GInfo->PickTopology(),
                     new NMonitoring::TDynamicCounters(), self, nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-                auto hullCtx = MakeIntrusive<THullCtx>(vctx, config, 128 << 20, 256 << 10,
-                    true, true, true, true, 1, 1, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), 8, 8);
+                auto hullCtx = MakeIntrusive<THullCtx>(vctx, config, 128u << 20, 256u << 10,
+                    true, true, true, true, 1u, 1u, 0.5, TDuration::Minutes(5), TDuration::Seconds(1), 8u, 8u);
                 HullDs = MakeIntrusive<THullDs>(hullCtx);
                 const TLevelIndexSettings settings(hullCtx, 0, 0, 0, TDuration::Zero(), 0, false, false);
                 auto arena = std::make_shared<TRopeArena>(TRopeArenaBackend::Allocate);
@@ -58,7 +77,7 @@ namespace NKikimr {
                 HullDs->Barriers->LoadCompleted();
                 ReplCtx = std::make_shared<TReplCtx>(vctx, hullCtx, nullptr,
                     std::make_shared<THugeBlobCtx>("", nullptr, EBlobHeaderMode::OLD_HEADER),
-                    4097, HullDs, GInfo, SkeletonId, config, std::make_shared<std::atomic_uint64_t>(), paused);
+                    4097, HullDs, GInfo, ReplSkeletonId, config, std::make_shared<std::atomic_uint64_t>(), paused);
 
                 Runtime.SetScheduledEventFilter([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev,
                         TDuration, TInstant&) {
@@ -75,14 +94,27 @@ namespace NKikimr {
                         if (OnSnapshot) {
                             std::exchange(OnSnapshot, {})();
                         }
-                        Runtime.Send(new IEventHandle(ev->Sender, SkeletonId,
+                        Runtime.Send(new IEventHandle(ev->Sender, ReplSkeletonId,
                             new TEvTakeHullSnapshotResult(HullDs->GetIndexSnapshot())), 0, true);
                         return TTestActorRuntimeBase::EEventAction::DROP;
                     } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvReplFinished) {
                         FinishedPlans.push_back(ev->Get<TEvReplFinished>()->Info);
                     } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvReplStarted) {
+                        if (ev->Recipient == ReplSkeletonId) {
+                            ++StartedNotifications;
+                            return TTestActorRuntimeBase::EEventAction::DROP;
+                        }
                         ++StartedPlans;
                         // Stop before network/data I/O; this fixture exercises the actual planner.
+                        if (!DeliverStartedPlans) {
+                            return TTestActorRuntimeBase::EEventAction::DROP;
+                        }
+                    } else if (ev->GetTypeRewrite() == TEvQueryReplToken::EventType) {
+                        // Keep the scheduler waiting for its token when checking that actual
+                        // recovery work revokes readiness before any network/data I/O starts.
+                        return TTestActorRuntimeBase::EEventAction::DROP;
+                    } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvReplDone && ev->Recipient == ReplSkeletonId) {
+                        DoneNotifications.push_back(ev->Cookie);
                         return TTestActorRuntimeBase::EEventAction::DROP;
                     }
                     return TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -113,6 +145,35 @@ namespace NKikimr {
             void Start() {
                 ReplId = Runtime.Register(CreateReplActor(ReplCtx));
                 DispatchUntil([&] { return SchedulerBootstrapped; });
+            }
+
+            TLogoBlobID AddMissingCanonicalBlob(ui64 tabletId) {
+                const auto& topology = GInfo->GetTopology();
+                TLogoBlobID id;
+                for (ui32 step = 1;; ++step) {
+                    id = TLogoBlobID(tabletId, 1, step, 0, 64, 0);
+                    if (topology.GetIdxInSubgroup(ReplCtx->VCtx->ShortSelfVDisk, id.Hash()) == 0) {
+                        break;
+                    }
+                }
+                const auto source = topology.GetVDiskInSubgroup(1, id.Hash());
+                const auto ingress = TIngress::CreateIngressWithLocal(&topology, source, TLogoBlobID(id, 2))
+                    ->CopyWithoutLocal(GInfo->Type);
+                UNIT_ASSERT(ingress.PartsWeMustHaveLocally(&topology, ReplCtx->VCtx->ShortSelfVDisk, id).Empty());
+                TMemRecLogoBlob memRec(ingress);
+                memRec.SetNoBlob();
+                HullDs->LogoBlobs->PutToFresh(NextLsn++, TKeyLogoBlob(id), memRec);
+                return id;
+            }
+
+            void SendOverflow() {
+                std::vector<TLogoBlobID> updates;
+                updates.reserve(MaxReplSyncLogUpdates + 1);
+                for (ui32 step = 1; step <= MaxReplSyncLogUpdates + 1; ++step) {
+                    // Changed records can already have disappeared from the index through GC.
+                    updates.emplace_back(999, 1, step, 0, 64, 0);
+                }
+                SendUpdate(std::move(updates));
             }
 
             void DispatchUntil(std::function<bool()> condition) {
@@ -147,7 +208,7 @@ namespace NKikimr {
             TReplTestEnv env;
             env.ReplCtx->VDiskCfg->EnableLocalSyncLogDataCutting = false;
             auto syncerCtx = MakeIntrusive<TSyncerContext>(env.ReplCtx->VCtx,
-                MakeIntrusive<TLsnMngr>(0, 0, false),
+                MakeIntrusive<TLsnMngr>(ui64(0), ui64(0), false),
                 std::make_shared<TPDiskCtx>(nullptr, TActorId(), TString()), env.SkeletonId, TActorId(),
                 env.SkeletonId, env.SkeletonId, env.SkeletonId,
                 env.HullDs->LogoBlobs, env.HullDs->Blocks, env.HullDs->Barriers, env.ReplCtx->VDiskCfg);
@@ -200,8 +261,10 @@ namespace NKikimr {
             }
             env.Start();
             env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
+            env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
             UNIT_ASSERT(env.SnapshotRequests > 1);
             UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
             UNIT_ASSERT(env.Wakeups.empty());
 
             for (size_t batch = 0; batch < 3; ++batch) {
@@ -214,6 +277,7 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL(env.FinishedPlans.back()->ItemsPlanned, 0);
                 UNIT_ASSERT(env.Wakeups.empty());
             }
+            UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
         }
 
         Y_UNIT_TEST(SyncLogUpdateDuringInitialScanIsRetained) {
@@ -226,7 +290,72 @@ namespace NKikimr {
             const size_t snapshots = env.SnapshotRequests;
             env.Wakeup();
             env.DispatchUntil([&] { return env.FinishedPlans.size() == 2; });
+            env.DispatchUntil([&] { return !env.DoneNotifications.empty() && env.DoneNotifications.back() == 0; });
             UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - snapshots, 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.DoneNotifications.size(), 1);
+            UNIT_ASSERT(env.Wakeups.empty());
+        }
+
+        Y_UNIT_TEST(SyncLogOverflowFallsBackToFullScan) {
+            TReplTestEnv env;
+            for (ui32 step = 1; step <= 2048; ++step) {
+                env.AddHealthyBlob(TLogoBlobID(2, 1, step, 0, 64, 0));
+            }
+            env.Start();
+            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
+            const size_t fullScanSnapshots = env.SnapshotRequests;
+            env.SendOverflow();
+            // This update arrives after the overflow has discarded its ID set. The
+            // pending full scan must still find it without expanding that set again.
+            const TLogoBlobID missing = env.AddMissingCanonicalBlob(1);
+            env.SendUpdate({missing});
+            env.DeliverStartedPlans = true;
+            env.Wakeup();
+            env.DispatchUntil([&] { return env.StartedNotifications == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - fullScanSnapshots, fullScanSnapshots);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(env.ReplCtx->MonGroup.ReplItemsRemaining()), 1u);
+        }
+
+        Y_UNIT_TEST(SyncLogUpdateBehindOverflowScanCursorIsRetained) {
+            TReplTestEnv env;
+            for (ui32 step = 1; step <= 2048; ++step) {
+                env.AddHealthyBlob(TLogoBlobID(2, 1, step, 0, 64, 0));
+            }
+            env.Start();
+            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
+            env.DispatchUntil([&] { return env.DoneNotifications.size() == 1; });
+            const size_t fullScanSnapshots = env.SnapshotRequests;
+            env.DoneNotifications.clear();
+            env.SendOverflow();
+            env.OnSnapshot = [&] {
+                // The second snapshot resumes after the first 1023 keys. Insert
+                // an older key now so the ongoing full scan cannot see it.
+                env.OnSnapshot = [&] { env.SendUpdate({env.AddMissingCanonicalBlob(1)}); };
+            };
+            env.Wakeup();
+            env.DispatchUntil([&] { return env.FinishedPlans.size() == 2; });
+            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - fullScanSnapshots, fullScanSnapshots);
+            UNIT_ASSERT_VALUES_EQUAL(env.StartedPlans, 0);
+            const size_t snapshots = env.SnapshotRequests;
+            env.DeliverStartedPlans = true;
+            env.Wakeup();
+            env.DispatchUntil([&] { return env.StartedNotifications == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(env.SnapshotRequests - snapshots, 1);
+            UNIT_ASSERT(env.DoneNotifications.empty()); // no premature phantom-only completion
+        }
+
+        Y_UNIT_TEST(PendingFullScanDoesNotReportPhantomOnlyCompletion) {
+            TReplTestEnv env;
+            env.AddHealthyBlob(TLogoBlobID(2, 1, 1, 0, 64, 0));
+            env.OnSnapshot = [&] { env.SendOverflow(); };
+            env.Start();
+            env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
+            env.Wakeup();
+            env.DispatchUntil([&] { return env.FinishedPlans.size() == 2; });
+            env.DispatchUntil([&] { return !env.DoneNotifications.empty() && env.DoneNotifications.back() == 0; });
+            UNIT_ASSERT_VALUES_EQUAL(env.DoneNotifications.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(env.StartedNotifications, 0);
             UNIT_ASSERT(env.Wakeups.empty());
         }
 
@@ -237,22 +366,8 @@ namespace NKikimr {
             }
             env.Start();
             env.DispatchUntil([&] { return env.FinishedPlans.size() == 1; });
-            const auto& topology = env.GInfo->GetTopology();
-            TLogoBlobID id;
-            for (ui32 step = 1;; ++step) {
-                id = TLogoBlobID(2, 1, step, 0, 64, 0);
-                if (topology.GetIdxInSubgroup(env.ReplCtx->VCtx->ShortSelfVDisk, id.Hash()) == 0) {
-                    break;
-                }
-            }
             // Metadata from the surviving realm has no presence bit for this main replica.
-            const auto source = topology.GetVDiskInSubgroup(1, id.Hash());
-            const auto ingress = TIngress::CreateIngressWithLocal(&topology, source, TLogoBlobID(id, 2))
-                ->CopyWithoutLocal(env.GInfo->Type);
-            UNIT_ASSERT(ingress.PartsWeMustHaveLocally(&topology, env.ReplCtx->VCtx->ShortSelfVDisk, id).Empty());
-            TMemRecLogoBlob memRec(ingress);
-            memRec.SetNoBlob();
-            env.HullDs->LogoBlobs->PutToFresh(env.NextLsn++, TKeyLogoBlob(id), memRec);
+            const TLogoBlobID id = env.AddMissingCanonicalBlob(2);
             const size_t snapshots = env.SnapshotRequests;
             env.SendUpdate({id, id});
             env.SendUpdate({id});

@@ -3234,12 +3234,16 @@ namespace NKikimr {
             // FIXME: reconfigure handoff
         }
 
+        void HandleReplStarted(const TActorContext&) {
+            // Late SyncLog records can reveal missing data after a completed pass.
+            ReplDone = false;
+            ReplOnlyPhantomsRemain = false;
+            UpdateReplState();
+        }
+
         void HandleReplDone(STFUNC_SIG) {
-            if (ev->Cookie) { // semi-finished replication, only phantom blobs
-                ReplOnlyPhantomsRemain = true;
-            } else {
-                ReplDone = true;
-            }
+            ReplOnlyPhantomsRemain = ev->Cookie != 0;
+            ReplDone = !ReplOnlyPhantomsRemain;
             UpdateReplState();
         }
 
@@ -3766,6 +3770,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
+            CFunc(TEvBlobStorage::EvReplStarted, HandleReplStarted)
             fFunc(TEvBlobStorage::EvReplDone, HandleReplDone)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
@@ -3801,6 +3806,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
+            CFunc(TEvBlobStorage::EvReplStarted, Ignore)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)

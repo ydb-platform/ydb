@@ -283,8 +283,13 @@ namespace NKikimr {
         }
 
         std::set<TLogoBlobID> UpdatedBlobs;
+        bool FullRescanRequested = false;
         bool ReplWakeupScheduled = false;
         ui64 ReplWakeupGeneration = 0;
+
+        bool HasUnclassifiedUpdates() const {
+            return FullRescanRequested || !UpdatedBlobs.empty();
+        }
 
         void ScheduleReplicationWakeup() {
             if (!ReplWakeupScheduled) {
@@ -310,8 +315,17 @@ namespace NKikimr {
                 // Replication is paused before its initial scan, which will see these updates.
                 return;
             }
-            UpdatedBlobs.insert(ev->Get()->Blobs.begin(), ev->Get()->Blobs.end());
-            if (!UpdatedBlobs.empty() && (State == Relaxation || State == Finished)) {
+            if (!FullRescanRequested) {
+                for (const TLogoBlobID& id : ev->Get()->Blobs) {
+                    if (UpdatedBlobs.size() == MaxReplSyncLogUpdates && !UpdatedBlobs.contains(id)) {
+                        UpdatedBlobs.clear();
+                        FullRescanRequested = true;
+                        break;
+                    }
+                    UpdatedBlobs.insert(id);
+                }
+            }
+            if (HasUnclassifiedUpdates() && (State == Relaxation || State == Finished)) {
                 ScheduleReplicationWakeup();
             }
         }
@@ -319,7 +333,25 @@ namespace NKikimr {
         void StartReplication() {
             ReplWakeupScheduled = false;
             ++ReplWakeupGeneration;
-            if (!UpdatedBlobs.empty() && BlobsToReplicatePtr) {
+            if (!UpdatedBlobs.empty() && BlobsToReplicatePtr &&
+                    BlobsToReplicatePtr->GetNumItems() > MaxReplSyncLogUpdates - UpdatedBlobs.size()) {
+                // Do not duplicate an arbitrarily large retry queue just to merge dirty IDs.
+                FullRescanRequested = true;
+            }
+            if (std::exchange(FullRescanRequested, false)) {
+                // The next snapshot covers all updates observed so far, including the old
+                // retry queue. Start its bookkeeping afresh: old records may have been GC'd
+                // or repaired since the preceding pass. Updates arriving during this scan
+                // are collected again and cannot be lost behind the scan's cursor.
+                BlobsToReplicatePtr.reset();
+                UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+                UnreplicatedBlobRecords = TUnreplicatedBlobRecords();
+                MilestoneQueue = {};
+                ReplCtx->MonGroup.ReplTotalBlobsWithProblems() = 0;
+                ReplCtx->MonGroup.ReplPhantomBlobsWithProblems() = 0;
+                ReplCtx->MonGroup.ReplUnreplicatedPhantoms() = 0;
+                ReplCtx->MonGroup.ReplUnreplicatedNonPhantoms() = 0;
+            } else if (!UpdatedBlobs.empty() && BlobsToReplicatePtr) {
                 // Preserve the retry queue and check only the records changed by SyncLog. A null
                 // queue denotes the initial full scan, which already includes these records.
                 auto blobs = std::make_shared<TBlobIdQueue>();
@@ -376,6 +408,9 @@ namespace NKikimr {
 
             switch (State) {
                 case Plan:
+                    // The planner found actual recovery work. Healthy SyncLog updates
+                    // never reach this event and must not revoke VDisk readiness.
+                    Send(ReplCtx->SkeletonId, new TEvReplStarted);
                     // this is a first quantum of replication, so we have to register it in the broker
                     State = AwaitToken;
                     Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
@@ -557,11 +592,11 @@ namespace NKikimr {
                 ResetReplProgressTimer(true);
 
                 Become(&TThis::StateRelax);
-                if (!BlobsToReplicatePtr->IsEmpty() || !UpdatedBlobs.empty()) {
+                if (!BlobsToReplicatePtr->IsEmpty() || HasUnclassifiedUpdates()) {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
                     ScheduleReplicationWakeup();
-                    if (!UnrecoveredNonphantomBlobs) {
+                    if (!UnrecoveredNonphantomBlobs && !HasUnclassifiedUpdates()) {
                         // semi-finished replication -- we have only phantom-like unreplicated blobs
                         TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                             SelfId(), nullptr, 1));

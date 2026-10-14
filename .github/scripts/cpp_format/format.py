@@ -256,6 +256,7 @@ def main(argv=None):
     failed = False
     total = sum(len(files) for files in groups.values())
     checked = formatted = 0
+    folder_summaries = []
     interactive = sys.stdout.isatty()
     for folder, files in groups.items():
         if not files:
@@ -302,10 +303,15 @@ def main(argv=None):
         finally:
             if interactive:
                 print(flush=True)
+        if folder_formatted:
+            folder_summaries.append((folder, folder_formatted, folder_checked))
 
     status = 'Finished with errors' if failed else 'Finished'
     counts = f'{formatted} formatted / {checked} checked files' if args.fix else f'{checked} / {total} files checked'
-    print(f'{status}: {counts}.', flush=True)
+    summary_heading = ' Per folder summary:' if folder_summaries else ''
+    print(f'{status}: {counts}.{summary_heading}', flush=True)
+    for folder, folder_formatted, folder_checked in sorted(folder_summaries, key=lambda row: (-row[1], row[0])):
+        print(f'  - {folder}: {folder_formatted} / {folder_checked}', flush=True)
 
     return int(failed)
 

@@ -222,8 +222,14 @@ ENDIF()
         self.assertEqual(cpp_format.EXTENSIONS, extensions)
 
     def test_fix_progress_counts_actual_changes_across_roots_and_batches(self):
-        groups = {'local': ['local/a.cpp'], 'shared': [f'shared/{i:02}.cpp' for i in range(33)]}
-        changed = {'shared/00.cpp', 'shared/32.cpp'}
+        self.write('unchanged/linters.make.inc', (self.root / 'shared/linters.make.inc').read_text())
+        self.write(cpp_format.AUTOINCLUDES, json.dumps(['local', 'shared', 'unchanged']))
+        groups = {
+            'local': ['local/a.cpp'],
+            'shared': [f'shared/{i:02}.cpp' for i in range(33)],
+            'unchanged': ['unchanged/a.cpp'],
+        }
+        changed = {'local/a.cpp', 'shared/00.cpp', 'shared/32.cpp'}
         for fail in (False, True):
             with self.subTest(failed_batch=fail):
                 for files in groups.values():
@@ -246,18 +252,22 @@ ENDIF()
                     cpp_format.subprocess, 'run', side_effect=run
                 ) as formatter, contextlib.redirect_stdout(output):
                     self.assertEqual(cpp_format.main(['--fix']), int(fail))
-                self.assertEqual(formatter.call_count, 3)
+                self.assertEqual(formatter.call_count, 4)
                 self.assertIn(
-                    'Checked 32 / 33 files in shared. Formatted 1 (overall 33 / 34 checked, 1 formatted)',
+                    'Checked 32 / 33 files in shared. Formatted 1 (overall 33 / 35 checked, 2 formatted)',
                     output.getvalue(),
                 )
                 self.assertIn(
-                    'Checked 33 / 33 files in shared. Formatted 2 (overall 34 / 34 checked, 2 formatted)',
+                    'Checked 33 / 33 files in shared. Formatted 2 (overall 34 / 35 checked, 3 formatted)',
                     output.getvalue(),
                 )
                 status = 'Finished with errors' if fail else 'Finished'
-                self.assertTrue(output.getvalue().endswith(f'{status}: 2 formatted / 34 checked files.\n'))
-                self.assertEqual((self.root / 'local/a.cpp').read_text(), 'int  x;\n')
+                self.assertTrue(output.getvalue().endswith(
+                    f'{status}: 3 formatted / 35 checked files. Per folder summary:\n'
+                    '  - shared: 2 / 33\n'
+                    '  - local: 1 / 1\n'
+                ))
+                self.assertEqual((self.root / 'unchanged/a.cpp').read_text(), 'int  x;\n')
 
     def test_check_progress_preserves_files_and_reports_failures(self):
         file = self.write('shared/a.cpp', 'int  x;\n')

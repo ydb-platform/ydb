@@ -47,6 +47,7 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         CheckFlushActorCreate = false;
     }
 
+    TGuard<TMutex> guard(BatchMutex);
     TStringBuilder columnWriteErrors;
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         if (ErrorColumnIndex.has_value() && ErrorColumnIndex.value() == i) {
@@ -101,10 +102,6 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
 }
 
 void TBaseEventLogWriter::Flush() {
-    if (CurrentBatchSize == 0) {
-        return;
-    }
-
     // Check state
     TState oldState = State.load();
     if (oldState.Kind == TStateKind::StorageCreateError || oldState.Kind == TStateKind::Stop) {
@@ -125,6 +122,10 @@ void TBaseEventLogWriter::Flush() {
         return;
     }
 
+    if (CurrentBatchSize == 0) {
+        return;
+    }
+
     auto batch = CreateCurrentBatch();
     WriteBatch(batch);
     CurrentBatchSize = 0;
@@ -140,6 +141,7 @@ std::shared_ptr<arrow::Schema> TBaseEventLogWriter::GetArrowSchema() const {
 }
 
 std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
+    TGuard<TMutex> guard(BatchMutex);
     std::vector<std::shared_ptr<arrow::Array>> arrays;
     for (auto& column : Columns) {
         arrays.push_back(column->MakeArray());

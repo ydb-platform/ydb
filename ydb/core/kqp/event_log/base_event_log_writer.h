@@ -9,6 +9,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
 #include <util/datetime/base.h>
+#include <util/system/mutex.h>
 
 #include <functional>
 #include <memory>
@@ -74,6 +75,8 @@ protected:
     std::atomic<TState> State {TState(TStateKind::Started)};
     unsigned CurrentBatchSize {0};
     bool CheckFlushActorCreate {true};
+    TMutex BatchMutex;  // Lock access to current batch
+
 };
 
 class TBaseEventLogAutoFlushActor : public NActors::TActorBootstrapped<TBaseEventLogAutoFlushActor> {

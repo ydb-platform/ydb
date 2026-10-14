@@ -2051,6 +2051,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         const auto scope = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TProcessorFixture a(&GetDetailedMetricsDescriptor, scope, "/Root/a");
         TProcessorFixture b(&GetDetailedMetricsDescriptor, scope, "/Root/b");
+        TProcessorFixture c(&GetDetailedMetricsDescriptor, scope, "/Root/c");
         const auto report = [](TProcessorFixture& fixture, const TString& database, ui32 partitions) {
             fixture.ApplyAndFit(1, MakeGrid(1, partitions, 0, TPublicValues(), database));
             return fixture.Processor->GetEstimatedOutputBytes();
@@ -2101,6 +2102,28 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         b.Processor->SetOutputLimit(2 * b2 - 1, 100, {});
         tick(DETAILED_OUTPUT_RESTORE_TICKS);
         assertLeaves(0, 2);
+
+        // b goes over the limit while a, ranked first, still publishes: b folds until a has folded, then
+        // restores at the limit itself; c publishes rollups only, enough to put b inside the dead band
+        TPublicReport rollupsOnly;
+        for (ui32 t = 0; t < 20; ++t) {
+            rollupsOnly.Table(TPublicValues(), "/Root/c/T" + ToString(t));
+        }
+        c.ApplyAndFit(1, rollupsOnly);
+        const ui64 rollups = c.Processor->GetEstimatedOutputBytes();
+        const ui64 limitWithRollups = a4 + b2 + rollups;
+        a.Processor->SetOutputLimit(limitWithRollups, 100, {});
+        report(a, "/Root/a", 4);
+        tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        assertLeaves(4, 2);
+        a.Processor->SetOutputLimit(limitWithRollups, 80, {});
+        const ui64 b3 = report(b, "/Root/b", 3);
+        assertLeaves(4, 0);
+        a.Tick();
+        assertLeaves(0, 0);
+        UNIT_ASSERT_GT(rollups + b3, limitWithRollups / 100 * 80);
+        b.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        assertLeaves(0, 3);
     }
 
     Y_UNIT_TEST(OutputBudgetScopeSharingAndCleanup) {

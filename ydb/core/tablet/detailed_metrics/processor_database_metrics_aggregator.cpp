@@ -153,8 +153,17 @@ namespace NKikimr {
             return estimator.Size;
         }
 
+        enum class EFold {
+            None,
+            // Over with the members ranked before folded: restores at RestorePercent of the limit
+            Budget,
+            // Over only while a member ranked before still publishes: restores at the limit
+            Provisional,
+        };
+
         // The ydb_detailed output limit of one scrape endpoint, shared by its aggregators across actors.
         // Rollups always publish; members fold by leaf bytes desc, then database path, until the total fits.
+        // Each member folds on its own fit, so the ones ranked after fold provisionally until it does.
         class TOutputBudget: public TThrRefBase {
         public:
             explicit TOutputBudget(NMonitoring::TDynamicCounterPtr scope)
@@ -164,21 +173,25 @@ namespace NKikimr {
 
             // Joins the budget of the scope, a private one if null; Join and the last Leave are atomic
             static TIntrusivePtr<TOutputBudget> Join(
-                const NMonitoring::TDynamicCounterPtr& scope, const TString& database, ui64& memberId);
+                const NMonitoring::TDynamicCounterPtr& scope, const TString& database, bool folded, ui64& memberId);
 
             void Leave(ui64 memberId);
 
             void SetLimit(ui64 maxBytes, ui64 restorePercent);
 
-            // Records the unfolded output of the member; true when the member has to fold.
+            // Records the unfolded output of the member, and its fold at once if it has to fold.
             // A member folded by the budget restores only at or below RestorePercent of the limit.
-            bool MustFold(ui64 memberId, ui64 rollupBytes, ui64 leafBytes, bool foldedByBudget);
+            EFold MustFold(ui64 memberId, ui64 rollupBytes, ui64 leafBytes, bool foldedByBudget);
+
+            // Records that the member publishes its leaves again
+            void Restore(ui64 memberId);
 
         private:
             struct TMember {
                 TString Database;
                 ui64 RollupBytes = 0;
                 ui64 LeafBytes = 0;
+                bool Folded = false;
             };
 
             // The registry key, held so that its address is not reused while registered
@@ -202,7 +215,7 @@ namespace NKikimr {
         }
 
         TIntrusivePtr<TOutputBudget> TOutputBudget::Join(
-            const NMonitoring::TDynamicCounterPtr& scope, const TString& database, ui64& memberId) {
+            const NMonitoring::TDynamicCounterPtr& scope, const TString& database, bool folded, ui64& memberId) {
             auto& registry = GetBudgetRegistry();
             auto guard = Guard(registry.Mutex);
             TIntrusivePtr<TOutputBudget> budget;
@@ -216,7 +229,7 @@ namespace NKikimr {
                 budget = MakeIntrusive<TOutputBudget>(nullptr);
             }
             memberId = ++registry.LastMemberId;
-            budget->Members[memberId].Database = database;
+            budget->Members[memberId] = {.Database = database, .Folded = folded};
             return budget;
         }
 
@@ -236,30 +249,41 @@ namespace NKikimr {
             RestorePercent = restorePercent;
         }
 
-        bool TOutputBudget::MustFold(ui64 memberId, ui64 rollupBytes, ui64 leafBytes, bool foldedByBudget) {
+        EFold TOutputBudget::MustFold(ui64 memberId, ui64 rollupBytes, ui64 leafBytes, bool foldedByBudget) {
             auto guard = Guard(GetBudgetRegistry().Mutex);
             auto& self = Members[memberId];
             self.RollupBytes = rollupBytes;
             self.LeafBytes = leafBytes;
             if (!leafBytes) {
-                return false;
+                return EFold::None;
             }
-            // Greedy in rank order: the members ranked before this one fold first, then this one if still over
+            // Greedy in rank order: the members ranked before this one fold first, then this one if still over.
+            // The published total keeps the leaves of the ones ranked before that have yet to fold.
             ui64 total = 0;
+            ui64 published = 0;
             for (const auto& [id, member] : Members) {
-                total += member.RollupBytes + member.LeafBytes;
                 const bool rankedBefore = member.LeafBytes != self.LeafBytes ? member.LeafBytes > self.LeafBytes
                     : member.Database != self.Database ? member.Database < self.Database
                     : id < memberId;
-                if (rankedBefore) {
-                    total -= member.LeafBytes;
-                }
+                total += member.RollupBytes + (rankedBefore ? 0 : member.LeafBytes);
+                published += member.RollupBytes + (rankedBefore && member.Folded ? 0 : member.LeafBytes);
             }
             // Limit * RestorePercent / 100 without overflow
             const ui64 threshold = foldedByBudget
                 ? Limit / 100 * RestorePercent + Limit % 100 * RestorePercent / 100
                 : Limit;
-            return total > threshold;
+            const EFold fold = total > threshold ? EFold::Budget
+                : published > Limit ? EFold::Provisional
+                : EFold::None;
+            if (fold != EFold::None) {
+                self.Folded = true;
+            }
+            return fold;
+        }
+
+        void TOutputBudget::Restore(ui64 memberId) {
+            auto guard = Guard(GetBudgetRegistry().Mutex);
+            Members[memberId].Folded = false;
         }
 
         // A TABLE partial or a PARTITION leaf, fed with public metric values (see NKikimrSysView::TDbCounters).
@@ -455,8 +479,8 @@ namespace NKikimr {
                 : TargetCounterGroup(targetCounterGroup)
                 , DatabasePrefix(ChopTrailingSlash(databasePath))
                 , GetDescriptor(getDescriptor)
-                , Budget(TOutputBudget::Join(budgetScope, DatabasePrefix, MemberId))
                 // A scoped aggregator starts folded: no leaf flash after an SVP restart or move
+                , Budget(TOutputBudget::Join(budgetScope, DatabasePrefix, budgetScope != nullptr, MemberId))
                 , Folded(budgetScope != nullptr)
             {
             }
@@ -535,9 +559,10 @@ namespace NKikimr {
             // Folds as soon as the budget says so; restores after DETAILED_OUTPUT_RESTORE_TICKS fitting ticks in a row
             void Fit(bool tick) {
                 const ui64 leafBytes = Bytes(Leaves);
-                if (Budget->MustFold(MemberId, Bytes(Rollups), leafBytes, FoldedByBudget)) {
+                const EFold fold = Budget->MustFold(MemberId, Bytes(Rollups), leafBytes, FoldedByBudget);
+                if (fold != EFold::None) {
                     // A confirmed start fold restores through the dead band too
-                    FoldedByBudget = true;
+                    FoldedByBudget |= fold == EFold::Budget;
                     FitTicks = 0;
                     if (!Folded) {
                         SetFolded(true);
@@ -548,10 +573,13 @@ namespace NKikimr {
             }
 
             void SetFolded(bool fold) {
-                // Restoring the provisional start fold is routine
+                // Restoring a provisional fold is routine
                 const bool notice = fold || FoldedByBudget;
                 Folded = fold;
-                FoldedByBudget = fold;
+                if (!fold) {
+                    FoldedByBudget = false;
+                    Budget->Restore(MemberId);
+                }
                 for (auto& [_, table] : Tables) {
                     for (const auto& [key, bucket] : table.Buckets) {
                         if (!key) {
@@ -670,7 +698,8 @@ namespace NKikimr {
             TJsonSize Leaves;
             ui64 PrefixLabelBytes = 0;
             bool Folded;
-            // A provisional start fold restores at the limit, a budget fold at RestorePercent of it
+            // A provisional fold (the start one, or a larger member's pending) restores at the limit,
+            // a budget fold at RestorePercent of it
             bool FoldedByBudget = false;
             // Fitting ticks with leaves in a row while folded; a leafless tick neither counts nor resets
             ui32 FitTicks = 0;

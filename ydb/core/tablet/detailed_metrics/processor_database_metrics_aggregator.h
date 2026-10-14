@@ -64,8 +64,10 @@ namespace NKikimr {
      *
      * The aggregators of one budgetScope share the limit of SetOutputLimit on their estimated JSON output.
      * Over it, the databases with the most leaf bytes fold: their leaves keep feeding the rollup unpublished.
-     * Folding is immediate; restoring takes DETAILED_OUTPUT_RESTORE_TICKS fitting RecalculateAllCounters
-     * with leaves in a row. A scoped aggregator starts folded.
+     * Folding is immediate: while a database with more leaf bytes has yet to fold, a smaller one over the
+     * limit folds as well, and restores at the limit itself rather than at restorePercent of it.
+     * Restoring takes DETAILED_OUTPUT_RESTORE_TICKS fitting RecalculateAllCounters with leaves in a row.
+     * A scoped aggregator starts folded.
      *
      * @param[in] getDescriptor Replaced by the tests only
      * @param[in] budgetScope One budget per scope (a node's ydb_detailed group); null: private, starts unfolded

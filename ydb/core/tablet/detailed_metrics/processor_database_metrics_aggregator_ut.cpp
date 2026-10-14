@@ -1860,6 +1860,16 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_LE(NMonitoring::ToJson(*root).size() - 13, fixture.Processor->GetEstimatedOutputBytes());
     }
 
+    Y_UNIT_TEST(EstimateCountsNonUtf8LabelsAsIs) {
+        const auto estimate = [](const TString& projectId) {
+            TProcessorFixture fixture;
+            fixture.Processor->SetOutputLimit(Max<ui64>(), 100, {{"monitoring_project_id", projectId}});
+            fixture.ApplyPublicNode(1, MakeGrid(1, 1));
+            return fixture.Processor->GetEstimatedOutputBytes();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(estimate("proj\xff\xfe"), estimate("proj__"));
+    }
+
     Y_UNIT_TEST(FoldsOverLimitAndRestoresAfterStableTicks) {
         const auto leaders = MakeGrid(2, 3, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 7))
             .Table(TPublicValues().Gauge(PUBLIC_ROW_COUNT, 9), OTHER_TABLE_PATH);

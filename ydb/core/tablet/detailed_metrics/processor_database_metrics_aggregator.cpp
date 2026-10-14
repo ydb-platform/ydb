@@ -69,7 +69,8 @@ namespace NKikimr {
         // for the first bound and bucket
         constexpr ui64 JSON_HISTOGRAM_BYTES = 39;
 
-        // A JSON string as the encoder writes it, quotes excluded
+        // A JSON string as the encoder writes it, quotes excluded. Bytes that are not UTF-8 count as is,
+        // as spack and Prometheus write them; the monlib JSON encoder rejects them.
         ui64 JsonStringBytes(TStringBuf s) {
             // Printable ASCII but '"' and '\' is written as is; the rest takes the encoder's own escaping
             if (AllOf(s, [](char c) { return c >= 0x20 && c < 0x7f && c != '"' && c != '\\'; })) {

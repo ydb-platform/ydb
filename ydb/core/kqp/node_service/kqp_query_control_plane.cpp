@@ -24,9 +24,126 @@ namespace NKikimr::NKqp {
 
 namespace {
 
+// Everything is taken from the resource manager, see FeatureFlags.EnableComputeSchedulerMemory
 class TQueryQuotaManager final : public IQueryQuotaManager {
 public:
-    TQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx, NScheduler::TSchedulableMemoryPtr memory, ui64 taskMemory)
+    explicit TQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx)
+        : Tx(std::move(tx))
+    {
+        Y_ABORT_UNLESS(Tx && Tx->ResourceManager);
+    }
+
+    // the task and channel quota managers keep it alive: their Memory is back by now. The external memory left is the
+    // one of the channels and of the tasks whose compute actors did not terminate
+    ~TQueryQuotaManager() override {
+        const ui64 externalMemory = ExternalMemory.load();
+        Y_DEBUG_ABORT_UNLESS(AllocatedMemory.load() == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
+            Tx->TxId, AllocatedMemory.load() - externalMemory);
+        const ui64 executionUnits = ExecutionUnits.load();
+        if (executionUnits || externalMemory) {
+            Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
+                .ExecutionUnits = executionUnits,
+                .ExternalMemory = externalMemory,
+            });
+        }
+    }
+
+    // the elastic memory is the demand for the compute scheduler, the resource manager has no use for it
+    NRm::TKqpRMAllocateResult AllocateTasks(ui64 executionUnits, ui64 externalMemory, ui64 /* elasticMemory */) override {
+        auto result = Tx->ResourceManager->AllocateResources(*Tx, 0,
+            NRm::TKqpResourcesRequest{.ExecutionUnits = executionUnits, .ExternalMemory = externalMemory});
+        if (result) {
+            ExecutionUnits.fetch_add(executionUnits);
+            ExternalMemory.fetch_add(externalMemory);
+            Allocated(externalMemory);
+        }
+        return result;
+    }
+
+    void FreeTasks(ui64 executionUnits, ui64 externalMemory, ui64 /* elasticMemory */) override {
+        // uncounted before the release: never more than the tx holds
+        const ui64 prevUnits = ExecutionUnits.fetch_sub(executionUnits);
+        const ui64 prevExternal = ExternalMemory.fetch_sub(externalMemory);
+        const ui64 prevAllocated = AllocatedMemory.fetch_sub(externalMemory);
+        Y_DEBUG_ABORT_UNLESS(prevUnits >= executionUnits && prevExternal >= externalMemory && prevAllocated >= externalMemory,
+            "TxId: %" PRIu64 ", freeing %" PRIu64 " execution units of %" PRIu64 ", %" PRIu64 " bytes of external memory of %" PRIu64,
+            Tx->TxId, executionUnits, prevUnits, externalMemory, prevExternal);
+        Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
+            .ExecutionUnits = executionUnits,
+            .ExternalMemory = externalMemory,
+        });
+    }
+
+    const TIntrusivePtr<NRm::TTxState>& GetTx() const override {
+        return Tx;
+    }
+
+    bool AllocateQuota(ui64 memorySize, bool isOptional) override {
+        auto result = Tx->ResourceManager->AllocateResources(*Tx, 0,
+            NRm::TKqpResourcesRequest{.Memory = memorySize, .Optional = isOptional});
+
+        if (!result) {
+            // an optional refusal is the spilling signal, the caller logs it
+            if (!isOptional) {
+                YDB_LOG_WARN_COMP(NKikimrServices::KQP_COMPUTE, "",
+                    {"problem", "cannot_allocate_memory"},
+                    {"txId", Tx->TxId},
+                    {"memory", memorySize});
+            }
+
+            return false;
+        }
+
+        Allocated(memorySize);
+        return true;
+    }
+
+    void FreeQuota(ui64 memorySize) override {
+        // uncounted before the release: never more than the tx holds
+        const ui64 prev = AllocatedMemory.fetch_sub(memorySize);
+        Y_DEBUG_ABORT_UNLESS(prev >= memorySize, "TxId: %" PRIu64 ", freeing %" PRIu64 " bytes of %" PRIu64 " allocated",
+            Tx->TxId, memorySize, prev);
+        Tx->ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memorySize});
+    }
+
+    ui64 GetCurrentQuota() const override {
+        return AllocatedMemory.load();
+    }
+
+    ui64 GetMaxMemorySize() const override {
+        return MaxAllocatedMemory.load();
+    }
+
+    i64 GetMemoryAvailability() const override {
+        return Tx->GetMemoryAvailability();
+    }
+
+    TString MemoryConsumptionDetails() const override {
+        return Tx->ToString();
+    }
+
+private:
+    // counted after the grant: never more than the tx holds
+    void Allocated(ui64 bytes) {
+        const ui64 allocated = AllocatedMemory.fetch_add(bytes) + bytes;
+        ui64 peak = MaxAllocatedMemory.load();
+        while (peak < allocated && !MaxAllocatedMemory.compare_exchange_weak(peak, allocated)) {
+        }
+    }
+
+    const TIntrusivePtr<NRm::TTxState> Tx;
+    // not returned yet
+    std::atomic<ui64> ExecutionUnits = 0;
+    std::atomic<ui64> ExternalMemory = 0;
+    // Memory + ExternalMemory
+    std::atomic<ui64> AllocatedMemory = 0;
+    std::atomic<ui64> MaxAllocatedMemory = 0;
+};
+
+// The execution units are taken from the resource manager, the memory - from the compute scheduler
+class TSchedulerQueryQuotaManager final : public IQueryQuotaManager {
+public:
+    TSchedulerQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx, NScheduler::TSchedulableMemoryPtr memory, ui64 taskMemory)
         : Tx(std::move(tx))
         , Memory(std::move(memory))
         , TaskMemory(taskMemory)
@@ -36,7 +153,7 @@ public:
 
     // the task and channel quota managers keep it alive: their Memory is back by now. The external memory left is the
     // one of the channels and of the tasks whose compute actors did not terminate
-    ~TQueryQuotaManager() override {
+    ~TSchedulerQueryQuotaManager() override {
         const ui64 externalMemory = ExternalMemory.load();
         Y_DEBUG_ABORT_UNLESS(AllocatedMemory.load() == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
             Tx->TxId, AllocatedMemory.load() - externalMemory);
@@ -276,9 +393,13 @@ private:
 
 } // namespace
 
+TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx) {
+    return std::make_shared<TQueryQuotaManager>(std::move(tx));
+}
+
 TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx, NScheduler::TSchedulableMemoryPtr memory,
     ui64 taskMemory) {
-    return std::make_shared<TQueryQuotaManager>(std::move(tx), std::move(memory), taskMemory);
+    return std::make_shared<TSchedulerQueryQuotaManager>(std::move(tx), std::move(memory), taskMemory);
 }
 
 // for CA/task, is NOT thread safe
@@ -371,7 +492,7 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
-    // Node level memory availability of the tx (see NScheduler::TSchedulableMemory::GetAvailability) plus the locally
+    // Node level memory availability of the tx (see IQueryQuotaManager::GetMemoryAvailability) plus the locally
     // prepaid quota. Channels do not spill on a negative value, but propagate it as back pressure,
     // see TInputDescriptor::MemoryPressure.
     i64 GetMemoryAvailability() const override {
@@ -588,10 +709,17 @@ public:
                 channelMemory = tasksCount * lightLimit;
                 externalMemory += channelMemory;
             }
-            QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
-                poolId, msg.GetDatabase(), CaFactory_->GetVerboseMemoryLimitException()),
-                NScheduler::CreateSchedulableMemory(query, databaseId, poolId, CaFactory_->ElasticMemoryPercent),
-                CaFactory_->TaskMemory);
+            if (NScheduler::IsMemoryScheduled()) {
+                // the pool limits the memory in the scheduler, not in the resource manager
+                QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                    poolId, /* memoryPoolPercent */ 100.0, msg.GetDatabase(), CaFactory_->GetVerboseMemoryLimitException()),
+                    NScheduler::CreateSchedulableMemory(query, databaseId, poolId, CaFactory_->ElasticMemoryPercent),
+                    CaFactory_->TaskMemory);
+            } else {
+                QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
+                    poolId, msg.GetMemoryPoolPercent(),
+                    msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException()));
+            }
         }
 
         // the tasks and the channels start with their part of it; a task returns its part when its compute actor

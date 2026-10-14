@@ -335,6 +335,65 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         memory.DecreaseUsage(10_MB);
     }
 
+    /* Scenario:
+        - Without FeatureFlags.EnableComputeSchedulerMemory the service doesn't register in the memory controller and
+          doesn't push the query memory state to the resource manager.
+        - The memory limits of the pools are not set.
+        - With the CPU disabled as well no query is added, as before the scheduler had the memory.
+     */
+    Y_UNIT_TEST(MemoryDisabled) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{
+                .Enabled = false,
+                .DelayParams = NScheduler::TDelayParams{
+                    .MaxDelay = TDuration::MicroSeconds(3'000'000),
+                    .MinDelay = TDuration::MicroSeconds(10),
+                    .AttemptBonus = TDuration::MicroSeconds(5),
+                    .MaxRandomDelay = TDuration::MicroSeconds(100),
+                },
+                .MemoryEnabled = false,
+            });
+        scheduler->SetTotalMemoryLimit(1000_MB);
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+
+        ui32 registrations = 0;
+        auto registerObserver = runtime.AddObserver<NMemory::TEvConsumerRegister>([&](auto&) {
+            ++registrations;
+        });
+        ui32 memoryStates = 0;
+        auto stateObserver = runtime.AddObserver<NRm::TEvQueryMemoryState>([&](auto&) {
+            ++memoryStates;
+        });
+
+        runtime.RegisterService(NMemory::MakeMemoryControllerId(), runtime.AllocateEdgeActor());
+        runtime.RegisterService(MakeKqpRmServiceID(runtime.GetNodeId()), runtime.AllocateEdgeActor());
+
+        const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
+        runtime.EnableScheduleForActor(service);
+
+        NResourcePool::TPoolSettings poolSettings;
+        poolSettings.TotalMemoryLimitPercentPerNode = 30;
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", poolSettings)));
+
+        auto addQuery = MakeHolder<NScheduler::TEvAddQuery>();
+        addQuery->DatabaseId = "db";
+        addQuery->PoolId = "pool";
+        addQuery->QueryId = 1;
+        runtime.Send(new IEventHandle(service, sender, addQuery.Release(), 0, 1));
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<NScheduler::TEvQueryResponse>(sender)->Get()->Query);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(registrations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(memoryStates, 0);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetOrCreateMemoryPool("db", "pool")->GetMemoryLimit(), NScheduler::NHdrf::Infinity());
+    }
+
 }
 
 } // namespace NKikimr::NKqp

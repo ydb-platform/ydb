@@ -453,4 +453,7 @@ message TFeatureFlags {
     // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
     // Existing TTL settings continue to execute when the flag is disabled.
     optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
+    // The memory of the KQP queries is accounted and limited by the compute scheduler (the limit comes from the memory
+    // controller) instead of the resource manager. Read on the node start.
+    optional bool EnableComputeSchedulerMemory = 367 [default = true];
 }

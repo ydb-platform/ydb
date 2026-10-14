@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/common/util.h>
 
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
 #include <util/stream/str.h>
@@ -632,7 +633,26 @@ bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children,
            SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), ctx, depth + 1);
 }
 
+TExpression*  MaybeWrapUtf8(TExpression* proto, bool isUtf8) {
+    auto& cast = *proto->mutable_cast();
+    cast.mutable_type()->set_type_id(isUtf8 ? Ydb::Type::UTF8 : Ydb::Type::STRING);
+    return cast.mutable_value();
+}
+
+bool SerializeLikeExpression(const NPushdown::TLikeSettings& settings, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+    auto* dstProto = proto->mutable_like();
+    if (settings.Escape && !SerializeExpression(TExprBase(settings.Escape), dstProto->mutable_escape(), ctx, depth + 1)) {
+        return false;
+    }
+    dstProto->set_case_sensitive(settings.CaseSensitive);
+    return SerializeExpression(TExprBase(settings.Pattern), MaybeWrapUtf8(dstProto->mutable_pattern(), settings.IsUtf8), ctx, depth + 1)
+        && SerializeExpression(TExprBase(settings.Haystack), MaybeWrapUtf8(dstProto->mutable_value(), settings.IsUtf8), ctx, depth + 1);
+}
+
 bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+    if (auto settings = NPushdown::ExtractLikeSettings(apply)) {
+        return SerializeLikeExpression(*settings, proto, ctx, depth);
+    }
     const auto& maybeUdf = apply.Callable().Maybe<TCoUdf>();
     if (!maybeUdf) {
         ctx.Err << "expected only UDF apply, but got: " << apply.Callable().Ref().Content();
@@ -1194,6 +1214,13 @@ TString FormatRegexp(const TPredicate::TRegexp& regexp) {
     return TStringBuilder() << "(" << value << " REGEXP " << pattern << ")";
 }
 
+TString FormatLike(const TPredicate::TLike& like) {
+    const auto& value = FormatExpression(like.value());
+    const auto& pattern = FormatExpression(like.pattern());
+    auto ret = TStringBuilder() << "(" << value << (like.case_sensitive() ? " LIKE " : " ILIKE ") << pattern << ")";
+    return std::move(ret);
+}
+
 TString FormatPredicate(const TPredicate& predicate) {
     switch (predicate.payload_case()) {
         case TPredicate::PAYLOAD_NOT_SET:
@@ -1220,6 +1247,8 @@ TString FormatPredicate(const TPredicate& predicate) {
             return FormatIn(predicate.in());
         case TPredicate::kRegexp:
             return FormatRegexp(predicate.regexp());
+        case TPredicate::kLike:
+            return FormatLike(predicate.like());
         default:
             throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
     }

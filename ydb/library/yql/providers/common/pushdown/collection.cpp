@@ -700,6 +700,21 @@ private:
         // Check if callable is a UDF and can be pushed
         auto udf = apply.Callable().Maybe<TCoUdf>();
         if (!udf || !UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
+            if (Settings.IsEnabled(EFlag::LikeOperator)) {
+                auto settings = ExtractLikeSettings(apply);
+                if (settings) {
+                   if (!CheckExpressionNodeForPushdown(TExprBase(settings->Pattern))) {
+                       return false;
+                   }
+                   if (!CheckExpressionNodeForPushdown(TExprBase(settings->Haystack))) {
+                       return false;
+                   }
+                   if (settings->Escape && !CheckExpressionNodeForPushdown(TExprBase(settings->Escape))) {
+                       return false;
+                   }
+                   return true;
+                }
+            }
             return false;
         }
 
@@ -778,6 +793,115 @@ private:
 };
 
 }   // namespace
+
+std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
+{
+    auto maybeApply = node.Maybe<TCoApply>();
+    if (!maybeApply) {
+        return std::nullopt;
+    }
+    auto apply = maybeApply.Cast();
+    auto matchNode = apply.Callable().Ptr();
+    if (matchNode->IsCallable("AssumeStrict")) {
+        if (matchNode->ChildrenSize() != 1) {
+            return std::nullopt;
+        }
+        matchNode = matchNode->ChildPtr(0);
+    }
+    auto maybeMatch = TExprBase(matchNode).Maybe<TCoUdf>();
+    if (!maybeMatch) {
+        return std::nullopt;
+    }
+    auto matchUdf = maybeMatch.Cast();
+    if (matchUdf.MethodName() != "Re2.Match") {
+        return std::nullopt;
+    }
+    if (apply.Ref().ChildrenSize() != 1+1) {
+        return std::nullopt;
+    }
+    // TODO deeper validation
+    auto maybeRunConfigValue = matchUdf.RunConfigValue();
+    if (!maybeRunConfigValue) {
+        return std::nullopt;
+    }
+    const auto& runConfigValue = maybeRunConfigValue.Cast().Ref();
+    if (runConfigValue.ChildrenSize() != 2) {
+        return std::nullopt;
+    }
+    TLikeSettings settings;
+    
+    auto regexp = runConfigValue.ChildPtr(0);
+    if (!regexp->IsCallable("Apply") || regexp->ChildrenSize() != 2) {
+        return std::nullopt;
+    }
+    auto patternFromLike = regexp->ChildPtr(0);
+    auto patternFromLikeUdf = TExprBase(patternFromLike).Maybe<TCoUdf>();
+    
+    if (!patternFromLikeUdf || patternFromLikeUdf.Cast().MethodName() != "Re2.PatternFromLike") {
+        return std::nullopt;
+    }
+    settings.Pattern = regexp->ChildPtr(1);
+    settings.Haystack = apply.Ref().ChildPtr(1);
+    auto just = runConfigValue.ChildPtr(1);
+    if (!just->IsCallable("Just") || just->ChildrenSize() != 1) {
+        return std::nullopt;
+    }
+    auto namedApply = just->ChildPtr(0);
+    if (!namedApply->IsCallable("NamedApply") || namedApply->ChildrenSize() < 2) {
+        return std::nullopt;
+    }
+    auto options = namedApply->ChildPtr(0);
+    auto optionsUdf = TExprBase(options).Maybe<TCoUdf>();
+    if (!optionsUdf || optionsUdf.Cast().MethodName() != "Re2.Options") {
+        return std::nullopt;
+    }
+    auto maybeAsStruct = TExprBase(namedApply->ChildPtr(2)).Maybe<TCoAsStruct>();
+    if (!maybeAsStruct) {
+        return std::nullopt;
+    }
+    for (const auto& child: maybeAsStruct.Cast()) {
+        if (child.Size() != 2) {
+            return std::nullopt;
+        }
+        auto maybeName = child.Item(0).Maybe<TCoAtom>();
+        if (!maybeName) {
+            return std::nullopt;
+        }
+        auto value = child.Item(1).Ptr();
+        if (maybeName.Cast().StringValue() == "CaseSensitive") {
+            if (auto maybeJust = TExprBase(value).Maybe<TCoJust>()) {
+                value = maybeJust.Cast().Input().Ptr();
+            }
+            auto maybeBool = TExprBase(value).Maybe<TCoBool>();
+            if (!maybeBool) {
+                return std::nullopt;
+            }
+            auto boolValue = TryFromString<bool>(maybeBool.Cast().Literal().StringValue());
+            if (!boolValue) {
+                return std::nullopt;
+            }
+            settings.CaseSensitive = *boolValue;
+            continue;
+        }
+        if (maybeName.Cast().StringValue() == "Utf8") {
+            if (auto maybeJust = TExprBase(value).Maybe<TCoJust>()) {
+                value = maybeJust.Cast().Input().Ptr();
+            }
+            auto maybeBool = TExprBase(value).Maybe<TCoBool>();
+            if (!maybeBool) {
+                return std::nullopt;
+            }
+            auto boolValue = TryFromString<bool>(maybeBool.Cast().Literal().StringValue());
+            if (!boolValue) {
+                return std::nullopt;
+            }
+            settings.IsUtf8 = *boolValue;
+            continue;
+        }
+        return std::nullopt;
+    }
+    return settings;
+}
 
 void CollectPredicates(TExprContext& ctx, const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg,
     const TExprBase& /*lambdaBody*/, const TSettings& settings) {

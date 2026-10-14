@@ -14,4 +14,14 @@ void CollectPredicates(TExprContext& ctx, const NNodes::TExprBase& predicate, TP
 [[nodiscard]] bool TestExprForPushdown(
     TExprContext& ctx, const NNodes::TExprBase& lambdaArg, const NNodes::TExprBase& lambdaBody, const TSettings& settings);
 
+struct TLikeSettings {
+    bool IsUtf8 = false;
+    bool CaseSensitive = false;
+    TExprNodePtr Haystack;
+    TExprNodePtr Pattern;
+    TExprNodePtr Escape;
+};
+
+std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node);
+
 }   // namespace NYql::NPushdown

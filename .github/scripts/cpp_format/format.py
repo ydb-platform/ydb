@@ -102,9 +102,49 @@ def skip_style(root, file):
     )
 
 
+def unconditional_no_lint(makefile):
+    # Only a literal, unconditional NO_LINT() disables C++ lint here.
+    # Conditional settings remain Ya's responsibility; NO_LINT(ktlint) does
+    # not disable the native C++ checker either.
+    text = re.sub(r'#[^\n]*', '', makefile.read_text())
+    depth = 0
+    for match in re.finditer(r'(?m)^[ \t]*(IF|ENDIF|NO_LINT)\s*\(', text):
+        macro = match.group(1)
+        if macro == 'IF':
+            depth += 1
+        elif macro == 'ENDIF':
+            depth -= 1
+        elif depth == 0 and re.match(r'\s*\)', text[match.end() :]):
+            return True
+    return False
+
+
+def module_no_lint(root, directory, cache):
+    # A parent module can own sources in subdirectories without ya.make.
+    # A child with its own ya.make starts a separate module, not an inherited
+    # NO_LINT scope. Cache the result for every visited source directory.
+    pending = []
+    while directory not in cache:
+        pending.append(directory)
+        makefile = directory / 'ya.make'
+        if makefile.is_file():
+            disabled = unconditional_no_lint(makefile)
+            break
+        if directory == root:
+            disabled = False
+            break
+        directory = directory.parent
+    else:
+        disabled = cache[directory]
+    for directory in pending:
+        cache[directory] = disabled
+    return disabled
+
+
 def selected_files(root, configs):
     output = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z'])
     groups = {folder: [] for folder in sorted(configs)}
+    no_lint_cache = {}
     for path in sorted({os.fsdecode(path) for path in output.split(b'\0') if path}):
         if PurePosixPath(path).suffix not in EXTENSIONS:
             continue
@@ -116,7 +156,7 @@ def selected_files(root, configs):
             if file.is_symlink() or not file.is_file():
                 break
             file.resolve().relative_to(root.resolve())
-            if not skip_style(root, file):
+            if not module_no_lint(root, file.parent, no_lint_cache) and not skip_style(root, file):
                 groups[folder].append(path)
             break
 

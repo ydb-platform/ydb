@@ -98,8 +98,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
 #endif
 
     NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
-    std::vector<std::shared_ptr<arrow::Array>> pkColumns;
-    pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
+    std::vector<bool> pkFieldsPresent(GetIndexInfo().GetReplaceKey()->num_fields(), false);
     ui32 pkColumnsCount = 0;
     const auto pred = [&](const ui32 incomingIdx, const i32 targetIdx) {
         if (targetIdx == -1) {
@@ -136,9 +135,9 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             }
         }
         if (pkFieldIdx) {
-            AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
-            AFL_VERIFY(!pkColumns[*pkFieldIdx]);
-            pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+            AFL_VERIFY(*pkFieldIdx < (i32)pkFieldsPresent.size());
+            AFL_VERIFY(!pkFieldsPresent[*pkFieldIdx]);
+            pkFieldsPresent[*pkFieldIdx] = true;
             ++pkColumnsCount;
         }
         return TConclusionStatus::Success();
@@ -151,7 +150,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
     if (batchConclusion.IsFail()) {
         return batchConclusion;
     }
-    if (pkColumnsCount < pkColumns.size()) {
+    if (pkColumnsCount < pkFieldsPresent.size()) {
         return TConclusionStatus::Fail("not enough pk fields");
     }
     auto result = batchConclusion.DetachResult();

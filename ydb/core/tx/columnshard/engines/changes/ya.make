@@ -7,6 +7,7 @@ SRCS(
     general_compaction.cpp
     merge_subset.cpp
     ttl.cpp
+    ttl_memory.cpp
     with_appended.cpp
 )
 

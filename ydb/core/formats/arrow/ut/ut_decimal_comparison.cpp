@@ -72,6 +72,41 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
         UNIT_ASSERT(TKeyColumnComparator(*field).Compare(*array, 0, *array, 1) == std::partial_ordering::less);
     }
 
+    Y_UNIT_TEST(DeduplicationKeepsLastRowWithCompositeKey) {
+        const auto type = arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128));
+        const auto decimalField = arrow::field("decimal", type)->WithMetadata(
+            arrow::key_value_metadata({TKeyColumnComparator::DecimalComparisonMetadata}, {"1"}));
+        const auto schema = arrow::schema({decimalField, arrow::field("secondary", arrow::int32())});
+        const std::vector<std::optional<NYql::NDecimal::TInt128>> decimals = {256, std::nullopt, -1, 256, 1, std::nullopt, -1, 256};
+        const std::vector<i32> secondary = {1, 2, 0, 0, 0, 2, 0, 1};
+        arrow::FixedSizeBinaryBuilder decimalBuilder(type);
+        arrow::Int32Builder secondaryBuilder;
+        for (ui32 i = 0; i < decimals.size(); ++i) {
+            if (decimals[i]) {
+                UNIT_ASSERT(decimalBuilder.Append(reinterpret_cast<const char*>(&*decimals[i])).ok());
+            } else {
+                UNIT_ASSERT(decimalBuilder.AppendNull().ok());
+            }
+            UNIT_ASSERT(secondaryBuilder.Append(secondary[i]).ok());
+        }
+        std::shared_ptr<arrow::Array> decimalArray, secondaryArray;
+        UNIT_ASSERT(decimalBuilder.Finish(&decimalArray).ok());
+        UNIT_ASSERT(secondaryBuilder.Finish(&secondaryArray).ok());
+        const auto batch = arrow::RecordBatch::Make(schema, decimals.size(), {decimalArray, secondaryArray});
+        const auto permutation = MakeSortPermutation(batch, schema, true);
+        const std::vector<ui64> expected = {5, 6, 4, 3, 7};
+        UNIT_ASSERT(permutation);
+        UNIT_ASSERT_VALUES_EQUAL(permutation->length(), expected.size());
+        for (ui32 i = 0; i < expected.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(permutation->Value(i), expected[i]);
+        }
+        const auto sorted = SortBatch(batch, schema, true);
+        UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), expected.size());
+        UNIT_ASSERT(IsSortedAndUnique(sorted, schema));
+        UNIT_ASSERT(!MakeSortPermutation(sorted, schema, true));
+        UNIT_ASSERT(!MakeSortPermutation(sorted->Slice(0, 0), schema, true));
+    }
+
     Y_UNIT_TEST(StableSortPreservesVersions) {
         const auto type = arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128));
         auto schema = arrow::schema({arrow::field("key", type)->WithMetadata(

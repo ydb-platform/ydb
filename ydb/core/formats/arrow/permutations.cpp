@@ -2,14 +2,13 @@
 #include "permutations.h"
 #include "key_comparator.h"
 
-#include "hash/calcer.h"
-
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
+
+#include <numeric>
 
 namespace NKikimr::NArrow {
 
@@ -26,55 +25,36 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
         }
     }
     AFL_VERIFY(count);
-    std::vector<TRawReplaceKey> points;
-    points.reserve(*count);
-    for (int i = 0; i < *count; ++i) {
-        points.push_back(TRawReplaceKey(&keyColumns, i));
-    }
-
-    bool haveNulls = false;
-    for (auto& column : keyColumns) {
-        if (HasNulls(column)) {
-            haveNulls = true;
-            break;
-        }
-    }
+    AFL_VERIFY(*count <= Max<i32>());
+    std::vector<i32> positions(*count);
+    std::iota(positions.begin(), positions.end(), 0);
 
     const TKeyComparator comparator(comparisonSchema, keyColumns.size());
-    std::sort(points.begin(), points.end(), [&](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-        const auto cmp = comparator.Compare(keyColumns, a.GetPosition(), b.GetPosition());
+    std::sort(positions.begin(), positions.end(), [&](const i32 a, const i32 b) {
+        const auto cmp = comparator.Compare(keyColumns, a, b);
         return cmp == std::partial_ordering::equivalent
-            ? (preserveEqualOrder ? a.GetPosition() < b.GetPosition() : a.GetPosition() > b.GetPosition())
+            ? (preserveEqualOrder ? a < b : a > b)
             : cmp == std::partial_ordering::less;
     });
 
     arrow::UInt64Builder builder;
-    TStatusValidator::Validate(builder.Reserve(points.size()));
+    TStatusValidator::Validate(builder.Reserve(positions.size()));
 
-    TRawReplaceKey* predKey = nullptr;
-    int predPosition = -1;
+    i32 previous = -1;
     bool isTrivial = true;
-    for (auto& point : points) {
-        if (andUnique) {
-            if (predKey) {
-                if (haveNulls) {
-                    if (*predKey == point) {
-                        continue;
-                    }
-                } else if (predKey->CompareNotNull(point) == std::partial_ordering::equivalent) {
-                    continue;
-                }
-            }
+    for (const i32 position : positions) {
+        if (andUnique && previous != -1 &&
+            comparator.Compare(keyColumns, previous, position) == std::partial_ordering::equivalent) {
+            continue;
         }
-        if (point.GetPosition() != predPosition + 1) {
+        if (position != previous + 1) {
             isTrivial = false;
         }
-        predPosition = point.GetPosition();
-        TStatusValidator::Validate(builder.Append(point.GetPosition()));
-        predKey = &point;
+        previous = position;
+        TStatusValidator::Validate(builder.Append(position));
     }
 
-    if (isTrivial && builder.length() == (i64)points.size()) {
+    if (isTrivial && builder.length() == *count) {
         return nullptr;
     }
 

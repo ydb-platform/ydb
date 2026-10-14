@@ -131,6 +131,7 @@ namespace NKikimr {
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompStorageRatioSkipRank;
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper DefragThrottlerBytesRate;
         TControlWrapper MaxActiveCompactionsPerPDisk;

@@ -220,6 +220,7 @@ private:
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
             GetYdbStatus(result), result.Issues(),
             QueryId, std::move(result.Exprs), std::move(result.World), std::move(result.Ctx));
+        ReleaseExprNodes();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -489,6 +490,7 @@ private:
         stats.FromCache = false;
         stats.DurationUs = (TInstant::Now() - StartTime).MicroSeconds();
         stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
+        ReleaseExprNodes();
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -498,6 +500,16 @@ private:
         EndQueryTraceSpan(CompileActorSpan, KqpCompileResult->Status);
 
         PassAway();
+    }
+
+    // Expression nodes of a split query are shared with the session actor, and their reference counters are not atomic.
+    // They are released before the reply is sent, so that the session actor can release its references only after this.
+    void ReleaseExprNodes() {
+        AsyncSplitResult.Reset();
+        AsyncCompileResult.Reset();
+        KqpHost.Reset();
+        SplitExpr.Reset();
+        SplitCtx.reset();
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {

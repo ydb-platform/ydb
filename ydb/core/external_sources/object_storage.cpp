@@ -797,6 +797,7 @@ private:
     }
 
     static NYql::TIssues ValidateIntegerProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+        // clang-format off
         static const std::vector<NYdb::TType> availableTypes {
             NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::String)
@@ -817,6 +818,7 @@ private:
                 .Primitive(NYdb::EPrimitiveType::Utf8)
                 .Build()
         };
+        // clang-format on
         return ValidateProjectionType(columnType, columnName, availableTypes);
     }
 
@@ -830,6 +832,7 @@ private:
     }
 
     static NYql::TIssues ValidateCommonProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+        // clang-format off
         static const std::vector<NYdb::TType> availableTypes {
             NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::String)
@@ -856,10 +859,12 @@ private:
                 .Primitive(NYdb::EPrimitiveType::Datetime)
                 .Build()
         };
+        // clang-format on
         return ValidateProjectionType(columnType, columnName, availableTypes);
     }
 
     static NYql::TIssues ValidateDateProjectionType(const NYdb::TType& columnType, const TString& columnName) {
+        // clang-format off
         static const std::vector<NYdb::TType> availableTypes {
             NYdb::TTypeBuilder{}
                 .Primitive(NYdb::EPrimitiveType::String)
@@ -877,6 +882,7 @@ private:
                 .Primitive(NYdb::EPrimitiveType::Datetime)
                 .Build()
         };
+        // clang-format on
         return ValidateProjectionType(columnType, columnName, availableTypes);
     }
 
@@ -929,6 +935,7 @@ private:
         NYdb::TType utf8Type = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Utf8).Build();
         NYdb::TType ysonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Yson).Build();
         NYdb::TType jsonType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::Json).Build();
+        // clang-format off
         const std::vector<NYdb::TType> result {
             stringType,
             utf8Type,
@@ -939,6 +946,7 @@ private:
             NYdb::TTypeBuilder{}.Optional(ysonType).Build(),
             NYdb::TTypeBuilder{}.Optional(jsonType).Build()
         };
+        // clang-format on
         return result;
     }
 
@@ -959,6 +967,7 @@ private:
         NYdb::TType tzdateType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::TzDate).Build();
         NYdb::TType tzdatetimeType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::TzDatetime).Build();
         NYdb::TType tztimestampType = NYdb::TTypeBuilder{}.Primitive(NYdb::EPrimitiveType::TzTimestamp).Build();
+        // clang-format off
         const std::vector<NYdb::TType> result {
             dateType,
             datetimeType,
@@ -983,6 +992,7 @@ private:
             NYdb::TTypeBuilder{}.Optional(tzdatetimeType).Build(),
             NYdb::TTypeBuilder{}.Optional(tztimestampType).Build()
         };
+        // clang-format on
         return result;
     }
 

@@ -142,6 +142,7 @@ public:
             return {};
         }
 
+        // clang-format off
         return Build<TSoWriteToShard>(ctx, write.Pos())
             .World(write.World())
             .DataSink(write.DataSink())
@@ -150,6 +151,7 @@ public:
                 .Input(write.Arg(3))
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     void GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) override {

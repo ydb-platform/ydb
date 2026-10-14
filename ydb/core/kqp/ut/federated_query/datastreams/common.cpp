@@ -1186,22 +1186,26 @@ void TStreamingTestFixture::SetupMockConnectorTableDescription(std::shared_ptr<T
 
     if (settings.ListSplitsCount) {
         auto listSplitsBuilder = mockClient->ExpectListSplits();
+        // clang-format off
         auto fillListSplitExpectation = listSplitsBuilder
             .ValidateArgs(settings.ValidateListSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
             .Select()
                 .DataSourceInstance(GetMockConnectorSourceInstance())
                 .Table(settings.TableName)
                 .What();
+        // clang-format on
 
         FillMockConnectorRequestColumns(fillListSplitExpectation, settings.Columns);
 
         for (ui64 i = 0; i < settings.ListSplitsCount; ++i) {
+            // clang-format off
             auto responseBuilder = listSplitsBuilder.Result()
                 .AddResponse(NYql::NConnector::NewSuccess())
                     .Description("some binary description")
                     .Select()
                         .DataSourceInstance(GetMockConnectorSourceInstance())
                         .What();
+            // clang-format on
             FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
         }
     }
@@ -1212,6 +1216,7 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
     auto readSplitsBuilder = mockClient->ExpectReadSplits();
 
     {
+        // clang-format off
         auto columnsBuilder = readSplitsBuilder
             .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
             .ValidateArgs(settings.ValidateReadSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
@@ -1221,6 +1226,7 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
                     .Table(settings.TableName)
                     .DataSourceInstance(GetMockConnectorSourceInstance())
                     .What();
+        // clang-format on
         FillMockConnectorRequestColumns(columnsBuilder, settings.Columns);
     }
 

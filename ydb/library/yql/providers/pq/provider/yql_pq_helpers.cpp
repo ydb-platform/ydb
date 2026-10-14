@@ -60,18 +60,22 @@ TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPos
         } else {
             TVector<TDqPqFederatedCluster> clusters(Reserve(federatedTopics.size()));
             for (const auto& topic: federatedTopics) {
+                // clang-format off
                 clusters.push_back(Build<TDqPqFederatedCluster>(ctx, pos)
                     .Name().Build(topic.Info.Name)
                     .Endpoint().Build(topic.Info.Endpoint)
                     .Database().Build(topic.Info.Path)
                     .PartitionsCount().Build(ToString(topic.PartitionsCount))
                     .Done());
+                // clang-format on
                 maxPartitionsCount = std::max(maxPartitionsCount, topic.PartitionsCount);
             }
+            // clang-format off
             props.push_back(
                     Build<TCoNameValueTuple>(ctx, pos)
                     .Name().Build(FederatedClustersProp)
                     .Value<TDqPqFederatedClusterList>().Add(clusters).Build().Done());
+            // clang-format on
         }
     }
     Add(props, PartitionsCountProp, ToString(maxPartitionsCount), pos, ctx);

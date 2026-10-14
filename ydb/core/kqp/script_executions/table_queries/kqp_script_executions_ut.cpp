@@ -505,6 +505,7 @@ struct TScriptExecutionsYdbSetup {
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database")
                 .Utf8(TestDatabase)
@@ -536,6 +537,7 @@ struct TScriptExecutionsYdbSetup {
             .AddParam("$lease_generation")
                 .Int64(leaseGeneration)
                 .Build();
+        // clang-format on
 
         const auto result = TableClientSession->ExecuteDataQuery(
             sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();

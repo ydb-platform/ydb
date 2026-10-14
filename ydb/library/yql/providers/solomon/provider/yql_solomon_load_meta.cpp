@@ -155,6 +155,7 @@ public:
                 labelNames.push_back(Build<TCoAtom>(ctx, read.Pos()).Value(label).Done());
             }
 
+            // clang-format off
             replaces.emplace(node,
                 Build<TSoReadObject>(ctx, read.Pos())
                     .InitFrom(read)
@@ -163,6 +164,7 @@ public:
                         .Build()
                     .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricLabelsValue.Result.TotalCount))
                 .Done().Ptr());
+            // clang-format on
         }
 
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings{nullptr});

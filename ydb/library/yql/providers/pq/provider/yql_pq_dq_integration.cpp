@@ -222,6 +222,7 @@ public:
 
             const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
 
+            // clang-format off
             TExprBase result = Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -243,6 +244,7 @@ public:
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
+            // clang-format on
 
             if (maybeWatermark && State_->EnableWatermarksAdvanced && !useSharedReading) {
                 const auto watermark = maybeWatermark.Cast();
@@ -282,10 +284,12 @@ public:
                             };
                             newFederatedClusters.push_back(Build<TCoAtom>(ctx, federatedClusters.Pos()).Value(newFederatedCluster).Done());
                         }
+                        // clang-format off
                         watermarkSettingsBuilder.Add<TCoNameValueTuple>()
                             .Name<TCoAtom>().Build(name)
                             .Value<TCoAtomList>().Add(newFederatedClusters).Build()
                             .Build();
+                        // clang-format on
                     }
                 }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
@@ -323,6 +327,7 @@ public:
                     return {};
                 }
 
+                // clang-format off
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(eventTimeExtractor)
@@ -355,6 +360,7 @@ public:
                     .WatermarkSettings(watermarkSettings.Ptr())
                     .PartitionKeys<TCoVoid>().Build()
                     .Done();
+                // clang-format on
             }
 
             return result.Ptr();
@@ -1020,12 +1026,14 @@ public:
         Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic, ctx)), pos, ctx);
 
         if (!innerSettings.empty()) {
+            // clang-format off
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build("settings")
                 .Value<TCoNameValueTupleList>()
                     .Add(innerSettings)
                     .Build()
                 .Done());
+            // clang-format on
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

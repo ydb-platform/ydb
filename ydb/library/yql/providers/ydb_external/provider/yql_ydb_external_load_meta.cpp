@@ -523,12 +523,14 @@ private:
             if (!ParseRead(read, table, ctx)) {
                 return TStatus::Error;
             }
+            // clang-format off
             replacements.emplace(node.Get(), Build<TYdbExternalReadTable>(ctx, read.Pos())
                 .World(read.World())
                 .DataSource(read.DataSource())
                 .Table().Value(table).Build()
                 .Columns(read.Ref().ChildrenSize() > 3 ? read.Ref().ChildPtr(3) : ctx.NewCallable(read.Pos(), "Void", {}))
                 .Done().Ptr());
+            // clang-format on
         }
         return RemapExpr(input, output, replacements, ctx, TOptimizeExprSettings(nullptr));
     }

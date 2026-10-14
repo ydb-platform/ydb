@@ -292,6 +292,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(OneToOneMapping) {
+        // clang-format off
         SrcGraph
             .Task()
                 .Input().Channel().Build()
@@ -300,6 +301,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
             .Task()
                 .Input().Channel().Build()
                 .Input().TopicSource("t", 3, 3, 0).Build();
+        // clang-format on
         DstGraph
             .Task()
                 .Input().TopicSource("t", 3, 3, 0).Build();
@@ -434,6 +436,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
                 .Input().TopicSource("t", 5, 1, 0).Build()
                 .Build();
 
+        // clang-format off
         DstGraph
             .Task()
                 .Input().TopicSource("t", 5, 1, 0).Build()
@@ -444,6 +447,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
             .Task()
                 .Input().TopicSource("t", 5, 2, 1).Build()
                 .Build();
+        // clang-format on
 
         UNIT_ASSERT(MakePlan(false));
         UNIT_ASSERT_VALUES_EQUAL(Issues.Size(), 0);
@@ -467,6 +471,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
                 .Input().TopicSource("t", 5, 1, 0).Build()
                 .Build();
 
+        // clang-format off
         DstGraph
             .Task()
                 .Input().TopicSource("t", 5, 1, 0).Build()
@@ -477,6 +482,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
             .Task()
                 .Input().TopicSource("t", 5, 2, 1).Build()
                 .Build();
+        // clang-format on
 
         UNIT_ASSERT(!MakePlan(false));
         UNIT_ASSERT(MakePlan(true));

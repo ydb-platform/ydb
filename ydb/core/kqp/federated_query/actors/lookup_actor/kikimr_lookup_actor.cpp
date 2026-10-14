@@ -259,9 +259,11 @@ namespace {
     public:
 
         void Bootstrap() {
+// clang-format off: keep this macro's layout stable across formatter runs.
 #define COMMON_LOG \
             { "actorId", SelfId() }, \
             { "path", LookupSource.GetPath() }
+// clang-format on
             YDB_LOG_INFO("New kikimr provider lookup actor",
                     COMMON_LOG,
                     {"database", LookupSource.GetDatabase()},

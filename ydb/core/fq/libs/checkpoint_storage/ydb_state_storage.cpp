@@ -416,6 +416,7 @@ TStateStorage::TStateStorage(
 }
 
 TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
+    // clang-format off
     auto stateDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("task_id", EPrimitiveType::Uint64)
@@ -431,6 +432,7 @@ TFuture<TIssues> TStateStorage::Init(const NACLib::TDiffACL& acl) {
             .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
+    // clang-format on
 
     auto promise = NThreading::NewPromise<TIssues>();
 

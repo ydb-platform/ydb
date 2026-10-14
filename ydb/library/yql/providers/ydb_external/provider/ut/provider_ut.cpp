@@ -54,6 +54,7 @@ struct TFixture {
         const auto pos = Ctx.AppendPosition({});
         auto world = Ctx.NewWorld(pos);
         world->SetTypeAnn(Ctx.MakeType<TWorldExprType>());
+        // clang-format off
         auto read = Build<TYdbExternalReadTable>(Ctx, pos)
             .World(world)
             .DataSource<TYdbExternalDataSource>()
@@ -63,6 +64,7 @@ struct TFixture {
             .Table().Build("items")
             .Columns<TCoVoid>().Build()
             .Done();
+        // clang-format on
         // The core DataSource annotator runs before the provider in a real pipeline.
         read.DataSource().Ptr()->SetTypeAnn(Ctx.MakeType<TUnitExprType>());
         const auto* row = State->Tables.at(TState::TTableKey("remote", "items")).RowType;
@@ -134,12 +136,14 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
             UNIT_ASSERT_VALUES_EQUAL(requests, 0);
             const auto pos = ctx.AppendPosition({});
             const auto makeRead = [&](TStringBuf category) {
+                // clang-format off
                 return ctx.NewCallable(pos, "Read!", {
                     ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {
                         ctx.NewAtom(pos, category), ctx.NewAtom(pos, "remote")}),
                     ctx.NewCallable(pos, "Key", {ctx.NewList(pos, {ctx.NewAtom(pos, "table"),
                         ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "items")})})}),
                     ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, {})});
+                // clang-format on
             };
             auto& metadata = providers.Source->GetLoadTableMetadataTransformer();
             TExprNode::TPtr output;
@@ -445,6 +449,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         TFixture f;
         const auto read = f.MakeRead();
         const auto wrap = CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {});
+        // clang-format off
         const auto filter = Build<TCoFilter>(f.Ctx, read.Pos())
             .Input(wrap)
             .Lambda()
@@ -457,6 +462,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
                 .Build()
             .Build()
             .Done();
+        // clang-format on
         const auto projection = f.MakeProjection(filter.Ptr(), {"key"});
         auto optimizer = CreateLogicalOptimizer(f.State);
         TExprNode::TPtr output;

@@ -9,6 +9,7 @@ namespace NYql::NDq {
 
 namespace {
 
+// clang-format off
 const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
     {
         "create_time", [](const NFq::TMessageStreamRecord& record, const TString& /*cluster*/) {
@@ -80,6 +81,7 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
         }
     },
 };
+// clang-format on
 
 } // anonymous namespace
 

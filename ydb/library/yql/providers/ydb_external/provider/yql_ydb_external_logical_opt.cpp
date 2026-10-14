@@ -35,6 +35,7 @@ private:
         }
         // Only push a projection directly on a read. Common optimizers retain
         // columns used by intervening local filters before producing this shape.
+        // clang-format off
         return Build<TWrap>(ctx, node.Pos())
             .InitFrom(wrapper.Cast())
             .template Input<TYdbExternalReadTable>()
@@ -42,6 +43,7 @@ private:
                 .Columns(extract.Members())
             .Build()
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> ExtractMembersSource(TExprBase node, TExprContext& ctx) const {
@@ -59,6 +61,7 @@ private:
                 source.Cast().Cluster().StringValue(), source.Cast().Table().StringValue()));
             columns = ctx.NewList(node.Pos(), {ctx.NewAtom(node.Pos(), table.RowType->GetItems().front()->GetName())});
         }
+        // clang-format off
         return Build<TDqSourceWrap>(ctx, node.Pos())
             .InitFrom(wrapper.Cast())
             .Input<TYdbExternalSourceSettings>()
@@ -67,6 +70,7 @@ private:
             .Build()
             .RowType(ExpandType(node.Pos(), GetSeqItemType(*extract.Ref().GetTypeAnn()), ctx))
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> RejectLookup(TExprBase node, TExprContext& ctx) const {

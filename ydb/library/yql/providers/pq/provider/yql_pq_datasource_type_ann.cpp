@@ -660,12 +660,14 @@ public:
                 }
             }
 
+            // clang-format off
             output = ctx.Builder(input->Pos())
                 .Callable("Member")
                     .Add(0, row)
                     .Atom(1, structType->GetItems()[*pos]->GetName(), TNodeFlags::Default)
                 .Seal()
                 .Build();
+            // clang-format on
 
             return TStatus::Repeat;
         }

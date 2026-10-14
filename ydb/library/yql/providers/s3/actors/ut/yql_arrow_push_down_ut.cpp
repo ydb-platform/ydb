@@ -123,10 +123,12 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
             arrow::field("field2", arrow::int64()),
             arrow::field("field3", arrow::float64())
         }};
+        // clang-format off
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-03-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds())
                                    .Build()
                             .Build();
+        // clang-format on
 
         auto predicate = BuildPredicate(
                         R"proto(
@@ -159,10 +161,12 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
             arrow::field("field2", arrow::int64()),
             arrow::field("field3", arrow::float64())
         }};
+        // clang-format off
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-13T00:00:00Z").MilliSeconds())
                                    .Build()
                             .Build();
+        // clang-format on
 
         auto predicate = BuildPredicate(
                         R"proto(
@@ -194,6 +198,7 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
             arrow::field("field2", arrow::int64()),
             arrow::field("field3", arrow::float64())
         }};
+        // clang-format off
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-03-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds())
                                    .Build()
@@ -201,6 +206,7 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-02-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds())
                                    .Build()
                             .Build();
+        // clang-format on
 
         auto predicate = BuildPredicate(
                         R"proto(
@@ -297,6 +303,7 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
         const TString fromSecond(16, '\x20');
 
         TFileMetaDataBuilder builder{MakeLogicalUuidSchema("id")};
+        // clang-format off
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnFlbaStatistics(0, firstLo, firstHi)
                                    .Build()
@@ -304,6 +311,7 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
                                    .AddColumnFlbaStatistics(0, secondLo, secondHi)
                                    .Build()
                             .Build();
+        // clang-format on
 
         auto predicate = BuildPredicate(
             TStringBuilder() << R"proto(

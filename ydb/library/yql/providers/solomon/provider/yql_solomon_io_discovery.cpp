@@ -199,6 +199,7 @@ public:
                                             .Add(userLabelAliases)
                                         .Done();
 
+                // clang-format off
                 return userSchema.back()
                     ? Build<TSoReadObject>(ctx, read.Pos())
                         .World(read.World())
@@ -223,6 +224,7 @@ public:
                         .TotalMetricsCount().Build()
                         .RowType(rowTypeNode)
                       .Done().Ptr();
+                // clang-format on
             }
 
             return node;

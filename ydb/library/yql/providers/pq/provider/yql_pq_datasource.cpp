@@ -135,6 +135,7 @@ public:
                 .Done());
         }
 
+        // clang-format off
         auto topicNode = Build<TPqTopic>(ctx, read.Pos())
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
@@ -143,6 +144,7 @@ public:
             .Props(BuildTopicPropsList(*topicMeta, read.Pos(), ctx))
             .Metadata().Add(sourceMetadata).Build()
             .Done();
+        // clang-format on
 
         TExprNode::TPtr columns = topicKeyParser.GetColumnOrder();
 
@@ -260,6 +262,7 @@ public:
             watermarkArg = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
         }
 
+        // clang-format off
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
@@ -271,6 +274,7 @@ public:
             .Settings(settings.Done())
             .Watermark(std::move(watermarkArg))
             .UserSchemaColumns(std::move(userSchemaColumnsList));
+        // clang-format on
 
         return Build<TCoRight>(ctx, read.Pos())
             .Input(builder.Done())

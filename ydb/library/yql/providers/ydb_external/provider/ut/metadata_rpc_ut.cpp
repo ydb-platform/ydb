@@ -144,12 +144,14 @@ private:
 
 TExprNode::TPtr MakeRead(TExprContext& ctx) {
     const auto pos = ctx.AppendPosition({});
+    // clang-format off
     return ctx.NewCallable(pos, "Read!", {
         ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {
             ctx.NewAtom(pos, YdbExternalProviderName), ctx.NewAtom(pos, "remote")}),
         ctx.NewCallable(pos, "Key", {ctx.NewList(pos, {ctx.NewAtom(pos, "table"),
             ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "items")})})}),
         ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, {})});
+    // clang-format on
 }
 
 void CheckMetadataCleanup(bool rejectBeforeCompletion, bool unsupportedType = false) {
@@ -212,12 +214,14 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
         {"authMethod", "NONE"}, {"use_tls", "false"}});
     TExprContext ctx;
     const auto pos = ctx.AppendPosition({});
+    // clang-format off
     auto input = ctx.NewCallable(pos, "Read!", {
         ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {
             ctx.NewAtom(pos, YdbExternalProviderName), ctx.NewAtom(pos, "remote")}),
         ctx.NewCallable(pos, "Key", {ctx.NewList(pos, {ctx.NewAtom(pos, "table"),
             ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, "items")})})}),
         ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, {})});
+    // clang-format on
     auto transformer = CreateLoadMetadataTransformer(state);
     TExprNode::TPtr output;
     UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(input, output, ctx).Level, IGraphTransformer::TStatus::Async);

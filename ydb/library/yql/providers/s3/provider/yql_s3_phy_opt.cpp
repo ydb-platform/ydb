@@ -232,6 +232,7 @@ public:
 
             auto inputsBuilder = Build<TExprList>(ctx, writePos);
             if (!keys.empty()) {
+                // clang-format off
                 inputsBuilder.Add<TDqCnHashShuffle>()
                     .Output<TDqOutput>()
                         .Stage<TDqStage>()
@@ -250,8 +251,10 @@ public:
                         .Add(keys)
                         .Build()
                     .Build();
+                // clang-format on
             }
 
+            // clang-format off
             return Build<TDqStage>(ctx, writePos)
                 .Inputs(inputsBuilder.Done())
                 .Program(stageProgram)
@@ -260,6 +263,7 @@ public:
                     .Build()
                 .Settings().Build()
                 .Done().Ptr();
+            // clang-format on
         }
 
         const auto dqUnionOutput = maybeUnionAll.Cast().Output();
@@ -319,6 +323,7 @@ public:
         YQL_CLOG(INFO, ProviderS3) << "Rewrite S3WriteObject `" << cluster << "`.`" << target.Path().StringValue() << "` as sink in external stage.";
         YQL_ENSURE(!keys.empty());
 
+        // clang-format off
         return Build<TDqStage>(ctx, writePos)
             .Inputs()
                 .Add<TDqCnHashShuffle>()
@@ -334,6 +339,7 @@ public:
                 .Add(sink.BuildSink(0, ctx, writePos))
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> S3Insert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
@@ -498,6 +504,7 @@ private:
         if (TString error; !UseBlocksSink(format, keys, &rowType, State_->Configuration, error)){
             // Build CH udf serializer
             YQL_ENSURE(!error, "Got block sink error: " << error);
+            // clang-format off
             serializer = Build<TS3SinkOutput>(ctx, writePos)
                 .Input(argument)
                 .Format().Build(format)
@@ -506,6 +513,7 @@ private:
                     .Build()
                 .Settings(sinkOutputSettingsBuilder.Done())
                 .Done().Ptr();
+            // clang-format on
         } else {
             // Build arrow block serializer
             YQL_ENSURE(format == "parquet");
@@ -534,6 +542,7 @@ private:
                 .Done().Ptr();
         }
 
+        // clang-format off
         auto sinkSettings = Build<TS3SinkSettings>(ctx, writePos)
             .Path(target.Path())
             .Settings(sinkSettingsBuilder.Done())
@@ -543,6 +552,7 @@ private:
             .Extension().Build(GetExtension(format, compression ? compression->Tail().Content() : ""sv))
             .RowType(ExpandType(writePos, rowType, ctx))
             .Done();
+        // clang-format on
 
         return TS3SinkInfo(sinkSettings, serializer, argument, dataSink);
     }

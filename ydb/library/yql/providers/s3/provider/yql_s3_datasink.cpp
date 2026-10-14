@@ -105,6 +105,7 @@ private:
             return nullptr;
         }
 
+        // clang-format off
         return Build<TS3WriteObject>(ctx, w.Pos())
                 .World(w.World())
                 .DataSink(w.DataSink())
@@ -115,6 +116,7 @@ private:
                     .Build()
                 .Input(write->ChildPtr(3))
             .Done().Ptr();
+        // clang-format on
     }
 
     ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {

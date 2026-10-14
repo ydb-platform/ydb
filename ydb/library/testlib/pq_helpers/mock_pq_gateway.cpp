@@ -204,6 +204,7 @@ public:
         topicMessages.reserve(messages.size());
         for (const auto& message : messages) {
             const TInstant msgTime = message.MessageTime.value_or(now);
+            // clang-format off
             topicMessages.push_back({
                 message.Data,
                 nullptr,
@@ -220,6 +221,7 @@ public:
                 ),
                 PartitionSession
             });
+            // clang-format on
         }
 
         AddEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(std::move(topicMessages), {}, PartitionSession));

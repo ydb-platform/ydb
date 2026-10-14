@@ -107,6 +107,7 @@ TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
     static const auto immutableI64Global = IR::GlobalType{IR::ValueType::i64, false};
     static const auto immutableI32Global = IR::GlobalType{IR::ValueType::i32, false};
 
+    // clang-format off
     auto data = TMemoryLayoutData{
         .LinearMemory = Runtime::createMemory(
             compartment,
@@ -134,6 +135,7 @@ TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
         .StackLow = Runtime::createGlobal(compartment, mutableI64Global, "__stack_low"),
         .StackHigh = Runtime::createGlobal(compartment, mutableI64Global, "__stack_high"),
     };
+    // clang-format on
 
     initializeGlobal(data.StackPointer, IR::Value{StackPointer});
     initializeGlobal(data.HeapBase, IR::Value{HeapBase});

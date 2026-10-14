@@ -342,6 +342,7 @@ public:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(DatabaseId)
@@ -355,6 +356,7 @@ public:
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
+        // clang-format on
 
         RunDataQuery(sql, &params);
         SetQueryResultHandler(&TRefreshPoolStateQuery::OnLeaseUpdated, "Update lease");
@@ -467,6 +469,7 @@ public:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(DatabaseId)
@@ -489,6 +492,7 @@ public:
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
+        // clang-format on
 
         RunDataQuery(sql, &params);
     }
@@ -620,6 +624,7 @@ public:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(DatabaseId)
@@ -639,6 +644,7 @@ public:
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
+        // clang-format on
 
         RunDataQuery(sql, &params);
         SetQueryResultHandler(&TStartFirstDelayedRequestQuery::OnQueryResult, "Start request");
@@ -690,6 +696,7 @@ public:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(DatabaseId)
@@ -706,6 +713,7 @@ public:
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
+        // clang-format on
 
         RunDataQuery(sql, &params);
     }
@@ -797,6 +805,7 @@ public:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(DatabaseId)
@@ -807,6 +816,7 @@ public:
             .AddParam("$node_id")
                 .Uint32(SelfId().NodeId())
                 .Build();
+        // clang-format on
 
         auto& param = params.AddParam("$session_ids").BeginList();
         for (const TString& sessionId : SessionIds) {

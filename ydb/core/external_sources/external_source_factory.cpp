@@ -137,6 +137,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool allExternalDataSourcesAreAvailable,
                                                          const std::set<NYql::EDatabaseType>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
+    // clang-format off
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
             ToString(NYql::EDatabaseType::ObjectStorage),
@@ -209,6 +210,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
     },
     allExternalDataSourcesAreAvailable,
     availableExternalDataSources); 
+    // clang-format on
 }
 
 }

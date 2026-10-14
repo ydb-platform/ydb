@@ -33,6 +33,7 @@ TIssues BuildIssues(long httpCode, const TString& s3ErrorCode, const TString& me
     return issues;
 }
 
+// clang-format off
 static const THashMap<TStringBuf, NDqProto::StatusIds::StatusCode> S3ErrorToStatusCode = {
     { "BucketMaxSizeExceeded"sv, NDqProto::StatusIds::LIMIT_EXCEEDED },
     { "CloudTotalAliveSizeQuotaExceed"sv, NDqProto::StatusIds::LIMIT_EXCEEDED },
@@ -43,6 +44,7 @@ static const THashMap<TStringBuf, NDqProto::StatusIds::StatusCode> S3ErrorToStat
     { "AccessDenied"sv, NDqProto::StatusIds::BAD_REQUEST },
     { "NoSuchBucket"sv, NDqProto::StatusIds::BAD_REQUEST }
 };
+// clang-format on
 
 NDqProto::StatusIds::StatusCode StatusFromS3ErrorCode(const TString& s3ErrorCode) {
     if (s3ErrorCode.empty()) {

@@ -46,12 +46,14 @@ public:
         auto writeToShard = maybeWriteToShard.Cast();
         const auto tokenName = "cluster:default_" + writeToShard.DataSink().Cluster().StringValue();
 
+        // clang-format off
         return Build<TYtflowWriteWrap>(ctx, write->Pos())
             .Input(writeToShard)
             .Token<TCoSecureParam>()
                 .Name().Build(tokenName)
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr GetReadWorld(const TExprNode& /*read*/, TExprContext& /*ctx*/) override {

@@ -550,6 +550,7 @@ private:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(Request.GetRequest().GetDatabaseId())
@@ -557,6 +558,7 @@ private:
             .AddParam("$query_path")
                 .Utf8(StreamingQueryPath)
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnStreamingOperationStateFetched, "Validate streaming operation state");
         RunDataQuery(sql, &params, TTxControl::BeginTx());
@@ -667,6 +669,7 @@ private:
         }
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$run_script_actor_id")
                 .Utf8(ScriptExecutionRunnerActorIdString(RunScriptActorId))
@@ -722,6 +725,7 @@ private:
             .AddParam("$result_set_metas")
                 .JsonDocument("[]")
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Create script execution operation");
         RunDataQuery(sql, &params, StreamingQueryPath ? TTxControl::ContinueAndCommitTx() : TTxControl::BeginAndCommitTx());
@@ -1322,6 +1326,7 @@ private:
         )";
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
@@ -1341,6 +1346,7 @@ private:
             .AddParam("$transient_issues")
                 .JsonDocument(SerializeIssues(TransientIssues))
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Restart script execution");
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -2115,6 +2121,7 @@ private:
 
         const i64 minRowId = std::max(resultSet.MaxRowId - NUMBER_ROWS_IN_BATCH, resultSet.MinRowId);
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$result_set_id")
                 .Int32(resultSet.Id)
@@ -2125,6 +2132,7 @@ private:
             .AddParam("$max_row_id")
                 .Int64(resultSet.MaxRowId)
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnResultsDeleted, TStringBuilder() << "Delete script results in range [" << minRowId << "; " << resultSet.MaxRowId << "]");
         RunDataQuery(sql, &params);
@@ -2636,6 +2644,7 @@ private:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database")
                 .Utf8(Database)
@@ -2646,6 +2655,7 @@ private:
             .AddParam("$user_sid")
                 .OptionalUtf8(UserSID)
                 .Build();
+        // clang-format on
 
         if (PageToken) {
             auto pageTokenParts = ParsePageToken(PageToken);
@@ -2873,6 +2883,7 @@ private:
         }
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$retry_state")
                 .OptionalJsonDocument(RetryState ? std::optional<std::string>(NProtobufJson::Proto2Json(*RetryState, NProtobufJson::TProto2JsonConfig())) : std::nullopt)
@@ -2883,6 +2894,7 @@ private:
             .AddParam("$execution_status")
                 .Int32(Ydb::Query::EXEC_STATUS_CANCELLED)
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Drop retry state");
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -3408,6 +3420,7 @@ private:
         for (const auto& rowValue : ResultSet.rows()) {
             auto rowValueSerialized = rowValue.SerializeAsString();
             SavedSize += rowValueSerialized.size();
+            // clang-format off
             param
                 .AddListItem()
                 .BeginStruct()
@@ -3418,6 +3431,7 @@ private:
                     .AddMember("accumulated_size")
                         .Int64(AccumulatedSize + SavedSize)
                 .EndStruct();
+            // clang-format on
         }
         param
             .EndList()
@@ -3733,6 +3747,7 @@ private:
         )";
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$result_set_id")
                 .Int32(ResultSetIndex)
@@ -3746,6 +3761,7 @@ private:
             .AddParam("$limit")
                 .Uint64(RowsLimit ? RowsLimit + 1 : std::numeric_limits<ui64>::max())
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, TStringBuilder() << "Fetch results for offset " << Offset << ", limit: " << RowsLimit);
         RunStreamQuery(sql, &params, SizeLimit ? SizeLimit : 60_MB);
@@ -3946,6 +3962,7 @@ private:
         )";
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$customer_supplied_id")
                 .Utf8(Request.CustomerSuppliedId)
@@ -3961,6 +3978,7 @@ private:
             .AddParam("$lease_generation")
                 .Int64(LeaseGeneration)
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Save external effect");
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -4323,6 +4341,7 @@ private:
             {"operationTtl", TDuration::MicroSeconds(operationTtl)});
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$operation_status")
                 .Int32(Request.OperationStatus)
@@ -4375,6 +4394,7 @@ private:
             .AddParam("$lease_state")
                 .Int32(static_cast<i32>(leaseState))
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Update final status");
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -4586,6 +4606,7 @@ private:
             {"leaseState", static_cast<i32>(leaseInfo.NewLeaseState)});
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$operation_status")
                 .Int32(*OperationStatus)
@@ -4605,6 +4626,7 @@ private:
             .AddParam("$lease_state")
                 .Int32(static_cast<i32>(leaseInfo.NewLeaseState))
                 .Build();
+        // clang-format on
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Update final status");
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -4660,6 +4682,7 @@ private:
         )";
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$execution_status")
                 .Int32(Ydb::Query::EXEC_STATUS_RUNNING)
@@ -4667,8 +4690,10 @@ private:
             .AddParam("$lease_generation")
                 .Int64(LeaseGeneration)
                 .Build();
+        // clang-format on
 
         if (artifacts.Plan) {
+            // clang-format off
             params
                 .AddParam("$plan_compressed")
                     .OptionalString(artifacts.Plan)
@@ -4676,6 +4701,7 @@ private:
                 .AddParam("$plan_compression_method")
                     .OptionalUtf8(artifacts.PlanCompressionMethod)
                     .Build();
+            // clang-format on
 
             parameters << R"(
                 DECLARE $plan_compressed AS Optional<String>;
@@ -4689,6 +4715,7 @@ private:
         }
 
         if (artifacts.Ast) {
+            // clang-format off
             params
                 .AddParam("$ast_compressed")
                     .OptionalString(artifacts.Ast)
@@ -4696,6 +4723,7 @@ private:
                 .AddParam("$ast_compression_method")
                     .OptionalUtf8(artifacts.AstCompressionMethod)
                     .Build();
+            // clang-format on
 
             parameters << R"(
                 DECLARE $ast_compressed AS Optional<String>;
@@ -4756,6 +4784,7 @@ private:
         )";
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$max_lease_deadline")
                 .Timestamp(LeaseDeadline)
@@ -4763,6 +4792,7 @@ private:
             .AddParam("$max_listed_leases")
                 .Uint64(MAX_LISTED_LEASES)
                 .Build();
+        // clang-format on
 
         RunDataQuery(sql, &params, TTxControl::BeginAndCommitTx(/* snapshotRead */ true));
     }
@@ -4968,6 +4998,7 @@ private:
         const auto& [graphCompressionMethod, graphCompressed] = Compressor.Compress(PhysicalGraph.SerializeAsString());
 
         auto params = CreateParams();
+        // clang-format off
         params
             .AddParam("$graph_compressed")
                 .String(graphCompressed)
@@ -4978,6 +5009,7 @@ private:
             .AddParam("$lease_generation")
                 .Int64(LeaseGeneration)
                 .Build();
+        // clang-format on
 
         RunDataQuery(sql, &params);
     }

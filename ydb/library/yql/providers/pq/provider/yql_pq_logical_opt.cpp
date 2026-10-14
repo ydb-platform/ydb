@@ -281,6 +281,7 @@ public:
 
         const auto& newSourceMetadata = DropUnusedMetadata(pqTopic, usedColumnNames, State_->EnableUserAttributesInTopicQuery);
 
+        // clang-format off
         const TExprNode::TPtr newPqTopicSource = Build<TDqPqTopicSource>(ctx, dqPqTopicSource.Pos())
             .InitFrom(dqPqTopicSource)
             .Topic<TPqTopic>()
@@ -292,6 +293,7 @@ public:
             .RowType(DropUnusedRowItems(dqPqTopicSource.RowType().Pos(), oldRowType, usedColumnNames, ctx))
             .Done()
             .Ptr();
+        // clang-format on
 
         const TExprNode::TPtr newDqSourceWrap = Build<TDqSourceWrap>(ctx, dqSourceWrap.Pos())
             .InitFrom(dqSourceWrap)
@@ -474,6 +476,7 @@ public:
                     return node;
                 }
                 isPartitionListUpdated = true;
+                // clang-format off
                 partitionList = ctx.Builder(node.Pos())
                     .Callable("EvaluateExpr")
                         .Callable(0, "Filter")
@@ -489,6 +492,7 @@ public:
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             }
         }
 
@@ -519,6 +523,7 @@ public:
 
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         if (maybeExtractMembers) {
+            // clang-format off
             return Build<TCoFlatMap>(ctx, flatmap.Pos())
                 .InitFrom(flatmap)
                 .Input<TCoExtractMembers>()
@@ -536,7 +541,9 @@ public:
                         .Build()
                     .Build()
                 .Done();
+            // clang-format on
         }
+        // clang-format off
         return Build<TCoFlatMap>(ctx, flatmap.Pos())
             .InitFrom(flatmap)
             .Input<TDqSourceWrap>()
@@ -551,6 +558,7 @@ public:
                     .Build()
                 .Build()
             .Done();
+        // clang-format on
     }
 
 private:

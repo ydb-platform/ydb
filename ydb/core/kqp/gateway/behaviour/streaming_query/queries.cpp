@@ -1450,6 +1450,7 @@ protected:
         stateWriter.WriteJsonValue(&stateJson);
 
         NYdb::TParamsBuilder params;
+        // clang-format off
         params
             .AddParam("$database_id")
                 .Utf8(DatabaseId)
@@ -1463,6 +1464,7 @@ protected:
             .AddParam("$expire_at")
                 .OptionalTimestamp(expireAt)
                 .Build();
+        // clang-format on
 
         ExecuteQuery(__func__, sql, &params, txControl);
     }

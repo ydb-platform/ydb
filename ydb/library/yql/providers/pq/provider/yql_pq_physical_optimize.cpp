@@ -182,12 +182,14 @@ TMaybeNode<TCoNameValueTupleList> BuildDqWatermarkSettings(
     }
     const auto [_, delay] = *eventTimeAndDelay;
 
+    // clang-format off
     result.Add<TCoNameValueTuple>()
         .Name<TCoAtom>().Build(WatermarksLateArrivalDelayUsSetting)
         .Value<TCoAtom>()
             .Value(ToString(delay))
             .Build()
         .Build();
+    // clang-format on
 
     return result.Done();
 }
@@ -228,6 +230,7 @@ public:
         if (!parsingWrap.Maybe<TPqParsingWrap>() && !parsingWrap.Maybe<TDqPqPhyParsingWrap>()) {
             const auto metadataColumns = GetWatermarkMetadataColumns(watermarkGenerator.Pos(), *State_, ctx);
 
+            // clang-format off
             return Build<TCoRemovePrefixMembers>(ctx, watermarkGenerator.Pos())
                 .Input<TCoWatermarkGenerator>()
                     .InitFrom(watermarkGenerator)
@@ -241,6 +244,7 @@ public:
                     .Add<TCoAtom>().Build("__ydb_watermark_")
                     .Build()
                 .Done();
+            // clang-format on
         }
 
         const auto maybePqReadTopic = FindPqReadTopic(parsingWrap);
@@ -271,6 +275,7 @@ public:
             parsingWrap = BuildPhysicalParsingWrap(logicalParsingWrap.Cast(), ctx);
         }
 
+        // clang-format off
         return Build<TDqPhyWatermarkGenerator>(ctx, watermarkGenerator.Pos())
             .Input(parsingWrap)
             .WatermarkExtractor(eventTimeExtractor)
@@ -303,6 +308,7 @@ public:
             .WatermarkSettings(watermarkSettings)
             .PartitionKeys<TCoVoid>().Build()
             .Done();
+        // clang-format on
     }
 
     TMaybeNode<TExprBase> RewriteParsingWrap(
@@ -346,12 +352,14 @@ public:
                     .MetadataColumns(parsingWrap.MetadataColumns())
                     .Done();
 
+                // clang-format off
                 const auto inputWithoutWatermarkMetadata = Build<TCoRemovePrefixMembers>(ctx, input.Pos())
                     .Input(innerParsingWrap)
                     .Prefixes<TCoAtomList>()
                         .Add<TCoAtom>().Build("__ydb_watermark_")
                         .Build()
                     .Done();
+                // clang-format on
 
                 const auto& parents = *getParents();
                 const auto parentsIt = parents.find(input.Raw());
@@ -413,6 +421,7 @@ public:
             return node;
         }
 
+        // clang-format off
         const auto lambda = Build<TCoLambda>(ctx, parsingWrap.Pos())
             .Args({"arg"})
             .Body<TCoToFlow>()
@@ -424,6 +433,7 @@ public:
                     .Build()
                 .Build()
             .Done();
+        // clang-format on
 
         const auto result = DqPushLambdaToStageUnionAll(connection, lambda, {}, ctx, optCtx);
         if (!result) {
@@ -552,6 +562,7 @@ public:
             }
         }
 
+        // clang-format off
         auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
@@ -563,6 +574,7 @@ public:
                         .Build()
                     .Build()
                 .Build();
+        // clang-format on
 
         if (isPureDqExpr) {
             YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, build pure stage with sink";
@@ -571,6 +583,7 @@ public:
                 .Index().Build(0)
                 .Done();
 
+            // clang-format off
             return Build<TDqStage>(ctx, insert.Pos())
                 .Inputs().Build()
                 .Program<TCoLambda>()
@@ -584,6 +597,7 @@ public:
                     .Build()
                 .Settings().Build()
                 .Done();
+            // clang-format on
         }
 
         YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, push into existing stage";

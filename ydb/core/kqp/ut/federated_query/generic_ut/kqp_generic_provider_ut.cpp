@@ -566,6 +566,7 @@ namespace NKikimr::NKqp {
         ///
         void TestFilterPushdown(EProviderType providerType, const TString& where, NApi::TSelect::TWhere& expectedWhere) {
             auto f = std::make_shared<TQueryExecutorFixture>(providerType);
+            // clang-format off
             auto expectedSelect = f->GetSelectBuilder()
                 .What()
                     .NullableColumn("colDate", Ydb::Type::DATE)
@@ -574,8 +575,10 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Where(expectedWhere)
                 .GetResult();
+            // clang-format on
 
             // step 1: DescribeTable
+            // clang-format off
             f->ClientMock->ExpectDescribeTable()
                 .DataSourceInstance(f->DataSourceInstance)
                 .TypeMappingSettings(MakeTypeMappingSettings(NYql::NConnector::NApi::STRING_FORMAT))
@@ -583,20 +586,24 @@ namespace NKikimr::NKqp {
                     .NullableColumn("colDate", Ydb::Type::DATE)
                     .NullableColumn("colInt32", Ydb::Type::INT32)
                     .NullableColumn("colString", Ydb::Type::STRING);
+            // clang-format on
 
             // step 2: ListSplits
+            // clang-format off
             f->ClientMock->ExpectListSplits()
                 .Select(expectedSelect)
                 .Result()
                     .AddResponse(NewSuccess())
                         .Description("some binary description")
                         .Select(expectedSelect);
+            // clang-format on
 
             // step 3: ReadSplits
             std::vector<std::string> colString = {"Filtered text", "Text"};
             std::vector<ui16> colDate = {20326, 20329};
             std::vector<i32> colInt32 = {42, 24};
 
+            // clang-format off
             f->ClientMock->ExpectReadSplits()
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
@@ -609,6 +616,7 @@ namespace NKikimr::NKqp {
                         MakeArray<arrow::Int32Builder>("colInt32", colInt32, arrow::int32()),
                         MakeArray<arrow::BinaryBuilder>("colString", colString, arrow::binary())),
                         NewSuccess());
+            // clang-format on
 
             const TString query = fmt::format(
                 R"(
@@ -650,6 +658,7 @@ namespace NKikimr::NKqp {
         void TestFilterPushdown(EProviderType providerType) {
             using namespace NYql::NConnector::NTest;
 
+            // clang-format off
             auto expectedWhereInt = TConnectorClientMock::TWhereBuilder<>()
                 .Filter().Equal()
                     .Column("colInt32")
@@ -657,11 +666,13 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Done()
                 .GetResult();
+            // clang-format on
 
             TestFilterPushdown(providerType, "colInt32 = 42", expectedWhereInt);
             TestFilterPushdown(providerType, "colInt32 = EvaluateExpr(44 - 2)", expectedWhereInt);
             TestFilterPushdown(providerType, "colInt32 = 44 - 2", expectedWhereInt);
 
+            // clang-format off
             auto expectedWhereDate = TConnectorClientMock::TWhereBuilder<>()
                 .Filter().Equal()
                     .Column("colDate")
@@ -669,6 +680,7 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Done()
                 .GetResult();
+            // clang-format on
 
             TestFilterPushdown(providerType, "colDate = Date('2025-08-26')", expectedWhereDate);
             TestFilterPushdown(providerType, "colDate = EvaluateExpr(Date('2025-08-27') - Interval(\"P1D\"))", expectedWhereDate);

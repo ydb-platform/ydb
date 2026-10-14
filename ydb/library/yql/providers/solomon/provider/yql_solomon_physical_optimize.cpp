@@ -103,6 +103,7 @@ public:
                 .Index().Build(0)
                 .Done();
 
+            // clang-format off
             return Build<TDqStage>(ctx, writePos)
                 .Inputs().Build()
                 .Program<TCoLambda>()
@@ -116,6 +117,7 @@ public:
                     .Build()
                 .Settings().Build()
                 .Done();
+            // clang-format on
         }
         
         const auto maybeDqUnion = input.Maybe<TDqCnUnionAll>();
@@ -218,6 +220,7 @@ private:
         }
         YQL_ENSURE(!cluster.empty(), "Cluster is not defined. You can define it inside connection, or inside query.");
 
+        // clang-format off
         return Build<TSoShard>(ctx, shardNode.Pos())
             .SolomonCluster<TCoAtom>().Value(solomonCluster).Build()
             .Project<TCoAtom>().Value(project).Build()
@@ -226,6 +229,7 @@ private:
             .RowType(rowType)
             .Token<TCoSecureParam>().Name().Build("cluster:default_" + solomonCluster).Build()
             .Done();
+        // clang-format on
     }
 
 private:

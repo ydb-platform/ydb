@@ -259,6 +259,7 @@ public:
                 }
             }
 
+            // clang-format off
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
                     .World(soReadObject.World())
@@ -285,6 +286,7 @@ public:
                 .RowType(soReadObject.RowType())
                 .Settings(settings)
                 .Done().Ptr();
+            // clang-format on
         }
         return read;
     }

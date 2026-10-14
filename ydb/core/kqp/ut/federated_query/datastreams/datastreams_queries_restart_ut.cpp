@@ -73,11 +73,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsQueriesRestart) {
 
             {
                 auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+                // clang-format off
                 alterSettings
                     .BeginAlterPartitioningSettings()
                         .MinActivePartitions(20)
                         .MaxActivePartitions(20)
                     .EndAlterTopicPartitioningSettings();
+                // clang-format on
                 const auto result = GetTopicClient(local)->AlterTopic(inputTopicName, alterSettings).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             }

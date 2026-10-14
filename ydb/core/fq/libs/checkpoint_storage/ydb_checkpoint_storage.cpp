@@ -179,6 +179,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     query << firstPart;
 
     auto params = std::make_shared<NYdb::TParamsBuilder>();
+    // clang-format off
     params->
          AddParam("$graph_id")
             .String(generationContext->PrimaryKey)
@@ -198,6 +199,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
         .AddParam("$ts")
             .Timestamp(TInstant::Now())
             .Build();
+    // clang-format on
 
     if (graphDescContext->NewGraphDescription) {
         const TString graphDescriptionPart = fmt::format(R"sql(
@@ -263,6 +265,7 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
         CheckpointsMetadataTable);
 
     auto params = std::make_shared<NYdb::TParamsBuilder>();
+    // clang-format off
     params->
          AddParam("$graph_id")
             .String(generationContext->PrimaryKey)
@@ -282,6 +285,7 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
         .AddParam("$ts")
             .Timestamp(TInstant::Now())
             .Build();
+    // clang-format on
 
     auto ttxControl = TTxControl::ContinueAndCommitTx();
     return generationContext->Session->ExecuteDataQuery(query, ttxControl, std::move(params), generationContext->ExecDataQuerySettings).Apply(
@@ -500,6 +504,7 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
         CheckpointsMetadataTable);
 
     auto params = std::make_shared<NYdb::TParamsBuilder>();
+    // clang-format off
     params->
          AddParam("$graph_id")
             .String(generationContext->PrimaryKey)
@@ -510,6 +515,7 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
         .AddParam("$seq_no")
             .Uint64(context->CheckpointId.SeqNo)
             .Build();
+    // clang-format on
 
     return generationContext->Session->ExecuteDataQuery(
         query,
@@ -770,6 +776,7 @@ TCheckpointStorage::TCheckpointStorage(
 
 TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
 {
+    // clang-format off
     auto graphDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("generation", EPrimitiveType::Uint64)
@@ -779,10 +786,12 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
             .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
+    // clang-format on
     auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc), acl);
 
     // TODO: graph_id could be just secondary index, but API forbids it,
     // so we set it primary key column to have index
+    // clang-format off
     auto checkpointDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("coordinator_generation", EPrimitiveType::Uint64)
@@ -798,8 +807,10 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
             .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
+    // clang-format on
     auto f2 = CreateTable(YdbConnection, CheckpointsMetadataTable, std::move(checkpointDesc), acl);
 
+    // clang-format off
     auto checkpointGraphsDescDesc = TTableBuilder()
         .AddNullableColumn("id", EPrimitiveType::String)
         .AddNullableColumn("ref_count", EPrimitiveType::Uint64)
@@ -810,6 +821,7 @@ TFuture<TIssues> TCheckpointStorage::Init(const NACLib::TDiffACL& acl)
             .SetMinPartitionsCount(1)
         .EndPartitioningSettings()
         .Build();
+    // clang-format on
     auto f3 = CreateTable(YdbConnection, CheckpointsGraphsDescriptionTable, std::move(checkpointGraphsDescDesc), acl);
 
     std::vector<NThreading::TFuture<NYdb::TStatus>> futures{f1, f2, f3};
@@ -1068,6 +1080,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
                 CheckpointsMetadataTable);
 
     auto params = std::make_shared<NYdb::TParamsBuilder>();
+    // clang-format off
     params->
          AddParam("$graph_id")
             .String(graphId)
@@ -1084,6 +1097,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
         .AddParam("$ts")
             .Timestamp(TInstant::Now())
             .Build();
+    // clang-format on
 
             auto future = session->ExecuteDataQuery(
                 query,
@@ -1141,6 +1155,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteCheckpoints(
                     .Build();
 
             if (checkpointUpperBound) {
+                // clang-format off
                 params
                     ->AddParam("$coordinator_generation")
                         .Uint64(checkpointUpperBound->CoordinatorGeneration)
@@ -1148,6 +1163,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteCheckpoints(
                     .AddParam("$seq_no")
                         .Uint64(checkpointUpperBound->SeqNo)
                         .Build();
+                // clang-format on
             }
 
             return params;

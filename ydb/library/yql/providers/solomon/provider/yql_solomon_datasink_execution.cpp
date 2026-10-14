@@ -49,6 +49,7 @@ private:
         TExprContext& ctx)
     {
         YQL_CLOG(INFO, ProviderSolomon) << "Delegate execution of " << input->Content() << " to dq provider";
+        // clang-format off
         auto delegatedNode = Build<TPull>(ctx, input->Pos())
             .Input(input)
             .BytesLimit()
@@ -74,6 +75,7 @@ private:
             .Origin(originInput)
             .Done()
             .Ptr();
+        // clang-format on
 
         auto atomType = ctx.MakeType<TUnitExprType>();
 

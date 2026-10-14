@@ -34,6 +34,7 @@ public:
         const auto listType = maybeWriteToShard.Cast().Input().Ref().GetTypeAnn();
         const auto itemType = listType->Cast<TListExprType>()->GetItemType();
 
+        // clang-format off
         return Build<TSoWriteToShard>(ctx, write->Pos())
             .InitFrom(maybeWriteToShard.Cast())
             .Input<TYtflowReadStub>()
@@ -41,6 +42,7 @@ public:
                 .ItemType(ExpandType(TPositionHandle{}, *itemType, ctx))
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
 private:

@@ -58,12 +58,14 @@ public:
         auto writeTopic = maybeWriteTopic.Cast();
         const auto tokenName = "cluster:default_" + writeTopic.DataSink().Cluster().StringValue();
 
+        // clang-format off
         return Build<TYtflowWriteWrap>(ctx, write->Pos())
             .Input(writeTopic)
             .Token<TCoSecureParam>()
                 .Name().Build(tokenName)
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr GetReadWorld(const TExprNode& read, TExprContext& /*ctx*/) override {

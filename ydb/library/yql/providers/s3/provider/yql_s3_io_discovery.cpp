@@ -219,6 +219,7 @@ private:
             bool isTextEncoded;
             NS3Details::PackPathsList(listedPaths, packedPaths, isTextEncoded);
 
+            // clang-format off
             newPaths.emplace_back(
                 Build<TS3Path>(ctx, generatedPathsPack.Pos())
                     .Data<TCoString>()
@@ -232,7 +233,9 @@ private:
                     .ExtraColumns(generatedPathsPack.ExtraColumns())
                     .Done().Ptr()
             );
+            // clang-format on
 
+            // clang-format off
             extraValuesItems.emplace_back(
                 ctx.Builder(generatedPathsPack.ExtraColumns().Pos())
                     .Callable("Replicate")
@@ -243,11 +246,13 @@ private:
                     .Seal()
                     .Build()
             );
+            // clang-format on
         }
 
         YQL_ENSURE(dirIndex == requests.size());
 
         if (newPaths.empty()) {
+            // clang-format off
             replaces.emplace(source.Raw(),
                 ctx.Builder(source.Pos())
                     .Callable("List")
@@ -257,6 +262,7 @@ private:
                     .Seal()
                     .Build()
             );
+            // clang-format on
             return TStatus::Ok;
         }
 
@@ -402,14 +408,17 @@ private:
                     YQL_ENSURE(generatedColumnsConfig->SchemaTypeNode);
 
                     for (auto& ev : *extraValues) {
+                        // clang-format off
                         auto resultType = ctx.Builder(object.Pos())
                             .Callable("StructMemberType")
                                 .Add(0, generatedColumnsConfig->SchemaTypeNode)
                                 .Atom(1, ev.Name)
                             .Seal()
                             .Build();
+                        // clang-format on
                         TExprNode::TPtr value;
                         if (ev.Type.Defined()) {
+                            // clang-format off
                             value = ctx.Builder(object.Pos())
                                 .Callable("StrictCast")
                                     .Callable(0, "Data")
@@ -419,6 +428,7 @@ private:
                                     .Add(1, resultType)
                                 .Seal()
                                 .Build();
+                            // clang-format on
                         } else {
                             value = ctx.Builder(object.Pos())
                                 .Callable("DataOrOptionalData")
@@ -444,6 +454,7 @@ private:
                 bool isTextFormat;
                 NS3Details::PackPathsList(pathList, packedPaths, isTextFormat);
 
+                // clang-format off
                 pathNodes.emplace_back(
                     Build<TS3Path>(ctx, object.Pos())
                         .Data<TCoString>()
@@ -457,6 +468,7 @@ private:
                         .ExtraColumns(extraColumns)
                     .Done().Ptr()
                 );
+                // clang-format on
             }
 
             const auto settingsPos = read.Ref().Child(4)->Pos();
@@ -511,11 +523,13 @@ private:
             }
 
             TExprNode::TPtr s3Object;
+            // clang-format off
             s3Object = Build<TS3Object>(ctx, object.Pos())
                     .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
                     .Format(std::move(format))
                     .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
+            // clang-format on
 
             auto row = Build<TCoArgument>(ctx, read.Pos())
                 .Name("row")
@@ -527,6 +541,7 @@ private:
                     .Build()
                 .Done().Ptr();
             
+            // clang-format off
             replaces.emplace(node, userSchema.back() ?
                 Build<TS3ReadObject>(ctx, read.Pos())
                     .World(read.World())
@@ -545,6 +560,7 @@ private:
                     .Path(ctx.NewAtom(object.Pos(), path))
                     .FilterPredicate(emptyPredicate)
                 .Done().Ptr());
+            // clang-format on
         }
 
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));

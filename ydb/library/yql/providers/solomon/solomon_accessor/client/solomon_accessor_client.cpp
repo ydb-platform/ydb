@@ -691,11 +691,13 @@ private:
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
+            // clang-format off
             w.BeginObject()
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
             .EndObject();
+            // clang-format on
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
@@ -719,11 +721,13 @@ private:
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
+            // clang-format off
             w.BeginObject()
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
             .EndObject();
+            // clang-format on
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
@@ -746,12 +750,14 @@ private:
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
+            // clang-format off
             w.BeginObject()
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
                 .UnsafeWriteKey("limit").WriteLongLong(LabelsListingLimit)
             .EndObject();
+            // clang-format on
         } else {
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
@@ -774,6 +780,7 @@ private:
 
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
+        // clang-format off
         w.BeginObject()
             .UnsafeWriteKey("from").WriteString(from.ToString())
             .UnsafeWriteKey("to").WriteString(to.ToString())
@@ -781,6 +788,7 @@ private:
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
                     .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
+        // clang-format on
 
         if (!ds.GetDisabled()) {
             w

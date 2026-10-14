@@ -416,6 +416,7 @@ void Init(
     }
 
     if (protoConfig.GetQuotasManager().GetEnabled()) {
+        // clang-format off
         auto quotaService = NFq::CreateQuotaServiceActor(
             protoConfig.GetQuotasManager(),
             protoConfig.GetControlPlaneStorage().GetStorage(),
@@ -433,6 +434,7 @@ void Init(
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_QUERY_RESULT_LIMIT, 20_MB, 2_GB)
             },
             appData->Mon);
+        // clang-format on
         actorRegistrator(NFq::MakeQuotaServiceActorId(nodeId), quotaService);
 
         auto quotaProxy = NFq::CreateQuotaProxyActor(

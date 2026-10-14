@@ -53,6 +53,7 @@ public:
 
         auto userSchemaColumnsNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
 
+        // clang-format off
         return Build<TPqReadTopic>(ctx, read->Pos())
             .InitFrom(maybeReadTopic.Cast())
             .Topic<TPqTopic>()
@@ -65,6 +66,7 @@ public:
                 .Build()
             .UserSchemaColumns(std::move(userSchemaColumnsNode))
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr ApplyUnordered(const TExprNode::TPtr& read, TExprContext& ctx) override {
@@ -87,6 +89,7 @@ public:
         auto listType = maybeWriteTopic.Cast().Input().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
+        // clang-format off
         return Build<TPqWriteTopic>(ctx, write->Pos())
             .InitFrom(maybeWriteTopic.Cast())
             .Input<TYtflowReadStub>()
@@ -94,6 +97,7 @@ public:
                 .ItemType(ExpandType(TPositionHandle{}, *itemType, ctx))
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
 private:

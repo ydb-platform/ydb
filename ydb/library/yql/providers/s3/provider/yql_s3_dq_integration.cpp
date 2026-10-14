@@ -259,6 +259,7 @@ public:
             const auto token = "cluster:default_" + clusterName;
             YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
 
+            // clang-format off
             TExprNode::TListType settings(1U,
                 ctx.Builder(s3ReadObject.Object().Pos())
                     .List()
@@ -266,6 +267,7 @@ public:
                         .Add(1, s3ReadObject.Object().Format().Ptr())
                     .Seal().Build()
             );
+            // clang-format on
 
             TExprNodeList extraColumnsExtents;
             for (size_t i = 0; i < s3ReadObject.Object().Paths().Size(); ++i) {
@@ -276,6 +278,7 @@ public:
                 TPathList paths;
                 UnpackPathsList(packed, isTextEncoded, paths);
 
+                // clang-format off
                 extraColumnsExtents.push_back(
                     ctx.Builder(batch.ExtraColumns().Pos())
                         .Callable("Replicate")
@@ -286,9 +289,11 @@ public:
                         .Seal()
                         .Build()
                 );
+                // clang-format on
             }
             YQL_ENSURE(!extraColumnsExtents.empty());
             if (s3ReadObject.Object().Paths().Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>()->GetSize()) {
+                // clang-format off
                 settings.push_back(
                     ctx.Builder(s3ReadObject.Object().Pos())
                         .List()
@@ -297,6 +302,7 @@ public:
                         .Seal()
                         .Build()
                 );
+                // clang-format on
             }
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
@@ -317,6 +323,7 @@ public:
                         for (const auto& child : columnOrderChildren) {
                             columnAtoms.push_back(ctx.NewAtom(s3ReadObject.Object().Pos(), child->Content()));
                         }
+                        // clang-format off
                         settingsList.push_back(
                             ctx.Builder(s3ReadObject.Object().Pos())
                                 .List()
@@ -325,12 +332,14 @@ public:
                                 .Seal()
                                 .Build()
                         );
+                        // clang-format on
                     }
                 }
                 return ctx.NewList(s3ReadObject.Object().Pos(), std::move(settingsList));
             };
 
             if (State_->Configuration->SourceCoroActor.GetOrDefault() && format != "raw" && format != "json_list") {
+                // clang-format off
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
                         .World(s3ReadObject.World())
@@ -349,8 +358,10 @@ public:
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
                     .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
                     .Done().Ptr();
+                // clang-format on
             } else {
                 if (const auto& objectSettings = s3ReadObject.Object().Settings()) {
+                    // clang-format off
                     settings.emplace_back(
                         ctx.Builder(objectSettings.Cast().Pos())
                             .List()
@@ -358,6 +369,7 @@ public:
                                 .Add(1, objectSettings.Cast().Ptr())
                             .Seal().Build()
                     );
+                    // clang-format on
                 }
                 auto readSettings = s3ReadObject.Object().Settings().Cast().Ptr();
 
@@ -377,6 +389,7 @@ public:
                 }
 
                 auto emptyNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+                // clang-format off
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
                         .World(s3ReadObject.World())
@@ -401,6 +414,7 @@ public:
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
                     .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
                     .Done().Ptr();
+                // clang-format on
             }
         }
         return read;

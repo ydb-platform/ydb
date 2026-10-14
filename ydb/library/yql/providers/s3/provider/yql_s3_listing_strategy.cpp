@@ -601,6 +601,7 @@ public:
               [listerFactory, httpGateway, retryPolicy, minParallelism, allowLocalFiles](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
+                  // clang-format off
                   auto ptr = std::shared_ptr<IS3Lister>(
                       new TBFSDirectoryResolverIterator{
                           listingRequest,
@@ -620,6 +621,7 @@ public:
                               listerFactory, httpGateway, retryPolicy, allowLocalFiles},
                           minParallelism,
                           options.MaxResultSet});
+                  // clang-format on
                   return MakeFuture(std::move(ptr));
               },
               "TUnPartitionedDatasetS3ListingStrategy") {}
@@ -1011,6 +1013,7 @@ public:
               [listerFactory, httpGateway, retryPolicy, allowLocalFiles, maxParallelOps](
                   const TListingRequest& listingRequest,
                   TS3ListingOptions options) {
+                  // clang-format off
                   auto ptr = std::shared_ptr<IS3Lister>(
                       new TConcurrentBFSDirectoryResolverIterator{
                           listingRequest,
@@ -1039,6 +1042,7 @@ public:
                               listerFactory, httpGateway, retryPolicy, allowLocalFiles},
                           options.MaxResultSet,
                           maxParallelOps});
+                  // clang-format on
                   return MakeFuture(std::move(ptr));
               },
               "TConcurrentPartitionedDatasetS3ListingStrategy") { }
@@ -1089,6 +1093,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     size_t maxParallelOps,
     bool allowLocalFiles) {
+    // clang-format off
     return std::make_shared<TLoggingS3ListingStrategy>(
         std::make_shared<TCompositeS3ListingStrategy>(
             std::vector<std::shared_ptr<IS3ListingStrategy>>{
@@ -1136,6 +1141,7 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
                              minDesiredDirectoriesOfFilesPerQuery,
                              maxParallelOps,
                              allowLocalFiles)}})}));
+    // clang-format on
 }
 
 IS3ListingStrategy::TPtr MakeCollectingS3ListingStrategy(

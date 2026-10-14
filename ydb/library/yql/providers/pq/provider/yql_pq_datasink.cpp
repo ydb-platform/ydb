@@ -144,6 +144,7 @@ public:
             return nullptr;
         }
 
+        // clang-format off
         auto topicNode = Build<TPqTopic>(ctx, write.Pos())
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
@@ -152,7 +153,9 @@ public:
             .Props(BuildTopicPropsList(*found, write.Pos(), ctx))
             .Metadata().Build()
             .Done();
+        // clang-format on
 
+        // clang-format off
         return Build<TPqWriteTopic>(ctx, node->Pos())
             .World(write.World())
             .DataSink(write.DataSink().Ptr())
@@ -163,6 +166,7 @@ public:
             .Mode(settings.Mode)
             .Settings(settings.Other)
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override {
@@ -172,10 +176,12 @@ public:
         }
 
         TPositionHandle pos;
+        // clang-format off
         return Build<NNodes::TPqClusterConfig>(ctx, pos)
             .Endpoint<TCoAtom>().Build(config->Endpoint)
             .TvmId<TCoAtom>().Build(ToString(config->TvmId))
             .Done().Ptr();
+        // clang-format on
     }
 
     ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {

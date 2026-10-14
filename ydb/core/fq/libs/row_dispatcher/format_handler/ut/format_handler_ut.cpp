@@ -603,6 +603,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             0
         ));
 
+        // clang-format off
         auto records = TVector<TMessages>{
             {
                 {firstOffset + 0, firstOffset + 1},
@@ -612,6 +613,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("event1").AddString("str_first__large__").AddString("some_str"))
             },
         };
+        // clang-format on
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
             "",
@@ -620,6 +622,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             ExpectedFilteredRows(records)
         ));
 
+        // clang-format off
         records = TVector<TMessages>{
             {
                 {firstOffset + 0, firstOffset + 1},
@@ -636,6 +639,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("event3").AddString("str_first__large__").AddString("some_str"))
             },
         };
+        // clang-format on
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}, {"column_1", "[DataType; String]"}},
             "",
@@ -850,6 +854,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             GetRecord(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z"})"),
         });
 
+        // clang-format off
         auto records = TVector<TMessages>{
             {
                 {firstOffset + 2, firstOffset + 3},
@@ -866,6 +871,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:47Z"))
             },
         };
+        // clang-format on
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
@@ -879,6 +885,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             GetRecord(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z"})"),
         });
 
+        // clang-format off
         records = TVector<TMessages>{
             {
                 {firstOffset + 4, firstOffset + 5},
@@ -910,6 +917,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:04Z")) // watermark = NULL
             },
         };
+        // clang-format on
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
@@ -957,6 +965,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             GetRecord(firstOffset + 1, R"({"ts": "1970-01-01T00:00:43Z", "pass": 0})"),
         });
 
+        // clang-format off
         auto records = TVector<TMessages>{
             {
                 {firstOffset + 2},
@@ -971,6 +980,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
         };
+        // clang-format on
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",
@@ -984,6 +994,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
             GetRecord(firstOffset + 3, R"({"ts": "1970-01-01T00:00:45Z", "pass": 0})"),
         });
 
+        // clang-format off
         records = TVector<TMessages>{
             {
                 {firstOffset + 4},
@@ -998,6 +1009,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z").AddUint64(1))
             },
         };
+        // clang-format on
         CheckSuccess(MakeClient(
             {{"ts", "[DataType; String]"}, {"pass", "[DataType; Uint64]"}},
             R"(CAST(`ts` AS Timestamp?) - Interval("PT5S"))",

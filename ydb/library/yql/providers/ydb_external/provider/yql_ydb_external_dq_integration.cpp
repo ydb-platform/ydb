@@ -53,6 +53,7 @@ public:
             const auto& table = State_->Tables.at(TState::TTableKey(read.DataSource().Cluster().StringValue(), read.Table().StringValue()));
             columns.emplace_back(ctx.NewAtom(node->Pos(), table.RowType->GetItems().front()->GetName()));
         }
+        // clang-format off
         return Build<TDqSourceWrap>(ctx, node->Pos())
             .Input<TYdbExternalSourceSettings>()
                 .World(read.World())
@@ -66,6 +67,7 @@ public:
             .RowType(ExpandType(node->Pos(), *row, ctx))
             .DataSource(read.DataSource().Cast<TCoDataSource>())
             .Done().Ptr();
+        // clang-format on
     }
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {

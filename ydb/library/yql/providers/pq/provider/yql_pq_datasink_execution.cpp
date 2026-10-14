@@ -37,6 +37,7 @@ public:
 
     TStatusCallbackPair DelegateExecutionToDqProvider(const TExprNode::TPtr& input, const TExprNode::TPtr& originInput, TExprContext& ctx) {
         YQL_CLOG(INFO, ProviderPq) << "Delegate execution of " << input->Content() << " to dq provider";
+        // clang-format off
         auto delegatedNode = Build<TPull>(ctx, input->Pos())
             .Input(input)
             .BytesLimit()
@@ -62,6 +63,7 @@ public:
             .Origin(originInput)
             .Done()
             .Ptr();
+        // clang-format on
 
         auto atomType = ctx.MakeType<TUnitExprType>();
 

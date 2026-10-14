@@ -84,6 +84,7 @@ public:
 
         auto newRowTypeNode = ExpandType(node.Pos(), *ctx.MakeType<TStructExprType>(newColumnTypes), ctx);
 
+        // clang-format off
         return Build<TDqSourceWrap>(ctx, dqSource.Pos())
             .InitFrom(dqSource)
             .Input<TSoSourceSettings>()
@@ -101,6 +102,7 @@ public:
                 .Build()
             .RowType(newRowTypeNode)
             .Done();
+        // clang-format on
     }
 
 private:

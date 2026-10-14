@@ -2,13 +2,20 @@
 
 #include "defs.h"
 
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
+
+#include <cstdint>
 
 #include <util/generic/bitops.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
+#include <util/generic/vector.h>
 #include <ydb/core/util/max_tracker.h>
 
 namespace NKikimr {
@@ -17,12 +24,67 @@ namespace NKikimr {
 // Storage pool monitoring counters
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+class TStoragePoolCounters;
+
+struct TDsProxyInFlightLatencyStats {
+    ui64 InFlightLatencyUsSum = 0;
+    ui64 InFlightCount = 0;
+    ui64 InFlightLatencyUsMax = 0;
+
+    void Add(const TDsProxyInFlightLatencyStats& other) {
+        InFlightLatencyUsSum += other.InFlightLatencyUsSum;
+        InFlightCount += other.InFlightCount;
+        InFlightLatencyUsMax = Max(InFlightLatencyUsMax, other.InFlightLatencyUsMax);
+    }
+};
+
+struct TDsProxyInFlightLatencyBucketKey {
+    TIntrusivePtr<TStoragePoolCounters> PoolCounters;
+    ui32 HandleClass = 0;
+    ui32 SizeClassIdx = 0;
+
+    size_t Hash() const {
+        return MultiHash(reinterpret_cast<uintptr_t>(PoolCounters.Get()), HandleClass, SizeClassIdx);
+    }
+
+    friend bool operator ==(const TDsProxyInFlightLatencyBucketKey& x,
+            const TDsProxyInFlightLatencyBucketKey& y) {
+        return x.PoolCounters.Get() == y.PoolCounters.Get()
+            && x.HandleClass == y.HandleClass
+            && x.SizeClassIdx == y.SizeClassIdx;
+    }
+};
+
+struct TDsProxyInFlightLatencyBucket {
+    TDsProxyInFlightLatencyBucketKey Key;
+    TDsProxyInFlightLatencyStats Stats;
+};
+
+struct TEvDsProxyInFlightLatencySnapshot
+    : public TEventLocal<TEvDsProxyInFlightLatencySnapshot, TEvBlobStorage::EvDsProxyInFlightLatencySnapshot>
+{
+    TVector<TDsProxyInFlightLatencyBucket> Buckets;
+
+    TEvDsProxyInFlightLatencySnapshot() = default;
+
+    explicit TEvDsProxyInFlightLatencySnapshot(TVector<TDsProxyInFlightLatencyBucket>&& buckets)
+        : Buckets(std::move(buckets))
+    {}
+};
+
+IActor* CreateDsProxyInFlightLatencyAggregator();
+
 struct TRequestMonItem {
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
     TMaxTracker ResponseTimeMax;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeUsCompletedSum;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseTimeCompletedCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlightResponseTimeUsSum;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlightCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlightResponseTimeUsMax;
 
     void Init(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
@@ -34,14 +96,29 @@ struct TRequestMonItem {
         ResponseTime = counters->GetHistogram("responseTimeMs",
             NMonitoring::ExplicitHistogram(std::move(bounds)));
         ResponseTimeMax.Init(counters->GetCounter("responseTimeMsMax", false));
+        ResponseTimeUsCompletedSum = counters->GetCounter("responseTimeUsCompletedSum", true);
+        ResponseTimeCompletedCount = counters->GetCounter("responseTimeCompletedCount", true);
+        InFlightResponseTimeUsSum = counters->GetCounter("inFlightResponseTimeUsSum", false);
+        InFlightCount = counters->GetCounter("inFlightCount", false);
+        InFlightResponseTimeUsMax = counters->GetCounter("inFlightResponseTimeUsMax", false);
     }
 
     void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, double durationSeconds) {
+        const double durationMs = durationSeconds * 1000.0;
+        const ui64 durationUs = durationSeconds * 1'000'000.0;
         *RequestBytes += requestBytes;
         *GeneratedSubrequests += generatedSubrequests;
         *GeneratedSubrequestBytes += generatedSubrequestBytes;
-        ResponseTime->Collect(durationSeconds * 1000.0);
-        ResponseTimeMax.Collect((i64)(durationSeconds * 1000.0));
+        ResponseTime->Collect(durationMs);
+        ResponseTimeMax.Collect((i64)durationMs);
+        ResponseTimeUsCompletedSum->Add(durationUs);
+        ResponseTimeCompletedCount->Inc();
+    }
+
+    void SetInFlightLatencyStats(const TDsProxyInFlightLatencyStats& stats) {
+        InFlightResponseTimeUsSum->Set(stats.InFlightLatencyUsSum);
+        InFlightCount->Set(stats.InFlightCount);
+        InFlightResponseTimeUsMax->Set(stats.InFlightLatencyUsMax);
     }
 
     void Update() {
@@ -160,17 +237,31 @@ private:
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PoolGroup;
 
 public:
-    TRequestMonItem& GetItem(EHandleClass handleClass, ui32 requestBytes) {
-        Y_ABORT_UNLESS((ui32)handleClass < (ui32)HcCount);
-        ui32 sizeClassIdx = 0;
+    static ui32 SizeClassIndex(EHandleClass handleClass, ui32 requestBytes) {
         if (IsReducedHandleClass(handleClass)) {
-            sizeClassIdx = ReducedSizeClassFromSizeBytes(requestBytes);
+            return ReducedSizeClassFromSizeBytes(requestBytes);
+        } else {
+            return SizeClassFromSizeBytes(requestBytes);
+        }
+    }
+
+    TRequestMonItem& GetItem(EHandleClass handleClass, ui32 requestBytes) {
+        return GetItemBySizeClass(handleClass, SizeClassIndex(handleClass, requestBytes));
+    }
+
+    TRequestMonItem& GetItemBySizeClass(EHandleClass handleClass, ui32 sizeClassIdx) {
+        Y_ABORT_UNLESS((ui32)handleClass < (ui32)HcCount);
+        if (IsReducedHandleClass(handleClass)) {
             Y_ABORT_UNLESS(sizeClassIdx <= MaxReducedSizeClassBucketIdx);
         } else {
-            sizeClassIdx = SizeClassFromSizeBytes(requestBytes);
             Y_ABORT_UNLESS(sizeClassIdx <= MaxSizeClassBucketIdx);
         }
         return RequestMon[(ui32)handleClass][sizeClassIdx];
+    }
+
+    void SetInFlightLatencyStats(EHandleClass handleClass, ui32 sizeClassIdx,
+            const TDsProxyInFlightLatencyStats& stats) {
+        GetItemBySizeClass(handleClass, sizeClassIdx).SetInFlightLatencyStats(stats);
     }
 
     TStoragePoolCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
@@ -245,3 +336,9 @@ public:
 
 } // NKikimr
 
+template<>
+struct THash<NKikimr::TDsProxyInFlightLatencyBucketKey> {
+    size_t operator()(const NKikimr::TDsProxyInFlightLatencyBucketKey& key) const {
+        return key.Hash();
+    }
+};

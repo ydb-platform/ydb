@@ -335,6 +335,7 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
   private:
     using TSimdI8 = typename TTraits::TSimdI8;
     template <class T> using TSimd = typename TTraits::template TSimd8<T>;
+    using TPerm = std::array<ui8, TSimd<ui8>::SIZE>;
 
     static constexpr ui8 kSIMDMaxCols = 4;
     static constexpr ui8 kSIMDMaxInnerLoopSize = 4;
@@ -351,7 +352,7 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
         size_t RowOffset;
     };
     SIMDSmallTupleDesc SIMDSmallTuple_;
-    std::vector<typename SIMDPack<TTraits>::TPerm> SIMDPermMasks_;
+    std::vector<TPerm> SIMDPermMasks_;
 
     struct SIMDTransposeDesc {
         ui8 Cols = 0;

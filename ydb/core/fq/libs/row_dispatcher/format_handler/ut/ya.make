@@ -12,8 +12,10 @@ PEERDIR(
     ydb/core/fq/libs/row_dispatcher/format_handler/filters
     ydb/core/fq/libs/row_dispatcher/format_handler/parsers
     ydb/core/fq/libs/row_dispatcher/format_handler/ut/common
+    ydb/core/fq/libs/row_dispatcher/purecalc_compilation
 
     yql/essentials/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 SIZE(MEDIUM)

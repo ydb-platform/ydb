@@ -1,16 +1,19 @@
 #include "ut_common.h"
 
+#include <library/cpp/testing/common/env.h>
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/backtrace.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-
-#include <ydb/core/testlib/basics/appdata.h>
 
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
+
+#include <util/system/datetime.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -155,6 +158,51 @@ TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
 
 //// TBaseFixture
 
+TFormatHandlerTestRuntime::TFormatHandlerTestRuntime()
+    : TTestActorRuntimeBase(/* nodeCount */ 1, /* useRealThreads */ true)
+{}
+
+void TFormatHandlerTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
+    // These tests need AppData for actor helpers, but no tablet services or factories.
+    node->AppData0 = std::make_shared<NKikimr::TAppData>(
+        0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, FunctionRegistry.Get(), nullptr, nullptr);
+    node->LogSettings->Append(
+        NKikimrServices::EServiceKikimr_MIN,
+        NKikimrServices::EServiceKikimr_MAX,
+        NKikimrServices::EServiceKikimr_Name);
+
+    const THashMap<TString, NActors::NLog::EPriority> priorities = {
+        {"TRACE", NActors::NLog::PRI_TRACE},
+        {"DEBUG", NActors::NLog::PRI_DEBUG},
+        {"INFO", NActors::NLog::PRI_INFO},
+        {"NOTICE", NActors::NLog::PRI_NOTICE},
+        {"WARN", NActors::NLog::PRI_WARN},
+        {"ERROR", NActors::NLog::PRI_ERROR},
+        {"CRIT", NActors::NLog::PRI_CRIT},
+        {"ALERT", NActors::NLog::PRI_ALERT},
+        {"EMERG", NActors::NLog::PRI_EMERG},
+    };
+    for (int service = NKikimrServices::EServiceKikimr_MIN; service <= NKikimrServices::EServiceKikimr_MAX; ++service) {
+        if (!NKikimrServices::EServiceKikimr_IsValid(service)) {
+            continue;
+        }
+        TString level = GetTestParam(TStringBuilder() << "TEST_LOG_" << NKikimrServices::EServiceKikimr_Name(static_cast<NKikimrServices::EServiceKikimr>(service)));
+        if (level.empty()) {
+            level = GetTestParam("TEST_LOG");
+        }
+        auto priority = service == NKikimrServices::FQ_ROW_DISPATCHER ? NActors::NLog::PRI_TRACE : NActors::NLog::PRI_WARN;
+        if (!level.empty()) {
+            level.to_upper();
+            const auto it = priorities.find(level);
+            UNIT_ASSERT_C(it != priorities.end(), "Unknown log level: " << level);
+            priority = it->second;
+        }
+        TString explanation;
+        UNIT_ASSERT_C(!node->LogSettings->SetLevel(priority, service, explanation), explanation);
+    }
+    TTestActorRuntimeBase::InitNodeImpl(node, nodeIndex);
+}
+
 TBaseFixture::TBaseFixture()
     : TTypeParser(__LOCATION__, ::NFq::NRowDispatcher::NTests::FunctionRegistry.Get(), {})
     , MemoryInfo("TBaseFixture alloc")
@@ -163,20 +211,28 @@ TBaseFixture::TBaseFixture()
     Alloc.Ref().UseRefLocking = true;
 }
 
-void TBaseFixture::SetUp(NUnitTest::TTestContext& ctx) {
-    Settings.WaitTimeout = WAIT_TIMEOUT;
-    Settings.LogSettings.AddLogPriority(NKikimrServices::EServiceKikimr::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
-    TBase::SetUp(ctx);
+void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
+    NKikimr::EnableYDBBacktraceFormat();
+    Runtime.SetLogBackend(NActors::CreateStderrBackend());
+    Runtime.SetDispatchTimeout(WAIT_TIMEOUT);
+    Runtime.Initialize();
+
+    Mailbox = std::make_unique<NActors::TMailbox>();
+    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, Runtime.GetActorSystem(0), nullptr, "test thread");
+    ActorCtx = std::make_unique<NActors::TActorContext>(*Mailbox, *ExecutorThread, GetCycleCountFast(), NActors::TActorId());
+    PrevActorCtx = NActors::TlsActivationContext;
+    NActors::TlsActivationContext = ActorCtx.get();
 }
 
-void TBaseFixture::TearDown(NUnitTest::TTestContext& ctx) {
+void TBaseFixture::TearDown(NUnitTest::TTestContext&) {
     with_lock(Alloc) {
         ProgramBuilder.reset();
         TypeEnv.reset();
         HolderFactory.reset();
     }
 
-    TBase::TearDown(ctx);
+    NActors::TlsActivationContext = PrevActorCtx;
+    PrevActorCtx = nullptr;
 }
 
 void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const {
@@ -224,6 +280,19 @@ TMessageStreamRecord TBaseFixture::GetRecord(ui64 offset, const TString& data) {
 }
 
 //// Functions
+
+void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate) {
+    const auto start = TInstant::Now();
+    auto delay = TDuration::MilliSeconds(1);
+    while (TInstant::Now() - start <= timeout) {
+        if (predicate()) {
+            return;
+        }
+        Sleep(delay);
+        delay = Min(delay * 2, TDuration::Seconds(1));
+    }
+    UNIT_FAIL("Timeout waiting for " << description);
+}
 
 NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay) {
     return new TPurecalcCompileServiceMock(owner, responseDelay);

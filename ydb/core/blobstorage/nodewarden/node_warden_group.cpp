@@ -2,6 +2,7 @@
 #include "node_warden_impl.h"
 #include "node_warden_events.h"
 
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blobstorage/bridge/syncer/syncer.h>
 
 #include <ydb/core/blob_depot/agent/agent.h>
@@ -281,6 +282,15 @@ namespace NKikimr::NStorage {
                     TActorSystem *as = TActivationContext::ActorSystem();
                     group.ProxyId = Register(NBlobDepot::CreateBlobDepotAgent(groupId, info, group.ProxyId),
                         TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+                    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+                } else if (info && info->IsInlinePile() && !group.InlinePileProxy) {
+                    // the group has just been converted into the bridged one, it becomes an inline pile; put bridge
+                    // proxy in front of the running DS proxy, the latter will serve the inline pile
+                    Y_ABORT_UNLESS(!group.AgentProxy);
+                    group.InlinePileProxy = true;
+                    TActorSystem *as = TActivationContext::ActorSystem();
+                    group.ProxyId = Register(CreateBridgeProxyActor(info, group.ProxyId), TMailboxType::ReadAsFilled,
+                        AppData()->SystemPoolId);
                     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
                 }
 

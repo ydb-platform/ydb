@@ -34,6 +34,43 @@ class ConfigsTest(unittest.TestCase):
             },
         })
 
+    def test_node_layout_accepts_datacenter_count(self):
+        config = self._apply_multinode_scheme({
+            "hosts": ["host1"],
+            "erasure": "mirror-3-dc",
+            "node_layout": {
+                "num_datacenters": 4,
+                "nodes_per_rack": 1,
+                "shuffle_locations": False,
+            },
+        })
+        self.assertEqual(config["node_layout"]["num_datacenters"], 4)
+        self.assertIsNone(config["node_layout"]["piles"])
+
+    def test_node_layout_accepts_pile_count(self):
+        config = self._apply_multinode_scheme({
+            "hosts": ["host1"],
+            "erasure": "mirror-3-dc",
+            "node_layout": {"piles": 2, "datacenters_per_pile": 3},
+        })
+        self.assertEqual(config["node_layout"]["piles"], 2)
+        self.assertEqual(config["node_layout"]["datacenters_per_pile"], 3)
+        self.assertIsNone(config["node_layout"]["num_datacenters"])
+
+    def test_node_layout_requires_exactly_one_topology(self):
+        for layout, expected_error in [
+            ({}, "There aren't any of keys"),
+            ({"piles": 2, "num_datacenters": 4}, "There are more than 1 key"),
+        ]:
+            with self.subTest(layout=layout):
+                config, errors = scheme.apply_scheme({
+                    "hosts": ["host1"],
+                    "erasure": "mirror-3-dc",
+                    "node_layout": layout,
+                }, multinode.scheme)
+                self.assertIsNone(config)
+                self.assertTrue(any(expected_error in error for error in errors), errors)
+
     def test_nbs_database_is_counted_as_dynamic_node(self):
         config = {
             "nodes_per_host": 1,

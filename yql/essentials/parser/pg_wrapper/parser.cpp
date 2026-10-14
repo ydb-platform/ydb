@@ -314,7 +314,13 @@ extern "C" void setup_pg_thread_cleanup() {
         std::weak_ptr<NYql::TExtensionsRegistry> Registry_;
     };
 
+#if defined(_darwin_)
+    // Darwin destroys native TLS before pthread-key destructors. PG cleanup
+    // must run while its __thread resource owner and memory contexts still exist.
+    thread_local TThreadCleanup cleanup;
+#else
     FastTlsSingleton<TThreadCleanup>();
+#endif
     Log_error_verbosity = PGERROR_DEFAULT;
     SetDatabaseEncoding(PG_UTF8);
     SetClientEncoding(PG_UTF8);

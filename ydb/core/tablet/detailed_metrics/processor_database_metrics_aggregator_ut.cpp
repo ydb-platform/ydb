@@ -1836,12 +1836,14 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
     Y_UNIT_TEST(EstimateMatchesJsonEncoding) {
         TProcessorFixture fixture;
+        // A user attribute may hold JSON-escaped and multibyte characters: '"', '\', '\n', '\x01', 'é', U+2028
+        const TString projectId = "proj\"\\\n\x01\xc3\xa9\xe2\x80\xa8";
         // Registered as the SVP does, so the JSON carries the prefix labels
         auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        root->GetSubgroup("host", "")->GetSubgroup("monitoring_project_id", "proj1")
+        root->GetSubgroup("host", "")->GetSubgroup("monitoring_project_id", projectId)
             ->RegisterSubgroup("database", DATABASE_PATH, fixture.PublicRoot);
         fixture.Processor->SetOutputLimit(Max<ui64>(), 100,
-            {{"host", ""}, {"monitoring_project_id", "proj1"}, {"database", DATABASE_PATH}});
+            {{"host", ""}, {"monitoring_project_id", projectId}, {"database", DATABASE_PATH}});
         fixture.ApplyPublicNode(1, MakeGrid(2, 3).Table(TPublicValues(), OTHER_TABLE_PATH), MakeGrid(2, 1, 1));
         fixture.Tick();
 

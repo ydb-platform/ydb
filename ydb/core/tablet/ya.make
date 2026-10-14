@@ -89,6 +89,7 @@ PEERDIR(
     ydb/library/actors/util
     library/cpp/blockcodecs
     library/cpp/deprecated/enum_codegen
+    library/cpp/json/writer
     library/cpp/yson
     ydb/core/base
     ydb/core/graph/shard/protos

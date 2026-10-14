@@ -8,11 +8,15 @@
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/json/writer/json.h>
 #include <library/cpp/monlib/metrics/metric_type.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <util/stream/length.h>
+#include <util/stream/null.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/system/guard.h>
@@ -65,11 +69,26 @@ namespace NKikimr {
         // for the first bound and bucket
         constexpr ui64 JSON_HISTOGRAM_BYTES = 39;
 
-        // ,"name":"value" per label (HEM_UNSAFE escapes no path character)
+        // A JSON string as the encoder writes it, quotes excluded
+        ui64 JsonStringBytes(TStringBuf s) {
+            // Printable ASCII but '"' and '\' is written as is; the rest takes the encoder's own escaping
+            if (AllOf(s, [](char c) { return c >= 0x20 && c < 0x7f && c != '"' && c != '\\'; })) {
+                return s.size();
+            }
+            TCountingOutput out(&Cnull);
+            NJsonWriter::TBuf(NJsonWriter::HEM_UNSAFE, &out).WriteString(s);
+            return out.Counter() - 2;
+        }
+
+        // ,"name":"value"
+        ui64 JsonLabelBytes(TStringBuf name, TStringBuf value) {
+            return JsonStringBytes(name) + JsonStringBytes(value) + JSON_LABEL_BYTES;
+        }
+
         ui64 JsonLabelBytes(const TSubgroupPath& labels) {
             ui64 bytes = 0;
             for (const auto& [name, value] : labels) {
-                bytes += name.size() + value.size() + JSON_LABEL_BYTES;
+                bytes += JsonLabelBytes(name, value);
             }
             return bytes;
         }
@@ -120,7 +139,7 @@ namespace NKikimr {
                 NMonitoring::EMetricType type, const TString& labelName, const TString& labelValue,
                 ui64 valueBytes) {
                 Size.Bytes += JSON_SERIES_BYTES + NMonitoring::MetricTypeToStr(type).size() + GroupLabelBytes
-                    + labelName.size() + labelValue.size() + JSON_LABEL_BYTES + valueBytes;
+                    + JsonLabelBytes(labelName, labelValue) + valueBytes;
                 ++Size.Series;
             }
 

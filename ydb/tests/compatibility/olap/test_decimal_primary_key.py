@@ -2,6 +2,7 @@ import time
 
 import pytest
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.compatibility.fixtures import (
     RestartToAnotherVersionFixture,
     current_binary_path,
@@ -18,7 +19,7 @@ class TestDecimalPrimaryKey(RestartToAnotherVersionFixture):
     def setup(self):
         # Do not send the new option to old binaries. Its default must retain the
         # legacy ordering throughout an upgrade/downgrade before opting in.
-        yield from self.setup_cluster(column_shard_config={
+        yield from self.setup_cluster(nodes=3, erasure=Erasure.NONE, column_shard_config={
             "disabled_on_scheme_shard": False,
             "compaction_enabled": False,
         })
@@ -77,7 +78,7 @@ class TestDecimalPrimaryKeyRepair(RestartToAnotherVersionFixture):
 
     @pytest.fixture(autouse=True)
     def setup(self, base_setup):
-        yield from self.setup_cluster(column_shard_config={
+        yield from self.setup_cluster(nodes=3, erasure=Erasure.NONE, column_shard_config={
             "disabled_on_scheme_shard": False,
             "compaction_enabled": False,
         })

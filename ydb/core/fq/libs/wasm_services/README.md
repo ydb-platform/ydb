@@ -1,8 +1,9 @@
-# FQ WASM service transport prototype (P2)
+# WASM service transport and module contracts
 
-This is a network harness for the coroutine/async bridge from P1. This layer
-does not change the shared WASM ABI or synchronous UDF execution. It is not
-wired into SQL, DQ or the FQ control plane.
+This layer combines the coroutine/async network harness with a service-module
+SDK, manifest validation and example modules. This layer does not change the
+shared WASM ABI or synchronous UDF execution. It is not wired into SQL, DQ or
+the FQ control plane.
 
 ## Native clients
 
@@ -89,16 +90,35 @@ Run from the repository root:
 ./ya make --build relwithdebinfo -tA ydb/core/fq/libs/wasm_services/ut
 ```
 
-The checked-in WASM resource is generated from `fixture/main.cpp`. Regenerate
-it with the current supported toolchain and rerun the native tests:
+The transport harness now uses the checked-in Profile module artifact at
+`ydb/udfs/wasm/profile/ut/data/profile.wasm`. It retains the byte-oriented fixture
+modes and adds typed Profile JSON/protobuf decoding. Build/regeneration commands
+are in `ydb/udfs/wasm/profile/README.md`; Echo has its own module and artifact
+under `ydb/udfs/wasm/echo`. The former `wasm_services/fixture` target and
+`ut/data/transport_coroutine.wasm` resource are no longer used.
+
+## Service-module contract
+
+`ydb/udfs/wasm/sdk/services` defines the bounded row and network envelopes,
+module exports and generated dispatch constants. The author-owned manifest
+declares the module name, service ABI version and method schemas. Its generator
+validates the contract and emits method constants derived from method names;
+the native manifest loader derives the same IDs. There are no manual method IDs
+or generated manifests. See `ydb/udfs/wasm/sdk/services/README.md` for the schema
+and supported scalar types.
+
+Profile owns its JSON/protobuf payloads, strict decoding and batch correlation.
+Echo demonstrates a second module with two methods and different row types.
+These modules and manifest checks can be tested independently of SQL execution.
+SQL examples document the intended integration, which is added in a later stage.
+
+Run the generator checks with:
 
 ```bash
-./ya make --build release --target-platform=clang20-emscripten-wasm64 ydb/core/fq/libs/wasm_services/fixture
-cp -L ydb/core/fq/libs/wasm_services/fixture/libwasm_services-fixture.so ydb/core/fq/libs/wasm_services/ut/data/transport_coroutine.wasm
-chmod 644 ydb/core/fq/libs/wasm_services/ut/data/transport_coroutine.wasm
+./ya make --build relwithdebinfo -tA ydb/udfs/wasm/sdk/services/ut
 ```
 
-## Remaining P2 Gates
+## Remaining Integration Gates
 
 This harness does not establish the full RFC P2 acceptance criteria:
 
@@ -109,7 +129,6 @@ This harness does not establish the full RFC P2 acceptance criteria:
   current tests use generated local server certificates and trusted CA files.
 - Add production worker/tenant resource accounting beyond application-buffer
   reservations and validate diagnostics against production service behavior.
-- Define typed service results and schema-specific guest decoding.
 - Connect execution to DQ/SQL through the later RFC stages. No production
   configuration or external-network access is exposed by this prototype.
 

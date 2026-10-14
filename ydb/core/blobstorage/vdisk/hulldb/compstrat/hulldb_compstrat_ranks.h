@@ -6,6 +6,8 @@ namespace NKikimr::NHullComp {
 
     // LSM pressure calculated without selecting or modifying a compaction task.
     struct TLevelRanks {
+        static constexpr double StorageRatioSkipRank = 10.0;
+
         std::vector<double> Ranks;
         ui32 FreePartiallySortedLevelsNum = 0;
         ui32 VirtualLevelToCompact = 0;

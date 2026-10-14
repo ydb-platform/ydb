@@ -266,6 +266,37 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, 1);
         }
 
+        Y_UNIT_TEST(HighRankStorageRatioSkipRequiresFeatureFlag) {
+            constexpr ui32 level0Boundary = HullCompLevel0MaxSstsAtOnce * (Level0UseDreg ? 2 : 1);
+            constexpr ui32 skipChunks = level0Boundary * NHullComp::TLevelRanks::StorageRatioSkipRank;
+            for (bool enableOptimization : {false, true}) {
+                for (const auto& [chunks, expectedInvocationsWhenEnabled] : {
+                        std::make_pair(skipChunks - 1, 1u),
+                        std::make_pair(skipChunks, 0u),
+                        std::make_pair(skipChunks + 1, 0u)}) {
+                    TPriorityTestEnv env;
+                    env.AddSst(0, chunks);
+                    auto hullCtx = env.Contexts.GetHullCtx();
+                    hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioOptimization(enableOptimization);
+
+                    auto checkSelection = [&](ui64 expectedInvocations) {
+                        TTask task;
+                        UNIT_ASSERT(env.Select(task) == NHullComp::ActCompactSsts);
+                        UNIT_ASSERT(task.SelectStrategy == NHullComp::ESelectStrategy::BalanceLevel);
+                        UNIT_ASSERT_VALUES_EQUAL(task.Priority.MaxRank, chunks / double(level0Boundary));
+                        UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, 1);
+                        UNIT_ASSERT_VALUES_EQUAL(hullCtx->StorageRatioGroup.StorageRatioInvocations().Val(),
+                            expectedInvocations);
+                    };
+
+                    checkSelection(1); // Unset flag preserves calculation at any rank.
+                    hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioHighRankSkip(true);
+                    checkSelection(1 + expectedInvocationsWhenEnabled);
+                    hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioHighRankSkip(false);
+                    checkSelection(2 + expectedInvocationsWhenEnabled);
+                }
+            }
+        }
 
         Y_UNIT_TEST(Test1) {
             STR << "Building LevelIndex\n";

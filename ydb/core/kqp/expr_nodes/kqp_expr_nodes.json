@@ -625,6 +625,14 @@
             ]
         },
         {
+            "Name": "TKqpTableTruncateSettings",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTableTruncateSettings"},
+            "Children": [
+                {"Index": 0, "Name": "TablePath", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpTableSinkSettings",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpTableSinkSettings"},

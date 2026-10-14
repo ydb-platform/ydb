@@ -955,6 +955,11 @@ enum EInputRowFormat {
     INPUT_ROW_FORMAT_STRUCT_OF_ROWS = 1;
 }
 
+// Unsafe truncate resolves the table and its synchronous indexes at execution time.
+message TKqpTableTruncateSettings {
+    optional string TablePath = 1;
+}
+
 message TKqpTableSinkSettings {
     enum EType {
         MODE_REPLACE = 0;

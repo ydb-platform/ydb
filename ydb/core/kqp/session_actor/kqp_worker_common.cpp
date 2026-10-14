@@ -181,7 +181,7 @@ bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::
 bool CanCacheQuery(const NKqpProto::TKqpPhyQuery& query) {
     for (const auto& tx : query.GetTransactions()) {
         if (tx.GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME
-            || tx.HasUnsafeTruncate())
+            || FindTableTruncateSink(tx))
         {
             return false;
         }

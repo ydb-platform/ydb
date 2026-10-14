@@ -2827,6 +2827,15 @@ TStatus AnnotateUnsafeTruncate(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateTableTruncateSettings(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)
+        || !EnsureAtom(*node->Child(TKqpTableTruncateSettings::idx_TablePath), ctx)) {
+        return TStatus::Error;
+    }
+    node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateExternalEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 1, ctx)) {
         return TStatus::Error;
@@ -4120,6 +4129,7 @@ public:
         AddHandler({TKqpReadSysViewSourceSettings::CallableName()}, HndlInt(&AnnotateSysViewSourceSettings));
         AddHandler({TKqlExternalEffect::CallableName()}, Hndl(&AnnotateExternalEffect));
         AddHandler({TKqlUnsafeTruncate::CallableName()}, Hndl(&AnnotateUnsafeTruncate));
+        AddHandler({TKqpTableTruncateSettings::CallableName()}, Hndl(&AnnotateTableTruncateSettings));
         AddHandler({TKqpSinkEffect::CallableName()}, Hndl(&AnnotateKqpSinkEffect));
         AddHandler({TKqlReturningList::CallableName()}, HndlInt(&AnnotateReturningList));
         AddHandler({TKqpTableSinkSettings::CallableName()}, Hndl(&AnnotateTableSinkSettings));

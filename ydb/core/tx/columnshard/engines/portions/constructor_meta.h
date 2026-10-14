@@ -1,8 +1,8 @@
-#include <ydb/core/formats/arrow/key_comparator.h>
 #pragma once
 #include "common.h"
 #include "meta.h"
 
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>

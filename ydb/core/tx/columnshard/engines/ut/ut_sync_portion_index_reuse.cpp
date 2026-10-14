@@ -1,9 +1,12 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/snapshot_scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
@@ -16,6 +19,7 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -38,6 +42,7 @@ constexpr i32 ExpectedMaxColumnValue = TestValueColumnData.back();
 struct TTestSchemaOptions {
     bool WithMaxIndex = false;
     bool WithBloomIndex = false;
+    bool WithDecimalKey = false;
 };
 
 void FillDefaultSchemaProto(NKikimrSchemeOp::TColumnTableSchema& proto, const ui64 presetId) {
@@ -57,6 +62,9 @@ ISnapshotSchema::TPtr MakeTestSchema(const ui64 presetId, const TTestSchemaOptio
 
     NKikimrSchemeOp::TColumnTableSchema proto;
     FillDefaultSchemaProto(proto, presetId);
+    if (options.WithDecimalKey) {
+        *proto.MutableColumns(0) = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::TDecimalType(22, 0))).CreateColumn(PkColumnId);
+    }
 
     if (options.WithMaxIndex) {
         *proto.AddIndexes() = NIndexes::TIndexMetaContainer(std::make_shared<NIndexes::NMax::TIndexMeta>(MaxIndexId, "max_value",
@@ -210,6 +218,70 @@ bool IsMemoryTierAvailable() {
 }
 
 }   // namespace
+
+Y_UNIT_TEST_SUITE(TDecimalRepairPortionTests) {
+    Y_UNIT_TEST(RewritePreservesHistoricalVisibilityAndRebuildsIndexes) {
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalKeyComparison(false);
+        const auto oldSchema = MakeTestSchema(1, { .WithMaxIndex = true, .WithDecimalKey = true });
+        arrow::FixedSizeBinaryBuilder pkBuilder(arrow::fixed_size_binary(16));
+        for (const NYql::NDecimal::TInt128 value : { 256, 1, -1 }) {
+            UNIT_ASSERT(pkBuilder.Append(reinterpret_cast<const ui8*>(&value)).ok());
+        }
+        auto batch =
+            arrow::RecordBatch::Make(arrow::schema({ arrow::field("pk", arrow::fixed_size_binary(16)), arrow::field("value", arrow::int32()) }),
+                3, { pkBuilder.Finish().ValueOrDie(), MakeTestBatch()->column(1) });
+        const auto splitterCounters = MakeSplitterCounters();
+        auto original = BuildTestPortion(oldSchema, batch, { { MaxIndexId, MaxIndexMarker } }, splitterCounters);
+        auto& ctor = original.GetPortionConstructor().MutablePortionConstructor();
+        static_cast<TWrittenPortionInfoConstructor&>(ctor).SetCommitSnapshot(TSnapshot(1, 1));
+        ctor.SetRemoveSnapshot(TSnapshot(10, 1));
+        FinalizeWritePortion(original);
+        const auto& originalInfo = original.GetPortionResult().GetPortionInfo();
+        auto meta = originalInfo.GetMeta().SerializeToProto(original.GetPortionResult().GetBlobIds(), NPortion::EProduced::INSERTED);
+        meta.SetRebuildDecimalPrimaryKey(true);
+
+        actorSystem.AppData.ColumnShardConfig.SetEnableDecimalKeyComparison(true);
+        const auto newSchema = MakeTestSchema(1, { .WithMaxIndex = true, .WithDecimalKey = true });
+        auto loadedCtor = originalInfo.BuildConstructor(true);
+        UNIT_ASSERT(loadedCtor->MutableMeta().LoadMetadata(meta, newSchema->GetIndexInfo(), TFakeGroupSelector()));
+        const auto loaded = original.GetPortionResult().SwitchPortionInfo(loadedCtor->Build());
+        NBlobOperations::NRead::TCompositeReadBlobs originalBlobs;
+        FillReadBlobs(original, originalBlobs);
+        auto source = TReadPortionInfoWithBlobs::RestorePortion(loaded, originalBlobs, newSchema->GetIndexInfo());
+        auto rewritten = TReadPortionInfoWithBlobs::SyncPortion(
+            std::move(source), newSchema, newSchema, IStoragesManager::DefaultStorageId, TTestStoragesManager::GetInstance(), splitterCounters);
+        UNIT_ASSERT(rewritten);
+        FinalizeWritePortion(*rewritten);
+        const auto& before = original.GetPortionResult().GetPortionInfo();
+        const auto& after = rewritten->GetPortionResult().GetPortionInfo();
+        UNIT_ASSERT(before.GetAddress() == after.GetAddress());
+        UNIT_ASSERT_VALUES_EQUAL(before.GetRemoveSnapshotVerified(), after.GetRemoveSnapshotVerified());
+        UNIT_ASSERT_VALUES_EQUAL(before.RecordSnapshotMin(), after.RecordSnapshotMin());
+        UNIT_ASSERT_VALUES_EQUAL(before.RecordSnapshotMax(), after.RecordSnapshotMax());
+        UNIT_ASSERT(!after.IsRemovedFor(TSnapshot(5, 1)));
+        UNIT_ASSERT(after.IsRemovedFor(TSnapshot(10, 1)));
+        UNIT_ASSERT(after.GetMeta().GetDecimalKeyOrder());
+        UNIT_ASSERT(!after.GetMeta().GetRebuildDecimalPrimaryKey());
+        UNIT_ASSERT(!after.GetMeta().HasIncompatibleDecimalKeyOrder());
+        UNIT_ASSERT_VALUES_EQUAL(GetMaxIndexValue(newSchema, GetInplaceIndexData(*rewritten, MaxIndexId)), ExpectedMaxColumnValue);
+
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        FillReadBlobs(*rewritten, blobs);
+        const auto restored = TReadPortionInfoWithBlobs::RestorePortion(rewritten->GetPortionResult(), blobs, newSchema->GetIndexInfo());
+        const auto result = NArrow::ToBatch(restored.RestoreBatch(*newSchema, *newSchema, {}).DetachResult()->BuildTableVerified());
+        const auto keys = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(result->GetColumnByName("pk"));
+        const auto values = std::static_pointer_cast<arrow::Int32Array>(result->GetColumnByName("value"));
+        const std::array<i64, 3> expectedKeys = { -1, 1, 256 };
+        for (ui32 i = 0; i < 3; ++i) {
+            NYql::NDecimal::TInt128 key;
+            memcpy(&key, keys->GetValue(i), sizeof(key));
+            UNIT_ASSERT(key == expectedKeys[i]);
+            UNIT_ASSERT_VALUES_EQUAL(values->Value(i), TestValueColumnData[2 - i]);
+        }
+    }
+}
 
 Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
     Y_UNIT_TEST(PlacesInplaceIndexChunk) {

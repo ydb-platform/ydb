@@ -1,5 +1,5 @@
-#include <ydb/core/formats/arrow/key_comparator.h>
 #pragma once
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>

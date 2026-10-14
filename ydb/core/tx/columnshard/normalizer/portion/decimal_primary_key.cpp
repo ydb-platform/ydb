@@ -1,8 +1,11 @@
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 namespace {
@@ -71,6 +74,8 @@ public:
         if (!rows.IsReady()) {
             return TConclusionStatus::Fail("Not ready");
         }
+        ui64 marked = 0;
+        ui64 historical = 0;
         THashMap<TPortionAddress, NKikimrTxColumnShard::TIndexPortionMeta> portions;
         while (!rows.EndOfSet()) {
             const auto schema = tables.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(rows.GetValue<TTable::SchemaVersion>());
@@ -88,6 +93,8 @@ public:
                     }
                     continue;
                 }
+                ++marked;
+                historical += rows.GetValue<TTable::XPlanStep>() != 0;
                 meta.SetRebuildDecimalPrimaryKey(true);
                 portions.emplace(portion.GetAddress(), std::move(meta));
                 if (portions.size() == 1000) {
@@ -103,6 +110,7 @@ public:
         if (!portions.empty()) {
             tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TDecimalPrimaryKeyChanges>(std::move(portions))));
         }
+        YDB_LOG_NOTICE("Decimal primary key repair scheduled", {"portions", marked}, {"historicalPortions", historical});
         return tasks;
     }
 };

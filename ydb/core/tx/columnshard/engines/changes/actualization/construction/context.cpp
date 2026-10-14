@@ -24,7 +24,8 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
     if (!UsedPortions.emplace(info->GetAddress()).second) {
         return EAddPortionResult::PORTION_LOCKED;
     }
-    if (DataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Actualization)) {
+    const auto lockCategory = features.GetRebuildDecimalPrimaryKey() ? NDataLocks::ELockCategory::Any : NDataLocks::ELockCategory::Actualization;
+    if (DataLocksManager->IsLocked(*info, lockCategory)) {
         return EAddPortionResult::PORTION_LOCKED;
     }
 

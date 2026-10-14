@@ -860,7 +860,6 @@ void TColumnEngineForLogs::DoRegisterTable(const TInternalPathId pathId) {
     std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), GetVersionedIndex());
     if (ActualizationStarted) {
         g->StartActualizationIndex();
-        g->RefreshScheme();
     }
 }
 

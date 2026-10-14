@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
+
 namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
@@ -119,6 +121,9 @@ void TTTLColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard*
     TBase::DoWriteIndexOnComplete(self, context);
     for (auto& [original, replacement] : RewrittenPortions) {
         context.EngineLogs.ReplacePortion(original, replacement.GetPortionResultPtr());
+    }
+    if (!RewrittenPortions.empty()) {
+        YDB_LOG_NOTICE("Decimal primary key repair applied", {"portions", RewrittenPortions.size()});
     }
 }
 

@@ -39,6 +39,7 @@ private:
 
     std::vector<TPortionForEviction> PortionsToEvict;
     const NActualizer::TRWAddress RWAddress;
+    bool HasKeyRebuild = false;
     // Physical replacements keep portion identity and its complete MVCC interval.
     std::vector<std::pair<TPortionInfo::TConstPtr, TWritePortionInfoWithBlobsResult>> RewrittenPortions;
 
@@ -64,7 +65,7 @@ protected:
     }
 
     virtual NDataLocks::ELockCategory GetLockCategory() const override {
-        return NDataLocks::ELockCategory::Actualization;
+        return HasKeyRebuild ? NDataLocks::ELockCategory::Any : NDataLocks::ELockCategory::Actualization;
     }
 
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
@@ -132,6 +133,7 @@ public:
 
     void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
         AFL_VERIFY(!info->HasRemoveSnapshot() || features.GetRebuildDecimalPrimaryKey());
+        HasKeyRebuild |= features.GetRebuildDecimalPrimaryKey();
         PortionsToEvict.emplace_back(info, std::move(features));
         PortionsToAccess.emplace_back(info);
     }

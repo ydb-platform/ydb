@@ -1,9 +1,13 @@
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/storage.h>
 #include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -146,6 +150,76 @@ public:
     }
 };
 
+// Reproduce startup with loaded portions, no TTL and no critical schema history.
+class TDecimalRepairTestEnv {
+private:
+    const std::shared_ptr<TSchemaObjectsCache> Cache = std::make_shared<TSchemaObjectsCache>();
+    const std::shared_ptr<IStoragesManager> Storages = TTestStoragesManager::GetInstance();
+    const std::shared_ptr<NDataLocks::TManager> Locks = std::make_shared<NDataLocks::TManager>();
+    const std::shared_ptr<TController> Controller = std::make_shared<TController>();
+    TVersionedIndex VersionedIndex;
+    TGranulesStorage Storage{ NColumnShard::TEngineLogsCounters(),
+        std::make_shared<NDataAccessorControl::TActorAccessorsManager>(NActors::TActorId(1, 1)), Storages };
+    std::shared_ptr<TGranuleMeta> Granule;
+    std::shared_ptr<TPortionInfo> Portion;
+
+public:
+    explicit TDecimalRepairTestEnv(const std::optional<TSnapshot>& removed = {}) {
+        VersionedIndex.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false)));
+        auto original = NTest::MakeTestCompactedPortion(TestPathId, TestPortionId, 10, 19, 10, TSnapshot(1, 1), removed);
+        auto proto = original->GetMeta().SerializeToProto({ TUnifiedBlobId(1, 1, 1, 1, 1, 1, 100) }, NPortion::EProduced::SPLIT_COMPACTED);
+        proto.SetRebuildDecimalPrimaryKey(true);
+        auto ctor = original->BuildConstructor(true);
+        TPortionMetaConstructor meta;
+        UNIT_ASSERT(meta.LoadMetadata(proto, VersionedIndex.GetLastSchema()->GetIndexInfo(), TFakeGroupSelector()));
+        ctor->MutableMeta() = std::move(meta);
+        Portion = ctor->Build();
+        Granule = Storage.RegisterTable(TestPathId, NColumnShard::TAgentGranuleDataCounters("repair_test").RegisterClient(), VersionedIndex);
+        Granule->UpsertPortionOnLoad(Portion);
+        Granule->OnAfterPortionsLoad();
+    }
+
+    auto LockPortion(const NDataLocks::ELockCategory category) {
+        return Locks->RegisterLock<NDataLocks::TListPortionsLock>(
+            "existing_operation", std::vector<std::shared_ptr<TPortionInfo>>{ Portion }, category);
+    }
+
+    void ReleaseLock(const std::shared_ptr<NDataLocks::TManager::TGuard>& guard) {
+        guard->Release(*Locks);
+    }
+
+    void Start() {
+        Granule->StartActualizationIndex();
+    }
+
+    auto ExtractTasks() {
+        TTieringProcessContext context(
+            MemoryLimit, TSaverContext(Storages), Locks, VersionedIndex, NColumnShard::TEngineLogsCounters(), Controller);
+        Granule->BuildActualizationTasks(context, TDuration::Zero());
+        return context.GetTasks();
+    }
+
+    const TPortionInfo& GetPortion() const {
+        return *Portion;
+    }
+
+    std::shared_ptr<NDataLocks::ILock> BuildRepairLock() const {
+        class TTestChanges: public TTTLColumnEngineChanges {
+        public:
+            using TColumnEngineChanges::BuildDataLock;
+            using TTTLColumnEngineChanges::TTTLColumnEngineChanges;
+        };
+
+        const auto schema = VersionedIndex.GetLastSchema();
+        TPortionEvictionFeatures features(schema, schema, IStoragesManager::DefaultStorageId);
+        features.SetTargetTierName(IStoragesManager::DefaultStorageId);
+        features.SetRebuildDecimalPrimaryKey(true);
+        TTestChanges task(features.GetRWAddress(), TSaverContext(Storages));
+        task.AddPortionToEvict(Portion, std::move(features));
+        return task.BuildDataLock();
+    }
+};
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TTieringProcessContextTests) {
@@ -212,6 +286,54 @@ Y_UNIT_TEST_SUITE(TSchemeActualizerTests) {
         // turned into a task from an empty actualization info
         env.CollapseSchemaOntoTarget();
         UNIT_ASSERT(env.ExtractTasks().empty());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
+    Y_UNIT_TEST(LateStartQueuesLoadedPortionsWithoutCriticalSchema) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.RunCall([] {
+            TDecimalRepairTestEnv env;
+            env.Start();
+            const auto tasks = env.ExtractTasks();
+            UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(tasks.begin()->second.front().GetPortionsCount(), 1);
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(LateStartQueuesHistoricalPortions) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.RunCall([] {
+            TDecimalRepairTestEnv env(TSnapshot(10, 1));
+            env.Start();
+            const auto tasks = env.ExtractTasks();
+            UNIT_ASSERT_VALUES_EQUAL(tasks.size(), 1);
+            const auto lock = env.BuildRepairLock();
+            UNIT_ASSERT(lock->IsLocked(env.GetPortion(), NDataLocks::ELockCategory::Cleanup));
+            UNIT_ASSERT(lock->IsLocked(env.GetPortion(), NDataLocks::ELockCategory::Scan));
+            UNIT_ASSERT(lock->IsLocked(env.GetPortion(), NDataLocks::ELockCategory::Compaction));
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(RepairWaitsForCleanupAndReaders) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.RunCall([] {
+            for (const auto category : { NDataLocks::ELockCategory::Cleanup, NDataLocks::ELockCategory::Scan }) {
+                TDecimalRepairTestEnv env(TSnapshot(10, 1));
+                env.Start();
+                const auto guard = env.LockPortion(category);
+                const bool noTasksWhileLocked = env.ExtractTasks().empty();
+                env.ReleaseLock(guard);
+                UNIT_ASSERT(noTasksWhileLocked);
+                UNIT_ASSERT_VALUES_EQUAL(env.ExtractTasks().size(), 1);
+            }
+            return true;
+        });
     }
 }
 

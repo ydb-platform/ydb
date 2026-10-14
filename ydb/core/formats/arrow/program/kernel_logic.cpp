@@ -10,8 +10,9 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TCoalesceKernelLogic::TCoalesceKernelLogic()
-    : TSimpleKernelLogic((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+TCoalesceKernelLogic::TCoalesceKernelLogic(const arrow::compute::ScalarKernel& kernel)
+    : TSimpleKernelLogic((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)
+    , OutputType(kernel.signature->out_type().type()) {
 }
 
 TConclusion<bool> TCoalesceKernelLogic::DoExecute(
@@ -20,7 +21,9 @@ TConclusion<bool> TCoalesceKernelLogic::DoExecute(
         return false;
     }
     const auto& first = resources.GetAccessorOptional(input.front().GetColumnId());
-    if (!first || first->GetDataType()->id() != arrow::Type::UINT8) {
+    // Shortcut may be taken even in some cases where the types are not equal,
+    // but the exact set would require duplicating the kernel logic.
+    if (!first || !first->GetDataType()->Equals(*OutputType)) {
         return false;
     }
     std::shared_ptr<arrow::Scalar> value;

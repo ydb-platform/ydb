@@ -53,15 +53,15 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
             kernelLogic = std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Greater);
         } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual) {
             kernelLogic = std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::GreaterOrEqual);
-        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
-            kernelLogic = std::make_shared<TCoalesceKernelLogic>();
         }
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {
             return TConclusionStatus::Fail(
                 TStringBuilder() << "Unknown kernel for " << name.GetColumnName() << ";kernel_idx=" << func.GetKernelIdx());
         }
-        if (kernelLogic->GetClassName() == TToStringKernel::GetClassNameStatic()) {
+        if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+            kernelLogic = std::make_shared<TCoalesceKernelLogic>(*kernelFunction->kernels().front());
+        } else if (kernelLogic->GetClassName() == TToStringKernel::GetClassNameStatic()) {
             kernelLogic = TToStringKernel::Resolve(*kernelFunction);
         }
         return std::make_shared<TKernelFunction>(kernelFunction);

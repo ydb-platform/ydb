@@ -105,11 +105,13 @@ public:
 
 class TCoalesceKernelLogic: public TSimpleKernelLogic {
 private:
+    const std::shared_ptr<arrow::DataType> OutputType;
+
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         TAccessorsCollection& resources) const override;
 
 public:
-    TCoalesceKernelLogic();
+    explicit TCoalesceKernelLogic(const arrow::compute::ScalarKernel& kernel);
 };
 
 class TToStringKernel: public TSimpleKernelLogic {

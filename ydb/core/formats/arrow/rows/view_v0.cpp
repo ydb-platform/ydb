@@ -1,5 +1,5 @@
 #include "view.h"
-#include <ydb/library/formats/arrow/switch/compare.h>
+#include <ydb/core/formats/arrow/key_comparator.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -114,7 +114,7 @@ TConclusionStatus TSimpleRowViewV0::AddToBuilders(
 class TCompareActor {
 private:
     const std::optional<std::string_view> ItemView;
-    const bool Decimal;
+    const TKeyColumnComparator Comparator;
     YDB_READONLY(std::partial_ordering, Result, std::partial_ordering::equivalent);
 
 public:
@@ -133,16 +133,7 @@ public:
             Result = std::partial_ordering::greater;
             return false;
         }
-        if (Decimal) {
-            Result = TComparator::CompareDecimal({data, size}, *ItemView);
-            return false;
-        }
-        const int cmp = std::string_view(data, size).compare(*ItemView);
-        if (cmp < 0) {
-            Result = std::partial_ordering::less;
-        } else if (cmp > 0) {
-            Result = std::partial_ordering::greater;
-        }
+        Result = Comparator.Compare({data, size}, *ItemView);
         return false;
     }
 
@@ -162,9 +153,9 @@ public:
         return false;
     }
 
-    TCompareActor(const std::optional<std::string_view>& itemView, const bool decimal)
+    TCompareActor(const std::optional<std::string_view>& itemView, const TKeyColumnComparator& comparator)
         : ItemView(itemView)
-        , Decimal(decimal) {
+        , Comparator(comparator) {
     }
 };
 
@@ -191,7 +182,7 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
     while (!itSelf.IsFinished()) {
         AFL_VERIFY(!itItem.IsFinished());
 
-        TCompareActor customActor(itItem.GetCurrentValue(), TComparator::IsDecimal(*schema->field(fieldIndex++)));
+        TCompareActor customActor(itItem.GetCurrentValue(), TKeyColumnComparator(*schema->field(fieldIndex++)));
         TGeneralActor<TCompareActor> actor(std::move(customActor));
         Y_UNUSED(itSelf.ApplyActor(actor));
         if (actor.GetCustomActor().GetResult() != std::partial_ordering::equivalent) {

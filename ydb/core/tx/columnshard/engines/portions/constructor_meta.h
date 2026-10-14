@@ -1,3 +1,4 @@
+#include <ydb/core/formats/arrow/key_comparator.h>
 #pragma once
 #include "common.h"
 #include "meta.h"
@@ -46,7 +47,7 @@ public:
         RebuildDecimalPrimaryKey = false;
         DecimalKeyOrder = false;
         for (const auto& field : keys.GetSchema()->fields()) {
-            DecimalKeyOrder |= NArrow::TComparator::IsDecimal(*field);
+            DecimalKeyOrder |= NArrow::TKeyColumnComparator::IsDecimal(*field);
         }
     }
 

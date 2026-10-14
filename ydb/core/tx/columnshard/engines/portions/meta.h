@@ -1,3 +1,4 @@
+#include <ydb/core/formats/arrow/key_comparator.h>
 #pragma once
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
@@ -86,7 +87,7 @@ public:
     bool HasIncompatibleDecimalKeyOrder() const {
         bool numeric = false;
         for (const auto& field : PKSchema->fields()) {
-            numeric |= NArrow::TComparator::IsDecimal(*field);
+            numeric |= NArrow::TKeyColumnComparator::IsDecimal(*field);
         }
         return numeric != DecimalKeyOrder;
     }

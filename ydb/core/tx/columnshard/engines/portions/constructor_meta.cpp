@@ -1,5 +1,6 @@
 #include "constructor_meta.h"
 
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
@@ -126,7 +127,7 @@ bool TPortionMetaConstructor::LoadMetadata(
         if (pkColumns[i].second.GetTypeId() != NScheme::NTypeIds::Decimal) {
             continue;
         }
-        const bool numeric = NArrow::TComparator::IsDecimal(*indexInfo.GetReplaceKey()->field(i));
+        const bool numeric = NArrow::TKeyColumnComparator::IsDecimal(*indexInfo.GetReplaceKey()->field(i));
         if (numeric != DecimalKeyOrder) {
             StoredPrimaryKeys = std::make_shared<NArrow::TFirstLastSpecialKeys>(*FirstAndLastPK);
             const auto makeBorder = [&](const NArrow::TSimpleRow& row, const bool upper) {

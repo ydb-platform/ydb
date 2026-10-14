@@ -39,8 +39,15 @@ private:
 
     std::vector<TPortionForEviction> PortionsToEvict;
     const NActualizer::TRWAddress RWAddress;
+    // Physical replacements keep portion identity and its complete MVCC interval.
+    std::vector<std::pair<TPortionInfo::TConstPtr, TWritePortionInfoWithBlobsResult>> RewrittenPortions;
 
 protected:
+    void DoCompile(TFinalizationContext& context) override;
+    void DoOnAfterCompile(const TFinalizationContext& context) override;
+    void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
+    void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
+
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
@@ -83,6 +90,15 @@ protected:
     }
 
 public:
+    ui32 GetWritePortionsCount() const override {
+        return TBase::GetWritePortionsCount() + RewrittenPortions.size();
+    }
+
+    TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) override {
+        const auto appended = TBase::GetWritePortionsCount();
+        return index < appended ? TBase::GetWritePortionInfo(index) : &RewrittenPortions.at(index - appended).second;
+    }
+
     class TMemoryPredictorSimplePolicy: public IMemoryPredictor {
     private:
         ui64 SumBlobsMemory = 0;
@@ -115,7 +131,7 @@ public:
     }
 
     void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
-        AFL_VERIFY(!info->HasRemoveSnapshot());
+        AFL_VERIFY(!info->HasRemoveSnapshot() || features.GetRebuildDecimalPrimaryKey());
         PortionsToEvict.emplace_back(info, std::move(features));
         PortionsToAccess.emplace_back(info);
     }

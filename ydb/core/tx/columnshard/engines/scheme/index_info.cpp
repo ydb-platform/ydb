@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/protos/config.pb.h>
@@ -14,7 +15,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
-#include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <util/string/join.h>
 
@@ -37,7 +37,7 @@ std::shared_ptr<arrow::Field> TIndexInfo::BuildArrowField(const NTable::TColumn&
     auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
     if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal && HasAppData() &&
         AppDataVerified().ColumnShardConfig.GetEnableDecimalKeyComparison()) {
-        f = f->WithMetadata(arrow::key_value_metadata({ NArrow::TComparator::DecimalComparisonMetadata }, { "1" }));
+        f = f->WithMetadata(arrow::key_value_metadata({ NArrow::TKeyColumnComparator::DecimalComparisonMetadata }, { "1" }));
     }
     if (cache) {
         return cache->GetOrInsertField(f);

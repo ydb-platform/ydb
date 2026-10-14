@@ -1,9 +1,5 @@
 #pragma once
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/key_value_metadata.h>
-#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <util/system/yassert.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -11,22 +7,6 @@ namespace NKikimr::NArrow {
 
 class TComparator {
 public:
-    static constexpr const char* DecimalComparisonMetadata = "ydb.decimal_comparison";
-
-    static bool IsDecimal(const arrow::Field& field) {
-        return field.type()->id() == arrow::Type::FIXED_SIZE_BINARY && field.metadata() &&
-            field.metadata()->Contains(DecimalComparisonMetadata);
-    }
-
-    static std::partial_ordering CompareDecimal(const std::string_view left, const std::string_view right) {
-        NYql::NDecimal::TInt128 lhs, rhs;
-        AFL_VERIFY(left.size() == sizeof(lhs) && right.size() == sizeof(rhs));
-        // The stored mantissa can be unaligned (in particular in serialized PK borders).
-        memcpy(&lhs, left.data(), sizeof(lhs));
-        memcpy(&rhs, right.data(), sizeof(rhs));
-        return lhs < rhs ? std::partial_ordering::less : rhs < lhs ? std::partial_ordering::greater : std::partial_ordering::equivalent;
-    }
-
     template <bool notNull>
     static std::partial_ordering ConcreteTypedCompare(const arrow::Type::type typeId, const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
         switch (typeId) {
@@ -98,32 +78,9 @@ public:
     }
 
     template <bool notNull>
-    static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos,
-        const bool decimal = false) {
+    static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
         AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type()->ToString())("rhs", rhs.type()->ToString());
-        if (decimal) {
-            AFL_VERIFY(lhs.type_id() == arrow::Type::FIXED_SIZE_BINARY);
-            if (lhs.IsNull(lpos) || rhs.IsNull(rpos)) {
-                AFL_VERIFY(!notNull);
-                return CompareValueNotNull(!lhs.IsNull(lpos), !rhs.IsNull(rpos));
-            }
-            const auto left = static_cast<const arrow::FixedSizeBinaryArray&>(lhs).GetView(lpos);
-            const auto right = static_cast<const arrow::FixedSizeBinaryArray&>(rhs).GetView(rpos);
-            return CompareDecimal({left.data(), left.size()}, {right.data(), right.size()});
-        }
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos);
-    }
-
-    template <bool notNull>
-    static std::partial_ordering CompareRows(const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const int lhs, const int rhs, const arrow::Schema* schema = nullptr) {
-        for (ui32 i = 0; i < columns.size(); ++i) {
-            const auto cmp = TypedCompare<notNull>(*columns[i], lhs, *columns[i], rhs, schema && IsDecimal(*schema->field(i)));
-            if (cmp != std::partial_ordering::equivalent) {
-                return cmp;
-            }
-        }
-        return std::partial_ordering::equivalent;
     }
 
     template <typename T, bool notNull>

@@ -281,6 +281,7 @@ public:
 
     void StartActualizationIndex() {
         ActualizationIndex->Start();
+        RefreshScheme();
     }
 
     NJson::TJsonValue OptimizerSerializeToJson() const {

@@ -1,3 +1,4 @@
+#include "key_comparator.h"
 #include "arrow_helpers.h"
 #include "permutations.h"
 
@@ -206,8 +207,9 @@ namespace {
 bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
     const bool desc, const bool unique) {
     auto keys = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
+    const TKeyComparator comparator(sortingKey->fields());
     for (i64 i = 1; i < keys->num_rows(); ++i) {
-        const auto cmp = TComparator::CompareRows<false>(keys->columns(), i - 1, i, sortingKey.get());
+        const auto cmp = comparator.Compare(keys->columns(), i - 1, i);
         if (cmp == (desc ? std::partial_ordering::less : std::partial_ordering::greater) ||
             (unique && cmp == std::partial_ordering::equivalent)) {
             return false;

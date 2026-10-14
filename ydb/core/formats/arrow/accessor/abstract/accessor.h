@@ -186,7 +186,7 @@ public:
 
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
 
-        std::partial_ordering Compare(const ui64 position, const TFullDataAddress& item, const ui64 itemPosition, const bool decimal = false) const;
+        std::partial_ordering Compare(const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const;
 
         TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
             : Array(arr)

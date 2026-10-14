@@ -1,3 +1,4 @@
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
@@ -52,6 +53,9 @@ public:
 
     TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
         const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override {
+        if (!AppDataVerified().ColumnShardConfig.GetEnableDecimalKeyComparison()) {
+            return TConclusionStatus::Fail("RebuildDecimalPrimaryKey requires EnableDecimalKeyComparison");
+        }
         NIceDb::TNiceDb db(txc.DB);
         NColumnShard::TTablesManager tables(
             controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<NColumnShard::TPortionIndexStats>(), 0);
@@ -75,9 +79,15 @@ public:
                 Y_UNUSED(name);
                 hasDecimalKey |= type.GetTypeId() == NScheme::NTypeIds::Decimal;
             }
-            if (hasDecimalKey && !rows.GetValueOrDefault<TTable::XPlanStep>(0)) {
+            if (hasDecimalKey) {
                 TPortionLoadContext portion(rows);
                 auto meta = portion.GetMetaProto();
+                if (meta.GetDecimalKeyOrder()) {
+                    if (!rows.Next()) {
+                        return TConclusionStatus::Fail("Not ready");
+                    }
+                    continue;
+                }
                 meta.SetRebuildDecimalPrimaryKey(true);
                 portions.emplace(portion.GetAddress(), std::move(meta));
                 if (portions.size() == 1000) {

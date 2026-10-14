@@ -3097,6 +3097,8 @@ message TColumnShardConfig {
     optional TCutHistoryConfig CutHistory = 78;
     // Enable after upgrading all nodes; existing Decimal PK portions need the
     // manually scheduled RebuildDecimalPrimaryKey repair before normal reads resume.
+    // Enable only after rollback to binaries without this comparator is prohibited.
+    // Disabling the flag does not convert numeric-order portions back to byte order.
     optional bool EnableDecimalKeyComparison = 79 [default = false];
 }
 

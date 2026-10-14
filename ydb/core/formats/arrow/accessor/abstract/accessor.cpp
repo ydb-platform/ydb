@@ -189,11 +189,11 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
 
 
 std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
-    const ui64 position, const TFullDataAddress& item, const ui64 itemPosition, const bool decimal) const {
+    const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {
     AFL_VERIFY(Address.Contains(position))("pos", position)("start", Address.DebugString());
     AFL_VERIFY(item.Address.Contains(itemPosition))("pos", itemPosition)("start", item.Address.DebugString());
     //https://github.com/ydb-platform/ydb/issues/26933
-    return TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition), decimal);
+    return TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
 }
 
 std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const ui64 recordIndex) const {

@@ -77,10 +77,10 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             } else {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
+        }
+        if (!onLoad) {
             NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-            if (!onLoad) {
-                ActualizationIndex->AddPortion(portionAfter, context);
-            }
+            ActualizationIndex->AddPortion(portionAfter, context);
         }
         Stats->OnAddPortion(*portionAfter);
     }
@@ -102,8 +102,8 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
         if (!portionBefore->HasRemoveSnapshot()) {
             PortionsIndex.RemovePortion(portionBefore);
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
-            ActualizationIndex->RemovePortion(portionBefore);
         }
+        ActualizationIndex->RemovePortion(portionBefore);
         Stats->OnRemovePortion(*portionBefore);
     }
     if (!!AdditiveSummaryCache) {

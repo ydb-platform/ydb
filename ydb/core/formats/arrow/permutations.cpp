@@ -1,5 +1,6 @@
 #include "arrow_helpers.h"
 #include "permutations.h"
+#include "key_comparator.h"
 
 #include "hash/calcer.h"
 
@@ -39,21 +40,13 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
         }
     }
 
-    if (haveNulls) {
-        std::sort(points.begin(), points.end(), [&](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-            auto cmp = TComparator::CompareRows<false>(keyColumns, a.GetPosition(), b.GetPosition(), comparisonSchema);
-            return cmp == std::partial_ordering::equivalent
-                ? (preserveEqualOrder ? a.GetPosition() < b.GetPosition() : a.GetPosition() > b.GetPosition())
-                : cmp == std::partial_ordering::less;
-        });
-    } else {
-        std::sort(points.begin(), points.end(), [&](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-            auto cmp = TComparator::CompareRows<true>(keyColumns, a.GetPosition(), b.GetPosition(), comparisonSchema);
-            return cmp == std::partial_ordering::equivalent
-                ? (preserveEqualOrder ? a.GetPosition() < b.GetPosition() : a.GetPosition() > b.GetPosition())
-                : cmp == std::partial_ordering::less;
-        });
-    }
+    const TKeyComparator comparator(comparisonSchema, keyColumns.size());
+    std::sort(points.begin(), points.end(), [&](const TRawReplaceKey& a, const TRawReplaceKey& b) {
+        const auto cmp = comparator.Compare(keyColumns, a.GetPosition(), b.GetPosition());
+        return cmp == std::partial_ordering::equivalent
+            ? (preserveEqualOrder ? a.GetPosition() < b.GetPosition() : a.GetPosition() > b.GetPosition())
+            : cmp == std::partial_ordering::less;
+    });
 
     arrow::UInt64Builder builder;
     TStatusValidator::Validate(builder.Reserve(points.size()));

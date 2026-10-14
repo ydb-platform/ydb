@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NActualizer {
 
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
     const TPortionInfo& portion) const {
-    const auto targetSchema = portion.GetMeta().GetRebuildDecimalPrimaryKey() ? VersionedIndex.GetLastSchema() : TargetSchema;
+    const auto targetSchema = portion.GetMeta().GetRebuildDecimalPrimaryKey() ? portion.GetSchema(VersionedIndex) : TargetSchema;
     if (!targetSchema) {
         return {};
     }

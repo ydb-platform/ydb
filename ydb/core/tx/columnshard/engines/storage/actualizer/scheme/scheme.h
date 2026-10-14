@@ -61,6 +61,10 @@ private:
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion) const;
 
 protected:
+    bool CanActualizeRemovedPortion(const TPortionInfo& portion) const override {
+        return portion.GetMeta().GetRebuildDecimalPrimaryKey();
+    }
+
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
     virtual void DoRemovePortion(const ui64 portionId) override;
     virtual void DoExtractTasks(

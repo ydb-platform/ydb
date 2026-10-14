@@ -4,7 +4,7 @@
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
-#include <ydb/library/formats/arrow/switch/compare.h>
+#include <ydb/core/formats/arrow/key_comparator.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
     Y_UNIT_TEST(SortRowsAndBorders) {
         const auto type = arrow::fixed_size_binary(16);
         auto field = arrow::field("key", type)->WithMetadata(
-            arrow::key_value_metadata({TComparator::DecimalComparisonMetadata}, {"1"}));
+            arrow::key_value_metadata({TKeyColumnComparator::DecimalComparisonMetadata}, {"1"}));
         const std::vector<NYql::NDecimal::TInt128> values = {
             NYql::NDecimal::Nan(), 256, -1, NYql::NDecimal::Inf(), 1, -NYql::NDecimal::Inf(), -256, 0};
         arrow::FixedSizeBinaryBuilder builder(type);
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
         collection.AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(sorted->column(0)), false);
         NSSA::TSchemaColumnResolver resolver(schema);
         auto restored = collection.ToGeneralContainer(&resolver);
-        UNIT_ASSERT(TComparator::IsDecimal(*restored->GetSchema()->GetFieldByName("key")));
+        UNIT_ASSERT(TKeyColumnComparator::IsDecimal(*restored->GetSchema()->GetFieldByName("key")));
         NMerger::TSortableScanData restoredScan(0, restored);
         for (ui32 i = 1; i < (ui32)sorted->num_rows(); ++i) {
             UNIT_ASSERT(restoredScan.BuildCursor(i - 1).Compare(restoredScan.BuildCursor(i)) == std::partial_ordering::less);
@@ -70,13 +70,15 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
         std::shared_ptr<arrow::Array> array;
         UNIT_ASSERT(builder.Finish(&array).ok());
         UNIT_ASSERT(TComparator::TypedCompare<true>(*array, 0, *array, 1) == std::partial_ordering::greater);
-        UNIT_ASSERT(TComparator::TypedCompare<true>(*array, 0, *array, 1, true) == std::partial_ordering::less);
+        const auto field = arrow::field("decimal", array->type())->WithMetadata(
+            arrow::key_value_metadata({TKeyColumnComparator::DecimalComparisonMetadata}, {"1"}));
+        UNIT_ASSERT(TKeyColumnComparator(*field).Compare(*array, 0, *array, 1) == std::partial_ordering::less);
     }
 
     Y_UNIT_TEST(StableSortPreservesVersions) {
         const auto type = arrow::fixed_size_binary(16);
         auto schema = arrow::schema({arrow::field("key", type)->WithMetadata(
-            arrow::key_value_metadata({TComparator::DecimalComparisonMetadata}, {"1"}))});
+            arrow::key_value_metadata({TKeyColumnComparator::DecimalComparisonMetadata}, {"1"}))});
         arrow::FixedSizeBinaryBuilder builder(type);
         for (const NYql::NDecimal::TInt128 value : {256, -1, 256, -1}) {
             UNIT_ASSERT(builder.Append(reinterpret_cast<const char*>(&value)).ok());

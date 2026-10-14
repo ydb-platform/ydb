@@ -31,6 +31,10 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
         for (auto&& i : GetPortionsToRemove().GetPortions()) {
             AFL_VERIFY(restoreIndexAddresses[i.first.GetPathId()].emplace(i.first.GetPortionId()).second);
         }
+        for (const auto& [original, replacement] : RewrittenPortions) {
+            Y_UNUSED(replacement);
+            restoreIndexAddresses[original->GetPathId()].emplace(original->GetPortionId());
+        }
         engine.ReturnToIndexes(restoreIndexAddresses);
     }
 }
@@ -58,16 +62,64 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            AddPortionToRemove(info.GetPortionInfo(), false);
             for (const auto& x : pwb->MutableBlobs()) {
                 AFL_VERIFY(x.GetOperator()->GetStorageId() != IStoragesManager::LocalMetadataStorageId);
             }
-            AppendedPortions.emplace_back(std::move(*pwb));
+            if (info.GetFeatures().GetRebuildDecimalPrimaryKey()) {
+                RewrittenPortions.emplace_back(info.GetPortionInfo(), std::move(*pwb));
+            } else {
+                AddPortionToRemove(info.GetPortionInfo(), false);
+                AppendedPortions.emplace_back(std::move(*pwb));
+            }
         }
     }
 
     PortionsToEvict.clear();
     return TConclusionStatus::Success();
+}
+
+void TTTLColumnEngineChanges::DoCompile(TFinalizationContext& context) {
+    NoAppendIsCorrect = !RewrittenPortions.empty();
+    TBase::DoCompile(context);
+}
+
+void TTTLColumnEngineChanges::DoOnAfterCompile(const TFinalizationContext& context) {
+    TBase::DoOnAfterCompile(context);
+    for (auto& [original, replacement] : RewrittenPortions) {
+        replacement.FinalizePortionConstructor(context.GetSnapshot());
+        AFL_VERIFY(original->GetAddress() == replacement.GetPortionResult().GetPortionInfo().GetAddress());
+    }
+}
+
+void TTTLColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
+    TBase::DoWriteIndexOnExecute(self, context);
+    for (auto& [original, replacement] : RewrittenPortions) {
+        // Readers cannot enter a portion with incompatible key order. Actualization
+        // locks exclude concurrent cleanup/compaction. Persist the replacement and
+        // retire the old blobs in the same tablet transaction, keeping all snapshots.
+        AFL_VERIFY(original->GetMeta().HasIncompatibleDecimalKeyOrder());
+        const auto& old = GetPortionDataAccessor(original->GetPortionId());
+        old.RemoveFromDatabase(context.DBWrapper);
+        const auto schema = original->GetSchema(context.EngineLogs.GetVersionedIndex());
+        replacement.GetPortionResult().SaveToDatabase(context.DBWrapper, schema->GetIndexInfo().GetPKFirstColumnId(), false);
+        if (self) {
+            THashMap<TString, THashSet<TUnifiedBlobId>> blobs;
+            old.FillBlobIdsByStorage(blobs, context.EngineLogs.GetVersionedIndex());
+            for (const auto& [storage, ids] : blobs) {
+                auto action = BlobsAction.GetRemoving(storage);
+                for (const auto& id : ids) {
+                    action->DeclareRemove((TTabletId)self->TabletID(), id);
+                }
+            }
+        }
+    }
+}
+
+void TTTLColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {
+    TBase::DoWriteIndexOnComplete(self, context);
+    for (auto& [original, replacement] : RewrittenPortions) {
+        context.EngineLogs.ReplacePortion(original, replacement.GetPortionResultPtr());
+    }
 }
 
 NColumnShard::ECumulativeCounters TTTLColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

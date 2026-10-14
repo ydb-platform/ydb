@@ -1,3 +1,4 @@
+#include <ydb/core/formats/arrow/key_comparator.h>
 #include "position.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
@@ -223,6 +224,7 @@ void TSortableScanData::AppendPositionTo(
 }
 
 void TSortableScanData::BuildPosition(const ui64 position) {
+    Comparators = TKeyComparator(Fields);
     PositionAddress.clear();
     std::optional<ui64> recordsCount;
     FinishPosition = Max<ui64>();
@@ -296,7 +298,7 @@ std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64
 std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64 itemPosition) const {
     AFL_VERIFY(PositionAddress.size() == item.GetPositionAddress().size());
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
-        auto cmp = PositionAddress[idx].Compare(Position, item.GetPositionAddress()[idx], itemPosition, TComparator::IsDecimal(*Fields[idx]));
+        auto cmp = Comparators[idx].Compare(PositionAddress[idx], Position, item.GetPositionAddress()[idx], itemPosition);
         if (std::is_neq(cmp)) {
             return cmp;
         }
@@ -308,7 +310,7 @@ std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64
 std::partial_ordering TCursor::Compare(const TCursor& item) const {
     AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
-        auto cmp = PositionAddress[idx].Compare(Position, item.PositionAddress[idx], item.Position, TComparator::IsDecimal(*Fields[idx]));
+        auto cmp = Comparators[idx].Compare(PositionAddress[idx], Position, item.PositionAddress[idx], item.Position);
         if (std::is_neq(cmp)) {
             return cmp;
         }
@@ -338,7 +340,7 @@ TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position
     : Position(position) {
     const TSortableScanData data(position, table, columns);
     PositionAddress = data.GetPositionAddress();
-    Fields = data.GetFields();
+    Comparators = data.GetComparators();
 }
 
 }   // namespace NKikimr::NArrow::NMerger

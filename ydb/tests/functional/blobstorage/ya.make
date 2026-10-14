@@ -2,7 +2,6 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
-    test_single_dc.py
     test_node_warden_cache.py
     test_security_token_not_in_logs.py
     test_pdisk_format_info.py

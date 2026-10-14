@@ -186,7 +186,7 @@ def resolve_formatter(root):
     return binary
 
 
-def format_files(root, files, style, binary, fix, progress=None):
+def format_files(root, files, style, binary, fix, progress=None, clear_progress=None):
     failed = False
     for start in range(0, len(files), 32):
         batch = [root / path for path in files[start : start + 32]]
@@ -194,7 +194,17 @@ def format_files(root, files, style, binary, fix, progress=None):
         command = [binary, '--style=file:' + str(style)]
         command += ['-i'] if fix else ['--dry-run', '--Werror', '--ferror-limit=1']
         command += [str(path) for path in batch]
-        failed |= subprocess.run(command, cwd=root).returncode != 0
+        if clear_progress is None:
+            result = subprocess.run(command, cwd=root)
+        else:
+            # Keep formatter diagnostics separate from the live progress row.
+            result = subprocess.run(command, cwd=root, capture_output=True, text=True, errors='replace')
+            if result.stdout or result.stderr:
+                clear_progress()
+                for output, stream in ((result.stdout, sys.stdout), (result.stderr, sys.stderr)):
+                    if output:
+                        print(output, end='' if output.endswith('\n') else '\n', file=stream, flush=True)
+        failed |= result.returncode != 0
         changed = sum(path.read_bytes() != content for path, content in zip(batch, before))
         if progress is not None:
             progress(len(batch), changed)
@@ -246,6 +256,7 @@ def main(argv=None):
     failed = False
     total = sum(len(files) for files in groups.values())
     checked = formatted = 0
+    interactive = sys.stdout.isatty()
     for folder, files in groups.items():
         if not files:
             continue
@@ -258,20 +269,39 @@ def main(argv=None):
         )
         folder_checked = folder_formatted = 0
 
+        def clear_progress():
+            print('\r\033[2K', end='', flush=True)
+
         def report_progress(batch_checked, batch_formatted):
             nonlocal checked, formatted, folder_checked, folder_formatted
             checked += batch_checked
             formatted += batch_formatted
             folder_checked += batch_checked
             folder_formatted += batch_formatted
-            message = f'Checked {folder_checked} / {len(files)} files in {folder}'
+            message = f'Checked {folder_checked} / {len(files)} files'
+            if not interactive:
+                message += f' in {folder}'
             overall = f'overall {checked} / {total} checked'
             if args.fix:
-                message += f'; formatted {folder_formatted}'
+                message += f'. Formatted {folder_formatted}'
                 overall += f', {formatted} formatted'
-            print(f'{message} ({overall})', flush=True)
+            message = f'{message} ({overall})'
+            if interactive:
+                # The heading identifies the folder. Keep the live row within
+                # the terminal width so a redraw cannot leave wrapped lines.
+                width = max(1, shutil.get_terminal_size().columns - 1)
+                if len(message) > width:
+                    message = message[: max(0, width - 1)] + '…'
+                clear_progress()
+            print(message, end='' if interactive else '\n', flush=True)
 
-        failed |= format_files(ROOT, files, style, binary, args.fix, report_progress) != 0
+        try:
+            failed |= format_files(
+                ROOT, files, style, binary, args.fix, report_progress, clear_progress if interactive else None
+            ) != 0
+        finally:
+            if interactive:
+                print(flush=True)
 
     status = 'Finished with errors' if failed else 'Finished'
     counts = f'{formatted} formatted / {checked} checked files' if args.fix else f'{checked} / {total} files checked'

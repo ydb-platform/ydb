@@ -14,7 +14,7 @@ directory's `linters.make.inc`. Coverage applies to the listed subtrees.
 | --- | --- | --- | --- |
 | CS (`@ydb-platform/cs`) | `ydb/core/tx/columnshard` | Common | [.github/config/cpp_format/.clang-format](../../config/cpp_format/.clang-format) |
 | NBS (`@ydb-platform/nbs_yandex`) | `ydb/core/nbs` | Own | [ydb/core/nbs/.clang-format](../../../ydb/core/nbs/.clang-format) |
-| FQ (`@ydb-platform/fq`) | 62 FQ roots listed in [autoincludes.json](../../../build/internal/conf/autoincludes.json) | Common | [.github/config/cpp_format/.clang-format](../../config/cpp_format/.clang-format) |
+| FQ (`@ydb-platform/fq`) | 61 FQ roots listed in [autoincludes.json](../../../build/internal/conf/autoincludes.json) | Common | [.github/config/cpp_format/.clang-format](../../config/cpp_format/.clang-format) |
 
 Update this table when enabling a team's directories or changing their style
 configuration. The examples below show CS's existing setup and how to enable an
@@ -178,8 +178,11 @@ formatter resource as Ya's style tests. `--list` does not resolve or download th
 formatter. To reuse a previously resolved Ya binary offline, set
 `YDB_CLANG_FORMAT` to its executable path.
 
-After each batch of up to 32 files, `--fix` and `--check` log checked/total
-counts for the current root and the whole run. `--fix` also counts files whose
+After each batch of up to 32 files, `--fix` and `--check` update checked/total
+counts for the current root and the whole run. In a terminal, the active progress
+row is redrawn in place beneath the folder/configuration heading; long rows are
+shortened to fit the terminal width. Redirected output uses ordinary log lines.
+Formatter diagnostics are printed on separate lines. `--fix` also counts files whose
 contents actually changed, ending with a summary such as
 `Finished: 12 formatted / 534 checked files.` Checked counts include files in
 batches that reported errors; those runs end with `Finished with errors` and a

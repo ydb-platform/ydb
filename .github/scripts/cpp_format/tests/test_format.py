@@ -248,11 +248,11 @@ ENDIF()
                     self.assertEqual(cpp_format.main(['--fix']), int(fail))
                 self.assertEqual(formatter.call_count, 3)
                 self.assertIn(
-                    'Checked 32 / 33 files in shared; formatted 1 (overall 33 / 34 checked, 1 formatted)',
+                    'Checked 32 / 33 files in shared. Formatted 1 (overall 33 / 34 checked, 1 formatted)',
                     output.getvalue(),
                 )
                 self.assertIn(
-                    'Checked 33 / 33 files in shared; formatted 2 (overall 34 / 34 checked, 2 formatted)',
+                    'Checked 33 / 33 files in shared. Formatted 2 (overall 34 / 34 checked, 2 formatted)',
                     output.getvalue(),
                 )
                 status = 'Finished with errors' if fail else 'Finished'
@@ -273,6 +273,36 @@ ENDIF()
         self.assertEqual(file.read_text(), 'int  x;\n')
         self.assertIn('Checked 1 / 1 files in shared (overall 1 / 1 checked)', output.getvalue())
         self.assertTrue(output.getvalue().endswith('Finished with errors: 1 / 1 files checked.\n'))
+
+    def test_terminal_progress_redraws_one_row_without_overwriting_diagnostics(self):
+        files = [f'shared/{i:02}.cpp' for i in range(33)]
+        for path in files:
+            self.write(path, 'int x;\n')
+        for width in (80, 30):
+            with self.subTest(terminal_width=width):
+                output = io.StringIO()
+                with mock.patch.object(cpp_format, 'ROOT', self.root), mock.patch.object(
+                    cpp_format, 'selected_files', return_value={'shared': files}
+                ), mock.patch.object(cpp_format, 'resolve_formatter', return_value='mock-clang-format'), mock.patch.object(
+                    cpp_format.subprocess, 'run', side_effect=[
+                        subprocess.CompletedProcess([], 0, stdout='', stderr=''),
+                        subprocess.CompletedProcess([], 1, stdout='formatter note\n', stderr='formatter error\n'),
+                    ]
+                ) as formatter, mock.patch.object(output, 'isatty', return_value=True), mock.patch.object(
+                    cpp_format.shutil, 'get_terminal_size', return_value=os.terminal_size((width, 24))
+                ), contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                    self.assertEqual(cpp_format.main(['--fix']), 1)
+                text = output.getvalue()
+                redraws = text.split('\r\033[2K')
+                self.assertEqual(len(redraws), 4)
+                self.assertTrue(redraws[1].startswith('Checked 32 / 33 files.'))
+                self.assertNotIn('\n', redraws[1])
+                self.assertLessEqual(len(redraws[1]), width - 1)
+                self.assertEqual(redraws[2], 'formatter note\nformatter error\n')
+                self.assertTrue(redraws[3].startswith('Checked 33 / 33 files.'))
+                self.assertLessEqual(len(redraws[3].splitlines()[0]), width - 1)
+                self.assertTrue(text.endswith('Finished with errors: 0 formatted / 33 checked files.\n'))
+                self.assertTrue(all(call.kwargs['capture_output'] for call in formatter.call_args_list))
 
     @unittest.skipUnless(os.environ.get('YDB_CLANG_FORMAT'), 'set YDB_CLANG_FORMAT for real formatter coverage')
     def test_real_formatter_checks_fixes_and_preserves_per_root_styles(self):

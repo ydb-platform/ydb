@@ -11,8 +11,10 @@ from ydb.udfs.wasm.profile.proto.schema import profile_pb2
 
 
 class MockServices:
-    def __init__(self, http_port=0, grpc_port=0, certificate=None, private_key=None):
+    def __init__(self, http_port=0, grpc_port=0, certificate=None, private_key=None, require_tvm_ticket=False):
         self.requests = []
+        self.tvm_tickets = []
+        self.require_tvm_ticket = require_tvm_ticket
         self.lock = threading.Lock()
         self.started = threading.Event()
         self.release = threading.Event()
@@ -22,6 +24,11 @@ class MockServices:
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
+                if not owner.check_tvm_ticket('http', self.headers.get('X-Ya-Service-Ticket')):
+                    self.send_response(401)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
                 if self.path == '/echo':
                     with owner.lock:
                         owner.requests.append(('echo', body, self.headers.get('Authorization')))
@@ -77,7 +84,19 @@ class MockServices:
             self.grpc.add_insecure_port(f'127.0.0.1:{grpc_port}')
         self.grpc.start()
 
+    def check_tvm_ticket(self, protocol, ticket):
+        with self.lock:
+            self.tvm_tickets.append((protocol, ticket))
+        # Deliberately only checks presence, not TVM signatures or claims.
+        return not self.require_tvm_ticket or bool(ticket)
+
+    def check_grpc_tvm_ticket(self, context):
+        ticket = dict(context.invocation_metadata()).get('x-ya-service-ticket')
+        if not self.check_tvm_ticket('grpc', ticket):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing x-ya-service-ticket')
+
     def lookup(self, request, context):
+        self.check_grpc_tvm_ticket(context)
         with self.lock:
             self.requests.append(('grpc', request.id, dict(context.invocation_metadata()).get('authorization')))
         if request.id == 999:
@@ -88,6 +107,7 @@ class MockServices:
         return profile_pb2.ProfileReply(payload=profile.SerializeToString())
 
     def lookup_batch(self, request, context):
+        self.check_grpc_tvm_ticket(context)
         with self.lock:
             self.requests.append(('grpc', tuple(request.ids), dict(context.invocation_metadata()).get('authorization')))
         if 999 in request.ids:

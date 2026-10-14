@@ -349,9 +349,17 @@ protected:
                 ExecutionOptions.InitQueries.emplace_back(LoadFile(option->CurVal()));
             });
 
-        options.AddLongOption("secrets-file", "Local JSON object mapping TOKEN_SECRET_NAME to token values")
+        options.AddLongOption("secrets-file", "Local JSON object mapping TOKEN_SECRET_NAME or TVM_SECRET_NAME to credentials")
             .RequiredArgument("file")
             .StoreResult(&SecretsFile);
+
+        options.AddLongOption("tvm-mock", "Return a fake TVM service ticket for local mock services")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.FqSettings.MockTvm);
+
+        options.AddLongOption("tvm-mock-delay-ms", "Delay each mock TVM ticket in milliseconds (requires --tvm-mock; default: 100)")
+            .RequiredArgument("milliseconds")
+            .StoreResult(&RunnerOptions.FqSettings.MockTvmDelayMs);
 
         options.AddLongOption('s', "sql", "Query SQL text to execute").RequiredArgument("str").AppendTo(&ExecutionOptions.Queries);
 

@@ -4,6 +4,7 @@
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
+#include <ydb/core/fq/libs/wasm_services/mock/tvm.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 
@@ -174,7 +175,8 @@ private:
         };
 
         NFq::Init(fqConfig, GetRuntime()->GetNodeId(), actorRegistrator, &GetRuntime()->GetAppData(), Settings.DomainName, nullptr,
-            YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory);
+            YqSharedResources, folderServiceFactory, 0, {}, Settings.PqGatewayFactory,
+            Settings.MockTvm ? NFq::NWasmServices::CreateMockTvmTicketProvider(TDuration::MilliSeconds(Settings.MockTvmDelayMs)) : nullptr);
         YqSharedResources->Init(GetRuntime()->GetActorSystem(0));
     }
 

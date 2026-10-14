@@ -5,6 +5,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <util/stream/file.h>
 #include <util/string/ascii.h>
+#include <util/string/cast.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
@@ -79,7 +80,8 @@ TConnectionDdl DecodeWrite(const TAstNode& write, const THashMap<TString, TStrin
     for (const auto& [name, value] : properties) {
         Y_UNUSED(value);
         Y_ENSURE(name == "source_type" || name == "protocol" || name == "location" || name == "auth_method" || name == "token_secret_name" ||
-                     name == "use_tls" || name == "ca_certificate", "Unsupported ExternalService property: " << to_upper(name));
+                     name == "use_tls" || name == "ca_certificate" || name == "tvm_source_id" || name == "tvm_destination_id" ||
+                     name == "tvm_secret_name", "Unsupported ExternalService property: " << to_upper(name));
     }
     Y_ENSURE(Required(properties, "source_type") == "ExternalService", "SOURCE_TYPE must be ExternalService");
     auto& service = *result.Content.mutable_setting()->mutable_external_service();
@@ -100,8 +102,19 @@ TConnectionDdl DecodeWrite(const TAstNode& write, const THashMap<TString, TStrin
         service.mutable_auth()->mutable_none();
     } else if (auth == "CURRENT_IAM") {
         service.mutable_auth()->mutable_current_iam();
+    } else if (auth == "TVM") {
+        auto& tvm = *service.mutable_tvm_auth();
+        ui32 source = 0, destination = 0;
+        Y_ENSURE(TryFromString(Required(properties, "tvm_source_id"), source) && source, "TVM_SOURCE_ID must be a nonzero uint32");
+        Y_ENSURE(TryFromString(Required(properties, "tvm_destination_id"), destination) && destination,
+            "TVM_DESTINATION_ID must be a nonzero uint32");
+        tvm.set_source_id(source);
+        tvm.set_destination_id(destination);
+        auto it = secrets.find(Required(properties, "tvm_secret_name"));
+        Y_ENSURE(it != secrets.end(), "TVM_SECRET_NAME is not present in --secrets-file");
+        tvm.set_secret(it->second);
     } else {
-        Y_ENSURE(auth == "TOKEN", "AUTH_METHOD must be NONE, CURRENT_IAM or TOKEN");
+        Y_ENSURE(auth == "TOKEN", "AUTH_METHOD must be NONE, CURRENT_IAM, TOKEN or TVM");
         const auto secret = Required(properties, "token_secret_name");
         auto it = secrets.find(secret);
         Y_ENSURE(it != secrets.end(), "TOKEN_SECRET_NAME is not present in --secrets-file");

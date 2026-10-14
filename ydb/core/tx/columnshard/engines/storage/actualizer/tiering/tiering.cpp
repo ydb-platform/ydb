@@ -115,8 +115,6 @@ void TTieringActualizer::AddPortionImpl(const TPortionInfo& portion, const TInst
 }
 
 void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) {
-    // Key repair preserves the physical tier and the original snapshot schema.
-    // Let the scheme actualizer finish it before applying TTL/tiering.
     if (portion.GetMeta().GetRebuildDecimalPrimaryKey()) {
         return;
     }

@@ -360,6 +360,8 @@ public:
         return DoCalcMemoryForUsage();
     }
 
+    virtual ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const;
+
     TString GetTaskIdentifier() const {
         return TaskIdentifier;
     }

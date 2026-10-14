@@ -60,8 +60,7 @@ private:
     std::shared_ptr<arrow::Schema> PKSchema;
     NArrow::TSimpleRowContent FirstPKRow;
     NArrow::TSimpleRowContent LastPKRow;
-    // Runtime bounds may be widened during a comparator migration. Persist the
-    // original bounds until the actualizer has really reordered the rows.
+    // Persist original bounds until the rows have been reordered.
     std::shared_ptr<const NArrow::TFirstLastSpecialKeys> StoredPrimaryKeys;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
@@ -85,11 +84,7 @@ private:
 
 public:
     bool HasIncompatibleDecimalKeyOrder() const {
-        bool numeric = false;
-        for (const auto& field : PKSchema->fields()) {
-            numeric |= NArrow::TKeyColumnComparator::IsDecimal(*field);
-        }
-        return numeric != DecimalKeyOrder;
+        return NArrow::TKeyComparator::HasDecimalComparison(*PKSchema) != DecimalKeyOrder;
     }
 
     void FullValidation() const;

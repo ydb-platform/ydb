@@ -119,9 +119,7 @@ bool TPortionMetaConstructor::LoadMetadata(
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
     }
 
-    // Old first/last rows are not bounds under the other ordering. Keep the
-    // correctly ordered prefix and widen the first Decimal component while the
-    // manual actualization is pending. Reads/compaction reject this old order.
+    // Old first/last rows do not bound the data under the new comparator.
     const auto& pkColumns = indexInfo.GetPrimaryKeyColumns();
     for (ui32 i = 0; i < pkColumns.size(); ++i) {
         if (pkColumns[i].second.GetTypeId() != NScheme::NTypeIds::Decimal) {
@@ -133,7 +131,7 @@ bool TPortionMetaConstructor::LoadMetadata(
             const auto makeBorder = [&](const NArrow::TSimpleRow& row, const bool upper) {
                 auto batch = row.ToBatch();
                 auto arrays = batch->columns();
-                TString bytes(16, upper ? '\xff' : '\0');
+                TString bytes(sizeof(NYql::NDecimal::TInt128), upper ? '\xff' : '\0');
                 if (numeric) {
                     // Values strictly outside the valid YQL Decimal range.
                     const auto value = upper ? NYql::NDecimal::Nan() + 1 : -NYql::NDecimal::Inf() - 1;

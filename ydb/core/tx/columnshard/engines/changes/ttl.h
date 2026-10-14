@@ -40,7 +40,6 @@ private:
     std::vector<TPortionForEviction> PortionsToEvict;
     const NActualizer::TRWAddress RWAddress;
     bool HasKeyRebuild = false;
-    // Physical replacements keep portion identity and its complete MVCC interval.
     std::vector<std::pair<TPortionInfo::TConstPtr, TWritePortionInfoWithBlobsResult>> RewrittenPortions;
 
 protected:
@@ -91,6 +90,8 @@ protected:
     }
 
 public:
+    ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const override;
+
     ui32 GetWritePortionsCount() const override {
         return TBase::GetWritePortionsCount() + RewrittenPortions.size();
     }
@@ -107,7 +108,12 @@ public:
         ui64 MaxWorkingMemory = 0;
 
     public:
-        ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features);
+        ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features,
+            const TPortionDataAccessor* accessor = nullptr);
+
+        ui64 GetConstructionMemory() const {
+            return SumOutputMemory + MaxWorkingMemory;
+        }
 
         ui64 PredictMemory(const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features) const {
             auto copy = *this;
@@ -137,8 +143,6 @@ public:
 
     void AddPortionToEvict(const TPortionInfo::TConstPtr& info, TPortionEvictionFeatures&& features) {
         AFL_VERIFY(!info->HasRemoveSnapshot() || features.GetRebuildDecimalPrimaryKey());
-        // A repair takes an Any lock. Compatible portions must remain readable
-        // while a historical portion is being repaired in another task.
         AFL_VERIFY(PortionsToEvict.empty() || HasKeyRebuild == features.GetRebuildDecimalPrimaryKey());
         HasKeyRebuild = features.GetRebuildDecimalPrimaryKey();
         PortionsToEvict.emplace_back(info, std::move(features));

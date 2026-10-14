@@ -1,3 +1,5 @@
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -30,14 +32,18 @@ const TDuration Tier1EvictAfter = TDuration::Hours(1);
 const TDuration Tier2EvictAfter = TDuration::Hours(2);
 
 TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization,
-    const std::optional<TString>& sparseDefault = {}) {
+    const std::optional<TString>& sparseDefault = {}, const bool dictionaryPayload = false) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(PkColumnId);
-    if (sparseDefault) {
+    if (sparseDefault || dictionaryPayload) {
         auto column = NArrow::NTest::TTestColumn("payload", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)).CreateColumn(2);
-        *column.MutableDefaultValue() =
-            TColumnDefaultScalarValue(std::make_shared<arrow::StringScalar>(std::string(*sparseDefault))).SerializeToProto();
-        NArrow::NAccessor::TConstructorContainer accessor(std::make_shared<NArrow::NAccessor::NSparsed::TConstructor>());
+        if (sparseDefault) {
+            *column.MutableDefaultValue() =
+                TColumnDefaultScalarValue(std::make_shared<arrow::StringScalar>(std::string(*sparseDefault))).SerializeToProto();
+        }
+        NArrow::NAccessor::TConstructorContainer accessor =
+            dictionaryPayload ? NArrow::NAccessor::TConstructorContainer(std::make_shared<NArrow::NAccessor::NDictionary::TConstructor>())
+                              : NArrow::NAccessor::TConstructorContainer(std::make_shared<NArrow::NAccessor::NSparsed::TConstructor>());
         *column.MutableDataAccessorConstructor() = accessor.SerializeToProto();
         *proto.AddColumns() = column;
         *proto.AddColumns() = NArrow::NTest::TTestColumn("absent", NScheme::TTypeInfo(NScheme::NTypeIds::Int64)).CreateColumn(3);
@@ -163,7 +169,6 @@ public:
     }
 };
 
-// Reproduce startup with loaded portions, no TTL and no critical schema history.
 class TDecimalRepairTestEnv {
 private:
     const std::shared_ptr<TSchemaObjectsCache> Cache = std::make_shared<TSchemaObjectsCache>();
@@ -241,9 +246,9 @@ public:
     const std::shared_ptr<TController> Controller = std::make_shared<TController>();
     TVersionedIndex Index;
 
-    explicit TActualizationBatchTestEnv(const std::optional<TString>& sparseDefault = {}) {
-        Index.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false, sparseDefault)));
-        Index.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true, sparseDefault)));
+    explicit TActualizationBatchTestEnv(const std::optional<TString>& sparseDefault = {}, const bool dictionaryPayload = false) {
+        Index.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false, sparseDefault, dictionaryPayload)));
+        Index.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true, sparseDefault, dictionaryPayload)));
     }
 
     TPortionEvictionFeatures Features(const bool repair) const {
@@ -261,6 +266,22 @@ public:
     static TPortionInfo::TConstPtr Portion(const ui64 id, const bool historical, const ui32 rows = 1000) {
         return NTest::MakeTestCompactedPortion(
             TestPathId, id, 10, 19, rows, TSnapshot(1, 1), historical ? std::make_optional(TSnapshot(10, 1)) : std::nullopt);
+    }
+
+    std::shared_ptr<TPortionDataAccessor> Accessor(const ui64 id, const ui32 rows, const std::vector<TColumnRecord>& records) const {
+        auto portion = Portion(id, true, rows);
+        const std::vector<TUnifiedBlobId> blobs = { TUnifiedBlobId(1, 1, 1, 1, 1, 1, 100) };
+        auto proto = portion->GetMeta().SerializeToProto(blobs, NPortion::EProduced::SPLIT_COMPACTED);
+        ui64 rawBytes = 0;
+        for (const auto& chunk : records) {
+            rawBytes += chunk.GetMeta().GetRawBytes();
+        }
+        proto.SetColumnRawBytes(rawBytes);
+        auto ctor = portion->BuildConstructor(true);
+        TPortionMetaConstructor meta;
+        UNIT_ASSERT(meta.LoadMetadata(proto, Index.GetSchemaVerified(1)->GetIndexInfo(), TFakeGroupSelector()));
+        ctor->MutableMeta() = std::move(meta);
+        return std::make_shared<TPortionDataAccessor>(ctor->Build(), blobs, records, std::vector<TIndexChunk>(), false);
     }
 
     static auto BuildLock(const TTTLColumnEngineChanges& task) {
@@ -378,7 +399,6 @@ Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
         UNIT_ASSERT_EQUAL(
             context.AddPortion(env.Portion(2, false), env.Features(false), {}), TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED);
         UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().begin()->second.size(), 1);
-        // Another repair portion still fits without using a new slot.
         UNIT_ASSERT_EQUAL(context.AddPortion(env.Portion(3, true), env.Features(true), {}), TTieringProcessContext::EAddPortionResult::SUCCESS);
     }
 
@@ -420,6 +440,80 @@ Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
         const auto features = env.Features(false);
         UNIT_ASSERT_VALUES_EQUAL(predictor->AddPortion(portion, features), portion->GetTotalBlobBytes() + portion->GetTotalRawBytes());
         UNIT_ASSERT_VALUES_EQUAL(predictor->AddPortion(portion, features), 2 * portion->GetTotalBlobBytes() + portion->GetTotalRawBytes());
+    }
+
+    Y_UNIT_TEST(RepairReservationIncludesDenseDefaultsAndExcludesInputBlobs) {
+        TActualizationBatchTestEnv env(TString(1024, 'x'));
+        auto features = env.Features(true);
+        TTTLColumnEngineChanges task(features.GetRWAddress(), TSaverContext(env.Storages));
+        std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
+        ui64 inputBlobs = 0;
+        for (ui64 id = 1; id <= 2; ++id) {
+            auto accessor = env.Accessor(id, 4096, { TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, 4096, 4096 * sizeof(ui64)) });
+            inputBlobs += accessor->GetPortionInfo().GetTotalBlobBytes();
+            task.AddPortionToEvict(accessor->GetPortionInfoPtr(), env.Features(true));
+            accessors.emplace_back(std::move(accessor));
+        }
+        const TColumnEngineChanges& changes = task;
+        const ui64 reserved = changes.CalcMemoryForConstruction(accessors);
+        UNIT_ASSERT(reserved > 3 * 4096 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(reserved + inputBlobs, task.CalcMemoryForUsage());
+    }
+
+    Y_UNIT_TEST(DictionaryRepairReservationAccountsForRepeatedLongValues) {
+        TActualizationBatchTestEnv env({}, true);
+        constexpr ui32 ChunkRows = 100000;
+        constexpr ui32 ValueBytes = 16 * 1024;
+        const auto dictionary =
+            NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::StringScalar(std::string(ValueBytes, 'x')), 1));
+        const auto positions = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), ChunkRows));
+        const auto encoded = std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictionary, positions);
+        const ui64 expandedBytes = ui64(ChunkRows) * ValueBytes;
+        UNIT_ASSERT(encoded->GetValueRawBytes() < expandedBytes / 1000);
+        std::vector<TColumnRecord> records;
+        records.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, 2 * ChunkRows, 2 * ChunkRows * sizeof(ui64)));
+        records.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 0, 100, 100, ChunkRows, encoded->GetValueRawBytes()));
+        records.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 1, 200, 100, ChunkRows, encoded->GetValueRawBytes()));
+        const auto accessor = env.Accessor(1, 2 * ChunkRows, records);
+        auto features = env.Features(true);
+        TTTLColumnEngineChanges task(features.GetRWAddress(), TSaverContext(env.Storages));
+        task.AddPortionToEvict(accessor->GetPortionInfoPtr(), env.Features(true));
+        const TColumnEngineChanges& changes = task;
+        const ui64 reserved = changes.CalcMemoryForConstruction({ accessor });
+        UNIT_ASSERT(reserved > 3 * 2 * expandedBytes);
+        UNIT_ASSERT(reserved < task.CalcMemoryForUsage());
+
+        std::vector<TColumnRecord> singleChunkRecords;
+        singleChunkRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, ChunkRows, ChunkRows * sizeof(ui64)));
+        singleChunkRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 0, 100, 100, ChunkRows, encoded->GetValueRawBytes()));
+        const auto singleChunk = env.Accessor(2, ChunkRows, singleChunkRecords);
+        task.AddPortionToEvict(singleChunk->GetPortionInfoPtr(), env.Features(true));
+        const ui64 withRetainedOutput = changes.CalcMemoryForConstruction({ singleChunk, accessor });
+        UNIT_ASSERT(withRetainedOutput >= reserved + expandedBytes);
+
+        auto context = env.Context();
+        for (const auto& portion : { accessor, singleChunk }) {
+            UNIT_ASSERT_EQUAL(
+                context.AddPortion(portion->GetPortionInfoPtr(), env.Features(true), {}), TTieringProcessContext::EAddPortionResult::SUCCESS);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(context.GetTasks().begin()->second.size(), 2);
+    }
+
+    Y_UNIT_TEST(OrdinaryReservationKeepsMaximumPerColumn) {
+        TActualizationBatchTestEnv env;
+        auto features = env.Features(false);
+        TTTLColumnEngineChanges task(features.GetRWAddress(), TSaverContext(env.Storages));
+        std::vector<TColumnRecord> firstRecords;
+        firstRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, 500, 100));
+        firstRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 1, 100, 100, 500, 200));
+        firstRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 0, 200, 100, 1000, 600));
+        const auto first = env.Accessor(1, 1000, firstRecords);
+        std::vector<TColumnRecord> secondRecords;
+        secondRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, 1000, 400));
+        secondRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 0, 100, 100, 1000, 50));
+        const auto second = env.Accessor(2, 1000, secondRecords);
+        const TColumnEngineChanges& changes = task;
+        UNIT_ASSERT_VALUES_EQUAL(changes.CalcMemoryForConstruction({ first, second }), 650);
     }
 
     Y_UNIT_TEST(LateStartQueuesLoadedPortionsWithoutCriticalSchema) {

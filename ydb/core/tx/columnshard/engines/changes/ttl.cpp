@@ -10,41 +10,78 @@
 
 #include <ydb/library/formats/arrow/replace_key.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_util.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION
 
 namespace NKikimr::NOlap {
 
 ui64 TTTLColumnEngineChanges::TMemoryPredictor::AddPortion(
-    const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features) {
+    const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features, const TPortionDataAccessor* accessor) {
     SumBlobsMemory += portionInfo->GetTotalBlobBytes();
     ui64 workingMemory = portionInfo->GetTotalRawBytes();
     if (features.GetRebuildDecimalPrimaryKey()) {
+        constexpr ui64 ArrayMetadataEstimateBytes = 256;
+        constexpr ui64 WorkingArrayCopies = 4;
+        constexpr ui64 OutputBufferCopies = 2;
+        constexpr ui64 PermutationBufferCopies = 2;
         const ui64 rows = portionInfo->GetRecordsCount();
-        // RawBytes describes stored values, not the dense arrays produced when
-        // sparse/absent columns are restored. Include every column, even defaults
-        // and MVCC columns, and add variable-width payloads from the stored data.
+        // Stored RawBytes omits repeated defaults in sparse/absent columns.
         ui64 denseMemory = portionInfo->GetTotalRawBytes();
+        THashSet<ui32> dictionaryColumns;
         for (const auto columnId : features.GetTargetScheme()->GetColumnIds()) {
             const auto loader = features.GetTargetScheme()->GetColumnLoaderVerified(columnId);
             const auto& type = loader->GetField()->type();
-            denseMemory += (rows + 7) / 8 + 256;   // validity bitmap and array/buffer metadata
+            denseMemory += arrow::BitUtil::BytesForBits(rows) + ArrayMetadataEstimateBytes;
             if (const auto fixed = std::dynamic_pointer_cast<arrow::FixedWidthType>(type)) {
-                denseMemory += (rows * fixed->bit_width() + 7) / 8;
+                denseMemory += arrow::BitUtil::BytesForBits(rows * fixed->bit_width());
             } else {
+                if (loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary) {
+                    dictionaryColumns.emplace(columnId);
+                }
                 denseMemory += (rows + 1) * sizeof(ui64);   // offsets, including large binary
                 if (const auto value = std::dynamic_pointer_cast<arrow::BaseBinaryScalar>(loader->GetDefaultValue()); value && value->is_valid) {
                     denseMemory += rows * value->value->size();
                 }
             }
         }
-        // Input accessors, combined arrays, reordered arrays and serialization /
-        // accessor reconstruction may coexist. Sorting also keeps row references
-        // and UInt64 permutation buffers. Output blobs accumulate across portions.
-        workingMemory = 4 * denseMemory + rows * (sizeof(NArrow::TRawReplaceKey) + 2 * sizeof(ui64));
-        SumOutputMemory += 2 * denseMemory;
+        if (!dictionaryColumns.empty()) {
+            if (accessor) {
+                for (const auto& chunk : accessor->GetRecordsVerified()) {
+                    if (dictionaryColumns.contains(chunk.GetColumnId())) {
+                        const ui64 chunkRows = chunk.GetMeta().GetRecordsCount();
+                        const ui64 rawBytes = chunk.GetMeta().GetRawBytes();
+                        // Positions use at least one byte per row; the rest bounds a dictionary value.
+                        AFL_VERIFY(rawBytes >= chunkRows);
+                        denseMemory += chunkRows * (rawBytes - chunkRows);
+                    }
+                }
+            } else {
+                // Task batching precedes accessor loading, so only portion totals are available.
+                denseMemory += rows * portionInfo->GetTotalRawBytes();
+            }
+        }
+        workingMemory = WorkingArrayCopies * denseMemory + rows * (sizeof(NArrow::TRawReplaceKey) + PermutationBufferCopies * sizeof(ui64));
+        SumOutputMemory += OutputBufferCopies * denseMemory;
     }
     MaxWorkingMemory = Max(MaxWorkingMemory, workingMemory);
-    return SumBlobsMemory + SumOutputMemory + MaxWorkingMemory;
+    return SumBlobsMemory + GetConstructionMemory();
+}
+
+ui64 TTTLColumnEngineChanges::CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const {
+    if (!HasKeyRebuild) {
+        return TBase::CalcMemoryForConstruction(accessors);
+    }
+    THashMap<ui64, const TPortionDataAccessor*> accessorsById;
+    for (const auto& accessor : accessors) {
+        accessorsById.emplace(accessor->GetPortionInfo().GetPortionId(), accessor.get());
+    }
+    TMemoryPredictor predictor;
+    for (const auto& portion : PortionsToEvict) {
+        predictor.AddPortion(portion.GetPortionInfo(), portion.GetFeatures(), accessorsById.at(portion.GetPortionInfo()->GetPortionId()));
+    }
+    // Input blobs have a separate reservation in TAskBlobDataResourceStep.
+    return predictor.GetConstructionMemory();
 }
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
@@ -131,9 +168,6 @@ void TTTLColumnEngineChanges::DoOnAfterCompile(const TFinalizationContext& conte
 void TTTLColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     TBase::DoWriteIndexOnExecute(self, context);
     for (auto& [original, replacement] : RewrittenPortions) {
-        // Readers cannot enter a portion with incompatible key order. Actualization
-        // locks exclude concurrent cleanup/compaction. Persist the replacement and
-        // retire the old blobs in the same tablet transaction, keeping all snapshots.
         AFL_VERIFY(original->GetMeta().HasIncompatibleDecimalKeyOrder());
         const auto& old = GetPortionDataAccessor(original->GetPortionId());
         old.RemoveFromDatabase(context.DBWrapper);

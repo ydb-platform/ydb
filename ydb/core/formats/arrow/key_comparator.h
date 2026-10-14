@@ -6,10 +6,10 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/key_value_metadata.h>
 
+#include <algorithm>
+
 namespace NKikimr::NArrow {
 
-// Logical key comparison is selected once from the schema. Physical Arrow
-// comparison (including UUID and unannotated fixed_size_binary) is unchanged.
 class TKeyColumnComparator {
     using TBinaryCompare = std::partial_ordering (*)(std::string_view, std::string_view);
     using TArrayCompare = std::partial_ordering (*)(const arrow::Array&, i32, const arrow::Array&, i32);
@@ -79,6 +79,12 @@ class TKeyComparator {
     std::vector<TKeyColumnComparator> Columns;
 
 public:
+    static bool HasDecimalComparison(const arrow::Schema& schema) {
+        return std::any_of(schema.fields().begin(), schema.fields().end(), [](const auto& field) {
+            return TKeyColumnComparator::IsDecimal(*field);
+        });
+    }
+
     explicit TKeyComparator(const arrow::FieldVector& fields) {
         for (const auto& field : fields) {
             Columns.emplace_back(*field);

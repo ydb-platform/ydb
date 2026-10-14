@@ -12,7 +12,7 @@ namespace NKikimr::NArrow {
 
 Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
     Y_UNIT_TEST(SortRowsAndBorders) {
-        const auto type = arrow::fixed_size_binary(16);
+        const auto type = arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128));
         auto field = arrow::field("key", type)->WithMetadata(
             arrow::key_value_metadata({TKeyColumnComparator::DecimalComparisonMetadata}, {"1"}));
         const std::vector<NYql::NDecimal::TInt128> values = {
@@ -37,7 +37,6 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
             memcpy(&value, result.GetValue(i + 1), sizeof(value));
             UNIT_ASSERT(value == expected[i]);
         }
-        // Serialized borders and cursors must agree, including nulls and sliced arrays.
         auto sliced = sorted->Slice(1);
         NMerger::TSortableScanData scan(0, sliced);
         for (ui32 i = 1; i < expected.size(); ++i) {
@@ -49,8 +48,6 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
         UNIT_ASSERT(IsSortedAndUnique(legacy, legacySchema));
         UNIT_ASSERT(!IsSorted(legacy, schema));
 
-        // Predicate filtering reconstructs fields from accessors and a resolver.
-        // The comparison metadata must survive that reconstruction.
         NAccessor::TAccessorsCollection collection;
         collection.AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(sorted->column(0)), false);
         NSSA::TSchemaColumnResolver resolver(schema);
@@ -64,7 +61,7 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
 
     Y_UNIT_TEST(OtherFixedSizeBinaryKeepsByteOrder) {
         const NYql::NDecimal::TInt128 one = 1, nextByte = 256;
-        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(16));
+        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128)));
         UNIT_ASSERT(builder.Append(reinterpret_cast<const char*>(&one)).ok());
         UNIT_ASSERT(builder.Append(reinterpret_cast<const char*>(&nextByte)).ok());
         std::shared_ptr<arrow::Array> array;
@@ -76,7 +73,7 @@ Y_UNIT_TEST_SUITE(DecimalKeyComparison) {
     }
 
     Y_UNIT_TEST(StableSortPreservesVersions) {
-        const auto type = arrow::fixed_size_binary(16);
+        const auto type = arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128));
         auto schema = arrow::schema({arrow::field("key", type)->WithMetadata(
             arrow::key_value_metadata({TKeyColumnComparator::DecimalComparisonMetadata}, {"1"}))});
         arrow::FixedSizeBinaryBuilder builder(type);

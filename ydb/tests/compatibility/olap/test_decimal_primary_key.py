@@ -17,8 +17,6 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class TestDecimalPrimaryKey(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        # Do not send the new option to old binaries. Its default must retain the
-        # legacy ordering throughout an upgrade/downgrade before opting in.
         yield from self.setup_cluster(nodes=3, erasure=Erasure.NONE, column_shard_config={
             "disabled_on_scheme_shard": False,
             "compaction_enabled": False,
@@ -41,7 +39,6 @@ class TestDecimalPrimaryKey(RestartToAnotherVersionFixture):
 
         def write(offset):
             with ydb.QuerySessionPool(self.driver) as pool:
-                # Separate writes exercise persisted portion borders as well as rows.
                 for i, value in enumerate(values):
                     pool.execute_with_retries(f"""
                         UPSERT INTO decimals (prefix, key, value)
@@ -126,8 +123,6 @@ class TestDecimalPrimaryKeyRepair(RestartToAnotherVersionFixture):
                     assert [row["value"] for row in result] == [i]
 
         check()
-        # Reuse the repair identity and restart the current binary: persisted data
-        # must stay readable without rerunning the one-shot normalizer.
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()

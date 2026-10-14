@@ -678,22 +678,7 @@ private:
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
         const std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>& acc) const override {
         AFL_VERIFY(!columnIds);
-        THashMap<ui32, ui64> memoryByColumns;
-        for (auto&& a : acc) {
-            THashMap<ui32, ui64> memoryByPortionColumns;
-            for (auto&& c : a->GetRecordsVerified()) {
-                const ui64 current = memoryByPortionColumns[c.GetEntityId()];
-                memoryByPortionColumns[c.GetEntityId()] = std::max<ui64>(current, c.GetMeta().GetRawBytes());
-            }
-            for (auto&& c : memoryByPortionColumns) {
-                memoryByColumns[c.first] += c.second;
-            }
-        }
-        ui64 max = 0;
-        for (auto&& c : memoryByColumns) {
-            max = std::max(max, c.second);
-        }
-        return max;
+        return Changes->CalcMemoryForConstruction(acc);
     }
 
     virtual void DoOnError(const TString& errorMessage) override {

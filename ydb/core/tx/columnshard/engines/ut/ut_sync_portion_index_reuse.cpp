@@ -225,13 +225,13 @@ Y_UNIT_TEST_SUITE(TDecimalRepairPortionTests) {
         actorSystem.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         actorSystem.AppData.ColumnShardConfig.SetEnableDecimalKeyComparison(false);
         const auto oldSchema = MakeTestSchema(1, { .WithMaxIndex = true, .WithDecimalKey = true });
-        arrow::FixedSizeBinaryBuilder pkBuilder(arrow::fixed_size_binary(16));
+        arrow::FixedSizeBinaryBuilder pkBuilder(arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128)));
         for (const NYql::NDecimal::TInt128 value : { 256, 1, -1 }) {
             UNIT_ASSERT(pkBuilder.Append(reinterpret_cast<const ui8*>(&value)).ok());
         }
-        auto batch =
-            arrow::RecordBatch::Make(arrow::schema({ arrow::field("pk", arrow::fixed_size_binary(16)), arrow::field("value", arrow::int32()) }),
-                3, { pkBuilder.Finish().ValueOrDie(), MakeTestBatch()->column(1) });
+        auto batch = arrow::RecordBatch::Make(arrow::schema({ arrow::field("pk", arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128))),
+                                                  arrow::field("value", arrow::int32()) }), 3,
+            { pkBuilder.Finish().ValueOrDie(), MakeTestBatch()->column(1) });
         const auto splitterCounters = MakeSplitterCounters();
         auto original = BuildTestPortion(oldSchema, batch, { { MaxIndexId, MaxIndexMarker } }, splitterCounters);
         auto& ctor = original.GetPortionConstructor().MutablePortionConstructor();

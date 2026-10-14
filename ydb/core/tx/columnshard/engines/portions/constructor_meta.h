@@ -45,10 +45,7 @@ public:
         FirstAndLastPK = keys;
         StoredPrimaryKeys.reset();
         RebuildDecimalPrimaryKey = false;
-        DecimalKeyOrder = false;
-        for (const auto& field : keys.GetSchema()->fields()) {
-            DecimalKeyOrder |= NArrow::TKeyColumnComparator::IsDecimal(*field);
-        }
+        DecimalKeyOrder = NArrow::TKeyComparator::HasDecimalComparison(*keys.GetSchema());
     }
 
     const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {

@@ -37,6 +37,7 @@ public:
 
 class TDecimalPrimaryKeyNormalizer: public TNormalizationController::INormalizerComponent {
     using TBase = TNormalizationController::INormalizerComponent;
+    static constexpr ui32 MaxPortionsPerTask = 1000;
     static inline TFactory::TRegistrator<TDecimalPrimaryKeyNormalizer> Registrator{ "RebuildDecimalPrimaryKey" };
 
 public:
@@ -50,7 +51,6 @@ public:
     }
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        // This is a manually scheduled repair, not an automatic startup migration.
         return std::nullopt;
     }
 
@@ -77,6 +77,12 @@ public:
         ui64 marked = 0;
         ui64 historical = 0;
         THashMap<TPortionAddress, NKikimrTxColumnShard::TIndexPortionMeta> portions;
+        const auto flushPortions = [&] {
+            if (!portions.empty()) {
+                tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TDecimalPrimaryKeyChanges>(std::move(portions))));
+                portions.clear();
+            }
+        };
         while (!rows.EndOfSet()) {
             const auto schema = tables.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(rows.GetValue<TTable::SchemaVersion>());
             bool hasDecimalKey = false;
@@ -87,29 +93,21 @@ public:
             if (hasDecimalKey) {
                 TPortionLoadContext portion(rows);
                 auto meta = portion.GetMetaProto();
-                if (meta.GetDecimalKeyOrder()) {
-                    if (!rows.Next()) {
-                        return TConclusionStatus::Fail("Not ready");
+                if (!meta.GetDecimalKeyOrder()) {
+                    ++marked;
+                    historical += rows.GetValue<TTable::XPlanStep>() != 0;
+                    meta.SetRebuildDecimalPrimaryKey(true);
+                    portions.emplace(portion.GetAddress(), std::move(meta));
+                    if (portions.size() == MaxPortionsPerTask) {
+                        flushPortions();
                     }
-                    continue;
-                }
-                ++marked;
-                historical += rows.GetValue<TTable::XPlanStep>() != 0;
-                meta.SetRebuildDecimalPrimaryKey(true);
-                portions.emplace(portion.GetAddress(), std::move(meta));
-                if (portions.size() == 1000) {
-                    tasks.emplace_back(
-                        std::make_shared<TTrivialNormalizerTask>(std::make_shared<TDecimalPrimaryKeyChanges>(std::move(portions))));
-                    portions.clear();
                 }
             }
             if (!rows.Next()) {
                 return TConclusionStatus::Fail("Not ready");
             }
         }
-        if (!portions.empty()) {
-            tasks.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TDecimalPrimaryKeyChanges>(std::move(portions))));
-        }
+        flushPortions();
         YDB_LOG_NOTICE("Decimal primary key repair scheduled", {"portions", marked}, {"historicalPortions", historical});
         return tasks;
     }

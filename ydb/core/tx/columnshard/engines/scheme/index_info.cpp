@@ -26,7 +26,6 @@ std::shared_ptr<arrow::Field> TIndexInfo::BuildArrowField(const NTable::TColumn&
     std::shared_ptr<arrow::DataType> arrowType;
 
     if (column.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
-        // ColumnShard stores Interval as int64; GetArrowType returns duration(MICRO).
         arrowType = arrow::int64();
     } else {
         auto result = NArrow::GetArrowType(column.PType);

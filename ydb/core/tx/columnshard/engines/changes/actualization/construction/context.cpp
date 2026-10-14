@@ -41,8 +41,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         std::vector<TTaskConstructor> tasks = { buildNewTask() };
         it = Tasks.emplace(features.GetRWAddress(), std::move(tasks)).first;
     }
-    // Keep the shared per-storage task limit, but never mix physical repair
-    // (Any lock) with ordinary actualization (readers may still use its input).
+    // An Any repair lock must not hide compatible portions from readers.
     TTaskConstructor* task = nullptr;
     for (auto candidate = it->second.rbegin(); candidate != it->second.rend(); ++candidate) {
         if (!candidate->GetPortionsCount() || candidate->GetTask()->IsKeyRebuild() == features.GetRebuildDecimalPrimaryKey()) {

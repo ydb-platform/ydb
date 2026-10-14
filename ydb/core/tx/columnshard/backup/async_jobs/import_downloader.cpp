@@ -75,8 +75,7 @@ public:
                 return Fail("Invalid YT next part first key");
             }
             const size_t keyCount = task.GetTableDescription().KeyColumnIdsSize();
-            if (lower.GetCells().size() != keyCount ||
-                (PartIndex + 1 < YtPlan->PartsSize() && upper.GetCells().size() != keyCount)) {
+            if (lower.GetCells().size() != keyCount || (PartIndex + 1 < YtPlan->PartsSize() && upper.GetCells().size() != keyCount)) {
                 return Fail("Invalid YT part key column count");
             }
             // Column restore writes locally. For the single-shard YT destination,

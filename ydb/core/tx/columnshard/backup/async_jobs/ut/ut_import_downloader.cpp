@@ -15,13 +15,13 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
+#include <contrib/libs/zlib/zlib.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/node/node_io.h>
-#include <contrib/libs/zlib/zlib.h>
-#include <aws/s3/model/HeadObjectRequest.h>
 
 namespace NKikimr {
 
@@ -247,8 +247,7 @@ TString MakeYtGzip(TStringBuf text) {
     const auto wrapped = NYT::NodeToYsonString(rows, NYson::EYsonFormat::Binary);
     const auto input = TStringBuf(wrapped).SubStr(1, wrapped.size() - 2);
     z_stream stream{};
-    UNIT_ASSERT_VALUES_EQUAL(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
-        16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY), Z_OK);
+    UNIT_ASSERT_VALUES_EQUAL(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY), Z_OK);
     TString output;
     output.resize(deflateBound(&stream, input.size()));
     stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
@@ -269,12 +268,11 @@ NKikimrSchemeOp::TRestoreTask MakeYtRestoreTask(const TString& bucket) {
     return task;
 }
 
-void AddYtPart(NKikimrSchemeOp::TRestoreTask& task, Aws::S3::S3Client& client,
-               TStringBuf key, TStringBuf firstKey, TStringBuf text, ui64 start, ui64 end) {
+void AddYtPart(
+    NKikimrSchemeOp::TRestoreTask& task, Aws::S3::S3Client& client, TStringBuf key, TStringBuf firstKey, TStringBuf text, ui64 start, ui64 end) {
     const auto data = MakeYtGzip(text);
     NTestUtils::UploadObject(task.GetS3Settings().GetBucket(), TString(key), data, client);
-    const auto head = client.HeadObject(Aws::S3::Model::HeadObjectRequest()
-        .WithBucket(task.GetS3Settings().GetBucket()).WithKey(TString(key)));
+    const auto head = client.HeadObject(Aws::S3::Model::HeadObjectRequest().WithBucket(task.GetS3Settings().GetBucket()).WithKey(TString(key)));
     UNIT_ASSERT_C(head.IsSuccess(), head.GetError().GetMessage());
     auto* part = task.MutableYtImportPlan()->AddParts();
     part->SetObjectKey(TString(key));
@@ -283,15 +281,13 @@ void AddYtPart(NKikimrSchemeOp::TRestoreTask& task, Aws::S3::S3Client& client,
     part->SetContentLength(data.size());
     part->SetStartRow(start);
     part->SetEndRow(end);
-    const TVector<TCell> cells{TCell(firstKey.data(), firstKey.size())};
+    const TVector<TCell> cells{ TCell(firstKey.data(), firstKey.size()) };
     part->SetFirstKey(TSerializedCellVec(cells).GetBuffer());
 }
 
-TActorId StartYtWrapper(TTestActorRuntime& runtime, const TActorId& edge,
-                        const NKikimrSchemeOp::TRestoreTask& task) {
+TActorId StartYtWrapper(TTestActorRuntime& runtime, const TActorId& edge, const NKikimrSchemeOp::TRestoreTask& task) {
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), task.GetTableDescription(), ui32(0));
-    auto actor = NColumnShard::NBackup::CreateImportDownloader(
-        edge, 0, task, NDataShard::TTableInfo(0, userTable), MakeYdbSchema());
+    auto actor = NColumnShard::NBackup::CreateImportDownloader(edge, 0, task, NDataShard::TTableInfo(0, userTable), MakeYdbSchema());
     return runtime.Register(actor.release());
 }
 

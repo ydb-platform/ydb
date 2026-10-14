@@ -61,9 +61,7 @@ const TPartitionGraph::Node* TMLPConsumer::PickNextPartition() {
         return GetPartitionGraph().GetPartition(activePartitions[partitionId]);
     }
 
-    // Prefer a partition that is known to have unlocked messages: a partition whose
-    // messages are all locked cannot serve a read, and routing a reader there results
-    // in a spurious empty read while a sibling partition has available messages.
+    // Prefer a partition with available (unlocked, non-delayed) messages.
     // Metrics are reported on the consumer heartbeat and may be stale or unknown,
     // so fall back to the plain round-robin when no partition qualifies.
     for (size_t i = 0; i < PartitionsForBalancing.size(); ++i) {
@@ -71,7 +69,7 @@ const TPartitionGraph::Node* TMLPConsumer::PickNextPartition() {
         const auto partitionId = PartitionsForBalancing[index];
         auto it = Partitions.find(partitionId);
         if (it != Partitions.end()
-                && it->second.Metrics.Messages > it->second.Metrics.LockedMessages)
+                && it->second.Metrics.Messages > it->second.Metrics.LockedMessages + it->second.Metrics.DelayedMessages)
         {
             PartitionIterator = index + 1;
             return GetPartitionGraph().GetPartition(partitionId);
@@ -229,9 +227,7 @@ void TMLPConsumer::Rebuild() {
         }
     }
 
-    // A partition without a status entry has not reported yet (statuses arrive
-    // asynchronously on the consumer heartbeat). Unknown must not be treated as
-    // "reading finished": keep such active partitions in the balancing set until
+    // Partitions without a status entry have not reported yet; keep them until
     // their first status arrives, otherwise a partially reported topic collapses
     // the balancing set to the already reported partitions.
     for (const auto partitionId : Balancer.GetActivePartitions()) {

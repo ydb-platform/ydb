@@ -2567,14 +2567,20 @@ class Cuda(object):
 
             host, target = self.build.host_target
 
-            if host == target:
-                self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
-            else:
-                self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
+            # Keep an explicit target SDK when using bundled host tools.
+            if not self.cuda_target_root.from_user:
+                # ARM64 libraries use a separate SDK even for native ARM64 builds.
+                if target.is_linux_armv8 or target.is_linux_armv9a or host != target:
+                    self.cuda_target_root.value = '$CUDA_TARGET_RESOURCE_GLOBAL'
+                else:
+                    self.cuda_target_root.value = '$CUDA_RESOURCE_GLOBAL'
 
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
                 self.nvcc_flags.append('-I$OS_SDK_ROOT/usr/include/x86_64-linux-gnu')
+        elif not self.cuda_target_root.from_user:
+            # Preserve CUDA_ROOT-only local toolkits now that library paths use CUDA_TARGET_ROOT.
+            self.cuda_target_root.value = '$CUDA_ROOT'
 
         self.cuda_nvcc_flags.calculate_value()
 
@@ -2651,21 +2657,28 @@ class Cuda(object):
     def have_cuda_in_arcadia(self):
         host, target = self.build.host_target
 
-        if not any((host.is_linux_x86_64, host.is_windows_x86_64)):
+        # The bundled Windows toolkit supports only native x86-64 CUDA 11.4.
+        if host.is_windows_x86_64:
+            return target.is_windows_x86_64 and self.cuda_version.value == '11.4'
+
+        # Both Linux host architectures use the same existing target SDK matrix.
+        if not any((host.is_linux_x86_64, host.is_linux_armv8, host.is_linux_armv9a)):
             return False
 
-        if host != target:
-            if not (host.is_linux_x86_64 and (target.is_linux_armv8 or target.is_linux_armv9a)):
-                return False
+        # Keep CUDA opt-in for existing x86-to-ARM cross builds.
+        if host.is_linux_x86_64 and (target.is_linux_armv8 or target.is_linux_armv9a):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0', '13.2'):
-            return True
-        elif self.cuda_version.value in ('10.2', '11.4.19') and (target.is_linux_armv8 or target.is_linux_armv9a):
-            return True
-        else:
-            raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
+        if target.is_linux_x86_64:
+            return self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0', '13.2')
+        if target.is_linux_armv8 or target.is_linux_armv9a:
+            if self.cuda_version.value in ('12.6', '13.0', '13.2'):
+                return True
+            if preset('CUDA_HOST_VERSION') == '11.8':
+                return self.cuda_version.value in ('10.2', '11.4.19')
+            return self.cuda_version.value == '11.4'
+        return False
 
     def auto_have_cuda(self):
         if is_positive('MUSL'):
@@ -2797,14 +2810,15 @@ class Cuda(object):
         if host.is_windows_x86_64 and target.is_windows_x86_64:
             return self.cuda_windows_host_compiler()
 
-        return select((
-            (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-            (host.is_linux_x86_64 and target.is_linux_armv9a, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
-        ))
+        # Both host architectures use their native C++ compiler for either target.
+        if any((host.is_linux_x86_64, host.is_linux_armv8, host.is_linux_armv9a)) and any((target.is_linux_x86_64, target.is_linux_armv8, target.is_linux_armv9a)):
+            return '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'
+        return None
 
     def auto_cuda_host_compiler_version(self):
-        if not self.use_arcadia_cuda_host_compiler.value or not self.build.host.is_linux_x86_64:
+        # Apply the existing CUDA/Clang version compatibility rules to ARM64 hosts too.
+        host = self.build.host
+        if not self.use_arcadia_cuda_host_compiler.value or not any((host.is_linux_x86_64, host.is_linux_armv8, host.is_linux_armv9a)):
             return None
 
         if is_positive('CUDA11'):

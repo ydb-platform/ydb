@@ -16,11 +16,14 @@
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/backend.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
-#include <util/system/mutex.h>
+
+#include <memory>
+#include <optional>
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -41,6 +44,29 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
 using TTestLogSettings = NTestUtils::TTestLogSettings;
+
+// A copyable handle to shared capture state; backends own the same state.
+class TCapturedLog final {
+public:
+    explicit TCapturedLog(bool appendNewline = false);
+
+    // Copy rvalues as well so the source handle keeps its shared state.
+    TCapturedLog(const TCapturedLog&) = default;
+    TCapturedLog& operator=(const TCapturedLog&) = default;
+
+    // Copies the buffer under the lock; parsing the returned copy does not block log writers.
+    // It includes records already written, not records queued in logger actors.
+    TString Snapshot() const;
+
+    // Every backend shares both the buffer's lifetime and its mutex.
+    THolder<TLogBackend> CreateBackend() const;
+
+private:
+    class TSynchronizedStreamLogBackend;
+    struct TState;
+
+    std::shared_ptr<TState> State_;
+};
 
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
@@ -82,8 +108,7 @@ public:
     bool EnableScriptExecutionBackgroundChecks = true;
     bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
-    IOutputStream* LogStream = nullptr;
-    std::shared_ptr<TMutex> LogStreamMutex;
+    std::optional<TCapturedLog> LogCapture;
     TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
@@ -120,7 +145,7 @@ public:
     TKikimrSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
     TKikimrSettings& SetWithSampleTables(bool value) { WithSampleTables = value; return *this; }
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
-    TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
+    TKikimrSettings& SetLogCapture(const TCapturedLog& capture) { LogCapture = capture; return *this; }
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
     TKikimrSettings& SetStoragePoolTypes(const TVector<TString>& storagePoolTypes) { StoragePoolTypes = storagePoolTypes; return *this; };
     TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };

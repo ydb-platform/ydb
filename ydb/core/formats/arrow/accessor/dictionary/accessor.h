@@ -60,8 +60,12 @@ protected:
     }
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
-        if (ArrayDictionary->length() == 1) {
+        if (ArrayDictionary->length() == 1 && (ArrayDictionary->IsNull(0) || !ArrayPositions->null_count())) {
             value = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(0));
+            return true;
+        }
+        if (ArrayPositions->length() && ArrayPositions->null_count() == ArrayPositions->length()) {
+            value = arrow::MakeNullScalar(ArrayDictionary->type());
             return true;
         }
         return false;

@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(metrics.cpp transport.cpp readiness.cpp grpc_readiness.cpp)
+SRCS(metrics.cpp transport.cpp readiness.cpp grpc_readiness.cpp tvm.cpp)
 
 PEERDIR(
     library/cpp/time_provider

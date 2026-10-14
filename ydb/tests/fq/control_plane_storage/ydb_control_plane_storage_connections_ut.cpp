@@ -1212,3 +1212,34 @@ Y_UNIT_TEST_SUITE(TExternalServiceConnectionStorage) {
     }
 }
 }   // namespace NFq
+
+namespace NFq {
+Y_UNIT_TEST_SUITE(TExternalServiceTvmConnectionStorage) {
+    Y_UNIT_TEST(TvmSecretsAreRedacted) {
+        NConfig::TControlPlaneStorageConfig config;
+        config.AddAvailableConnection("EXTERNAL_SERVICE");
+        TTestBootstrap bootstrap{ __PRETTY_FUNCTION__, config };
+        auto request = TCreateConnectionBuilder{}.Build();
+        auto* service = request.mutable_content()->mutable_setting()->mutable_external_service();
+        service->set_protocol(FederatedQuery::ExternalService::HTTP);
+        service->set_endpoint("https://service.test");
+        auto* tvm = service->mutable_tvm_auth();
+        tvm->set_source_id(2020001);
+        tvm->set_destination_id(2020002);
+        tvm->set_secret("private-tvm-source-secret");
+        const auto [created, createIssues] = bootstrap.CreateConnection(request);
+        UNIT_ASSERT_C(!createIssues, createIssues.ToString());
+        const auto [described, describeIssues] =
+            bootstrap.DescribeConnection(TDescribeConnectionBuilder{}.SetConnectionId(created.connection_id()).Build());
+        UNIT_ASSERT_C(!describeIssues, describeIssues.ToString());
+        const auto& visible = described.connection().content().setting().external_service().tvm_auth();
+        UNIT_ASSERT_VALUES_EQUAL(visible.source_id(), 2020001);
+        UNIT_ASSERT_VALUES_EQUAL(visible.destination_id(), 2020002);
+        UNIT_ASSERT(visible.secret() != "private-tvm-source-secret");
+        const auto [listed, listIssues] = bootstrap.ListConnections(TListConnectionsBuilder{}.Build());
+        UNIT_ASSERT_C(!listIssues, listIssues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listed.connection_size(), 1);
+        UNIT_ASSERT(listed.connection(0).content().setting().external_service().tvm_auth().secret() != "private-tvm-source-secret");
+    }
+}
+}   // namespace NFq

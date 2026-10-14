@@ -57,3 +57,11 @@ aggregate monitoring does not identify an individual SQL query or request ID.
 Use query diagnostics/tracing for individual executions; do not add unbounded
 query IDs as metric labels. Deployment dashboards and workload-specific alert
 thresholds can be supplied separately from the transport/SDK stack.
+
+Authorization uses the same logical completion boundary as its parent: pending
+`auth.tvm` metrics finish immediately on cancellation/deadline, even when the user
+pool cannot yet process cleanup. Already completed authorization keeps its outcome.
+The parent's transport reservation is not charged again to authorization, whose
+`ReservedBytes` is zero. A late provider callback can retain the auth metric and
+its `CleanupPending` after the parent request and its reservation have been freed;
+it does not retain the parent transport buffers or lease.

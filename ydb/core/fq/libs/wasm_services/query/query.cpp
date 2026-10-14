@@ -549,8 +549,11 @@ NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactory(
     return factory;
 }
 
-void RegisterServiceTransforms(
-    TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config, ui32 userPool, NMonitoring::TDynamicCounterPtr counters) {
+void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config,
+    std::shared_ptr<ITvmTicketProvider> tvmProvider, ui32 userPool, NMonitoring::TDynamicCounterPtr counters) {
+    if (!tvmProvider) {
+        tvmProvider = CreateTvmTicketProvider();
+    }
     auto source = CreateServiceModuleSource(config);
     // Compile local modules at startup, never on a transform's user-pool turn.
     // Store modules arrive asynchronously and are already compiled by UDF Store.
@@ -572,8 +575,9 @@ void RegisterServiceTransforms(
     }
     EnsureUdfHostIntrinsicsRegistered();
     NAsync::KeepAsyncHostIntrinsicsLinked();
-    factory.RegisterOutputTransform<NYql::NProto::TFunctionTransform>(TString(ServiceTransformType),
-        [source, config, sharedTransport](NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
+    factory.RegisterOutputTransform<NYql::NProto::TFunctionTransform>(
+        TString(ServiceTransformType), [source, config, tvmProvider, sharedTransport](
+                                           NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
             NJson::TJsonValue invocation;
             Y_ENSURE(NJson::ReadJsonTree(settings.GetInvokeUrl(), &invocation, true) && invocation.IsMap(), "Invalid WASM service invocation");
             const auto module = source->Load(invocation["module"].GetStringSafe());
@@ -609,6 +613,12 @@ void RegisterServiceTransforms(
             binding.CaCertificate = service.ca_certificate();
             for (const auto& [key, value] : service.headers()) {
                 binding.Headers.emplace_back(key, value);
+            }
+            if (service.has_tvm_auth()) {
+                Y_ENSURE(tvmProvider->IsAvailable(),
+                    "TVM ticket provider is not implemented; source/destination credentials are supported, but ticket acquisition is a stub");
+                binding.TvmProvider = tvmProvider;
+                binding.TvmCredentials = { service.tvm_auth().source_id(), service.tvm_auth().destination_id(), service.tvm_auth().secret() };
             }
             if (service.auth().has_token()) {
                 binding.Headers.emplace_back(

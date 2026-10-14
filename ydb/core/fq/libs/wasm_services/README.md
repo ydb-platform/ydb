@@ -88,8 +88,9 @@ For gRPC use `protocol: GRPC` and `endpoint: "host:port"`; WASM supplies
 `/package.Service/Method` per call. TLS is the default; plaintext requires
 `insecure: true` for either protocol. For HTTP the URL scheme must match this
 flag. TLS verification cannot be disabled. `auth.none`, `auth.token` and
-`auth.current_iam` are supported; service-account auth is explicitly rejected
-until asynchronous initial token acquisition is integrated. Authorization is
+`auth.current_iam` are supported; TVM uses the separate `tvm_auth` field.
+Service-account auth is explicitly rejected until asynchronous initial token
+acquisition is integrated. Authorization is
 derived from `auth`, never a user-supplied header override. Extra headers are
 sensitive and, like bearer tokens, omitted from public connection responses.
 
@@ -162,7 +163,7 @@ All transforms registered on the FQ node share one transport executor actor on
 OS socket waiter per executor. That waiter's thread only publishes notifications;
 `curl_multi_socket_action`, request preparation and response processing run on
 the user pool. gRPC uses an executor-owned completion queue with one shared
-waiter. Completion tags likewise only publish results
+waiter. Completion tags and TVM ticket callbacks likewise only publish results
 and wake the actor. They do not resume WASM or process responses on the native
 waiter/callback thread. No transform creates its own transport thread. The gRPC
 queue outlives its channels, so releasing the last transport from a completion
@@ -170,7 +171,8 @@ tag cannot shut down and join the thread executing that tag.
 
 The executor processes at most 32 ready sessions per turn before yielding. It
 does not periodically scan pending requests. One-shot timers cover concrete
-request deadlines, libcurl timeouts and native timer operations. Pending I/O leaves the user-pool
+request deadlines, libcurl timeouts and native timer operations; delayed mock
+TVM tickets use a separate one-shot actor timer. Pending I/O leaves the user-pool
 thread available for other work. Response processing and owner notifications
 remain on the user pool.
 
@@ -178,8 +180,8 @@ remain on the user pool.
 256 MiB of conservative buffer reservations across these transports. Individual
 transports also retain limits of 128 operations and 64 MiB. Both sets of limits
 must admit a request; exhaustion returns `ResourceLimit` immediately. Pending
-timers and operations still undergoing cancellation consume credits. Reservations
-are released after native buffers and handles have been destroyed. These are
+timers, TVM-ticket waits and operations still undergoing cancellation consume
+credits. Reservations are released after native buffers and handles have been destroyed. These are
 separate from `MaxBufferedBytes` and WASM memory and are not a process RSS limit.
 Final actor-system teardown closes the executor, cancels requests and joins the
 shared socket waiter after user workers have stopped. It then shuts down and
@@ -196,6 +198,54 @@ Redirects, ambient proxies and application/gRPC retries are disabled.
 Diagnostics contain fixed text and numeric error classes, never service
 payloads, endpoints or credentials. The production HTTP gateway choice remains
 open; this prototype uses curl without changing shared HTTP APIs.
+
+## TVM Authorization
+
+Use `external_service.tvm_auth` instead of `external_service.auth` in an FQ
+connection to provide source ID, destination ID and the source application's
+secret:
+
+```protobuf
+tvm_auth {
+  source_id: 2020001
+  destination_id: 2020002
+  secret: "host-owned-source-secret"
+}
+```
+
+Both IDs must be nonzero uint32 values. TVM cannot be combined with token/IAM
+credentials. Secrets are omitted from ordinary public connection reads and
+masked in diagnostics. Credentials reach the transport through the existing
+private compute channel and never enter guest memory.
+
+`ITvmTicketProvider` in `tvm.h` receives source ID, destination ID, secret and
+deadline. Paths and methods are not part of TVM authorization; no TVM method
+allowlist is applied. The WASM guest supplies each request method/path independently.
+The host adds `X-Ya-Service-Ticket` for HTTP or `x-ya-service-ticket` for gRPC.
+Reserved ticket headers cannot be overridden through connection headers.
+
+The default provider is unavailable until the real client/API contract is
+integrated. Connections can be created, but execution fails with
+`TVM ticket provider is not implemented` before sending to the external service.
+There is no unauthenticated fallback. An implementation can be injected into
+`RegisterServiceTransforms` and is shared by the node's transforms.
+
+`Request(credentials, deadline, completion)` starts acquisition on the user pool
+and returns a cancellable waiter. Its completion callback may run inline or on
+another thread and reports `Ready` or `Failed` exactly once. It only publishes
+the ticket result and wakes the transport actor; subsequent processing runs on
+the user pool. `Request()`, `Cancel()` and waiter destruction must not block.
+Cancellation detaches the individual waiter and must tolerate a racing callback.
+Acquisition stays subject to the operation's deadline, cancellation, and shared
+operation/byte quotas. A real provider must isolate credentials and implement
+ticket caching/refresh and independent waiter cancellation.
+
+The test provider returns a fixed fake ticket after a configurable delay using
+a one-shot actor timer, without polling, sleeping or creating a thread per ticket.
+Single-thread user-pool tests hold one ticket pending while other requests
+complete, then fire the controlled timer to finish the first request. Mock tests do not
+validate real TVM issuance or ticket signatures. CLI/DDL selection of this mock
+is a separate runner integration.
 
 ## Verification and Remaining Gates
 
@@ -224,11 +274,11 @@ add KQP external data sources or a network probe to the `TestConnection` API.
 Connection endpoints are HTTP origins or gRPC host:port; they contain no request
 method or application path. Wire v4 (with v3 request compatibility) carries the guest's HTTP method/path or gRPC
 method. Profile selects its single/batch routes inside WASM. Methods are syntax
-checked, with no per-service method authorization list. Authorization belongs to
-the connection identity and is independent of the route.
+checked, with no per-service method authorization list. TVM authorization, when
+available, belongs to the connection identity and is independent of the route.
 
-HTTP socket readiness and gRPC completion wake only the affected transport
-session. Native tests hold HTTP/gRPC responses pending and
+HTTP socket readiness, gRPC completion and TVM ticket completion wake only the
+affected transport session. Native tests hold HTTP/gRPC responses pending and
 check that executor dispatches stop until readiness arrives, that completion
 runs on the user pool and that reservations are released after cleanup.
 Load-dependent latency validation remains follow-up work.

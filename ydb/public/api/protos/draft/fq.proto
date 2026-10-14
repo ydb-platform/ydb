@@ -580,6 +580,13 @@ message Iceberg {
     IcebergCatalog catalog = 4;
 }
 
+// Host-only TVM credentials. A service ticket is obtained for source -> destination.
+message ExternalServiceTvmAuth {
+    uint32 source_id = 1;
+    uint32 destination_id = 2;
+    string secret = 3 [(Ydb.length).le = 4096, (Ydb.sensitive) = true];
+}
+
 // Host-owned transport settings for external service adapters.
 message ExternalService {
     enum Protocol {
@@ -599,6 +606,8 @@ message ExternalService {
     // PEM trust roots; empty uses system roots. Not a server filesystem path.
     string ca_certificate = 6 [(Ydb.length).le = 65536];
     map<string, string> headers = 7 [(Ydb.sensitive) = true];
+    // Exactly one of auth and tvm_auth must be set.
+    ExternalServiceTvmAuth tvm_auth = 8;
 }
 
 message ConnectionSetting {

@@ -145,7 +145,7 @@ struct TQueryTransformEnv {
             config.ClearModules();
             // Initialize the executor factory before the module exists: UDF Store
             // loads modules asynchronously after ydbd/FQ startup.
-            RegisterServiceTransforms(Factory, config, 1);
+            RegisterServiceTransforms(Factory, config, binding.TvmProvider, 1);
             const auto bytes = NResource::Find("/fq_transport_coroutine.wasm");
             NKikimr::NUdfStore::NWasm::TWasmLoadParams params;
             params.Manifest = NKikimr::NUdfStore::NWasm::ParseManifest(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
@@ -158,8 +158,15 @@ struct TQueryTransformEnv {
             gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "profiles")->ResolveFunction({}, "Profile").GetValueSync();
         UNIT_ASSERT_STRING_CONTAINS(description.InvokeUrl, "profiles");
         UNIT_ASSERT_EXCEPTION(gateway->CreateDqFunctionGateway(TString(ProfileTransformType), {}, "missing"), yexception);
+        if (binding.TvmProvider) {
+            entry->clear_auth();
+            auto* tvm = entry->mutable_tvm_auth();
+            tvm->set_source_id(binding.TvmCredentials.SourceId);
+            tvm->set_destination_id(binding.TvmCredentials.DestinationId);
+            tvm->set_secret(binding.TvmCredentials.Secret);
+        }
         if (!useStore) {
-            RegisterServiceTransforms(Factory, config, 1);
+            RegisterServiceTransforms(Factory, config, binding.TvmProvider, 1);
         }
         Setup.Execute([&](NYql::NDq::TFakeActor& actor) {
             using namespace NKikimr::NMiniKQL;

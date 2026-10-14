@@ -96,8 +96,6 @@ struct TKiExploreTxResults {
         THashMap<TString, TPrimitiveYdbOperations> TablePrimitiveOps; // needed to split query into blocks
         TVector<TKiOperation> TableOperations;
         bool HasUncommittedChangesRead = false;
-        // Non-empty on a block that is nothing but an unsafe truncate of this path.
-        TString UnsafeTruncatePath;
     };
 
     bool ConcurrentResults = true;
@@ -798,7 +796,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         // No TKiOperation is recorded: BuildYdbOpNode leaves the table name empty, and every
         // consumer of the operation list resolves that name against the table metadata.
         txRes.AddQueryBlock();
-        txRes.QueryBlocks.back().UnsafeTruncatePath = TString(truncateTable.TablePath().Value());
+        txRes.QueryBlocks.back().Effects.emplace_back(truncateTable);
         txRes.AddQueryBlock();
         return true;
     }
@@ -917,7 +915,6 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
     for (const auto& block : txExplore.QueryBlocks) {
         TKiDataQueryBlockSettings settings;
         settings.HasUncommittedChangesRead = block.HasUncommittedChangesRead;
-        settings.UnsafeTruncatePath = block.UnsafeTruncatePath;
 
         TExprNode::TListType queryResults;
         for (auto& result : block.Results) {
@@ -965,6 +962,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
                     node.Maybe<TKiWriteTable>() ||
                     node.Maybe<TKiUpdateTable>() ||
                     node.Maybe<TKiDeleteTable>() ||
+                    node.Maybe<TKiTruncateTable>() ||
                     IsDqRead(node, ctx, types, false) ||
                     IsDqWrite(node, ctx, types))
                 {

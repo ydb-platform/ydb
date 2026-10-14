@@ -1655,17 +1655,16 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
     queryBlocks.reserve(dataQueryBlocks.ArgCount());
     for (const auto& block : dataQueryBlocks) {
         TVector<TExprBase> kqlEffects;
-        const auto settings = TKiDataQueryBlockSettings::Parse(block);
-        if (!settings.UnsafeTruncatePath.empty()) {
-            YQL_ENSURE(block.Results().Empty() && block.Effects().ArgCount() == 0,
-                "Unsafe truncate must occupy a separate query block");
-            kqlEffects.emplace_back(Build<TKqlUnsafeTruncate>(ctx, block.Pos())
-                .TablePath().Build(settings.UnsafeTruncatePath)
-                .Done());
-        }
-
         TNodeOnNodeOwnedMap effectsMap;
         for (const auto& effect : block.Effects()) {
+            if (auto truncate = effect.Maybe<TKiTruncateTable>()) {
+                YQL_ENSURE(block.Results().Empty() && block.Effects().ArgCount() == 1,
+                    "Unsafe truncate must occupy a separate query block");
+                kqlEffects.emplace_back(Build<TKqlUnsafeTruncate>(ctx, effect.Pos())
+                    .TablePath(truncate.Cast().TablePath())
+                    .Done());
+            }
+
             if (auto maybeWrite = effect.Maybe<TKiWriteTable>()) {
                 auto writeOp = HandleWriteTable(maybeWrite.Cast(), ctx, *kqpCtx, tablesData);
                 if (!writeOp) {

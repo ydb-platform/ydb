@@ -14,12 +14,37 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
+
+std::shared_ptr<arrow::Field> TIndexInfo::BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+    std::shared_ptr<arrow::DataType> arrowType;
+
+    if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+        arrowType = arrow::fixed_size_binary(16);
+    } else if (column.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+        arrowType = arrow::int64();
+    } else {
+        auto result = NArrow::GetArrowType(column.PType);
+        AFL_VERIFY(result.ok());
+        arrowType = result.ValueUnsafe();
+    }
+    auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
+    if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal && HasAppData() &&
+        AppDataVerified().ColumnShardConfig.GetEnableDecimalKeyComparison()) {
+        f = f->WithMetadata(arrow::key_value_metadata({ NArrow::TComparator::DecimalComparisonMetadata }, { "1" }));
+    }
+    if (cache) {
+        return cache->GetOrInsertField(f);
+    } else {
+        return f;
+    }
+}
 
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {

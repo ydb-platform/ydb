@@ -12,7 +12,9 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique) {
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique,
+    const arrow::Schema* comparisonSchema, const bool preserveEqualOrder) {
+    AFL_VERIFY(!preserveEqualOrder || !andUnique);
     std::optional<i64> count;
     for (auto&& i : keyColumns) {
         AFL_VERIFY(i);
@@ -38,14 +40,18 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
     }
 
     if (haveNulls) {
-        std::sort(points.begin(), points.end(), [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-            auto cmp = a <=> b;
-            return cmp == std::partial_ordering::equivalent ? a.GetPosition() > b.GetPosition() : cmp == std::partial_ordering::less;
+        std::sort(points.begin(), points.end(), [&](const TRawReplaceKey& a, const TRawReplaceKey& b) {
+            auto cmp = TComparator::CompareRows<false>(keyColumns, a.GetPosition(), b.GetPosition(), comparisonSchema);
+            return cmp == std::partial_ordering::equivalent
+                ? (preserveEqualOrder ? a.GetPosition() < b.GetPosition() : a.GetPosition() > b.GetPosition())
+                : cmp == std::partial_ordering::less;
         });
     } else {
-        std::sort(points.begin(), points.end(), [](const TRawReplaceKey& a, const TRawReplaceKey& b) {
-            auto cmp = a.CompareNotNull(b);
-            return cmp == std::partial_ordering::equivalent ? a.GetPosition() > b.GetPosition() : cmp == std::partial_ordering::less;
+        std::sort(points.begin(), points.end(), [&](const TRawReplaceKey& a, const TRawReplaceKey& b) {
+            auto cmp = TComparator::CompareRows<true>(keyColumns, a.GetPosition(), b.GetPosition(), comparisonSchema);
+            return cmp == std::partial_ordering::equivalent
+                ? (preserveEqualOrder ? a.GetPosition() < b.GetPosition() : a.GetPosition() > b.GetPosition())
+                : cmp == std::partial_ordering::less;
         });
     }
 
@@ -85,9 +91,10 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
 }
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique,
+    const bool preserveEqualOrder) {
     auto keyBatch = TColumnOperator().VerifyIfAbsent().Adapt(batch, sortingKey).DetachResult();
-    return MakeSortPermutation(keyBatch->columns(), andUnique);
+    return MakeSortPermutation(keyBatch->columns(), andUnique, sortingKey.get(), preserveEqualOrder);
 }
 
 }   // namespace NKikimr::NArrow

@@ -3095,6 +3095,9 @@ message TColumnShardConfig {
     }
 
     optional TCutHistoryConfig CutHistory = 78;
+    // Enable after upgrading all nodes; existing Decimal PK portions need the
+    // manually scheduled RebuildDecimalPrimaryKey repair before normal reads resume.
+    optional bool EnableDecimalKeyComparison = 79 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

@@ -59,6 +59,9 @@ private:
     std::shared_ptr<arrow::Schema> PKSchema;
     NArrow::TSimpleRowContent FirstPKRow;
     NArrow::TSimpleRowContent LastPKRow;
+    // Runtime bounds may be widened during a comparator migration. Persist the
+    // original bounds until the actualizer has really reordered the rows.
+    std::shared_ptr<const NArrow::TFirstLastSpecialKeys> StoredPrimaryKeys;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -69,6 +72,8 @@ private:
     YDB_READONLY(ui32, IndexBlobBytes, 0);
     YDB_READONLY(ui32, NumSlices, 1);
     YDB_READONLY_DEF(std::optional<ui32>, BsIndexBlobBytes);
+    YDB_READONLY(bool, RebuildDecimalPrimaryKey, false);
+    YDB_READONLY(bool, DecimalKeyOrder, false);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
@@ -78,6 +83,14 @@ private:
     TSnapshot RecordSnapshotMax;
 
 public:
+    bool HasIncompatibleDecimalKeyOrder() const {
+        bool numeric = false;
+        for (const auto& field : PKSchema->fields()) {
+            numeric |= NArrow::TComparator::IsDecimal(*field);
+        }
+        return numeric != DecimalKeyOrder;
+    }
+
     void FullValidation() const;
 
     NArrow::TSimpleRow IndexKeyStart() const;

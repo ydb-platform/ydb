@@ -48,6 +48,7 @@ private:
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
+    YDB_ACCESSOR(bool, RebuildDecimalPrimaryKey, false);
 
 public:
     TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
@@ -97,6 +98,9 @@ public:
     bool NeedRewrite() const {
         if (TargetTierName == NTiering::NCommon::DeleteTierName) {
             return false;
+        }
+        if (RebuildDecimalPrimaryKey) {
+            return true;
         }
         if (CurrentTierName != TargetTierName) {
             return true;

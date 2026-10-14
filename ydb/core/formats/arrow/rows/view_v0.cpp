@@ -1,4 +1,5 @@
 #include "view.h"
+#include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -113,6 +114,7 @@ TConclusionStatus TSimpleRowViewV0::AddToBuilders(
 class TCompareActor {
 private:
     const std::optional<std::string_view> ItemView;
+    const bool Decimal;
     YDB_READONLY(std::partial_ordering, Result, std::partial_ordering::equivalent);
 
 public:
@@ -129,6 +131,10 @@ public:
     bool OnBinary(const ui32 /*fieldIndex*/, const char* data, const ui32 size) {
         if (!ItemView) {
             Result = std::partial_ordering::greater;
+            return false;
+        }
+        if (Decimal) {
+            Result = TComparator::CompareDecimal({data, size}, *ItemView);
             return false;
         }
         const int cmp = std::string_view(data, size).compare(*ItemView);
@@ -156,8 +162,9 @@ public:
         return false;
     }
 
-    TCompareActor(const std::optional<std::string_view>& itemView)
-        : ItemView(itemView) {
+    TCompareActor(const std::optional<std::string_view>& itemView, const bool decimal)
+        : ItemView(itemView)
+        , Decimal(decimal) {
     }
 };
 
@@ -179,11 +186,12 @@ TConclusion<std::partial_ordering> TSimpleRowViewV0::Compare(
         }
     }
 
+    ui32 fieldIndex = 0;
     ui32 idx = columnsCount.value_or((ui32)schema->num_fields());
     while (!itSelf.IsFinished()) {
         AFL_VERIFY(!itItem.IsFinished());
 
-        TCompareActor customActor(itItem.GetCurrentValue());
+        TCompareActor customActor(itItem.GetCurrentValue(), TComparator::IsDecimal(*schema->field(fieldIndex++)));
         TGeneralActor<TCompareActor> actor(std::move(customActor));
         Y_UNUSED(itSelf.ApplyActor(actor));
         if (actor.GetCustomActor().GetResult() != std::partial_ordering::equivalent) {

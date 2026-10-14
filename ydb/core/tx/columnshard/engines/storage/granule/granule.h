@@ -125,6 +125,7 @@ public:
 
 class TGranuleMeta: TNonCopyable {
 private:
+    YDB_READONLY(ui64, IncompatibleDecimalKeyPortions, 0);
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     TAtomic LastInsertWriteId = 1;
@@ -292,13 +293,33 @@ public:
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
+    bool HasIncompatibleDecimalKeyPortions(const std::optional<TSnapshot>& snapshot = {}) const {
+        if (!IncompatibleDecimalKeyPortions) {
+            return false;
+        }
+        for (const auto& [id, portion] : Portions) {
+            Y_UNUSED(id);
+            if (portion->GetMeta().HasIncompatibleDecimalKeyOrder() &&
+                (snapshot ? !portion->IsRemovedFor(*snapshot) : !portion->HasRemoveSnapshot())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        if (HasIncompatibleDecimalKeyPortions()) {
+            return {};
+        }
         return OptimizerPlanner->GetOptimizationTasks(self, locksManager);
     }
 
     std::shared_ptr<TColumnEngineChanges> GetNextOptimizationTask(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
+        if (HasIncompatibleDecimalKeyPortions()) {
+            return nullptr;
+        }
         return OptimizerPlanner->GetNextOptimizationTask(self, locksManager);
     }
 

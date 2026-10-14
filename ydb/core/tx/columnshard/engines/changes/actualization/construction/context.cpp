@@ -46,7 +46,9 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
         } else {
             return EAddPortionResult::TASK_LIMIT_EXCEEDED;
         }
-        features.OnSkipPortionWithProcessMemory(Counters, *dWait);
+        if (dWait) {
+            features.OnSkipPortionWithProcessMemory(Counters, *dWait);
+        }
     }
     if (features.NeedRewrite()) {
         if (MemoryUsageLimit <= it->second.back().GetMemoryUsage()) {
@@ -55,7 +57,9 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             } else {
                 return EAddPortionResult::TASK_LIMIT_EXCEEDED;
             }
-            features.OnSkipPortionWithTxLimit(Counters, *dWait);
+            if (dWait) {
+                features.OnSkipPortionWithTxLimit(Counters, *dWait);
+            }
         }
         it->second.back().MutableMemoryUsage() = it->second.back().GetMemoryPredictor()->AddPortion(info);
     }
@@ -68,7 +72,7 @@ TTieringProcessContext::EAddPortionResult TTieringProcessContext::AddPortion(
             "f", it->first.DebugString());
     } else {
         if (!dWait) {
-            AFL_VERIFY(features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
+            AFL_VERIFY(features.GetRebuildDecimalPrimaryKey() || features.GetCurrentScheme()->GetVersion() < features.GetTargetScheme()->GetVersion());
         } else {
             Counters.OnPortionToEvict(info->GetTotalBlobBytes(), *dWait);
         }

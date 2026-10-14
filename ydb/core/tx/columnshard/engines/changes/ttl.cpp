@@ -41,7 +41,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TTTLColumnEngineChanges::UpdateE
     auto& evictFeatures = info.GetFeatures();
     auto blobSchema = portionInfo.GetSchema(context.SchemaVersions);
     Y_ABORT_UNLESS(portionInfo.GetMeta().GetTierName() != evictFeatures.GetTargetTierName() ||
-                   blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion());
+                   blobSchema->GetVersion() < evictFeatures.GetTargetScheme()->GetVersion() ||
+                   portionInfo.GetMeta().GetRebuildDecimalPrimaryKey());
 
     auto portionWithBlobs = TReadPortionInfoWithBlobs::RestorePortion(
         GetPortionDataAccessor(info.GetPortionInfo()->GetPortionId()), srcBlobs, blobSchema->GetIndexInfo());

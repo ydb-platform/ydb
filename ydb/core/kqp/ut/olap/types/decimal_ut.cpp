@@ -546,6 +546,98 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         RunFilterEqualForPrecision<35, 10>(Arg<0>(), Arg<1>(), Arg<2>());
         RunFilterEqualForPrecision<12, 2>(Arg<0>(), Arg<1>(), Arg<2>());
     }
+
+    void CheckPrimaryKeyOrder(const TString& reader, const bool separatePortions) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.SetColumnShardReaderClassName(reader);
+        settings.AppConfig.MutableColumnShardConfig()->SetEnableDecimalKeyComparison(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        TKikimrRunner kikimr(settings);
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto ddl = session.ExecuteQuery(R"(
+            CREATE TABLE `/Root/Decimals` (
+                key Decimal(22, 0) NOT NULL,
+                value Int64 NOT NULL,
+                PRIMARY KEY (key)
+            ) PARTITION BY HASH(key)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(ddl.IsSuccess(), ddl.GetIssues().ToString());
+
+        const auto execute = [&](const TString& query) {
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), query << ": " << result.GetIssues().ToString());
+            return result;
+        };
+        // Both the sign and carries between bytes disagree with lexicographic byte order.
+        const std::vector<i64> values = {-257, -256, -1, 0, 1, 255, 256, 257, 65536};
+        TStringBuilder rows;
+        for (const auto value : values) {
+            TString row = TStringBuilder() << "(Unwrap(CAST(\"" << value << "\" AS Decimal(22, 0))), " << value << ")";
+            if (separatePortions) {
+                execute("INSERT INTO `/Root/Decimals` (key, value) VALUES " + row);
+            } else {
+                if (rows) {
+                    rows << ", ";
+                }
+                rows << row;
+            }
+        }
+        if (!separatePortions) {
+            execute("INSERT INTO `/Root/Decimals` (key, value) VALUES " + rows);
+        }
+        for (const bool reverse : {false, true}) {
+            for (const ui32 limit : {1u, 4u, 9u}) {
+                const TString query = TStringBuilder() << "SELECT value FROM `/Root/Decimals` ORDER BY key "
+                    << (reverse ? "DESC" : "ASC") << " LIMIT " << limit;
+                auto result = execute(query);
+                auto parser = result.GetResultSetParser(0);
+                for (ui32 i = 0; i < limit; ++i) {
+                    UNIT_ASSERT_C(parser.TryNextRow(), query);
+                    UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("value").GetInt64(),
+                        values[reverse ? values.size() - 1 - i : i], query);
+                }
+                UNIT_ASSERT_C(!parser.TryNextRow(), query);
+            }
+        }
+        for (const auto value : values) {
+            const TString query = TStringBuilder() << "SELECT value FROM `/Root/Decimals` WHERE key = CAST(\""
+                << value << "\" AS Decimal(22, 0))";
+            auto result = execute(query);
+            auto parser = result.GetResultSetParser(0);
+            UNIT_ASSERT_C(parser.TryNextRow(), query);
+            UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("value").GetInt64(), value, query);
+            UNIT_ASSERT_C(!parser.TryNextRow(), query);
+        }
+        const TString rangeQuery = R"(SELECT value FROM `/Root/Decimals`
+            WHERE key >= CAST("-256" AS Decimal(22, 0)) AND key < CAST("257" AS Decimal(22, 0))
+            ORDER BY key)";
+        auto result = execute(rangeQuery);
+        auto parser = result.GetResultSetParser(0);
+        for (const i64 value : {-256, -1, 0, 1, 255, 256}) {
+            UNIT_ASSERT_C(parser.TryNextRow(), rangeQuery);
+            UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("value").GetInt64(), value, rangeQuery);
+        }
+        UNIT_ASSERT_C(!parser.TryNextRow(), rangeQuery);
+    }
+
+    Y_UNIT_TEST(PrimaryKeySinglePortionSimple) {
+        CheckPrimaryKeyOrder("SIMPLE", false);
+    }
+
+    Y_UNIT_TEST(PrimaryKeySinglePortionTrivial) {
+        CheckPrimaryKeyOrder("TRIVIAL", false);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyMultiplePortionsTrivial) {
+        CheckPrimaryKeyOrder("TRIVIAL", true);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyMultiplePortionsSimple) {
+        CheckPrimaryKeyOrder("SIMPLE", true);
+    }
 }
 
 }   // namespace NKqp

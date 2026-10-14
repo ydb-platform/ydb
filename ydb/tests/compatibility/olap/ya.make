@@ -7,6 +7,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_decimal_primary_key.py
     test_bloom_index.py
     test_min_max_index.py
     test_rename_table.py

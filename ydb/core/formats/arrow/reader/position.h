@@ -7,6 +7,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/switch/compare.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -24,14 +25,16 @@ class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
     std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
+    std::vector<std::shared_ptr<arrow::Field>> Fields;
 
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns);
 
-    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses)
+    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses, const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : Position(position)
-        , PositionAddress(addresses) {
+        , PositionAddress(addresses)
+        , Fields(fields) {
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -82,7 +85,7 @@ private:
         AFL_VERIFY(size);
         if (Contains(position) && item.Contains(itemPosition)) {
             for (ui32 idx = 0; idx < size; ++idx) {
-                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition, TComparator::IsDecimal(*Fields[idx]));
                 if (cmp != std::partial_ordering::equivalent) {
                     return cmp;
                 }
@@ -93,13 +96,13 @@ private:
                 const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
                 const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
                 if (containsSelf && containsItem) {
-                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition, TComparator::IsDecimal(*Fields[idx]));
                 } else if (containsSelf) {
                     auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
-                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
+                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition, TComparator::IsDecimal(*Fields[idx]));
                 } else if (containsItem) {
                     auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
-                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
+                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition, TComparator::IsDecimal(*Fields[idx]));
                 } else {
                     AFL_VERIFY(false);
                 }
@@ -163,7 +166,7 @@ public:
 
     TCursor BuildCursor(const ui64 position) const {
         if (Contains(position)) {
-            return TCursor(position, PositionAddress);
+            return TCursor(position, PositionAddress, Fields);
         }
         auto addresses = PositionAddress;
         ui32 idx = 0;
@@ -173,7 +176,7 @@ public:
             }
             ++idx;
         }
-        return TCursor(position, addresses);
+        return TCursor(position, addresses, Fields);
     }
 
     std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {

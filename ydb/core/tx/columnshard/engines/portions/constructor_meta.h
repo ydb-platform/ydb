@@ -13,6 +13,7 @@ struct TIndexInfo;
 class TPortionMetaConstructor {
 private:
     std::optional<NArrow::TFirstLastSpecialKeys> FirstAndLastPK;
+    std::shared_ptr<const NArrow::TFirstLastSpecialKeys> StoredPrimaryKeys;
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
@@ -27,6 +28,8 @@ private:
     std::optional<ui32> NumSlices;
 
     std::optional<ui32> DeletionsCount;
+    bool RebuildDecimalPrimaryKey = false;
+    bool DecimalKeyOrder = false;
 
     friend class TPortionInfoConstructor;
     friend class TPortionAccessorConstructor;
@@ -36,6 +39,16 @@ private:
 public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta);
+
+    void ResetPrimaryKeys(const NArrow::TFirstLastSpecialKeys& keys) {
+        FirstAndLastPK = keys;
+        StoredPrimaryKeys.reset();
+        RebuildDecimalPrimaryKey = false;
+        DecimalKeyOrder = false;
+        for (const auto& field : keys.GetSchema()->fields()) {
+            DecimalKeyOrder |= NArrow::TComparator::IsDecimal(*field);
+        }
+    }
 
     const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
         AFL_VERIFY(FirstAndLastPK);

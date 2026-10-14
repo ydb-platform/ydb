@@ -2,8 +2,12 @@
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
 
+#include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
@@ -92,7 +96,9 @@ bool TReadPortionInfoWithBlobs::ExtractColumnChunks(
 std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncPortion(TReadPortionInfoWithBlobs&& source,
     const ISnapshotSchema::TPtr& from, const ISnapshotSchema::TPtr& to, const TString& targetTier,
     const std::shared_ptr<IStoragesManager>& storages, std::shared_ptr<NColumnShard::TSplitterCounters> counters) {
-    if (from->GetVersion() == to->GetVersion() && targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
+    const bool rebuildKey = source.GetPortionInfo().GetMeta().GetRebuildDecimalPrimaryKey();
+    if (!rebuildKey && from->GetVersion() == to->GetVersion() &&
+        targetTier == source.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId)) {
         YDB_LOG_WARN("",
             {"event", "we don't need sync portion"});
         return {};
@@ -111,17 +117,44 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     }
 
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> entityChunksNew;
-    for (auto&& i : to->GetIndexInfo().GetColumnIds()) {
-        auto it = columnChunks.find(i);
-        std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
-        if (it != columnChunks.end()) {
-            newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
-            AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+    std::shared_ptr<arrow::RecordBatch> reordered;
+    if (rebuildKey) {
+        auto restored = source.RestoreBatch(*from, *to, {}).DetachResult();
+        reordered = NArrow::ToBatch(restored->BuildTableVerified());
+        // Keep all versions of a key in their original MVCC order.
+        const auto permutation = NArrow::MakeSortPermutation(reordered, to->GetIndexInfo().GetPrimaryKey(), false, true);
+        if (permutation) {
+            reordered = NArrow::Reorder(reordered, permutation, false);
+        }
+        for (const auto columnId : to->GetColumnIds()) {
+            const auto loader = to->GetColumnLoaderVerified(columnId);
+            const auto array = reordered->GetColumnByName(loader->GetField()->name());
+            AFL_VERIFY(array);
+            auto plain = std::make_shared<NArrow::NAccessor::TTrivialArray>(array);
+            const auto context = loader->BuildAccessorContext(array->length());
+            const auto& accessorConstructor = loader->GetAccessorConstructor();
+            auto accessor = accessorConstructor->Construct(plain, context).DetachResult();
+            auto serialized = accessorConstructor->SerializeToBlobAndMeta(accessor, context);
+            entityChunksNew[columnId].emplace_back(std::make_shared<NChunks::TChunkPreparation>(std::move(serialized.Blob), accessor,
+                TChunkAddress(columnId, 0), to->GetIndexInfo().GetColumnFeaturesVerified(columnId), std::move(serialized.Meta)));
+        }
+    } else {
+        for (auto&& i : to->GetIndexInfo().GetColumnIds()) {
+            auto it = columnChunks.find(i);
+            std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
+            if (it != columnChunks.end()) {
+                newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
+                AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
+            }
         }
     }
 
     TPortionAccessorConstructor constructor = TPortionAccessorConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
     constructor.MutablePortionConstructor().SetSchemaVersion(to->GetVersion());
+    if (rebuildKey) {
+        constructor.MutablePortionConstructor().MutableMeta().ResetPrimaryKeys(
+            NArrow::TFirstLastSpecialKeys(NArrow::TColumnOperator().Adapt(reordered, to->GetIndexInfo().GetPrimaryKey()).DetachResult()));
+    }
     constructor.MutablePortionConstructor().MutableMeta().ResetTierName(targetTier);
 
     TIndexInfo::TSecondaryData secondaryData;
@@ -131,7 +164,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
     const ui32 recordsCount = source.PortionInfo.GetPortionInfo().GetRecordsCount();
     for (auto&& [indexId, toIndex] : to->GetIndexInfo().GetIndexes()) {
         bool reused = false;
-        if (fromIndexInfo.HasIndexId(indexId)) {
+        if (!rebuildKey && fromIndexInfo.HasIndexId(indexId)) {
             const bool canTryReuse =
                 sameSchema || fromIndexInfo.GetIndexVerified(indexId)->CheckModificationCompatibility(toIndex.GetObjectPtr()).Ok();
             if (canTryReuse) {

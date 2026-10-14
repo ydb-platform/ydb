@@ -5,6 +5,8 @@
 
 #include <ydb/library/formats/arrow/size_calcer.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
@@ -16,7 +18,7 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
     for (i32 i = 0; i < primaryKeys.GetSchema()->num_fields(); ++i) {
         AFL_VERIFY(primaryKeys.GetSchema()->field(i)->type()->id() == indexInfo.GetReplaceKey()->field(i)->type()->id());
     }
-    FirstAndLastPK = primaryKeys;
+    ResetPrimaryKeys(primaryKeys);
     AFL_VERIFY(!RecordSnapshotMin);
     AFL_VERIFY(!RecordSnapshotMax);
     DeletionsCount = deletionsCount;
@@ -32,6 +34,7 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
 }
 
 TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
+    StoredPrimaryKeys = meta.StoredPrimaryKeys;
     FirstAndLastPK = NArrow::TFirstLastSpecialKeys(meta.IndexKeyStart(), meta.IndexKeyEnd(), meta.IndexKeyStart().GetSchema());
     RecordSnapshotMin = meta.RecordSnapshotMin;
     RecordSnapshotMax = meta.RecordSnapshotMax;
@@ -39,6 +42,8 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta) {
     DeletionsCount = meta.GetDeletionsCount();
     TierName = meta.GetTierNameOptional();
     BsIndexBlobBytes = meta.GetBsIndexBlobBytes();
+    RebuildDecimalPrimaryKey = meta.GetRebuildDecimalPrimaryKey();
+    DecimalKeyOrder = meta.GetDecimalKeyOrder();
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -57,6 +62,9 @@ TPortionMeta TPortionMetaConstructor::Build() {
     AFL_VERIFY(RecordSnapshotMin);
     AFL_VERIFY(RecordSnapshotMax);
     TPortionMeta result(*FirstAndLastPK, *RecordSnapshotMin, *RecordSnapshotMax);
+    result.StoredPrimaryKeys = StoredPrimaryKeys;
+    result.RebuildDecimalPrimaryKey = RebuildDecimalPrimaryKey;
+    result.DecimalKeyOrder = DecimalKeyOrder;
     if (TierName) {
         result.TierName = *TierName;
     }
@@ -82,6 +90,8 @@ TPortionMeta TPortionMetaConstructor::Build() {
 
 bool TPortionMetaConstructor::LoadMetadata(
     const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& /*groupSelector*/) {
+    RebuildDecimalPrimaryKey = portionMeta.GetRebuildDecimalPrimaryKey();
+    DecimalKeyOrder = portionMeta.GetDecimalKeyOrder();
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
     }
@@ -106,6 +116,37 @@ bool TPortionMetaConstructor::LoadMetadata(
     } else {
         AFL_VERIFY(portionMeta.HasPrimaryKeyBorders());
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
+    }
+
+    // Old first/last rows are not bounds under the other ordering. Keep the
+    // correctly ordered prefix and widen the first Decimal component while the
+    // manual actualization is pending. Reads/compaction reject this old order.
+    const auto& pkColumns = indexInfo.GetPrimaryKeyColumns();
+    for (ui32 i = 0; i < pkColumns.size(); ++i) {
+        if (pkColumns[i].second.GetTypeId() != NScheme::NTypeIds::Decimal) {
+            continue;
+        }
+        const bool numeric = NArrow::TComparator::IsDecimal(*indexInfo.GetReplaceKey()->field(i));
+        if (numeric != DecimalKeyOrder) {
+            StoredPrimaryKeys = std::make_shared<NArrow::TFirstLastSpecialKeys>(*FirstAndLastPK);
+            const auto makeBorder = [&](const NArrow::TSimpleRow& row, const bool upper) {
+                auto batch = row.ToBatch();
+                auto arrays = batch->columns();
+                TString bytes(16, upper ? '\xff' : '\0');
+                if (numeric) {
+                    // Values strictly outside the valid YQL Decimal range.
+                    const auto value = upper ? NYql::NDecimal::Nan() + 1 : -NYql::NDecimal::Inf() - 1;
+                    memcpy(bytes.Detach(), &value, sizeof(value));
+                }
+                arrow::FixedSizeBinaryBuilder builder(batch->schema()->field(i)->type());
+                NArrow::TStatusValidator::Validate(builder.Append(bytes.data()));
+                NArrow::TStatusValidator::Validate(builder.Finish(&arrays[i]));
+                return NArrow::TSimpleRow(arrow::RecordBatch::Make(batch->schema(), 1, arrays), 0);
+            };
+            FirstAndLastPK = NArrow::TFirstLastSpecialKeys(
+                makeBorder(FirstAndLastPK->GetFirst(), false), makeBorder(FirstAndLastPK->GetLast(), true), indexInfo.GetReplaceKey());
+        }
+        break;
     }
 
     AFL_VERIFY(portionMeta.HasRecordSnapshotMin());

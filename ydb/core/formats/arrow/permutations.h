@@ -10,8 +10,10 @@
 namespace NKikimr::NArrow {
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique,
+    const bool preserveEqualOrder = false);
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& columns, const bool andUnique);
+std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& columns, const bool andUnique,
+    const arrow::Schema* comparisonSchema = nullptr, const bool preserveEqualOrder = false);
 
 }   // namespace NKikimr::NArrow

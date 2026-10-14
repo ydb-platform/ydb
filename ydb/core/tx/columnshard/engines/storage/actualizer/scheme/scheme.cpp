@@ -13,20 +13,23 @@ namespace NKikimr::NOlap::NActualizer {
 
 std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualizationInfo> TSchemeActualizer::BuildActualizationInfo(
     const TPortionInfo& portion) const {
-    AFL_VERIFY(TargetSchema);
+    const auto targetSchema = portion.GetMeta().GetRebuildDecimalPrimaryKey() ? VersionedIndex.GetLastSchema() : TargetSchema;
+    if (!targetSchema) {
+        return {};
+    }
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
     auto portionSchema = portion.GetSchema(VersionedIndex);
-    if (portionSchema->GetVersion() < TargetSchema->GetVersion()) {
-        auto storagesWrite = TargetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
+    if (portion.GetMeta().GetRebuildDecimalPrimaryKey() || portionSchema->GetVersion() < targetSchema->GetVersion()) {
+        auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);
         TRWAddress address(std::move(storagesRead), std::move(storagesWrite));
-        return TFullActualizationInfo(std::move(address), TargetSchema);
+        return TFullActualizationInfo(std::move(address), targetSchema);
     }
     return {};
 }
 
 void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& addContext) {
-    if (!TargetSchema) {
+    if (!TargetSchema && !info.GetMeta().GetRebuildDecimalPrimaryKey()) {
         TSchemeGlobalCounters::OnEmptyTargetSchema();
         return;
     }
@@ -82,7 +85,8 @@ void TSchemeActualizer::DoExtractTasks(
             auto portion = externalContext.GetPortionVerified(portionId);
             if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
                 const bool sameTierRewrite = portion->GetTierNameDef(IStoragesManager::DefaultStorageId) == IStoragesManager::DefaultStorageId;
-                if (!sameTierRewrite && !portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+                if (!sameTierRewrite && !portion->GetMeta().GetRebuildDecimalPrimaryKey() &&
+                    !portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
                     TSchemeGlobalCounters::OnSkipNotOptimized();
                     continue;
                 }
@@ -96,6 +100,7 @@ void TSchemeActualizer::DoExtractTasks(
             TPortionEvictionFeatures features(
                 portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+            features.SetRebuildDecimalPrimaryKey(portion->GetMeta().GetRebuildDecimalPrimaryKey());
 
             bool limitExceeded = false;
             switch (tasksContext.AddPortion(portion, std::move(features), {})) {
@@ -142,15 +147,14 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     TargetSchema = VersionedIndex.GetLastCriticalSchema();
     if (!TargetSchema) {
         TSchemeGlobalCounters::OnRefreshEmpty();
-        AFL_VERIFY(PortionsInfo.empty());
     } else {
         TSchemeGlobalCounters::OnRefreshValue();
-        NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
-        PortionsInfo.clear();
-        PortionsToActualizeScheme.clear();
-        for (auto&& i : externalContext.GetPortions()) {
-            AddPortion(i.second, externalContext);
-        }
+    }
+    NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
+    PortionsInfo.clear();
+    PortionsToActualizeScheme.clear();
+    for (auto&& i : externalContext.GetPortions()) {
+        AddPortion(i.second, externalContext);
     }
 }
 

@@ -2,6 +2,8 @@
 
 #include "packing.h"
 
+#include <array>
+
 // This implementation is instantiated only by the ISA-specific libraries.
 
 namespace NKikimr {

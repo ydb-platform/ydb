@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/logging/logging.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+
 namespace NActors {
 
     class TInterconnectDynamicNameserver
@@ -33,19 +35,28 @@ namespace NActors {
                 TString str = TStringBuilder() << "\n > Node " << nodeId << " `" << node.Address << "`:" << node.Port << ", host: " << node.Host << ", resolveHost: " << node.ResolveHost;
                 logMsg += str;
             }
-            LOG_TRACE_IC("ICN01", "%s", logMsg.c_str());
+            YDB_LOG_TRACE(logMsg,
+                {"marker", "ICN01"});
         }
 
         bool IsNodeUpdated(const ui32 nodeId, const TString& address, const ui32 port) {
             bool printInfo = false;
             auto it = NodeTable.find(nodeId);
             if (it == NodeTable.end()) {
-                LOG_TRACE_IC("ICN02", "New node %u `%s`: %u",
-                    nodeId, address.c_str(), port);
+                YDB_LOG_TRACE("New node",
+                    {"marker", "ICN02"},
+                    {"nodeId", nodeId},
+                    {"address", address},
+                    {"port", port});
                 printInfo = true;
             } else if (it->second.Address != address || it->second.Port != port) {
-                LOG_TRACE_IC("ICN03", "Updated node %u `%s`: %u (from `%s`: %u)",
-                    nodeId, address.c_str(), port, it->second.Address.c_str(), it->second.Port);
+                YDB_LOG_TRACE("Updated node",
+                    {"marker", "ICN03"},
+                    {"nodeId", nodeId},
+                    {"address", address},
+                    {"port", port},
+                    {"oldAddress", it->second.Address},
+                    {"oldPort", it->second.Port});
                 printInfo = true;
                 Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvDisconnect);
             }
@@ -58,7 +69,9 @@ namespace NActors {
 
             for (auto& pending : PendingRequests) {
                 if (pending.Request && pending.Deadline > now) {
-                    LOG_ERROR_IC("ICN06", "Unknown nodeId: %u", pending.Request->Get()->NodeId);
+                    YDB_LOG_ERROR("Unknown",
+                        {"marker", "ICN06"},
+                        {"nodeId", pending.Request->Get()->NodeId});
                     auto reply = new TEvLocalNodeInfo;
                     reply->NodeId = pending.Request->Get()->NodeId;
                     ctx.Send(pending.Request->Sender, reply);
@@ -109,7 +122,9 @@ namespace NActors {
                     CFunc(TEvents::TEvWakeup::EventType, HandlePeriodic);
                 }
             } catch (...) {
-                LOG_ERROR_IC("ICN09", "%s", CurrentExceptionMessage().c_str());
+                YDB_LOG_ERROR("Catch exception",
+                    {"marker", "ICN09"},
+                    {"exception", CurrentExceptionMessage()});
             }
         }
 
@@ -122,7 +137,9 @@ namespace NActors {
                 }
                 PendingRequests.emplace_back(std::move(ev), Min(deadline, ctx.Monotonic() + PendingPeriod));
             } else {
-                LOG_ERROR_IC("ICN07", "Unknown nodeId: %u", ev->Get()->NodeId);
+                YDB_LOG_ERROR("Unknown",
+                    {"marker", "ICN07"},
+                    {"nodeId", ev->Get()->NodeId});
                 TInterconnectNameserverBase::HandleMissedNodeId(ev, ctx, deadline);
             }
         }
@@ -131,7 +148,9 @@ namespace NActors {
                     const TActorContext& ctx) {
 
             auto request = ev->Get();
-            LOG_TRACE_IC("ICN04", "Update TEvNodesInfo with sz: %lu ", request->Nodes.size());
+            YDB_LOG_TRACE("Update TEvNodesInfo with",
+                {"marker", "ICN04"},
+                {"sz", request->Nodes.size()});
 
             bool printInfo = false;
             ui32 compactionCount = 0;
@@ -144,7 +163,9 @@ namespace NActors {
 
                 for (auto& pending : PendingRequests) {
                     if (pending.Request && pending.Request->Get()->NodeId == node.NodeId) {
-                        LOG_TRACE_IC("ICN05", "Pending nodeId: %u discovered", node.NodeId);
+                        YDB_LOG_TRACE("Pending discovered",
+                            {"marker", "ICN05"},
+                            {"nodeId", node.NodeId});
                         RegisterWithSameMailbox(
                             CreateResolveActor(node.NodeId, NodeTable[node.NodeId], pending.Request->Sender, SelfId(), pending.Deadline));
                         pending.Request.Reset();

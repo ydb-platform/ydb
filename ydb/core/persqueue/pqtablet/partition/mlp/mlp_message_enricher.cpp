@@ -4,6 +4,8 @@
 
 #include <util/generic/algorithm.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
@@ -45,7 +47,9 @@ void TMessageEnricherActor::Bootstrap() {
 }
 
 void TMessageEnricherActor::PassAway() {
-    LOG_D("PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {"logPrefix", NPQ_LOG_PREFIX});
+
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
         if (!PendingResponses[i].Sent) {
             const TReadResult& reply = Replies[i];
@@ -85,10 +89,13 @@ void TMessageEnricherActor::SendPartialReply(size_t replyIndex) {
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        YDB_LOG_WARN("Fetch messages",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"failed", ev->Get()->Record.DebugString()});
         return PassAway();
     }
 
@@ -179,7 +186,8 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
     PassAway();
 }
 
@@ -189,7 +197,9 @@ STFUNC(TMessageEnricherActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            YDB_LOG_ERROR("Unexpected",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"event", EventStr("StateWork", ev)});
     }
 }
 

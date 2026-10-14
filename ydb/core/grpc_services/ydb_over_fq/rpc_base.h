@@ -7,25 +7,6 @@
 #include <ydb/core/grpc_services/local_grpc/local_grpc.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
-#define LOG_WITH_QUERY_ID(LEVEL, QUERY_ID, STRM) LOG_LOG_S(ctx, NActors::NLog::PRI_ ## LEVEL, NKikimrServices::FQ_INTERNAL_SERVICE, (TLogCtx{.Owner_ = *this, .QueryId_ = QUERY_ID}) << STRM)
-
-#define LOG_WITHOUT_QUERY_ID(LEVEL, STRM) LOG_LOG_S(ctx, NActors::NLog::PRI_ ## LEVEL, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << STRM)
-
-#define SRC_LOG_CHOICE(_1, _2, _3, NAME, ...) NAME
-
-#define SRC_LOG(...) SRC_LOG_CHOICE(__VA_ARGS__, LOG_WITH_QUERY_ID, LOG_WITHOUT_QUERY_ID)(__VA_ARGS__)
-
-// both should work:
-// * SRC_LOG_T(queryId, some << stream)
-// * SRC_LOG_T(some << stream)
-#define SRC_LOG_T(...) SRC_LOG(TRACE, __VA_ARGS__)
-#define SRC_LOG_D(...) SRC_LOG(DEBUG, __VA_ARGS__)
-#define SRC_LOG_I(...) SRC_LOG(INFO, __VA_ARGS__)
-#define SRC_LOG_W(...) SRC_LOG(WARN, __VA_ARGS__)
-#define SRC_LOG_N(...) SRC_LOG(NOTICE, __VA_ARGS__)
-#define SRC_LOG_E(...) SRC_LOG(ERROR, __VA_ARGS__)
-#define SRC_LOG_C(...) SRC_LOG(CRIT, __VA_ARGS__)
-
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
 template<typename TDerived, typename TReq>
@@ -57,9 +38,11 @@ public:
 
         TString serialized;
         if (!response.SerializeToString(&serialized)) {
-            LOG_ERROR_S(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "YdbOverFq::" << TDerived::RpcName << " actorId: " << TActorBootstrapped<TDerived>::SelfId().ToString() <<
-                " couldn't serialize response, status: " << Ydb::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString()
-            );
+            YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Couldn't serialize response",
+                {"rpcName", TDerived::RpcName},
+                {"actorId", TActorBootstrapped<TDerived>::SelfId()},
+                {"status", Ydb::StatusIds::StatusCode_Name(status)},
+                {"issues", issues.ToOneLineString()});
             FinishStream(Ydb::StatusIds::INTERNAL_ERROR, ctx);
             return;
         }
@@ -128,7 +111,8 @@ protected:
         auto& acl = *queryContent.mutable_acl();
         acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
 
-        SRC_LOG_T("creating query");
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Creating query",
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&TRpcBase::CreateQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -177,8 +161,10 @@ protected:
         resp.operation().result().UnpackTo(&result);
 
         if (!NFq::IsTerminalStatus(result.status())) {
-            SRC_LOG_T("still waiting for query: " << QueryId_ <<
-                ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Still waiting for query",
+                {"logContext", TLogCtx{.Owner_ = *this}},
+                {"queryId", QueryId_},
+                {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(result.status())});
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {
                 TBase::Reply(Ydb::StatusIds_StatusCode_TIMEOUT,
@@ -219,7 +205,10 @@ protected:
         NYql::IssuesFromMessage(operation.issues(), issues);
 
         TString errorMsg = TStringBuilder{} << "failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
-        SRC_LOG_I(errorMsg << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Operation failed",
+            {"logContext", TLogCtx{.Owner_ = *this}},
+            {"errorMsg", errorMsg},
+            {"issues", issues.ToOneLineString()});
         issues.AddIssue(errorMsg);
 
         TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);
@@ -251,22 +240,17 @@ protected:
     struct TLogCtx {
         TRpcBase& Owner_;
         TStringBuf QueryId_ = "";
+
+        NActors::NStructuredLog::TStructuredMessage ToStructuredMessage() const {
+            auto result = YDB_LOG_CREATE_MESSAGE({"actorId", Owner_.SelfId()});
+            if (!QueryId_.empty()) {
+                YDB_LOG_UPDATE_MESSAGE(result, {"queryId", QueryId_});
+            } else if (!Owner_.QueryId_.empty()) {
+                YDB_LOG_UPDATE_MESSAGE(result, {"queryId", Owner_.QueryId_});
+            }
+            return result;
+        }
     };
-
-    friend TStringBuilder& operator<<(TStringBuilder& out, const TLogCtx& ctx) {
-        if (ctx.Owner_.LogCtx_.empty()) {
-            ctx.Owner_.LogCtx_ = TStringBuilder{} << "YdbOverFq::" << TDerived::RpcName << " actorId: " << ctx.Owner_.SelfId().ToString();
-        }
-
-        out << ctx.Owner_.LogCtx_;
-        if (!ctx.QueryId_.empty()) {
-            out << " queryId: " << ctx.QueryId_;
-        } else if (!ctx.Owner_.QueryId_.empty()) {
-            out << " queryId: " << ctx.Owner_.QueryId_;
-        }
-        out << ' ';
-        return out;
-    }
 
 private:
     WaitRetryPolicy::IRetryState::TPtr WaitRetryState_;

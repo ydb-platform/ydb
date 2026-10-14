@@ -14,6 +14,8 @@
 
 #include <util/generic/maybe.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
+
 namespace NKikimr::NDataShard {
 
 class TIncrRestoreChangeSenderMain
@@ -33,15 +35,11 @@ class TIncrRestoreChangeSenderMain
     USE_STATE(ResolveTargetTable);
     USE_STATE(ResolveKeys);
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[IncrRestoreChangeSenderMain]"
-                << "[" << GetChangeSenderIdentity() << "]" // maybe better add something else
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "IncrRestoreChangeSenderMain"},
+            {"selfId", SelfId()},
+            {"changeSenderIdentity", GetChangeSenderIdentity()});
     }
 
     static TSerializedTableRange GetFullRange(ui32 keyColumnsCount) {
@@ -102,12 +100,14 @@ class TIncrRestoreChangeSenderMain
     }
 
     void LogCritAndRetry(const TString& error) {
-        LOG_C(error);
+        YDB_LOG_CRIT("Critical error during change exchange operation, retrying",
+            {"errorMessage", error});
         Retry();
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_W(error);
+        YDB_LOG_WARN("Recoverable error during change exchange operation, retrying",
+            {"errorMessage", error});
         Retry();
     }
 
@@ -136,22 +136,26 @@ class TIncrRestoreChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         EnqueueRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         ProcessRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvForgetRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         ForgetRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
 
         if (NoMoreData && !HasPendingRecords() && IsAllSendersReadyOrUninit()) {
@@ -160,12 +164,14 @@ class TIncrRestoreChangeSenderMain
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         OnGone(ev->Get()->PartitionId);
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
@@ -173,7 +179,8 @@ class TIncrRestoreChangeSenderMain
     }
 
     void Handle(TEvIncrementalRestoreScan::TEvNoMoreData::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         NoMoreData = true;
 
         if (!HasPendingRecords() && IsAllSendersReadyOrUninit()) {
@@ -202,10 +209,13 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix());
         ResolveUserTable();
     }
 
     STFUNC(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvIncrementalRestoreScan::TEvNoMoreData, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
@@ -225,7 +235,6 @@ public:
 private:
     const TDataShardId DataShard;
     const TTableId UserTableId;
-    mutable TMaybe<TString> LogPrefix;
 
     THashMap<TString, TTag> MainColumnToTag;
     TMap<TTag, TTag> TagMap; // from incrBackupTable to targetTable

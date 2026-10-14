@@ -15,6 +15,8 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_CHANNELS
+
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
@@ -102,7 +104,10 @@ public:
     virtual void HandleStart(TEvTestPrivate::TEvStart::TPtr& ev) {
         RunnerId = ev->Sender;
         PeerId = ev->Get()->PeerId;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, LogPrefix << "TEST START SelfId=" << this->SelfId() << ", ChannelId=" << ChannelId << ", PeerId=" << PeerId);
+        YDB_LOG_DEBUG("TEST START",
+            {"selfId", this->SelfId()},
+            {"channelId", ChannelId},
+            {"peerId", PeerId});
         if (Settings.StartDelayMs) {
             this->Schedule(TDuration::MilliSeconds(RandomNumber<ui64>(Settings.StartDelayMs) + 1), new NActors::TEvents::TEvWakeup());
         } else {
@@ -111,9 +116,10 @@ public:
     }
 
     virtual void HandleAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS,
-            LogPrefix << "TEST ABORT SelfId=" << this->SelfId() << ", ChannelId=" << ChannelId << ", " << ev->Get()->GetIssues().ToOneLineString()
-        );
+        YDB_LOG_DEBUG("Test worker received abort execution",
+            {"selfId", this->SelfId()},
+            {"channelId", ChannelId},
+            {"issues", ev->Get()->GetIssues().ToOneLineString()});
         this->Send(RunnerId, new TEvTestPrivate::TEvFinished(TEvTestPrivate::ERole::Producer, true));
         this->PassAway();
     }

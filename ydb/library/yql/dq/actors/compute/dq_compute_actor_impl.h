@@ -159,6 +159,19 @@ protected:
             new NActors::TEvents::TEvWakeup(EEvWakeupTag::TimeoutTag));
     }
 
+    static constexpr TDuration PeriodicStatsChunkSize = TDuration::Seconds(1);
+
+    void ScheduleNextPeriodicStatsChunk(TDuration remaining) {
+        this->Schedule(Min(PeriodicStatsChunkSize, remaining),
+            new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+    }
+
+    void SchedulePeriodicStats() {
+        const auto statsInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
+        PeriodicStatsDeadline = NActors::TActivationContext::Monotonic() + statsInterval;
+        ScheduleNextPeriodicStatsChunk(statsInterval);
+    }
+
 public:
     void Bootstrap() {
         try {
@@ -187,7 +200,10 @@ public:
             if (auto reportStatsSettings = RuntimeSettings.ReportStatsSettings) {
                 if (reportStatsSettings->MaxInterval) {
                     CA_LOG_D("Set periodic stats " << reportStatsSettings->MaxInterval << ", has checkpoints: " << (Checkpoints ? "true" : "false"));
-                    this->Schedule(reportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                    SchedulePeriodicStats();
+                }
+                if (reportStatsSettings->DelayFirstReport) {
+                    LastSendStatsTime = NActors::TActivationContext::Monotonic();
                 }
             }
 
@@ -1346,11 +1362,16 @@ protected:
                 if (State == NDqProto::COMPUTE_STATE_EXECUTING || State == NDqProto::COMPUTE_STATE_UNKNOWN ||
                     Checkpoints // Tasks with checkpoints should stay after finishing
                 ) {
+                    const TMonotonic now = NActors::TActivationContext::Monotonic();
+                    if (now < PeriodicStatsDeadline) {
+                        ScheduleNextPeriodicStatsChunk(PeriodicStatsDeadline - now);
+                        break;
+                    }
+
                     ReportStats();
 
-                    const auto statsInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
-                    CA_LOG_T("Schedule next periodic stats " << statsInterval);
-                    this->Schedule(statsInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                    CA_LOG_T("Schedule next periodic stats " << RuntimeSettings.ReportStatsSettings->MaxInterval);
+                    SchedulePeriodicStats();
                 }
                 break;
             }

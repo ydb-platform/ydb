@@ -345,6 +345,7 @@ using namespace NYql::NDqProto;
                         UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MinInterval,
                             progressPeriod ? progressPeriod : TDuration::Seconds(30));
                         UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MaxInterval, TDuration::Seconds(30));
+                        UNIT_ASSERT(settings.LocalReportStatsSettings->DelayFirstReport);
                     }
                     UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings.Defined(), streaming);
                     if (streaming) {

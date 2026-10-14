@@ -221,6 +221,59 @@ ENDIF()
                 extensions.update(ast.literal_eval(node.value))
         self.assertEqual(cpp_format.EXTENSIONS, extensions)
 
+    def test_fix_progress_counts_actual_changes_across_roots_and_batches(self):
+        groups = {'local': ['local/a.cpp'], 'shared': [f'shared/{i:02}.cpp' for i in range(33)]}
+        changed = {'shared/00.cpp', 'shared/32.cpp'}
+        for fail in (False, True):
+            with self.subTest(failed_batch=fail):
+                for files in groups.values():
+                    for path in files:
+                        self.write(path, 'int  x;\n')
+
+                def run(command, cwd):
+                    self.assertEqual(command[2], '-i')
+                    batch = [Path(path) for path in command[3:]]
+                    for path in batch:
+                        if path.relative_to(self.root).as_posix() in changed:
+                            path.write_text('int x;\n')
+                    code = int(fail and self.root / 'shared/00.cpp' in batch)
+                    return subprocess.CompletedProcess(command, code)
+
+                output = io.StringIO()
+                with mock.patch.object(cpp_format, 'ROOT', self.root), mock.patch.object(
+                    cpp_format, 'selected_files', return_value=groups
+                ), mock.patch.object(cpp_format, 'resolve_formatter', return_value='mock-clang-format'), mock.patch.object(
+                    cpp_format.subprocess, 'run', side_effect=run
+                ) as formatter, contextlib.redirect_stdout(output):
+                    self.assertEqual(cpp_format.main(['--fix']), int(fail))
+                self.assertEqual(formatter.call_count, 3)
+                self.assertIn(
+                    'Checked 32 / 33 files in shared; formatted 1 (overall 33 / 34 checked, 1 formatted)',
+                    output.getvalue(),
+                )
+                self.assertIn(
+                    'Checked 33 / 33 files in shared; formatted 2 (overall 34 / 34 checked, 2 formatted)',
+                    output.getvalue(),
+                )
+                status = 'Finished with errors' if fail else 'Finished'
+                self.assertTrue(output.getvalue().endswith(f'{status}: 2 formatted / 34 checked files.\n'))
+                self.assertEqual((self.root / 'local/a.cpp').read_text(), 'int  x;\n')
+
+    def test_check_progress_preserves_files_and_reports_failures(self):
+        file = self.write('shared/a.cpp', 'int  x;\n')
+        output = io.StringIO()
+        with mock.patch.object(cpp_format, 'ROOT', self.root), mock.patch.object(
+            cpp_format, 'selected_files', return_value={'shared': ['shared/a.cpp']}
+        ), mock.patch.object(cpp_format, 'resolve_formatter', return_value='mock-clang-format'), mock.patch.object(
+            cpp_format.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)
+        ) as formatter, contextlib.redirect_stdout(output):
+            self.assertEqual(cpp_format.main(['--check']), 1)
+        self.assertNotIn('-i', formatter.call_args.args[0])
+        self.assertIn('--dry-run', formatter.call_args.args[0])
+        self.assertEqual(file.read_text(), 'int  x;\n')
+        self.assertIn('Checked 1 / 1 files in shared (overall 1 / 1 checked)', output.getvalue())
+        self.assertTrue(output.getvalue().endswith('Finished with errors: 1 / 1 files checked.\n'))
+
     @unittest.skipUnless(os.environ.get('YDB_CLANG_FORMAT'), 'set YDB_CLANG_FORMAT for real formatter coverage')
     def test_real_formatter_checks_fixes_and_preserves_per_root_styles(self):
         self.root = self.copy_checkout(parent='vendor/contrib/generated')

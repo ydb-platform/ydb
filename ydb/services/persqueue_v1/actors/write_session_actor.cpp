@@ -458,6 +458,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+    if constexpr (!UseMigrationProtocol) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->NormalizePath(topic_path);
+            InitRequest.set_path(topic_path);
+        }
+    }
 
     if constexpr (UseMigrationProtocol) {
         if (InitRequest.message_group_id().empty()) {

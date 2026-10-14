@@ -4152,6 +4152,87 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             "idx_bloom should not exist after DROP TABLE, but got status: "
                 << static_cast<int>(bloomDesc->Record.GetSchemeStatus()));
     }
+
+    // Complex LIKE/ILIKE stay one Re2 match. With the shard flag the bloom-ngram index skips portions
+    // that cannot contain the literal runs; results stay the same as with the flag off.
+    Y_UNIT_TEST(ComplexLikeNgramSkip) {
+        auto run = [](const bool hintsEnabled, const bool caseSensitiveIndex) {
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableCsPatternIndexHints(hintsEnabled);
+            settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+            settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+            TKikimrRunner kikimr(settings);
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+            ExecQuery(kikimr, true, R"(
+                CREATE TABLE `/Root/complexLike` (
+                    key Int32 NOT NULL,
+                    value String NOT NULL,
+                    PRIMARY KEY (key)
+                )
+                PARTITION BY HASH (key)
+                WITH (STORE = COLUMN);
+            )");
+            ExecQuery(kikimr, true, TStringBuilder() << R"(
+                ALTER TABLE `/Root/complexLike`
+                ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (value)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = )"
+                << (caseSensitiveIndex ? "true" : "false") << ");");
+
+            auto runDml = [&](const TString& query) {
+                auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            };
+            runDml(R"(
+                $rows = ListMap(ListFromRange(1, 201), ($x) -> { RETURN AsStruct($x AS item); });
+                UPSERT INTO `/Root/complexLike` (key, value)
+                SELECT item AS key, "noise_" || CAST(item AS String) AS value FROM AS_TABLE($rows);
+            )");
+            runDml(R"(
+                UPSERT INTO `/Root/complexLike` (key, value) VALUES
+                    (1001, "xx aaabbb yy"),
+                    (1002, "bbb aaa");
+            )");
+
+            auto runScan = [&](const TString& query) {
+                auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                return StreamResultToYson(it);
+            };
+            CompareYson(R"([[1001]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value LIKE '%aaa%bbb%' ORDER BY key)"),
+                "LIKE rows");
+            CompareYson(R"([[1001]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%AAA%bbb%' ORDER BY key)"),
+                "ILIKE rows");
+
+            const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+            CompareYson(R"([[0u]])",
+                runScan(R"(SELECT COUNT(*) FROM `/Root/complexLike` WHERE value LIKE '%zzz%qqq%')"),
+                "absent LIKE");
+            const ui64 likeSkipped = csController->GetIndexesSkippingOnSelect().Val() - skipBefore;
+
+            const ui64 ilikeBefore = csController->GetIndexesSkippingOnSelect().Val();
+            CompareYson(R"([[0u]])",
+                runScan(R"(SELECT COUNT(*) FROM `/Root/complexLike` WHERE value ILIKE '%ZZZ%qqq%')"),
+                "absent ILIKE");
+            const ui64 ilikeSkipped = csController->GetIndexesSkippingOnSelect().Val() - ilikeBefore;
+            return std::make_pair(likeSkipped, ilikeSkipped);
+        };
+
+        const auto insensitive = run(true, false);
+        UNIT_ASSERT_C(insensitive.first > 0, "case-insensitive ngram did not skip for LIKE");
+        UNIT_ASSERT_C(insensitive.second > 0, "case-insensitive ngram did not skip for ILIKE");
+
+        const auto sensitive = run(true, true);
+        UNIT_ASSERT_C(sensitive.first > 0, "case-sensitive ngram did not skip for LIKE");
+        UNIT_ASSERT_VALUES_EQUAL(sensitive.second, 0);
+
+        const auto disabled = run(false, false);
+        UNIT_ASSERT_VALUES_EQUAL(disabled.first, 0);
+        UNIT_ASSERT_VALUES_EQUAL(disabled.second, 0);
+    }
 }
 
 }   // namespace NKikimr::NKqp

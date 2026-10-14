@@ -1506,6 +1506,85 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
 
+    Y_UNIT_TEST(PatternHint_ComplexLike) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/likeHint` (
+                id Int64 NOT NULL,
+                message String,
+                PRIMARY KEY (id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto inserted = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/likeHint` (id, message) VALUES
+                (1, "xx aaabbb yy"),
+                (2, "bbb aaa"),
+                (3, "nothing")
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        auto run = [&](const TString& query) {
+            const auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' ORDER BY id)"), "[[1]]");
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%AAA%bbb%' ORDER BY id)"), "[[1]]");
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%' ORDER BY id)"), "[[2];[3]]");
+
+        auto ssaOf = [&](const TString& query, const TParams& params = TParams()) {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+            auto it = tableClient.StreamExecuteScanQuery(query, params, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = CollectStreamResult(it);
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.PlanJson, &plan, true));
+            TString ssa;
+            std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+                if (node.IsMap()) {
+                    for (const auto& [key, value] : node.GetMapSafe()) {
+                        if (key == "SsaProgram" && value.IsString()) {
+                            ssa += value.GetStringRobust();
+                        }
+                        walk(value);
+                    }
+                } else if (node.IsArray()) {
+                    for (const auto& value : node.GetArraySafe()) {
+                        walk(value);
+                    }
+                }
+            };
+            walk(plan);
+            return ssa;
+        };
+
+        const auto like = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(like.Contains("PatternHint"), like);
+        UNIT_ASSERT_C(like.Contains("\"CaseSensitive\":true") || like.Contains("\"CaseSensitive\": true"), like);
+        const auto ilike = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(ilike.Contains("PatternHint"), ilike);
+        UNIT_ASSERT_C(ilike.Contains("\"CaseSensitive\":false") || ilike.Contains("\"CaseSensitive\": false"), ilike);
+        const auto negated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!negated.Contains("PatternHint"), negated);
+        const auto disjunction = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' OR message LIKE '%ccc%ddd%')");
+        UNIT_ASSERT_C(!disjunction.Contains("PatternHint"), disjunction);
+        const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '100#%%' ESCAPE '#')");
+        UNIT_ASSERT_C(escaped.Contains("PatternHint"), escaped);
+        const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
+        const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", params);
+        UNIT_ASSERT_C(!parameterized.Contains("PatternHint"), parameterized);
+    }
+
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

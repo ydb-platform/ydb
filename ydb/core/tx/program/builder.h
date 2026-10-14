@@ -22,6 +22,7 @@ private:
     const IColumnResolver& ColumnResolver;
     const TKernelsRegistry& KernelsRegistry;
     mutable THashMap<ui32, std::shared_ptr<arrow::Scalar>> Constants;
+    bool PatternIndexHintsEnabled = false;
 
     NArrow::NSSA::NGraph::NOptimization::TGraph::TBuilder Builder;
 
@@ -60,6 +61,10 @@ public:
 
     void EnableIndexMemoryReserve() {
         Builder.EnableIndexMemoryReserve();
+    }
+
+    void EnablePatternIndexHints() {
+        PatternIndexHintsEnabled = true;
     }
 
     TConclusion<std::shared_ptr<NGraph::NExecution::TCompiledGraph>> Finish() {

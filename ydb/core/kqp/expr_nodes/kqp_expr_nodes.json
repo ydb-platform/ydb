@@ -788,7 +788,8 @@
             "Children": [
                 {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
                 {"Index": 1, "Name": "Args", "Type": "TExprList"},
-                {"Index": 2, "Name": "KernelName", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "KernelName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "LikeHint", "Type": "TExprList", "Optional": true}
             ]
         },
         {

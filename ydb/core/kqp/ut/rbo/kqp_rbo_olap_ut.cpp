@@ -3217,6 +3217,51 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
              << " us, new optimizer=" << newOptimizerTotal << " us" << Endl;
     }
 
+    Y_UNIT_TEST(PatternHint_ComplexLike) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/likeHint` (
+                id Int64 NOT NULL,
+                message String,
+                PRIMARY KEY (id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+        auto it = tableClient.StreamExecuteScanQuery(
+            R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%aaa%bbb%')", scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto result = CollectStreamResult(it);
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(NJson::ReadJsonTree(*result.PlanJson, &plan, true));
+        TString ssa;
+        std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+            if (node.IsMap()) {
+                for (const auto& [key, value] : node.GetMapSafe()) {
+                    if (key == "SsaProgram" && value.IsString()) {
+                        ssa += value.GetStringRobust();
+                    }
+                    walk(value);
+                }
+            } else if (node.IsArray()) {
+                for (const auto& value : node.GetArraySafe()) {
+                    walk(value);
+                }
+            }
+        };
+        walk(plan);
+        UNIT_ASSERT_C(ssa.Contains("PatternHint"), ssa);
+        UNIT_ASSERT_C(ssa.Contains("\"CaseSensitive\":false") || ssa.Contains("\"CaseSensitive\": false"), ssa);
+    }
+
 }
 } // namespace NKqp
 } // namespace NKikimr

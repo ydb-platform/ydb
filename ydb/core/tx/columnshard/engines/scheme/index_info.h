@@ -293,6 +293,9 @@ public:
         return Indexes;
     }
 
+    // Smallest ngramm_size of a bloom-ngram index on `columnId` that accepts `caseSensitive` probes.
+    std::optional<ui32> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
+
     TString DebugString() const {
         TStringBuilder sb;
         sb << "("

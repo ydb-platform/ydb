@@ -62,6 +62,21 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         if (kernelLogic->GetClassName() == TToStringKernel::GetClassNameStatic()) {
             kernelLogic = TToStringKernel::Resolve(*kernelFunction);
         }
+        if (PatternIndexHintsEnabled && func.HasPatternHint() && func.GetPatternHint().HasLike()) {
+            const auto& hint = func.GetPatternHint();
+            if (hint.GetArgumentIndex() < arguments.size()) {
+                const auto ngramSize = ColumnResolver.GetBloomNgramSize(arguments[hint.GetArgumentIndex()].GetColumnId(), hint.GetCaseSensitive());
+                if (ngramSize) {
+                    TPatternHintPolicy policy;
+                    policy.MinContainsLength = *ngramSize;
+                    auto hints = BuildLikeIndexHints(hint.GetLike().GetPattern(), hint.GetLike().GetEscape(), hint.GetCaseSensitive(),
+                        hint.GetArgumentIndex(), policy);
+                    if (!hints.empty()) {
+                        kernelLogic = std::make_shared<TLogicPatternMatch>(std::move(hints));
+                    }
+                }
+            }
+        }
         return std::make_shared<TKernelFunction>(kernelFunction);
     }
 

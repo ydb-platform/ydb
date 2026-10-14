@@ -1,0 +1,37 @@
+#pragma once
+#include "abstract.h"
+
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+
+namespace NKikimr::NArrow::NSSA {
+
+// One bloom-ngram probe implied by a LIKE/ILIKE match: the matched input contains (or starts/ends with) Value.
+struct TPatternIndexHint {
+    ui32 InputIndex = 0;
+    TIndexCheckOperation Operation;
+    TString Value;
+
+    TPatternIndexHint(const ui32 inputIndex, const TIndexCheckOperation operation, TString value)
+        : InputIndex(inputIndex)
+        , Operation(operation)
+        , Value(std::move(value)) {
+    }
+};
+
+struct TPatternHintPolicy {
+    // A Contains shorter than the bloom ngram size probes nothing. The caller sets this from the index.
+    ui32 MinContainsLength = 3;
+    // StartsWith / EndsWith still hash boundary ngrams padded with zero bytes, so one byte is enough.
+    ui32 MinAnchoredLength = 1;
+    // Phase 1 does not interpret ESCAPE. A pattern that has one produces no hints.
+    bool AllowEscape = false;
+};
+
+// Literal runs of a SQL LIKE pattern that every matching string must contain.
+// ILIKE keeps only ASCII pieces of a run: the case-insensitive bloom folds ASCII, while Re2 folds Unicode.
+// Residual deviation, same as OptimizeSimpleILIKE: Re2 folds U+212A to 'k' and U+017F to 's'.
+std::vector<TPatternIndexHint> BuildLikeIndexHints(const TStringBuf pattern, const TStringBuf escape, const bool caseSensitive,
+    const ui32 inputIndex, const TPatternHintPolicy& policy);
+
+}   // namespace NKikimr::NArrow::NSSA

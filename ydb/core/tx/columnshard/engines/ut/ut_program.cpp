@@ -849,4 +849,110 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         JsonValueImpl(true, NYql::EDataSlot::Float);
         JsonValueImpl(true, NYql::EDataSlot::Double);
     }
+
+    // Reports a fixed ngram size so hint derivation does not need a real bloom index.
+    class TFixedNgramResolver: public NReader::NCommon::TIndexColumnResolver {
+    public:
+        using TIndexColumnResolver::TIndexColumnResolver;
+        std::optional<ui32> NgramSize;
+
+        std::optional<ui32> GetBloomNgramSize(const ui32 /*columnId*/, const bool /*caseSensitive*/) const override {
+            return NgramSize;
+        }
+    };
+
+    // PatternHint adds bloom checks next to the original kernel. With no index blobs the checks allow
+    // every row, so the kernel result is unchanged. No reported ngram size means no checks are built.
+    Y_UNIT_TEST(PatternHintBuildsCheckers) {
+        TIndexInfo indexInfo = BuildTableInfo(testColumns, testKey);
+        TFixedNgramResolver columnResolver(indexInfo);
+        columnResolver.NgramSize = 3;
+
+        auto makeProgram = [&](const TString& pattern, const bool caseSensitive, const std::optional<ui32> argumentIndex) {
+            NKikimrSSA::TProgram programProto;
+            {
+                auto* command = programProto.AddCommand();
+                command->MutableAssign()->MutableConstant()->SetBytes("Lorem");
+                command->MutableAssign()->MutableColumn()->SetId(15);
+            }
+            {
+                auto* command = programProto.AddCommand();
+                auto* functionProto = command->MutableAssign()->MutableFunction();
+                functionProto->SetFunctionType(NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL);
+                functionProto->SetKernelIdx(0);
+                functionProto->AddArguments()->SetId(columnResolver.GetColumnIdVerified("string"));
+                functionProto->AddArguments()->SetId(15);
+                if (argumentIndex) {
+                    auto* hint = functionProto->MutablePatternHint();
+                    hint->SetArgumentIndex(*argumentIndex);
+                    hint->MutableLike()->SetPattern(pattern);
+                    hint->SetCaseSensitive(caseSensitive);
+                }
+                command->MutableAssign()->MutableColumn()->SetId(16);
+            }
+            {
+                auto* command = programProto.AddCommand();
+                command->MutableProjection()->AddColumns()->SetId(16);
+            }
+            TKernelsWrapper kernels;
+            kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true);
+            programProto.SetKernels(kernels.Serialize());
+            return programProto;
+        };
+
+        auto apply = [&](NKikimrSSA::TProgram programProto, const bool hintsEnabled) {
+            TProgramContainer program;
+            program.SetPatternIndexHintsEnabled(hintsEnabled);
+            program
+                .Init(
+                    columnResolver, NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS, SerializeProgram(programProto))
+                .Validate();
+            TTableUpdatesBuilder updates(NArrow::MakeArrowSchema({ { "string", TTypeInfo(NTypeIds::Utf8) } }));
+            updates.AddRow().Add<std::string>("Lorem ipsum");
+            updates.AddRow().Add<std::string>("ipsum");
+            auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
+            return std::make_pair(program.GetChainVerified()->DebugDOT(), batch);
+        };
+
+        auto uint8Pair = [](const std::shared_ptr<arrow::RecordBatch>& batch) {
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 2);
+            auto column = std::static_pointer_cast<arrow::UInt8Array>(batch->column(0));
+            UNIT_ASSERT(column);
+            return std::make_pair(column->Value(0), column->Value(1));
+        };
+
+        const auto withHints = apply(makeProgram("%aaa%bbb%", true, 0), true);
+        UNIT_ASSERT_C(withHints.first.Contains("PATTERN_MATCH"), withHints.first);
+        UNIT_ASSERT_C(withHints.first.Contains("aaa") && withHints.first.Contains("bbb"), withHints.first);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(withHints.second), (std::pair<ui8, ui8>(1, 0)));
+        const auto checkerCount = [&](const TString& dot) {
+            ui32 count = 0;
+            for (size_t pos = 0; (pos = dot.find("CheckIndexData", pos)) != TString::npos; pos += 14) {
+                ++count;
+            }
+            return count;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(checkerCount(withHints.first), 2);
+
+        const auto flagOff = apply(makeProgram("%aaa%bbb%", true, 0), false);
+        UNIT_ASSERT_C(!flagOff.first.Contains("PATTERN_MATCH"), flagOff.first);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(flagOff.second), (std::pair<ui8, ui8>(1, 0)));
+
+        const auto ignored = apply(makeProgram("%aaa%bbb%", true, 5), true);
+        UNIT_ASSERT_C(!ignored.first.Contains("PATTERN_MATCH"), ignored.first);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(ignored.second), (std::pair<ui8, ui8>(1, 0)));
+
+        const auto ilike = apply(makeProgram("%Err%Ошибка%", false, 0), true);
+        UNIT_ASSERT_C(ilike.first.Contains("PATTERN_MATCH"), ilike.first);
+        UNIT_ASSERT_C(ilike.first.Contains("Err"), ilike.first);
+        UNIT_ASSERT_C(!ilike.first.Contains("Ошибка"), ilike.first);
+        UNIT_ASSERT_VALUES_EQUAL(checkerCount(ilike.first), 1);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(ilike.second), (std::pair<ui8, ui8>(1, 0)));
+
+        columnResolver.NgramSize.reset();
+        const auto noIndex = apply(makeProgram("%aaa%bbb%", true, 0), true);
+        UNIT_ASSERT_C(!noIndex.first.Contains("PATTERN_MATCH"), noIndex.first);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(noIndex.second), (std::pair<ui8, ui8>(1, 0)));
+    }
 }

@@ -13,7 +13,8 @@
 
 namespace NKikimr::NOlap {
 
-ui64 TColumnEngineChanges::CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const {
+ui64 TColumnEngineChanges::CalcMemoryForConstruction(
+    const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors, const NBlobOperations::NRead::TCompositeReadBlobs* /*blobs*/) const {
     THashMap<ui32, ui64> memoryByColumns;
     for (const auto& accessor : accessors) {
         THashMap<ui32, ui64> memoryByPortionColumns;

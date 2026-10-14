@@ -360,7 +360,12 @@ public:
         return DoCalcMemoryForUsage();
     }
 
-    virtual ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const;
+    virtual ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
+        const NBlobOperations::NRead::TCompositeReadBlobs* blobs = nullptr) const;
+
+    virtual ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*accessors*/) const {
+        return 0;
+    }
 
     TString GetTaskIdentifier() const {
         return TaskIdentifier;

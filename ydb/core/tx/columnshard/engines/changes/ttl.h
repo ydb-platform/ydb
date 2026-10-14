@@ -90,7 +90,10 @@ protected:
     }
 
 public:
-    ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const override;
+    ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
+        const NBlobOperations::NRead::TCompositeReadBlobs* blobs = nullptr) const override;
+
+    ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors) const override;
 
     ui32 GetWritePortionsCount() const override {
         return TBase::GetWritePortionsCount() + RewrittenPortions.size();
@@ -109,7 +112,7 @@ public:
 
     public:
         ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo, const TPortionEvictionFeatures& features,
-            const TPortionDataAccessor* accessor = nullptr);
+            const TPortionDataAccessor* accessor = nullptr, const NBlobOperations::NRead::TCompositeReadBlobs* blobs = nullptr);
 
         ui64 GetConstructionMemory() const {
             return SumOutputMemory + MaxWorkingMemory;

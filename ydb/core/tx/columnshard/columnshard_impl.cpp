@@ -651,7 +651,8 @@ private:
             {"tabletId", TabletId},
             {"parentId", ParentActorId});
         if (NeedBlobs) {
-            AFL_VERIFY(context.GetResourceGuards().size() == 3);
+            AFL_VERIFY(context.GetResourceGuards().size() ==
+                3 + (Changes->GetMemoryForConstructionPreparation(context.GetPortionAccessors()) != 0));
         } else {
             AFL_VERIFY(context.GetResourceGuards().size() == 2);
         }
@@ -676,9 +677,14 @@ private:
     }
 
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
-        const std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>& acc) const override {
+        const std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>& acc,
+        const NOlap::NDataFetcher::TCurrentContext& context) const override {
         AFL_VERIFY(!columnIds);
-        return Changes->CalcMemoryForConstruction(acc);
+        return Changes->CalcMemoryForConstruction(acc, context.GetBlobsOptional());
+    }
+
+    ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>>& acc) const override {
+        return Changes->GetMemoryForConstructionPreparation(acc);
     }
 
     virtual void DoOnError(const TString& errorMessage) override {

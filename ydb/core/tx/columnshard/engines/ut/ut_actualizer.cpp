@@ -1,6 +1,8 @@
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
@@ -15,7 +17,9 @@
 
 #include <ydb/library/formats/arrow/size_calcer.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -32,18 +36,20 @@ const TDuration Tier1EvictAfter = TDuration::Hours(1);
 const TDuration Tier2EvictAfter = TDuration::Hours(2);
 
 TIndexInfo MakeTestIndexInfo(const std::shared_ptr<TSchemaObjectsCache>& cache, const ui64 version, const bool schemeNeedActualization,
-    const std::optional<TString>& sparseDefault = {}, const bool dictionaryPayload = false) {
+    const std::optional<TString>& sparseDefault = {}, const std::shared_ptr<NArrow::NAccessor::IConstructor>& payloadConstructor = nullptr) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     *proto.MutableColumns()->Add() = NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)).CreateColumn(PkColumnId);
-    if (sparseDefault || dictionaryPayload) {
-        auto column = NArrow::NTest::TTestColumn("payload", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8)).CreateColumn(2);
+    if (sparseDefault || payloadConstructor) {
+        const auto typeId = payloadConstructor && payloadConstructor->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray
+                                ? NScheme::NTypeIds::JsonDocument
+                                : NScheme::NTypeIds::Utf8;
+        auto column = NArrow::NTest::TTestColumn("payload", NScheme::TTypeInfo(typeId)).CreateColumn(2);
         if (sparseDefault) {
             *column.MutableDefaultValue() =
                 TColumnDefaultScalarValue(std::make_shared<arrow::StringScalar>(std::string(*sparseDefault))).SerializeToProto();
         }
-        NArrow::NAccessor::TConstructorContainer accessor =
-            dictionaryPayload ? NArrow::NAccessor::TConstructorContainer(std::make_shared<NArrow::NAccessor::NDictionary::TConstructor>())
-                              : NArrow::NAccessor::TConstructorContainer(std::make_shared<NArrow::NAccessor::NSparsed::TConstructor>());
+        NArrow::NAccessor::TConstructorContainer accessor(
+            payloadConstructor ? payloadConstructor : std::make_shared<NArrow::NAccessor::NSparsed::TConstructor>());
         *column.MutableDataAccessorConstructor() = accessor.SerializeToProto();
         *proto.AddColumns() = column;
         *proto.AddColumns() = NArrow::NTest::TTestColumn("absent", NScheme::TTypeInfo(NScheme::NTypeIds::Int64)).CreateColumn(3);
@@ -246,9 +252,10 @@ public:
     const std::shared_ptr<TController> Controller = std::make_shared<TController>();
     TVersionedIndex Index;
 
-    explicit TActualizationBatchTestEnv(const std::optional<TString>& sparseDefault = {}, const bool dictionaryPayload = false) {
-        Index.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false, sparseDefault, dictionaryPayload)));
-        Index.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true, sparseDefault, dictionaryPayload)));
+    explicit TActualizationBatchTestEnv(
+        const std::optional<TString>& sparseDefault = {}, const std::shared_ptr<NArrow::NAccessor::IConstructor>& payloadConstructor = nullptr) {
+        Index.AddIndex(TSnapshot(1, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 1, false, sparseDefault, payloadConstructor)));
+        Index.AddIndex(TSnapshot(2, 1), Cache->UpsertIndexInfo(MakeTestIndexInfo(Cache, 2, true, sparseDefault, payloadConstructor)));
     }
 
     TPortionEvictionFeatures Features(const bool repair) const {
@@ -268,20 +275,48 @@ public:
             TestPathId, id, 10, 19, rows, TSnapshot(1, 1), historical ? std::make_optional(TSnapshot(10, 1)) : std::nullopt);
     }
 
-    std::shared_ptr<TPortionDataAccessor> Accessor(const ui64 id, const ui32 rows, const std::vector<TColumnRecord>& records) const {
+    std::shared_ptr<TPortionDataAccessor> Accessor(
+        const ui64 id, const ui32 rows, const std::vector<TColumnRecord>& records, const ui32 blobBytes = 100) const {
         auto portion = Portion(id, true, rows);
-        const std::vector<TUnifiedBlobId> blobs = { TUnifiedBlobId(1, 1, 1, 1, 1, 1, 100) };
+        const std::vector<TUnifiedBlobId> blobs = { TUnifiedBlobId(1, 1, 1, 1, 1, id, blobBytes) };
         auto proto = portion->GetMeta().SerializeToProto(blobs, NPortion::EProduced::SPLIT_COMPACTED);
         ui64 rawBytes = 0;
         for (const auto& chunk : records) {
             rawBytes += chunk.GetMeta().GetRawBytes();
         }
         proto.SetColumnRawBytes(rawBytes);
+        proto.SetColumnBlobBytes(blobBytes);
         auto ctor = portion->BuildConstructor(true);
         TPortionMetaConstructor meta;
         UNIT_ASSERT(meta.LoadMetadata(proto, Index.GetSchemaVerified(1)->GetIndexInfo(), TFakeGroupSelector()));
         ctor->MutableMeta() = std::move(meta);
         return std::make_shared<TPortionDataAccessor>(ctor->Build(), blobs, records, std::vector<TIndexChunk>(), false);
+    }
+
+    std::shared_ptr<TPortionDataAccessor> EncodedAccessor(const ui64 id,
+        const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& chunks, NBlobOperations::NRead::TCompositeReadBlobs& blobs) const {
+        const auto loader = Index.GetSchemaVerified(1)->GetColumnLoaderVerified(2);
+        std::vector<TColumnRecord> records;
+        std::vector<TString> data;
+        ui32 rows = 0;
+        ui32 blobBytes = 0;
+        for (const auto& chunk : chunks) {
+            auto serialized =
+                loader->GetAccessorConstructor()->SerializeToBlobAndMeta(chunk, loader->BuildAccessorContext(chunk->GetRecordsCount()));
+            auto record = TColumnRecord::TTestInstanceBuilder::Build(2, records.size(), blobBytes, serialized.Blob.size(),
+                chunk->GetRecordsCount(), chunk->GetRawSizeVerified());
+            record.RegisterBlobIdx(0);
+            record.MutableMeta().SetAdditionalAccessorData(std::move(serialized.Meta));
+            records.emplace_back(std::move(record));
+            rows += chunk->GetRecordsCount();
+            blobBytes += serialized.Blob.size();
+            data.emplace_back(std::move(serialized.Blob));
+        }
+        auto accessor = Accessor(id, rows, records, blobBytes);
+        for (ui32 i = 0; i < records.size(); ++i) {
+            blobs.Add(IStoragesManager::DefaultStorageId, accessor->RestoreBlobRange(records[i].GetBlobRange()), std::move(data[i]));
+        }
+        return accessor;
     }
 
     static auto BuildLock(const TTTLColumnEngineChanges& task) {
@@ -461,7 +496,7 @@ Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
     }
 
     Y_UNIT_TEST(DictionaryRepairReservationAccountsForRepeatedLongValues) {
-        TActualizationBatchTestEnv env({}, true);
+        TActualizationBatchTestEnv env({}, std::make_shared<NArrow::NAccessor::NDictionary::TConstructor>());
         constexpr ui32 ChunkRows = 100000;
         constexpr ui32 ValueBytes = 16 * 1024;
         const auto dictionary =
@@ -470,25 +505,19 @@ Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
         const auto encoded = std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictionary, positions);
         const ui64 expandedBytes = ui64(ChunkRows) * ValueBytes;
         UNIT_ASSERT(encoded->GetValueRawBytes() < expandedBytes / 1000);
-        std::vector<TColumnRecord> records;
-        records.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, 2 * ChunkRows, 2 * ChunkRows * sizeof(ui64)));
-        records.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 0, 100, 100, ChunkRows, encoded->GetValueRawBytes()));
-        records.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 1, 200, 100, ChunkRows, encoded->GetValueRawBytes()));
-        const auto accessor = env.Accessor(1, 2 * ChunkRows, records);
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        const auto accessor = env.EncodedAccessor(1, { encoded, encoded }, blobs);
         auto features = env.Features(true);
         TTTLColumnEngineChanges task(features.GetRWAddress(), TSaverContext(env.Storages));
         task.AddPortionToEvict(accessor->GetPortionInfoPtr(), env.Features(true));
         const TColumnEngineChanges& changes = task;
-        const ui64 reserved = changes.CalcMemoryForConstruction({ accessor });
+        const ui64 reserved = changes.CalcMemoryForConstruction({ accessor }, &blobs);
         UNIT_ASSERT(reserved > 3 * 2 * expandedBytes);
         UNIT_ASSERT(reserved < task.CalcMemoryForUsage());
 
-        std::vector<TColumnRecord> singleChunkRecords;
-        singleChunkRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(1, 0, 0, 100, ChunkRows, ChunkRows * sizeof(ui64)));
-        singleChunkRecords.emplace_back(TColumnRecord::TTestInstanceBuilder::Build(2, 0, 100, 100, ChunkRows, encoded->GetValueRawBytes()));
-        const auto singleChunk = env.Accessor(2, ChunkRows, singleChunkRecords);
+        const auto singleChunk = env.EncodedAccessor(2, { encoded }, blobs);
         task.AddPortionToEvict(singleChunk->GetPortionInfoPtr(), env.Features(true));
-        const ui64 withRetainedOutput = changes.CalcMemoryForConstruction({ singleChunk, accessor });
+        const ui64 withRetainedOutput = changes.CalcMemoryForConstruction({ singleChunk, accessor }, &blobs);
         UNIT_ASSERT(withRetainedOutput >= reserved + expandedBytes);
 
         auto context = env.Context();
@@ -514,6 +543,82 @@ Y_UNIT_TEST_SUITE(TDecimalRepairActualizerTests) {
         const auto second = env.Accessor(2, 1000, secondRecords);
         const TColumnEngineChanges& changes = task;
         UNIT_ASSERT_VALUES_EQUAL(changes.CalcMemoryForConstruction({ first, second }), 650);
+        UNIT_ASSERT_VALUES_EQUAL(changes.GetMemoryForConstructionPreparation({ first, second }), 0);
+    }
+
+    Y_UNIT_TEST(DictionaryReservationDoesNotMultiplyPositionBytes) {
+        using namespace NArrow::NAccessor;
+        constexpr ui32 Rows = 100000;
+        constexpr ui64 ReservationLimit = 64 * 1024 * 1024;
+        for (const ui32 variants : { 1, 256, 65536 }) {
+            TActualizationBatchTestEnv env({}, std::make_shared<NDictionary::TConstructor>());
+            arrow::StringBuilder values;
+            for (ui32 i = 0; i < variants; ++i) {
+                const char value[] = { char(' ' + i % 64), char(' ' + (i / 64) % 64), char(' ' + (i / 4096) % 64) };
+                UNIT_ASSERT(values.Append(value, sizeof(value)).ok());
+            }
+            arrow::UInt32Builder indexes;
+            for (ui32 row = 0; row < Rows; ++row) {
+                UNIT_ASSERT((row % 17 ? indexes.Append(row % variants) : indexes.AppendNull()).ok());
+            }
+            const auto positions = NArrow::TStatusValidator::GetValid(
+                arrow::compute::Cast(*indexes.Finish().ValueOrDie(), NDictionary::TConstructor::GetTypeByVariantsCount(variants)));
+            const auto encoded = std::make_shared<TDictionaryArray>(values.Finish().ValueOrDie(), positions);
+            NBlobOperations::NRead::TCompositeReadBlobs blobs;
+            const auto accessor = env.EncodedAccessor(1, { encoded }, blobs);
+            auto features = env.Features(true);
+            TTTLColumnEngineChanges task(features.GetRWAddress(), TSaverContext(env.Storages));
+            task.AddPortionToEvict(accessor->GetPortionInfoPtr(), env.Features(true));
+            const ui64 preparation = task.GetMemoryForConstructionPreparation({ accessor });
+            const ui64 construction = task.CalcMemoryForConstruction({ accessor }, &blobs);
+            const auto dense = encoded->GetChunkedArray()->chunk(0);
+            UNIT_ASSERT(construction > 3 * NArrow::GetArrayMemorySize(dense->data()));
+            UNIT_ASSERT(preparation > encoded->GetRawSizeVerified());
+            UNIT_ASSERT_C(preparation + construction < ReservationLimit, variants << ": " << preparation + construction);
+            UNIT_ASSERT(!blobs.IsEmpty());
+        }
+    }
+
+    Y_UNIT_TEST(SubColumnsReservationIncludesExpandedDocuments) {
+        using namespace NArrow::NAccessor;
+        using namespace NArrow::NAccessor::NSubColumns;
+        constexpr ui32 Rows = 2048;
+        constexpr ui32 ValueBytes = 4096;
+        TSettings settings;
+        settings.SetDataExtractor(TDataAdapterContainer::GetDefault());
+        settings.SetEnableNativeColumns(true);
+        TActualizationBatchTestEnv env({}, std::make_shared<NSubColumns::TConstructor>(settings));
+        const auto values = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::StringScalar(std::string(ValueBytes, 'x')), 1));
+        const auto positions = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt8Scalar(0), Rows));
+        const auto dictionary = std::make_shared<TDictionaryArray>(values, positions);
+        auto statsBuilder = TDictStats::MakeBuilder();
+        statsBuilder.Add(
+            TString("\"nested\".\"payload\""), Rows, dictionary->GetValueRawBytes(), IChunkedArray::EType::Dictionary, EValueType::String);
+        auto stats = statsBuilder.Finish();
+        auto columns = std::make_shared<NArrow::TGeneralContainer>(Rows);
+        columns->AddField(stats.GetField(0), dictionary).Validate();
+
+        const auto otherValue = std::get<NBinaryJson::TBinaryJson>(NBinaryJson::SerializeToBinaryJson("{\"items\":[1,true,\"text\"]}"));
+        auto othersStatsBuilder = TDictStats::MakeBuilder();
+        othersStatsBuilder.Add(TString("other"), 1, otherValue.size(), IChunkedArray::EType::Array, EValueType::BinaryJson);
+        auto othersBuilder = TOthersData::MakeMergedBuilder();
+        othersBuilder->Add(0, 0, std::string_view(otherValue.data(), otherValue.size()));
+        auto others = othersBuilder->Finish(TOthersData::TFinishContext(othersStatsBuilder.Finish()));
+        const auto encoded =
+            std::make_shared<TSubColumnsArray>(TColumnsData(std::move(stats), columns), std::move(others), arrow::binary(), Rows, settings);
+        NBlobOperations::NRead::TCompositeReadBlobs blobs;
+        const auto accessor = env.EncodedAccessor(1, { encoded }, blobs);
+        auto features = env.Features(true);
+        TTTLColumnEngineChanges task(features.GetRWAddress(), TSaverContext(env.Storages));
+        task.AddPortionToEvict(accessor->GetPortionInfoPtr(), env.Features(true));
+        const ui64 reserved = task.CalcMemoryForConstruction({ accessor }, &blobs);
+        const auto dense = encoded->GetChunkedArray()->chunk(0);
+        const ui64 denseBytes = NArrow::GetArrayMemorySize(dense->data());
+        UNIT_ASSERT(denseBytes > ui64(Rows) * ValueBytes);
+        UNIT_ASSERT(encoded->GetRawSizeVerified() < denseBytes / 100);
+        UNIT_ASSERT(reserved > 3 * denseBytes);
+        UNIT_ASSERT(reserved < 16 * denseBytes);
+        UNIT_ASSERT(task.GetMemoryForConstructionPreparation({ accessor }) < denseBytes);
     }
 
     Y_UNIT_TEST(LateStartQueuesLoadedPortionsWithoutCriticalSchema) {

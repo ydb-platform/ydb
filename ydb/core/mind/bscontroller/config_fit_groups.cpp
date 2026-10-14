@@ -425,7 +425,8 @@ namespace NKikimr {
                 placement.RequiredSpace = TGroupMapper::CalculateRequiredSpace(reassignment.Disks);
                 const TVDiskIdShort replacedVDisk = Geometry.RepairGroupLayout(*Mapper, groupInfo.ID, placement.Group,
                                                                              std::move(forbidden), groupInfo.GroupSizeInUnits,
-                                                                             placement.RequiredSpace, groupInfo.BridgePileId);
+                                                                             placement.RequiredSpace,
+                                                                             GetPlacementPileId(groupInfo.BridgePileId));
                 if (reassignment.ReplacedSlots.empty()) {
                     const TVSlotInfo *slot = groupInfo.VDisksInGroup[groupInfo.Topology->GetOrderNumber(replacedVDisk)];
                     reassignment.ReplacedSlots.emplace(replacedVDisk, slot->VSlotId);
@@ -442,7 +443,7 @@ namespace NKikimr {
                 request.GroupSizeInUnits = groupInfo.GroupSizeInUnits;
                 request.TryToRelocateLocallyFirst = State.Self.TryToRelocateBrokenDisksLocallyFirst;
                 request.IgnoreGroupLayoutChecks = LayoutPolicy.AllowsRelaxedPlacement();
-                request.BridgePileId = groupInfo.BridgePileId;
+                request.BridgePileId = GetPlacementPileId(groupInfo.BridgePileId);
 
                 EnsureGroupMapper();
                 auto outcome = Mapper->AllocateGroupReassignment(std::move(request));
@@ -606,11 +607,16 @@ namespace NKikimr {
                 }
             }
 
+            TBridgePileId GetPlacementPileId(TBridgePileId groupPileId) const {
+                return NBridge::GetPlacementPileId(groupPileId, State.BridgeInfo.get());
+            }
+
             void AllocateNewGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group, ui32 groupSizeInUnits,
                                   i64 requiredSpace, TBridgePileId bridgePileId) {
                 EnsureGroupMapper();
                 TGroupMapper::TGroupConstraintsDefinition constraints;
-                Geometry.AllocateGroup(*Mapper, groupId, group, constraints, {}, {}, groupSizeInUnits, requiredSpace, bridgePileId);
+                Geometry.AllocateGroup(*Mapper, groupId, group, constraints, {}, {}, groupSizeInUnits, requiredSpace,
+                    GetPlacementPileId(bridgePileId));
             }
 
             void PopulateGroupMapper() {

@@ -9,6 +9,8 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::NeedBridgeMode() {
         if (!Self->Cfg->BridgeConfig) {
             throw TExError() << "Bridge mode is not enabled";
+        } else if (!Self->StorageConfig || !Self->StorageConfig->HasClusterState()) {
+            throw TExError() << "Cluster is not converted to bridged one yet";
         }
     }
 
@@ -175,9 +177,8 @@ namespace NKikimr::NStorage {
 
         const auto bridgePileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSyncFinished::GetBridgePileId);
 
-        if (!Self->Cfg->BridgeConfig) {
-            throw TExError() << "Bridge mode is not enabled";
-        } else if (Self->Cfg->BridgeConfig->PilesSize() <= bridgePileId.GetPileIndex()) {
+        NeedBridgeMode();
+        if (Self->Cfg->BridgeConfig->PilesSize() <= bridgePileId.GetPileIndex()) {
             throw TExError() << "BridgePileId out of bounds";
         } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
             throw TExError() << "Generation mismatch";
@@ -276,9 +277,8 @@ namespace NKikimr::NStorage {
 
         const auto pileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSuspended::GetPileId);
 
-        if (!Self->Cfg->BridgeConfig) {
-            throw TExError() << "Bridge mode is not enabled";
-        } else if (Self->Cfg->BridgeConfig->PilesSize() <= pileId.GetPileIndex()) {
+        NeedBridgeMode();
+        if (Self->Cfg->BridgeConfig->PilesSize() <= pileId.GetPileIndex()) {
             throw TExError() << "BridgePileId out of bounds";
         } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
             throw TExError() << "Generation mismatch";

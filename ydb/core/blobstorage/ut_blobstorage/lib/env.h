@@ -328,9 +328,12 @@ struct TEnvironmentSetup {
         }
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
+        }
+        // node warden must be started before tablets as bootstrapper queries it for storage config in bridge mode
+        SetupStorage(nodeId);
+        if (nodeId == Settings.ControllerNodeId) {
             SetupTablet();
         }
-        SetupStorage(nodeId);
     }
 
     void RestartNode(ui32 nodeId) {
@@ -464,8 +467,23 @@ struct TEnvironmentSetup {
                             TStringBuilder res;
                             for (ui32 nodeId : Runtime->GetNodes()) {
                                 res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
-                                    << nodeId << ", unit: unit_" << nodeId << ", bridge_pile_name: pile_"
-                                    << (nodeId - 1) / 8 + 1 << "}}\n";
+                                    << nodeId << ", unit: unit_" << nodeId;
+                                if (Settings.NumPiles) {
+                                    res << ", bridge_pile_name: pile_" << (nodeId - 1) / 8 + 1;
+                                }
+                                res << "}}\n";
+                            }
+                            return res;
+                        };
+
+                        auto makeBridgeConfig = [&] {
+                            TStringBuilder res;
+                            if (Settings.NumPiles) {
+                                res << "  bridge_config:\n";
+                                res << "    piles:\n";
+                                for (ui32 i = 0; i < Settings.NumPiles; ++i) {
+                                    res << "    - name: pile_" << i + 1 << "\n";
+                                }
                             }
                             return res;
                         };
@@ -482,12 +500,7 @@ config:
   self_management_config:
     enabled: true
     automatic_bootstrap: true
-  bridge_config:
-    piles:
-    - name: pile_1
-    - name: pile_2
-    - name: pile_3
-  host_configs:
+)" << makeBridgeConfig() << R"(  host_configs:
   - nvme:
     - SectorMap:0:1000
     - SectorMap:1:1000
@@ -529,8 +542,10 @@ config:
                         *Settings.VDiskHeapAllocatorNumLeadingDisks);
                 }
 
-                if (Settings.NumPiles) {
-                    config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(Runtime->GetAppDataBridgeConfig());
+                // bridge config is taken from the runtime when the node starts, so the test may change it between
+                // node restarts (this is what happens when the cluster is being converted into bridged one)
+                if (const auto& bridgeConfig = Runtime->GetAppDataBridgeConfig(); bridgeConfig.PilesSize()) {
+                    config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(bridgeConfig);
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();

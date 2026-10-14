@@ -179,9 +179,10 @@ namespace NKikimr::NBsController {
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
             cur = std::move(storagePool); // update existing storage pool
         } else {
-            // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)
-            const bool bridgeMode = AppData()->BridgeModeEnabled;
-            Y_DEBUG_ABORT_UNLESS(bridgeMode == static_cast<bool>(BridgeInfo));
+            // enable bridge mode by default for new pools (when the cluster is bridged one; bridge-capable cluster
+            // that has not been converted yet runs in implicit single-pile state and keeps creating ordinary pools)
+            Y_DEBUG_ABORT_UNLESS(AppData()->BridgeModeEnabled == static_cast<bool>(BridgeInfo));
+            const bool bridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
             spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);

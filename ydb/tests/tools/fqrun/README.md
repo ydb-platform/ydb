@@ -174,6 +174,62 @@ signatures. Credentials stay on the host and use the existing private channel
 to compute actors. Module registration and connection creation do not call the
 external service.
 
+### Create connections with SQL
+
+Use `--init-query=connections.sql` with `--compute=in-place` and enabled
+`WasmServices` to create private FQ connections before submitting queries:
+
+```sql
+CREATE EXTERNAL DATA SOURCE profiles_http WITH (
+    SOURCE_TYPE = 'ExternalService',
+    PROTOCOL = 'HTTP',
+    LOCATION = 'https://profiles.example.test',
+    AUTH_METHOD = 'TOKEN',
+    TOKEN_SECRET_NAME = 'profiles_token'
+);
+```
+
+For gRPC, use `PROTOCOL='GRPC'` and `LOCATION='host:port'`. For HTTP,
+`LOCATION` is an origin, without an application path or query. The WASM module
+supplies the HTTP verb/path or gRPC method per call; `METHOD` is not a DDL option.
+`USE_TLS` defaults to `TRUE`; plaintext requires `USE_TLS=FALSE` and an `http://`
+URL for HTTP. `CA_CERTIFICATE` accepts PEM trust roots, not a filesystem path.
+TLS verification cannot be disabled. Unknown properties and duplicate keys fail.
+
+`AUTH_METHOD` accepts `NONE`, `CURRENT_IAM` (the runner's `YQL_TOKEN`) or `TOKEN`.
+For `TOKEN`, pass `--secrets-file=secrets.json`, a local JSON object:
+
+```json
+{"profiles_token": "example-token"}
+```
+
+The local runner resolves `TOKEN_SECRET_NAME` while preparing connections and
+passes the token through the existing sensitive FQ credential fields. This is
+not a persistent secret registry: stored connections contain the resolved token;
+changing the file does not rotate an existing connection. SQL and WASM receive
+no secret values. Do not put literal tokens in the SQL file.
+
+Initialization accepts only `CREATE EXTERNAL DATA SOURCE`, optionally with
+`IF NOT EXISTS`. It uses the SQL v1 parser, including comments and quoted names.
+`USE`, pragmas, variable assignments, SELECT, ALTER, DROP and OR REPLACE are not
+supported in initialization files. Connection names must be unqualified aliases;
+`--scope-id` chooses the FQ scope. One initialization file can contain multiple
+statements; repeat `--init-query` for multiple files, executed in argument order.
+
+All initialization SQL is parsed and validated before creating any objects.
+Creation then runs sequentially in each query scope, after protobuf connections
+and before bindings and queries, once per run rather than per query loop.
+Creation is not transactional: objects already created remain if a later API
+request fails. Failure stops query submission even with `--continue-after-fail`.
+`IF NOT EXISTS` preserves the existing private connection of the current user,
+including endpoint and credentials. Plain CREATE rejects a duplicate name,
+including a connection supplied by `--connection`.
+
+Initialization can run without a query (omit `-C`); with embedded metadata the
+connections last only for that runner invocation. Use `--hold` to keep the runner
+available, or an external `--cp-storage-db` for persistent metadata. Module loading
+still uses `WasmServices.Modules`; DDL does not register or download WASM.
+
 ### Reproducible HTTP/gRPC example
 
 From the repository root, build the runner and the local mock service:
@@ -183,8 +239,8 @@ From the repository root, build the runner and the local mock service:
 ydb/tests/tools/fqrun/examples/server/fqrun-wasm-mock --output-dir /tmp/fqrun-wasm-example --batch-rows 2
 ```
 
-The server stays running and writes a complete config, three connections and SQL
-examples into the output directory. It uses the checked-in Profile/Echo WASM
+The server stays running and writes a complete config, three connections,
+`connections.sql`, `secrets.json` (dummy credentials) and SQL examples into the output directory. It uses the checked-in Profile/Echo WASM
 test artifacts. Use `--source-root /absolute/path/to/repo` when starting elsewhere.
 The mock listens on loopback using available ports; optional `--http-port` and
 `--grpc-port` select fixed ports. Generated connections contain a dummy token.
@@ -194,18 +250,20 @@ In another terminal, run either Profile transport:
 ```bash
 ydb/tests/tools/fqrun/fqrun -C analytics --compute=in-place \
   --cfg=/tmp/fqrun-wasm-example/app.conf \
-  --connection=/tmp/fqrun-wasm-example/profiles_http.pb.txt \
+  --init-query=/tmp/fqrun-wasm-example/connections.sql \
+  --secrets-file=/tmp/fqrun-wasm-example/secrets.json \
   --query=/tmp/fqrun-wasm-example/profiles_http.sql
 
 ydb/tests/tools/fqrun/fqrun -C analytics --compute=in-place \
   --cfg=/tmp/fqrun-wasm-example/app.conf \
-  --connection=/tmp/fqrun-wasm-example/profiles_grpc.pb.txt \
+  --init-query=/tmp/fqrun-wasm-example/connections.sql \
+  --secrets-file=/tmp/fqrun-wasm-example/secrets.json \
   --query=/tmp/fqrun-wasm-example/profiles_grpc.sql
 ```
 
 Both return IDs 42 and 43, name `Ada` and score 97. For the second module use
-`echo_http.pb.txt` and `echo.sql`; it returns `hello` with length 5.
-Multiple `--connection` arguments can be supplied to a single run.
+`echo.sql` with the same initialization files; it returns `hello` with length 5.
+The generated `.pb.txt` connections remain available for the `--connection` interface.
 
 The SQL uses the current prototype interface:
 

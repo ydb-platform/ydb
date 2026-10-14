@@ -4,6 +4,7 @@
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
+#include <ydb/tests/tools/fqrun/src/connection_ddl.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
@@ -36,6 +37,8 @@ struct TExecutionOptions {
     };
 
     std::vector<TString> Queries;
+    std::vector<TString> InitQueries;
+    std::vector<TConnectionDdl> ConnectionDdl;
     std::vector<FederatedQuery::ConnectionContent> Connections;
     std::vector<FederatedQuery::BindingContent> Bindings;
     bool UseTemplates = false;
@@ -104,7 +107,7 @@ struct TExecutionOptions {
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled &&
+        if (Queries.empty() && InitQueries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled &&
             !runnerOptions.FqSettings.GrpcEnabled && !RunAsDeamon) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
@@ -124,7 +127,7 @@ private:
 
         checker(ExecutionCases.size(), "execution cases");
         checker(QueryActions.size(), "query actions");
-        checker(Scopes.size(), "query scopes");
+        checker(Scopes.size() > 1 ? Scopes.size() : 0, "query scopes");
         checker(runnerOptions.AstOutputs.size(), "ast output files");
         checker(runnerOptions.PlanOutputs.size(), "plan output files");
         checker(runnerOptions.StatsOutputs.size(), "statistics output files");
@@ -198,6 +201,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
         scopes.emplace(executionOptions.GetScope(i));
     }
 
+    if (scopes.empty()) {
+        scopes.emplace(executionOptions.GetScope(0));
+    }
+
     if (!executionOptions.Connections.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
         for (const auto& scope : scopes) {
@@ -205,6 +212,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections for scope " << scope;
             }
         }
+    }
+
+    for (const auto& scope : scopes) {
+        runner.CreateConnectionsFromDdl(executionOptions.ConnectionDdl, { .Scope = scope });
     }
 
     if (!executionOptions.Bindings.empty()) {
@@ -331,6 +342,16 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.Queries.emplace_back(LoadFile(option->CurVal()));
             });
+
+        options.AddLongOption("init-query", "SQL file with CREATE EXTERNAL DATA SOURCE statements, run once before queries")
+            .RequiredArgument("file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                ExecutionOptions.InitQueries.emplace_back(LoadFile(option->CurVal()));
+            });
+
+        options.AddLongOption("secrets-file", "Local JSON object mapping TOKEN_SECRET_NAME to token values")
+            .RequiredArgument("file")
+            .StoreResult(&SecretsFile);
 
         options.AddLongOption('s', "sql", "Query SQL text to execute").RequiredArgument("str").AppendTo(&ExecutionOptions.Queries);
 
@@ -622,6 +643,25 @@ protected:
         RunnerOptions.FqSettings.ConfigureCompute(
             ComputeBackend, ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) ||
                                 ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics));
+        if (!ExecutionOptions.InitQueries.empty()) {
+            const auto& config = RunnerOptions.FqSettings.AppConfig.GetFederatedQueryConfig();
+            Y_ENSURE(config.GetWasmServices().GetEnabled(), "Connection DDL requires WasmServices.Enabled");
+            const NFq::TComputeConfig compute(config.GetCompute());
+            for (size_t i = 0; i < std::max<size_t>(1, ExecutionOptions.Queries.size()); ++i) {
+                Y_ENSURE(compute.GetComputeType(FederatedQuery::QueryContent::ANALYTICS,
+                             TStringBuilder() << "yandexcloud://" << ExecutionOptions.GetScope(i)) == NFq::NConfig::IN_PLACE,
+                    "Connection DDL requires IN_PLACE compute; use --compute=in-place");
+            }
+            const auto secrets = LoadConnectionSecrets(SecretsFile);
+            for (const auto& sql : ExecutionOptions.InitQueries) {
+                auto statements = ParseConnectionDdl(sql, secrets);
+                for (auto& statement : statements) {
+                    ExecutionOptions.ConnectionDdl.push_back(std::move(statement));
+                }
+            }
+        } else {
+            Y_ENSURE(SecretsFile.empty(), "--secrets-file requires --init-query");
+        }
         ValidateWasmServices();
 
         RunnerOptions.FqSettings.YqlToken = YqlToken;
@@ -723,6 +763,7 @@ private:
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
     std::optional<EComputeBackend> ComputeBackend;
+    TString SecretsFile;
 
     struct TTopicSettings {
         bool CancelOnFileFinish = false;

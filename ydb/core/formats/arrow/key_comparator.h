@@ -12,17 +12,17 @@ namespace NKikimr::NArrow {
 // comparison (including UUID and unannotated fixed_size_binary) is unchanged.
 class TKeyColumnComparator {
     using TBinaryCompare = std::partial_ordering (*)(std::string_view, std::string_view);
-    using TArrayCompare = std::partial_ordering (*)(const arrow::Array&, int, const arrow::Array&, int);
+    using TArrayCompare = std::partial_ordering (*)(const arrow::Array&, i32, const arrow::Array&, i32);
 
     static std::partial_ordering CompareBytes(std::string_view lhs, std::string_view rhs) {
         return lhs <=> rhs;
     }
 
-    static std::partial_ordering ComparePhysical(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
+    static std::partial_ordering ComparePhysical(const arrow::Array& lhs, i32 lpos, const arrow::Array& rhs, i32 rpos) {
         return TComparator::TypedCompare<false>(lhs, lpos, rhs, rpos);
     }
 
-    static std::partial_ordering CompareDecimalArrays(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) {
+    static std::partial_ordering CompareDecimalArrays(const arrow::Array& lhs, i32 lpos, const arrow::Array& rhs, i32 rpos) {
         AFL_VERIFY(lhs.type_id() == arrow::Type::FIXED_SIZE_BINARY && rhs.type_id() == lhs.type_id());
         if (lhs.IsNull(lpos) || rhs.IsNull(rpos)) {
             return TComparator::CompareValueNotNull(!lhs.IsNull(lpos), !rhs.IsNull(rpos));
@@ -60,7 +60,7 @@ public:
         }
     }
 
-    std::partial_ordering Compare(const arrow::Array& lhs, int lpos, const arrow::Array& rhs, int rpos) const {
+    std::partial_ordering Compare(const arrow::Array& lhs, i32 lpos, const arrow::Array& rhs, i32 rpos) const {
         return ArrayCompare(lhs, lpos, rhs, rpos);
     }
 
@@ -97,7 +97,7 @@ public:
         return Columns[i];
     }
 
-    std::partial_ordering Compare(const std::vector<std::shared_ptr<arrow::Array>>& columns, int lhs, int rhs) const {
+    std::partial_ordering Compare(const std::vector<std::shared_ptr<arrow::Array>>& columns, i32 lhs, i32 rhs) const {
         AFL_VERIFY(columns.size() == Columns.size());
         for (size_t i = 0; i < columns.size(); ++i) {
             const auto cmp = Columns[i].Compare(*columns[i], lhs, *columns[i], rhs);

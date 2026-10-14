@@ -325,10 +325,11 @@ template <class TTraits> struct TSimdPackImpl {
         }
     }
 
-    static void BuildTuplePerm(ui8 perm[], size_t col_size, size_t col_pad,
-                               size_t tuple_size, ui8 offset, ui8 ind,
-                               bool packing) {
-        std::memset(perm, 0x80, TSimd<ui8>::SIZE);
+    static std::array<ui8, TSimd<ui8>::SIZE>
+    BuildTuplePerm(size_t col_size, size_t col_pad, size_t tuple_size,
+                   ui8 offset, ui8 ind, bool packing) {
+        std::array<ui8, TSimd<ui8>::SIZE> perm;
+        perm.fill(0x80);
 
         size_t iters = std::max(1ul, 1 + (TSimd<ui8>::SIZE - tuple_size) /
                                              (col_size + col_pad));
@@ -342,6 +343,8 @@ template <class TTraits> struct TSimdPackImpl {
             }
             offset += col_pad;
         }
+
+        return perm;
     }
 
     template <ui8 TupleSize> static TSimd<ui8> TupleOr(TSimd<ui8> vec[]) {
@@ -480,22 +483,22 @@ void SIMDPack<TTraits>::UnpackColSize(
 }
 
 template <class TTraits>
-void SIMDPack<TTraits>::BuildTuplePerm(
-    ui8 perm[], size_t col_size, size_t col_pad, size_t tuple_size, ui8 offset,
-    ui8 index, bool packing) {
+auto SIMDPack<TTraits>::BuildTuplePerm(
+    size_t col_size, size_t col_pad, size_t tuple_size, ui8 offset, ui8 index,
+    bool packing) -> TPerm {
     return TSimdPackImpl<TTraits>::BuildTuplePerm(
-        perm, col_size, col_pad, tuple_size, offset, index, packing);
+        col_size, col_pad, tuple_size, offset, index, packing);
 }
 
 template <class TTraits>
 void SIMDPack<TTraits>::PackTupleOr(
     ui8 stores_per_load, ui8 cols, const ui8 *const src_cols[], ui8 *dst_rows,
     size_t size, const size_t col_sizes[], const size_t offsets[],
-    size_t tuple_size, size_t padded_size, const ui8 perms[],
+    size_t tuple_size, size_t padded_size, const TPerm perms[],
     size_t start) {
     TSimd<ui8> simdPerms[16];
     for (size_t i = 0; i != stores_per_load * cols; ++i) {
-        simdPerms[i] = TSimd<ui8>(perms + i * TSimd<ui8>::SIZE);
+        simdPerms[i] = TSimd<ui8>(perms[i].data());
     }
 
 #define CASE(i, j)                                                             \
@@ -524,10 +527,10 @@ void SIMDPack<TTraits>::UnpackTupleOr(
     ui8 loads_per_store, ui8 cols, const ui8 *src_rows,
     ui8 *const dst_cols[], size_t size, const size_t col_sizes[],
     const size_t offsets[], size_t tuple_size, size_t padded_size,
-    const ui8 perms[], size_t start) {
+    const TPerm perms[], size_t start) {
     TSimd<ui8> simdPerms[16];
     for (size_t i = 0; i != loads_per_store * cols; ++i) {
-        simdPerms[i] = TSimd<ui8>(perms + i * TSimd<ui8>::SIZE);
+        simdPerms[i] = TSimd<ui8>(perms[i].data());
     }
 
 #define CASE(i, j)                                                             \

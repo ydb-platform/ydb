@@ -351,7 +351,7 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
         size_t RowOffset;
     };
     SIMDSmallTupleDesc SIMDSmallTuple_;
-    std::vector<TSimd<ui8>> SIMDPermMasks_; // small tuple precomputed masks
+    std::vector<ui8> SIMDPermMasks_; // small tuple precomputed masks
 
     struct SIMDTransposeDesc {
         ui8 Cols = 0;

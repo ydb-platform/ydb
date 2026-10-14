@@ -594,13 +594,16 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
 
                         for (ui8 ind = 0; ind != simd_desc.InnerLoopIters;
                              ++ind) {
-                            auto perm = SIMDPack<TTraits>::BuildTuplePerm(
+                            const size_t permOffset = SIMDPermMasks_.size();
+                            SIMDPermMasks_.resize(
+                                permOffset + TSimd<ui8>::SIZE);
+                            SIMDPack<TTraits>::BuildTuplePerm(
+                                SIMDPermMasks_.data() + permOffset,
                                 col_desc->DataSize,
                                 TotalRowSize - col_desc->DataSize, tuple_size,
                                 offset,
                                 ind * col_desc->DataSize * tuples_per_register,
                                 packing_flag % 2);
-                            SIMDPermMasks_.push_back(perm);
                         }
                     }
                 }
@@ -1346,8 +1349,8 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                 BlockFixedColsSizes_.data() + cols_past,
                 BlockColsOffsets_.data() + cols_past,
                 SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
-                SIMDPermMasks_.data() + SIMDSmallTuple_.InnerLoopIters *
-                    SIMDSmallTuple_.Cols,
+                SIMDPermMasks_.data() + TSimd<ui8>::SIZE *
+                    SIMDSmallTuple_.InnerLoopIters * SIMDSmallTuple_.Cols,
                 start);
 
             cols_past += SIMDSmallTuple_.Cols;

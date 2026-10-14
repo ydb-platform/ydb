@@ -100,6 +100,69 @@ void CheckPlan(TQueryClient& client, const TString& query, bool expectScalarHash
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
+    Y_UNIT_TEST(SelectImplementationByInputLayout) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* tableService = settings.AppConfig.MutableTableServiceConfig();
+        tableService->SetEnableNewRBO(false);
+        tableService->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+        CreateSampleTables(client);
+
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE `/Root/CL` (
+                id Int32 NOT NULL,
+                k Int32,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+            CREATE TABLE `/Root/CR` (
+                id Int32 NOT NULL,
+                k Int64,
+                PRIMARY KEY (id)
+            ) WITH (STORE = COLUMN);
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = client.ExecuteQuery(R"(
+            INSERT INTO `/Root/CL` (id, k) VALUES (1, 1), (2, 2), (3, NULL);
+            INSERT INTO `/Root/CR` (id, k) VALUES (1, 1), (2, 2), (3, NULL);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto makeQuery = [](TStringBuf left, TStringBuf right) {
+            return TStringBuilder() << R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.UseBlockHashJoin='true';
+                PRAGMA ydb.OptShuffleElimination='true';
+                PRAGMA ydb.OptShuffleEliminationWithMap='true';
+                PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
+                SELECT L.id AS lid, R.id AS rid
+                FROM )" << left << R"( AS L
+                INNER JOIN )" << right << R"( AS R ON L.k = R.k;
+            )";
+        };
+        const auto explain = [&](const TString& query) {
+            auto explainResult = client.ExecuteQuery(query, TTxControl::NoTx(),
+                TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            return TString(*explainResult.GetStats()->GetAst());
+        };
+
+        const TString scalarQuery = makeQuery("L", "R");
+        const TString scalarAst = explain(scalarQuery);
+        UNIT_ASSERT_C(scalarAst.Contains("ScalarHashJoin"), scalarAst);
+        UNIT_ASSERT_C(!scalarAst.Contains("BlockHashJoin"), scalarAst);
+
+        const TString blockAst = explain(makeQuery("CL", "CR"));
+        UNIT_ASSERT_C(blockAst.Contains("BlockHashJoin"), blockAst);
+        UNIT_ASSERT_C(!blockAst.Contains("ScalarHashJoin"), blockAst);
+
+        const TString mixedQuery = makeQuery("L", "CR");
+        const TString mixedAst = explain(mixedQuery);
+        UNIT_ASSERT_C(mixedAst.Contains("ScalarHashJoin"), mixedAst);
+        UNIT_ASSERT_C(!mixedAst.Contains("BlockHashJoin"), mixedAst);
+    }
+
     Y_UNIT_TEST(ReplaceMapJoin) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();

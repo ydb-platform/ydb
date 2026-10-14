@@ -398,9 +398,54 @@ bool CanPropagateWideBlockThroughChannel(
     return true;
 }
 
+TStatus ResolveHashJoinsByInputLayout(
+    TCoLambda& lambda,
+    const TVector<TCoArgument>& args,
+    const TVector<bool>& blockChannelInputs,
+    TExprContext& ctx)
+{
+    YQL_ENSURE(args.size() == blockChannelInputs.size());
+
+    THashSet<const TExprNode*> blockArguments;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (blockChannelInputs[i]) {
+            blockArguments.emplace(args[i].Raw());
+        }
+    }
+
+    TExprNode::TPtr newBody;
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
+    const auto status = OptimizeExpr(lambda.Body().Ptr(), newBody,
+        [&blockArguments](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            if (!TDqPhyHashJoin::Match(node.Get())) {
+                return node;
+            }
+
+            const auto join = TDqPhyHashJoin(node);
+            const auto isBlockInput = [&blockArguments](const TExprBase& input) {
+                return DqPeepholeHasBlockInput(input) || FindNode(input.Ptr(), [&blockArguments](const TExprNode::TPtr& node) {
+                    return node->IsArgument() && blockArguments.contains(node.Get());
+                });
+            };
+            const bool leftIsBlock = isBlockInput(join.LeftInput());
+            const bool rightIsBlock = isBlockInput(join.RightInput());
+            return DqPeepholeChooseHashJoin(TExprBase(node), ctx, leftIsBlock, rightIsBlock).Ptr();
+        }, ctx, settings);
+
+    if (newBody) {
+        lambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args(lambda.Args())
+            .Body(newBody)
+            .Done();
+    }
+    return status;
+}
+
 TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprContext& ctx,
     TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
-    TKikimrConfiguration::TPtr config, bool withFinalStageRules, TSet<TString> disabledOpts)
+    TKikimrConfiguration::TPtr config, bool withFinalStageRules, TSet<TString> disabledOpts,
+    bool resolveHashJoinsByInputLayout)
 {
     THashMap<ui64 /*stage uid*/, TKqpProgram> programs;
     THashMap<TString, TKqpParamBinding> nonDetParamBindings;
@@ -412,6 +457,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         TCoLambda lambda = stage.Program();
         TVector<TCoArgument> newArgs;
         TNodeOnNodeOwnedMap argsMap;
+        TVector<bool> blockChannelInputs(stage.Inputs().Size(), false);
         newArgs.reserve(stage.Inputs().Size());
 
         // Propagate "WideFromBlock" through connections.
@@ -441,9 +487,17 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
 
-                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
-                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, ctx, typesCtx))
-                {
+                auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>();
+                bool isBlockChannel = false;
+                if (connection && scalarHashShuffleCount <= 1) {
+                    const auto& output = connection.Cast().Output();
+                    const auto& inputProgram = programs.at(output.Stage().Ref().UniqueId());
+                    const bool alreadyBlock = IsWideSequenceBlockType(*inputProgram.Lambda().Body().Ref().GetTypeAnn());
+                    const bool canPropagateBlock = CanPropagateWideBlockThroughChannel(output, programs, ctx, typesCtx);
+                    isBlockChannel = alreadyBlock || canPropagateBlock;
+                }
+                blockChannelInputs[i] = isBlockChannel;
+                if (blockChannelInputs[i]) {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
                         .Callable("WideFromBlocks")
                             .Add(0, newArg.Ptr())
@@ -494,6 +548,9 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 YQL_ENSURE(argsMap.emplace(oldArg.Raw(), newArg.Ptr()).second);
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
+                blockChannelInputs[i] = config->GetBlockChannelsMode()
+                    == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE
+                    && stage.Inputs().Item(i).Maybe<TDqConnection>();
             }
         }
 
@@ -502,6 +559,15 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .Args(newArgs)
             .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argsMap))
             .Done();
+
+        TStatus status = TStatus::Ok;
+        if (resolveHashJoinsByInputLayout) {
+            status = ResolveHashJoinsByInputLayout(lambda, newArgs, blockChannelInputs, ctx);
+            if (status == TStatus::Error) {
+                ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Failed to resolve hash join implementation by input layout"));
+                return {};
+            }
+        }
 
         TVector<const TTypeAnnotationNode*> argTypes;
         for (const auto& arg : newArgs) {
@@ -516,7 +582,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             .Done();
 
         TExprNode::TPtr newProgram;
-        auto status = PeepHoleOptimize(program, newProgram, ctx, typesCtx, config,
+        status = PeepHoleOptimize(program, newProgram, ctx, typesCtx, config,
             true, withFinalStageRules, disabledOpts);
         if (status != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()), "Peephole optimization failed for KQP transaction"));
@@ -574,12 +640,14 @@ public:
         TTypeAnnotationContext& typesCtx,
         TKikimrConfiguration::TPtr config,
         bool withFinalStageRules,
-        TSet<TString> disabledOpts
+        TSet<TString> disabledOpts,
+        bool resolveHashJoinsByInputLayout
     )
         : TypesCtx(typesCtx)
         , Config(config)
         , WithFinalStageRules(withFinalStageRules)
         , DisabledOpts(disabledOpts)
+        , ResolveHashJoinsByInputLayout(resolveHashJoinsByInputLayout)
     {}
 
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
@@ -597,7 +665,8 @@ public:
         auto tx = input.Cast<TKqpPhysicalTx>();
 
         THashSet<ui64> optimizedStages;
-        auto optimizedTx = PeepholeOptimize(tx, ctx, TypesCtx, optimizedStages, Config, WithFinalStageRules, DisabledOpts);
+        auto optimizedTx = PeepholeOptimize(tx, ctx, TypesCtx, optimizedStages, Config, WithFinalStageRules, DisabledOpts,
+            ResolveHashJoinsByInputLayout);
 
         if (!optimizedTx) {
             return TStatus::Error;
@@ -619,6 +688,7 @@ private:
     bool Optimized = false;
     bool WithFinalStageRules = true;
     TSet<TString> DisabledOpts;
+    bool ResolveHashJoinsByInputLayout = false;
 };
 
 class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
@@ -632,7 +702,7 @@ public:
             .Add(TLogExprTransformer::Sync("TxsPeephole", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxsPeephole")
             .AddTypeAnnotationTransformer()
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpTxPeepholeTransformer(typesCtx, config), "Peephole")
+            .Add(CreateKqpTxPeepholeTransformer(typesCtx, config, true, {}, true), "Peephole")
             .Build(false);
     }
 
@@ -734,10 +804,11 @@ TAutoPtr<IGraphTransformer> CreateKqpTxPeepholeTransformer(
     TTypeAnnotationContext& typesCtx,
     const TKikimrConfiguration::TPtr& config,
     bool withFinalStageRules,
-    TSet<TString> disabledOpts
+    TSet<TString> disabledOpts,
+    bool resolveHashJoinsByInputLayout
 )
 {
-    return new TKqpTxPeepholeTransformer(typesCtx, config, withFinalStageRules, disabledOpts);
+    return new TKqpTxPeepholeTransformer(typesCtx, config, withFinalStageRules, disabledOpts, resolveHashJoinsByInputLayout);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpTxsPeepholeTransformer(

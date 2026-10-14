@@ -30,7 +30,8 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpTxPeepholeTransformer(
     NYql::TTypeAnnotationContext& typesCtx, 
     const TIntrusivePtr<NYql::TKikimrConfiguration>& config, 
     bool withFinalStageRules = true,
-    TSet<TString> disabledOpts = {}
+    TSet<TString> disabledOpts = {},
+    bool resolveHashJoinsByInputLayout = false
 );
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpTxsPeepholeTransformer(

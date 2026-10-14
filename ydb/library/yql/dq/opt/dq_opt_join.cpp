@@ -877,7 +877,7 @@ bool IsSupportedByScalarConverter(const TTypeAnnotationNode* type, bool nullable
 
 } // anonymous namespace
 
-bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx) {
+bool DqCanUseScalarHashJoin(const TDqJoin& join, TExprContext& ctx) {
     const auto joinType = join.JoinType().Value();
     if (joinType != "Inner"sv && joinType != "Left"sv && joinType != "LeftSemi"sv && joinType != "LeftOnly"sv) {
         return false;
@@ -1912,19 +1912,35 @@ TExprBase DqBuildHashJoin(
             if (useBlockHashJoin) {
                 const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
-                hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
-                    .LeftInput(leftInputArg)
-                    .RightInput(rightInputArg)
-                    .LeftLabel(join.LeftLabel())
-                    .RightLabel(join.RightLabel())
-                    .JoinType(join.JoinType())
-                    .JoinKeys(join.JoinKeys())
-                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
-                    .RightJoinKeyNames(join.RightJoinKeyNames())
-                    .Settings()
-                        .Add(joinSettings)
-                        .Build()
-                    .Done().Ptr();
+                if (DqCanUseScalarHashJoin(join, ctx)) {
+                    hashJoin = Build<TDqPhyHashJoin>(ctx, join.Pos())
+                        .LeftInput(leftInputArg)
+                        .RightInput(rightInputArg)
+                        .LeftLabel(join.LeftLabel())
+                        .RightLabel(join.RightLabel())
+                        .JoinType(join.JoinType())
+                        .JoinKeys(join.JoinKeys())
+                        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                        .RightJoinKeyNames(join.RightJoinKeyNames())
+                        .Settings()
+                            .Add(joinSettings)
+                            .Build()
+                        .Done().Ptr();
+                } else {
+                    hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+                        .LeftInput(leftInputArg)
+                        .RightInput(rightInputArg)
+                        .LeftLabel(join.LeftLabel())
+                        .RightLabel(join.RightLabel())
+                        .JoinType(join.JoinType())
+                        .JoinKeys(join.JoinKeys())
+                        .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                        .RightJoinKeyNames(join.RightJoinKeyNames())
+                        .Settings()
+                            .Add(joinSettings)
+                            .Build()
+                        .Done().Ptr();
+                }
                 break;
             }
 

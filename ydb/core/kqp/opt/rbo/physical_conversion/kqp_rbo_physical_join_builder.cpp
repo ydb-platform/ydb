@@ -18,9 +18,9 @@ bool BadKeyTypeForHashJoin(const TTypeAnnotationNode* type) {
             type = type->Cast<TOptionalExprType>()->GetItemType();
         }
     }
-    if (!type) {
-        return true;
-    }
+
+    Y_ENSURE(type, "Null type for join key");
+    
     switch (type->GetKind()) {
         case ETypeAnnotationKind::List:
         case ETypeAnnotationKind::Dict:

@@ -102,6 +102,21 @@ static TStringBuf PhysicalTxTypeToString(EPhysicalTxType type) {
     YQL_ENSURE(false, "Unexpected physical tx type: " << type);
 }
 
+TMaybeNode<TKqpTableTruncateSettings> GetTableTruncateSettings(const TKqpPhysicalTx& tx) {
+    for (const auto& stage : tx.Stages()) {
+        if (const auto outputs = stage.Outputs()) {
+            for (const auto& output : outputs.Cast()) {
+                if (const auto sink = output.Maybe<TDqSink>()) {
+                    if (const auto settings = sink.Cast().Settings().Maybe<TKqpTableTruncateSettings>()) {
+                        return settings;
+                    }
+                }
+            }
+        }
+    }
+    return {};
+}
+
 TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
     TKqpPhyTxSettings settings;
 
@@ -112,8 +127,6 @@ TKqpPhyTxSettings TKqpPhyTxSettings::Parse(const TKqpPhysicalTx& node) {
             settings.Type = GetPhysicalTxType(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == WithEffectsSettingName) {
             settings.WithEffects = true;
-        } else if (name == UnsafeTruncatePathSettingName) {
-            settings.UnsafeTruncatePath = TString(tuple.Value().Cast<TCoAtom>().Value());
         }
     }
 
@@ -128,13 +141,6 @@ NNodes::TCoNameValueTupleList TKqpPhyTxSettings::BuildNode(TExprContext& ctx, TP
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(TypeSettingName)
             .Value<TCoAtom>().Build(PhysicalTxTypeToString(*Type))
-            .Done());
-    }
-
-    if (!UnsafeTruncatePath.empty()) {
-        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(UnsafeTruncatePathSettingName)
-            .Value<TCoAtom>().Build(UnsafeTruncatePath)
             .Done());
     }
 

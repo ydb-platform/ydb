@@ -762,7 +762,7 @@ public:
         // effects cannot be deferred past it.
         bool hasUnsafeTruncate = false;
         for (const auto& tx : query.Transactions()) {
-            if (!TKqpPhyTxSettings::Parse(tx).UnsafeTruncatePath.empty()) {
+            if (GetTableTruncateSettings(tx)) {
                 hasUnsafeTruncate = true;
                 break;
             }
@@ -1214,14 +1214,6 @@ private:
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
-
-        // Nothing else to compile: the transaction is the table path, and the executer discovers
-        // everything else from the live schema.
-        if (!txSettings.UnsafeTruncatePath.empty()) {
-            YQL_ENSURE(*txSettings.Type == EPhysicalTxType::Generic);
-            txProto.MutableUnsafeTruncate()->SetTablePath(txSettings.UnsafeTruncatePath);
-            return;
-        }
 
         bool hasEffectStage = false;
         bool hasPqSources = false;
@@ -2630,7 +2622,14 @@ private:
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (IsTableSink(dataSinkCategory)) {
+        if (dataSinkCategory == KqpTableTruncateSinkName) {
+            const auto settings = sink.Settings().Cast<TKqpTableTruncateSettings>();
+            NKikimrKqp::TKqpTableTruncateSettings settingsProto;
+            settingsProto.SetTablePath(settings.TablePath().StringValue());
+            auto& internalSink = *protoSink->MutableInternalSink();
+            internalSink.SetType(TString(KqpTableTruncateSinkName));
+            internalSink.MutableSettings()->PackFrom(settingsProto);
+        } else if (IsTableSink(dataSinkCategory)) {
             auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>();
             YQL_ENSURE(settings, "Unsupported sink type");
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();

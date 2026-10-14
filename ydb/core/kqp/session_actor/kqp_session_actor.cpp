@@ -1169,7 +1169,7 @@ public:
                     secureParams.emplace(secretName, "");
                 }
 
-                // Unsafe truncate has no stages and is executed outside the tasks graph.
+                // Unsafe truncate is executed outside the tasks graph.
                 if (tx->HasUnsafeTruncate()) {
                     continue;
                 }
@@ -1581,13 +1581,10 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
-        // Sink settings are only emitted for transactions that write through a sink. A scheme tx
-        // never does, and neither does an unsafe truncate - it drives its own shard writes - so a
-        // query made only of those carries no sink settings at all. A query that also holds data
-        // transactions does carry them, and takes the branches above instead.
+        // Scheme operations and unsafe truncate do not use the regular table write sinks.
         auto checkNoSinkTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
-                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && !tx.HasUnsafeTruncate()) {
+                if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && !FindTableTruncateSink(tx)) {
                     return false;
                 }
             }
@@ -2173,7 +2170,7 @@ public:
                                 "Unsafe TRUNCATE TABLE cannot be executed in a read-only transaction");
                             return true;
                         }
-                        YQL_ENSURE(tx->StagesSize() == 0);
+                        YQL_ENSURE(tx->StagesSize() == 1);
                         SendToUnsafeTruncateExecuter(tx);
                         return false;
                     }

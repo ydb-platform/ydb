@@ -62,10 +62,10 @@ TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const 
     if (result.IsFail()) {
         return result;
     }
-    const auto accessor = result.DetachResult().GetAccessorVerified();
+    auto datum = result.DetachResult();
     context.MutableResources().Remove(GetOutputColumnIdOnce());
-    context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
-    return IsFinishAccessor(accessor);
+    context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), datum);
+    return IsFinishDatum(datum);
 }
 
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
@@ -85,20 +85,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
             context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
         } else {
-<<<<<<< HEAD
-            auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
-            if (result.IsFail()) {
-                return result;
-            }
-            auto datum = result.DetachResult();
-            context.MutableResources().Remove(GetOutputColumnIdOnce());
-            context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), datum);
-            if (IsFinishDatum(datum)) {
-                return true;
-            }
-=======
             return CombineInput(inputId, context);
->>>>>>> ed49d24cb07 (Fix bugs in accessors (#55596))
         }
         return false;
     } else {

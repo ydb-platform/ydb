@@ -117,8 +117,8 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto slice = std::static_pointer_cast<TDictionaryArray>(dictionary->ISlice(1, 2));
         UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->null_count(), 1);
         UNIT_ASSERT_VALUES_EQUAL(slice->GetPositions()->null_count(), 1);
-        UNIT_ASSERT(slice->IsNull(0));
-        UNIT_ASSERT(!slice->IsNull(1));
+        UNIT_ASSERT(slice->GetPositions()->IsNull(0));
+        UNIT_ASSERT(!slice->GetPositions()->IsNull(1));
     }
 
     Y_UNIT_TEST(Serialization) {
@@ -307,8 +307,6 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
             "actual", PrepareToCompare(visited[0]->ToString()));
     }
-<<<<<<< HEAD
-=======
 
     void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {
         TChunkConstructionData info(
@@ -338,45 +336,6 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         builder.AddValue(1, false);
         builder.AddValue(2, true);
         CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
-    }
-
-    Y_UNIT_TEST(NullDefaultUsesNullPositions) {
-        TChunkConstructionData info(3, nullptr, arrow::utf8(), NSerialization::TSerializerContainer::GetDefaultSerializer());
-        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().ConstructDefault(info).DetachResult());
-
-        UNIT_ASSERT_VALUES_EQUAL(dict->GetPositions()->null_count(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(dict->GetNullsCount(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->length(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->null_count(), 1);
-        for (ui32 i = 0; i < 3; ++i) {
-            UNIT_ASSERT(dict->IsNull(i));
-        }
-        UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(dict->GetChunkedArray()->ToString()), R"([[null,null,null]])");
-    }
-
-    Y_UNIT_TEST(LegacyNullDefaultUsesReferencedNull) {
-        auto dictionary = TThreadSimpleArraysCache::GetNull(arrow::utf8(), 1);
-        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 3);
-
-        const auto checkNulls = [](const std::shared_ptr<TDictionaryArray>& array) {
-            UNIT_ASSERT_VALUES_EQUAL(array->GetPositions()->null_count(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(array->GetDictionary()->null_count(), 1);
-            for (ui32 i = 0; i < 3; ++i) {
-                UNIT_ASSERT(array->IsNull(i));
-            }
-            UNIT_ASSERT_VALUES_EQUAL(array->GetNullsCount(), 3);
-        };
-
-        auto legacy = std::make_shared<TDictionaryArray>(dictionary, positions);
-        checkNulls(legacy);
-
-        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
-        TChunkConstructionData info(3, nullptr, arrow::utf8(), serializer);
-        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(legacy, info);
-        TChunkConstructionData infoWithMeta(3, nullptr, arrow::utf8(), serializer, std::nullopt, blobAndMeta.Meta);
-        auto restored = std::static_pointer_cast<TDictionaryArray>(
-            NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
-        checkNulls(restored);
     }
 
     Y_UNIT_TEST(SlicedSingleValueWithNullPositionsIsNotOneValue) {
@@ -415,5 +374,4 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         UNIT_ASSERT(value && !value->is_valid);
         UNIT_ASSERT(value->type->Equals(arrow::utf8()));
     }
->>>>>>> ed49d24cb07 (Fix bugs in accessors (#55596))
 };

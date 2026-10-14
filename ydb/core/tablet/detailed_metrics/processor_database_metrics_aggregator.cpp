@@ -499,14 +499,15 @@ namespace NKikimr {
 
             // Folds as soon as the budget says so; restores after DETAILED_OUTPUT_RESTORE_TICKS fitting ticks in a row
             void Fit(bool tick) {
-                if (Budget->MustFold(MemberId, Bytes(Rollups), Bytes(Leaves), FoldedByBudget)) {
+                const ui64 leafBytes = Bytes(Leaves);
+                if (Budget->MustFold(MemberId, Bytes(Rollups), leafBytes, FoldedByBudget)) {
                     // A confirmed start fold restores through the dead band too
                     FoldedByBudget = true;
                     FitTicks = 0;
                     if (!Folded) {
                         SetFolded(true);
                     }
-                } else if (Folded && (FitTicks += tick) >= DETAILED_OUTPUT_RESTORE_TICKS) {
+                } else if (Folded && tick && leafBytes && ++FitTicks >= DETAILED_OUTPUT_RESTORE_TICKS) {
                     SetFolded(false);
                 }
             }
@@ -636,7 +637,7 @@ namespace NKikimr {
             bool Folded;
             // A provisional start fold restores at the limit, a budget fold at RestorePercent of it
             bool FoldedByBudget = false;
-            // Fitting ticks in a row while folded
+            // Fitting ticks with leaves in a row while folded; a leafless tick neither counts nor resets
             ui32 FitTicks = 0;
         };
 

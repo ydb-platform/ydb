@@ -329,6 +329,9 @@ Y_UNIT_TEST_SUITE(DbCounters) {
     // always present (processor-move protection, mirrors ydb_serverless),
     // monitoring_project_id=<value> comes from the DB user attribute of the
     // same name (ATTR_MONITORING_PROJECT_ID) and is absent when unset.
+    // A new SysView Processor starts folded: the first table group comes
+    // without the partition leaves. The ICB limit of the node's output folds
+    // them back into the table rollup.
     Y_UNIT_TEST(DetailedTables) {
         TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
 
@@ -342,18 +345,25 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         const TString relativeTablePath = "Table1";
         const TString projectId = "proj1";
 
+        auto* runtime = env.GetServer().GetRuntime();
+        bool tableSeen = false;
+        ::NMonitoring::TDynamicCounterPtr publishedGroup;
         for (size_t iter = 0; iter < 30; ++iter) {
             Cerr << "iteration " << iter << Endl;
 
-            bool isGood = false;
-
-            for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
-                auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
+            for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+                auto counters = runtime->GetAppData(nodeId).Counters;
                 auto root = GetServiceCounters(counters, "ydb_detailed", false);
 
                 auto tableGroup = FindDetailedTableGroup(root, projectId, databasePath, relativeTablePath);
                 if (!tableGroup) {
                     continue;
+                }
+
+                // Unfolded, the first report would create the table group and its leaves at once
+                if (!tableSeen) {
+                    UNIT_ASSERT_C(!FindAnyTabletIdGroup(tableGroup), "the first table group has partition leaves");
+                    tableSeen = true;
                 }
 
                 {
@@ -388,18 +398,27 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics"));
                 UNIT_ASSERT(!tableGroup->FindSubgroup("follower_id", "replicas_only"));
 
-                isGood = true;
+                publishedGroup = tableGroup;
                 break;
             }
 
-            if (isGood) {
-                return;
+            if (publishedGroup) {
+                break;
             }
 
             Sleep(TDuration::Seconds(5));
         }
 
-        UNIT_ASSERT_C(false, "out of iterations");
+        UNIT_ASSERT_C(publishedGroup, "out of iterations");
+
+        for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+            TControlBoard::SetValue(0, runtime->GetAppData(nodeId).Icb->DetailedMetricsControls.MaxNodeOutputBytes);
+        }
+        // The SysView Processor reads the ICB once per 5 s tick
+        for (size_t iter = 0; iter < 60 && FindAnyTabletIdGroup(publishedGroup); ++iter) {
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(!FindAnyTabletIdGroup(publishedGroup), "the limit does not fold the partition leaves");
     }
 
     // used_core_percents is a non-derivative histogram (tablets per CPU-% bucket) that
@@ -522,46 +541,6 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         }
 
         UNIT_ASSERT_C(false, "out of iterations");
-    }
-
-    // The ICB limit of a node's ydb_detailed output folds the partition leaves and restores them
-    Y_UNIT_TEST(DetailedTablesFoldOverNodeOutputLimit) {
-        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
-
-        CreateDetailedDatabase(env, "Database1");
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-            env.GetClient().AlterUserAttributes("/Root", "Database1",
-                {{"monitoring_project_id", "proj1"}}));
-        CreateDetailedTable(env, "Database1", "Table1");
-
-        auto* runtime = env.GetServer().GetRuntime();
-        // Sets the limit on every node, then waits for the rollup with or without the leaves
-        const auto waitFor = [&](i64 limit, bool published) {
-            for (size_t iter = 0; iter < 40; ++iter) {
-                Cerr << "iteration " << iter << " (limit " << limit << ")" << Endl;
-                for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
-                    TControlBoard::SetValue(limit, runtime->GetAppData(nodeId).Icb->DetailedMetricsControls.MaxNodeOutputBytes);
-                }
-                for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
-                    auto root = GetServiceCounters(runtime->GetAppData(nodeId).Counters, "ydb_detailed", false);
-                    auto tableGroup = FindDetailedTableGroup(root, "proj1", "/Root/Database1", "Table1");
-                    if (!tableGroup) {
-                        continue;
-                    }
-                    auto rowCount = tableGroup->FindNamedCounter("name", "table.datashard.row_count");
-                    if (rowCount && rowCount->Val() > 0 && !!FindAnyTabletIdGroup(tableGroup) == published) {
-                        return;
-                    }
-                }
-                Sleep(TDuration::Seconds(5));
-            }
-            UNIT_FAIL("out of iterations, limit " << limit);
-        };
-
-        // Each phase needs the ICB: leaves published, folded by the limit, restored after the stable ticks
-        waitFor(Max<i64>(), true);
-        waitFor(0, false);
-        waitFor(Max<i64>(), true);
     }
 }
 

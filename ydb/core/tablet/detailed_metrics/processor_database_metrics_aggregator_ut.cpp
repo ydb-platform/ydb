@@ -1892,8 +1892,12 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         fixture.Processor->SetOutputLimit(estimate - 1, 100, {});
         assertFolded(DETAILED_OUTPUT_RESTORE_TICKS);
 
-        // A budget fold restores at RestorePercent of the limit only
+        // A budget fold restores at RestorePercent of the limit only, through a leaf outage too
         fixture.Processor->SetOutputLimit(estimate, 80, {});
+        assertFolded(2 * DETAILED_OUTPUT_RESTORE_TICKS);
+        fixture.Processor->DropNode(1);
+        fixture.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
+        fixture.ApplyAndFit(1, leaders, followers);
         assertFolded(2 * DETAILED_OUTPUT_RESTORE_TICKS);
         fixture.Processor->SetOutputLimit((estimate * 100 + 79) / 80, 80, {});
         assertRestores();
@@ -2020,6 +2024,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
     Y_UNIT_TEST(ScopedAggregatorStartsFolded) {
         TProcessorFixture fixture(&GetDetailedMetricsDescriptor, MakeIntrusive<NMonitoring::TDynamicCounters>());
+        // The start fold waits for the leaves, however long the aggregator was empty
+        fixture.Tick(DETAILED_OUTPUT_RESTORE_TICKS);
         fixture.ApplyAndFit(1, MakeGrid(1, 3, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 7)));
         UNIT_ASSERT_VALUES_EQUAL(fixture.CountTabletGroups(), 0);
         fixture.Tick(DETAILED_OUTPUT_RESTORE_TICKS - 1);

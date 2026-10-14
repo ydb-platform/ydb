@@ -20,7 +20,7 @@ bool BadKeyTypeForHashJoin(const TTypeAnnotationNode* type) {
     }
 
     Y_ENSURE(type, "Null type for join key");
-    
+
     switch (type->GetKind()) {
         case ETypeAnnotationKind::List:
         case ETypeAnnotationKind::Dict:
@@ -48,18 +48,10 @@ bool BadKeyTypeForHashJoin(const TTypeAnnotationNode* type) {
 
 bool BadTypesForBlockJoin(TOpJoin& join, TExprContext& ctx) {
     for (const auto & joinIU : join.JoinKeys.Items()) {
-        auto leftKeyType = join.GetIUType(joinIU.first, ctx);
-        if (!leftKeyType) {
-            YQL_CLOG(TRACE, CoreDq) << "Type missing for left join key!";
-        }
-        auto rightKeyType = join.GetIUType(joinIU.second, ctx);
-        if (!rightKeyType) {
-            YQL_CLOG(TRACE, CoreDq) << "Type missing for right join key!";
-        }
-        if (BadKeyTypeForHashJoin(join.GetIUType(joinIU.first, ctx))) {
+        if (BadKeyTypeForHashJoin(join.GetLeftInput()->GetIUType(joinIU.first, ctx))) {
             return true;
         }
-        if (BadKeyTypeForHashJoin(join.GetIUType(joinIU.second, ctx))) {
+        if (BadKeyTypeForHashJoin(join.GetRightInput()->GetIUType(joinIU.second, ctx))) {
             return true;
         }
     }

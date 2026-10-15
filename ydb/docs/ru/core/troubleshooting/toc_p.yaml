@@ -17,5 +17,3 @@ items:
       href: examples/schemas/overloaded-shard-insufficient-cpu.md
 - name: Как подготовить воспроизводимый пример (repro)
   href: repro.md
-
-

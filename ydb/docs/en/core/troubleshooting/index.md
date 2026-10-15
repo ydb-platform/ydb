@@ -4,4 +4,3 @@ This section of the {{ ydb-short-name }} documentation provides guidance on trou
 
 - [{#T}](performance/index.md)
 - [{#T}](repro.md)
-

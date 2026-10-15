@@ -21,7 +21,7 @@ If you cannot reproduce the issue consistently, still report it: describe the ci
 An **issue** is a problem report in a GitHub repository. Structure it using the sections below:
 
 1. **Bug description** — briefly state what is wrong. Preferably attach the error message itself as text, not as a screenshot.
-2. **Steps to reproduce** — a numbered list of actions and minimal YQL or code. State where you ran the scenario: [{{ ydb-ui-name }}](../reference/ydb-ui/index.md), [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), or SDK.
+2. **Steps to reproduce** — a numbered list of actions and minimal YQL or code. State where you ran the scenario: [{{ ydb-ui-name }}](../reference/ydb-ui/index.md), [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md), or the [{{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md).
 3. **Expected behavior** — what should happen when the system works correctly.
 4. **Actual behavior** — what actually happened. State whether the issue reproduces consistently.
 5. **Environment** — {{ ydb-short-name }} version or branch, how it is deployed, and the client version if relevant. For example, state a Docker image and tag, a binary build, a cluster, or another environment.

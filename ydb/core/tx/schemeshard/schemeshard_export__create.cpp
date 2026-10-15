@@ -600,6 +600,8 @@ private:
             return;
         }
 
+        context.IncludeIndexData = exportInfo.IncludeIndexData;
+
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
             Y_ABORT_UNLESS(itemIdx < ui32(exportInfo.ExportMetadata.SchemaMappingSize()));

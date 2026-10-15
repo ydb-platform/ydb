@@ -1820,7 +1820,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT(HasS3File(Parquet ? "/sql/data_00.parquet" : "/sql/data_00.csv.zst"));
     }
 
-    Y_UNIT_TEST(TableBackupAsSqlRetainsIndexSchemes) {
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlRetainsIndexSchemes, MaterializeIndexes) {
         EnvOptions().EnableIndexMaterialization(true);
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
@@ -1836,17 +1836,32 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
             IndexDescription { Name: "index" KeyColumnNames: ["value"] }
         )");
         Env().TestWaitNotification(Runtime(), txId);
-        const auto expected = DescribeTableAsSql();
-        WaitTableSqlExport(StartTableSqlExport(txId, "sql", "include_index_data: true"));
+        const auto expected = MaterializeIndexes ? DescribeTableAsSql() : TString{};
+        WaitTableSqlExport(StartTableSqlExport(txId, "sql", Sprintf("include_index_data: %s",
+            MaterializeIndexes ? "true" : "false")));
         CheckSqlBackup("/sql", expected);
+
+        const auto sql = GetS3FileContent("/sql/create_table.sql");
+        const auto createTableEnd = sql.find(';');
+        UNIT_ASSERT_UNEQUAL_C(createTableEnd, TString::npos, sql);
+        const TString indexDefinition = "INDEX `index` GLOBAL SYNC ON (`value`)";
+        UNIT_ASSERT_VALUES_EQUAL_C(sql.substr(0, createTableEnd).Contains(indexDefinition), MaterializeIndexes, sql);
+        const auto alterStatements = sql.substr(createTableEnd + 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(alterStatements.Contains("ADD " + indexDefinition), !MaterializeIndexes, sql);
+        if (!MaterializeIndexes) {
+            UNIT_ASSERT_STRING_CONTAINS(alterStatements, "ALTER TABLE `Table`");
+        }
+
         const TString indexPrefix = "/sql/index/indexImplTable";
-        UNIT_ASSERT(HasS3File(indexPrefix + "/scheme.pb"));
+        UNIT_ASSERT_VALUES_EQUAL(HasS3File(indexPrefix + "/scheme.pb"), MaterializeIndexes);
         UNIT_ASSERT(!HasS3File(indexPrefix + "/create_table.sql"));
-        Ydb::Table::CreateTableRequest scheme;
-        const auto content = GetS3FileContent(indexPrefix + "/scheme.pb");
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(content, &scheme));
-        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(indexPrefix + "/scheme.pb.sha256"),
-            NBackup::ComputeChecksum(content) + " scheme.pb");
+        if (MaterializeIndexes) {
+            Ydb::Table::CreateTableRequest scheme;
+            const auto content = GetS3FileContent(indexPrefix + "/scheme.pb");
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(content, &scheme));
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(indexPrefix + "/scheme.pb.sha256"),
+                NBackup::ComputeChecksum(content) + " scheme.pb");
+        }
     }
 
     Y_UNIT_TEST(TableBackupAsSqlUsesCopiedIndexPartitioning) {

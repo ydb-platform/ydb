@@ -8,6 +8,7 @@ namespace NKikimr::NSchemeShard {
 
 struct TExportTableSchemeContext {
     TString TablePath; // Database-relative path used throughout the exported SQL
+    bool IncludeIndexData = false;
     NKikimrSchemeOp::TPathDescription PathDescription;
     NKikimrSchemeOp::TChangefeedUnderlyingTopics ChangefeedUnderlyingTopics;
 };

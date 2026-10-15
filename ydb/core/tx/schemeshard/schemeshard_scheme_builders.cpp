@@ -38,7 +38,7 @@ NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& conte
     const auto& tablePath = context.TablePath;
     Y_ENSURE(tablePath, "Missing table path for SQL backup");
 
-    NSysView::TCreateTableFormatter formatter;
+    NSysView::TCreateTableFormatter formatter(!context.IncludeIndexData);
     if (pathDescription.HasColumnTableDescription()) {
         const auto& description = pathDescription.GetColumnTableDescription();
         Y_ENSURE(description.GetSchema().ColumnsSize(), "Column table description has no columns");

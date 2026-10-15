@@ -71,6 +71,7 @@
   - effects.h
   - encdec.h
   - errhandlingapi.h
+  - esent.h
   - eventtoken.h
   - evntcons.h
   - evntprov.h

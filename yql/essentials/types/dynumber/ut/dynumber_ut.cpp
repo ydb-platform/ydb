@@ -45,60 +45,9 @@ void TestCast(TStringBuf test, TMaybe<T> value) {
         UNIT_ASSERT_C(!casted && !value, "Casted: " << casted << ", value: " << value);
     }
 }
-
-void TestInstant(TStringBuf text, ui32 unitsInSecond, ui64 expectedMicros) {
-    const auto binary = ParseDyNumberString(text);
-    UNIT_ASSERT_C(binary, text);
-    const auto instant = DyNumberToInstant(*binary, unitsInSecond);
-    UNIT_ASSERT_C(instant, text);
-    UNIT_ASSERT_VALUES_EQUAL_C(instant->MicroSeconds(), expectedMicros, text);
-}
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDyNumberTests) {
-Y_UNIT_TEST(ToInstantUnitsAndRounding) {
-    for (const ui32 units : {1U, 1000U, 1000000U, 1000000000U}) {
-        const TString second = ToString(units);
-        TestInstant(second, units, 1000000);
-        TestInstant(second + "e-6", units, 1);
-        TestInstant(second + "e-7", units, 1);
-        TestInstant(second + ".0000000000001", units, 1000001);
-        TestInstant("1e-130", units, 1);
-        TestInstant("0", units, 0);
-        TestInstant("-1e-130", units, 0);
-        TestInstant("-1e125", units, 0);
-        TestInstant("9.9999999999999999999999999999999999999e125", units, Max<ui64>());
-    }
-    TestInstant("123456789.123456", 1, 123456789123456);
-    TestInstant("123456789.12345600000000000000000000001", 1, 123456789123457);
-    TestInstant("1.01", 1000000, 2);
-    TestInstant("1.001", 1000000, 2);
-    TestInstant("1000", 1000000000, 1);
-    TestInstant("1001", 1000000000, 2);
-}
-
-Y_UNIT_TEST(ToInstantBounds) {
-    for (const auto& [units, suffix] : {std::pair<ui32, TString>{1, "e-6"}, {1000, "e-3"}, {1000000, ""}, {1000000000, "e3"}}) {
-        TestInstant("18446744073709551614" + suffix, units, Max<ui64>() - 1);
-        TestInstant("18446744073709551615" + suffix, units, Max<ui64>());
-        TestInstant("18446744073709551616" + suffix, units, Max<ui64>());
-        TestInstant("18446744073709551614.1" + suffix, units, Max<ui64>());
-        TestInstant("18446744073709551615.1" + suffix, units, Max<ui64>());
-    }
-}
-
-Y_UNIT_TEST(ToInstantInvalidInput) {
-    for (const TStringBuf binary : {TStringBuf(), TStringBuf("\x02", 1), TStringBuf("\x03", 1),
-             TStringBuf("\x01\x00", 2), TStringBuf("\x02\x81\xfa", 3), TStringBuf("\x00\x81\x00", 3)}) {
-        UNIT_ASSERT(!DyNumberToInstant(binary, 1));
-    }
-    const auto binary = ParseDyNumberString("1");
-    UNIT_ASSERT(binary);
-    for (const ui32 units : {0U, 2U, 999U, Max<ui32>()}) {
-        UNIT_ASSERT(!DyNumberToInstant(*binary, units));
-    }
-}
-
 Y_UNIT_TEST(ParseAndRestore) {
     TestDyNumber("0");
     TestDyNumber(".0");

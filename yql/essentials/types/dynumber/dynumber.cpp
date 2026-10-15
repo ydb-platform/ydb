@@ -290,42 +290,4 @@ TMaybe<TString> DyNumberToString(TStringBuf buffer) {
     return out;
 }
 
-TMaybe<TInstant> DyNumberToInstant(TStringBuf buffer, ui32 unitsInSecond) {
-    if (!IsValidDyNumber(buffer) ||
-        (unitsInSecond != 1 && unitsInSecond != 1000 && unitsInSecond != 1000000 && unitsInSecond != 1000000000)) {
-        return Nothing();
-    }
-    if (buffer[0] != '\x02') {
-        return TInstant::Zero();
-    }
-
-    // Positive values store the decimal exponent biased by 129, followed
-    // by two digits per byte. Shift the decimal point to microseconds.
-    i32 integerDigits = static_cast<ui8>(buffer[1]) - 129 + 6;
-    for (; unitsInSecond > 1; unitsInSecond /= 10) {
-        --integerDigits;
-    }
-    const size_t digitCount = (buffer.size() - 2) * 2;
-    const auto digitAt = [&](size_t i) -> ui64 {
-        const ui8 byte = buffer[2 + i / 2];
-        return i % 2 ? byte & 0x0f : byte >> 4;
-    };
-
-    ui64 micros = 0;
-    for (i32 i = 0; i < integerDigits; ++i) {
-        const ui64 digit = static_cast<size_t>(i) < digitCount ? digitAt(i) : 0;
-        if (micros > (Max<ui64>() - digit) / 10) {
-            return TInstant::Max();
-        }
-        micros = micros * 10 + digit;
-    }
-    // A positive fraction of a microsecond must not expire early.
-    for (size_t i = Max(integerDigits, 0); i < digitCount; ++i) {
-        if (digitAt(i)) {
-            return TInstant::MicroSeconds(micros == Max<ui64>() ? micros : micros + 1);
-        }
-    }
-    return TInstant::MicroSeconds(micros);
-}
-
 } // namespace NKikimr::NDyNumber

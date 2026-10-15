@@ -2,9 +2,36 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
-#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/types/dynumber/cast.h>
+
+#include <cmath>
 
 namespace NKikimr::NOlap {
+
+namespace {
+
+std::optional<TInstant> DyNumberToInstant(TStringBuf binary, ui64 unitsInSecond) {
+    const auto value = NDyNumber::TryFromDyNumber<double>(binary);
+    if (!value) {
+        return {};
+    }
+    if (*value <= 0) {
+        return TInstant::Zero();
+    }
+    const double micros = *value * 1e6 / static_cast<double>(unitsInSecond);
+    if (!std::isfinite(micros) || micros >= static_cast<double>(Max<ui64>())) {
+        return TInstant::Max();
+    }
+    const auto whole = static_cast<ui64>(micros);
+    // Round up the fraction retained by double; finer precision may be lost
+    // when converting DyNumber to double.
+    if (static_cast<double>(whole) < micros && whole != Max<ui64>()) {
+        return TInstant::MicroSeconds(whole + 1);
+    }
+    return TInstant::MicroSeconds(whole);
+}
+
+}   // namespace
 
 std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar, NScheme::TTypeId columnType) const {
     const ui64 unitsInSeconds = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
@@ -19,12 +46,7 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
             return TInstant::MicroSeconds(Max<i64>(0, std::static_pointer_cast<arrow::Int64Scalar>(scalar)->value));
         case NScheme::NTypeIds::DyNumber: {
             const auto& value = std::static_pointer_cast<arrow::BinaryScalar>(scalar)->value;
-            const auto instant =
-                NDyNumber::DyNumberToInstant(TStringBuf(reinterpret_cast<const char*>(value->data()), value->size()), unitsInSeconds);
-            if (instant) {
-                return *instant;
-            }
-            return {};
+            return DyNumberToInstant(TStringBuf(reinterpret_cast<const char*>(value->data()), value->size()), unitsInSeconds);
         }
         default:
             break;

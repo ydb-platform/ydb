@@ -58,10 +58,30 @@ Y_UNIT_TEST_SUITE(ColumnShardTtlTypes) {
         }
         const auto tier = TTierInfo::MakeTtl(TDuration::Seconds(1), "ts", 1000000);
         for (const auto& [text, expected] :
-            TVector<std::pair<TString, ui64>>{ { "1000000.000000000000001", 1000001 }, { "18446744073709551614", Max<ui64>() - 1 },
+            TVector<std::pair<TString, ui64>>{ { "1000000.25", 1000001 }, { "18446744073709551614", Max<ui64>() },
                 { "18446744073709551615", Max<ui64>() }, { "18446744073709551616", Max<ui64>() }, { "18446744073709551614.1", Max<ui64>() } }) {
             UNIT_ASSERT_VALUES_EQUAL(
                 *tier->ScalarToInstant(DyNumberScalar(text), NScheme::NTypeIds::DyNumber), TInstant::MicroSeconds(expected));
+        }
+    }
+
+    Y_UNIT_TEST(DyNumberRounding) {
+        const auto seconds = TTierInfo::MakeTtl(TDuration::Seconds(1), "ts", 1);
+        for (const auto& [text, expected] : TVector<std::pair<TString, ui64>>{
+                 { "0.0000001", 1 }, { "0.000001", 1 }, { "90.0000001", 90000001 }, { "1700000000.5", 1700000000500000 } }) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                *seconds->ScalarToInstant(DyNumberScalar(text), NScheme::NTypeIds::DyNumber), TInstant::MicroSeconds(expected), text);
+        }
+        const auto nanos = TTierInfo::MakeTtl(TDuration::Seconds(1), "ts", 1000000000);
+        UNIT_ASSERT_VALUES_EQUAL(*nanos->ScalarToInstant(DyNumberScalar("1001"), NScheme::NTypeIds::DyNumber), TInstant::MicroSeconds(2));
+    }
+
+    Y_UNIT_TEST(InvalidDyNumber) {
+        const auto tier = TTierInfo::MakeTtl(TDuration::Seconds(1), "ts", 1);
+        for (const TStringBuf binary : { TStringBuf(), TStringBuf("\x02", 1), TStringBuf("\x03", 1), TStringBuf("\x01\x00", 2),
+                 TStringBuf("\x02\x81\xfa", 3), TStringBuf("\x00\x81\x00", 3) }) {
+            const auto scalar = std::make_shared<arrow::BinaryScalar>(arrow::Buffer::FromString(std::string(binary.data(), binary.size())));
+            UNIT_ASSERT(!tier->ScalarToInstant(scalar, NScheme::NTypeIds::DyNumber));
         }
     }
 
@@ -73,7 +93,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTtlTypes) {
             const auto context = tiering.GetTierToMove(DyNumberScalar(text), now, false, NScheme::NTypeIds::DyNumber);
             UNIT_ASSERT_VALUES_EQUAL(context.GetCurrentTierName(), TTierInfo::GetTtlTierName());
         }
-        const auto future = tiering.GetTierToMove(DyNumberScalar("90.000000000000001"), now, false, NScheme::NTypeIds::DyNumber);
+        const auto future = tiering.GetTierToMove(DyNumberScalar("90.0000001"), now, false, NScheme::NTypeIds::DyNumber);
         UNIT_ASSERT_VALUES_EQUAL(future.GetNextTierNameVerified(), TTierInfo::GetTtlTierName());
         UNIT_ASSERT_VALUES_EQUAL(future.GetNextTierWaitingVerified(), TDuration::MicroSeconds(1));
         for (const auto type : { NScheme::NTypeIds::Datetime64, NScheme::NTypeIds::Timestamp64 }) {

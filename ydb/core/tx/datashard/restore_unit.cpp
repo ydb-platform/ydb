@@ -42,7 +42,7 @@ protected:
         case NKikimrSchemeOp::TRestoreTask::kFSSettings:
         #ifndef KIKIMR_DISABLE_S3_OPS
             tx->SetAsyncJobActor(ctx.Register(
-                CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo),
+                CreateS3Downloader(DataShard.SelfId(), DataShard.TabletID(), op->GetTxId(), restore, tableInfo),
                 TMailboxType::HTSwap,
                 AppData(ctx)->BatchPoolId));
             break;

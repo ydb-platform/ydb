@@ -758,7 +758,8 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        // Unsafe truncate must see preceding writes, so effects cannot be deferred past it.
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
         bool hasUnsafeTruncate = false;
         for (const auto& tx : query.Transactions()) {
             if (GetTableTruncateSettings(tx)) {

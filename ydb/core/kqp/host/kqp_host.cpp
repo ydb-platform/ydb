@@ -107,36 +107,6 @@ bool CheckIsBatch(const TExprNode::TPtr& root, TExprContext& exprCtx) {
     return true;
 }
 
-bool CheckUnsafeTruncateQuery(const TExprNode::TPtr& root, TExprContext& ctx) {
-    ui64 actionsCount = 0;
-    bool hasUnsafeTruncate = false;
-    VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (TCoWrite::Match(node.Get())) {
-            ++actionsCount;
-            if (node->ChildrenSize() < 5 || !node->Child(4)->IsList()) {
-                return true;
-            }
-            const auto mode = GetSetting(*node->Child(4), "mode");
-            const auto unsafe = GetSetting(*node->Child(4), "UNSAFE");
-            if (mode && mode->ChildrenSize() == 2 && mode->Child(1)->IsAtom("truncateTable")
-                && unsafe && unsafe->ChildrenSize() == 2) {
-                const auto value = TMaybeNode<TCoBool>(unsafe->Child(1));
-                hasUnsafeTruncate |= value && value.Cast().Literal().Value() == "true";
-            }
-        } else if (TCoRead::Match(node.Get())) {
-            ++actionsCount;
-        }
-        return true;
-    });
-
-    if (hasUnsafeTruncate && actionsCount != 1) {
-        ctx.AddError(TIssue(ctx.GetPosition(root->Pos()),
-            "Unsafe TRUNCATE TABLE cannot be used with other reads or writes in the same query."));
-        return false;
-    }
-    return true;
-}
-
 bool HasSamplingRead(const TExprNode::TPtr& root) {
     return FindNode(root, [](const TExprNode::TPtr& node) {
         if (!TCoRead::Match(node.Get()) || node->ChildrenSize() <= TKiReadTable::idx_Settings ||
@@ -1563,7 +1533,7 @@ private:
         }
         YQL_CLOG(INFO, CoreDq) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
-        if (!CheckIsBatch(queryExpr, ctx) || !CheckUnsafeTruncateQuery(queryExpr, ctx)) {
+        if (!CheckIsBatch(queryExpr, ctx)) {
             return result;
         }
 

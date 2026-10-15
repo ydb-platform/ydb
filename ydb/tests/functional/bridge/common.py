@@ -5,6 +5,7 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 
 from hamcrest import assert_that, is_, has_entries
@@ -71,8 +72,32 @@ class BridgeKiKiMRTest(object):
         self.cluster.stop()
 
     def update_cluster_state(self, client, updates, expected_status=StatusIds.SUCCESS, quorum_piles=None):
-        response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
-        self.logger.debug("Update cluster state response: %s", response)
+        deadline = time.monotonic() + 120
+        completed_states = {
+            PileState.PROMOTED: PileState.PRIMARY,
+            PileState.SUSPENDED: PileState.DISCONNECTED,
+            PileState.NOT_SYNCHRONIZED: PileState.SYNCHRONIZED,
+        }
+        while True:
+            response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
+            self.logger.debug("Update cluster state response: %s", response)
+            transient = response.operation.status == StatusIds.INTERNAL_ERROR and any(
+                issue in str(response.operation.issues) for issue in (
+                    "No quorum to start propose/commit configuration", "Hop node disconnected",
+                )
+            )
+            if expected_status != StatusIds.SUCCESS or not transient or time.monotonic() >= deadline:
+                break
+            # A request may have committed before its acknowledgement was lost.
+            current = self.get_cluster_state(client)
+            actual = {pile.pile_name: pile.state for pile in current.pile_states}
+            if updates and all(
+                actual.get(update.pile_name) in (update.state, completed_states.get(update.state, update.state))
+                for update in updates
+            ):
+                return bridge.UpdateClusterStateResult()
+            self.logger.warning("Retrying bridge update after transient error: %s", response.operation.issues)
+            time.sleep(1)
         assert_that(response.operation.status, is_(expected_status), str(response))
         if expected_status == StatusIds.SUCCESS:
             result = bridge.UpdateClusterStateResult()

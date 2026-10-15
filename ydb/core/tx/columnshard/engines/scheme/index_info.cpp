@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/transformer/dictionary.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
@@ -25,17 +24,19 @@ namespace NKikimr::NOlap {
 std::optional<ui32> TIndexInfo::GetBloomNgramSize(const ui32 columnId, const bool caseSensitive) const {
     std::optional<ui32> smallest;
     for (const auto& [_, container] : Indexes) {
-        const auto bloom = container.GetObjectPtrOptionalAs<NIndexes::NBloomNGramm::TIndexMeta>();
-        if (!bloom || !bloom->AcceptsCaseMode(caseSensitive)) {
+        if (!container) {
             continue;
         }
-        const auto indexedColumn = bloom->GetSingleColumnId();
+        const auto ngramSize = container->GetCompatibleBloomNgramSize(caseSensitive);
+        if (!ngramSize) {
+            continue;
+        }
+        const auto indexedColumn = container->GetSingleColumnId();
         if (!indexedColumn || *indexedColumn != columnId) {
             continue;
         }
-        const ui32 ngramSize = bloom->GetNGrammSize();
-        if (!smallest || ngramSize < *smallest) {
-            smallest = ngramSize;
+        if (!smallest || *ngramSize < *smallest) {
+            smallest = *ngramSize;
         }
     }
     return smallest;

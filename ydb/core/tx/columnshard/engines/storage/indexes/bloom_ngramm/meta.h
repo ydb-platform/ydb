@@ -156,6 +156,13 @@ public:
     bool AcceptsCaseMode(const bool caseSensitive) const {
         return !Request.ResolvedCaseSensitive() || caseSensitive;
     }
+
+    std::optional<ui32> GetCompatibleBloomNgramSize(const bool caseSensitive) const override {
+        if (!AcceptsCaseMode(caseSensitive)) {
+            return std::nullopt;
+        }
+        return GetNGrammSize();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

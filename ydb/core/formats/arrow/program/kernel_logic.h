@@ -151,6 +151,23 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TToStringKernel>(GetClassNameStatic());
 };
 
+class TJustKernel: public TSimpleKernelLogic {
+public:
+    static TString GetClassNameStatic() {
+        return ToString(NYql::TKernelRequestBuilder::EUnaryOp::Just);
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    virtual std::optional<ui32> GetOriginalAddressFromInput() const override {
+        return 0;
+    }
+
+    static const inline auto Registrator = TFactory::TRegistrator<TJustKernel>(GetClassNameStatic());
+};
+
 class TLogicMatchString: public IKernelLogic {
 private:
     using TBase = IKernelLogic;

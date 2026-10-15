@@ -245,12 +245,10 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:
+    - name: Probe GitHub speed
+      uses: ./.github/actions/github_fetch_fallback
     - name: Checkout
       uses: actions/checkout@v5
-      env:
-        GIT_CONFIG_COUNT: "1"
-        GIT_CONFIG_KEY_0: url.https://gh-proxy.com/https://github.com/.insteadOf
-        GIT_CONFIG_VALUE_0: https://github.com/
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
@@ -305,12 +303,10 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}", postcommit ]
     name: Postcommit · Build and test ${{ matrix.build_preset }}
     steps:
+    - name: Probe GitHub speed
+      uses: ./.github/actions/github_fetch_fallback
     - name: Checkout
       uses: actions/checkout@v5
-      env:
-        GIT_CONFIG_COUNT: "1"
-        GIT_CONFIG_KEY_0: url.https://gh-proxy.com/https://github.com/.insteadOf
-        GIT_CONFIG_VALUE_0: https://github.com/
       with:
         fetch-depth: 2
     - name: Setup ydb access

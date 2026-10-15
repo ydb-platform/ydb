@@ -10,6 +10,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/stream/format.h>
 
+#include <cmath>
 #include <ranges>
 
 namespace NKikimr::NPQ::NMLP {
@@ -880,8 +881,30 @@ size_t TConsumerActor::RequiredToFetchMessageCount() const {
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
+    if (const size_t missingGroups = FifoUnlockedGroupDeficit()) {
+        const size_t estimate = EstimateFetchCountForNewGroups(metrics.InflightMessageCount, metrics.InflightMessageGroupCount, missingGroups);
+        maxMessages = std::max(maxMessages, estimate);
+    }
 
     return std::min(maxMessages, Storage->MaxMessages - metrics.InflightMessageCount);
+}
+
+// messages whose group head is already in flight are Unprocessed but not readable,
+// so check the number of groups
+size_t TConsumerActor::FifoUnlockedGroupDeficit() const {
+    if (!Config.GetKeepMessageOrder()) {
+        return 0;
+    }
+    const float unlockedGroupsRatio = ClampVal<float>(AppData()->PQConfig.GetMLPUnlockedGroupsRatio(), 0.0, 1.0);
+    if (unlockedGroupsRatio <= 0.0f) {
+        return 0;
+    }
+    auto& metrics = Storage->GetMetrics();
+    const size_t inflightGroups = metrics.InflightMessageGroupCount;
+    const size_t lockedGroups = metrics.LockedMessageGroupCount;
+    const size_t readableGroups = inflightGroups > lockedGroups ? inflightGroups - lockedGroups : 0;
+    const size_t targetReadableGroups = static_cast<size_t>(std::ceil(unlockedGroupsRatio * inflightGroups));
+    return readableGroups < targetReadableGroups ? targetReadableGroups - readableGroups : 0;
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {

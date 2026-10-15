@@ -281,6 +281,12 @@
   - windef.h
   - windns.h
   - windows.applicationmodel.core.h
+  - windows.devices.bluetooth.advertisement.h
+  - windows.devices.bluetooth.genericattributeprofile.h
+  - windows.devices.bluetooth.h
+  - windows.devices.enumeration.h
+  - windows.foundation.collections.h
+  - windows.foundation.h
   - windows.globalization.h
   - windows.graphics.display.h
   - windows.h

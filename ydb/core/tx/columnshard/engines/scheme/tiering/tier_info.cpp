@@ -2,48 +2,9 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
-#include <util/string/cast.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 namespace NKikimr::NOlap {
-
-namespace {
-
-std::optional<TInstant> DyNumberToInstant(TStringBuf binary, ui64 unitsInSecond) {
-    const auto number = NDyNumber::DyNumberToString(binary);
-    if (!number) {
-        return {};
-    }
-    if (number->StartsWith('-') || *number == "0") {
-        return TInstant::Zero();
-    }
-    // DyNumberToString produces .<digits>[e<exponent>]. Move the decimal
-    // point to microseconds without losing any of DyNumber's 38 digits.
-    const TStringBuf text(*number);
-    const size_t exponentPos = text.find('e');
-    const TStringBuf digits = text.SubStr(1, exponentPos == TStringBuf::npos ? text.size() - 1 : exponentPos - 1);
-    int integerDigits = (exponentPos == TStringBuf::npos ? 0 : FromString<int>(text.SubStr(exponentPos + 1))) + 6;
-    for (; unitsInSecond > 1; unitsInSecond /= 10) {
-        --integerDigits;
-    }
-    ui64 micros = 0;
-    for (int i = 0; i < integerDigits; ++i) {
-        const ui64 digit = i < static_cast<int>(digits.size()) ? digits[i] - '0' : 0;
-        if (micros > (Max<ui64>() - digit) / 10) {
-            return TInstant::Max();
-        }
-        micros = micros * 10 + digit;
-    }
-    // Round up: a positive fraction of a microsecond must not expire early.
-    for (size_t i = Max(integerDigits, 0); i < digits.size(); ++i) {
-        if (digits[i] != '0') {
-            return TInstant::MicroSeconds(micros == Max<ui64>() ? micros : micros + 1);
-        }
-    }
-    return TInstant::MicroSeconds(micros);
-}
-
-}   // namespace
 
 std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar, NScheme::TTypeId columnType) const {
     const ui64 unitsInSeconds = TtlUnitsInSecond ? TtlUnitsInSecond : 1;
@@ -58,7 +19,12 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
             return TInstant::MicroSeconds(Max<i64>(0, std::static_pointer_cast<arrow::Int64Scalar>(scalar)->value));
         case NScheme::NTypeIds::DyNumber: {
             const auto& value = std::static_pointer_cast<arrow::BinaryScalar>(scalar)->value;
-            return DyNumberToInstant(TStringBuf(reinterpret_cast<const char*>(value->data()), value->size()), unitsInSeconds);
+            const auto instant =
+                NDyNumber::DyNumberToInstant(TStringBuf(reinterpret_cast<const char*>(value->data()), value->size()), unitsInSeconds);
+            if (instant) {
+                return *instant;
+            }
+            return {};
         }
         default:
             break;

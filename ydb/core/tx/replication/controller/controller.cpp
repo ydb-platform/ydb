@@ -89,6 +89,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvResolveTenantResult, Handle);
         HFunc(TEvPrivate::TEvUpdateTenantNodes, Handle);
         HFunc(TEvPrivate::TEvProcessQueues, Handle);
+        HFunc(TEvPrivate::TEvRestoreSession, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
@@ -464,6 +465,13 @@ void TController::Handle(TEvService::TEvStatus::TPtr& ev, const TActorContext& c
         }
 
         auto* worker = GetOrCreateWorker(id);
+        if (!worker->HasCommand()) {
+            if (const auto* target = FindTarget(id)) {
+                auto ev = MakeRunWorkerEv(Find(id.ReplicationId()), *target, id.WorkerId());
+                worker->SetCommand(ev->Record.MutableCommand());
+            }
+        }
+
         if (worker->HasSession()) {
             if (const auto sessionId = worker->GetSession(); sessionId != nodeId) {
                 Y_ABORT_UNLESS(Sessions.contains(sessionId));
@@ -609,6 +617,11 @@ void TController::Handle(TEvService::TEvWorkerDataEnd::TPtr& ev, const TActorCon
 
     const auto& record = ev->Get()->Record;
     const auto id = TWorkerId::Parse(record.GetWorker());
+    // DataEnd is resent on every handshake, the worker might be gone or about to be stopped
+    if (!Sessions[nodeId].HasWorker(id) || !IsValidWorker(id)) {
+        return;
+    }
+
     auto* worker = GetOrCreateWorker(id);
     worker->SetDataEnded(true);
 
@@ -927,6 +940,15 @@ void TController::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const T
 
     if (Sessions.contains(nodeId)) {
         DeleteSession(nodeId, ctx);
+        // the node is still in discovery, so it will not be reported as a new one
+        Schedule(RestoreSessionInterval, new TEvPrivate::TEvRestoreSession(nodeId));
+    }
+}
+
+void TController::Handle(TEvPrivate::TEvRestoreSession::TPtr& ev, const TActorContext& ctx) {
+    const ui32 nodeId = ev->Get()->NodeId;
+    if (!Sessions.contains(nodeId) && NodesManager.HasNode(nodeId)) {
+        CreateSession(nodeId, ctx);
     }
 }
 

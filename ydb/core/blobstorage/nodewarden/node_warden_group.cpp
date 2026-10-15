@@ -276,7 +276,7 @@ namespace NKikimr::NStorage {
                     ? DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType())
                     : nullptr;
 
-                if (info && info->BlobDepotId && !group.AgentProxy) {
+                if (info && info->BlobDepotId.value_or(0) && !group.AgentProxy) {
                     // re-register proxy as an agent
                     group.AgentProxy = true;
                     TActorSystem *as = TActivationContext::ActorSystem();

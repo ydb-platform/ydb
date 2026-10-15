@@ -343,6 +343,11 @@ message TEvNodeConfigInvokeOnRoot {
     message TConvertToBridge {
     }
 
+    // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
+    // converted yet); clears ClusterStateDetails.BscConversionPending flag.
+    message TNotifyBscConversionFinished {
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -366,6 +371,7 @@ message TEvNodeConfigInvokeOnRoot {
         TDemandRetroTrace DemandRetroTrace = 23;
         TQueryWorkingRoot QueryWorkingRoot = 24;
         TConvertToBridge ConvertToBridge = 25;
+        TNotifyBscConversionFinished NotifyBscConversionFinished = 26;
     }
 }
 

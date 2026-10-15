@@ -431,6 +431,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         RecheckUnsyncedBridgePiles = true;
         CheckUnsyncedBridgePiles();
     }
+
+    CheckBridgeConversion();
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {

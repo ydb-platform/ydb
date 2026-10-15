@@ -102,6 +102,7 @@ public:
     class TTxUpdateNodeDisconnectTimestamp;
     class TTxUpdateShred;
     class TTxCheckUnsynced;
+    class TTxConvertToBridge;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -965,6 +966,38 @@ public:
 
         bool IsDecommitted() const {
             return DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+        }
+
+        // is this a physical group which is not bridged yet; such group is turned into inline pile when ordinary
+        // cluster is being converted into bridged one
+        bool IsBridgeConversionCandidate() const {
+            return !VDisksInGroup.empty() && !VirtualGroupState && !BlobDepotId && !DDisk && !BridgeGroupInfo &&
+                !BridgeProxyGroupId && !BridgePileId;
+        }
+
+        // BlobDepotId as reported to node wardens: actual tablet id for working virtual group, zero for virtual group which
+        // BlobDepot has failed to be created for, and nothing otherwise
+        std::optional<ui64> GetReportedBlobDepotId() const {
+            if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                Y_ABORT_UNLESS(BlobDepotId);
+                return *BlobDepotId;
+            } else if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
+                return 0;
+            } else {
+                return std::nullopt;
+            }
+        }
+
+        // the part of group information reported to node wardens which is changed by virtual group machinery; group
+        // generation has to be bumped whenever it changes, otherwise nodes would get different infos of the same generation
+        auto GetReportedVirtualGroupState() const {
+            return std::make_tuple(GetReportedBlobDepotId(), DecommitStatus);
+        }
+
+        // does this group have both physical and virtual parts (it is being decommitted or recommissioned); such
+        // group is not bridged, and conversion to bridged cluster is not finished until it loses one of the parts
+        bool BlocksBridgeConversion() const {
+            return !VDisksInGroup.empty() && (VirtualGroupState || BlobDepotId);
         }
 
         using TGroupFinder = std::function<const TGroupInfo*(TGroupId)>;
@@ -2161,6 +2194,12 @@ private:
 
     void CheckUnsyncedBridgePiles();
 
+    bool ConvertingToBridge = false;
+    bool RecheckBridgeConversion = false;
+
+    void CheckBridgeConversion();
+    void OnBridgeConversionStepDone();
+
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
 
@@ -2409,6 +2448,7 @@ public:
 
         ShredState.Initialize();
         CheckSyncerDisconnectedNodes();
+        CheckBridgeConversion();
     }
 
     void UpdatePDisksCounters() {

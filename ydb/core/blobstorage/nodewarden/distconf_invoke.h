@@ -175,6 +175,7 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+        void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Retro trace collection

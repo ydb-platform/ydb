@@ -359,4 +359,16 @@ namespace NKikimr::NStorage {
         });
     }
 
+    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& /*cmd*/) {
+        RunCommonChecks();
+
+        if (!Self->StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+            return Finish(TResult::OK, std::nullopt); // already cleared
+        }
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        config.MutableClusterStateDetails()->ClearBscConversionPending();
+        StartProposition(&config);
+    }
+
 } // NKikimr::NStorage

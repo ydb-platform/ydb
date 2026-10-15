@@ -64,7 +64,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         // create mock proxy
         proxy.reset(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(groupId)));
     } else if (auto info = NeedGroupInfo(groupId)) {
-        if (info->BlobDepotId) {
+        if (info->BlobDepotId.value_or(0)) { // zero is reported when BlobDepot has failed to be created
             TActorId proxyActorId;
 
             switch (info->DecommitStatus) {

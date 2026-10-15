@@ -313,6 +313,9 @@ struct TEnvironmentSetup {
         SetupStaticStorage();
         SetupStorage();
         SetupTablet();
+        for (ui32 nodeId : Runtime->GetNodes()) {
+            SetupTenantPool(nodeId);
+        }
     }
 
     void StopNode(ui32 nodeId) {
@@ -334,6 +337,7 @@ struct TEnvironmentSetup {
         if (nodeId == Settings.ControllerNodeId) {
             SetupTablet();
         }
+        SetupTenantPool(nodeId);
     }
 
     void RestartNode(ui32 nodeId) {
@@ -675,6 +679,13 @@ config:
             bool working = true;
             Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
         }
+    }
+
+    // start services making node able to run tablets launched by Hive
+    void SetupTenantPool(ui32 nodeId) {
+        if (!Settings.SetupHive) {
+            return;
+        }
 
         auto localConfig = MakeIntrusive<TLocalConfig>();
 
@@ -689,16 +700,11 @@ config:
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);
 
-        if (Settings.SetupHive) {
-            for (ui32 nodeId : Runtime->GetNodes()) {
-                Runtime->RegisterService(MakeTenantPoolRootID(),
-                    Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
-                Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
-                    Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
-                Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
-                Runtime->Register(CreateLabelsMaintainer({}), nodeId);
-            }
-        }
+        Runtime->RegisterService(MakeTenantPoolRootID(), Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
+        Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
+            Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
+        Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
+        Runtime->Register(CreateLabelsMaintainer({}), nodeId);
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,

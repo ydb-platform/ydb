@@ -247,6 +247,106 @@ public:
     }
 };
 
+class TBlobStorageController::TTxConvertToBridge : public TTransactionBase<TBlobStorageController> {
+    std::optional<TConfigState> State;
+    bool Finished = false;
+
+public:
+    TTxConvertToBridge(TBlobStorageController *controller)
+        : TTransactionBase(controller)
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_CONVERT_TO_BRIDGE; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+
+        // new groups are created bridged from now on
+        auto needsBridgeMode = [](const TStoragePoolInfo& pool) { return !pool.BridgeMode && !pool.DDisk; };
+        if (std::ranges::any_of(State->StoragePools.Get() | std::views::values, needsBridgeMode)) {
+            for (auto& pool : State->StoragePools.Unshare() | std::views::values) {
+                if (needsBridgeMode(pool)) {
+                    pool.BridgeMode = true;
+                }
+            }
+        }
+
+        // turn existing physical groups into inline piles
+        bool blocked = false;
+        State->Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
+            if (groupInfo.IsBridgeConversionCandidate()) {
+                TGroupInfo *group = State->Groups.FindForUpdate(groupId);
+                group->BridgePileId = TBridgePileId::FromPileIndex(0);
+                group->BridgeProxyGroupId = groupId;
+                auto *pile = group->BridgeGroupInfo.emplace().MutableBridgeGroupState()->AddPile();
+                groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                pile->SetGroupGeneration(group->Generation); // gets adjusted along with generation bump on commit
+                pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+                State->GroupContentChanged.insert(groupId);
+            } else if (groupInfo.BlocksBridgeConversion()) {
+                blocked = true;
+            }
+        });
+
+        if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+            YDB_LOG_ERROR("Failed to commit bridge conversion",
+                {"marker", "BSCBR14"},
+                {"error", *error});
+        } else {
+            Finished = !blocked;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        if (State) {
+            State->ApplyConfigUpdates();
+        }
+
+        YDB_LOG_INFO("Bridge conversion step complete",
+            {"marker", "BSCBR15"},
+            {"finished", Finished});
+
+        if (!Finished) {
+            Self->OnBridgeConversionStepDone();
+            return;
+        }
+
+        NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
+        request.MutableNotifyBscConversionFinished();
+        Self->InvokeOnRoot(std::move(request), [self = Self](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+            if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                // will be retried upon next storage config change
+                YDB_LOG_WARN("Failed to notify distconf about finished bridge conversion",
+                    {"marker", "BSCBR16"},
+                    {"result", result});
+            }
+            self->OnBridgeConversionStepDone();
+        });
+    }
+};
+
+void TBlobStorageController::CheckBridgeConversion() {
+    if (!Loaded || !StorageConfig || !StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+        return;
+    } else if (ConvertingToBridge) {
+        RecheckBridgeConversion = true;
+    } else {
+        ConvertingToBridge = true;
+        RecheckBridgeConversion = false;
+        Execute(std::make_unique<TTxConvertToBridge>(this));
+    }
+}
+
+void TBlobStorageController::OnBridgeConversionStepDone() {
+    Y_ABORT_UNLESS(ConvertingToBridge);
+    ConvertingToBridge = false;
+    if (RecheckBridgeConversion) {
+        CheckBridgeConversion();
+    }
+}
+
 void TBlobStorageController::CheckUnsyncedBridgePiles() {
     if (!StorageConfig->HasClusterStateDetails() || CheckingUnsyncedBridgePiles) {
         return; // no bridge mode cluster state details available

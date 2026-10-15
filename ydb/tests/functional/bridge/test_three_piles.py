@@ -237,6 +237,21 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.keep_only("r1")
         self.write_data()
 
+    @pytest.mark.parametrize("survivor", ["r1", "r3"], ids=["primary-survives", "primary-lost"])
+    def test_two_piles_fail_together(self, survivor):
+        self.create_data()
+        failed = [name for name in self.pile_names if name != survivor]
+        with ThreadPoolExecutor(max_workers=len(failed)) as executor:
+            list(executor.map(self.stop_pile, failed))
+        changes = [(name, DISCONNECTED) for name in failed]
+        if survivor != self.primary:
+            changes.append((survivor, PRIMARY))
+        self.update(changes, via=survivor)
+        self.states = {name: PRIMARY if name == survivor else DISCONNECTED for name in self.pile_names}
+        self.wait_states()
+        self.check_data()
+        self.write_data()
+
     def test_switch_with_third_pile_disconnected(self):
         self.create_data()
         self.disconnect("r3")

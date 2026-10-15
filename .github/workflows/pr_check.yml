@@ -249,8 +249,9 @@ jobs:
       shell: bash
       run: |
         set +e
-        speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' \
-          https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz)
+        url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
+        speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "$url")
+        proxy_speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "https://gh-proxy.com/$url")
         set -euo pipefail
         threshold=3000000
         use_proxy=false
@@ -258,7 +259,8 @@ jobs:
           use_proxy=true
         fi
         mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        echo "GitHub sample ${mb} MB/s, threshold 3 MB/s, use_proxy=${use_proxy}"
+        proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
+        echo "GitHub sample ${mb} MB/s, gh-proxy.com ${proxy_mb} MB/s, threshold 3 MB/s, use_proxy=${use_proxy}"
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"
@@ -329,8 +331,9 @@ jobs:
       shell: bash
       run: |
         set +e
-        speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' \
-          https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz)
+        url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
+        speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "$url")
+        proxy_speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "https://gh-proxy.com/$url")
         set -euo pipefail
         threshold=3000000
         use_proxy=false
@@ -338,7 +341,8 @@ jobs:
           use_proxy=true
         fi
         mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        echo "GitHub sample ${mb} MB/s, threshold 3 MB/s, use_proxy=${use_proxy}"
+        proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
+        echo "GitHub sample ${mb} MB/s, gh-proxy.com ${proxy_mb} MB/s, threshold 3 MB/s, use_proxy=${use_proxy}"
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"

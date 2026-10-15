@@ -112,26 +112,32 @@ public:
             if (stored.IsKnown()) {
                 AFL_ENSURE(stored.TableId == meta.TableId)
                     ("stored", stored.TableId)("incoming", meta.TableId);
-                // Metadata may arrive as borders-with-version or version-only (the
-                // caller had no resolved partitioning at hand). Compare borders only
-                // when both sides carry them; a version-only update just bumps the
-                // version and keeps the stored borders.
-                const bool bordersKnown = stored.Borders.From.size() > 0 || stored.Borders.To.size() > 0;
-                const bool incomingBorders = meta.Borders.From.size() > 0 || meta.Borders.To.size() > 0;
-                if (bordersKnown && incomingBorders) {
-                    AFL_ENSURE(SameBorders(stored.Borders, meta.Borders))
-                        ("shardId", shardId)
-                        ("storedFrom", stored.Borders.From.size())
-                        ("storedTo", stored.Borders.To.size())
-                        ("storedVersion", stored.PartitioningVersion)
-                        ("incomingFrom", meta.Borders.From.size())
-                        ("incomingTo", meta.Borders.To.size())
-                        ("incomingVersion", meta.PartitioningVersion);
-                }
-                stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
-                if (incomingBorders && !bordersKnown) {
-                    stored.Borders = meta.Borders;
-                }
+        // Metadata may arrive as borders-with-version or version-only (the caller
+        // had no resolved partitioning at hand). Compare borders only when both
+        // sides carry them. A version-only meta describes a shard absent from the
+        // caller's partitioning snapshot (e.g. a shard removed by a split/merge):
+        // it carries no borders, so it must not move the version of a stored meta
+        // that has borders — the stored version must keep matching the stored
+        // borders, or MoveShardTo's strictly-newer-version check between two
+        // borders-known metas breaks (from == to).
+        const bool bordersKnown = stored.Borders.From.size() > 0 || stored.Borders.To.size() > 0;
+        const bool incomingBorders = meta.Borders.From.size() > 0 || meta.Borders.To.size() > 0;
+        if (bordersKnown && incomingBorders) {
+            AFL_ENSURE(SameBorders(stored.Borders, meta.Borders))
+                ("shardId", shardId)
+                ("storedFrom", stored.Borders.From.size())
+                ("storedTo", stored.Borders.To.size())
+                ("storedVersion", stored.PartitioningVersion)
+                ("incomingFrom", meta.Borders.From.size())
+                ("incomingTo", meta.Borders.To.size())
+                ("incomingVersion", meta.PartitioningVersion);
+        }
+        if (!bordersKnown || incomingBorders) {
+            stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
+        }
+        if (incomingBorders && !bordersKnown) {
+            stored.Borders = meta.Borders;
+        }
             } else {
                 stored = meta;
             }

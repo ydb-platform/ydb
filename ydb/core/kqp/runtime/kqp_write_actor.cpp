@@ -1403,6 +1403,9 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
+            
+            // We need to register shards before sending Prepare/Commit to them, 
+            // since TxManager must know all shards that will participate in commit.
             TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }

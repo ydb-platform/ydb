@@ -55,6 +55,11 @@ Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
 
     Y_UNIT_TEST(VersionOnlyMetaKeepsBorders) {
         // A caller that knows only the version (no borders) must not clear borders.
+        // A version-only meta describes a shard that is absent from the resolved
+        // partitioning, so it must not move the version of a stored meta that has
+        // borders either: the shard is not part of that partitioning (e.g. it was
+        // removed by a split/merge) and its version must keep matching the stored
+        // borders for MoveShardTo's strictly-newer-version check.
         auto txManager = CreateKqpTransactionManager();
 
         TShardMeta withBorders;
@@ -70,7 +75,7 @@ Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
         txManager->AddShard(1, false, "/Root/Table", versionOnly);
 
         UNIT_ASSERT(txManager->GetShardMeta(1).IsKnown());
-        UNIT_ASSERT_VALUES_EQUAL(txManager->GetShardMeta(1).PartitioningVersion, 9);
+        UNIT_ASSERT_VALUES_EQUAL(txManager->GetShardMeta(1).PartitioningVersion, 7);
         UNIT_ASSERT(SameBorders(txManager->GetShardMeta(1).Borders, withBorders.Borders));
     }
 

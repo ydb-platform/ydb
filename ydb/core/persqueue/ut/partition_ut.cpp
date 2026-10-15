@@ -8590,6 +8590,51 @@ Y_UNIT_TEST_F(ReadLagEstimateUsesFirstUnreadMessage, TPartitionFixture) {
     Ctx->Runtime->DispatchEvents(options);
 }
 
+Y_UNIT_TEST_F(ReadLagClampsWhenFirstUnreadWrittenAfterLastRead, TPartitionFixture) {
+    // Live consumer (ReadOffset != -1, no cached read timestamps): the first
+    // unread message may be written after the last read activity. The lag must
+    // clamp to zero instead of wrapping around in the unsigned TDuration.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    const TInstant oldTs = TInstant::Now() - TDuration::Hours(5);
+    const TInstant recentTs = TInstant::Now() - TDuration::Seconds(1);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 3);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 1, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 2, 100, recentTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 3, 3);
+
+    auto probe = [&](const TActorContext& ctx) {
+        auto& userInfo = TPartitionTestWrapper::GetOrCreateUserInfo(*partition, "consumer", ctx);
+        // Read up to offset 2 long ago; the pending message 2 was written
+        // after that read, so the naive subtraction would go negative.
+        userInfo.Offset = 2;
+        userInfo.ReadOffset = 1; // GetReadOffset() == 2
+        userInfo.ReadTimestamp = TInstant::Now() - TDuration::Seconds(10);
+        UNIT_ASSERT_VALUES_EQUAL(userInfo.GetReadOffset(), 2);
+
+        const auto snapshot = TPartitionTestWrapper::CreateSnapshot(*partition, userInfo);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.ReadLag, TDuration::Zero());
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
 Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixture) {
     // E2E: InitComplete → ReportCounters and later GetClientOffset must not crash
     // when meta offsets exist without data keys (#49507).

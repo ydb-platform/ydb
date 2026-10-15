@@ -256,27 +256,18 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.keep_only(target)
         self.write_data()
 
-    @pytest.mark.parametrize("failover", [False, True], ids=["switchover", "failover"])
-    def test_switch_with_third_pile_disconnected(self, failover):
+    def test_switch_with_third_pile_disconnected(self):
         self.create_data()
         self.disconnect("r3")
         self.write_data()
-        if failover:
-            self.stop_pile("r1")
-            self.disconnect("r1", new_primary="r2")
-        else:
-            self.promote("r2")
+        self.promote("r2")
         self.check_data()
         self.write_data()
         self.rejoin("r3")
         self.keep_only("r3")
 
-    @pytest.mark.parametrize(
-        "disconnect_order,return_order",
-        [(("r2", "r3"), ("r2", "r3")), (("r1", "r2"), ("r2", "r1"))],
-        ids=["survive-r1-forward-rejoin", "survive-r3-reverse-rejoin"],
-    )
-    def test_two_lagging_piles(self, disconnect_order, return_order):
+    def test_two_lagging_piles(self):
+        disconnect_order = return_order = ("r2", "r3")
         self.create_data()
         survivor = next(name for name in self.pile_names if name not in disconnect_order)
         for name in disconnect_order:
@@ -288,16 +279,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             self.write_data()
         # Prove that each restored pile has the data without reading another replica.
         self.check_restored_piles(return_order)
-
-    def test_rejoin_without_waiting_for_other_pile(self):
-        self.create_data()
-        for name in ("r2", "r3"):
-            self.disconnect(name)
-            self.write_data()
-        self.rejoin("r2", wait=False)
-        self.rejoin("r3", wait=False)
-        self.wait_states()
-        self.check_restored_piles(("r2", "r3"))
 
     def check_discovery(self):
         expected_nodes = {

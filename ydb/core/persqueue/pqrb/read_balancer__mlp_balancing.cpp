@@ -61,21 +61,6 @@ const TPartitionGraph::Node* TMLPConsumer::PickNextPartition() {
         return GetPartitionGraph().GetPartition(activePartitions[partitionId]);
     }
 
-    // Prefer a partition with available (unlocked, non-delayed) messages.
-    // Metrics are reported on the consumer heartbeat and may be stale or unknown,
-    // so fall back to the plain round-robin when no partition qualifies.
-    for (size_t i = 0; i < PartitionsForBalancing.size(); ++i) {
-        const auto index = (PartitionIterator + i) % PartitionsForBalancing.size();
-        const auto partitionId = PartitionsForBalancing[index];
-        auto it = Partitions.find(partitionId);
-        if (it != Partitions.end()
-                && it->second.Metrics.Messages > it->second.Metrics.LockedMessages + it->second.Metrics.DelayedMessages)
-        {
-            PartitionIterator = index + 1;
-            return GetPartitionGraph().GetPartition(partitionId);
-        }
-    }
-
     auto partitionId = PartitionIterator++ % PartitionsForBalancing.size();
     return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
 }
@@ -223,15 +208,6 @@ void TMLPConsumer::Rebuild() {
             continue;
         }
         if (!readyForReadingPartitions || status.UseForReading) {
-            PartitionsForBalancing.push_back(partitionId);
-        }
-    }
-
-    // Partitions without a status entry have not reported yet; keep them until
-    // their first status arrives, otherwise a partially reported topic collapses
-    // the balancing set to the already reported partitions.
-    for (const auto partitionId : Balancer.GetActivePartitions()) {
-        if (!Partitions.contains(partitionId)) {
             PartitionsForBalancing.push_back(partitionId);
         }
     }

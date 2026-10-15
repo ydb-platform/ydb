@@ -152,8 +152,9 @@ private:
         }
 
         const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
-        KesusPath = StartRequest->Record.session_start().path();
-        RequestEvent->CountResourcePath(KesusPath);
+        const auto& path = StartRequest->Record.session_start().path();
+        RequestEvent->CountResourcePath(path);
+        KesusPath = RequestEvent->NormalizePath(path);
 
         auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {

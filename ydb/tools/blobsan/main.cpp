@@ -260,15 +260,15 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
                 r.Ingress |= record.MemRec.Ingress.Raw();
             }
 
-            auto ingress = TBarrierIngress::CreateFromRaw(r.Ingress);
-            if (ingress.IsQuorum(ingressCache.Get())) {
+//            auto ingress = TBarrierIngress::CreateFromRaw(r.Ingress);
+//            if (ingress.IsQuorum(ingressCache.Get())) {
                 auto& key = r.Hard ? barrier.HardKey : barrier.SoftKey;
                 auto& value = r.Hard ? barrier.Hard : barrier.Soft;
                 if (!value || key < it->first) { // newer barrier with quorum wins
                     key = it->first;
                     value.emplace(r.CollectGen, r.CollectStep);
                 }
-            }
+//            }
         };
 
         auto processRecord = [&](auto& record, const auto& callback) {
@@ -542,8 +542,15 @@ int main(int argc, char **argv) {
                 }
             }
 
-            if (!blob.UnderBarrierMask || blob.Hard || blob.Info.KeepMode != KEEP ||
-                    (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout))) {
+            if (blob.Hard || blob.Info.KeepMode == DO_NOT_KEEP) {
+                continue;
+            }
+            if (blob.UnderBarrierMask && blob.Info.KeepMode != KEEP) {
+                continue;
+            }
+
+//            if (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout)) {
+            if (isFull(originalLocalLayout)) {
                 // looks like correct blob -- either it is not under barrier (and may be being written right now), or
                 // it is with keep flags and fully written with correct ingress bits on every disk
                 continue;
@@ -577,7 +584,7 @@ int main(int argc, char **argv) {
                 case DO_NOT_KEEP: keepMode = "doNotKeep"; break;
             }
 
-            err << "GroupId# " << groupId << " BlobId# " << blobId
+            err << "GroupId# " << groupId << " BlobId# " << blobId << (isFull(blob.Info.Layout) ? " FULL" : "")
                 << "\n\tOrderNums#          " << FormatList(nums)
                 << "\n\tKeepMode#           " << keepMode
                 << "\n\tLayout#             " << FormatLayout(blob.Info.Layout, type)

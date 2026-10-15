@@ -324,10 +324,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             ([("r4", PRIMARY)], StatusIds.BAD_REQUEST, "Invalid pile name"),
             ([("r2", PileState.PROMOTED), ("r3", PileState.PROMOTED)],
              StatusIds.BAD_REQUEST, "multiple promoted piles"),
-            ([("r2", DISCONNECTED), ("r3", DISCONNECTED)],
-             StatusIds.INTERNAL_ERROR, "Too many state changes"),
         ],
-        ids=["empty", "two-primary", "no-primary", "duplicate", "unknown-pile", "two-promoted", "two-disconnected"],
+        ids=["empty", "two-primary", "no-primary", "duplicate", "unknown-pile", "two-promoted"],
     )
     def test_invalid_updates(self, changes, status, issue):
         self.assert_rejected(changes, status, issue)

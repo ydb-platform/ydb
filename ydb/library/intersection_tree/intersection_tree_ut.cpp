@@ -51,6 +51,20 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
         return ranges;
     }
 
+    std::vector<TDebugRange> TreeToRangesBackward(const TExampleTree& tree) {
+        TExampleTree::TFoundRange last;
+        tree.ForEachRange([&](const auto& range) {
+            last = range;
+            return true;
+        });
+        std::vector<TDebugRange> ranges;
+        for (auto range = last; range; range = range.Prev()) {
+            ranges.push_back({ range.GetLeftPartitionKey(), range.GetRightPartitionKey(), range.GetCount() });
+        }
+        std::reverse(ranges.begin(), ranges.end());
+        return ranges;
+    }
+
     std::vector<TDebugRange> SpanToRanges(const std::span<TExampleRange>& srcRanges) {
         std::map<TExampleTree::TPartitionKey, i32> deltas;
         for (const auto& range : srcRanges) {
@@ -92,7 +106,7 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
     }
 
     Y_UNIT_TEST(Randomized) {
-        size_t removeCount = 99;
+        SetRandomSeed(42);
         auto rangesVec = GenerateRanges(100, 1000000);
         std::span<TExampleRange> ranges(rangesVec.data(), rangesVec.size());
         TExampleTree tree;
@@ -104,14 +118,23 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
             ToString(TreeToRanges(tree)),
             ToString(SpanToRanges(ranges))
         );
+        UNIT_ASSERT_VALUES_EQUAL(
+            ToString(TreeToRangesBackward(tree)),
+            ToString(SpanToRanges(ranges))
+        );
         CheckMaxRange(tree);
         nextPosition = 0;
-        for (size_t i = 0; i < removeCount && !ranges.empty(); ++i) {
+        while (!ranges.empty()) {
             tree.Remove(nextPosition++);
             ranges = ranges.subspan(1);
             UNIT_ASSERT_VALUES_EQUAL(
                 ToString(TreeToRanges(tree)),
                 ToString(SpanToRanges(ranges))
+            );
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                ToString(TreeToRangesBackward(tree)),
+                ToString(SpanToRanges(ranges)),
+                "after " << nextPosition << " removals"
             );
             CheckMaxRange(tree);
         }
@@ -130,6 +153,8 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
     };
 
     std::unique_ptr<TRandomTree> BuildRandomTree() {
+        // Reproduce both the generated ranges and the tree's node priorities.
+        SetRandomSeed(42);
         auto b = std::make_unique<TRandomTree>();
         b->RangesVec = GenerateRanges(100, 1000000);
         size_t next = 0;
@@ -198,20 +223,52 @@ Y_UNIT_TEST_SUITE(IntersectionTree) {
         UNIT_ASSERT(checked > 0);
     }
 
+    Y_UNIT_TEST(InclusiveFlagsForKnownRanges) {
+        struct TExpectedRange {
+            ui64 LeftKey;
+            ui64 RightKey;
+            bool LeftInclusive;
+            bool RightInclusive;
+            i32 Count;
+        };
+        struct TTestCase {
+            std::vector<TExampleRange> Ranges;
+            std::vector<TExpectedRange> Expected;
+        };
+        const TTestCase testCases[] = {
+            {
+                {{10, 20}, {15, 25}},
+                {{10, 15, true, false, 1}, {15, 20, true, true, 2}, {20, 25, false, true, 1}},
+            },
+            {
+                {{10, 20}, {20, 30}},
+                {{10, 20, true, false, 1}, {20, 20, true, true, 2}, {20, 30, false, true, 1}},
+            },
+        };
+        for (const auto& testCase : testCases) {
+            SetRandomSeed(42);
+            TExampleTree tree;
+            size_t next = 0;
+            for (const auto& range : testCase.Ranges) {
+                tree.Add(next++, range.MinKey, range.MaxKey);
+            }
+            auto range = tree.FirstRange();
+            for (const auto& expected : testCase.Expected) {
+                UNIT_ASSERT_C(range, "expected range " << expected.LeftKey << ", " << expected.RightKey);
+                UNIT_ASSERT_VALUES_EQUAL(range.GetLeftKey(), expected.LeftKey);
+                UNIT_ASSERT_VALUES_EQUAL(range.GetRightKey(), expected.RightKey);
+                UNIT_ASSERT_VALUES_EQUAL(range.IsLeftInclusive(), expected.LeftInclusive);
+                UNIT_ASSERT_VALUES_EQUAL(range.IsRightInclusive(), expected.RightInclusive);
+                UNIT_ASSERT_VALUES_EQUAL(range.GetCount(), expected.Count);
+                range = range.Next();
+            }
+            UNIT_ASSERT(!range);
+        }
+    }
+
     Y_UNIT_TEST(PrevMatchesNext) {
         auto b = BuildRandomTree();
-        std::vector<TDebugRange> forward = TreeToRanges(b->Tree);
-        TExampleTree::TFoundRange last;
-        b->Tree.ForEachRange([&](const auto& r) {
-            last = r;
-            return true;
-        });
-        std::vector<TDebugRange> backward;
-        for (auto r = last; r; r = r.Prev()) {
-            backward.push_back({ r.GetLeftPartitionKey(), r.GetRightPartitionKey(), r.GetCount() });
-        }
-        std::reverse(backward.begin(), backward.end());
-        UNIT_ASSERT_VALUES_EQUAL(ToString(backward), ToString(forward));
+        UNIT_ASSERT_VALUES_EQUAL(ToString(TreeToRangesBackward(b->Tree)), ToString(TreeToRanges(b->Tree)));
     }
 
     Y_UNIT_TEST(NextPrevRoundTrip) {

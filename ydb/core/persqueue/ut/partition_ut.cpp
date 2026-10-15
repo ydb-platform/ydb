@@ -114,6 +114,14 @@ public:
         return partition.GetWriteTimeEstimate(offset);
     }
 
+    static TConsumerSnapshot CreateSnapshot(TPartition& partition, TUserInfo& userInfo) {
+        return partition.CreateSnapshot(userInfo);
+    }
+
+    static TUserInfo& GetOrCreateUserInfo(TPartition& partition, const TString& user, const TActorContext& ctx) {
+        return partition.UsersInfoStorage->GetOrCreate(user, ctx);
+    }
+
     static ui64 GetStartOffset(TPartition& partition) {
         return partition.GetStartOffset();
     }
@@ -8528,6 +8536,58 @@ Y_UNIT_TEST_F(GetWriteTimeEstimateFirstKeyWithPartNoDoesNotAbort, TPartitionFixt
 
     UNIT_ASSERT_VALUES_EQUAL(
         TPartitionTestWrapper::GetWriteTimeEstimate(*partition, 272449), ts);
+}
+
+Y_UNIT_TEST_F(ReadLagEstimateUsesFirstUnreadMessage, TPartitionFixture) {
+    // LOGBROKER-10672: after partition restart the consumer has no read state
+    // (ReadOffset == -1, no actual timestamps), so the read lag is estimated
+    // from blob write times. The estimate must use the write time of the first
+    // UNREAD message, not of the message before it (the last read one).
+    // Otherwise a nearly-caught-up consumer in a low-traffic topic reports a
+    // multi-hour lag spike right after the restart.
+    UNIT_ASSERT(Ctx.Defined());
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+    const TPartitionId partitionId(1);
+
+    const TInstant oldTs = TInstant::Now() - TDuration::Hours(5);
+    const TInstant recentTs = TInstant::Now() - TDuration::Seconds(1);
+
+    auto& cz = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    ClearEncoderKeys(cz);
+    SetEncoderRange(cz, 0, 3);
+    AddBodyKeyToEncoder(cz, partitionId, 0, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 1, 100, oldTs);
+    AddBodyKeyToEncoder(cz, partitionId, 2, 100, recentTs);
+
+    auto& fwz = TPartitionTestWrapper::BlobEncoder(*partition);
+    ClearEncoderKeys(fwz);
+    SetEncoderRange(fwz, 3, 3);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 3u);
+
+    auto probe = [&](const TActorContext& ctx) {
+        auto& userInfo = TPartitionTestWrapper::GetOrCreateUserInfo(*partition, "consumer", ctx);
+        // Post-restart state: committed offset 2, one pending message at offset
+        // 2, no read performed yet, ReadTimestamp reset to now.
+        userInfo.Offset = 2;
+        userInfo.ReadTimestamp = TInstant::Now();
+        UNIT_ASSERT_VALUES_EQUAL(userInfo.GetReadOffset(), 2);
+
+        const auto snapshot = TPartitionTestWrapper::CreateSnapshot(*partition, userInfo);
+        // The only unread message was written ~1s ago; the reported read lag
+        // must be based on it, not on the 5-hour-old message before it.
+        UNIT_ASSERT_C(snapshot.ReadLag <= TDuration::Seconds(5),
+                      "ReadLag is " << snapshot.ReadLag.ToString());
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
 }
 
 Y_UNIT_TEST_F(GetClientOffsetSurvivesInitWithMetaButNoDataKeys, TPartitionFixture) {

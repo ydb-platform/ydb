@@ -1166,12 +1166,16 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
     } else if (userInfo.ReadOffset == -1) {
-        result.LastReadMessage = result.LastCommittedMessage;
+        // No read since restart: estimate by the first unread message's write time.
+        auto timestamp = GetWriteTimeEstimate(readOffset, /*stepsBack=*/1);
+        result.LastReadMessage.CreateTimestamp = timestamp;
+        result.LastReadMessage.WriteTimestamp = timestamp;
     } else if (userInfo.ReadWriteTimestamp) {
         result.LastReadMessage.CreateTimestamp = userInfo.ReadCreateTimestamp;
         result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
     } else {
-        auto timestamp = GetWriteTimeEstimate(readOffset);
+        // readOffset is the first UNREAD message: estimate by its own write time.
+        auto timestamp = GetWriteTimeEstimate(readOffset, /*stepsBack=*/1);
         result.LastReadMessage.CreateTimestamp = timestamp;
         result.LastReadMessage.WriteTimestamp = timestamp;
     }
@@ -1541,7 +1545,7 @@ const std::deque<TDataKey>& GetContainer(const TPartitionBlobEncoder& zone, ui64
 }
 
 //zero means no such record
-TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
+TInstant TPartition::GetWriteTimeEstimate(ui64 offset, ui64 stepsBack) const {
     if (offset < GetStartOffset()) {
         offset = GetStartOffset();
     }
@@ -1586,9 +1590,11 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
                    offset < it->Key.GetOffset() ||
                    it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
 
-    --it;
-    if (it != container.begin())
+    // Step back to the requested key: 2 steps for the next-to-commit offset
+    // (last committed message), 1 step for the first unread offset.
+    for (ui64 i = 0; i < stepsBack && it != container.begin(); ++i) {
         --it;
+    }
 
     return it->Timestamp;
 }

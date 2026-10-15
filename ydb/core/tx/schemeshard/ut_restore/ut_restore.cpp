@@ -4227,14 +4227,54 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         auto* policy = profiles->AddPartitioningPolicies();
         policy->SetName("uniform-default");
         policy->SetUniformPartitionsCount(3);
+        policy->SetAutoSplit(true);
+        policy->SetAutoMerge(true);
+        policy->SetSizeToSplit(128 * 1024 * 1024);
+        policy->SetMaxPartitionsCount(8);
         auto* profile = profiles->AddTableProfiles();
         profile->SetName("default");
         profile->SetPartitioningPolicy("uniform-default");
         SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(notification));
-        // The source plan must override the default profile's three uniform partitions.
-        Run(runtime, env, {{"/table_metadata.yson", metadata},
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3Mock({{"/table_metadata.yson", metadata},
             {"/table_0_1", part({{"a", -10}, {"a", -1}})},
-            {"/table_2_3", part({{"a", 0}, {"b", -100}})}}, YtImportRequest());
+            {"/table_2_3", part({{"a", 0}, {"b", -100}})}}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> restore(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+        });
+        TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
+        runtime.WaitFor("YT source layout created before restore", [&] { return !restore.empty(); });
+        const auto duringRestore = DescribePath(runtime, "/MyRoot/Table", true, false, true);
+        UNIT_ASSERT(duringRestore.GetPathDescription().GetTable().GetIsRestore());
+        UNIT_ASSERT_VALUES_EQUAL(duringRestore.GetPathDescription().TablePartitionsSize(), 2);
+        TestDescribeResult(duringRestore, {
+            NLs::SizeToSplitEqual(128 * 1024 * 1024),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(8),
+        });
+        UNIT_ASSERT(!duringRestore.GetPathDescription().GetTable().GetPartitionConfig()
+            .GetPartitioningPolicy().HasSplitByLoadSettings());
+        // Restore state protects the source layout while normal automatic partitioning remains configured.
+        const auto& partitions = duringRestore.GetPathDescription().GetTablePartitions();
+        TestSplitTable(runtime, 200, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SourceTabletId: %lu
+        )", partitions.Get(0).GetDatashardId(), partitions.Get(1).GetDatashardId()),
+            {NKikimrScheme::StatusInvalidParameter});
+        restore.Stop().Unblock();
+        env.TestWaitNotification(runtime, 100);
+        TestGetImport(runtime, 100, "/MyRoot");
+        const auto afterRestore = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT(!afterRestore.GetPathDescription().GetTable().GetIsRestore());
+        TestDescribeResult(afterRestore, {
+            NLs::SizeToSplitEqual(128 * 1024 * 1024),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(8),
+        });
+        UNIT_ASSERT(!afterRestore.GetPathDescription().GetTable().GetPartitionConfig()
+            .GetPartitioningPolicy().HasSplitByLoadSettings());
         const auto shards = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
         NKqp::CompareYson(R"([[[[["a";"-10";["a:-10"]];["a";"-1";["a:-1"]]];%false]]])", shards[0]);

@@ -351,8 +351,12 @@ std::expected<NKikimrBackup::TS3DownloadState, TString> ConsumeYt(
     NKikimrBackup::TS3DownloadState state;
     ui64 batches = 0;
     for (ui64 step = 0; step < source.size() * 4 + 100; ++step) {
+        const auto before = rows.size();
         auto result = engine.GetData(pool, CaptureRows(rows), {});
         if (!result) return std::unexpected(result.error());
+        if (result->Status != IImportS3Engine::EDataStatus::Ready) {
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), before);
+        }
         if (result->Status == IImportS3Engine::EDataStatus::Finished) return state;
         if (result->Status == IImportS3Engine::EDataStatus::Yield) continue;
         if (result->Status == IImportS3Engine::EDataStatus::Ready) {
@@ -1322,6 +1326,153 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "first\nline");
         UNIT_ASSERT_VALUES_EQUAL(rows[2].Key, "k3");
+    }
+
+    Y_UNIT_TEST(YtBatchesCompressedRowsAndReplaysRejectedUploads) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        const TEngineFixture fixture(scheme);
+        constexpr ui64 RowCount = 12 * 1024;
+        const TString value(1024, 'x');
+        TStringBuilder text;
+        for (ui64 i = 0; i < RowCount; ++i) {
+            text << "{key=k" << 100000 + i << ";value=\"" << value << "\"};";
+        }
+        const auto source = YtGzip(text);
+        UNIT_ASSERT_LT(source.size(), 512_KB);
+
+        for (const auto [readSize, bufferLimit] : {
+                std::pair<ui32, ui64>{8_MB, 16_MB}, {8_MB, 512_KB},
+                {512_KB, 16_MB}, {64_MB, 128_MB}}) {
+            auto engine = MakeYtEngine(fixture, source, RowCount, readSize, bufferLimit);
+            const ui64 budget = Min<ui64>(readSize, bufferLimit, 8_MB);
+            TMemoryPool pool(256);
+            TVector<TDecodedRow> rows;
+            NKikimrBackup::TS3DownloadState durable;
+            ui64 committedBatches = 0;
+            ui64 committedBytes = 0;
+            bool rejected = false;
+            bool finished = false;
+            for (ui32 step = 0; step < 10000 && !finished; ++step) {
+                const auto before = rows.size();
+                const auto data = ExtractValue(engine->GetData(pool, CaptureRows(rows), {}));
+                if (data.Status == IImportS3Engine::EDataStatus::Ready) {
+                    UNIT_ASSERT_VALUES_EQUAL(data.Batch.Rows, rows.size() - before);
+                    UNIT_ASSERT_VALUES_EQUAL(data.Batch.DownloadStateAfter.GetYsonGzip().GetCommittedRows(), rows.size());
+                    UNIT_ASSERT_LE(data.Batch.DataBytes, budget + 32_KB);
+                    const auto waiting = ExtractValue(engine->GetData(pool, CaptureRows(rows), {}));
+                    UNIT_ASSERT(waiting.Status == IImportS3Engine::EDataStatus::WaitingForCommit);
+                    UNIT_ASSERT_VALUES_EQUAL(waiting.Batch.Id, data.Batch.Id);
+                    UNIT_ASSERT_VALUES_EQUAL(rows.size() - before, data.Batch.Rows);
+                    UNIT_ASSERT(ExtractValue(engine->NextRange()).Status == IImportS3Engine::ENextRangeStatus::Blocked);
+                    if (committedBatches == 1 && !rejected) {
+                        // The second upload failed: replay only the durable prefix,
+                        // including actor yields, before emitting its rows again.
+                        rows.resize(durable.GetYsonGzip().GetCommittedRows());
+                        AssertSuccess(engine->RestoreFromState(0, durable));
+                        rejected = true;
+                        continue;
+                    }
+                    committedBatches += data.Batch.Rows != 0;
+                    committedBytes += data.Batch.DataBytes;
+                    durable = data.Batch.DownloadStateAfter;
+                    AssertSuccess(engine->Commit(data.Batch.Id));
+                } else {
+                    // The downloader discards its request builder on either status.
+                    UNIT_ASSERT_VALUES_EQUAL(rows.size(), before);
+                    if (data.Status == IImportS3Engine::EDataStatus::NeedInput) {
+                        const auto next = ExtractValue(engine->NextRange());
+                        UNIT_ASSERT(next.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                        AssertSuccess(engine->PutRange(next.Range, Slice(source, next.Range)));
+                    } else if (data.Status == IImportS3Engine::EDataStatus::Finished) {
+                        finished = true;
+                    } else {
+                        UNIT_ASSERT(data.Status == IImportS3Engine::EDataStatus::Yield);
+                    }
+                }
+            }
+            UNIT_ASSERT(finished && rejected);
+            UNIT_ASSERT(durable.GetYsonGzip().GetFinished());
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), RowCount);
+            UNIT_ASSERT_VALUES_EQUAL(committedBytes, RowCount * (7 + value.size()));
+            // A few budget-sized uploads, even though the whole gzip fits in one GET.
+            UNIT_ASSERT_LE(committedBatches, 2 * ((committedBytes + budget - 1) / budget));
+            for (ui64 i = 0; i < rows.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(rows[i].Key, TStringBuilder() << "k" << 100000 + i);
+                UNIT_ASSERT_VALUES_EQUAL(rows[i].Value, value);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(YtBatchesSparseRowsBySerializedSize) {
+        auto scheme = MakeUint32KeyTableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        while (scheme.ColumnsSize() < 10000) {
+            const ui32 id = scheme.ColumnsSize() + 1;
+            auto* column = scheme.AddColumns();
+            column->SetId(id);
+            column->SetName(TStringBuilder() << "value" << id);
+            column->SetTypeId(NScheme::NTypeIds::Uint64);
+        }
+        const TEngineFixture fixture(scheme);
+        constexpr ui32 RowCount = 2000;
+        TStringBuilder text;
+        for (ui32 i = 0; i < RowCount; ++i) {
+            text << "{key=" << i << "u};";
+        }
+        const auto source = YtGzip(text);
+        auto engine = MakeYtEngine(fixture, source, RowCount, 8_MB, 128_MB);
+        TMemoryPool pool(256);
+        ui32 rows = 0;
+        ui64 uploadBytes = 0;
+        ui32 batches = 0;
+        const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
+            UNIT_ASSERT_VALUES_EQUAL(keys.front().AsValue<ui32>(), rows++);
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 9999);
+            for (const auto& cell : values) {
+                UNIT_ASSERT(cell.IsNull());
+            }
+            uploadBytes += TSerializedCellVec::SerializedSize(keys) + TSerializedCellVec::SerializedSize(values);
+            return {};
+        };
+        for (ui32 step = 0; step < 100; ++step) {
+            const auto data = ExtractValue(engine->GetData(pool, addRow, {}));
+            if (data.Status == IImportS3Engine::EDataStatus::Finished) {
+                UNIT_ASSERT_VALUES_EQUAL(rows, RowCount);
+                UNIT_ASSERT_GE(batches, 9);
+                UNIT_ASSERT_LE(batches, 11);
+                return;
+            }
+            if (data.Status == IImportS3Engine::EDataStatus::Ready) {
+                // Only 8 KiB of values, but about 80 MiB of serialized NULL headers.
+                UNIT_ASSERT_LE(uploadBytes, 8_MB + 64_KB);
+                batches += data.Batch.Rows != 0;
+                uploadBytes = 0;
+                AssertSuccess(engine->Commit(data.Batch.Id));
+            } else {
+                UNIT_ASSERT(data.Status == IImportS3Engine::EDataStatus::NeedInput);
+                const auto next = ExtractValue(engine->NextRange());
+                UNIT_ASSERT(next.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                AssertSuccess(engine->PutRange(next.Range, Slice(source, next.Range)));
+            }
+        }
+        UNIT_FAIL("sparse YT import did not finish");
+    }
+
+    Y_UNIT_TEST(YtRowCrossingBatchBudget) {
+        auto scheme = MakeUtf8TableScheme();
+        scheme.MutableColumns(0)->SetNotNull(true);
+        const TEngineFixture fixture(scheme);
+        const TString large(2_MB, 'x');
+        const auto source = YtGzip(TString("{key=k1;value=first};{key=k2;value=\"") + large + "\"};{key=k3;value=last};");
+        auto engine = MakeYtEngine(fixture, source, 3, 512_KB, 4_MB);
+        TVector<TDecodedRow> rows;
+        const auto state = ExtractValue(ConsumeYt(*engine, source, rows));
+        UNIT_ASSERT(state.GetYsonGzip().GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rows[0].Value, "first");
+        UNIT_ASSERT_VALUES_EQUAL(rows[1].Value, large);
+        UNIT_ASSERT_VALUES_EQUAL(rows[2].Value, "last");
     }
 
     Y_UNIT_TEST(YtCommittedPrefixYieldsWithoutChangingDurableCursor) {

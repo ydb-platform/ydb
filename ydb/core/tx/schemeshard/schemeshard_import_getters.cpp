@@ -1992,8 +1992,6 @@ private:
             if (!NBackup::NYt::ParseMetadata(message.Body, Schema, error)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, error);
             }
-            Schema.Table.mutable_partitioning_settings()->set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
-            Schema.Table.mutable_partitioning_settings()->set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
             for (const auto index : Schema.KeyColumns) {
                 KeyTypes.emplace_back(Schema.Description.GetColumns(index).GetTypeId());
             }

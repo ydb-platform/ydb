@@ -1673,11 +1673,15 @@ public:
             return TDataResult{.Status = EDataStatus::Finished};
         }
         AddRow = &addRow;
-        BatchRows = BatchBytes = 0;
+        BatchRows = BatchBytes = BatchUploadBytes = 0;
         ui64 decompressedBytes = 0;
+        // Leave room for a row crossing the budget (at most 16 MiB), including when
+        // ReadBatchSize is raised. The same batches feed ColumnShard uploads.
+        const ui64 batchLimit = Min<ui64>(Settings.ReadBatchSize, Settings.BufferSizeLimit, 8 * 1024 * 1024);
+        const ui64 maxFixedRowBytes = 2 * sizeof(ui16) + Schema.Columns.size() * (sizeof(ui32) + sizeof(ui64));
         constexpr ui64 REPLAY_TURN_LIMIT = 256 * 1024;
         while (!Finished) {
-            if (decompressedBytes >= REPLAY_TURN_LIMIT) {
+            if (!BatchRows && decompressedBytes >= REPLAY_TURN_LIMIT) {
                 AddRow = nullptr;
                 return TDataResult{.Status = EDataStatus::Yield};
             }
@@ -1708,11 +1712,14 @@ public:
             Stream.next_in = Input.empty() ? nullptr : reinterpret_cast<Bytef*>(Input.Detach() + InputPos);
             Stream.avail_in = Input.size() - InputPos;
             Stream.next_out = reinterpret_cast<Bytef*>(output);
-            Stream.avail_out = sizeof(output);
+            // Omitted nullable columns still need serialized cell headers; numeric
+            // cells can expand to eight bytes. A chunk ends at most one row per byte.
+            const size_t outputSize = Min<ui64>(sizeof(output), Max<ui64>(1, (batchLimit - BatchUploadBytes) / maxFixedRowBytes));
+            Stream.avail_out = outputSize;
             const auto before = Stream.avail_in;
             const int result = inflate(&Stream, Z_NO_FLUSH);
             InputPos += before - Stream.avail_in;
-            const size_t produced = sizeof(output) - Stream.avail_out;
+            const size_t produced = outputSize - Stream.avail_out;
             decompressedBytes += produced;
             DrainPending = Stream.avail_out == 0 && result != Z_STREAM_END;
             if (result != Z_OK && result != Z_STREAM_END && result != Z_BUF_ERROR) {
@@ -1736,7 +1743,9 @@ public:
                 }
                 return Fail("YT gzip decoder made no progress");
             }
-            if (BatchRows) {
+            // Feed can finish a row that started in an earlier chunk, so the limit
+            // is a target. Never yield with rows in the caller's uncommitted upload.
+            if (BatchRows && (BatchUploadBytes >= batchLimit || decompressedBytes >= batchLimit || GzipEnded)) {
                 break;
             }
         }
@@ -1843,6 +1852,7 @@ private:
                     return false;
                 }
                 ++BatchRows;
+                BatchUploadBytes += TSerializedCellVec::SerializedSize(keys) + TSerializedCellVec::SerializedSize(values);
                 for (const auto& cell : row.Cells) {
                     BatchBytes += cell.Size();
                 }
@@ -1866,7 +1876,7 @@ private:
     TString Input, Error;
     size_t InputPos = 0;
     ui64 Offset = 0, SeenRows = 0, CommittedRows = 0, NextId = 1;
-    ui64 BatchRows = 0, BatchBytes = 0;
+    ui64 BatchRows = 0, BatchBytes = 0, BatchUploadBytes = 0;
     bool GzipEnded = false, Finished = false, DrainPending = false;
     TMaybe<TImportRange> Outstanding;
     TMaybe<TDataBatch> Waiting;

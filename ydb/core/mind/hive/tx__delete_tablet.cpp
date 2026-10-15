@@ -34,6 +34,7 @@ public:
                     Self->UpdateCounterTabletsStarting(-1);
                 }
                 tablet->State = ETabletState::Deleting;
+                Self->RecordTabletEvent(*tablet, EHiveEventType::Deleting, EHiveEventReason::OwnerRequest);
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State, Schema::Tablet::LeaderNode>(ETabletState::Deleting, 0);
                 for (const TActorId& actor : tablet->ActorsToNotifyOnRestart) {
                     SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "delete"));
@@ -42,7 +43,7 @@ public:
                 if (std::exchange(tablet->IsMarkedForReassign, false)) {
                     Self->UpdateCounterTabletsReassigning(-1);
                 }
-                tablet->InitiateStop(SideEffects);
+                tablet->InitiateStop(SideEffects, EHiveEventReason::Deleting);
                 for (TTabletInfo& follower : tablet->Followers) {
                     for (const TActorId& actor : follower.ActorsToNotifyOnRestart) {
                         SideEffects.Send(actor, new TEvPrivate::TEvRestartComplete(follower.GetFullTabletId(), "delete"));
@@ -51,7 +52,7 @@ public:
                     if (follower.IsStarting()) {
                         Self->UpdateCounterTabletsStarting(-1);
                     }
-                    follower.InitiateStop(SideEffects);
+                    follower.InitiateStop(SideEffects, EHiveEventReason::Deleting);
                     db.Table<Schema::TabletFollowerTablet>().Key(follower.GetFullTabletId()).Update<Schema::TabletFollowerTablet::FollowerNode>(0);
                 }
                 Self->BlockStorageForDelete(tabletId, SideEffects);

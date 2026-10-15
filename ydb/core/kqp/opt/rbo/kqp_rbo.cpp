@@ -225,7 +225,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
         }
 
         auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
-            | ERuleProperties::RequireLiveness;
+            | ERuleProperties::RequireLiveness | ERuleProperties::RequireTypes;
         ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
         TUnorderedIUs live;
         for (const auto& item : root) {

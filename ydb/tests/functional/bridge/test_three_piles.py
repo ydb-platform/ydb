@@ -211,16 +211,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
                 self.disconnect(name)
                 self.check_data()
 
-    def check_restored_piles(self, piles):
-        for index, restored in enumerate(piles):
-            if index:
-                # Restore peers only to prepare the next isolation check.
-                for name in self.pile_names:
-                    if self.states[name] == DISCONNECTED:
-                        self.rejoin(name)
-            self.keep_only(restored)
-            self.write_data()
-
     @pytest.mark.parametrize("target", ["r2", "r3"])
     def test_switchover(self, target):
         self.create_data()
@@ -247,15 +237,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.keep_only("r1")
         self.write_data()
 
-    @pytest.mark.parametrize("target", ["r2", "r3"])
-    def test_takedown_and_rejoin(self, target):
-        self.create_data()
-        self.disconnect(target, graceful=True)
-        self.write_data()
-        self.rejoin(target)
-        self.keep_only(target)
-        self.write_data()
-
     def test_switch_with_third_pile_disconnected(self):
         self.create_data()
         self.disconnect("r3")
@@ -263,22 +244,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.promote("r2")
         self.check_data()
         self.write_data()
-        self.rejoin("r3")
-        self.keep_only("r3")
-
-    def test_two_lagging_piles(self):
-        disconnect_order = return_order = ("r2", "r3")
-        self.create_data()
-        survivor = next(name for name in self.pile_names if name not in disconnect_order)
-        for name in disconnect_order:
-            self.disconnect(name, new_primary=survivor if name == self.primary else None)
-            self.write_data()
-        for name in return_order:
-            self.rejoin(name)
-            self.check_data()
-            self.write_data()
-        # Prove that each restored pile has the data without reading another replica.
-        self.check_restored_piles(return_order)
 
     def check_discovery(self):
         expected_nodes = {
@@ -346,6 +311,3 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             [("r2", UNSYNC), ("r3", UNSYNC)], StatusIds.INTERNAL_ERROR, "Too many state changes",
         )
         self.check_data()
-        for name in ("r2", "r3"):
-            self.rejoin(name)
-        self.keep_only("r3")

@@ -1,4 +1,4 @@
-# Replace example.com and the partition labels with those of your host.
+# Replace example.com everywhere and the partition labels with those of your host.
 hosts:
   - example.com
 
@@ -15,6 +15,36 @@ use_home_dir: true
 
 overridden_configs:
   fail_domain_type: disk
+  # Keep the real hostname for node identity and MNC; use loopback for interconnect.
+  hosts:
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19001
+      node_id: 1
+      host_config_id: 1
+      location: {body: body_0, data_center: data_center_0, rack: rack_0}
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19000
+      node_id: 2
+      host_config_id: 2
+      location: {body: body_1, data_center: data_center_1, rack: rack_1}
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19002
+      node_id: 3
+      host_config_id: 3
+      location: {body: body_2, data_center: data_center_2, rack: rack_2}
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19003
+      node_id: 4
+      host_config_id: 4
+      location: {body: body_3, data_center: data_center_3, rack: rack_3}
 
 domain:
   name: Root

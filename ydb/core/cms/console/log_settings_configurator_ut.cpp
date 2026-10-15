@@ -57,14 +57,12 @@ NKikimrConsole::TConfigItem ITEM_TYPE1_LOG_2;
 NKikimrConsole::TConfigItem ITEM_TENANT1_TYPE1_LOG_1;
 NKikimrConsole::TConfigItem ITEM_TENANT2_TYPE1_LOG_1;
 
-TVector<TComponentSettings>
-InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
+TIntrusivePtr<NLog::TSettings> InitLogSettings(TTenantTestRuntime &runtime)
 {
     runtime.Register(CreateLogSettingsConfigurator());
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvConfigsDispatcher::EvSetConfigSubscriptionResponse, 1);
     runtime.DispatchEvents(options);
-
 
     ITEM_DOMAIN_LOG_1
         = MakeConfigItem(NKikimrConsole::TConfigItem::LogConfigItem,
@@ -121,7 +119,12 @@ InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
                           dummy);
 
     // But enable CMS_CONFIGS
+    return logSettings;
+}
 
+TVector<TComponentSettings> InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
+{
+    auto logSettings = InitLogSettings(runtime);
     TVector<TComponentSettings> result(logSettings->MaxVal + 1,
                                        TComponentSettings(0));
     for (EComponent i = logSettings->MinVal; i <= logSettings->MaxVal; ++i) {
@@ -129,6 +132,22 @@ InitLogSettingsConfigurator(TTenantTestRuntime &runtime)
             result[i] = logSettings->GetComponentSettings(i);
     }
     return result;
+}
+
+TSet<TString> GetSinkNames(TIntrusivePtr<NLog::TSettings> logSettings) {
+    TSet<TString> result;
+
+    auto sinks = logSettings->GetSinks();
+    for(auto& sink : *sinks) {
+        result.insert(sink.first);
+    }
+    return result;
+}
+
+TSet<TString> InitLogSinksConfigurator(TTenantTestRuntime &runtime)
+{
+    auto logSettings = InitLogSettings(runtime);
+    return GetSinkNames(logSettings);
 }
 
 void SetDefaults(NKikimrConsole::TConfigItem &item,
@@ -156,6 +175,15 @@ void AddEntry(NKikimrConsole::TConfigItem &item,
         entry.SetSamplingLevel(samplingLevel);
     if (samplingRate != Max<ui32>())
         entry.SetSamplingRate(samplingRate);
+}
+
+void AddSink(NKikimrConsole::TConfigItem &item,
+              const TString &eventSource,
+              const TString &eventDestination)
+{
+    auto &sink = *item.MutableConfig()->MutableLogConfig()->AddSink();
+    sink.SetSource(eventSource);
+    sink.SetDestination(eventDestination);
 }
 
 void SetDefaultLogConfig(NKikimrConsole::TConfigItem &item)
@@ -219,6 +247,14 @@ void CompareSettings(TTenantTestRuntime &runtime,
         UNIT_ASSERT_VALUES_EQUAL(settings[i].Raw.X.SamplingRate,
                                  logSettings->GetComponentSettings(i).Raw.X.SamplingRate);
     }
+}
+
+void CompareSinks(TTenantTestRuntime &runtime, const TSet<TString> &requiredSinkNames)
+{
+    auto logSettings = runtime.GetLogSettings(0);
+    auto logSinkNames = GetSinkNames(logSettings);
+
+    UNIT_ASSERT_VALUES_EQUAL(logSinkNames, requiredSinkNames);
 }
 
 TVector<ui64> GetTenantItemIds(TTenantTestRuntime &runtime,
@@ -337,37 +373,68 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     }
 }
 
-Y_UNIT_TEST_SUITE(TLogSinkSettings) {
-    Y_UNIT_TEST(AddSink)
+Y_UNIT_TEST_SUITE(TLogSinkConfiguratorTests) {
+    Y_UNIT_TEST(TestAddSinks)
+    {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
+        auto sinkNames = InitLogSinksConfigurator(runtime);
+        updates.Wait();
+
+        SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
+
+        AddSink(ITEM_DOMAIN_LOG_1, "kqp-requests", "local-db");
+        AddSink(ITEM_DOMAIN_LOG_1, "audit-schemeshard", "local-db");
+        AddSink(ITEM_DOMAIN_LOG_1, "audit-grpc-proxy", "local-db");
+
+        sinkNames.insert("Source: \"kqp-requests\" Destination: \"local-db\""); // Due to AddSink(..., "kqp-requests", "local-db");
+        sinkNames.insert("Source: \"audit-schemeshard\" Destination: \"local-db\""); // Due to AddSink(..., "audit-schemeshard", "local-db");
+        sinkNames.insert("Source: \"audit-grpc-proxy\" Destination: \"local-db\""); // Due to AddSink(..., "audit-grpc-proxy", "local-db");
+
+        ConfigureAndWaitUpdate(runtime, updates,
+                               MakeAddAction(ITEM_DOMAIN_LOG_1));
+        CompareSinks(runtime, sinkNames);
+    }
+
+    Y_UNIT_TEST(TestRemoveSinks)
     {
         NKikimrConfig::TAppConfig ext;
-
         auto& label = *ext.AddLabels();
         label.SetName("tenant");
         label.SetValue(TENANT1_1_NAME);
-
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), ext);
         runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
 
         TConfigUpdatesObserver updates(runtime);
-        auto settings = InitLogSettingsConfigurator(runtime);
-        updates.Wait(); // initial update
+        auto sinkNames = InitLogSinksConfigurator(runtime);
+        updates.Wait();
+
+        // initial config
+        SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
+
+        AddSink(ITEM_DOMAIN_LOG_1, "kqp-requests", "local-db");
+        sinkNames.insert("Source: \"kqp-requests\" Destination: \"local-db\""); // Due to AddSink(..., "kqp-requests", "local-db");
+
+        AddSink(ITEM_TENANT1_LOG_1, "audit-schemeshard", "local-db");
+        sinkNames.insert("Source: \"audit-schemeshard\" Destination: \"local-db\""); // Due to AddSink(..., "audit-schemeshard", "local-db");
+
+        ConfigureAndWaitUpdate(runtime, updates,
+                               MakeAddAction(ITEM_DOMAIN_LOG_1),
+                               MakeAddAction(ITEM_TENANT1_LOG_1));
+        CompareSinks(runtime, sinkNames);
+
+        // emulate remove
+        auto ids = GetTenantItemIds(runtime, TENANT1_1_NAME);
+        AssignIds(ids, ITEM_TENANT1_LOG_1);
+
+        ConfigureAndWaitUpdate(runtime, updates,
+                               MakeRemoveAction(ITEM_TENANT1_LOG_1));
+        sinkNames.erase("Source: \"audit-schemeshard\" Destination: \"local-db\""); // Due to AddSink(..., "audit-schemeshard", "local-db");
+        CompareSinks(runtime, sinkNames);
     }
 
-    Y_UNIT_TEST(RemoveSink)
-    {
-
-    }
-
-    Y_UNIT_TEST(ChangeSink)
-    {
-
-    }
-
-	Y_UNIT_TEST(NoSinkChanges)
-    {
-
-    }
 }
 
 } // namespace NKikimr

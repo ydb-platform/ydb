@@ -239,6 +239,16 @@ namespace NActors {
 
         TSettings::~TSettings() = default;
 
+        TSettings::TLogSinkMapSPtr TSettings::GetSinks() {
+            TGuard<TMutex> guard(SinksMutex);
+            return Sinks;
+        }
+
+        void TSettings::SetSinks(TLogSinkMapSPtr sinks) {
+            TGuard<TMutex> guard(SinksMutex);
+            Sinks = sinks;
+        }
+
     }
 
 }

@@ -283,7 +283,23 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
             YDB_LOG_NOTICE("TColumnShardLogWriter: There are no table columns. Try create it");
             pThis->CreateSession();
         } else {
-            YDB_LOG_NOTICE("TColumnShardLogWriter: Try to update table columns");
+            YDB_LOG_NOTICE("TColumnShardLogWriter: Check columns");
+
+            std::set<std::string> existedNames;
+            for(auto& column: tableDescription.columns()) {
+                existedNames.insert(column.name());
+            }
+
+            std::set<std::string> requiredNames;
+            for(auto& column: pThis->GetColumns()) {
+                requiredNames.insert(column->Name);
+            }
+
+            if (existedNames != requiredNames) {
+                YDB_LOG_ERROR("TColumnShardLogWriter: Table structure is changed");
+                pThis->State.store(TStateKind::StorageStructureChanged);
+                return;
+            }
 
             pThis->State.store(TStateKind::Working);
             pThis->Flush();

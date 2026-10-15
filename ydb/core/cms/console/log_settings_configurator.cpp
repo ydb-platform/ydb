@@ -344,7 +344,7 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
 
     NActors::NLog::TSettings::TLogSinkMap oldSinks, newSinks;
 
-    auto oldSinksPtr = logSettings->Sinks;
+    auto oldSinksPtr = logSettings->GetSinks();
     if (oldSinksPtr != nullptr) {
         oldSinks = *oldSinksPtr;
     }
@@ -387,7 +387,7 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
     }
 
     // (*newSinks)["1"] = std::make_shared<TKqpEventLogWriter>(GetSettings("kqp_requests"));
-    logSettings->Sinks = std::make_shared<NLog::TSettings::TLogSinkMap>(newSinks);
+    logSettings->SetSinks(std::make_shared<NLog::TSettings::TLogSinkMap>(newSinks));
 
     Cerr << "Done dump sinks" << Endl;
 }

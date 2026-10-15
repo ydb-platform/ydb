@@ -8,6 +8,7 @@
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
+#include <util/system/mutex.h>
 
 namespace NActors {
     namespace NStructuredLog {
@@ -185,9 +186,13 @@ namespace NActors {
 
             using TLogSinkMap = std::map<TString, NStructuredLog::ILogSinkSPtr>;
             using TLogSinkMapSPtr = std::shared_ptr<const TLogSinkMap>;
-            TLogSinkMapSPtr Sinks;
+            TLogSinkMapSPtr GetSinks();
+            void SetSinks(TLogSinkMapSPtr sinks);
 
             ~TSettings();
+        protected:
+            TMutex SinksMutex;      // Lock access to sinks
+            TLogSinkMapSPtr Sinks;
 
         private:
             int SetLevelImpl(

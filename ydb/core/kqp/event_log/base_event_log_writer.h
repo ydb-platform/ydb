@@ -41,8 +41,21 @@ public:
         return CurrentBatchSize;
     }
 
+    enum class TStateKind : std::uint8_t {
+        Started = 1,
+        StorageCreating = 2,
+        StorageCreateError = 3,
+        StorageStructureChanged = 4,
+        Working = 5,
+        Stop = 6,
+    };
+
+    TStateKind GetStateKind() const {
+        return State.load().Kind;
+    }
+
     virtual bool IsAlive() const {
-        return State.load().Kind != TStateKind::Stop;
+        return GetStateKind() != TStateKind::Stop;
     };
 
 protected:
@@ -58,13 +71,6 @@ protected:
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
 
-    enum class TStateKind : std::uint8_t {
-        Started = 1,
-        StorageCreating = 2,
-        StorageCreateError = 3,
-        Working = 4,
-        Stop = 5,
-    };
     struct TState {
         TStateKind Kind {TStateKind::Started};
         std::uint8_t CreateAttempCount{5};

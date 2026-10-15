@@ -25,20 +25,20 @@ public:
             std::make_shared<TDBLogMessageStringValueColumn>("user_sid", std::vector<TKeyName>{"userSID"}, notNullDict),
             std::make_shared<TDBLogMessageStringValueColumn>("request", std::vector<TKeyName>{"request"}, notNull),
             std::make_shared<TDBLogMessageStringValueColumn>("issues", std::vector<TKeyName>{"issues"}, notNull),
-            std::make_shared<TDBLogMessageStringValueColumn>("is_streaming_query", std::vector<TKeyName>{"isStreamingQuery"}, notNullDict),
-            std::make_shared<TDBLogMessageStringValueColumn>("duration_us", std::vector<TKeyName>{"durationUs"}, notNull),
-            std::make_shared<TDBLogMessageStringValueColumn>("results_size", std::vector<TKeyName>{"resultsSize"}, notNull),
+            std::make_shared<TDBLogColumnBool>("is_streaming_query", std::vector<TKeyName>{"isStreamingQuery"}, notNull),
+            std::make_shared<TDBLogColumnUint64>("duration_us", std::vector<TKeyName>{"durationUs"}, notNull),
+            std::make_shared<TDBLogColumnUint64>("results_size", std::vector<TKeyName>{"resultsSize"}, notNull),
             std::make_shared<TDBLogMessageStringValueColumn>("database", std::vector<TKeyName>{"database"}, dict),
             std::make_shared<TDBLogMessageStringValueColumn>("database_id", std::vector<TKeyName>{"databaseId"}, dict),
             std::make_shared<TDBLogMessageStringValueColumn>("trace_id", std::vector<TKeyName>{"traceId"}),
             std::make_shared<TDBLogMessageStringValueColumn>("query_id", std::vector<TKeyName>{"queryId"}),
             std::make_shared<TDBLogMessageStringValueColumn>("action", std::vector<TKeyName>{"action"}, dict),
             std::make_shared<TDBLogMessageStringValueColumn>("type", std::vector<TKeyName>{"type"}, dict),
-            std::make_shared<TDBLogMessageStringValueColumn>("started_at_us", std::vector<TKeyName>{"startedAtUs"}),
+            std::make_shared<TDBLogColumnTimestamp>("started_at_us", std::vector<TKeyName>{"startedAtUs"}),
             std::make_shared<TDBLogMessageStringValueColumn>("status", std::vector<TKeyName>{"status"}, dict),
-            std::make_shared<TDBLogMessageStringValueColumn>("queued_time_us", std::vector<TKeyName>{"queuedTimeUs"}),
-            std::make_shared<TDBLogMessageStringValueColumn>("compile_from_cache", std::vector<TKeyName>{"compileFromCache"}),
-            std::make_shared<TDBLogMessageStringValueColumn>("compile_time_us", std::vector<TKeyName>{"compileTimeUs"})
+            std::make_shared<TDBLogColumnUint64>("queued_time_us", std::vector<TKeyName>{"queuedTimeUs"}),
+            std::make_shared<TDBLogColumnBool>("compile_from_cache", std::vector<TKeyName>{"compileFromCache"}),
+            std::make_shared<TDBLogColumnUint64>("compile_time_us", std::vector<TKeyName>{"compileTimeUs"})
         };
     }
 

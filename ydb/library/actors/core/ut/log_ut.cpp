@@ -113,7 +113,7 @@ namespace {
             Runtime.Initialize();
             LogBackend.reset(new TMockBackend{ThrowAlways});
             NLog::TSettings::TLogSinkMap sinks{{"", sink}};
-            settings->Sinks = std::make_shared<NLog::TSettings::TLogSinkMap>(sinks);
+            settings->SetSinks(std::make_shared<NLog::TSettings::TLogSinkMap>(sinks));
             auto logger = new TLoggerActor{settings, LogBackend, Counters};
             LoggerActor = Runtime.Register(logger);
             Runtime.SetScheduledEventFilter([] (auto&&, auto&&, auto&&, auto) {

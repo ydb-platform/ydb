@@ -270,7 +270,7 @@ struct TEnvironment {
                 key << j++;
                 (*sinks)[key] = sink;
             }
-            settings->Sinks = sinks;
+            settings->SetSinks(sinks);
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
     }
@@ -689,6 +689,44 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogSchema) {
             {"12u", R"("Test message 12")"},
             {"13u", R"("Test message 13")"}
         }, 3);
+    }
+
+    Y_UNIT_TEST(ExistsWrongTable) {
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessageTextColumn>()
+        });
+        // First log chunk
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test message 1");
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test message 2");
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test message 3");
+        });
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", R"("Test message 1")"},
+            {"2u", R"("Test message 2")"},
+            {"3u", R"("Test message 3")"}});
+
+        // Recreate writer (emulate YDB restart)
+        env.RecreateWriter({
+            std::make_shared<TDBLogMessageIdColumn>(11),
+            std::make_shared<TDBLogMessageTextColumn>(),
+            std::make_shared<TDBLogMessagePrioColumn>()
+        });
+
+        // Second log chunk
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test message 11");
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test message 12");
+            YDB_LOG_INFO_COMP(TEnvironment::Component, "Test message 13");
+        });
+
+        // Writer detected another table structure
+        UNIT_ASSERT(WaitCondition([&](){
+            return env.Writer->GetStateKind() == TBaseEventLogWriter::TStateKind::StorageStructureChanged;
+        }));
     }
 }
 

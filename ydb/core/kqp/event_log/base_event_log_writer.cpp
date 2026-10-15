@@ -27,7 +27,9 @@ TBaseEventLogWriter::TBaseEventLogWriter(
 
 bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
     auto stateKind = State.load().Kind;
-    if (stateKind == TStateKind::StorageCreateError || stateKind == TStateKind::Stop) {
+    if (stateKind == TStateKind::StorageCreateError ||
+        stateKind == TStateKind::StorageStructureChanged ||
+        stateKind == TStateKind::Stop) {
         return false;
     }
 
@@ -104,7 +106,9 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
 void TBaseEventLogWriter::Flush() {
     // Check state
     TState oldState = State.load();
-    if (oldState.Kind == TStateKind::StorageCreateError || oldState.Kind == TStateKind::Stop) {
+    if (oldState.Kind == TStateKind::StorageCreateError ||
+        oldState.Kind == TStateKind::StorageStructureChanged ||
+        oldState.Kind == TStateKind::Stop) {
         return ;
     }
 

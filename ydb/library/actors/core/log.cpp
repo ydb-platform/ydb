@@ -539,7 +539,7 @@ namespace NActors {
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
-        auto sinks = Settings->Sinks;
+        auto sinks = Settings->GetSinks();
         if (sinks !=nullptr && !sinks->empty()) {
             NStructuredLog::TLogMessage message {
                 .Time = evLog->Stamp,

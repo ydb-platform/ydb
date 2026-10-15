@@ -110,7 +110,7 @@ CLI объединяет области доступа из повторяющи
 
 [Команда](auth-get-token.md) `auth get-token` выводит строку `Bearer` с пробелом и токеном доступа. Токен обновления и `id_token` не выводятся. `--force` отключает подтверждение вывода секрета, но не вход у IdP; ссылка и код устройства идут в стандартный поток ошибок. Параметр `--timeout` не ограничивает ожидание входа по коду устройства.
 
-Полученный файл можно использовать с `--oidc-access-token-file`. Если токен нужен другому инструменту, проверьте, ожидает ли тот всю строку с префиксом или только значение токена. Команды приведены в [примерах для каждого режима](#examples).
+Полученный файл можно использовать с `--oidc-access-token-file`. Если токен нужен другому инструменту, проверьте, ожидает ли тот всю строку с префиксом или только значение токена. Команды для всех режимов приведены на [вкладке «Получение токена»](#token-examples).
 
 ## Примеры {#examples}
 
@@ -130,8 +130,6 @@ chmod 700 /home/user/.config/ydb
 В примерах **неинтерактивный запуск** выполняет одну команду `discovery whoami` и завершает работу, а **интерактивный запуск** открывает [SQL-оболочку](interactive-cli.md): CLI запускается без подкоманды из терминала. Это не меняет способ получения токена. В режиме `device` оба варианта могут требовать подтверждения в браузере; для автоматического задания без участия пользователя выбирайте `client` или `static`.
 
 Во вкладках показаны одинаковые варианты подключения: без профиля и с профилем, без кеша и с кешем, в каждом случае — одна команда и интерактивная оболочка. Для `static` варианты с кешем неприменимы, поскольку этот режим его не использует.
-
-Команды получения токена используют `umask 077`, чтобы новый файл был доступен только владельцу. Для уже существующего файла заранее проверьте права: `umask` их не меняет. Перенаправление `>` сохраняет стандартный вывод, содержащий `Bearer`, пробел и токен доступа. URL и код устройства остаются в стандартном потоке ошибок.
 
 {% list tabs %}
 
@@ -307,29 +305,6 @@ chmod 700 /home/user/.config/ydb
           scope: offline_access
   ```
 
-  ### Получение токена {#device-get-token}
-
-  При необходимости подтвердите вход в браузере. Параметр `--force` разрешает вывод токена, но не отменяет это подтверждение.
-
-  Без профиля:
-
-  ```bash
-  umask 077
-  {{ ydb-cli }} \
-    -e grpcs://ydb.example.com:2135 -d /Root/mydb \
-    --oidc-config /home/user/.config/ydb/oidc-device.yaml \
-    auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
-  ```
-
-  С профилем:
-
-  ```bash
-  umask 077
-  {{ ydb-cli }} --profile oidc-device auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
-  ```
-
-  Чтобы использовать кеш, в первом варианте укажите `oidc-device-cache.yaml`, а во втором — профиль `oidc-device-cache`.
-
 - Секрет приложения (client)
 
   ### Конфигурация {#client-config}
@@ -468,27 +443,6 @@ chmod 700 /home/user/.config/ydb
 
   Такой профиль хранит настройки в `authentication` с `method: oidc`; профиль со ссылкой на файл использует `method: oidc-config`. Выбирайте новый профиль через `--profile oidc-client-direct`. Для сохранения токенов добавьте к команде создания профиля `--oidc-cache-path /home/user/.config/ydb/oidc-client-direct-cache.json`. Запуск без подкоманды открывает интерактивную оболочку.
 
-  ### Получение токена {#client-get-token}
-
-  Без профиля:
-
-  ```bash
-  umask 077
-  {{ ydb-cli }} \
-    -e grpcs://ydb.example.com:2135 -d /Root/mydb \
-    --oidc-config /home/user/.config/ydb/oidc-client.yaml \
-    auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
-  ```
-
-  С профилем:
-
-  ```bash
-  umask 077
-  {{ ydb-cli }} --profile oidc-client auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
-  ```
-
-  Чтобы использовать кеш, в первом варианте укажите `oidc-client-cache.yaml`, а во втором — профиль `oidc-client-cache`.
-
 - Готовый токен (static)
 
   ### Конфигурация {#static-config}
@@ -587,7 +541,63 @@ chmod 700 /home/user/.config/ydb
 
   Такой профиль хранит настройки в `authentication` с `method: oidc`; профиль со ссылкой на файл использует `method: oidc-config`. Выбирайте новый профиль через `--profile oidc-static-direct`. Запуск без подкоманды открывает интерактивную оболочку.
 
-  ### Получение токена {#static-get-token}
+- Получение токена
+
+  ### Получение токена {#token-examples}
+
+  Команды получения токена используют `umask 077`, чтобы новый файл был доступен только владельцу. Для уже существующего файла заранее проверьте права: `umask` их не меняет. Перенаправление `>` сохраняет стандартный вывод, содержащий `Bearer`, пробел и токен доступа. URL и код устройства остаются в стандартном потоке ошибок.
+
+  #### Код устройства {#device-get-token}
+
+  Используйте [конфигурацию и профиль для этого режима](#device-config).
+
+  При необходимости подтвердите вход в браузере. Параметр `--force` разрешает вывод токена, но не отменяет это подтверждение.
+
+  Без профиля:
+
+  ```bash
+  umask 077
+  {{ ydb-cli }} \
+    -e grpcs://ydb.example.com:2135 -d /Root/mydb \
+    --oidc-config /home/user/.config/ydb/oidc-device.yaml \
+    auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
+  ```
+
+  С профилем:
+
+  ```bash
+  umask 077
+  {{ ydb-cli }} --profile oidc-device auth get-token --force > /home/user/.config/ydb/exported-device-token.txt
+  ```
+
+  Чтобы использовать кеш, в первом варианте укажите `oidc-device-cache.yaml`, а во втором — профиль `oidc-device-cache`.
+
+  #### Секрет приложения {#client-get-token}
+
+  Используйте [конфигурацию и профиль для этого режима](#client-config).
+
+  Без профиля:
+
+  ```bash
+  umask 077
+  {{ ydb-cli }} \
+    -e grpcs://ydb.example.com:2135 -d /Root/mydb \
+    --oidc-config /home/user/.config/ydb/oidc-client.yaml \
+    auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
+  ```
+
+  С профилем:
+
+  ```bash
+  umask 077
+  {{ ydb-cli }} --profile oidc-client auth get-token --force > /home/user/.config/ydb/exported-client-token.txt
+  ```
+
+  Чтобы использовать кеш, в первом варианте укажите `oidc-client-cache.yaml`, а во втором — профиль `oidc-client-cache`.
+
+  #### Готовый токен {#static-get-token}
+
+  Используйте [конфигурацию и профиль для этого режима](#static-config).
 
   Команда выводит уже переданный токен с префиксом `Bearer`, а не получает новый у IdP. Используйте отдельный выходной файл, чтобы перенаправление не очистило исходный токен перед чтением.
 

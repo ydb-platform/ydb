@@ -57,6 +57,10 @@ struct TKqpCompileResult {
 
     ETableReadType MaxReadType;
     bool AllowCache = true;
+    // QUCA2: [канал доставки, шаг 3] Рядом с AllowCache («нельзя кэшировать» — как сейчас):
+    //   ECacheObject CacheObject = None;                      // что оптимизатор выбрал для кэша (doc §2)
+    //   TIntrusiveConstPtr<TPreCboSnapshot> CacheSnapshot;         // неизменяемый, общий для сессий (инвариант 3)
+    //   THashMap<TPeepholeKey, TPeepholeResult> NewPeephole;  // публикуется compile service пакетом
     bool UsedNewRbo = false;
     TMaybe<TQueryAst> QueryAst;
     bool NeedToSplit = false;

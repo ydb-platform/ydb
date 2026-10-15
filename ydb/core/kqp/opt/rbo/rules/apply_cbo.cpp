@@ -69,6 +69,10 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
         return input;
     }
 
+    // QUCA2: [выбор объекта кэша, doc §2] KQP ожидает от оптимизатора решение, что класть в кэш:
+    //   ctx.KqpCtx.CacheObject = CompiledQuery | PreCboSnapshot.
+    //   Где и как оно вычисляется — не фиксируем; метка стоит здесь как в месте, где виден CBO.
+    //   Забирается в kqp_rbo_transformer.cpp рядом с AddPlans.
     ++cboStats.TreesTotal;
     const auto leaves = BuildCBOLeaves(*cboTree);
 

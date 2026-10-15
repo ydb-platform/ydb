@@ -49,6 +49,17 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
+    // QUCA2: [вход/выход для оптимизатора, doc §3] Единственный объект, видимый от runner до TPhysicalQueryBuilder.
+    //   Вход (заполняет KQP до запуска компиляции):
+    //     TOptimizerInput OptimizerInput;
+    //       CacheSnapshot  : TIntrusiveConstPtr<TPreCboSnapshot>   // снимок этого запроса, если найден; иначе nullptr
+    //       PeepholeLookup : std::shared_ptr<IPeepholeLookup>       // Find(key) -> TIntrusiveConstPtr<TPeepholeResult> | nullptr
+    //   Выход (читает KQP после компиляции, см. kqp_rbo_transformer.cpp рядом с AddPlans):
+    //     ECacheObject CacheObject = None;                        // CompiledQuery | PreCboSnapshot
+    //     TIntrusiveConstPtr<TPreCboSnapshot> CacheSnapshot;      // если создан в этом проходе
+    //     THashMap<TPeepholeKey, TPeepholeResult> NewPeephole;    // новые результаты peephole
+    //   Объекты из кэша неизменяемы; один экземпляр читается параллельно несколькими компиляциями.
+    //   Типы — в ydb/core/kqp/common; про кэши, compile service и акторы оптимизатор не знает.
     NYql::TExprNode::TPtr RboTraceAstBeforeRewriteSelect;
     NYql::TExprNode::TPtr RboTraceAstAfterRewriteSelect;
     

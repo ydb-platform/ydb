@@ -198,6 +198,8 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
     auto& ctx = rboCtx.ExprCtx;
     int stageCounter = 0;
 
+    // QUCA2: [снимок, doc §7] KQP хранит один снимок на запрос: он должен описывать все корни
+    //   на границе перед Prepare for CBO.
     for (auto & rootPtr : roots) {
         auto & root = *rootPtr;
         root.PlanProps.StageGraph.StageCounter = stageCounter;

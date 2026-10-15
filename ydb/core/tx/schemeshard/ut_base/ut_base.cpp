@@ -12473,10 +12473,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             before[path] = table.SerializeAsString();
         }
 
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", TStringBuilder()
-            << "Name: \"Table\" Columns { Name: \"" << (IndexedColumn ? "Indexed" : "Other") << "\" NotNull: false }",
-            {{NKikimrScheme::StatusPreconditionFailed, "Cannot alter migrated index"}});
-        auto checkUnchanged = [&] {
+        const TString alter = TStringBuilder()
+            << "Name: \"Table\" Columns { Name: \"" << (IndexedColumn ? "Indexed" : "Other") << "\" NotNull: false }";
+        if (IndexedColumn) {
+            TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", alter,
+                {{NKikimrScheme::StatusPreconditionFailed, "Cannot alter migrated index"}});
+        } else {
+            TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", alter);
+            env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+            NKikimrSchemeOp::TTableDescription expected;
+            UNIT_ASSERT(expected.ParseFromString(before.at("/MyRoot/Tenant/Table")));
+            for (auto& column : *expected.MutableColumns()) {
+                if (column.GetName() == "Other") {
+                    column.SetNotNull(false);
+                }
+            }
+            expected.SetTableSchemaVersion(expected.GetTableSchemaVersion() + 1);
+            before["/MyRoot/Tenant/Table"] = expected.SerializeAsString();
+        }
+        auto checkSchema = [&] {
             for (const auto& [path, schema] : before) {
                 const auto describe = DescribePrivatePath(runtime, tenantSchemeShard, path);
                 TestDescribeResult(describe, {NLs::PathExist, NLs::CheckPathState()});
@@ -12487,9 +12502,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetTableIndex().SerializeAsString(),
                 indexBefore.GetTableIndex().SerializeAsString());
         };
-        checkUnchanged();
+        checkSchema();
         RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
-        checkUnchanged();
+        checkSchema();
     }
 
     Y_UNIT_TEST(AlterIndexTableDirectly) {

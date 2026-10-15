@@ -2,6 +2,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#include "index/index_utils.h"
+
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
@@ -72,10 +74,7 @@ THashSet<TString> GetColumnNamesWithNonDroppableNotNull(const TTableIndexInfo& i
 
     // Without row-id mode, these indexes require exactly one integer PK column,
     // as validated when the index is created.
-    if (index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
-        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
-        || index.Type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact)
-    {
+    if (NTableIndex::IsCompactIndex(index.Type)) {
         for (const auto columnId : table.KeyColumnIds) {
             columns.insert(table.Columns.at(columnId).Name);
         }
@@ -92,10 +91,6 @@ bool CheckIndexNotNullConstraints(const NKikimrSchemeOp::TTableDescription& alte
         return true;
     }
 
-    if (!context.SS->IsLocalId(indexPath.Base()->PathId)) {
-        errStr = "Cannot alter migrated index";
-        return false;
-    }
     const auto indexIt = context.SS->Indexes.find(indexPath.Base()->PathId);
     if (indexIt == context.SS->Indexes.end()) {
         errStr = TStringBuilder() << "Index metadata is missing for path: " << indexPath.PathString();
@@ -1143,6 +1138,8 @@ static ISubOperation::TPtr AppendIndexImplTableAlters(TVector<ISubOperation::TPt
         pathsToCheck.insert(implTablePathId);
         pathsToCheck.insert(context.SS->PathsById.at(implTablePathId)->ParentPathId);
     }
+    // Only affected indexes must be alterable: an unrelated migrated index must not
+    // prevent changing the base table's columns.
     // Check each path once before any Propose: TAlterTable cannot roll back its DB writes.
     for (const auto& pathId : pathsToCheck) {
         if (auto reject = CheckIndexAlterPath(id, TPath::Init(pathId, context.SS), context)) {

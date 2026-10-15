@@ -170,8 +170,7 @@ TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
         return {};
     }
 
-    const auto& config = AppData()->SmallBlobsQuotaConfig;
-
+    const auto& config = SmallBlobsQuotaConfig ? *SmallBlobsQuotaConfig : AppData()->SmallBlobsQuotaConfig;
     const double softRatio = std::clamp(config.GetSoftRatio(), 0.0, 0.999);
 
     TSmallBlobsQuotas quotas;

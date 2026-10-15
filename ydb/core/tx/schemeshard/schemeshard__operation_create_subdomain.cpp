@@ -285,6 +285,7 @@ public:
                     settings.GetPlanResolution(),
                     settings.GetTimeCastBucketsPerMediator(),
                     newNode->PathId);
+        context.SS->BindSmallBlobsQuotaConfig(*alter);
 
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
@@ -324,6 +325,7 @@ public:
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains.Emplace(newNode->PathId);
         subDomainInfo = new TSubDomainInfo();
+        context.SS->BindSmallBlobsQuotaConfig(*subDomainInfo);
         subDomainInfo->SetAlter(alter);
 
         PersistShards(db, txState, context.SS);

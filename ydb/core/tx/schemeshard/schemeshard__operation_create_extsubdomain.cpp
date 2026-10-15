@@ -216,6 +216,7 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExtSubDomain, newNode->PathId);
 
         TSubDomainInfo::TPtr alter = new TSubDomainInfo(1, 0, 0, resourcesDomainId ? resourcesDomainId : newNode->PathId);
+        context.SS->BindSmallBlobsQuotaConfig(*alter);
         alter->SetSchemeLimits(parentPath.DomainInfo()->GetSchemeLimits()); //inherit from root
 
         if (resourcesDomainId) {
@@ -248,6 +249,7 @@ public:
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains.Emplace(newNode->PathId);
         subDomainInfo = new TSubDomainInfo();
+        context.SS->BindSmallBlobsQuotaConfig(*subDomainInfo);
         subDomainInfo->SetAlter(alter);
 
         context.SS->PersistSubDomain(db, newNode->PathId, *subDomainInfo);

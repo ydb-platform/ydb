@@ -68,6 +68,10 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+namespace NKikimrConfig {
+class TSmallBlobsQuotaConfig;
+}
+
 namespace NKikimr {
 namespace NSchemeShard {
 using namespace NTableIndex;
@@ -2282,7 +2286,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     void SetAlterPrivate(TPtr alterData) {
-        AlterData = alterData;
+        AlterData = std::move(alterData);
+        PropagateSmallBlobsQuotaConfig();
     }
 
     void SetVersion(ui64 version) {
@@ -2293,7 +2298,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     void SetAlter(TPtr alterData) {
         Y_ENSURE(alterData);
         Y_ENSURE(GetVersion() < alterData->GetVersion());
-        AlterData = alterData;
+        AlterData = std::move(alterData);
+        PropagateSmallBlobsQuotaConfig();
+    }
+
+    void BindSmallBlobsQuotaConfig(const NKikimrConfig::TSmallBlobsQuotaConfig* config) {
+        SmallBlobsQuotaConfig = config;
+        PropagateSmallBlobsQuotaConfig();
     }
 
     void SetStoragePools(TStoragePools& storagePools, ui64 subDomainVersion) {
@@ -3001,6 +3012,14 @@ private:
     bool StorageSpaceExhausted = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
+    // Not owned. Null until the domain is bound to its schemeshard; then quotas follow the runtime config.
+    const NKikimrConfig::TSmallBlobsQuotaConfig* SmallBlobsQuotaConfig = nullptr;
+
+    void PropagateSmallBlobsQuotaConfig() {
+        if (SmallBlobsQuotaConfig && AlterData && AlterData->SmallBlobsQuotaConfig != SmallBlobsQuotaConfig) {
+            AlterData->BindSmallBlobsQuotaConfig(SmallBlobsQuotaConfig);
+        }
+    }
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;

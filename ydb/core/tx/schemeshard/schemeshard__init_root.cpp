@@ -122,6 +122,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->RootPathElements = std::move(rootPathElements);
 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
+        Self->BindSmallBlobsQuotaConfig(*newDomain);
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
         Self->SubDomains.Set(Self->RootPathId(), newDomain);
 
@@ -387,6 +388,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
                                                             processingParams.GetPlanResolution(),
                                                             processingParams.GetTimeCastBucketsPerMediator(),
                                                             resourcesDomainId);
+        Self->BindSmallBlobsQuotaConfig(*subdomain);
 
         if (record.HasSharedHive()) {
             subdomain->SetSharedHive(TTabletId(record.GetSharedHive()));

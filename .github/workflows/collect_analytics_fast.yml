@@ -25,13 +25,12 @@ jobs:
     name: Checkout and setup
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
-    - name: Checkout via gh-proxy
+    - name: Probe GitHub speed
+      uses: ./.github/actions/github_fetch_fallback
+    - name: Checkout via gh-proxy or direct
       uses: actions/checkout@v5
       env:
         GIT_TRACE: "1"
-        GIT_CONFIG_COUNT: "1"
-        GIT_CONFIG_KEY_0: url.https://gh-proxy.com/https://github.com/.insteadOf
-        GIT_CONFIG_VALUE_0: https://github.com/
       with:
         ref: ${{ inputs.commit_sha }}
     - name: Setup ydb access
@@ -145,7 +144,9 @@ jobs:
     name: GitHub job metrics
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
-    - name: Checkout direct
+    - name: Probe GitHub speed
+      uses: ./.github/actions/github_fetch_fallback
+    - name: Checkout via gh-proxy or direct
       uses: actions/checkout@v5
       env:
         GIT_TRACE: "1"

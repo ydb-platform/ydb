@@ -195,19 +195,6 @@ runs:
         echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
         analytics end setup_cache --conclusion success
 
-    - name: Route git fetches through gh-proxy.com
-      shell: bash
-      run: |
-        # gh-proxy.com rewrites the git URL. It is not an HTTP CONNECT proxy, so https_proxy
-        # cannot point at it. This applies only to later git commands in this job.
-        # curl calls to api.github.com stay direct. The checkout credential header is bound to
-        # https://github.com/ and is not attached to the rewritten proxy URL.
-        {
-          echo "GIT_CONFIG_COUNT=1"
-          echo "GIT_CONFIG_KEY_0=url.https://gh-proxy.com/https://github.com/.insteadOf"
-          echo "GIT_CONFIG_VALUE_0=https://github.com/"
-        } >> "$GITHUB_ENV"
-
     - name: ya build and test
       id: build
       shell: bash

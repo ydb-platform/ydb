@@ -1032,10 +1032,25 @@ namespace NKikimr::NStorage {
         }
 
         void HandleWakeup() {
-            Y_DEBUG_ABORT("Event# %s took too long to process", EventType);
-            YDB_LOG_CRIT("TPDiskMetadataInteractionActor::Wakeup",
+            YDB_LOG_ERROR("PDisk metadata request timed out",
                 {"marker", "NW61"},
+                {"PDiskId", PDiskKey.PDiskId},
                 {"eventType", EventType});
+            // A slow or starting PDisk must fail this operation, not terminate the node.
+            // The caller may retry; a late PDisk reply is discarded after PassAway.
+            switch (OriginalEv->GetTypeRewrite()) {
+                case TEvNodeWardenReadMetadata::EventType:
+                    Send(OriginalEv->Sender, new TEvNodeWardenReadMetadataResult(std::nullopt,
+                        NPDisk::EPDiskMetadataOutcome::ERROR, {}), 0, OriginalEv->Cookie);
+                    break;
+                case TEvNodeWardenWriteMetadata::EventType:
+                    Send(OriginalEv->Sender, new TEvNodeWardenWriteMetadataResult(std::nullopt,
+                        NPDisk::EPDiskMetadataOutcome::ERROR), 0, OriginalEv->Cookie);
+                    break;
+                default:
+                    Y_ABORT("Unexpected metadata request");
+            }
+            PassAway();
         }
 
         STRICT_STFUNC(StateFunc,

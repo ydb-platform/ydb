@@ -292,12 +292,6 @@ bool TSubDomainInfo::CheckQuotas(IQuotaCounters* counters) {
     return diskQuotaChanged || smallBlobsQuotaChanged;
 }
 
-void TSubDomainInfo::AccountSmallBlobsQuotas(IQuotaCounters* counters) {
-    const auto next = GetSmallBlobsQuotas();
-    CountSmallBlobsQuotas(counters, CountedSmallBlobsQuotas, next);
-    CountedSmallBlobsQuotas = next;
-}
-
 void TSubDomainInfo::CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next) {
     if (const i64 delta = static_cast<i64>(next.VolumeHardQuota) - static_cast<i64>(prev.VolumeHardQuota); delta != 0) {
         counters->ChangeSmallBlobsVolumeHardQuotaBytes(delta);

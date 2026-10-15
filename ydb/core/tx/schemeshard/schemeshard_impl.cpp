@@ -8991,14 +8991,20 @@ void TSchemeShard::ApplySmallBlobsQuotaConfig(const NKikimrConfig::TSmallBlobsQu
         return;
     }
 
+    TVector<std::pair<TSubDomainInfo::TPtr, TSubDomainInfo::TSmallBlobsQuotas>> prevQuotas;
+    prevQuotas.reserve(SubDomains.size());
+    for (const auto& [_, domainInfo] : SubDomains) {
+        prevQuotas.emplace_back(domainInfo, domainInfo->GetSmallBlobsQuotas());
+    }
+
     YDB_LOG_NOTICE_CTX(ctx, "ApplyConsoleConfigs: SmallBlobsQuotaConfig has been changed",
         {"oldValue", SmallBlobsQuotaConfig.ShortDebugString()},
         {"newValue", config.ShortDebugString()},
     );
     SmallBlobsQuotaConfig = config;
 
-    for (const auto& [_, domainInfo] : SubDomains) {
-        domainInfo->AccountSmallBlobsQuotas(this);
+    for (const auto& [domainInfo, prev] : prevQuotas) {
+        domainInfo->CountSmallBlobsQuotas(this, prev, domainInfo->GetSmallBlobsQuotas());
     }
 }
 

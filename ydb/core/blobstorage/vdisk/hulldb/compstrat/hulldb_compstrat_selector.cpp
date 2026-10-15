@@ -28,10 +28,12 @@ namespace NKikimr {
             using TStrategyStorageRatio = NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategySqueeze = NHullComp::TStrategySqueeze<TKeyLogoBlob, TMemRecLogoBlob>;
 
-            // calculate storage ratio and gather space consumption statistics
-            TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence = BarriersSnap.CreateEssence(HullCtx);
+            // Skip storage ratio calculation under high LSM pressure to let compaction catch up.
+            bool skipHighRank = HullCtx->VCfg->FeatureFlags.GetEnableHullCompStorageRatioHighRankSkip();
+            if (!skipHighRank || Ranks.GetMaxRank() < TLevelRanks::StorageRatioSkipRank) {
+                TStrategyStorageRatio(HullCtx, LevelSnap, BarriersSnap, AllowGarbageCollection, Yield).Work();
+            }
             BarriersSnap.Destroy();
-            TStrategyStorageRatio(HullCtx, LevelSnap, std::move(barriersEssence), AllowGarbageCollection, Yield).Work();
 
             // delete free ssts
             action = TStrategyDelSst(HullCtx, LevelSnap, Task, Yield).Select();

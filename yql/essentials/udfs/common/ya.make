@@ -19,6 +19,7 @@ IF (NOT EXPORT_CMAKE)
         stat
         streaming
         string
+        string/impl
         top
         topfreq
         unicode_base

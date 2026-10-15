@@ -10,7 +10,7 @@ namespace NKikimr {
 using TAuthorizeTicketResult = TEvTicketParser::TEvAuthorizeTicketResult;
 static_assert(std::is_const_v<decltype(TAuthorizeTicketResult::Ticket)>);
 static_assert(std::is_same_v<decltype(std::declval<const TAuthorizeTicketResult&>().GetError()), const TEvTicketParser::TError&>);
-static_assert(std::is_same_v<decltype(std::declval<const TAuthorizeTicketResult&>().GetToken()), const TIntrusiveConstPtr<NACLib::TUserToken>&>);
+static_assert(std::is_same_v<decltype(std::declval<const TAuthorizeTicketResult&>().GetToken()), TIntrusiveConstPtr<NACLib::TUserToken>>);
 
 Y_UNIT_TEST_SUITE(TAuthorizeTicketResult) {
     Y_UNIT_TEST(NullTokenIsError) {

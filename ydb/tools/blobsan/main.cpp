@@ -372,10 +372,41 @@ TString FormatLayout(const TSubgroupPartLayout& layout, TBlobStorageGroupType ty
 
 int main(int argc, char **argv) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+    opts.SetTitle("Analyze BlobStorage VDisk index snapshots for incomplete blob layouts.");
     opts.SetFreeArgsNum(1);
-    opts.SetFreeArgTitle(0, "erasure", "Erasure species name");
+    opts.SetFreeArgTitle(0, "erasure", "Erasure species of all input groups, e.g. mirror-3-dc or block-4-2");
     opts.AddLongOption("write2x2-candidates", "Find write2x2 recovery candidates using local parts from the snapshot")
         .StoreTrue(&Write2x2Candidates);
+    opts.AddSection("Input",
+        "Read a binary snapshot from stdin, as produced by `ydb-dstool group take-snapshot`."
+        " It contains group/VDisk headers and bzip2-compressed LogoBlobs, Blocks and"
+        " Barriers index records. Blob payloads are not included. All input groups"
+        " must use the specified erasure species.");
+    opts.AddSection("Analysis",
+        "By default, check Keep blobs below quorum-confirmed GC barriers for"
+        " incomplete local data or ingress layouts. Parts on missing VDisks may"
+        " be inferred from ingress metadata."
+        " --write2x2-candidates is intended for mirror-3-dc recovery scans. Judge"
+        " completeness using only local parts from captured VDisks, include blobs"
+        " above barriers and accept barriers without quorum. Skip hard-collected"
+        " and DoNotKeep blobs; blobs below soft barriers still require Keep."
+        " Both modes filter out blobs with missing records on captured VDisks,"
+        " too few restorable parts or insufficient subgroup coverage.");
+    opts.AddSection("Output",
+        "stdout: text dump of the input index records. Redirect to /dev/null"
+        " to skip generating the dump.\n"
+        "stderr: GroupId#/BlobId# reports with part layouts, Keep flags, VDisk"
+        " coverage masks and GC barriers. An optional TrashSize# line"
+        " estimates the size of misplaced and phantom-like parts."
+        " FULL marks a write2x2 candidate whose merged ingress layout is full"
+        " while its local-part layout from captured VDisks is incomplete.");
+    opts.AddSection("Exit status",
+        "0: analysis completed, including when findings are reported."
+        " Nonzero: argument or input error.");
+    opts.AddSection("Examples",
+        "ydb-dstool -e HOST:2135 group take-snapshot --group-ids 42 --output snapshot.bin"
+        " blobsan mirror-3-dc < snapshot.bin > dump.txt 2> report.txt"
+        " blobsan --write2x2-candidates mirror-3-dc < snapshot.bin > /dev/null 2> candidates.txt");
     NLastGetopt::TOptsParseResult args(&opts, argc, argv);
     const TString erasure = args.GetFreeArgs().front();
 

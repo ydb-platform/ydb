@@ -823,7 +823,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
     Y_UNIT_TEST_F(NonObjectJsonIsError, TJsonParserFixture) {
         CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
-        for (const TString data : {"[]", "null", "123", R"("text")"}) {
+        for (const TString data : {"[1]", "null", "123", R"("text")"}) {
             CheckBatchError(data, EStatusId::BAD_REQUEST, "Failed to parse json message for offset");
         }
     }

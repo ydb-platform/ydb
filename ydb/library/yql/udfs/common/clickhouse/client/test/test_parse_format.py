@@ -43,8 +43,11 @@ SCENARIOS = [
     _case('WhitespaceOnlyPayload', ('\n\r\t  \r\n',), ()),
     _case('EmptyArray', ('[]',), ()),
     _case('WhitespaceOnlyArray', ('[ \n\t ]',), ()),
-    _case('EmptyObject', ('{}',), (0,)),
-    _case('EmptyObjects', ('{}{}',), (0, 0)),
+    # Optional a isolates object framing from required-column validation.
+    _case('EmptyObject', ('{}',), (None,), nullable=True),
+    _case('EmptyObjects', ('{}{}',), (None, None), nullable=True),
+    # Schema behavior is tested separately from JSON syntax.
+    _case('MissingRequiredField', ('{}',), (0,)),
     _case('EmptyMessagesBetweenObjects', ('', '{"a":1}{"a":2}', ' \n', '[{"a":3}]', ''), (1, 2, 3)),
     _case('SeveralPayloads', ('{"a":1}{"a":2}', '{"a":3}'), (1, 2, 3)),
     _case('QuotedNumber', ('{"a":"1"}{"a":2}',), (1, 2)),

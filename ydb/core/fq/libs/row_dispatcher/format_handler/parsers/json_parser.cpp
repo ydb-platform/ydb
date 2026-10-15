@@ -1087,52 +1087,86 @@ private:
 
         size_t numberDocuments = 0;
         for (auto document : documents) {
-            const size_t rowId = OutputOffsets.size();
             CHECK_JSON_ERROR(document.error()) {
                 return handleError(parsingError(TStringBuilder() << "json document was corrupted: " << simdjson::error_message(error)));
             }
             ++numberDocuments;
-            EnsureRowCapacity(rowId + 1);
-            size_t parsedNonOptional = 0;
-            bool skipRow = false;
-            bool unrecoverableColumnError = false;
-            for (auto item : document.get_object()) {
-                CHECK_JSON_ERROR(item.error()) {
+            bool stopMessage = false;
+            auto parseObject = [&](simdjson::simdjson_result<simdjson::ondemand::object> object) -> TStatus {
+                CHECK_JSON_ERROR(object.error()) {
+                    stopMessage = true;
+                    return handleError(parsingError(simdjson::error_message(error)));
+                }
+                const size_t rowId = OutputOffsets.size();
+                EnsureRowCapacity(rowId + 1);
+                size_t parsedNonOptional = 0;
+                bool skipRow = false;
+                bool unrecoverableColumnError = false;
+                for (auto item : object) {
+                    CHECK_JSON_ERROR(item.error()) {
+                        ClearRowBuffer(rowId);
+                        stopMessage = true;
+                        return handleError(parsingError(TStringBuilder() << "json item was corrupted: " << simdjson::error_message(error)));
+                    }
+                    const auto it = ColumnsIndex.find(item.escaped_key().value());
+                    if (it == ColumnsIndex.end()) {
+                        continue;
+                    }
+                    const size_t columnId = it->second;
+                    auto& column = Columns[columnId];
+                    auto& value = ParsedValues[columnId][rowId];
+                    const bool valueWasSet = bool(value);
+                    const bool success = column.ParseJsonValue(offset, rowId, item.value(), value);
+                    if (!column.GetIsOptional() && !valueWasSet) {
+                        ++parsedNonOptional;
+                    }
+                    skipRow |= Config.SkipErrors && !success;
+                    simdjson::ondemand::document& parsedDocument = document.value_unsafe();
+                    if (!success && !parsedDocument.is_alive()) {
+                        // Preserve the column diagnostic, but never continue an
+                        // ondemand stream after its iterator has been abandoned.
+                        unrecoverableColumnError = true;
+                        break;
+                    }
+                }
+                if (Config.SkipErrors && (skipRow || parsedNonOptional != NonOptionalColumnsCount)) {
                     ClearRowBuffer(rowId);
-                    return handleError(parsingError(TStringBuilder() << "json item was corrupted: " << simdjson::error_message(error)));
-                }
-                const auto it = ColumnsIndex.find(item.escaped_key().value());
-                if (it == ColumnsIndex.end()) {
-                    continue;
-                }
-                const size_t columnId = it->second;
-                auto& column = Columns[columnId];
-                auto& value = ParsedValues[columnId][rowId];
-                const bool valueWasSet = bool(value);
-                const bool success = column.ParseJsonValue(offset, rowId, item.value(), value);
-                if (!column.GetIsOptional() && !valueWasSet) {
-                    ++parsedNonOptional;
-                }
-                skipRow |= Config.SkipErrors && !success;
-                simdjson::ondemand::document& parsedDocument = document.value_unsafe();
-                if (!success && !parsedDocument.is_alive()) {
-                    // Preserve the column diagnostic, but never continue an
-                    // ondemand stream after its iterator has been abandoned.
-                    unrecoverableColumnError = true;
-                    break;
-                }
-            }
-            if (Config.SkipErrors && (skipRow || parsedNonOptional != NonOptionalColumnsCount)) {
-                ClearRowBuffer(rowId);
-                ++ParsingFailedRowCount;
-                if (unrecoverableColumnError) {
+                    ++ParsingFailedRowCount;
+                    if (unrecoverableColumnError) {
+                        stopMessage = true;
+                        return TStatus::Success();
+                    }
                     return TStatus::Success();
                 }
-                continue;
-            }
-            OutputOffsets.push_back(offset);
-            if (unrecoverableColumnError) {
+                OutputOffsets.push_back(offset);
+                if (unrecoverableColumnError) {
+                    stopMessage = true;
+                    return TStatus::Success();
+                }
                 return TStatus::Success();
+            };
+
+            simdjson::ondemand::json_type type;
+            {
+                CHECK_JSON_ERROR(document.type().get(type)) {
+                    return handleError(parsingError(simdjson::error_message(error)));
+                }
+            }
+            if (type == simdjson::ondemand::json_type::array) {
+                for (auto element : document.get_array()) {
+                    CHECK_JSON_ERROR(element.error()) {
+                        return handleError(parsingError(simdjson::error_message(error)));
+                    }
+                    auto status = parseObject(element.get_object());
+                    if (status.IsFail() || stopMessage) {
+                        return status;
+                    }
+                }
+            } else {
+                auto status = parseObject(document.get_object());
+                if (status.IsFail() || stopMessage) {
+                    return status;
+                }
             }
         }
 

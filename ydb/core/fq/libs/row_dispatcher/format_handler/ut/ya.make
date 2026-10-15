@@ -5,6 +5,7 @@ SRCS(
     memory_quota_ut.cpp
     topic_filter_ut.cpp
     topic_parser_ut.cpp
+    json_parser_compatibility_ut.cpp
 )
 
 PEERDIR(

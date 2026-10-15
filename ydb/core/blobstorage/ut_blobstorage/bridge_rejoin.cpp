@@ -56,12 +56,12 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
         }
         UNIT_ASSERT_VALUES_EQUAL_C(pileGroups.size(), 3, groupResponse->Get()->Record.DebugString());
 
-        auto invoke = [&](std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
+        auto invoke = [&](std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request, bool requireSuccess = true) {
             runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender, request.release()), 1);
             auto response = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(sender, false,
                 runtime->GetClock() + TDuration::Seconds(30));
             UNIT_ASSERT_C(response, "Timed out waiting for a bridge configuration command");
-            UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
+            UNIT_ASSERT_C(!requireSuccess || response->Get()->Record.GetStatus() ==
                 NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
             return response->Get()->Record;
         };
@@ -71,13 +71,23 @@ Y_UNIT_TEST_SUITE(BridgeRejoin) {
             return invoke(std::move(request)).GetQueryConfig().GetConfig();
         };
         auto change = [&](ui32 index, NKikimrBridge::TClusterState::EPileState state) {
-            auto config = query();
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            auto *next = request->Record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
-            next->CopyFrom(config.GetClusterState());
-            next->SetPerPileState(index, state);
-            next->SetGeneration(next->GetGeneration() + 1);
-            invoke(std::move(request));
+            const auto deadline = runtime->GetClock() + TDuration::Seconds(30);
+            for (;;) {
+                auto config = query();
+                auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                auto *next = request->Record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
+                next->CopyFrom(config.GetClusterState());
+                next->SetPerPileState(index, state);
+                next->SetGeneration(next->GetGeneration() + 1);
+                auto response = invoke(std::move(request), false);
+                if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                    break;
+                }
+                // Synchronization can advance another pile between QueryConfig and the command.
+                const auto current = query().GetClusterState();
+                UNIT_ASSERT_C(current.GetGeneration() > config.GetClusterState().GetGeneration() &&
+                    runtime->GetClock() < deadline, response.DebugString());
+            }
         };
 
         std::vector<std::pair<TLogoBlobID, TString>> blobs;

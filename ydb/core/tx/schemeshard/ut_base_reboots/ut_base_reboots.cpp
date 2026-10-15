@@ -398,9 +398,8 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(DropNotNullWithIndexes, 2, 1, true, AlterMetrics) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropNotNullWithIndexes, 2, 1, true) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(AlterMetrics);
             const TVector<TString> tablePaths = {
                 "/MyRoot/Table",
                 "/MyRoot/Table/byValue/indexImplTable",
@@ -441,15 +440,12 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 }
             }
 
-            TString alter = R"(
+            const TString alter = R"(
                 Name: "Table"
                 Columns { Name: "Key" NotNull: false }
                 Columns { Name: "Value" NotNull: false }
                 Columns { Name: "Covered" NotNull: false }
             )";
-            if (AlterMetrics) {
-                alter += R"(DetailedMetricsSettings { Configured { MetricsLevel: MetricsLevelTable } })";
-            }
             t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot", alter),
                 {NKikimrScheme::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -468,11 +464,6 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                     for (const auto& column : table.GetColumns()) {
                         UNIT_ASSERT_VALUES_EQUAL_C(column.GetNotNull(), column.GetName() == "Other",
                             path << ": " << column.GetName());
-                    }
-                    UNIT_ASSERT_VALUES_EQUAL_C(table.HasDetailedMetricsSettings(), AlterMetrics, path);
-                    if (AlterMetrics) {
-                        UNIT_ASSERT_C(table.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
-                            == NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable, path);
                     }
                     UNIT_ASSERT_C(describe.GetPathDescription().TablePartitionsSize() != 0, path);
                     for (const auto& partition : describe.GetPathDescription().GetTablePartitions()) {

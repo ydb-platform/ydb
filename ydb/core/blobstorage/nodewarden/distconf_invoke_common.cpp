@@ -215,6 +215,9 @@ namespace NKikimr::NStorage {
                     case TQuery::kDemandRetroTrace:
                         return DemandRetroTrace(op.Command.GetDemandRetroTrace());
 
+                    case TQuery::kConvertToBridge:
+                        return ConvertToBridge(op.Command.GetConvertToBridge());
+
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
 

@@ -61,13 +61,20 @@ namespace {
         }
     };
 
-    // make all nodes bridge-capable with single pile by restarting them one by one
-    void RollingRestartWithSinglePileBridgeConfig(TEnvironmentSetup& env, TDataChecker& checker, ui32 groupId) {
+    // make nodes (all of them by default) bridge-capable with single pile by restarting them one by one
+    void RollingRestartWithSinglePileBridgeConfig(TEnvironmentSetup& env, TDataChecker& checker, ui32 groupId,
+            std::optional<std::vector<ui32>> nodeIds = std::nullopt) {
         auto& bridgeConfig = env.Runtime->GetAppDataBridgeConfig();
-        UNIT_ASSERT_VALUES_EQUAL(bridgeConfig.PilesSize(), 0);
-        bridgeConfig.AddPiles()->SetName("pile_1");
+        if (!bridgeConfig.PilesSize()) {
+            bridgeConfig.AddPiles()->SetName("pile_1");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(bridgeConfig.PilesSize(), 1);
 
-        for (ui32 nodeId : env.Runtime->GetNodes()) {
+        if (!nodeIds) {
+            const auto& nodes = env.Runtime->GetNodes();
+            nodeIds.emplace(nodes.begin(), nodes.end());
+        }
+        for (ui32 nodeId : *nodeIds) {
             Cerr << "*** restarting node " << nodeId << " with single-pile bridge config" << Endl;
             env.RestartNode(nodeId);
             env.Sim(TDuration::Seconds(30));
@@ -134,6 +141,26 @@ namespace {
         pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
         groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
         TBridgePileId::FromPileIndex(0).CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+    }
+
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeDistconf(TEnvironmentSetup& env,
+            const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        fill(ev->Record);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, ev.release()), nodeId);
+        auto res = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge, false);
+        return res->Get()->Record;
+    }
+
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult ConvertToBridge(TEnvironmentSetup& env) {
+        return InvokeDistconf(env, [](auto& record) { record.MutableConvertToBridge(); });
+    }
+
+    NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env) {
+        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        return res.GetQueryConfig().GetConfig();
     }
 
     std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> GetPoolGroups(
@@ -276,6 +303,115 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             env.RestartNode(nodeId);
             env.Sim(TDuration::Seconds(30));
             checkThroughBridgeProxy(nodeId);
+        }
+    }
+
+    Y_UNIT_TEST(ConvertStaticGroup) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+        const ui32 staticGroupId = 0;
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        checker.Write(staticGroupId);
+        checker.CheckAll();
+
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        // nodes are not bridge-capable yet
+        auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+
+        // and some of them still are not
+        RollingRestartWithSinglePileBridgeConfig(env, checker, staticGroupId, std::vector<ui32>{1, 2, 3, 4, 5});
+        res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+
+        RollingRestartWithSinglePileBridgeConfig(env, checker, staticGroupId, std::vector<ui32>{6, 7, 8, 9});
+        const auto before = QueryStorageConfig(env);
+        UNIT_ASSERT_VALUES_EQUAL(before.GetBlobStorageConfig().GetServiceSet().GroupsSize(), 1);
+        const auto& staticGroupBefore = before.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroupBefore.GetGroupID(), staticGroupId);
+
+        ui32 numInnerPuts = 0; // puts issued by the bridge proxy to the DS proxy of the inline pile
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                if (auto *msg = ev->Get<TEvBlobStorage::TEvPut>(); msg->ForceGroupGeneration &&
+                        msg->Id.TabletID() == 100500) {
+                    ++numInnerPuts;
+                }
+            }
+            return true;
+        };
+
+        res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(30));
+
+        // check the resulting config
+        const auto after = QueryStorageConfig(env);
+        UNIT_ASSERT(after.HasClusterState());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetClusterState().PerPileStateSize(), 1);
+        UNIT_ASSERT(after.GetClusterStateDetails().GetBscConversionPending());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetBlobStorageConfig().GetServiceSet().GroupsSize(), 1);
+        const auto& staticGroup = after.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetGroupID(), staticGroupId);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetGroupGeneration(), staticGroupBefore.GetGroupGeneration() + 1);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetBridgeProxyGroupId(), staticGroupId);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetBridgeGroupState().PileSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetBridgeGroupState().GetPile(0).GetGroupId(), staticGroupId);
+        for (const auto *pb : {&after.GetStateStorageConfig(), &after.GetStateStorageBoardConfig(),
+                &after.GetSchemeBoardConfig()}) {
+            UNIT_ASSERT(pb->RingGroupsSize());
+            for (const auto& ringGroup : pb->GetRingGroups()) {
+                UNIT_ASSERT(ringGroup.HasBridgePileId());
+            }
+        }
+
+        // conversion can't be repeated
+        res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+
+        // static group is served by the bridge proxy, old data is still readable
+        auto checkStaticGroup = [&](ui32 nodeId) {
+            const ui32 prev = numInnerPuts;
+            checker.Write(staticGroupId, nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(numInnerPuts, prev + 1);
+            checker.Write(groupId, nodeId);
+            checker.CheckAll(nodeId);
+        };
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            checkStaticGroup(nodeId);
+        }
+
+        // move one of the static group's VDisks; inline pile generation must follow the group's one
+        {
+            const auto& vdisk = after.GetBlobStorageConfig().GetServiceSet().GetVDisks(0);
+            res = InvokeDistconf(env, [&](auto& record) {
+                record.MutableReassignGroupDisk()->MutableVDiskId()->CopyFrom(vdisk.GetVDiskID());
+            });
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            env.Sim(TDuration::Minutes(1));
+            const auto reassigned = QueryStorageConfig(env);
+            const auto& group = reassigned.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), staticGroup.GetGroupGeneration() + 1);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetBridgeGroupState().GetPile(0).GetGroupGeneration(),
+                group.GetGroupGeneration());
+            checkStaticGroup(1);
+        }
+
+        // the cluster must restart correctly in its new state
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            Cerr << "*** restarting node " << nodeId << " of converted cluster" << Endl;
+            env.RestartNode(nodeId);
+            env.Sim(TDuration::Seconds(30));
+            checkStaticGroup(nodeId);
         }
     }
 

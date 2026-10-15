@@ -423,6 +423,12 @@ namespace NKikimr::NStorage {
             }
         }
 
+        if (config.GetClusterStateDetails().GetBscConversionPending() &&
+                config.GetClusterState().PerPileStateSize() != 1) {
+            // piles can't be added until BSC converts its groups into bridged ones
+            return "BscConversionPending is set while ClusterState doesn't contain exactly one pile";
+        }
+
         return {};
     }
 

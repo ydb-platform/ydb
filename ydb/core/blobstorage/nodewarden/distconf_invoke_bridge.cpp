@@ -312,4 +312,51 @@ namespace NKikimr::NStorage {
         StartProposition(&config, /*mindPrev=*/ false);
     }
 
+    void TInvokeRequestHandlerActor::ConvertToBridge(const TQuery::TConvertToBridge& /*cmd*/) {
+        RunCommonChecks();
+
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management must be enabled to convert cluster to bridged one";
+        } else if (!Self->Cfg->BridgeConfig) {
+            throw TExError() << "Bridge mode is not enabled";
+        } else if (Self->Cfg->BridgeConfig->PilesSize() != 1) {
+            throw TExError() << "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
+        } else if (Self->StorageConfig->HasClusterState()) {
+            throw TExError() << "Cluster is already bridged one";
+        }
+
+        // nodes running without BridgeConfig won't be able to work in bridged cluster, so ensure there are none of them
+        // among static nodes and dynamic nodes connected to them
+        TEvScatter task;
+        task.MutableCollectBridgeCapability();
+        IssueScatterTask(std::move(task), [this](TEvGather *res) {
+            if (!res->HasCollectBridgeCapability()) {
+                throw TExError() << "Incorrect CollectBridgeCapability response";
+            }
+            const auto& response = res->GetCollectBridgeCapability();
+
+            const THashSet<ui32> capable(response.GetCapableNodeIds().begin(), response.GetCapableNodeIds().end());
+            std::set<ui32> notCapable(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
+            for (const auto& [node, _] : Self->AllBoundNodes) {
+                if (!capable.contains(node.NodeId())) {
+                    notCapable.insert(node.NodeId()); // node of older version that does not report anything
+                }
+            }
+            if (!notCapable.empty()) {
+                TStringBuilder err;
+                err << "Some nodes are running without BridgeConfig NodeIds#";
+                for (const ui32 nodeId : notCapable) {
+                    err << ' ' << nodeId;
+                }
+                throw TExError() << err;
+            }
+
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+            if (auto error = ConvertStorageConfigToBridge(&config)) {
+                throw TExError() << *error;
+            }
+            StartProposition(&config);
+        });
+    }
+
 } // NKikimr::NStorage

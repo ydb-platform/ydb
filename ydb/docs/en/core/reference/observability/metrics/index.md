@@ -151,8 +151,12 @@ Transaction execution duration can be analyzed using a histogram counter. Interv
 | --- | --- |
 | `resources.cpu.used_core_percents`<br/>`RATE`, % | CPU usage. A value of `100` means that one of the cores is 100% utilized. The value can be greater than `100` for configurations with more than 1 core.<br/>Labels:<br/>- _pool_ – compute pool, possible values `user`, `system`, `batch`, `io`, `ic`. |
 | `resources.cpu.limit_core_percents`<br/>`IGAUGE`, % | CPU available to the database as a percentage. For example, for a database of three nodes with 4 cores in `pool=user` on each node, the value of this sensor will be `1200`.<br/>Labels:<br/>- _pool_ – compute pool, possible values `user`, `system`, `batch`, `io`, `ic`. |
+| `resources.cpu.total_core_percents`<br/>`IGAUGE`, % | Total compute capacity of the database in «core percents»: a value of `100` corresponds to one core. Thread counts of all compute pools are included except the `io` pool. |
+| `resources.cpu.usage`<br/>`RATE`, cores | Total CPU load across all compute pools over the observation interval. The value shows how many core equivalents were utilized on average. |
 | `resources.memory.used_bytes`<br/>`IGAUGE`, bytes | RAM used by database nodes. |
 | `resources.memory.limit_bytes`<br/>`IGAUGE`, bytes | RAM available to database nodes. |
+| `resources.network.received_bytes`<br/>`RATE`, bytes | Volume of data received via interconnect over the observation interval. |
+| `resources.network.sent_bytes`<br/>`RATE`, bytes | Volume of data sent via interconnect over the observation interval. |
 
 ## Query processing metrics (Dedicated mode only) {#ydb_dedicated_queries}
 

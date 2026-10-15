@@ -308,12 +308,11 @@ jobs:
             exit 1
           fi
 
+      - name: Probe GitHub speed
+        if: inputs.git_github_proxy
+        uses: ./.github/actions/github_fetch_fallback
       - name: Checkout ${{ matrix.branch }}
         uses: actions/checkout@v5
-        env:
-          GIT_CONFIG_COUNT: ${{ inputs.git_github_proxy && '1' || '0' }}
-          GIT_CONFIG_KEY_0: url.https://gh-proxy.com/https://github.com/.insteadOf
-          GIT_CONFIG_VALUE_0: https://github.com/
         with:
           ref: ${{ matrix.branch }}
 

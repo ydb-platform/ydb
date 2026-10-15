@@ -66,7 +66,7 @@ public:
                 }
                 jsonNodeInfo["Address"] = nodeInfo.Address;
                 jsonNodeInfo["Port"] = nodeInfo.Port;
-                if (nodeInfo.Location != TNodeLocation()) {
+                if (!nodeInfo.Location.GetItems().empty()) {
                     NActorsInterconnect::TNodeLocation location;
                     nodeInfo.Location.Serialize(&location, false);
                     if (location.GetDataCenter().empty()) {
@@ -79,7 +79,9 @@ public:
                         location.ClearUnit();
                     }
                     Proto2Json(location, jsonNodeInfo["Location"]);
+                }
 
+                if (nodeInfo.Location != TNodeLocation()) {
                     NJson::TJsonValue& jsonPhysicalLocation = jsonNodeInfo["PhysicalLocation"];
                     const auto& x = nodeInfo.Location.GetLegacyValue();
                     jsonPhysicalLocation["DataCenter"] = x.DataCenter;

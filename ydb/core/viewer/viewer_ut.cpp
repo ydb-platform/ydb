@@ -348,6 +348,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         legacyZeroLocation.SetRackNum(0);
         legacyZeroLocation.SetBodyNum(0);
 
+        NActorsInterconnect::TNodeLocation mixedLocation;
+        mixedLocation.SetDataCenterNum(0);
+        mixedLocation.SetRack("rack-a");
+
         const TVector<TNodeLocation> locations = {
             TNodeLocation(modernLocation),
             TNodeLocation(legacyLocation),
@@ -356,6 +360,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             TNodeLocation(zeroUnitLocation),
             TNodeLocation(zeroNamedLocation),
             TNodeLocation(legacyZeroLocation),
+            TNodeLocation(mixedLocation),
             TNodeLocation(),
         };
         auto observer = runtime.AddObserver<TEvInterconnect::TEvNodesInfo>([&](TEvInterconnect::TEvNodesInfo::TPtr& event) {
@@ -422,6 +427,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(unsetPhysicalLocation.at("Body").GetUInteger(), 0);
         const auto& legacyZeroPhysicalLocation = nodes[6].GetMap().at("PhysicalLocation").GetMap();
         UNIT_ASSERT_VALUES_EQUAL(legacyZeroPhysicalLocation.at("Location").GetString(), "DC=1/M=0/R=0/U=0/");
+        const auto& mixedNode = nodes[expectedLocations.GetArray().size()].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(mixedNode.at("Location").GetMap().at("Rack").GetString(), "rack-a");
+        UNIT_ASSERT_VALUES_EQUAL(mixedNode.at("Location").GetMap().size(), 1);
+        UNIT_ASSERT(!mixedNode.contains("PhysicalLocation"));
         UNIT_ASSERT(!nodes.back().GetMap().contains("Location"));
         UNIT_ASSERT(!nodes.back().GetMap().contains("PhysicalLocation"));
 

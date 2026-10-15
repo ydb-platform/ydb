@@ -254,20 +254,20 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     ChangeCounters([this, &result](){
         Counters_.IncAuthorizeCounter(
             (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
-            result.Error
+            result.HasError()
         );
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
     });
 
     if (result.HasError()) {
-        if (CanRetry() && result.Error.Retryable) {
+        if (CanRetry() && result.GetError().Retryable) {
             ScheduleAuthorizationRetry();
             return;
         } else {
             if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                RLOG_SQS_INFO("Authorize failed. Error: " << result.Error.ToString());
+                RLOG_SQS_INFO("Authorize failed. Error: " << result.GetError().ToString());
                 SetError(
-                    result.Error.Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
+                    result.GetError().Retryable ? NErrors::SERVICE_UNAVAILABLE : NErrors::ACCESS_DENIED,
                     "IAM authorization error."
                 );
                 SendReplyAndDie();
@@ -275,7 +275,7 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
             }
         }
     } else {
-        UserSID_ = result.Token->GetUserSID();
+        UserSID_ = result.GetToken()->GetUserSID();
     }
 
     MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
@@ -429,21 +429,20 @@ void TBaseCloudAuthRequestProxy::Authorize() {
     if (!UseMockedVersion(Cfg())) {
         Send(MakeTicketParserID(), request.Release());
     } else {
-        TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
         if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
-            result.SetError({
+            ProcessAuthorizationResult(TEvTicketParser::TEvAuthorizeTicketResult("fake_token", TEvTicketParser::TError{
                 .Message = "mocked_auth_error: empty access key",
                 .Retryable = false
-            });
+            }));
         } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
-            result.SetError({
+            ProcessAuthorizationResult(TEvTicketParser::TEvAuthorizeTicketResult("fake_token", TEvTicketParser::TError{
                 .Message = "mocked_auth_error: correct process retries",
                 .Retryable = true
-            });
+            }));
         } else {
-            result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
+            ProcessAuthorizationResult(TEvTicketParser::TEvAuthorizeTicketResult(
+                "fake_token", MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>())));
         }
-        ProcessAuthorizationResult(result);
     }
 
 }

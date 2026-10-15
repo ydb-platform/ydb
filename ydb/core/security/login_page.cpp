@@ -301,13 +301,10 @@ public:
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result = *ev->Get();
         if (result.HasError()) {
-            return ReplyErrorAndPassAway("403", "Forbidden", result.Error.Message);
-        }
-        if (result.Token == nullptr) {
-            return ReplyErrorAndPassAway("403", "Forbidden", "Empty token");
+            return ReplyErrorAndPassAway("403", "Forbidden", result.GetError().Message);
         }
 
-        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID(), result.Token->GetSanitizedToken());
+        ReplyDeleteCookieAndPassAway(result.GetToken()->GetUserSID(), result.GetToken()->GetSanitizedToken());
     }
 
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&) {

@@ -460,16 +460,16 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     YDB_LOG_INFO_CTX(ctx, "CheckACL ticket got result from TICKET_PARSER response",
         {"maskedTicket", maskedTicket},
-        {"error", ev->Get()->Error},
-        {"user", (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : "")});
+        {"error", ev->Get()->HasError() ? ev->Get()->GetError().Message : TString()},
+        {"user", !ev->Get()->HasError() ? ev->Get()->GetToken()->GetUserSID() : TString()});
 
     if (ev->Get()->HasError()) {
         if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-            CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
+            CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->GetError(), NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
             return;
         }
     }
-    Token = ev->Get()->Token;
+    Token = ev->Get()->HasError() ? nullptr : ev->Get()->GetToken();
 
 
     Y_ABORT_UNLESS(ACLCheckInProgress);

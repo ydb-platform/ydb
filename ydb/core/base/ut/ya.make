@@ -34,3 +34,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    ticket_parser
+)

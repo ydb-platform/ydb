@@ -904,7 +904,7 @@ private:
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (result.HasError()) {
             if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
-                RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
+                RLOG_SQS_ERROR("Got ticket parser error: " << result.GetError() << ". " << Action_ << " was rejected");
                 MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
                 SendReplyAndDie();
                 return;
@@ -912,7 +912,7 @@ private:
 
             UserToken_ = nullptr;
         } else {
-            UserToken_ = ev->Get()->Token;
+            UserToken_ = ev->Get()->GetToken();
             Y_ABORT_UNLESS(UserToken_);
         }
 

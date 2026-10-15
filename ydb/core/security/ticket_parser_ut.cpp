@@ -266,8 +266,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
     }
 
     Y_UNIT_TEST(LoginGoodWithGroups) {
@@ -316,9 +316,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-        UNIT_ASSERT(result->Token->IsExist("group1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+        UNIT_ASSERT(result->GetToken()->IsExist("group1"));
     }
 
     Y_UNIT_TEST(LoginGoodWithDelayUpdateSecurityState) {
@@ -372,9 +372,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
             TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT(!result->HasError());
-            UNIT_ASSERT(result->Token != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-            UNIT_ASSERT(result->Token->IsExist("group1"));
+
+            UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+            UNIT_ASSERT(result->GetToken()->IsExist("group1"));
         }
 
         {
@@ -407,9 +407,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
             TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT(!result->HasError());
-            UNIT_ASSERT(result->Token != nullptr);
-            UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-            UNIT_ASSERT(result->Token->IsExist("group1"));
+
+            UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+            UNIT_ASSERT(result->GetToken()->IsExist("group1"));
         }
     }
 
@@ -462,9 +462,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Token == nullptr);
-        UNIT_ASSERT_EQUAL_C(result->Error.Message, "Login state is not available", result->Error);
-        UNIT_ASSERT_EQUAL_C(result->Error.Retryable, false, result->Error.Retryable);
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
+        UNIT_ASSERT_EQUAL_C(result->GetError().Message, "Login state is not available", result->GetError());
+        UNIT_ASSERT_EQUAL_C(result->GetError().Retryable, false, result->GetError().Retryable);
     }
 
 
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Token is not in correct format");
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Token is not in correct format");
     }
 
     Y_UNIT_TEST(LoginRefreshGroupsGood) {
@@ -554,11 +554,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-        UNIT_ASSERT(result->Token->IsExist("group1"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 2);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+        UNIT_ASSERT(result->GetToken()->IsExist("group1"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetGroupSIDs().size(), 2);
 
         provider.CreateGroup({.Group = "group2"});
         provider.AddGroupMembership({.Group = "group2", .Member = "group1"});
@@ -573,12 +573,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-        UNIT_ASSERT(result->Token->IsExist("group1"));
-        UNIT_ASSERT(result->Token->IsExist("group2"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 3);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+        UNIT_ASSERT(result->GetToken()->IsExist("group1"));
+        UNIT_ASSERT(result->GetToken()->IsExist("group2"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetGroupSIDs().size(), 3);
 
         provider.RemoveGroup("group2");
         provider.CreateGroup({.Group = "group3"});
@@ -594,13 +594,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-        UNIT_ASSERT(result->Token->IsExist("group1"));
-        UNIT_ASSERT(result->Token->IsExist("group3"));
-        UNIT_ASSERT(!result->Token->IsExist("group2"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 3);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+        UNIT_ASSERT(result->GetToken()->IsExist("group1"));
+        UNIT_ASSERT(result->GetToken()->IsExist("group3"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("group2"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetGroupSIDs().size(), 3);
     }
 
     Y_UNIT_TEST(LoginRefreshGroupsWithError) {
@@ -653,9 +653,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), "Expected return error message");
-        UNIT_ASSERT(result->Token == nullptr);
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Security state is empty");
-        UNIT_ASSERT_EQUAL(result->Error.Retryable, true);
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
+        UNIT_ASSERT_STRINGS_EQUAL(result->GetError().Message, "Security state is empty");
+        UNIT_ASSERT_EQUAL(result->GetError().Retryable, true);
 
         Sleep(TDuration::Seconds(3));
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
@@ -668,11 +668,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-        UNIT_ASSERT(result->Token->IsExist("group1"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 2);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+        UNIT_ASSERT(result->GetToken()->IsExist("group1"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetGroupSIDs().size(), 2);
     }
 
     Y_UNIT_TEST(LoginCheckRemovedUser) {
@@ -722,10 +722,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
-        UNIT_ASSERT(result->Token->IsExist("group1"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetGroupSIDs().size(), 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1");
+        UNIT_ASSERT(result->GetToken()->IsExist("group1"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetGroupSIDs().size(), 2);
 
         provider.RemoveUser("user1");
 
@@ -741,8 +741,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT_EQUAL(result->Error.Message, "User not found");
-        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_EQUAL(result->GetError().Message, "User not found");
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
     }
 
     Y_UNIT_TEST(LoginEmptyTicketBad) {
@@ -786,8 +786,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Token == nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Ticket is empty");
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Ticket is empty");
     }
 
     Y_UNIT_TEST(TicketFromCertificateCheckIssuerGood) {
@@ -824,9 +824,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
-        const auto& groups = result->Token->GetGroupSIDs();
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_C(result->GetToken()->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->GetToken()->ShortDebugString());
+        const auto& groups = result->GetToken()->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
         UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain " + expectedGroup);
     }
@@ -867,8 +867,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
-        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(result->GetError().Message, "Cannot create token from certificate. Client`s certificate and server`s certificate have different issuers");
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
     }
 
     Y_UNIT_TEST(TicketFromCertificateWithValidationGood) {
@@ -920,9 +920,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
-        const auto& groups = result->Token->GetGroupSIDs();
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_C(result->GetToken()->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->GetToken()->ShortDebugString());
+        const auto& groups = result->GetToken()->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
         std::vector<TString> expectedGroups(firstCertDef.GetMemberGroups().cbegin(), firstCertDef.GetMemberGroups().cend());
         expectedGroups.insert(expectedGroups.end(), secondCertDef.GetMemberGroups().cbegin(), secondCertDef.GetMemberGroups().cend());
@@ -976,9 +976,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
-        const auto& groups = result->Token->GetGroupSIDs();
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_C(result->GetToken()->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->GetToken()->ShortDebugString());
+        const auto& groups = result->GetToken()->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
         const std::vector<TString> expectedGroups(certDef.GetMemberGroups().cbegin(), certDef.GetMemberGroups().cend());
         for (const auto& expectedGroup : expectedGroups) {
@@ -1031,8 +1031,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate failed verification");
-        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(result->GetError().Message, "Cannot create token from certificate. Client certificate failed verification");
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
     }
 
     Y_UNIT_TEST(TicketFromCertificateWithValidationDefaultGroupGood) {
@@ -1077,9 +1077,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_C(result->Token->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->Token->ShortDebugString());
-        const auto& groups = result->Token->GetGroupSIDs();
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_C(result->GetToken()->IsExist("C=RU,ST=MSK,L=MSK,O=YA,OU=UtTest,CN=localhost@cert"), result->GetToken()->ShortDebugString());
+        const auto& groups = result->GetToken()->GetGroupSIDs();
         const std::unordered_set<TString> groupsSet(groups.cbegin(), groups.cend());
         UNIT_ASSERT_C(groupsSet.contains(expectedGroup), "Groups should contain: " + expectedGroup);
     }
@@ -1125,8 +1125,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate failed verification");
-        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(result->GetError().Message, "Cannot create token from certificate. Client certificate failed verification");
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
     }
 
     Y_UNIT_TEST(TicketFromCertificateWithValidationCheckIssuerBad) {
@@ -1173,8 +1173,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(result->Error.Message, "Cannot create token from certificate. Client certificate failed verification");
-        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(result->GetError().Message, "Cannot create token from certificate. Client certificate failed verification");
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
     }
 
     template <typename TAccessServiceMock>
@@ -1219,11 +1219,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Ticket, userToken);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), userToken + "@as");
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedXUserIP, PEER_NAME);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.CapturedRequestId, requestId);
     }
@@ -1288,13 +1288,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthenticateCount.load(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), userToken + "@as");
-        UNIT_ASSERT_C(!result->Token->IsExist("ydb.databases.connect@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("ydb.databases.connect-bbbb4554@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("ydb.developerApi.get-gizmo@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), userToken + "@as");
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("ydb.databases.connect@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("ydb.databases.connect-bbbb4554@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("ydb.developerApi.get-gizmo@as"), result->GetToken()->ShortDebugString());
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvRefreshTicket(key)), 0);
         NActors::TDispatchOptions options;
@@ -1351,7 +1351,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
             TAutoPtr<IEventHandle> handle;
             auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-            UNIT_ASSERT_C(!result->HasError(), result->Error);
+            UNIT_ASSERT_C(!result->HasError(), result->GetError());
         };
 
         authorize("192.168.0.1", "initial-request-id");
@@ -1482,7 +1482,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "login1@passport");
     }
 
     template <typename TAccessServiceMock>
@@ -1530,8 +1530,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT(result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Service Unavailable");
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_GE(accessServiceMock.AuthenticateCount.load(), 1);
     }
@@ -1600,8 +1600,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT(result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Service Unavailable");
 
         Sleep(TDuration::Seconds(2));
         accessServiceMock.ShouldGenerateRetryableError = false;
@@ -1620,8 +1620,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1@as");
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_GE(accessServiceMock.AuthenticateCount.load(), 2);
     }
@@ -1690,8 +1690,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT(result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Service Unavailable");
 
         Sleep(TDuration::Seconds(2));
 
@@ -1708,8 +1708,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1@as");
         UNIT_ASSERT_VALUES_EQUAL(accessServiceMock.AuthorizeCount.load(), 0);
         UNIT_ASSERT_GE(accessServiceMock.AuthenticateCount.load(), 2);
     }
@@ -1788,8 +1788,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT(result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Service Unavailable");
 
         Sleep(TDuration::Seconds(2));
         accessServiceMock.ShouldGenerateRetryableError = false;
@@ -1811,10 +1811,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1@as");
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
     }
 
     Y_UNIT_TEST(BulkAuthorizationRetryError) {
@@ -1891,8 +1891,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT(result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Service Unavailable");
 
         Sleep(TDuration::Seconds(2));
 
@@ -1912,10 +1912,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1@as");
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
     }
 
     Y_UNIT_TEST(BulkAuthorizationRetryErrorImmediately) {
@@ -1971,8 +1971,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Token is not supported");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Token is not supported");
     }
 
     Y_UNIT_TEST(NebiusAccessKeySignatureUnsupported) {
@@ -2021,8 +2021,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access key signature is not supported");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access key signature is not supported");
     }
 
     Y_UNIT_TEST(AuthenticationUnknown) {
@@ -2069,8 +2069,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Unknown token");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Unknown token");
     }
 
     template <typename TAccessServiceMock>
@@ -2129,10 +2129,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(result->GetToken()->IsExist("something.read-bbbb4554@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("something.write-bbbb4554@as"), result->GetToken()->ShortDebugString());
 
         accessServiceMock.AllowedUserPermissions.insert("user1-something.connect");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
@@ -2148,12 +2148,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(result->Token->IsExist("something.connect-bbbb4554@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("something.list-bbbb4554@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("something.update-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(result->GetToken()->IsExist("something.read-bbbb4554@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(result->GetToken()->IsExist("something.connect-bbbb4554@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("something.list-bbbb4554@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("something.update-bbbb4554@as"), result->GetToken()->ShortDebugString());
 
         // Authorization ApiKey successful.
         if constexpr (IsApiKeySupported<TAccessServiceMock>()) {
@@ -2168,10 +2168,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-            UNIT_ASSERT_C(!result->HasError(), result->Error);
-            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-            UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
-            UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(!result->HasError(), result->GetError());
+            UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+            UNIT_ASSERT_C(result->GetToken()->IsExist("something.read-bbbb4554@as"), result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(!result->GetToken()->IsExist("something.write-bbbb4554@as"), result->GetToken()->ShortDebugString());
         }
 
         if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
@@ -2190,7 +2190,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 },
             })), 0);
             TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-            UNIT_ASSERT_C(result->HasError(), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->HasError(), result->GetToken()->ShortDebugString());
 
             // switch off this check
             accessServiceMock.ContainerId = "";
@@ -2209,8 +2209,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
-        UNIT_ASSERT(!result->Error.Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access Denied");
+        UNIT_ASSERT(!result->GetError().Retryable);
 
         // Authorization successful.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
@@ -2224,10 +2224,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             }},
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(!result->Token->IsExist("something.write-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(result->GetToken()->IsExist("something.read-bbbb4554@as"), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!result->GetToken()->IsExist("something.write-bbbb4554@as"), result->GetToken()->ShortDebugString());
 
         // Authorization failure with invalid token.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
@@ -2242,8 +2242,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access Denied");
 
         // Authorization failure with access denied token.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
@@ -2258,8 +2258,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access Denied");
 
         // Authorization failure with wrong folder_id.
         accessServiceMock.AllowedResourceIds.emplace("cccc1234");
@@ -2275,8 +2275,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access Denied");
 
         if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
             accessServiceMock.ContainerId = "aaaa1234";
@@ -2294,9 +2294,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(result->Token->IsExist("something.read-XXXXXXXX@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(result->GetToken()->IsExist("something.read-XXXXXXXX@as"), result->GetToken()->ShortDebugString());
 
         if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
             accessServiceMock.ContainerId = "";
@@ -2317,9 +2317,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+        UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(result->GetToken()->IsExist("something.read-bbbb4554@as"), result->GetToken()->ShortDebugString());
 
         if constexpr (!IsNebiusAccessService<TAccessServiceMock>()) {
             // Authorization successful for gizmo resource
@@ -2333,13 +2333,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-            UNIT_ASSERT_C(!result->HasError(), result->Error);
-            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Token->GetGroupSIDs().size(), 4, result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("all-users@well-known"), result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("user1@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(!result->HasError(), result->GetError());
+            UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->GetToken()->GetGroupSIDs().size(), 4, result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("all-users@well-known"), result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("monitoring.view@as"), result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("monitoring.view-gizmo@as"), result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("user1@as"), result->GetToken()->ShortDebugString());
         } else {
             // Authorization successful for cluster resource
             accessServiceMock.AllowedResourceIds.clear();
@@ -2352,12 +2352,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-            UNIT_ASSERT_C(!result->HasError(), result->Error);
-            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Token->GetGroupSIDs().size(), 3, result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("all-users@well-known"), result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
-            UNIT_ASSERT_C(result->Token->IsExist("user1@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(!result->HasError(), result->GetError());
+            UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->GetToken()->GetGroupSIDs().size(), 3, result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("all-users@well-known"), result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("monitoring.view@as"), result->GetToken()->ShortDebugString());
+            UNIT_ASSERT_C(result->GetToken()->IsExist("user1@as"), result->GetToken()->ShortDebugString());
         }
 
         {
@@ -2383,9 +2383,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-            UNIT_ASSERT_C(!result->HasError(), result->Error);
-            UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
-            UNIT_ASSERT_C(result->Token->IsExist("service1@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(!result->HasError(), result->GetError());
+            UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
+            UNIT_ASSERT_C(result->GetToken()->IsExist("service1@as"), result->GetToken()->ShortDebugString());
 
             // Service with impersonation chain
             if constexpr (IsNebiusAccessService<TAccessServiceMock>()) {
@@ -2402,9 +2402,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                     },
                 })), 0);
                 result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-                UNIT_ASSERT_C(!result->HasError(), result->Error);
-                UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
-                UNIT_ASSERT_C(result->Token->IsExist("service2@as"), result->Token->ShortDebugString());
+                UNIT_ASSERT_C(!result->HasError(), result->GetError());
+                UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE);
+                UNIT_ASSERT_C(result->GetToken()->IsExist("service2@as"), result->GetToken()->ShortDebugString());
 
                 accessServiceMock
                     .BuildImpersonationChain()
@@ -2424,9 +2424,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                     },
                 })), 0);
                 result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-                UNIT_ASSERT_C(!result->HasError(), result->Error);
-                UNIT_ASSERT_EQUAL(result->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER);
-                UNIT_ASSERT_C(result->Token->IsExist("service3@as"), result->Token->ShortDebugString());
+                UNIT_ASSERT_C(!result->HasError(), result->GetError());
+                UNIT_ASSERT_EQUAL(result->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_SERVICE_IMPERSONATED_FROM_USER);
+                UNIT_ASSERT_C(result->GetToken()->IsExist("service3@as"), result->GetToken()->ShortDebugString());
             }
         }
     }
@@ -2500,8 +2500,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             ));
             auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT(!result->HasError());
-            UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-            UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+            UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+            UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
         }
 
         {
@@ -2524,9 +2524,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             ));
             auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT(result->HasError());
-            UNIT_ASSERT(!result->Error.Retryable);
-            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "something.write for ");
-            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "aaaa1234");
+            UNIT_ASSERT(!result->GetError().Retryable);
+            UNIT_ASSERT_STRING_CONTAINS(result->GetError().Message, "something.write for ");
+            UNIT_ASSERT_STRING_CONTAINS(result->GetError().Message, "aaaa1234");
         }
     }
 
@@ -2600,9 +2600,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "login1@passport");
 
         // Authorization failure with not enough permissions.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
@@ -2617,8 +2617,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access Denied");
 
         // Authorization successful.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
@@ -2633,9 +2633,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "login1@passport");
 
         accessServiceMock.AllowedUserPermissions.insert("user1-something.write");
 
@@ -2652,9 +2652,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(result->Token->IsExist("something.write-bbbb4554@as"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(result->GetToken()->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "login1@passport");
     }
 
     Y_UNIT_TEST(BulkAuthorizationWithUserAccount) {
@@ -2727,10 +2727,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(!result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.list-bbbb4554@as"));
-        UNIT_ASSERT(result->Token->IsExist("something.write-bbbb4554@as"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.list-bbbb4554@as"));
+        UNIT_ASSERT(result->GetToken()->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "login1@passport");
     }
 
     Y_UNIT_TEST(BulkAuthorizationWithUserAccount2) {
@@ -2790,8 +2790,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Service Unavailable");
+        UNIT_ASSERT(result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Service Unavailable");
     }
 
     Y_UNIT_TEST(BulkAuthorizationUnavailable) {
@@ -2853,8 +2853,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
 
         accessServiceMock.AllowedUserPermissions.insert(userToken + "-something.write");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvDiscardTicket(userToken)), 0);
@@ -2872,8 +2872,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(result->Token->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(result->GetToken()->IsExist("something.write-bbbb4554@as"));
     }
 
     Y_UNIT_TEST(BulkAuthorizationModify) {
@@ -2936,9 +2936,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(result->HasError(), result->Error.Message);
-        UNIT_ASSERT_STRINGS_EQUAL_C(result->Error.Message, "", result->Error.Message);
-        UNIT_ASSERT(!result->Error.Retryable);
+        UNIT_ASSERT_C(result->HasError(), result->GetError().Message);
+        UNIT_ASSERT_STRINGS_EQUAL_C(result->GetError().Message, "", result->GetError().Message);
+        UNIT_ASSERT(!result->GetError().Retryable);
     }
 
     Y_UNIT_TEST(CustomExpireTimeFromSubclassIsUsed) {
@@ -2981,9 +2981,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user@builtin");
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user@builtin");
 
         UNIT_ASSERT_C(expireTimeCalledFlag,
             "Token expire time was not taken from the parser subclass override");
@@ -3049,9 +3049,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1@as");
+        UNIT_ASSERT(result->GetToken()->IsExist("something.read-bbbb4554@as"));
+        UNIT_ASSERT(!result->GetToken()->IsExist("something.write-bbbb4554@as"));
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "user1@as");
 
         // Verify that x-user-ip header was set with the correct value
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
@@ -3080,8 +3080,8 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         ), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Access Denied");
+        UNIT_ASSERT(!result->GetError().Retryable);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetError().Message, "Access Denied");
 
         // Verify that x-user-ip header was set with the correct value
         UNIT_ASSERT_VALUES_EQUAL_C(accessServiceMock.CapturedXUserIP, testPeerName,
@@ -3202,102 +3202,102 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         {
             auto res = RunPeernameQuery(runtime, "");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "invalid_format");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "[127.0.0.1]");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "127.0.0.1:65536");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "256.1.1.1");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "1.-1.1.1");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv4:");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv4:256.1.1.1");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv4:[127.0.0.1]:1234");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e:0370:7334:1234");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "2001:0db8:85a3:0000:0000:8a2e5:0370:7334");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "[::1]:");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "[::1]:65536");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "[::1]:port");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, ":::1");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime,  "ipv6:");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv6:[::1]:");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv6:[::1]:65536");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv6:[::1]:port");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
         {
             auto res = RunPeernameQuery(runtime, "ipv6:invalid");
             UNIT_ASSERT(res->HasError());
-            UNIT_ASSERT(!res->Error.Retryable);
+            UNIT_ASSERT(!res->GetError().Retryable);
         }
     }
 
@@ -3619,7 +3619,7 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     // waiting for ticket parser get success token for access service from service token manager
-    while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
+    while (authorizeTicketResultEv->HasError() && authorizeTicketResultEv->GetError().Retryable && authorizeTicketResultEv->GetError().Message == "Unauthenticated service") {
         runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .TraceContext = {PEER_NAME, REQUEST_ID},
@@ -3629,11 +3629,11 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
         })));
         authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     }
-    UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->Error);
-    UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->Token->GetUserSID(), "user1@as", authorizeTicketResultEv->Token->GetUserSID());
-    UNIT_ASSERT_EQUAL(authorizeTicketResultEv->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-    UNIT_ASSERT_C(authorizeTicketResultEv->Token->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
-    UNIT_ASSERT_C(!authorizeTicketResultEv->Token->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+    UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->GetError());
+    UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->GetToken()->GetUserSID(), "user1@as", authorizeTicketResultEv->GetToken()->GetUserSID());
+    UNIT_ASSERT_EQUAL(authorizeTicketResultEv->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+    UNIT_ASSERT_C(authorizeTicketResultEv->GetToken()->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->GetToken()->ShortDebugString());
+    UNIT_ASSERT_C(!authorizeTicketResultEv->GetToken()->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->GetToken()->ShortDebugString());
 }
 
 Y_UNIT_TEST(CanRefreshTokenForAccessService) {
@@ -3707,7 +3707,7 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
         })));
         TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         // waiting for ticket parser get success token for access service from service token manager
-        while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
+        while (authorizeTicketResultEv->HasError() && authorizeTicketResultEv->GetError().Retryable && authorizeTicketResultEv->GetError().Message == "Unauthenticated service") {
             runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .TraceContext = {PEER_NAME, REQUEST_ID},
@@ -3717,11 +3717,11 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
             })));
             authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         }
-        UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->Error);
-        UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->Token->GetUserSID(), "user1@as", authorizeTicketResultEv->Token->GetUserSID());
-        UNIT_ASSERT_EQUAL(authorizeTicketResultEv->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(authorizeTicketResultEv->Token->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
-        UNIT_ASSERT_C(!authorizeTicketResultEv->Token->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+        UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->GetError());
+        UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->GetToken()->GetUserSID(), "user1@as", authorizeTicketResultEv->GetToken()->GetUserSID());
+        UNIT_ASSERT_EQUAL(authorizeTicketResultEv->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(authorizeTicketResultEv->GetToken()->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!authorizeTicketResultEv->GetToken()->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->GetToken()->ShortDebugString());
     }
 
     // Change allowed token for authorization in access service. Jld token is not accepted
@@ -3746,7 +3746,7 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
         })));
         TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         // waiting for ticket parser get success token for access service from service token manager
-        while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
+        while (authorizeTicketResultEv->HasError() && authorizeTicketResultEv->GetError().Retryable && authorizeTicketResultEv->GetError().Message == "Unauthenticated service") {
             runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .TraceContext = {PEER_NAME, REQUEST_ID},
@@ -3756,11 +3756,11 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
             })));
             authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         }
-        UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->Error);
-        UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->Token->GetUserSID(), "user2@as", authorizeTicketResultEv->Token->GetUserSID());
-        UNIT_ASSERT_EQUAL(authorizeTicketResultEv->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
-        UNIT_ASSERT_C(authorizeTicketResultEv->Token->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
-        UNIT_ASSERT_C(!authorizeTicketResultEv->Token->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+        UNIT_ASSERT_C(!authorizeTicketResultEv->HasError(), authorizeTicketResultEv->GetError());
+        UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->GetToken()->GetUserSID(), "user2@as", authorizeTicketResultEv->GetToken()->GetUserSID());
+        UNIT_ASSERT_EQUAL(authorizeTicketResultEv->GetToken()->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(authorizeTicketResultEv->GetToken()->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(!authorizeTicketResultEv->GetToken()->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->GetToken()->ShortDebugString());
     }
 }
 
@@ -3938,11 +3938,11 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "testuser@" + DOM);
-        UNIT_ASSERT_C(result->Token->IsExist("admins@" + DOM), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(result->Token->IsExist("devs@" + DOM), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "testuser@" + DOM);
+        UNIT_ASSERT_C(result->GetToken()->IsExist("admins@" + DOM), result->GetToken()->ShortDebugString());
+        UNIT_ASSERT_C(result->GetToken()->IsExist("devs@" + DOM), result->GetToken()->ShortDebugString());
     }
 
     Y_UNIT_TEST(ExternalIdpTokenRefresh) {
@@ -4033,9 +4033,9 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "refreshuser@" + DOM);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "refreshuser@" + DOM);
 
         Sleep(TDuration::MilliSeconds(300));
 
@@ -4046,9 +4046,9 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
                 .TraceContext = {PEER_NAME, REQUEST_ID},
             })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT_C(!result->HasError(), result->Error);
-        UNIT_ASSERT(result->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "refreshuser@" + DOM);
+        UNIT_ASSERT_C(!result->HasError(), result->GetError());
+
+        UNIT_ASSERT_VALUES_EQUAL(result->GetToken()->GetUserSID(), "refreshuser@" + DOM);
     }
 
     Y_UNIT_TEST(ExternalIdpAuthenticationExpiredToken) {
@@ -4147,7 +4147,7 @@ Y_UNIT_TEST_SUITE(TExternalIdpTicketParserTest) {
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
         UNIT_ASSERT_C(result->HasError(), "Expected error for expired token but got success");
-        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_EXCEPTION(result->GetToken(), std::bad_variant_access);
     }
 }
 

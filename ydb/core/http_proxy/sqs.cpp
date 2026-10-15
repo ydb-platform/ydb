@@ -156,23 +156,16 @@ namespace NKikimr::NHttpProxy {
             }
 
             void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-                const auto& token = ev->Get()->Token;
                 const bool isEnforceUserTokenRequirement = AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->EnforceUserTokenCheckRequirement;
                 if (ev->Get()->HasError()) {
                     if (isEnforceUserTokenRequirement) {
                         return ReplyWithYdbError(
                             ctx,
-                            ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
-                            TString{ev->Get()->Error.Message});
-                    }
-                } else if (!token) {
-                    if (isEnforceUserTokenRequirement) {
-                        return ReplyWithYdbError(
-                            ctx,
-                            NYdb::EStatus::UNAUTHORIZED,
-                            "Access denied");
+                            ev->Get()->GetError().Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                            TString{ev->Get()->GetError().Message});
                     }
                 } else {
+                    const auto& token = ev->Get()->GetToken();
                     HttpContext.SerializedUserToken = token->GetSerializedToken();
                     UserSid_ = token->GetUserSID();
                 }

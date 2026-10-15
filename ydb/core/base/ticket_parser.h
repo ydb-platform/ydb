@@ -6,6 +6,8 @@
 #include <ydb/library/login/login.h>
 #include <util/string/builder.h>
 
+#include <variant>
+
 namespace NKikimr {
     struct TEvTicketParser {
         enum EEv {
@@ -159,34 +161,41 @@ namespace NKikimr {
         };
 
         struct TEvAuthorizeTicketResult : TEventLocal<TEvAuthorizeTicketResult, EvAuthorizeTicketResult> {
-            TString Ticket;
-            TError Error;
-            TIntrusiveConstPtr<NACLib::TUserToken> Token;
-            const TString SerializedToken;
-            bool IsSuccess = false;
+            using TTokenPtr = TIntrusiveConstPtr<NACLib::TUserToken>;
+            using TResult = std::variant<TError, TTokenPtr>;
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TIntrusiveConstPtr<NACLib::TUserToken>& token)
-                : Ticket(ticket)
-                , Token(token)
-                , SerializedToken(token ? token->GetSerializedToken() : "")
-                , IsSuccess(true)
+            const TString Ticket;
+
+            TEvAuthorizeTicketResult(TString ticket, TTokenPtr token)
+                : Ticket(std::move(ticket))
+                , Result_((token != nullptr)
+                    ? TResult(std::move(token))
+                    : TResult(TError{.Message = "Empty user token", .Retryable = false}))
             {
             }
 
-            TEvAuthorizeTicketResult(const TString& ticket, const TError& error)
-                : Ticket(ticket)
-                , Error(error)
-                , IsSuccess(false)
-            {}
-
-            void SetError(const TError& error) {
-                Error = error;
-                IsSuccess = false;
+            TEvAuthorizeTicketResult(TString ticket, TError error)
+                : Ticket(std::move(ticket))
+                , Result_(std::move(error))
+            {
             }
 
             bool HasError() const {
-                return !IsSuccess;
+                return std::holds_alternative<TError>(Result_);
             }
+
+            // Must check HasError() before this call
+            const TError& GetError() const {
+                return std::get<TError>(Result_);
+            }
+
+            // Must check !HasError() before this call
+            TTokenPtr GetToken() const {
+                return std::get<TTokenPtr>(Result_);
+            }
+
+        private:
+            const TResult Result_;
         };
 
         struct TEvRefreshTicket : TEventLocal<TEvRefreshTicket, EvRefreshTicket> {

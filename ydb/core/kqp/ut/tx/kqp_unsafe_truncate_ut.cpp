@@ -743,7 +743,10 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             "only the row written after the truncate survives");
     }
 
-    Y_UNIT_TEST_TWIN(MixedWithDataInOneQueryRejected, UseQueryService) {
+    // The shape the feature exists for: writes, reads and the truncate in one query text, executed
+    // in statement order. The truncate is compiled as a transaction of the data query, not through
+    // the scheme path, which is what lets it sit between them at all.
+    Y_UNIT_TEST_TWIN(MixedWithDataInOneQuery, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
         auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
@@ -756,20 +759,24 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             TRUNCATE TABLE `%s` WITH (unsafe = true);
             SELECT COUNT(*) AS cnt FROM `%s`;
         )", TablePath, TablePath, TablePath, TablePath), AutoCommit<UseQueryService>()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            "Unsafe TRUNCATE TABLE cannot be used with other reads or writes in the same query.");
-        UNIT_ASSERT_VALUES_EQUAL_C(CountRows(session), 3u, "neither the write nor the truncate may run");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        for (const auto& select : {TString("SELECT 1;"), CountQuery()}) {
-            for (const auto& query : {select + UnsafeTruncateQuery(), UnsafeTruncateQuery() + select}) {
-                auto mixed = ExecuteQuery(session, query, AutoCommit<UseQueryService>()).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(mixed.GetStatus(), EStatus::GENERIC_ERROR, mixed.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(mixed.GetIssues().ToString(),
-                    "Unsafe TRUNCATE TABLE cannot be used with other reads or writes in the same query.");
-                UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
-            }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2u, "both SELECTs must produce a result");
+
+        {
+            auto before = result.GetResultSetParser(0);
+            UNIT_ASSERT(before.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(before.ColumnParser("cnt").GetUint64(), 4u,
+                "the read before the truncate must see the write that precedes it");
         }
+        {
+            auto after = result.GetResultSetParser(1);
+            UNIT_ASSERT(after.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(after.ColumnParser("cnt").GetUint64(), 0u,
+                "the read after the truncate must see an empty table");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 0u);
     }
 
     // Anomaly (c), the other side: everyone else's locks are broken.
@@ -1759,7 +1766,9 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
         UNIT_ASSERT_VALUES_EQUAL_C(CountRows(admin), 3u, "nothing may have been wiped");
     }
 
-    Y_UNIT_TEST_TWIN(InterleavedTruncatesInOneQueryRejected, UseQueryService) {
+    // Several truncates interleaved with writes and reads in one query text. Each truncate gets a
+    // query block of its own, so this is what would break if a block ever held anything else.
+    Y_UNIT_TEST_TWIN(InterleavedTruncatesInOneQuery, UseQueryService) {
         auto kikimr = MakeRunner(/* enableUnsafeTruncate */ true);
         auto client = GetClient<UseQueryService>(kikimr);
         auto session = client.GetSession().GetValueSync().GetSession();
@@ -1776,17 +1785,23 @@ Y_UNIT_TEST_SUITE(KqpUnsafeTruncate) {
             SELECT COUNT(*) AS cnt FROM `%s`;
         )", TablePath, TablePath, TablePath, TablePath, TablePath, TablePath, TablePath),
             AutoCommit<UseQueryService>()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            "Unsafe TRUNCATE TABLE cannot be used with other reads or writes in the same query.");
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        auto repeated = ExecuteQuery(session, UnsafeTruncateQuery() + UnsafeTruncateQuery(),
-            AutoCommit<UseQueryService>()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::GENERIC_ERROR, repeated.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(repeated.GetIssues().ToString(),
-            "Unsafe TRUNCATE TABLE cannot be used with other reads or writes in the same query.");
-        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2u);
+        {
+            auto first = result.GetResultSetParser(0);
+            UNIT_ASSERT(first.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(first.ColumnParser("cnt").GetUint64(), 2u,
+                "only the two rows written after the first truncate may be visible");
+        }
+        {
+            auto second = result.GetResultSetParser(1);
+            UNIT_ASSERT(second.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL_C(second.ColumnParser("cnt").GetUint64(), 1u,
+                "only the row written after the second truncate may be visible");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(session), 1u);
     }
 
     // The path travels from the parsed statement to the executer as written, so a prefix or a bare

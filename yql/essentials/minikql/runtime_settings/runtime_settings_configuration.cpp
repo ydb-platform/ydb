@@ -2,6 +2,8 @@
 
 #include <library/cpp/hyperloglog/hyperloglog.h>
 
+#include <util/generic/singleton.h>
+
 namespace NYql {
 
 namespace {
@@ -38,21 +40,17 @@ auto MakeDatumValidationModeSerializer() {
 } // namespace
 
 #define REGISTER_RUNTIME_SETTING(setting) \
-    (*this).AddSetting(#setting, setting.Setting_)
+    AddSetting(#setting, [](auto& settings) -> auto& { return settings.setting.Setting_; })
+
+const TRuntimeSettingsConfiguration& TRuntimeSettingsConfiguration::Get() {
+    struct TInstance {
+        const TRuntimeSettingsConfiguration Configuration;
+    };
+    return Singleton<TInstance>()->Configuration;
+}
 
 TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration()
-    : TRuntimeSettingsConfiguration(TRuntimeSettings())
-{
-}
-
-TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TQContext& QContext)
-    : TRuntimeSettingsConfiguration(TRuntimeSettings(), QContext)
-{
-}
-
-TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration(const TRuntimeSettings& settings, const TQContext& QContext)
-    : TSettingDispatcher("runtime_settings", QContext)
-    , TRuntimeSettings(settings)
+    : NCommon::TDispatcher<TRuntimeSettings>("runtime_settings")
 {
     REGISTER_RUNTIME_SETTING(DatumValidation)
         .Parser(MakeDatumValidationModeParser())

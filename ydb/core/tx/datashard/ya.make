@@ -32,9 +32,11 @@ SRCS(
     read_iterator.h
     read_table_scan.h
     setup_sys_locks.h
+    build_index/table_range_reader.h
     build_index/filter_kmeans.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp
+    build_index/table_range_reader.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
     build_index/secondary_index.cpp

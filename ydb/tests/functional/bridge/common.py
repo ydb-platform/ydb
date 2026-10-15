@@ -18,6 +18,8 @@ class BridgeKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 16
+    pile_names = ("r1", "r2")
+    bridge_rpc_timeout = 10
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -25,27 +27,23 @@ class BridgeKiKiMRTest(object):
     }
     logger = logging.getLogger(__name__)
 
-    @classmethod
-    def setup_class(cls):
+    def setup_method(self):
         log_configs = {
             'GRPC_SERVER': LogLevels.DEBUG,
             'GRPC_PROXY': LogLevels.DEBUG,
         }
 
         bridge_config = {
-            "piles": [
-                {"name": "r1"},
-                {"name": "r2"}
-            ]
+            "piles": [{"name": name} for name in self.pile_names]
         }
 
-        cls.configurator = KikimrConfigGenerator(
-            cls.erasure,
-            nodes=cls.nodes_count,
+        self.configurator = KikimrConfigGenerator(
+            self.erasure,
+            nodes=self.nodes_count,
             use_in_memory_pdisks=False,
-            use_config_store=cls.use_config_store,
-            metadata_section=cls.metadata_section,
-            separate_node_configs=cls.separate_node_configs,
+            use_config_store=self.use_config_store,
+            metadata_section=self.metadata_section,
+            separate_node_configs=self.separate_node_configs,
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['bridge'],
@@ -53,25 +51,29 @@ class BridgeKiKiMRTest(object):
             bridge_config=bridge_config
         )
 
-        cls.cluster = KiKiMR(configurator=cls.configurator)
-        cls.cluster.start()
+        self.cluster = KiKiMR(configurator=self.configurator)
+        self.cluster.start()
 
-        host = cls.cluster.nodes[1].host
-        grpc_port = cls.cluster.nodes[1].port
-        cls.bridge_client = BridgeClient(host, grpc_port)
-        cls.secondary_bridge_client = BridgeClient(cls.cluster.nodes[2].host, cls.cluster.nodes[2].port)
-        cls.bridge_client.set_auth_token('root@builtin')
-        cls.secondary_bridge_client.set_auth_token('root@builtin')
+        self.pile_nodes = {name: [] for name in self.pile_names}
+        for node_id, host in enumerate(self.configurator.yaml_config["hosts"], 1):
+            self.pile_nodes[host["location"]["bridge_pile_name"]].append(self.cluster.nodes[node_id])
+        self.bridge_clients = {}
+        for name, nodes in self.pile_nodes.items():
+            client = BridgeClient(nodes[0].host, nodes[0].port, timeout=self.bridge_rpc_timeout)
+            client.set_auth_token('root@builtin')
+            self.bridge_clients[name] = client
+        self.bridge_client = self.bridge_clients[self.pile_names[0]]
+        self.secondary_bridge_client = self.bridge_clients[self.pile_names[1]]
 
-    @classmethod
-    def teardown_class(cls):
-        cls.bridge_client.close()
-        cls.cluster.stop()
+    def teardown_method(self):
+        for client in self.bridge_clients.values():
+            client.close()
+        self.cluster.stop()
 
     def update_cluster_state(self, client, updates, expected_status=StatusIds.SUCCESS, quorum_piles=None):
         response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
         self.logger.debug("Update cluster state response: %s", response)
-        assert_that(response.operation.status, is_(expected_status))
+        assert_that(response.operation.status, is_(expected_status), str(response))
         if expected_status == StatusIds.SUCCESS:
             result = bridge.UpdateClusterStateResult()
             response.operation.result.Unpack(result)

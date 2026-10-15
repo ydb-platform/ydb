@@ -8991,26 +8991,14 @@ void TSchemeShard::ApplySmallBlobsQuotaConfig(const NKikimrConfig::TSmallBlobsQu
         return;
     }
 
-    // Snapshot quotas under the previous config. Domains loaded later pick up the new config on their own.
-    TVector<std::pair<TPathId, TSubDomainInfo::TSmallBlobsQuotas>> prevQuotas;
-    prevQuotas.reserve(SubDomains.size());
-    for (const auto& [pathId, domainInfo] : SubDomains) {
-        domainInfo->BindSmallBlobsQuotaConfig(&SmallBlobsQuotaConfig);
-        prevQuotas.emplace_back(pathId, domainInfo->GetSmallBlobsQuotas());
-    }
-
     YDB_LOG_NOTICE_CTX(ctx, "ApplyConsoleConfigs: SmallBlobsQuotaConfig has been changed",
         {"oldValue", SmallBlobsQuotaConfig.ShortDebugString()},
         {"newValue", config.ShortDebugString()},
     );
     SmallBlobsQuotaConfig = config;
 
-    for (const auto& [pathId, prev] : prevQuotas) {
-        const auto it = SubDomains.find(pathId);
-        if (it == SubDomains.end()) {
-            continue;
-        }
-        it->second->CountSmallBlobsQuotas(this, prev, it->second->GetSmallBlobsQuotas());
+    for (const auto& [_, domainInfo] : SubDomains) {
+        domainInfo->AccountSmallBlobsQuotas(this);
     }
 }
 

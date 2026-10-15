@@ -2559,7 +2559,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         AlterData->CheckQuotas(counters);
 
         CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
-        CountSmallBlobsQuotas(counters, GetSmallBlobsQuotas(), AlterData->GetSmallBlobsQuotas());
+        CountSmallBlobsQuotas(counters, CountedSmallBlobsQuotas, AlterData->GetSmallBlobsQuotas());
+        AlterData->CountedSmallBlobsQuotas = AlterData->GetSmallBlobsQuotas();
         CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
         CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
     }
@@ -2591,6 +2592,9 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
     static void CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next);
+
+    // Move this database's contribution in the aggregated counters to the quotas of the current config.
+    void AccountSmallBlobsQuotas(IQuotaCounters* counters);
 
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
@@ -2839,16 +2843,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
         auto prev = GetDiskSpaceQuotas();
-        auto prevSmallBlobs = GetSmallBlobsQuotas();
         auto prevs = GetStreamShardsQuota();
         auto prevrs = GetStreamReservedStorageQuota();
         SetDatabaseQuotas(databaseQuotas);
         auto next = GetDiskSpaceQuotas();
-        auto nextSmallBlobs = GetSmallBlobsQuotas();
         auto nexts = GetStreamShardsQuota();
         auto nextrs = GetStreamReservedStorageQuota();
         CountDiskSpaceQuotas(counters, prev, next);
-        CountSmallBlobsQuotas(counters, prevSmallBlobs, nextSmallBlobs);
+        AccountSmallBlobsQuotas(counters);
         CountStreamShardsQuota(counters, prevs, nexts);
         CountStreamReservedStorageQuota(counters, prevrs, nextrs);
     }
@@ -3012,6 +3014,8 @@ private:
     bool StorageSpaceExhausted = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
+    // Contribution already added to the aggregated quota counters.
+    TSmallBlobsQuotas CountedSmallBlobsQuotas;
     // Not owned. Null until the domain is bound to its schemeshard; then quotas follow the runtime config.
     const NKikimrConfig::TSmallBlobsQuotaConfig* SmallBlobsQuotaConfig = nullptr;
 

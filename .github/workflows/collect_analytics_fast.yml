@@ -42,7 +42,7 @@ jobs:
             echo "GIT_CONFIG_VALUE_0=https://github.com/"
           } >> "$GITHUB_ENV"
         fi
-    - name: Checkout via gh-proxy or direct
+    - name: Checkout
       uses: actions/checkout@v5
       env:
         GIT_TRACE: "1"
@@ -183,7 +183,7 @@ jobs:
             echo "GIT_CONFIG_VALUE_0=https://github.com/"
           } >> "$GITHUB_ENV"
         fi
-    - name: Checkout via gh-proxy or direct
+    - name: Checkout
       uses: actions/checkout@v5
       env:
         GIT_TRACE: "1"

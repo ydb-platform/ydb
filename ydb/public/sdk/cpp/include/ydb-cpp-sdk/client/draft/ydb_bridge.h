@@ -14,6 +14,8 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
+struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {};
+
 enum class EPileState {
     UNSPECIFIED = 0,
     PRIMARY = 1,
@@ -32,10 +34,12 @@ struct TPileStateUpdate {
 
 class TGetClusterStateResult : public TStatus {
 public:
-    TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation)
+    TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation,
+            bool conversionInProgress = false)
         : TStatus(std::move(status))
         , State_(std::move(state))
         , Generation_(generation)
+        , ConversionInProgress_(conversionInProgress)
     {}
 
     const std::vector<TPileStateUpdate>& GetState() const {
@@ -46,9 +50,16 @@ public:
         return Generation_;
     }
 
+    // True after the cluster has been converted from a non-bridged one until all its storage groups are converted
+    // too; no piles can be added to the cluster meanwhile.
+    bool IsConversionInProgress() const {
+        return ConversionInProgress_;
+    }
+
 private:
     std::vector<TPileStateUpdate> State_;
     uint64_t Generation_ = 0;
+    bool ConversionInProgress_ = false;
 };
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
@@ -62,6 +73,10 @@ public:
         const std::vector<std::string>& quorumPiles, const TUpdateClusterStateSettings& settings = {});
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
+
+    // Convert a running non-bridged cluster into a bridged one with a single pile. All nodes must already run with
+    // a single-pile bridge config.
+    TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings = {});
 
 private:
     class TImpl;

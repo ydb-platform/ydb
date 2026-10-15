@@ -3,6 +3,7 @@ PY3TEST()
 TEST_SRCS(
     common.py
     test_bridge.py
+    test_conversion.py
     test_discovery.py
 )
 
@@ -14,7 +15,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()
-    TIMEOUT(100)
+    TIMEOUT(600)
 ENDIF()
 
 

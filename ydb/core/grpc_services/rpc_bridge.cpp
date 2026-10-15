@@ -16,6 +16,9 @@ using TEvGetClusterStateRequest =
 using TEvUpdateClusterStateRequest =
     TGrpcRequestOperationCall<Ydb::Bridge::UpdateClusterStateRequest,
         Ydb::Bridge::UpdateClusterStateResponse>;
+using TEvConvertToBridgeRequest =
+    TGrpcRequestOperationCall<Ydb::Bridge::ConvertToBridgeRequest,
+        Ydb::Bridge::ConvertToBridgeResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -53,6 +56,10 @@ void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, cons
         state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
     to.set_generation(from.GetGeneration());
+}
+
+void CopyFromInternalClusterStateDetails(const NKikimrBridge::TClusterStateDetails& from, Ydb::Bridge::GetClusterStateResult& to) {
+    to.set_conversion_in_progress(from.GetBscConversionPending());
 }
 
 class TUpdateClusterStateRequest : public TBridgeRequestGrpc<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest,
@@ -354,10 +361,69 @@ private:
         if (config->HasClusterState()) {
             Ydb::Bridge::GetClusterStateResult result;
             CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, result);
+            CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), result);
             self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
         } else {
             self->Reply(Ydb::StatusIds::NOT_FOUND, "Bridge cluster state is not configured",
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+        }
+    }
+};
+
+class TConvertToBridgeRequest : public TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest,
+    Ydb::Bridge::ConvertToBridgeResult> {
+    using TBase = TBridgeRequestGrpc<TConvertToBridgeRequest, TEvConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResult>;
+
+public:
+    using TBase::TBase;
+
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        if (!IsAdministrator(AppData(), Request_->GetSerializedToken())) {
+            status = Ydb::StatusIds::UNAUTHORIZED;
+            issues.AddIssue("Bridge operations require administrator privileges");
+            return false;
+        }
+        return true;
+    }
+
+    void SendRequest(const TActorContext& ctx) {
+        // all the preconditions are checked by distconf on the root node
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableConvertToBridge();
+        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+    }
+
+    STFUNC(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+        }
+    }
+
+private:
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        const auto& record = ev->Get()->Record;
+        auto* self = Self();
+        switch (record.GetStatus()) {
+            case TResult::OK:
+                self->ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Bridge::ConvertToBridgeResult(), self->ActorContext());
+                break;
+
+            case TResult::NO_QUORUM:
+                self->Reply(Ydb::StatusIds::UNAVAILABLE, record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+                break;
+
+            case TResult::RACE:
+                self->Reply(Ydb::StatusIds::ABORTED, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                    self->ActorContext());
+                break;
+
+            default:
+                self->Reply(Ydb::StatusIds::GENERIC_ERROR, record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                break;
         }
     }
 };
@@ -368,6 +434,10 @@ void DoUpdateClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvi
 
 void DoGetClusterState(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TGetClusterStateRequest(p.release()));
+}
+
+void DoConvertToBridge(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TConvertToBridgeRequest(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

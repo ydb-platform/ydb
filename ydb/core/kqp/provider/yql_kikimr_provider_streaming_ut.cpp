@@ -1,7 +1,7 @@
+#include "yql_kikimr_gateway_ut_helpers.h"
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
@@ -27,6 +27,8 @@
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {
 
@@ -206,7 +208,54 @@ struct TStreamingAggregationTypeAnnTest {
     }
 };
 
-} // anonymous namespace
+void TestCreateStreamingQuery(NKikimr::TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
+        {"run", "false"},
+        {"__query_text", "SELECT 42"},
+    });
+    const auto& streamingQuery = NGatewayTest::TestCreateObjectCommon(runtime, gateway, settings, queryName);
+
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 42");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "");
+}
+
+void TestAlterStreamingQuery(NKikimr::TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TCreateObjectSettings settings("STREAMING_QUERY", queryName, {
+        {"force", "true"},
+        {"__query_text", "SELECT 84"},
+        {"resource_pool", "my_pool"},
+    });
+    const auto& streamingQuery = NGatewayTest::TestAlterObjectCommon(runtime, gateway, settings, queryName);
+
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), "false");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("__query_text"), "SELECT 84");
+    UNIT_ASSERT_VALUES_EQUAL(properties.at("resource_pool"), "my_pool");
+}
+
+void TestDropStreamingQuery(NKikimr::TTestActorRuntime& runtime, TIntrusivePtr<IKikimrGateway> gateway, const TString& queryName) {
+    TDropObjectSettings settings("STREAMING_QUERY", queryName, {});
+    NGatewayTest::TestDropObjectCommon(runtime, gateway, settings, queryName);
+}
+
+NKikimr::NKqp::TKikimrRunner GetKikimrRunnerWithStreamingQueries() {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableStreamingQueries(/* value */ true);
+
+    return NKikimr::NKqp::TKikimrRunner(NKikimr::NKqp::TKikimrSettings(config)
+        .SetEnableStreamingQueries(/* value */ true)
+        .SetWithSampleTables(/* value */ false));
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
     Y_UNIT_TEST(KqpPureExprExcludesReads) {
@@ -2271,6 +2320,23 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
         const auto properties = source.BuildConnectorProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.at("database_name"), "database");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("transient_token"), "token");
+    }
+
+    Y_UNIT_TEST(TestCreateStreamingQuery) {
+        NKikimr::NKqp::TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQueries();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), NGatewayTest::GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(TestAlterStreamingQuery) {
+        NKikimr::NKqp::TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQueries();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), NGatewayTest::GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+        TestAlterStreamingQuery(*kikimr.GetTestServer().GetRuntime(), NGatewayTest::GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(TestDropStreamingQuery) {
+        NKikimr::NKqp::TKikimrRunner kikimr = GetKikimrRunnerWithStreamingQueries();
+        TestCreateStreamingQuery(*kikimr.GetTestServer().GetRuntime(), NGatewayTest::GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
+        TestDropStreamingQuery(*kikimr.GetTestServer().GetRuntime(), NGatewayTest::GetIcGateway(kikimr.GetTestServer()), "/Root/MyFolder/MyStreamingQuery");
     }
 }
 

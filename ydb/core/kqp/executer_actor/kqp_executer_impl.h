@@ -567,7 +567,7 @@ protected:
             YQL_ENSURE(false, "Unexpected schema inclusion mode");
         }
 
-        TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+        TKqpProtoBuilder protoBuilder;
         protoBuilder.BuildYdbResultSet(
             *streamEv->Record.MutableResultSet(), std::move(batches),
             txResult.MkqlItemType, FormatsSettings, fillSchema,

@@ -11,19 +11,13 @@ struct TAccessServiceSettings : NGrpcActorClient::TGrpcClientSettings {
     TAccessServiceSettings(TString endpoint, TStringBuf userAgentHint);
 };
 
-IActor* CreateAccessServiceV1(const TAccessServiceSettings& settings);
-IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings);
+IActor* CreateAccessService(const TAccessServiceSettings& settings);
 
-inline IActor* CreateAccessServiceV1(TString endpoint, TStringBuf userAgentHint) {
+inline IActor* CreateAccessService(TString endpoint, TStringBuf userAgentHint) {
     TAccessServiceSettings settings(std::move(endpoint), userAgentHint);
-    return CreateAccessServiceV1(settings);
+    return CreateAccessService(settings);
 }
 
-inline IActor* CreateAccessServiceV2(TString endpoint, TStringBuf userAgentHint) {
-    TAccessServiceSettings settings(std::move(endpoint), userAgentHint);
-    return CreateAccessServiceV2(settings);
-}
-
-IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings, bool enableV2Interface); // for compatibility with older code
+IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings); // for compatibility with older code
 
 }

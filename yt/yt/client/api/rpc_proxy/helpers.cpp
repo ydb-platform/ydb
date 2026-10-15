@@ -6,10 +6,13 @@
 #include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
+#include <yt/yt/client/api/table_reader.h>
 
 #include <yt/yt/client/sequoia_client/public.h>
 
 #include <yt/yt/client/signature/signature.h>
+
+#include <yt/yt/client/chunk_client/timing_statistics.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
@@ -700,6 +703,56 @@ void FromProto(
             counter->SetMax(protoCounter.max());
         }
     }
+}
+
+void ToProto(
+    NProto::TTimingStatistics* protoStatistics,
+    const NChunkClient::TTimingStatistics& statistics)
+{
+    protoStatistics->set_wait_time(statistics.WaitTime.MicroSeconds());
+    protoStatistics->set_read_time(statistics.ReadTime.MicroSeconds());
+    protoStatistics->set_idle_time(statistics.IdleTime.MicroSeconds());
+}
+
+void FromProto(
+    NChunkClient::TTimingStatistics* statistics,
+    const NProto::TTimingStatistics& protoStatistics)
+{
+    statistics->WaitTime = TDuration::MicroSeconds(protoStatistics.wait_time());
+    statistics->ReadTime = TDuration::MicroSeconds(protoStatistics.read_time());
+    statistics->IdleTime = TDuration::MicroSeconds(protoStatistics.idle_time());
+}
+
+void ToProto(
+    NProto::TRemoteTableReaderTimingStatistics* protoStatistics,
+    const NApi::TRemoteTableReaderTimingStatistics& statistics)
+{
+    if (statistics.MasterFetchTime) {
+        protoStatistics->set_master_fetch_time(statistics.MasterFetchTime->MicroSeconds());
+    }
+    if (statistics.DataReadTiming) {
+        ToProto(protoStatistics->mutable_data_read_timing(), *statistics.DataReadTiming);
+    }
+    protoStatistics->set_total_time(statistics.TotalTime.MicroSeconds());
+    protoStatistics->set_encode_time(statistics.EncodeTime.MicroSeconds());
+    protoStatistics->set_write_stall_time(statistics.WriteStallTime.MicroSeconds());
+    protoStatistics->set_window_drained_time(statistics.WindowDrainedTime.MicroSeconds());
+}
+
+void FromProto(
+    NApi::TRemoteTableReaderTimingStatistics* statistics,
+    const NProto::TRemoteTableReaderTimingStatistics& protoStatistics)
+{
+    if (protoStatistics.has_master_fetch_time()) {
+        statistics->MasterFetchTime = TDuration::MicroSeconds(protoStatistics.master_fetch_time());
+    }
+    if (protoStatistics.has_data_read_timing()) {
+        statistics->DataReadTiming = FromProto<NChunkClient::TTimingStatistics>(protoStatistics.data_read_timing());
+    }
+    statistics->TotalTime = TDuration::MicroSeconds(protoStatistics.total_time());
+    statistics->EncodeTime = TDuration::MicroSeconds(protoStatistics.encode_time());
+    statistics->WriteStallTime = TDuration::MicroSeconds(protoStatistics.write_stall_time());
+    statistics->WindowDrainedTime = TDuration::MicroSeconds(protoStatistics.window_drained_time());
 }
 
 void ToProto(

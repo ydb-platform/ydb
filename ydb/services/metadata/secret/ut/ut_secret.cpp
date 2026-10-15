@@ -75,13 +75,9 @@ Y_UNIT_TEST_SUITE(Secret) {
             Checkers.clear();
         }
 
-        STATEFN(StateInit) {
-            switch (ev->GetTypeRewrite()) {
+        STRICT_STFUNC(StateInit,
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-                default:
-                    Y_ABORT_UNLESS(false);
-            }
-        }
+        );
 
         void CheckRuntime(TTestActorRuntime& runtime) {
             const auto pred = [this](TAutoPtr<IEventHandle>& event)->TTestActorRuntimeBase::EEventAction {

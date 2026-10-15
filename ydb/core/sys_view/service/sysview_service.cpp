@@ -443,7 +443,13 @@ private:
         record.SetNodeId(SelfId().NodeId());
 
         for (auto& [service, state] : dbCounters.States) {
-            auto* serviceCounters = record.AddServiceCounters();
+            auto* list = record.MutableServiceCounters();
+            if constexpr (!isLabeled) {
+                if (service == NKikimrSysView::TABLETS_FOLLOWERS) {
+                    list = record.MutableFollowerServiceCounters(); // see sys_view.proto
+                }
+            }
+            auto* serviceCounters = list->Add();
             serviceCounters->SetService(service);
             auto* diff = serviceCounters->MutableCounters();
 
@@ -727,9 +733,9 @@ private:
     void Handle(TEvSysView::TEvRegisterDbCounters::TPtr& ev) {
         const auto service = ev->Get()->Service;
 
-        if (service == NKikimrSysView::TABLETS) { // register by path id
+        if (service == NKikimrSysView::TABLETS || service == NKikimrSysView::TABLETS_FOLLOWERS) { // register by path id
             auto pathId = ev->Get()->PathId;
-            UnresolvedTabletCounters[pathId] = ev->Get()->Counters;
+            UnresolvedTabletCounters[pathId][service] = ev->Get()->Counters;
             RequestDatabaseName(pathId);
 
             YDB_LOG_DEBUG("Handle TEvSysView::TEvRegisterDbCounters: registering counters by path id",
@@ -854,7 +860,9 @@ private:
                 return;
             }
 
-            RegisterDbCounters(database, NKikimrSysView::TABLETS, it->second);
+            for (const auto& [service, counters] : it->second) {
+                RegisterDbCounters(database, service, counters);
+            }
             UnresolvedTabletCounters.erase(it);
 
             YDB_LOG_INFO("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult: navigate by path id succeeded",
@@ -1146,7 +1154,7 @@ private:
 
     std::unordered_map<TString, TDbCounters> DatabaseCounters;
     std::unordered_map<TString, TDbCounters> DatabaseLabeledCounters;
-    THashMap<TPathId, TIntrusivePtr<IDbCounters>> UnresolvedTabletCounters;
+    THashMap<TPathId, THashMap<NKikimrSysView::EDbCountersService, TIntrusivePtr<IDbCounters>>> UnresolvedTabletCounters;
     TActorId DbWatcherActorId;
 
     static constexpr i64 ConcurrentScansLimit = 5;

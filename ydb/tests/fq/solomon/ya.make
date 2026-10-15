@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 TEST_SRCS(
     test.py
 )

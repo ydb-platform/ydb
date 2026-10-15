@@ -1,12 +1,10 @@
 #include "common.h"
 
-#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
-
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
 #include <ydb/core/kqp/ut/federated_query/s3/s3_recipe_ut_helpers.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -15,11 +13,15 @@
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-
-#include <fmt/format.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#include <fmt/format.h>
+
+#include <util/string/builder.h>
+
+#include <atomic>
 
 namespace NKikimr::NKqp {
 
@@ -67,6 +69,12 @@ private:
 };
 
 } // anonymous namespace
+
+TString MakeExternalName(TStringBuf prefix) {
+    // Recipes are shared by multiple tests; the counter distinguishes calls within one clock tick.
+    static std::atomic<ui64> sequence{0};
+    return TStringBuilder() << prefix << "_" << TInstant::Now().MicroSeconds() << "_" << sequence.fetch_add(1, std::memory_order_relaxed);
+}
 
 TStreamingTestFixture::~TStreamingTestFixture () {
     if (PqGatewayDriver) {
@@ -213,11 +221,6 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
 
             authConfig.SetAccessServiceEndpoint(iamEndpoint);
             authConfig.SetUseAccessServiceTLS(false);
-        }
-
-        {
-            auto useAccessServiceV2 = getenv("USE_ACCESS_SERVICE_V2");
-            featureFlags.SetEnableAccessServiceV2Interface(!useAccessServiceV2 || FromString<bool>(useAccessServiceV2));
         }
 
         LogSettings

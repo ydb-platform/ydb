@@ -2,6 +2,7 @@
 
 #include "build_info.h"
 #include "common.h"
+#include "oidc_options.h"
 #include "client_command_options.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -142,6 +143,7 @@ public:
         bool UsePerChannelTcpConnection = false;
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
+        TOidcCliOptions Oidc;
 
         ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosityLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
@@ -195,28 +197,7 @@ public:
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
 
-        TConfig(int argc, char** argv)
-            : ArgC(argc)
-            , ArgV(argv)
-            , InitialArgC(argc)
-            , InitialArgV(argv)
-            , Opts(nullptr)
-            , ParseResult(nullptr)
-            , HelpCommandVerbosityLevel(ParseHelpCommandVerbosity(argc, argv))
-            , TabletId(0)
-        {
-            CredentialsGetter = [](const TClientCommand::TConfig& config) {
-                if (config.SecurityToken) {
-                    return CreateOAuthCredentialsProviderFactory(config.SecurityToken);
-                }
-                if (config.UseOauth2TokenExchange) {
-                    if (config.Oauth2KeyFile) {
-                        return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
-                    }
-                }
-                return CreateInsecureCredentialsProviderFactory();
-            };
-        }
+        TConfig(int argc, char** argv);
 
         std::shared_ptr<ICredentialsProviderFactory> GetSingletonCredentialsProviderFactory();
 

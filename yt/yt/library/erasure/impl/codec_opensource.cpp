@@ -16,10 +16,10 @@ ICodec* FindCodec(ECodec codecId)
     // NB: Changing the set of supported codecs or their properties requires master reign promotion.
     switch (codecId) {
         // These codecs use ISA-l as a backend.
-        case ECodec::ReedSolomon_3_3: {
+        case ECodec::IsaReedSolomon_3_3: {
             static NDetail::TCodec<
                 TReedSolomonIsa<3, 3, 8, NDetail::TCodecTraits>,
-                ECodec::ReedSolomon_3_3,
+                ECodec::IsaReedSolomon_3_3,
                 /*bytewise*/ true> result;
             return &result;
         }

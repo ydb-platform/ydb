@@ -134,7 +134,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     TActorId infoAggregator,
     TDuration checkPartitionCountPeriod,
     TActorId controlPlaneActorId,
-    bool enableStreamingQueryTopicAutopartitioning
+    bool enableStreamingQueryTopicAutopartitioning,
+    IDqSchedulableWorkFactoryPtr workFactory
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -145,6 +146,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         : bufferSize;
 
     NFq::NMessageStream::TMessageStreamReadActorSettings common;
+    common.WorkFactory = workFactory;
     common.InputIndex = inputIndex;
     common.TaskId = taskId;
     common.TxId = txId;
@@ -219,9 +221,9 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
             }
         }
         auto executor = std::make_shared<TTopicEventProcessor<NFq::NMessageStream::TEvExecuteMessageStreamCallback>>();
-        cluster.CreateClient = [driver, pqGateway, settings, info = clusters[i], credentials, executor](const TActorContext& ctx) {
+        cluster.CreateClient = [driver, pqGateway, settings, info = clusters[i], credentials, executor, useCpuQuota = bool(workFactory)](const TActorContext& ctx) {
             auto options = pqGateway->GetTopicClientSettings();
-            if (settings.GetUseActorSystemThreadsInTopicClient()) {
+            if (settings.GetUseActorSystemThreadsInTopicClient() || useCpuQuota) {
                 executor->SetupTopicClientSettings(ctx.ActorSystem(), ctx.SelfID, options);
             }
             options.Database(settings.GetDatabase()).DiscoveryEndpoint(settings.GetEndpoint())
@@ -333,7 +335,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 infoAggregator,
                 checkPartitionCountPeriod,
                 controlPlaneActorId,
-                enableStreamingQueryTopicAutopartitioning);
+                enableStreamingQueryTopicAutopartitioning,
+                args.SchedulableWorkFactory);
         }
 
         const TStringBuf format(settings.GetFormat());

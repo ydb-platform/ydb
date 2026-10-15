@@ -1,10 +1,6 @@
 #include "manager.h"
 #include "queries.h"
 
-#include <library/cpp/protobuf/interop/cast.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/retry/retry_policy.h>
-
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
@@ -14,10 +10,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -33,8 +29,11 @@
 #include <yql/essentials/core/sql_types/hopping.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
-#include <fmt/format.h>
+#include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/retry/retry_policy.h>
 
+#include <fmt/format.h>
 #include <google/protobuf/util/time_util.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
@@ -3140,8 +3139,10 @@ private:
             if (SchemeOperationStarted) {
                 schemeTx->SetReplaceIfExists(true);
                 create.ClearOperationOwnerActorId();
-                create.MutableProperties()->MutableProperties()->erase(TStreamingQueryConfig::TProperties::InflightOperation);
-                create.MutableProperties()->MutableProperties()->erase(TStreamingQueryConfig::TProperties::OperationOwnerUserToken);
+
+                auto& properties = *create.MutableProperties()->MutableProperties();
+                properties.erase(TStreamingQueryConfig::TProperties::InflightOperation);
+                properties.erase(TStreamingQueryConfig::TProperties::OperationOwnerUserToken);
             } else {
                 ActorIdToProto(TBase::SelfId(), create.MutableOperationOwnerActorId());
                 auto& properties = *create.MutableProperties()->MutableProperties();
@@ -3153,7 +3154,8 @@ private:
         }
 
         auto token = Context.GetUserToken();
-        if (SchemeOperationStarted || (Access & NACLib::RemoveSchema)) {
+        if ((SchemeOperationStarted && AppData()->FeatureFlags.GetEnableStreamingQuerySchemeOperations()) || (Access & NACLib::RemoveSchema)) {
+            // Registered scheme operations must finish even if the user's permissions have changed.
             // DROP registers its operation with an internal ALTER after checking the user's RemoveSchema permission.
             token = NACLib::TSystemUsers::Metadata();
             token->SaveSerializationInfo();

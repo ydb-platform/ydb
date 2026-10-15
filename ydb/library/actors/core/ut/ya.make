@@ -38,6 +38,8 @@ SRCS(
     executor_pools_ut.cpp
     inmemory_metrics_ut.cpp
     metric_system_ut.cpp
+    log_mon_ut.cpp
+    log_contract_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     node_location_ut.cpp

@@ -47,7 +47,7 @@ public:
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() const;
 
 private:
-    NKikimr::NMiniKQL::TScopedAlloc Alloc{__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /* supportsSizedAllocators */ false, /* initiallyAcquired */ false};
+    NKikimr::NMiniKQL::TScopedAlloc Alloc{__LOCATION__, NKikimr::TAlignedPagePoolCounters(), /* initiallyAcquired */ false};
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> Env;
 };
 

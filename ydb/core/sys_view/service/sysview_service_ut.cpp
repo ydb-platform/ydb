@@ -2,6 +2,7 @@
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -63,6 +64,12 @@ namespace NKikimr {
                 }
             };
 
+            class TStubDbCounters: public IDbCounters {
+            public:
+                void ToProto(TDbServiceCounters&) override {}
+                void FromProto(TDbServiceCounters&) override {}
+            };
+
             struct TServiceIds {
                 TActorId ServiceId;
                 TActorId PipeCacheEdge;
@@ -88,6 +95,9 @@ namespace NKikimr {
                     if (request->ResultSet.size() == 1) {
                         auto& entry = request->ResultSet.back();
                         entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+                        if (entry.RequestType == NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId) {
+                            entry.Path = SplitPath(Database);
+                        }
                         const TPathId domainKey(72057594046644480ull, 1);
                         auto domainInfo = MakeIntrusive<NSchemeCache::TDomainInfo>(domainKey, domainKey);
                         domainInfo->Params.SetSysViewProcessor(ProcessorTabletId);
@@ -260,6 +270,27 @@ namespace NKikimr {
 
                 auto req2 = GrabRequest(runtime, pipeCacheEdge);
                 UNIT_ASSERT_VALUES_EQUAL(req2.GetGeneration(), gen1);
+            }
+
+            Y_UNIT_TEST(FollowerTabletCountersRideOwnField) {
+                TTestBasicRuntime runtime(1);
+                auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+                // RequestDatabaseName calls GetDomain(), which aborts on the bare TAppPrepare
+                runtime.GetAppData().DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
+
+                for (auto service : {NKikimrSysView::TABLETS, NKikimrSysView::TABLETS_FOLLOWERS}) {
+                    runtime.Send(new IEventHandle(serviceId, runtime.AllocateEdgeActor(),
+                        new TEvSysView::TEvRegisterDbCounters(service, TPathId(1, 2), MakeIntrusive<TStubDbCounters>())),
+                        0, true);
+                }
+
+                auto req = GrabRequest(runtime, pipeCacheEdge);
+
+                UNIT_ASSERT_VALUES_EQUAL(req.ServiceCountersSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL((int)req.GetServiceCounters(0).GetService(), (int)NKikimrSysView::TABLETS);
+                UNIT_ASSERT_VALUES_EQUAL(req.FollowerServiceCountersSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL((int)req.GetFollowerServiceCounters(0).GetService(),
+                                         (int)NKikimrSysView::TABLETS_FOLLOWERS);
             }
 
             Y_UNIT_TEST(DetailedOnlyDatabaseStillSends) {

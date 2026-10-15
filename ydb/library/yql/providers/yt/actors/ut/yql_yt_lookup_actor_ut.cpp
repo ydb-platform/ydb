@@ -136,7 +136,7 @@ auto CreateMockYtService(const auto& lookupTable) {
 }
 
 Y_UNIT_TEST(Lookup) {
-    auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+    auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> functionRegistry = CreateFunctionRegistry(NKikimr::NMiniKQL::IBuiltinFunctionRegistry::TPtr());
     NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
     NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);
@@ -215,7 +215,7 @@ Y_UNIT_TEST(Lookup) {
 }
 
 Y_UNIT_TEST(LookupMultiMatches) {
-    auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+    auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> functionRegistry = CreateFunctionRegistry(NKikimr::NMiniKQL::IBuiltinFunctionRegistry::TPtr());
     NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
     NKikimr::NMiniKQL::THolderFactory holderFactory(alloc->Ref(), memUsage);

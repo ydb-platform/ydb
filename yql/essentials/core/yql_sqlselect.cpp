@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_module_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql {
 
@@ -138,15 +139,15 @@ TExprNode::TPtr ExpandSqlWindowCall(
     }
 
     if (name == "cumedist" && argsCount == 0) {
+        TExprNode::TListType options;
+        if (!isYql || HasSetting(*call->Child(2), "ansi")) {
+            options.push_back(ctxExpr.NewList(call->Pos(), {ctxExpr.NewAtom(call->Pos(), "ansi")}));
+        }
         // clang-format off
         return ctxExpr.Builder(call->Pos())
             .Callable("CumeDist")
                 .Add(0, std::move(listType))
-                .List(1)
-                    .List(0)
-                        .Atom(0, "ansi")
-                    .Seal()
-                .Seal()
+                .Add(1, ctxExpr.NewList(call->Pos(), std::move(options)))
             .Seal()
             .Build();
         // clang-format on

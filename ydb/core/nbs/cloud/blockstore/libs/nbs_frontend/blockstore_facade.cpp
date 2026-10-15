@@ -5,13 +5,13 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_prefix.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat/classic_volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_control.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service_method.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
 
 #include <util/string/builder.h>
 
@@ -61,23 +61,6 @@ NProto::TError ValidateMountParameters(
     // are ignored; revisit their role with the full session/access contract.
     // RequestId and tracing headers describe individual requests, not sessions.
     return {};
-}
-
-NNbs1CompatApi::NBlockStore::NProto::TVolume MakeClassicVolume(
-    const NKikimrBlockStore::TVolumeConfig& config)
-{
-    NNbs1CompatApi::NBlockStore::NProto::TVolume volume;
-    volume.SetDiskId(config.GetDiskId());
-    volume.SetBlockSize(config.GetBlockSize());
-    volume.SetBlocksCount(config.GetPartitions(0).GetBlockCount());
-    volume.SetPartitionsCount(config.PartitionsSize());
-    // Registration accepts only native SSD; map explicitly to the wire enum.
-    volume.SetStorageMediaKind(NNbs1CompatApi::NProto::STORAGE_MEDIA_SSD);
-    volume.SetConfigVersion(config.GetVersion());
-    volume.SetProjectId(config.GetProjectId());
-    volume.SetFolderId(config.GetFolderId());
-    volume.SetCloudId(config.GetCloudId());
-    return volume;
 }
 
 NProto::TError ValidateIoMode(ui32 flags, const NCompatProto::THeaders& headers)

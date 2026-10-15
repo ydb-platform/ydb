@@ -15,17 +15,14 @@ class ExtensionPoint(abc.ABC):
 
     @abc.abstractmethod
     def is_applicable(self, request):
-        ExtensionPoint.is_applicable.__annotations__ = {
-            'request': pytest.FixtureRequest,
-            'return': bool
-        }
+        ExtensionPoint.is_applicable.__annotations__ = {'request': pytest.FixtureRequest, 'return': bool}
         pass
 
     def apply_to_kikimr_conf(self, request, configuration):
         ExtensionPoint.is_applicable.__annotations__ = {
             'request': pytest.FixtureRequest,
             'configuration': StreamingOverKikimrConfig,
-            'return': None
+            'return': None,
         }
         pass
 
@@ -33,16 +30,14 @@ class ExtensionPoint(abc.ABC):
         ExtensionPoint.is_applicable.__annotations__ = {
             'request': pytest.FixtureRequest,
             'kikimr': StreamingOverKikimr,
-            'return': None
+            'return': None,
         }
         pass
 
 
 class AddInflightExtension(ExtensionPoint):
     def is_applicable(self, request):
-        return (hasattr(request, 'param')
-                and isinstance(request.param, dict)
-                and "inflight" in request.param)
+        return hasattr(request, 'param') and isinstance(request.param, dict) and "inflight" in request.param
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.inflight = request.param["inflight"]
@@ -52,9 +47,11 @@ class AddInflightExtension(ExtensionPoint):
 
 class AddAllowConcurrentListingsExtension(ExtensionPoint):
     def is_applicable(self, request):
-        return (hasattr(request, 'param')
-                and isinstance(request.param, dict)
-                and "allow_concurrent_listings" in request.param)
+        return (
+            hasattr(request, 'param')
+            and isinstance(request.param, dict)
+            and "allow_concurrent_listings" in request.param
+        )
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.allow_concurrent_listings = request.param["allow_concurrent_listings"]
@@ -64,9 +61,7 @@ class AddAllowConcurrentListingsExtension(ExtensionPoint):
 
 class AddDataInflightExtension(ExtensionPoint):
     def is_applicable(self, request):
-        return (hasattr(request, 'param')
-                and isinstance(request.param, dict)
-                and "data_inflight" in request.param)
+        return hasattr(request, 'param') and isinstance(request.param, dict) and "data_inflight" in request.param
 
     def apply_to_kikimr(self, request, kikimr):
         kikimr.data_inflight = request.param["data_inflight"]
@@ -80,9 +75,7 @@ def enable_external_data_sources(qs_config):
 
 class AddFormatSizeLimitExtension(ExtensionPoint):
     def is_applicable(self, request):
-        return (hasattr(request, 'param')
-                and isinstance(request.param, dict)
-                and len(request.param) != 0)
+        return hasattr(request, 'param') and isinstance(request.param, dict) and len(request.param) != 0
 
     def apply_to_kikimr(self, request, kikimr):
         s3 = {}
@@ -91,8 +84,7 @@ class AddFormatSizeLimitExtension(ExtensionPoint):
             if name == "":
                 s3['file_size_limit'] = limit
             else:
-                s3['format_size_limit'].append(
-                    {'name': name, 'file_size_limit': limit})
+                s3['format_size_limit'].append({'name': name, 'file_size_limit': limit})
         kikimr.compute_plane.fq_config['gateways']['s3'] = s3  # v1
         kikimr.compute_plane.qs_config['s3'] = s3  # v2
         enable_external_data_sources(kikimr.compute_plane.qs_config)
@@ -101,10 +93,7 @@ class AddFormatSizeLimitExtension(ExtensionPoint):
 class DefaultConfigExtension(ExtensionPoint):
 
     def __init__(self, s3_url):
-        DefaultConfigExtension.__init__.__annotations__ = {
-            's3_url': str,
-            'return': None
-        }
+        DefaultConfigExtension.__init__.__annotations__ = {'s3_url': str, 'return': None}
         super().__init__()
         self.s3_url = s3_url
 
@@ -116,15 +105,9 @@ class DefaultConfigExtension(ExtensionPoint):
         if isinstance(kikimr.compute_plane, YqTenant):
             kikimr.compute_plane.fq_config['common']['object_storage_endpoint'] = self.s3_url
         kikimr.control_plane.fq_config['control_plane_storage']['retry_policy_mapping'] = [
-            {
-                'status_code': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-                'policy': {
-                    'retry_count': 0
-                }
-            }
+            {'status_code': [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13], 'policy': {'retry_count': 0}}
         ]
-        kikimr.control_plane.config_generator.yaml_config['metering_config'] = {
-            'metering_file_path': 'metering.bill'}
+        kikimr.control_plane.config_generator.yaml_config['metering_config'] = {'metering_file_path': 'metering.bill'}
 
         solomon_endpoint = os.environ.get('SOLOMON_HTTP_URL')
         if solomon_endpoint is not None:
@@ -140,10 +123,7 @@ class DefaultConfigExtension(ExtensionPoint):
 class YQv2Extension(ExtensionPoint):
 
     def __init__(self, yq_version, is_replace_if_exists=False, enable_schema_inference=True):
-        YQv2Extension.__init__.__annotations__ = {
-            'yq_version': str,
-            'return': None
-        }
+        YQv2Extension.__init__.__annotations__ = {'yq_version': str, 'return': None}
         super().__init__()
         self.yq_version = yq_version
         self.is_replace_if_exists = is_replace_if_exists
@@ -170,11 +150,13 @@ class YQv2Extension(ExtensionPoint):
         else:
             configuration.node_count = {
                 "/cp": TenantConfig(node_count=1),
-                "/compute": TenantConfig(node_count=1,
-                                         tenant_type=TenantType.YDB,
-                                         extra_feature_flags=extra_feature_flags,
-                                         disabled_feature_flags=disabled_feature_flags,
-                                         extra_grpc_services=['query_service']),
+                "/compute": TenantConfig(
+                    node_count=1,
+                    tenant_type=TenantType.YDB,
+                    extra_feature_flags=extra_feature_flags,
+                    disabled_feature_flags=disabled_feature_flags,
+                    extra_grpc_services=['query_service'],
+                ),
             }
 
     def is_applicable(self, request):
@@ -184,33 +166,18 @@ class YQv2Extension(ExtensionPoint):
         kikimr.control_plane.fq_config['control_plane_storage']['enabled'] = True
         kikimr.control_plane.fq_config['compute'] = {
             'default_compute': 'IN_PLACE',
-            'compute_mapping': [
-                {
-                    'query_type': 'ANALYTICS',
-                    'compute': 'YDB',
-                    'activation': {
-                        'percentage': 100
-                    }
-                }
-            ],
+            'compute_mapping': [{'query_type': 'ANALYTICS', 'compute': 'YDB', 'activation': {'percentage': 100}}],
             'ydb': {
                 'enable': 'true',
                 'control_plane': {
                     'enable': 'true',
                     'single': {
-                        'connection': {
-                            'endpoint': kikimr.tenants["/compute"].endpoint(),
-                            'database': '/local'
-                        },
-                        'access_config': {
-                            'external_sources_access_sid' : ['account@as']
-                        }
-                    }
-                }
+                        'connection': {'endpoint': kikimr.tenants["/compute"].endpoint(), 'database': '/local'},
+                        'access_config': {'external_sources_access_sid': ['account@as']},
+                    },
+                },
             },
-            "supported_compute_ydb_features": {
-                "replace_if_exists": self.is_replace_if_exists
-            }
+            "supported_compute_ydb_features": {"replace_if_exists": self.is_replace_if_exists},
         }
 
 
@@ -225,14 +192,10 @@ class ComputeExtension(ExtensionPoint):
             }
 
     def is_applicable(self, request):
-        return (hasattr(request, 'param')
-                and isinstance(request.param, dict)
-                and "compute" in request.param)
+        return hasattr(request, 'param') and isinstance(request.param, dict) and "compute" in request.param
 
     def apply_to_kikimr(self, request, kikimr):
-        kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {
-            "common_tenant_name": ["/compute"]
-        }
+        kikimr.control_plane.fq_config['control_plane_storage']['mapping'] = {"common_tenant_name": ["/compute"]}
         del request.param["compute"]
 
 
@@ -249,10 +212,7 @@ class AuditExtension(ExtensionPoint):
 class StatsModeExtension(ExtensionPoint):
 
     def __init__(self, stats_mode):
-        YQv2Extension.__init__.__annotations__ = {
-            'stats_mode': str,
-            'return': None
-        }
+        YQv2Extension.__init__.__annotations__ = {'stats_mode': str, 'return': None}
         super().__init__()
         self.stats_mode = stats_mode
 
@@ -267,11 +227,7 @@ class StatsModeExtension(ExtensionPoint):
 class BindingsModeExtension(ExtensionPoint):
 
     def __init__(self, bindings_mode, yq_version):
-        YQv2Extension.__init__.__annotations__ = {
-            'bindings_mode': str,
-            'yq_version': str,
-            'return': None
-        }
+        YQv2Extension.__init__.__annotations__ = {'bindings_mode': str, 'yq_version': str, 'return': None}
         super().__init__()
         self.bindings_mode = bindings_mode
         self.yq_version = yq_version
@@ -286,12 +242,7 @@ class BindingsModeExtension(ExtensionPoint):
 class ConnectorExtension(ExtensionPoint):
 
     def __init__(self, host, port, use_ssl):
-        ConnectorExtension.__init__.__annotations__ = {
-            'host': str,
-            'port': int,
-            'use_ssl': bool,
-            'return': None
-        }
+        ConnectorExtension.__init__.__annotations__ = {'host': str, 'port': int, 'use_ssl': bool, 'return': None}
         super().__init__()
         self.host = host
         self.port = port
@@ -328,10 +279,7 @@ class ConnectorExtension(ExtensionPoint):
 class MDBExtension(ExtensionPoint):
 
     def __init__(self, endpoint: str, use_ssl=False):
-        MDBExtension.__init__.__annotations__ = {
-            'endpoint': str,
-            'use_ssl': bool
-        }
+        MDBExtension.__init__.__annotations__ = {'endpoint': str, 'use_ssl': bool}
         super().__init__()
         self.endpoint = endpoint
         self.use_ssl = use_ssl
@@ -367,7 +315,9 @@ class YdbMvpExtension(ExtensionPoint):
 
     def apply_to_kikimr(self, request, kikimr):
         if 'generic' in kikimr.compute_plane.qs_config:
-            kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common']['ydb_mvp_cloud_endpoint']
+            kikimr.compute_plane.qs_config['generic']['ydb_mvp_endpoint'] = kikimr.control_plane.fq_config['common'][
+                'ydb_mvp_cloud_endpoint'
+            ]
         if bool(kikimr.compute_plane.qs_config):
             enable_external_data_sources(kikimr.compute_plane.qs_config)
 
@@ -420,7 +370,7 @@ def start_kikimr(request, kikimr_extensions):
     start_kikimr.__annotations__ = {
         'request': pytest.FixtureRequest,
         'kikimr_extensions': list[ExtensionPoint],
-        'return': bool
+        'return': bool,
     }
     kikimr_configuration = StreamingOverKikimrConfig(cloud_mode=True)
 

@@ -1,10 +1,14 @@
+#include <ydb/core/base/counters.h>
+#include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/query_metrics_limits.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/query_interval.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -189,6 +193,29 @@ void TestStaleFailure(bool disconnect) {
     UNIT_ASSERT_VALUES_EQUAL(entries.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(entries[0].GetMetrics().GetCount(), 1);
     UNIT_ASSERT_VALUES_EQUAL(entries[0].GetMetrics().GetCpuTimeUs().GetSum(), 20);
+}
+
+void SendDataShardCounters(TQueryMetricsEnv& env, ui64 nodeId, NKikimrSysView::EDbCountersService service,
+    ui64 readRows, ui64 uniqueRows)
+{
+    auto request = MakeHolder<TEvSysView::TEvSendDbCountersRequest>();
+    request->Record.SetNodeId(nodeId);
+    request->Record.SetGeneration(1);
+    auto* serviceCounters = service == NKikimrSysView::TABLETS_FOLLOWERS
+        ? request->Record.AddFollowerServiceCounters()
+        : request->Record.AddServiceCounters();
+    serviceCounters->SetService(service);
+    auto* tablet = serviceCounters->MutableCounters()->AddTabletCounters();
+    tablet->SetType(TTabletTypes::DataShard);
+    auto* executor = tablet->MutableExecutorCounters();
+    executor->MutableSimple()->Resize(NTabletFlatExecutor::TExecutorCounters::DB_UNIQUE_ROWS_TOTAL + 1, 0);
+    executor->SetSimple(NTabletFlatExecutor::TExecutorCounters::DB_UNIQUE_ROWS_TOTAL, uniqueRows);
+    // Cumulative holds (index, value) pairs
+    auto* app = tablet->MutableAppCounters();
+    app->SetCumulativeCount(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW + 1);
+    app->AddCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW);
+    app->AddCumulative(readRows);
+    env.Runtime.Send(new IEventHandle(env.Processor, env.Edge, request.Release()));
 }
 
 } // anonymous namespace
@@ -381,6 +408,46 @@ Y_UNIT_TEST_SUITE(TQueryMetricsProcessorTest) {
             UNIT_ASSERT_VALUES_EQUAL(entry.GetMetrics().GetCount(), 1);
             UNIT_ASSERT_VALUES_EQUAL(entry.GetKey().GetRank(), 1);
         }
+    }
+}
+
+
+Y_UNIT_TEST_SUITE(TDbCountersProcessorTest) {
+    Y_UNIT_TEST(FollowerTabletCounters) {
+        TQueryMetricsEnv env;
+        env.Runtime.RegisterService(MakeSchemeCacheID(), env.Edge);
+        // The processor reads the flag on init
+        env.Runtime.GetAppData().FeatureFlags.SetEnableDbCounters(true);
+        env.Reboot();
+
+        // The database navigate attaches ydb_serverless
+        auto navigate = env.Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySet>(env.Edge, TDuration::Seconds(1));
+        UNIT_ASSERT(navigate);
+        navigate->Get()->Request->ResultSet.back().Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        env.Runtime.Send(new IEventHandle(env.Processor, env.Edge,
+            new TEvTxProxySchemeCache::TEvNavigateKeySetResult(navigate->Get()->Request)));
+
+        // Followers come first, so a plain walk of the services map would apply TABLETS first
+        SendDataShardCounters(env, 1, NKikimrSysView::TABLETS_FOLLOWERS, 3, 7);
+        SendDataShardCounters(env, 2, NKikimrSysView::TABLETS, 2, 10);
+
+        // Applies run every 5 s, so exactly one applies these counters: it must include the followers
+        env.Runtime.SimulateSleep(TDuration::Seconds(6));
+
+        auto ydb = GetServiceCounters(env.Runtime.GetAppData().Counters, "ydb_serverless", false)
+            ->GetSubgroup("database", env.Database)
+            ->GetSubgroup("cloud_id", "")
+            ->GetSubgroup("folder_id", "")
+            ->GetSubgroup("database_id", "")
+            ->GetSubgroup("host", "");
+        auto value = [&](const TString& name) {
+            auto counter = ydb->FindNamedCounter("name", name);
+            UNIT_ASSERT_C(counter, name);
+            return counter->Val();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(value("table.datashard.read.rows"), 5);
+        // LeaderOnly
+        UNIT_ASSERT_VALUES_EQUAL(value("table.datashard.row_count"), 10);
     }
 }
 

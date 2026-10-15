@@ -44,6 +44,8 @@ struct TEvPrivate {
         EvAllowDropStream,
         EvPrepareAttachDst,
         EvPrepareAttachDstResult,
+        EvRestoreSession,
+        EvBootPersistedWorkers,
 
         EvEnd,
     };
@@ -319,6 +321,18 @@ struct TEvPrivate {
     };
 
     struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
+    };
+
+    struct TEvBootPersistedWorkers: public TEventLocal<TEvBootPersistedWorkers, EvBootPersistedWorkers> {
+    };
+
+    struct TEvRestoreSession: public TEventLocal<TEvRestoreSession, EvRestoreSession> {
+        const ui32 NodeId;
+
+        explicit TEvRestoreSession(ui32 nodeId)
+            : NodeId(nodeId)
+        {
+        }
     };
 
 }; // TEvPrivate

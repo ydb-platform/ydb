@@ -1,0 +1,8 @@
+{
+    "test_blobsan.TestBlobSan.test_barrier_selection": {
+        "uri": "file://test_blobsan.TestBlobSan.test_barrier_selection/output.txt"
+    },
+    "test_blobsan.TestBlobSan.test_write2x2_candidates": {
+        "uri": "file://test_blobsan.TestBlobSan.test_write2x2_candidates/output.txt"
+    }
+}

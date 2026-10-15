@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/vdisk/query/query_stream.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash.h>
@@ -29,6 +30,7 @@ ui32 TotalPartCount = 0;
 ui32 BlobSubgroupSize = 0;
 
 bool OutputCout = true;
+bool Write2x2Candidates = false;
 
 struct TRecordHeader {
     ui32 GroupId;
@@ -260,15 +262,15 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
                 r.Ingress |= record.MemRec.Ingress.Raw();
             }
 
-//            auto ingress = TBarrierIngress::CreateFromRaw(r.Ingress);
-//            if (ingress.IsQuorum(ingressCache.Get())) {
+            auto ingress = TBarrierIngress::CreateFromRaw(r.Ingress);
+            if (Write2x2Candidates || ingress.IsQuorum(ingressCache.Get())) {
                 auto& key = r.Hard ? barrier.HardKey : barrier.SoftKey;
                 auto& value = r.Hard ? barrier.Hard : barrier.Soft;
                 if (!value || key < it->first) { // newer barrier with quorum wins
                     key = it->first;
                     value.emplace(r.CollectGen, r.CollectStep);
                 }
-//            }
+            }
         };
 
         auto processRecord = [&](auto& record, const auto& callback) {
@@ -369,10 +371,13 @@ TString FormatLayout(const TSubgroupPartLayout& layout, TBlobStorageGroupType ty
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        Cerr << "usage: " << argv[0] << " <erasure>" << Endl;
-        return 1;
-    }
+    NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+    opts.SetFreeArgsNum(1);
+    opts.SetFreeArgTitle(0, "erasure", "Erasure species name");
+    opts.AddLongOption("write2x2-candidates", "Find write2x2 recovery candidates using local parts from the snapshot")
+        .StoreTrue(&Write2x2Candidates);
+    NLastGetopt::TOptsParseResult args(&opts, argc, argv);
+    const TString erasure = args.GetFreeArgs().front();
 
     char link[256];
     ssize_t rv = readlink("/proc/self/fd/1", link, sizeof(link));
@@ -381,8 +386,8 @@ int main(int argc, char **argv) {
     }
 
     TBlobStorageGroupType::EErasureSpecies species;
-    if (!TBlobStorageGroupType::ParseErasureName(species, argv[1])) {
-        Cerr << "invalid erasure species name: " << argv[1] << Endl;
+    if (!TBlobStorageGroupType::ParseErasureName(species, erasure)) {
+        Cerr << "invalid erasure species name: " << erasure << Endl;
         return 1;
     }
     TBlobStorageGroupType type(species);
@@ -548,9 +553,12 @@ int main(int argc, char **argv) {
             if (blob.UnderBarrierMask && blob.Info.KeepMode != KEEP) {
                 continue;
             }
+            if (!Write2x2Candidates && (!blob.UnderBarrierMask || blob.Info.KeepMode != KEEP)) {
+                continue;
+            }
 
-//            if (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout)) {
-            if (isFull(originalLocalLayout)) {
+            if (Write2x2Candidates ? isFull(originalLocalLayout) :
+                    (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout))) {
                 // looks like correct blob -- either it is not under barrier (and may be being written right now), or
                 // it is with keep flags and fully written with correct ingress bits on every disk
                 continue;
@@ -584,7 +592,7 @@ int main(int argc, char **argv) {
                 case DO_NOT_KEEP: keepMode = "doNotKeep"; break;
             }
 
-            err << "GroupId# " << groupId << " BlobId# " << blobId << (isFull(blob.Info.Layout) ? " FULL" : "")
+            err << "GroupId# " << groupId << " BlobId# " << blobId << (Write2x2Candidates && isFull(blob.Info.Layout) ? " FULL" : "")
                 << "\n\tOrderNums#          " << FormatList(nums)
                 << "\n\tKeepMode#           " << keepMode
                 << "\n\tLayout#             " << FormatLayout(blob.Info.Layout, type)

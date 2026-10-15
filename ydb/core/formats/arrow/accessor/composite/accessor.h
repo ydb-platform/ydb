@@ -41,6 +41,7 @@ protected:
         AFL_VERIFY(false);
         return 0;
     }
+    virtual std::optional<bool> DoHasNulls() const override;
     virtual ui32 DoGetValueRawBytes() const override {
         AFL_VERIFY(false);
         return 0;

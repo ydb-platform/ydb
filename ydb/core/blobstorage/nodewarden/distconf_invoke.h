@@ -29,6 +29,7 @@ namespace NKikimr::NStorage {
         bool InvokedWithoutScepter = false;
         bool EnablingDistconf = false;
         bool Detached = false;
+        bool AdvancesConflictingGeneration = false;
 
     public: // Error handling
         struct TExError : yexception {
@@ -137,6 +138,9 @@ namespace NKikimr::NStorage {
         std::optional<ui64> StorageYamlVersion;
         bool IsDryRun = false;
 
+        TStorageConfigPtr ConfigAwaitingCommit;
+        TMonotonic CommitConfirmationDeadline;
+
         TActorId ControllerPipeId;
 
         enum class EControllerOp {
@@ -155,6 +159,8 @@ namespace NKikimr::NStorage {
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
         void ReplaceStorageConfigExecute();
+        void StartCommitConfirmation();
+        void CollectCommittedConfig();
         void TryEnableDistconf();
         void ConnectToController();
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
@@ -183,8 +189,12 @@ namespace NKikimr::NStorage {
         // Configuration proposition
 
         void AdvanceGeneration();
+        void QueryConfig(const TQuery::TQueryConfig& request);
+        void CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback, bool allowConflictingGenerationAdvance = false);
         void StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev = true,
             const NKikimrBlobStorage::TStorageConfig *propositionBase = nullptr, bool fromBootstrap = false);
+        void StartPropositionImpl(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
+                                  const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap);
         void Handle(TEvPrivate::TEvConfigProposed::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

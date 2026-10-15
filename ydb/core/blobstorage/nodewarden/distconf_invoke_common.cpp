@@ -154,12 +154,7 @@ namespace NKikimr::NStorage {
                         return UpdateConfig(op.Command.MutableUpdateConfig());
 
                     case TQuery::kQueryConfig:
-                        return Finish(TResult::OK, std::nullopt, [&](auto *record) {
-                            auto *response = record->MutableQueryConfig();
-                            if (Self->StorageConfig) {
-                                response->MutableConfig()->CopyFrom(*Self->StorageConfig);
-                            }
-                        });
+                        return QueryConfig(op.Command.GetQueryConfig());
 
                     case TQuery::kReassignGroupDisk:
                         return ReassignGroupDisk(op.Command.GetReassignGroupDisk());
@@ -230,14 +225,20 @@ namespace NKikimr::NStorage {
 
                 TEvScatter task;
                 task.MutableCollectConfigs();
-                IssueScatterTask(std::move(task), [this](TEvGather *res) {
+                const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
+                IssueScatterTask(std::move(task), [this, recoveryGeneration](TEvGather *res) {
                     Y_ABORT_UNLESS(Self->StorageConfig); // it can't just disappear
                     Y_ABORT_UNLESS(!Self->CurrentProposition);
 
-                    if (!res->HasCollectConfigs()) {
+                    if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
+                        throw TExRace() << "Configuration changed while collecting configs";
+                    } else if (!res->HasCollectConfigs()) {
                         throw TExError() << "Incorrect CollectConfigs response";
                     } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt); r.ErrorReason) {
                         throw TExError() << *r.ErrorReason;
+                    } else if (r.IsDistconfDisabledQuorum) {
+                        Self->ConfigRecoveryRequired = false;
+                        Finish(TResult::OK, std::nullopt);
                     } else if (r.ConfigToPropose) {
                         StartProposition(&r.ConfigToPropose.value(), /*mindPrev=*/ true,
                             r.PropositionBase ? &r.PropositionBase.value() : nullptr, r.AutomaticBootstrap);
@@ -320,7 +321,74 @@ namespace NKikimr::NStorage {
         StartProposition(&config);
     }
 
+    void TInvokeRequestHandlerActor::QueryConfig(const TQuery::TQueryConfig& request) {
+        auto reply = [this, fresh = request.GetRequireFresh() && !Self->BridgeInfo] {
+            Finish(TResult::OK, std::nullopt, [&](auto *record) {
+                auto *response = record->MutableQueryConfig();
+                if (Self->StorageConfig) {
+                    response->MutableConfig()->CopyFrom(*Self->StorageConfig);
+                }
+                response->SetFresh(fresh);
+            });
+        };
+        if (request.GetRequireFresh() && !Self->BridgeInfo) {
+            CollectConfig([reply = std::move(reply)](TProcessCollectConfigsResult&&) { reply(); });
+        } else {
+            reply();
+        }
+    }
+
+    void TInvokeRequestHandlerActor::CollectConfig(std::function<void(TProcessCollectConfigsResult&&)> callback,
+                                                 bool allowConflictingGenerationAdvance) {
+        if (!Self->StorageConfig || !Self->Scepter) {
+            throw TExRace() << "No working root for configuration recovery";
+        }
+        TEvScatter task;
+        task.MutableCollectConfigs();
+        const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
+        IssueScatterTask(std::move(task), [this, recoveryGeneration, callback = std::move(callback), allowConflictingGenerationAdvance]
+                                        (TEvGather *res) {
+            if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
+                throw TExRace() << "Configuration changed while collecting configs";
+            }
+            if (!res->HasCollectConfigs()) {
+                throw TExError() << "Incorrect CollectConfigs response";
+            }
+            auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true,
+                                                     allowConflictingGenerationAdvance);
+            if (result.ErrorReason || result.IsDistconfDisabledQuorum || !result.RecoveredConfig) {
+                throw TExNoQuorum() << result.ErrorReason.value_or("No recoverable configuration");
+            }
+            if (!result.RequiresGenerationAdvance) {
+                Self->ConfigRecoveryRequired = false;
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+            }
+            callback(std::move(result));
+        });
+    }
+
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
+        if (!Self->BridgeInfo && Self->SelfManagementEnabled && Self->StorageConfig->GetGeneration()
+            && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
+            const TStorageConfigMeta base(*Self->StorageConfig);
+            auto savedBase = propositionBase ? std::make_optional(*propositionBase) : std::nullopt;
+            const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+            const bool allowConflictingGenerationAdvance = op && op->Command.HasReplaceStorageConfig();
+            CollectConfig([this, config = *config, mindPrev, savedBase = std::move(savedBase), fromBootstrap, base]
+                          (TProcessCollectConfigsResult&& result) mutable {
+                if (base != TStorageConfigMeta(*Self->StorageConfig)) {
+                    throw TExRace() << "Configuration was recovered; retry the configuration update";
+                }
+                AdvancesConflictingGeneration = result.RequiresGenerationAdvance;
+                StartPropositionImpl(&config, mindPrev, savedBase ? &*savedBase : nullptr, fromBootstrap);
+            }, allowConflictingGenerationAdvance);
+        } else {
+            StartPropositionImpl(config, mindPrev, propositionBase, fromBootstrap);
+        }
+    }
+
+    void TInvokeRequestHandlerActor::StartPropositionImpl(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
         if (!Self->HasConnectedNodeQuorum(*config)) {
             // we won't be able to have quorum for this configuration if we start proposing now
@@ -377,7 +445,7 @@ namespace NKikimr::NStorage {
 
         Y_ABORT_UNLESS(InvokePipelineGeneration == Self->InvokePipelineGeneration);
         auto error = InvokeOtherActor(*Self, &TDistributedConfigKeeper::StartProposition, config, propositionBase,
-            SelfId(), mindPrev);
+                                      SelfId(), mindPrev, AdvancesConflictingGeneration);
         if (error) {
             YDB_LOG_DEBUG("Config update validation failed",
                 {"marker", "NWDC78"},
@@ -399,6 +467,10 @@ namespace NKikimr::NStorage {
 
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
+        } else if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
+                   op && op->Command.HasReplaceStorageConfig() && ControllerOp == EControllerOp::OTHER
+                   && Self->SelfManagementEnabled) {
+            StartCommitConfirmation();
         } else {
             Finish(TResult::OK, std::nullopt, [&](TResult *record) {
                 if (ReassignGroupDiskResult) {
@@ -459,7 +531,12 @@ namespace NKikimr::NStorage {
                 }
             },
             [&](TCollectConfigsAndPropose&) {
-                if (status != TResult::OK && InvokePipelineGeneration == Self->InvokePipelineGeneration) {
+                if (InvokePipelineGeneration == Self->InvokePipelineGeneration && status == TResult::OK) {
+                    Self->ConfigRecoveryScheduled = false;
+                    if (Self->ConfigRecoveryRequired) {
+                        InvokeOtherActor(*Self, &TDistributedConfigKeeper::ScheduleConfigRecovery);
+                    }
+                } else if (InvokePipelineGeneration == Self->InvokePipelineGeneration) {
                     // reschedule operation
                     TActivationContext::Schedule(Self->CollectConfigsBackoffTimer.Next(),
                         new IEventHandle(TEvPrivate::EvRetryCollectConfigsAndPropose, 0, Self->SelfId(), {}, nullptr,

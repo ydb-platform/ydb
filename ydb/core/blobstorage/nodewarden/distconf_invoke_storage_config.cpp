@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+#include "distconf_quorum.h"
 #include "node_warden_impl.h"
 
 #include <ydb/core/config/validation/validators.h>
@@ -263,6 +264,18 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
+        if (ConfigAwaitingCommit) {
+            if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
+                throw TExNoQuorum() << "Committed configuration quorum was not confirmed; replace may already be applied";
+            }
+            if (ScatterTasks.empty()) {
+                CollectCommittedConfig();
+            }
+            TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvents::TSystem::Wakeup, 0,
+                                                                              SelfId(), {}, nullptr, 0));
+            return;
+        }
+
         YDB_LOG_DEBUG("FetchStorageConfig: timed out",
             {"marker", "NWDC87"},
             {"selfId", SelfId()});
@@ -317,6 +330,8 @@ namespace NKikimr::NStorage {
         if (!NewYaml && !NewStorageYaml) {
             if (request.HasSwitchDedicatedStorageSection()) {
                 throw TExError() << "Switching dedicated storage section mode without providing any new config";
+            } else if (!IsDryRun && Self->SelfManagementEnabled && Self->StorageConfig->GetGeneration()) {
+                return StartCommitConfirmation();
             } else { // finish this request prematurely: no configs are actually changed
                 return Finish(TResult::OK, std::nullopt);
             }
@@ -504,6 +519,66 @@ namespace NKikimr::NStorage {
             /*fromBootstrap=*/ EnablingDistconf);
     }
 
+    void TInvokeRequestHandlerActor::StartCommitConfirmation() {
+        if (ControllerPipeId) {
+            NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
+        }
+        ConfigAwaitingCommit = Self->StorageConfig;
+        CommitConfirmationDeadline = TActivationContext::Monotonic() + TDuration::Seconds(30);
+        HandleWakeup();
+    }
+
+    void TInvokeRequestHandlerActor::CollectCommittedConfig() {
+        TEvScatter task;
+        task.MutableCollectConfigs();
+        const ui64 recoveryGeneration = Self->ConfigRecoveryGeneration;
+        IssueScatterTask(std::move(task), [this, recoveryGeneration](TEvGather *res) {
+            if (!res->HasCollectConfigs()) {
+                throw TExError() << "Incorrect CollectConfigs response";
+            }
+            if (TStorageConfigMeta(*Self->StorageConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
+                throw TExRace() << "Configuration changed while confirming committed quorum; replace may already be applied";
+            }
+            if (recoveryGeneration != Self->ConfigRecoveryGeneration) {
+                return;
+            }
+
+            std::vector<TSuccessfulDisk> successfulDisks;
+            for (const auto& item : res->GetCollectConfigs().GetCommittedConfigs()) {
+                const auto& config = item.GetConfig();
+                if (config.GetGeneration() > ConfigAwaitingCommit->GetGeneration()) {
+                    throw TExRace() << "Newer committed configuration found; replace may already be applied";
+                }
+                if (config.GetGeneration() != ConfigAwaitingCommit->GetGeneration()) {
+                    continue;
+                }
+                if (config.GetFingerprint() != ConfigAwaitingCommit->GetFingerprint()) {
+                    throw TExError() << "Conflicting committed configurations of generation " << config.GetGeneration();
+                }
+                for (const auto& disk : item.GetDisks()) {
+                    successfulDisks.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                                                 disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                }
+            }
+
+            if (HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks, Self->BridgePileNameMap, TBridgePileId(),
+                                *Self->Cfg, false)) {
+                if (!Self->BridgeInfo) {
+                    auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
+                    if (result.ErrorReason || !result.RecoveredConfig) {
+                        return;
+                    }
+                    Self->ConfigRecoveryRequired = false;
+                    InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);
+                    if (TStorageConfigMeta(*result.RecoveredConfig) != TStorageConfigMeta(*ConfigAwaitingCommit)) {
+                        throw TExRace() << "Configuration changed while confirming committed quorum; replace may already be applied";
+                    }
+                }
+                Finish(TResult::OK, std::nullopt);
+            }
+        });
+    }
+
     void TInvokeRequestHandlerActor::TryEnableDistconf() {
         TEvScatter task;
         task.MutableCollectConfigs();
@@ -539,6 +614,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
+        if (msg.ClientId != ControllerPipeId) {
+            return;
+        }
         YDB_LOG_DEBUG("Received TEvClientConnected",
             {"marker", "NWDC65"},
             {"selfId", SelfId()},
@@ -554,6 +632,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
+        if (msg.ClientId != ControllerPipeId) {
+            return;
+        }
         YDB_LOG_DEBUG("Received TEvClientDestroyed",
             {"marker", "NWDC79"},
             {"selfId", SelfId()},

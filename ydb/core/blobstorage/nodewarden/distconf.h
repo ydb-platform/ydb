@@ -100,6 +100,7 @@ namespace NKikimr::NStorage {
                EvFlushRetroTraceBatch,
                EvRootProbeTimeout,
                EvBindingTimeout,
+               EvRetryConfigPropagation,
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
@@ -299,6 +300,18 @@ namespace NKikimr::NStorage {
             THashMap<ui32, std::list<TStorageConfigMeta>::iterator> Refs;
         };
         THashMap<ui32, TBoundNode> DirectBoundNodes; // a set of nodes directly bound to this one
+        bool ConfigPropagationRetryScheduled = false;
+        TDuration ConfigPropagationRetryDelay = TDuration::Seconds(1);
+        std::optional<TStorageConfigMeta> KnownAppliedConfig;
+        bool KnownAppliedConfigConflicting = false;
+        ui64 MaxObservedConfigGeneration = 0;
+        ui64 ConfigRecoveryGeneration = 0;
+        bool ConfigRecoveryRequired = false;
+        bool ConfigRecoveryScheduled = false;
+        class TConfigRefillActor;
+        TActorId ConfigRefillActorId;
+        std::optional<NKikimrBlobStorage::TStorageConfig> PendingConfigRefill;
+        bool LegacyConfigRefill = false;
         THashMap<TNodeIdentifier, TIndirectBoundNode> AllBoundNodes; // a set of all bound nodes in tree, including this one
         THashSet<TBridgePileId> ConnectedUnsyncedPiles;
 
@@ -336,6 +349,8 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TStorageConfig StorageConfig; // storage config being proposed
             TActorId ActorId; // actor id waiting for this operation to complete
             bool MindPrev; // mind previous configuration quorum
+            ui64 ConfigRecoveryGeneration;
+            bool AdvancesConflictingGeneration = false;
             std::vector<TNodeIdentifier> AddedOrChangedNodeIdentifiers; // identifiers of added nodes or changed endpoints
         };
         std::optional<TProposition> CurrentProposition;
@@ -457,7 +472,17 @@ namespace NKikimr::NStorage {
         void LogUnboundBindingWarning();
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
+        void RequestConfigRefill();
+        void CancelConfigRefill();
+        bool DeferConfigRefill(const NKikimrBlobStorage::TStorageConfig& config);
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig, bool onlyOutdated = false);
+        bool NeedsConfigUpdate(ui32 refererNodeId, const TBoundNode& node,
+                               const NKikimrBlobStorage::TStorageConfig& config) const;
+        void HandleRetryConfigPropagation(STATEFN_SIG);
+        void RememberAppliedConfig(const TStorageConfigMeta& meta);
+        void RequestConfigRecovery();
+        void ScheduleConfigRecovery();
+        bool HasLocalConfig() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -487,12 +512,14 @@ namespace NKikimr::NStorage {
         struct TProcessCollectConfigsResult {
             std::optional<TString> ErrorReason;
             bool IsDistconfDisabledQuorum = false;
+            std::optional<NKikimrBlobStorage::TStorageConfig> RecoveredConfig;
+            bool RequiresGenerationAdvance = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
             bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
-            std::optional<TString> selfAssemblyUUID, bool dryRun = false);
+            std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false);
 
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
@@ -554,7 +581,8 @@ namespace NKikimr::NStorage {
         void StopRootActivities(const TString& reason);
 
         std::optional<TString> StartProposition(NKikimrBlobStorage::TStorageConfig *configToPropose,
-            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev);
+            const NKikimrBlobStorage::TStorageConfig *propositionBase, TActorId actorId, bool mindPrev,
+            bool advancesConflictingGeneration = false);
 
         void CheckForConfigUpdate();
 

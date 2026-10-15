@@ -84,6 +84,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        CancelConfigRefill();
         for (const auto& item : InvokeQ) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, item.ActorId, SelfId(), nullptr, 0));
         }
@@ -142,6 +143,14 @@ namespace NKikimr::NStorage {
             }
             if (!newNodeList.empty()) {
                 ApplyNewNodeList(newNodeList);
+            }
+
+            if (IsSelfStatic && AllBoundNodes.contains(SelfNode)) {
+                auto update = std::make_unique<TEvNodeConfigPush>();
+                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, update.get());
+                if (Binding && Binding->SessionId && update->IsUseful()) {
+                    SendEvent(*Binding, std::move(update));
+                }
             }
 
             QuorumValid = false;
@@ -515,6 +524,7 @@ namespace NKikimr::NStorage {
             cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
             fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
             fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
+            fFunc(TEvPrivate::EvRetryConfigPropagation, HandleRetryConfigPropagation);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);

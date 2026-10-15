@@ -29,6 +29,7 @@ private:
     void Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev);
+    void Handle(TEvYdbProxy::TEvDescribeConsumerRequest::TPtr& ev);
 
     STATEFN(StateWork);
 

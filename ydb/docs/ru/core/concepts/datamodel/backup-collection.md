@@ -135,7 +135,8 @@ block-beta
 Для экспорта резервных копий во внешнее хранилище используйте {{ ydb-short-name }} CLI:
 
 - [`ydb export s3`](../../reference/ydb-cli/export-import/export-s3.md) для S3-совместимого хранилища.
-- [`ydb tools dump`](../../reference/ydb-cli/export-import/tools-dump.md) для файловой системы.
+- [`ydb export nfs`](../../reference/ydb-cli/export-import/export-nfs.md) для NFS на хостах кластера.
+- [`ydb tools dump`](../../reference/ydb-cli/export-import/tools-dump.md) для файловой системы на локальном компьютере.
 
 Каждую резервную копию в цепочке необходимо экспортировать отдельно. Сохраняйте порядок цепочки при экспорте/импорте для успешного восстановления.
 

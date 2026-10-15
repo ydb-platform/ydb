@@ -362,7 +362,8 @@ class TestCompactionConfig(object):
         assert not options.get("SchemeNeedActualization", False), options
         assert set(options.keys()) <= {"SchemeNeedActualization"}, options
 
-        with pytest.raises(Exception, match="unknown option 'UNKNOWN'"):
+        # Protobuf text formatting may escape apostrophes in SDK error messages.
+        with pytest.raises(ydb.issues.GenericError, match=r"unknown option \\?'UNKNOWN\\?'"):
             self.ydb_client.query(f"ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=RESET_OPTIONS, NAME=UNKNOWN);")
-        with pytest.raises(Exception, match="can't find alter parameter NAME"):
+        with pytest.raises(ydb.issues.GenericError, match=r"can\\?'t find alter parameter NAME"):
             self.ydb_client.query(f"ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=RESET_OPTIONS);")

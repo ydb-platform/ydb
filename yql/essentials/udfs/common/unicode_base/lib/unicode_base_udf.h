@@ -787,7 +787,7 @@ SIMPLE_UDF(TToCodePointList, TListType<ui32>(TAutoMap<TUtf8>)) {
 SIMPLE_UDF(TFromCodePointList, TUtf8(TAutoMap<TListType<ui32>>)) {
     constexpr size_t maxUtf8BytesPerRune = WideToUTF8BufferSize(1);
     const auto validateRune = [](wchar32 rune) {
-        if (rune > 0x10FFFFu || (rune >= 0xD800u && rune <= 0xDFFFu)) {
+        if (rune > 0x10FFFFU || (rune >= 0xD800U && rune <= 0xDFFFU)) {
             throw yexception()
                 << "Unicode::FromCodePointList: invalid Unicode scalar value "
                 << static_cast<ui32>(rune);

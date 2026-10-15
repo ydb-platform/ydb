@@ -211,6 +211,16 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
                 self.disconnect(name)
                 self.check_data()
 
+    def check_restored_piles(self, piles):
+        for index, restored in enumerate(piles):
+            if index:
+                # Restore peers only to prepare the next isolation check.
+                for name in self.pile_names:
+                    if self.states[name] == DISCONNECTED:
+                        self.rejoin(name)
+            self.keep_only(restored)
+            self.write_data()
+
     @pytest.mark.parametrize("target", ["r2", "r3"])
     def test_switchover(self, target):
         self.create_data()
@@ -277,12 +287,7 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             self.check_data()
             self.write_data()
         # Prove that each restored pile has the data without reading another replica.
-        for restored in return_order:
-            self.keep_only(restored)
-            self.write_data()
-            for name in self.pile_names:
-                if name != restored:
-                    self.rejoin(name)
+        self.check_restored_piles(return_order)
 
     def test_rejoin_without_waiting_for_other_pile(self):
         self.create_data()
@@ -292,12 +297,7 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.rejoin("r2", wait=False)
         self.rejoin("r3", wait=False)
         self.wait_states()
-        for restored in ("r2", "r3"):
-            self.keep_only(restored)
-            self.write_data()
-            for name in self.pile_names:
-                if name != restored:
-                    self.rejoin(name)
+        self.check_restored_piles(("r2", "r3"))
 
     def check_discovery(self):
         expected_nodes = {

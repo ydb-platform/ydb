@@ -39,20 +39,14 @@ class TShardPartitionIndex {
 public:
     TShardPartitionIndex() = default;
 
-    // Builds the map in O(partition count). A null partitioning is allowed and
-    // yields an empty index.
     explicit TShardPartitionIndex(TPartitioning::TCPtr partitioning);
 
     explicit operator bool() const;
 
     const TPartitioning::TCPtr& GetPartitioning() const;
 
-    // Drops the partitioning and its index.
     void Reset();
 
-    // Index of the partition of `shardId`, or `GetPartitioning()->Size()` when
-    // the shard is not in the partitioning (FindPartitionIndex's contract).
-    // O(1).
     size_t FindPartitionIndex(ui64 shardId) const;
 
 private:

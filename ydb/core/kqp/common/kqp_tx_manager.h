@@ -90,8 +90,6 @@ public:
 
     virtual TTableInfo GetShardTableInfo(ui64 shardId) const = 0;
 
-    // Known metadata of a transaction participant shard. Returns an unknown-meta
-    // (IsKnown() == false) object for unregistered shards.
     virtual const TShardMeta& GetShardMeta(ui64 shardId) const = 0;
 
     virtual bool ShouldReattach(ui64 shardId, TInstant now) = 0;

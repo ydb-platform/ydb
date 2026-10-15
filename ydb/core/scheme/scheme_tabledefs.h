@@ -735,10 +735,6 @@ public:
 
     using TCPtr = std::shared_ptr<const TPartitioning>;
 
-    // Version == 0 means "unknown" (e.g. locally built partitioning that did
-    // not come from the scheme cache). Non-zero version is the table's
-    // PartitioningVersion from SchemeShard: equal iff partitioning unchanged,
-    // higher == newer.
     explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions, ui64 version = 0)
         : Partitions(std::move(partitions))
         , Version(version) {}

@@ -857,8 +857,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 CdcStreams.push_back(index);
             }
 
-            Y_ABORT_UNLESS(Self);
-
             if (pathDesc.TablePartitionsSize()) {
                 TVector<TKeyDesc::TPartitionInfo> partitions;
                 partitions.resize(pathDesc.TablePartitionsSize());
@@ -872,9 +870,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     partition.ShardId = src.GetDatashardId();
                 }
 
+                Y_ABORT_UNLESS(Self);
                 Partitioning = std::make_shared<TPartitioning>(std::move(partitions),
                     Self->Info.GetVersion().GetTablePartitionVersion());
-                return;
             }
 
             if (pathDesc.HasDomainDescription()) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "metrics.h"
+#include "tracing.h"
 #include "tvm.h"
 #include "wire.h"
 
@@ -75,6 +76,9 @@ class TTransport final: public NAsync::ITransport {
 public:
     TTransport(TVector<TBinding> bindings, std::shared_ptr<TTransportExecutor> executor, TTransportLimits limits = {});
     ~TTransport();
+    // Called by the owner before starting an invocation; Start snapshots the
+    // context into each operation. Existing calls retain their original parent.
+    void SetTraceContext(TTraceContext context);
 
     TCancel Start(NAsync::THandle operation, NAsync::EOperationKind kind, TString request, TInstant deadline, TCompletion completion) override;
     TTransportStats Stats() const;

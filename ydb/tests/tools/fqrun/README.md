@@ -441,3 +441,18 @@ See the [common metric schema](../../../core/fq/libs/wasm_services/MONITORING.md
 for outcome, latency, queue, payload, reservation and cleanup semantics.
 Look at latency histograms by alias, then errors/admission rejections and cleanup
 gauges. Metrics aggregate call classes, not individual SQL query IDs.
+
+## Query tracing
+
+Append `--trace-file=/tmp/wasm-trace.jsonl` to a WASM service query invocation.
+The runner prints `Query <query_id> trace_id=<trace_id>` and writes completed
+Wilson spans as JSON lines with hex trace/span IDs. Follow `parent_span_id` from
+`External call` (including `auth.tvm`) through `WASM invocation`, `WASM transform`
+and `ComputeActor` to `SQL execution`. Aliases match the metrics, including
+`profile.lookup` for scalar and `profile.batch` for batched Profile calls.
+
+Capture is bounded (10000 spans, 16 MiB serialized data) and best-effort on abrupt
+shutdown. `MaxTraceSpansPerTransform` controls detail generation; its default is
+4096. Local files remain the module source. See
+[tracing and sampling](../../../core/fq/libs/wasm_services/MONITORING.md#query-tracing)
+for ydbd/UDF Store, Wilson/OTLP configuration and lifecycle semantics.

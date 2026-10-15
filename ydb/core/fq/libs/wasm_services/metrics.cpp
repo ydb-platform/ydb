@@ -87,7 +87,9 @@ TRequestMetrics::TRequestMetrics(NMonitoring::TDynamicCounterPtr counters, ui32 
     // Overflow/anonymous groups cannot be starved by user supplied aliases.
     for (size_t i = 0; i < Series.size(); ++i) {
         for (const char* alias : { "unlabeled", "other" }) {
-            Series[i].emplace(alias, std::make_shared<TSeries>(Counters->GetSubgroup("protocol", Kinds[i])->GetSubgroup("call_alias", alias)));
+            auto series = std::make_shared<TSeries>(Counters->GetSubgroup("protocol", Kinds[i])->GetSubgroup("call_alias", alias));
+            series->Alias = alias;
+            Series[i].emplace(alias, std::move(series));
         }
     }
 }
@@ -103,10 +105,9 @@ std::shared_ptr<TRequestMetrics::TSeries> TRequestMetrics::Get(TStringBuf alias,
     if (map.size() - 2 >= MaxAliases) {
         return map.at("other");
     }
-    return map
-        .emplace(
-            key, std::make_shared<TSeries>(Counters->GetSubgroup("protocol", Kinds[static_cast<size_t>(kind)])->GetSubgroup("call_alias", key)))
-        .first->second;
+    auto series = std::make_shared<TSeries>(Counters->GetSubgroup("protocol", Kinds[static_cast<size_t>(kind)])->GetSubgroup("call_alias", key));
+    series->Alias = key;
+    return map.emplace(key, std::move(series)).first->second;
 }
 
 std::shared_ptr<TRequestMetrics::TOperation> TRequestMetrics::Start(

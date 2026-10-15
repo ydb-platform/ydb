@@ -38,6 +38,7 @@ enum class EAdmissionReason {
 class TRequestMetrics {
 public:
     struct TSeries {
+        TString Alias;
         NMonitoring::TDynamicCounters::TCounterPtr Started, InFlight, Bytes, CleanupPending;
         std::array<NMonitoring::TDynamicCounters::TCounterPtr, 4> Completed;
         std::array<NMonitoring::TDynamicCounters::TCounterPtr, 6> Rejected;

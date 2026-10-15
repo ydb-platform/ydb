@@ -553,3 +553,108 @@ def test_auth_uses_universal_call_monitoring(service, tmp_path, protocol):
     finally:
         process.terminate()
         runner.wait(process)
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+@pytest.mark.parametrize('batch_rows', [1, 2])
+@pytest.mark.parametrize('auth', [False, True])
+def test_query_tracing(service, tmp_path, protocol, batch_rows, auth):
+    if auth:
+        service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service, batch_rows)
+    trace_file = tmp_path / 'trace.jsonl'
+    options = ['--trace-file=' + str(trace_file)]
+    alias = 'profiles_' + protocol
+    if auth:
+        service.require_tvm_ticket = True
+        options += ['--tvm-mock', '--init-query=' + str(tmp_path / 'connections.sql'),
+                    '--secrets-file=' + str(tmp_path / 'secrets.json')]
+    process = runner.start(alias=None if auth else alias, sql=profile_query(alias), extra=options)
+    assert runner.wait(process) == 0, runner.output()
+    assert len(runner.rows()) == 2
+    spans = [json.loads(line) for line in trace_file.read_text().splitlines()]
+
+    def attrs(s):
+        return {a['key']: a['value'].get('string_value', a['value'].get('int_value')) for a in s.get('attributes', [])}
+
+    roots = [s for s in spans if s['name'] == 'SQL execution']
+    assert len(roots) == 1, spans
+    root = roots[0]
+    assert attrs(root)['query_id']
+    assert 'trace_id=' + root['trace_id'] in runner.output()
+    by_id = {s['span_id']: s for s in spans}
+    calls = [s for s in spans if s['name'] == 'External call' and attrs(s)['protocol'] == protocol]
+    assert len(calls) == (2 if batch_rows == 1 else 1), spans
+    for call in calls:
+        assert attrs(call)['call_alias'] == ('profile.lookup' if batch_rows == 1 else 'profile.batch')
+        assert attrs(call)['outcome'] == 'success'
+        assert int(attrs(call)['response_code']) == (200 if protocol == 'http' else 0)
+        assert call['trace_id'] == root['trace_id']
+        current = call
+        for name in ('WASM invocation', 'WASM transform', 'ComputeActor', 'SQL execution'):
+            current = by_id[current['parent_span_id']]
+            assert current['name'] == name, spans
+        ticket_spans = [s for s in spans if s.get('parent_span_id') == call['span_id']]
+        assert len(ticket_spans) == int(auth)
+        if auth:
+            assert attrs(ticket_spans[0])['call_alias'] == 'auth.tvm'
+            assert attrs(ticket_spans[0])['outcome'] == 'success'
+    assert all(secret not in trace_file.read_text() for secret in (
+        'host-secret', 'fqrun-example-tvm-secret', 'fqrun-mock-tvm-service-ticket', 'Bearer', '/profile'))
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_query_tracing_deadline(service, tmp_path, protocol):
+    runner = Runner(tmp_path, service, timeout_ms=500)
+    trace_file = tmp_path / 'trace.jsonl'
+    alias = 'profiles_' + protocol
+    process = runner.start(alias, profile_query(alias, (999,)), extra=('--trace-file=' + str(trace_file),))
+    assert runner.wait(process) != 0, runner.output()
+    spans = [json.loads(line) for line in trace_file.read_text().splitlines()]
+    for name in ('External call', 'WASM invocation', 'WASM transform'):
+        matching = [s for s in spans if s['name'] == name]
+        assert matching, spans
+        for span in matching:
+            attrs = {a['key']: a['value'].get('string_value') for a in span['attributes']}
+            # A transport timeout can reach guest code just before the absolute
+            # invocation deadline (HTTP uses millisecond timers). Guest error
+            # conversion is an invocation error, not a runtime cancellation.
+            assert attrs['outcome'] in ({'timeout'} if name == 'External call' else {'timeout', 'error'}), span
+
+
+def test_query_tracing_budget_does_not_change_results(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    runner.config.write_text(runner.config.read_text().replace('WasmServices {', 'WasmServices { MaxTraceSpansPerTransform: 1', 1))
+    trace_file = tmp_path / 'trace.jsonl'
+    assert runner.wait(runner.start(extra=('--trace-file=' + str(trace_file),))) == 0, runner.output()
+    assert len(runner.rows()) == 2
+    spans = [json.loads(line) for line in trace_file.read_text().splitlines()]
+    assert not any(s['name'] == 'External call' for s in spans), spans
+    transforms = [s for s in spans if s['name'] == 'WASM transform']
+    assert transforms
+    for span in transforms:
+        attrs = {a['key']: a['value'] for a in span['attributes']}
+        assert int(attrs['detail_spans_dropped']['int_value']) > 0
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_query_tracing_auth_deadline(service, tmp_path, protocol):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service, timeout_ms=500)
+    trace_file = tmp_path / 'trace.jsonl'
+    process = runner.start(alias=None, sql=profile_query('profiles_' + protocol), extra=(
+        '--trace-file=' + str(trace_file), '--tvm-mock', '--tvm-mock-delay-ms=2000',
+        '--init-query=' + str(tmp_path / 'connections.sql'), '--secrets-file=' + str(tmp_path / 'secrets.json'),
+    ))
+    assert runner.wait(process) != 0, runner.output()
+    assert not service.requests
+    spans = [json.loads(line) for line in trace_file.read_text().splitlines()]
+    for name in ('External call', 'WASM invocation', 'WASM transform'):
+        matching = [s for s in spans if s['name'] == name]
+        assert matching, spans
+        for span in matching:
+            attrs = {a['key']: a['value'].get('string_value') for a in span['attributes']}
+            # Unlike native millisecond network timers, the pending ticket is
+            # cancelled at the absolute invocation deadline. Dropping the runtime
+            # handle before decoding the result must not lose that timeout cause.
+            assert attrs['outcome'] == 'timeout', span

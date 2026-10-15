@@ -1512,11 +1512,12 @@ namespace Tests {
             }
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            // The memory of the queries is in the compute scheduler or in the resource manager, which takes the flag
-            // from the app data: the flag may be set in the feature flags of the settings as well
+            // The memory of the queries is in the compute scheduler or in the resource manager, which takes the flags
+            // from the app data: the flags may be set in the feature flags of the settings as well
+            const auto& featureFlags = Runtime->GetAppData(nodeIdx).FeatureFlags;
             auto schedulerAppConfig = *Settings->AppConfig;
-            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(
-                Runtime->GetAppData(nodeIdx).FeatureFlags.GetEnableComputeSchedulerMemory());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(featureFlags.GetEnableResourcePoolsScheduler());
+            schedulerAppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(featureFlags.GetEnableComputeSchedulerMemory());
             Runtime->GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, schedulerAppConfig);
 
             if (!Settings->AppConfig->GetTableServiceConfig().HasEnableCompileCacheWarmup()) {

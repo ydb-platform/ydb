@@ -1964,7 +1964,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.GetStatus(), test.Status);
             UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.HasCount(), test.Count.has_value());
             if (test.Count) {
-                UNIT_ASSERT_VALUES_EQUAL(group.StateInfo.GetCount(), *test.Count);
+                const auto& count = group.StateInfo.GetCount();
+                if (test.Erasure == TErasureType::ErasureMirror3dc) {
+                    UNIT_ASSERT(count.HasFailRealms());
+                    UNIT_ASSERT(!count.HasDisks());
+                    UNIT_ASSERT_VALUES_EQUAL(count.GetFailRealms().GetValue(), *test.Count);
+                } else {
+                    UNIT_ASSERT(count.HasDisks());
+                    UNIT_ASSERT(!count.HasFailRealms());
+                    UNIT_ASSERT_VALUES_EQUAL(count.GetDisks().GetValue(), *test.Count);
+                }
             }
             const auto& domains = group.StateInfo.GetFailedDomainsPerRealm();
             UNIT_ASSERT_VALUES_EQUAL(std::vector<ui32>(domains.begin(), domains.end()), test.FailedDomains);
@@ -1993,7 +2002,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto schema = swagger["responses"]["200"]["content"]["application/json"]["schema"];
         const auto stateInfo = schema["properties"]["StorageGroups"]["items"]["properties"]["StateInfo"];
         UNIT_ASSERT(stateInfo["description"].as<std::string>().find("Can be omitted") != std::string::npos);
-        const auto countDescription = stateInfo["properties"]["Count"]["description"].as<std::string>();
+        const auto count = stateInfo["properties"]["Count"];
+        UNIT_ASSERT_VALUES_EQUAL(count["type"].as<std::string>(), "object");
+        UNIT_ASSERT(!count["properties"]["Kind"]);
+        UNIT_ASSERT_VALUES_EQUAL(count["oneOf"].size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(count["oneOf"][0]["required"][0].as<std::string>(), "Disks");
+        UNIT_ASSERT_VALUES_EQUAL(count["oneOf"][1]["required"][0].as<std::string>(), "FailRealms");
+        for (const char* kind : {"Disks", "FailRealms"}) {
+            const auto variant = count["properties"][kind];
+            UNIT_ASSERT_VALUES_EQUAL(variant["type"].as<std::string>(), "object");
+            UNIT_ASSERT_VALUES_EQUAL(variant["properties"]["Value"]["type"].as<std::string>(), "integer");
+            UNIT_ASSERT_VALUES_EQUAL(variant["properties"]["Value"]["format"].as<std::string>(), "uint32");
+        }
+        const auto countDescription = count["description"].as<std::string>();
         UNIT_ASSERT(countDescription.find("none/block-4-2") != std::string::npos);
         UNIT_ASSERT(countDescription.find("mirror-3-dc") != std::string::npos);
         ui32 checkedParameters = 0;
@@ -2109,7 +2130,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (fields != "GroupId" && !missingStatuses) {
                 const auto& state = group.at("StateInfo").GetMap();
                 UNIT_ASSERT_VALUES_EQUAL(state.at("Status").GetString(), "degraded");
-                UNIT_ASSERT_VALUES_EQUAL(state.at("Count").GetUInteger(), 2);
+                const auto& count = state.at("Count").GetMap();
+                UNIT_ASSERT_VALUES_EQUAL(count.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(count.at("FailRealms").GetMap().at("Value").GetUInteger(), 2);
                 const auto& domains = state.at("FailedDomainsPerRealm").GetArray();
                 UNIT_ASSERT_VALUES_EQUAL(domains.size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(domains[0].GetUInteger(), 3);

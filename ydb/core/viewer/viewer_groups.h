@@ -439,7 +439,7 @@ public:
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
                     StateInfo.SetStatus(state);
-                    StateInfo.SetCount(static_cast<ui32>(MissingDisks));
+                    StateInfo.MutableCount()->MutableDisks()->SetValue(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
@@ -468,7 +468,7 @@ public:
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
                     StateInfo.SetStatus(state);
-                    StateInfo.SetCount(static_cast<ui32>(MissingDisks));
+                    StateInfo.MutableCount()->MutableDisks()->SetValue(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                     std::sort(failedDomainsPerRealm.begin(), failedDomainsPerRealm.end(), std::greater<ui8>());
                     while (!failedDomainsPerRealm.empty() && failedDomainsPerRealm.back() == 0) {
@@ -502,7 +502,7 @@ public:
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
                     if (!state.empty()) {
                         StateInfo.SetStatus(state);
-                        StateInfo.SetCount(static_cast<ui32>(failedDomainsPerRealm.size()));
+                        StateInfo.MutableCount()->MutableFailRealms()->SetValue(static_cast<ui32>(failedDomainsPerRealm.size()));
                         for (ui8 failedDomains : failedDomainsPerRealm) {
                             StateInfo.AddFailedDomainsPerRealm(failedDomains);
                         }
@@ -2829,10 +2829,21 @@ public:
         stateInfo["description"] =
             "Structured group state. Can be omitted even when State is present if CalcState cannot determine a known status.";
         stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
-        stateInfo["properties"]["Count"]["description"] =
-            "Number after the colon in State: missing or not-ready disks for none/block-4-2, "
-            "affected fail realms for mirror-3-dc. Mirror-3-dc counts include only disks with a known non-READY status. "
-            "Omitted for ok.";
+        YAML::Node count(stateInfo["properties"]["Count"]);
+        count["description"] =
+            "Number after the colon in State, with explicit units: Disks.Value for none/block-4-2, "
+            "FailRealms.Value for mirror-3-dc. Exactly one count kind is present. Omitted for ok.";
+        count["properties"].remove("Kind"); // protobuf oneof name is not a JSON property
+        for (const char* kind : {"Disks", "FailRealms"}) {
+            YAML::Node alternative;
+            alternative["required"].push_back(kind);
+            count["oneOf"].push_back(alternative);
+        }
+        count["properties"]["Disks"]["properties"]["Value"]["description"] =
+            "Number of missing or not-ready disks for none/block-4-2.";
+        count["properties"]["FailRealms"]["properties"]["Value"]["description"] =
+            "Number of affected fail realms for mirror-3-dc. "
+            "Only disks with a known non-READY status contribute; disks without status data are excluded.";
         stateInfo["properties"]["FailedDomainsPerRealm"]["description"] =
             "For mirror-3-dc, non-zero failed-domain counts per affected fail realm, sorted in descending order. "
             "Only disks with a known non-READY status contribute; disks without status data are excluded, "

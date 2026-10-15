@@ -468,9 +468,24 @@ message TStorageVDisk {
     NKikimrWhiteboard.TVDiskStateInfo Whiteboard = 50;
 }
 
+message TDiskCount {
+    uint32 Value = 1;
+}
+
+message TFailRealmCount {
+    uint32 Value = 1;
+}
+
+message TStorageGroupStateCount {
+    oneof Kind {
+        TDiskCount Disks = 1; // missing or not-ready disks for none/block-4-2
+        TFailRealmCount FailRealms = 2; // affected fail realms for mirror-3-dc
+    }
+}
+
 message TStorageGroupStateInfo {
     string Status = 1; // ok, starting, replicating, degraded, dead
-    optional uint32 Count = 2; // disks for none/block-4-2, affected fail realms for mirror-3-dc
+    TStorageGroupStateCount Count = 2; // number after the colon in State, with explicit units; omitted for ok
     repeated uint32 FailedDomainsPerRealm = 3; // mirror-3-dc: descending counts, excluding zeroes
 }
 

@@ -4266,7 +4266,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         restore.Stop().Unblock();
         env.TestWaitNotification(runtime, 100);
         TestGetImport(runtime, 100, "/MyRoot");
-        const auto afterRestore = DescribePath(runtime, "/MyRoot/Table");
+        const auto afterRestore = DescribePath(runtime, "/MyRoot/Table", true);
         UNIT_ASSERT(!afterRestore.GetPathDescription().GetTable().GetIsRestore());
         TestDescribeResult(afterRestore, {
             NLs::SizeToSplitEqual(128 * 1024 * 1024),

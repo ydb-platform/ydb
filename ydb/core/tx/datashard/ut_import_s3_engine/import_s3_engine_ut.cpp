@@ -1345,7 +1345,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                 std::pair<ui32, ui64>{8_MB, 16_MB}, {8_MB, 512_KB},
                 {512_KB, 16_MB}, {64_MB, 128_MB}}) {
             auto engine = MakeYtEngine(fixture, source, RowCount, readSize, bufferLimit);
-            const ui64 budget = Min<ui64>(readSize, bufferLimit, 8_MB);
+            const ui64 budget = Min<ui64>(Min<ui64>(readSize, bufferLimit), 8_MB);
             TMemoryPool pool(256);
             TVector<TDecodedRow> rows;
             NKikimrBackup::TS3DownloadState durable;
@@ -1416,9 +1416,15 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
         const TEngineFixture fixture(scheme);
         constexpr ui32 RowCount = 2000;
+        constexpr ui32 WideRow = 209;
+        const TString large(2_MB, 'x');
         TStringBuilder text;
         for (ui32 i = 0; i < RowCount; ++i) {
-            text << "{key=" << i << "u};";
+            text << "{key=" << i << "u;";
+            if (i == WideRow) {
+                text << "value=\"" << large << "\";";
+            }
+            text << "};";
         }
         const auto source = YtGzip(text);
         auto engine = MakeYtEngine(fixture, source, RowCount, 8_MB, 128_MB);
@@ -1427,11 +1433,16 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         ui64 uploadBytes = 0;
         ui32 batches = 0;
         const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
-            UNIT_ASSERT_VALUES_EQUAL(keys.front().AsValue<ui32>(), rows++);
+            UNIT_ASSERT_VALUES_EQUAL(keys.front().AsValue<ui32>(), rows);
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 9999);
-            for (const auto& cell : values) {
-                UNIT_ASSERT(cell.IsNull());
+            for (ui32 i = 0; i < values.size(); ++i) {
+                if (rows == WideRow && i == 0) {
+                    UNIT_ASSERT_VALUES_EQUAL(values[i].AsBuf(), large);
+                } else {
+                    UNIT_ASSERT(values[i].IsNull());
+                }
             }
+            ++rows;
             uploadBytes += TSerializedCellVec::SerializedSize(keys) + TSerializedCellVec::SerializedSize(values);
             return {};
         };
@@ -1440,12 +1451,17 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             if (data.Status == IImportS3Engine::EDataStatus::Finished) {
                 UNIT_ASSERT_VALUES_EQUAL(rows, RowCount);
                 UNIT_ASSERT_GE(batches, 9);
-                UNIT_ASSERT_LE(batches, 11);
+                UNIT_ASSERT_LE(batches, 12);
                 return;
             }
             if (data.Status == IImportS3Engine::EDataStatus::Ready) {
-                // Only 8 KiB of values, but about 80 MiB of serialized NULL headers.
-                UNIT_ASSERT_LE(uploadBytes, 8_MB + 64_KB);
+                // Flush the nearly full sparse batch before the wide row would
+                // force millions of tiny inflate steps against its remaining budget.
+                if (!batches) {
+                    UNIT_ASSERT_LE(rows, WideRow);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(data.Batch.DownloadStateAfter.GetYsonGzip().GetCommittedRows(), rows);
+                UNIT_ASSERT_LE(uploadBytes, 8_MB + large.size() + 64_KB);
                 batches += data.Batch.Rows != 0;
                 uploadBytes = 0;
                 AssertSuccess(engine->Commit(data.Batch.Id));

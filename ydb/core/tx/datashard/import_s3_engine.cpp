@@ -1677,8 +1677,10 @@ public:
         ui64 decompressedBytes = 0;
         // Leave room for a row crossing the budget (at most 16 MiB), including when
         // ReadBatchSize is raised. The same batches feed ColumnShard uploads.
-        const ui64 batchLimit = Min<ui64>(Settings.ReadBatchSize, Settings.BufferSizeLimit, 8 * 1024 * 1024);
+        const ui64 batchLimit = Min<ui64>(Min<ui64>(Settings.ReadBatchSize, Settings.BufferSizeLimit), 8 * 1024 * 1024);
         const ui64 maxFixedRowBytes = 2 * sizeof(ui16) + Schema.Columns.size() * (sizeof(ui32) + sizeof(ui64));
+        // Flush before the remaining budget forces tiny inflate steps for a wide row.
+        const ui64 batchMargin = Max(maxFixedRowBytes, batchLimit / 8);
         constexpr ui64 REPLAY_TURN_LIMIT = 256 * 1024;
         while (!Finished) {
             if (!BatchRows && decompressedBytes >= REPLAY_TURN_LIMIT) {
@@ -1745,7 +1747,7 @@ public:
             }
             // Feed can finish a row that started in an earlier chunk, so the limit
             // is a target. Never yield with rows in the caller's uncommitted upload.
-            if (BatchRows && (BatchUploadBytes >= batchLimit || decompressedBytes >= batchLimit || GzipEnded)) {
+            if (BatchRows && (BatchUploadBytes + batchMargin >= batchLimit || decompressedBytes >= batchLimit || GzipEnded)) {
                 break;
             }
         }

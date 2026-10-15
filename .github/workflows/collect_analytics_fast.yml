@@ -48,6 +48,9 @@ jobs:
         GIT_TRACE: "1"
       with:
         ref: ${{ inputs.commit_sha }}
+    - name: Drop GitHub proxy
+      shell: bash
+      run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -186,6 +189,9 @@ jobs:
         GIT_TRACE: "1"
       with:
         ref: ${{ inputs.commit_sha }}
+    - name: Drop GitHub proxy
+      shell: bash
+      run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

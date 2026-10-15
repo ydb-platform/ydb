@@ -922,6 +922,7 @@ public:
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
+        bool FillInOwnGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params) const;
         bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool useExpectedSlotCount) const;
         bool FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const;
 
@@ -951,6 +952,17 @@ public:
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        // is this group a pile of its own (a group converted from non-bridged one); such group has both its own VDisks
+        // and BridgeGroupInfo referencing itself
+        bool IsInlinePile() const {
+            return BridgeProxyGroupId == ID;
+        }
+
+        // is this group a pile of some other bridge proxy group, and hence not visible on its own
+        bool IsBridgePileOnly() const {
+            return BridgePileId && !IsInlinePile();
+        }
+
         bool IsDecommitted() const {
             return DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
@@ -960,8 +972,12 @@ public:
         bool IsLayoutCorrect(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
                 for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
-                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    if (!group || !group->IsLayoutCorrect(finder)) {
+                    const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    if (groupId == ID) { // inline pile
+                        if (!LayoutCorrect) {
+                            return false;
+                        }
+                    } else if (const TGroupInfo *group = finder(groupId); !group || !group->IsLayoutCorrect(finder)) {
                         return false;
                     }
                 }

@@ -863,7 +863,7 @@ namespace NKikimr {
 
                     for (const TGroupId groupId : groupIds) {
                         fitter.FitExistingGroup(groupId, state.Fit.GroupsToAllocate.contains(groupId));
-                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
+                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->IsBridgePileOnly()) {
                             ++numActualGroups;
                         }
                     }

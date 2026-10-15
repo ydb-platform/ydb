@@ -848,6 +848,41 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         CheckStaysConverged(runtime, allKeepers);
     }
 
+    // turn the only static group into the pile of its own, as it happens when converting cluster to bridged one
+    void MakeInlinePile(NKikimrBlobStorage::TStorageConfig& config) {
+        auto *group = config.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        auto *pile = group->MutableBridgeGroupState()->AddPile();
+        pile->SetGroupId(group->GetGroupID());
+        pile->SetGroupGeneration(group->GetGroupGeneration());
+        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+        group->SetBridgeProxyGroupId(group->GetGroupID());
+        TBridgePileId::FromPileIndex(0).CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+        config.MutableClusterState()->CopyFrom(NBridge::MakeImplicitSinglePileClusterState());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+    }
+
+    Y_UNIT_TEST(InlinePileStaticGroupValidation) {
+        auto config = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        MakeInlinePile(config);
+        if (const auto error = NStorage::ValidateConfig(config)) {
+            UNIT_FAIL(*error);
+        }
+
+        // pile generation must follow the generation of the group itself
+        auto *group = config.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        group->MutableBridgeGroupState()->MutablePile(0)->SetGroupGeneration(2);
+        const auto error = NStorage::ValidateConfig(config);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_VALUES_EQUAL(*error, "incorrect referenced group generation");
+    }
+
+    Y_UNIT_TEST(InlinePileStaticGroupQuorum) {
+        auto config = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        MakeInlinePile(config);
+        UNIT_ASSERT(HasQuorum(config, {1, 2, 3, 4, 5, 6}));
+        UNIT_ASSERT(!HasQuorum(config, {1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17}));
+    }
+
     Y_UNIT_TEST(ThreeNodeSplitConvergesThroughMailbox) {
         const auto config = MakeStorageConfig(3, 0, {1});
         TNodeWardenTestState state{2, 3};

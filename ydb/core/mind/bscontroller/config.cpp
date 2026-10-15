@@ -1368,7 +1368,7 @@ namespace NKikimr::NBsController {
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
 
-            if (group.BridgeGroupInfo) {
+            if (group.BridgeGroupInfo && !group.IsInlinePile()) { // inline pile has its own VDisks
                 pb->SetIsProxyGroup(true);
             }
 

@@ -6,6 +6,38 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
+    namespace {
+
+        // Propagate new generation of the group to the bridge group state referencing it; the referencing bridge proxy
+        // group gets its generation bumped too, unless this is an inline pile referencing itself.
+        void UpdateBridgePileGeneration(NKikimrBlobStorage::TNodeWardenServiceSet *ss, TGroupId groupId) {
+            std::optional<ui32> generation;
+            for (const auto& group : ss->GetGroups()) {
+                if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
+                    generation.emplace(group.GetGroupGeneration());
+                    break;
+                }
+            }
+            Y_ABORT_UNLESS(generation);
+
+            for (auto& group : *ss->MutableGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                for (auto& pile : *group.MutableBridgeGroupState()->MutablePile()) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) != groupId) {
+                        continue;
+                    }
+                    pile.SetGroupGeneration(*generation);
+                    if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) != groupId) {
+                        group.SetGroupGeneration(group.GetGroupGeneration() + 1);
+                    }
+                }
+            }
+        }
+
+    }
+
     TDistributedConfigKeeper::TAllocateStaticGroupParams
     TDistributedConfigKeeper::BuildStaticGroupReassignParams(NKikimrBlobStorage::TStorageConfig *config,
                                                              const NKikimrBlobStorage::TBaseConfig *baseConfig,
@@ -282,6 +314,8 @@ namespace NKikimr::NStorage {
                         {"error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
+
+                UpdateBridgePileGeneration(config.MutableBlobStorageConfig()->MutableServiceSet(), vdiskId.GroupID);
 
                 const auto it = reassignments.find(vdiskId);
                 if (it == reassignments.end() || !it->second.SourceSlotId || !it->second.TargetSlotId) {

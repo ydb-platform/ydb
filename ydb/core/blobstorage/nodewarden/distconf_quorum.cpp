@@ -313,7 +313,9 @@ namespace NKikimr::NStorage {
                         ? TBridgePileId::FromPileIndex(i) == singleBridgePileId
                         : NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum;
                 }
-            } else if (const auto& checker = info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
+            }
+            const bool hasOwnVDisks = !info->IsBridged() || info->IsInlinePile(); // bridge proxy group doesn't have them
+            if (hasOwnVDisks && !info->GetQuorumChecker().CheckQuorumForGroup(group.Confirmed)) {
                 badGroups.insert(groupId);
             }
         }

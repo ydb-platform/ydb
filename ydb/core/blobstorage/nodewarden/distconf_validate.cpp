@@ -300,8 +300,11 @@ namespace NKikimr::NStorage {
                         return "incorrect referenced group generation";
                     }
                 }
-                continue;
-            } else if (!group.HasErasureSpecies()) {
+                if (!group.HasBridgeProxyGroupId() || group.GetBridgeProxyGroupId() != group.GetGroupID()) {
+                    continue; // bridge proxy group has no VDisks of its own; inline pile has them and is validated below
+                }
+            }
+            if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
             }
 

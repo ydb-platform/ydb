@@ -2661,13 +2661,13 @@ TPhysicalJoin DispatchPhysicalJoin(EJoinKind kind, ESide preservedSide, bool isG
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
-        UNIT_ASSERT_VALUES_EQUAL(inner.Kind, EJoinKind::Inner);
-        UNIT_ASSERT_VALUES_EQUAL(inner.Preserved, ESide::Build);
+        UNIT_ASSERT(inner.Kind == EJoinKind::Inner);
+        UNIT_ASSERT(inner.Preserved == ESide::Build);
         UNIT_ASSERT(!inner.IsGrid);
 
         const auto cross = DispatchPhysicalJoin(EJoinKind::Cross, ESide::Build, true);
-        UNIT_ASSERT_VALUES_EQUAL(cross.Kind, EJoinKind::Cross);
-        UNIT_ASSERT_VALUES_EQUAL(cross.Preserved, ESide::Build);
+        UNIT_ASSERT(cross.Kind == EJoinKind::Cross);
+        UNIT_ASSERT(cross.Preserved == ESide::Build);
         UNIT_ASSERT(cross.IsGrid);
     }
 }

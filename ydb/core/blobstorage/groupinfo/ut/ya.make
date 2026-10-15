@@ -22,6 +22,7 @@ PEERDIR(
 SRCS(
     blobstorage_groupinfo_iter_ut.cpp
     blobstorage_groupinfo_ut.cpp
+    blobstorage_groupinfo_widelayout_ut.cpp
 )
 
 IF (BUILD_TYPE != "DEBUG")

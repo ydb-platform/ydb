@@ -184,6 +184,14 @@ public:
         }
 
         ops->Send(ActorId, status.Release());
+
+        // the previous controller (or session) might not have handled them
+        for (const auto& [id, record] : DataEnded) {
+            auto ev = MakeHolder<TEvService::TEvWorkerDataEnd>();
+            ev->Record.CopyFrom(record);
+            ops->Send(ActorId, ev.Release());
+        }
+
         for (const auto& [id, versions] : PendingIndexTxIds) {
             if (HasWorker(id) && !versions.empty()) {
                 auto request = MakeHolder<TEvService::TEvGetTxId>(versions);
@@ -273,6 +281,7 @@ public:
 
         IndexBuildWorkers.erase(id);
         PendingIndexTxIds.erase(id);
+        DataEnded.erase(id);
         Workers.erase(it);
     }
 
@@ -286,6 +295,7 @@ public:
 
         IndexBuildWorkers.erase(it->second);
         PendingIndexTxIds.erase(it->second);
+        DataEnded.erase(it->second);
         Workers.erase(it->second);
 
         PendingStatsValues.erase(it->second);
@@ -361,6 +371,7 @@ public:
             record.AddChildPartitionsIds(id);
         }
 
+        DataEnded[id] = record;
         ops->Send(ActorId, ev.Release());
     }
 
@@ -530,6 +541,7 @@ private:
 
     THashSet<TWorkerId> IndexBuildWorkers;
     THashMap<TWorkerId, TSet<TRowVersion>> PendingIndexTxIds;
+    THashMap<TWorkerId, NKikimrReplication::TEvWorkerDataEnd> DataEnded;
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
     THashSet<TWorkerId> WorkersWithHeartbeat;

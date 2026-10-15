@@ -15,4 +15,7 @@ items:
       href: examples/schemas/overloaded-shard-simple-case.md
     - name: Перегруженный шард и недостаточно ресурсов CPU
       href: examples/schemas/overloaded-shard-insufficient-cpu.md
+- name: Как подготовить воспроизводимый пример (repro)
+  href: repro.md
+
 

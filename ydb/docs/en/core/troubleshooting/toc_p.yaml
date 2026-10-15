@@ -13,4 +13,7 @@ items:
   items:
     - name: Overloaded shard
       href: examples/schemas/overloaded-shard-simple-case.md
+- name: How to prepare a reproducible example (repro)
+  href: repro.md
+
 

@@ -245,8 +245,25 @@ jobs:
       run: |
         set +e
         url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
-        speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "$url")
-        proxy_speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "https://gh-proxy.com/$url")
+        measure() {
+          local target="$1"
+          local deadline=$((SECONDS + 10))
+          local bytes=0
+          local started=$SECONDS
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            local left=$((deadline - SECONDS))
+            [ "$left" -lt 1 ] && left=1
+            local n
+            n=$(curl -L --http2 --max-time "$left" -o /dev/null -sS -w '%{size_download}' "$target" || true)
+            n=${n%%.*}
+            bytes=$((bytes + ${n:-0}))
+          done
+          local elapsed=$((SECONDS - started))
+          [ "$elapsed" -lt 1 ] && elapsed=1
+          echo $((bytes / elapsed))
+        }
+        speed=$(measure "$url")
+        proxy_speed=$(measure "https://gh-proxy.com/$url")
         set -euo pipefail
         threshold=3000000
         use_proxy=false
@@ -324,8 +341,25 @@ jobs:
       run: |
         set +e
         url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
-        speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "$url")
-        proxy_speed=$(curl -L --http2 --max-time 10 -o /dev/null -sS -w '%{speed_download}' "https://gh-proxy.com/$url")
+        measure() {
+          local target="$1"
+          local deadline=$((SECONDS + 10))
+          local bytes=0
+          local started=$SECONDS
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            local left=$((deadline - SECONDS))
+            [ "$left" -lt 1 ] && left=1
+            local n
+            n=$(curl -L --http2 --max-time "$left" -o /dev/null -sS -w '%{size_download}' "$target" || true)
+            n=${n%%.*}
+            bytes=$((bytes + ${n:-0}))
+          done
+          local elapsed=$((SECONDS - started))
+          [ "$elapsed" -lt 1 ] && elapsed=1
+          echo $((bytes / elapsed))
+        }
+        speed=$(measure "$url")
+        proxy_speed=$(measure "https://gh-proxy.com/$url")
         set -euo pipefail
         threshold=3000000
         use_proxy=false

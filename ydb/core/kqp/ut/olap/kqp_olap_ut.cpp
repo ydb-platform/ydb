@@ -1541,10 +1541,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%AAA%bbb%' ORDER BY id)"), "[[1]]");
         CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%' ORDER BY id)"), "[[2];[3]]");
 
-        auto ssaOf = [&](const TString& query, const TParams& params = TParams()) {
+        auto ssaOf = [&](const TString& query, const TParams* params = nullptr) {
             TStreamExecScanQuerySettings scanSettings;
             scanSettings.Explain(true);
-            auto it = tableClient.StreamExecuteScanQuery(query, params, scanSettings).GetValueSync();
+            auto it = params
+                ? tableClient.StreamExecuteScanQuery(query, *params, scanSettings).GetValueSync()
+                : tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             auto result = CollectStreamResult(it);
             NJson::TJsonValue plan;
@@ -1581,7 +1583,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '100#%%' ESCAPE '#')");
         UNIT_ASSERT_C(escaped.Contains("PatternHint"), escaped);
         const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
-        const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", params);
+        const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", &params);
         UNIT_ASSERT_C(!parameterized.Contains("PatternHint"), parameterized);
     }
 

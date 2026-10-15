@@ -269,6 +269,9 @@ jobs:
         # Fork code is checked out only after the check-running-allowed gate
         # (collaborator/owner or a maintainer-applied `ok-to-test` label)
         allow-unsafe-pr-checkout: true
+    - name: Drop GitHub proxy
+      shell: bash
+      run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -339,6 +342,9 @@ jobs:
       uses: actions/checkout@v5
       with:
         fetch-depth: 2
+    - name: Drop GitHub proxy
+      shell: bash
+      run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

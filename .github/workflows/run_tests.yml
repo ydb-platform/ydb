@@ -335,6 +335,11 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
+      - name: Drop GitHub proxy
+        if: inputs.git_github_proxy
+        shell: bash
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
+
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:

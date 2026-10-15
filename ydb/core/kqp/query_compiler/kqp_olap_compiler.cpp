@@ -656,8 +656,8 @@ TTypedColumn CompileYqlKernelUdf(const TKqpOlapUdf& udf, TKqpOlapCompileContext&
         // For now there are no known kernels that support utf8 and do not support string
         const auto stringColumn = IsUtf8Block(*column.Type) ? CompileYqlKernelToString(column, ctx) : column;
         bool isScalar;
-        // All currently used TKqpOlapUdfs have optional inputs, so adapt non-null column via Just
-        // Non-optional UDF input support will require type introspection.
+        // Supported UDFs require an optional first argument and a non-optional second argument.
+        // Other signatures require type introspection.
         if (ids.empty() && !GetBlockItemType(*stringColumn.Type, isScalar)->IsOptionalOrNull()) {
             const auto optionalType = ctx.GetOptionalType(*stringColumn.Type);
             auto* const command = ctx.CreateAssignCmd();

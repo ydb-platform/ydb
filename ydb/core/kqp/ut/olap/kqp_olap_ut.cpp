@@ -1808,7 +1808,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         run("", false);
     }
 
-    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfHandleBothStringAndUtf8, Utf8Column, NotNullColumn) {
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfDifferentStringTypes, Utf8Column, NotNullColumn) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);

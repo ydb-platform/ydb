@@ -162,6 +162,7 @@ public:
     }
 
     virtual std::optional<ui32> GetOriginalAddressFromInput() const override {
+        // Just preserves its input value while adding optionality.
         return 0;
     }
 

@@ -4,6 +4,7 @@ RECURSE(
     actors
     analytics
     arrow_clickhouse
+    arrow_helpers
     arrow_kernels
     arrow_parquet
     aws_init

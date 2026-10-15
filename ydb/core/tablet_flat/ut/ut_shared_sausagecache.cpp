@@ -1486,6 +1486,9 @@ Y_UNIT_TEST(TryKeepInMemoryMode_ReloadEvictedPage_Touched) {
     UNIT_ASSERT_VALUES_EQUAL(counters->S3FIFOEvictOps->Val(), evictOpsBeforeIdle);
 }
 
+<<<<<<< HEAD
+>>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
+=======
 >>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
 Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     TMyEnvBase env;

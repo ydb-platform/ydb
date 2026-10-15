@@ -210,6 +210,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             || InMemoryTierHasRoomFor(TPageTraits::GetSize(page));
     }
 
+<<<<<<< HEAD
+>>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
+=======
 >>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
     void ActualizeCacheSizeLimit() {
         Counters.ConfigLimitBytes->Set(Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0);
@@ -943,16 +946,22 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (page->GetFrequency() > 0) {
                     // page was accessed while being passive, load it back
 <<<<<<< HEAD
+<<<<<<< HEAD
                     ReloadEvictedPage(page);
                 } else if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory
                     && ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes())
 =======
+=======
+>>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
                     if (CanReloadEvictedPage(page)) {
                         ReloadEvictedPage(page);
                     }
                 } else if (page->CacheMode == ECacheMode::TryKeepInMemory
                     && ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()
                     && CanReloadEvictedPage(page))
+<<<<<<< HEAD
+>>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
+=======
 >>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
                 {
                     ReloadEvictedPage(page, false);
@@ -1290,6 +1299,37 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (CanReloadEvictedPage(page)) {
                     ReloadEvictedPage(page);
                     loadedPages.push_back(page);
+<<<<<<< HEAD
+=======
+                }
+                break;
+            }
+        };
+
+        bool hasSkippedPages = false;
+        for (const auto& pageId : xrange(pageCollection->MetaPages())) {
+            auto type = static_cast<NTable::NPage::EPage>(pageCollection->Page(pageId).Type);
+            hasSkippedPages |= type == NTable::NPage::EPage::Skip;
+            if (skipPageType(type)) {
+                continue;
+            }
+
+            auto location = pageCollection->GetLocation(pageId);
+            if (auto* page = collection.PageSet.FindPage(location.Offset)) {
+                processPage(page);
+            } else {
+                pagesToLoad.emplace(location);
+            }
+        }
+
+        // Hidden pages use Skip entries, including collections where Total() > MetaPages().
+        if (hasSkippedPages) {
+            // A Skip entry can hide even one page, when Total() still equals MetaPages().
+            for (const auto& ptr : collection.PageSet) {
+                auto* page = ptr.Get();
+                if (page->CacheMode != ECacheMode::TryKeepInMemory && !skipPageType(page->Type)) {
+                    processPage(page);
+>>>>>>> 3de54fd4e88 (LocalDB: YDBBUGS-978 (#55712))
                 }
                 break;
             }

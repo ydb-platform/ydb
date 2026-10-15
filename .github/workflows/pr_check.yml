@@ -252,24 +252,27 @@ jobs:
         url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
         measure() {
           local target="$1"
-          local deadline=$((SECONDS + 10))
+          local deadline=$((SECONDS + 20))
+          local cap=300000000
           local bytes=0
           local started=$SECONDS
-          while [ "$SECONDS" -lt "$deadline" ]; do
+          while [ "$SECONDS" -lt "$deadline" ] && [ "$bytes" -lt "$cap" ]; do
             local left=$((deadline - SECONDS))
             [ "$left" -lt 1 ] && left=1
             local n
-            n=$(curl -L --http2 --max-time "$left" -o /dev/null -sS -w '%{size_download}' "$target" || true)
+            n=$(curl -L --http2 --max-time "$left" -o /dev/null -s -w '%{size_download}' "$target" 2>/dev/null || true)
             n=${n%%.*}
             bytes=$((bytes + ${n:-0}))
           done
           local elapsed=$((SECONDS - started))
           [ "$elapsed" -lt 1 ] && elapsed=1
-          echo $((bytes / elapsed))
+          echo "$bytes $elapsed"
         }
-        speed=$(measure "$url")
-        proxy_speed=$(measure "https://gh-proxy.com/$url")
+        read -r speed_bytes speed_elapsed <<< "$(measure "$url")"
+        read -r proxy_bytes proxy_elapsed <<< "$(measure "https://gh-proxy.com/$url")"
         set -euo pipefail
+        speed=$((speed_bytes / speed_elapsed))
+        proxy_speed=$((proxy_bytes / proxy_elapsed))
         threshold=3000000
         use_proxy=false
         if awk -v s="${speed:-0}" -v t="$threshold" 'BEGIN { exit !(s+0 < t) }'; then
@@ -277,7 +280,9 @@ jobs:
         fi
         mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
         proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        echo "GitHub sample ${mb} MB/s, gh-proxy.com ${proxy_mb} MB/s, threshold 3 MB/s, use_proxy=${use_proxy}"
+        got=$(awk -v b="${speed_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
+        proxy_got=$(awk -v b="${proxy_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
+        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; threshold 3 MB/s, use_proxy=${use_proxy}"
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"
@@ -351,24 +356,27 @@ jobs:
         url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
         measure() {
           local target="$1"
-          local deadline=$((SECONDS + 10))
+          local deadline=$((SECONDS + 20))
+          local cap=300000000
           local bytes=0
           local started=$SECONDS
-          while [ "$SECONDS" -lt "$deadline" ]; do
+          while [ "$SECONDS" -lt "$deadline" ] && [ "$bytes" -lt "$cap" ]; do
             local left=$((deadline - SECONDS))
             [ "$left" -lt 1 ] && left=1
             local n
-            n=$(curl -L --http2 --max-time "$left" -o /dev/null -sS -w '%{size_download}' "$target" || true)
+            n=$(curl -L --http2 --max-time "$left" -o /dev/null -s -w '%{size_download}' "$target" 2>/dev/null || true)
             n=${n%%.*}
             bytes=$((bytes + ${n:-0}))
           done
           local elapsed=$((SECONDS - started))
           [ "$elapsed" -lt 1 ] && elapsed=1
-          echo $((bytes / elapsed))
+          echo "$bytes $elapsed"
         }
-        speed=$(measure "$url")
-        proxy_speed=$(measure "https://gh-proxy.com/$url")
+        read -r speed_bytes speed_elapsed <<< "$(measure "$url")"
+        read -r proxy_bytes proxy_elapsed <<< "$(measure "https://gh-proxy.com/$url")"
         set -euo pipefail
+        speed=$((speed_bytes / speed_elapsed))
+        proxy_speed=$((proxy_bytes / proxy_elapsed))
         threshold=3000000
         use_proxy=false
         if awk -v s="${speed:-0}" -v t="$threshold" 'BEGIN { exit !(s+0 < t) }'; then
@@ -376,7 +384,9 @@ jobs:
         fi
         mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
         proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        echo "GitHub sample ${mb} MB/s, gh-proxy.com ${proxy_mb} MB/s, threshold 3 MB/s, use_proxy=${use_proxy}"
+        got=$(awk -v b="${speed_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
+        proxy_got=$(awk -v b="${proxy_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
+        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; threshold 3 MB/s, use_proxy=${use_proxy}"
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"

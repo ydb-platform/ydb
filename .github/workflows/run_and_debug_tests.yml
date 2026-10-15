@@ -108,6 +108,7 @@ jobs:
       build_preset: ${{ matrix.build_preset }}
       branches: ${{ needs.prepare.outputs.branches_json || '' }}
       branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+      git_github_proxy: true
 
   collect_combined_summary:
     needs: main

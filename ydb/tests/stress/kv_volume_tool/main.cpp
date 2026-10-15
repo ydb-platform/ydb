@@ -1,3 +1,4 @@
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_keyvalue_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_keyvalue.pb.h>
@@ -128,7 +129,15 @@ std::shared_ptr<grpc::ChannelCredentials> MakeChannelCredentials(bool useTls) {
     return grpc::InsecureChannelCredentials();
 }
 
-std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TString& endpoint, bool useTls, ui32 channelId = 0) {
+struct TNodeEndpoint {
+    TString HostPort;
+    bool UseTls = false;
+    TString SslTargetNameOverride;
+    float LoadFactor = 0;
+    bool Local = false;
+};
+
+std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TNodeEndpoint& node, ui32 channelId = 0) {
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(GrpcMaxMessageSize);
     args.SetMaxSendMessageSize(GrpcMaxMessageSize);
@@ -136,8 +145,257 @@ std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TString& endpoint, bool use
     // target. Each load worker must get its own connection.
     args.SetInt(GRPC_ARG_USE_LOCAL_SUBCHANNEL_POOL, 1);
     args.SetInt(GRPC_ARG_CHANNEL_ID, static_cast<int>(channelId));
-    return grpc::CreateCustomChannel(endpoint, MakeChannelCredentials(useTls), args);
+    if (!node.SslTargetNameOverride.empty()) {
+        args.SetSslTargetNameOverride(std::string(node.SslTargetNameOverride));
+    }
+    return grpc::CreateCustomChannel(std::string(node.HostPort), MakeChannelCredentials(node.UseTls), args);
 }
+
+TString FormatHostPort(const TString& host, ui32 port) {
+    if (host.find(':') != TString::npos && !host.StartsWith("[")) {
+        return TStringBuilder() << "[" << host << "]:" << port;
+    }
+    return TStringBuilder() << host << ":" << port;
+}
+
+constexpr int TryNextNode = -1;
+
+enum class EOpResult {
+    Ok,
+    Failed,
+    Unavailable,
+};
+
+bool IsNodeUnavailable(const grpc::Status& status) {
+    const grpc::StatusCode code = status.error_code();
+    return code == grpc::StatusCode::UNAVAILABLE || code == grpc::StatusCode::DEADLINE_EXCEEDED;
+}
+
+int FailGrpc(const grpc::Status& status) {
+    if (IsNodeUnavailable(status)) {
+        return TryNextNode;
+    }
+    Cerr << "gRPC call failed: " << status.error_message() << Endl;
+    return 1;
+}
+
+using TKvStub = Ydb::KeyValue::V1::KeyValueService::Stub;
+
+struct TNodeSession {
+    std::shared_ptr<TVector<TNodeEndpoint>> Nodes = std::make_shared<TVector<TNodeEndpoint>>();
+    size_t Index = 0;
+    ui32 ChannelId = 0;
+    bool Ready = false;
+    std::shared_ptr<grpc::Channel> Channel;
+    std::unique_ptr<TKvStub> KvStub;
+
+    static TNodeSession Discover(const TString& endpoint, bool useTls, const TString& database) {
+        TNodeSession session;
+        if (!session.LoadEndpoints(endpoint, useTls, database)) {
+            return session;
+        }
+        session.OrderNodes();
+        session.Ready = true;
+        session.Reopen();
+        return session;
+    }
+
+    const TVector<TNodeEndpoint>& Endpoints() const {
+        return *Nodes;
+    }
+
+    TKvStub& Stub() {
+        return *KvStub;
+    }
+
+    TNodeSession Spawn(size_t index, ui32 channelId) const {
+        TNodeSession session;
+        session.Nodes = Nodes;
+        session.Index = Nodes->empty() ? 0 : index % Nodes->size();
+        session.ChannelId = channelId;
+        session.Ready = Ready;
+        if (session.Ready) {
+            session.Reopen();
+        }
+        return session;
+    }
+
+    template <typename TFn>
+    int Call(TFn&& fn) {
+        if (!Ready || Nodes->empty()) {
+            Cerr << "Discovery returned no endpoints" << Endl;
+            return 1;
+        }
+        for (size_t attempt = 0; attempt < Nodes->size(); ++attempt) {
+            const TNodeEndpoint& node = (*Nodes)[Index];
+            if (VerboseMode) {
+                Cerr << "Trying endpoint: " << node.HostPort << Endl;
+            }
+            const int code = fn(*KvStub);
+            if (code != TryNextNode) {
+                return code;
+            }
+            NoteUnavailable(node);
+            if (attempt + 1 == Nodes->size()) {
+                break;
+            }
+            Index = (Index + 1) % Nodes->size();
+            Reopen();
+        }
+        Cerr << "Failed to connect to any discovered endpoint:" << Endl;
+        for (const auto& node : *Nodes) {
+            Cerr << "  " << node.HostPort << Endl;
+        }
+        return 1;
+    }
+
+    template <typename TFn>
+    bool Call(TFn&& fn, TString* errorOut) {
+        if (!Ready || Nodes->empty()) {
+            if (errorOut) {
+                *errorOut = "discovery returned no endpoints";
+            }
+            return false;
+        }
+        for (size_t attempt = 0; attempt < Nodes->size(); ++attempt) {
+            if (errorOut) {
+                errorOut->clear();
+            }
+            const EOpResult result = fn(*KvStub);
+            if (result != EOpResult::Unavailable) {
+                return result == EOpResult::Ok;
+            }
+            NoteUnavailable((*Nodes)[Index]);
+            if (attempt + 1 == Nodes->size()) {
+                break;
+            }
+            Index = (Index + 1) % Nodes->size();
+            Reopen();
+        }
+        if (errorOut && errorOut->empty()) {
+            *errorOut = "all discovered endpoints are unavailable";
+        }
+        return false;
+    }
+
+private:
+    static void NoteUnavailable(const TNodeEndpoint& node) {
+        Cerr << "Endpoint " << node.HostPort << " is unavailable, trying the next one" << Endl;
+    }
+
+    void Reopen() {
+        Channel = MakeGrpcChannel((*Nodes)[Index], ChannelId);
+        KvStub = Ydb::KeyValue::V1::KeyValueService::NewStub(Channel);
+    }
+
+    void OrderNodes() {
+        std::stable_sort(Nodes->begin(), Nodes->end(), [](const TNodeEndpoint& left, const TNodeEndpoint& right) {
+            if (left.Local != right.Local) {
+                return left.Local;
+            }
+            return left.LoadFactor < right.LoadFactor;
+        });
+    }
+
+    bool LoadEndpoints(const TString& endpoint, bool useTls, const TString& database) {
+        TNodeEndpoint bootstrap;
+        bootstrap.HostPort = endpoint;
+        bootstrap.UseTls = useTls;
+
+        auto channel = MakeGrpcChannel(bootstrap);
+        auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(channel);
+
+        Ydb::Discovery::ListEndpointsRequest request;
+        request.set_database(database);
+
+        if (VerboseMode) {
+            TString requestText;
+            google::protobuf::TextFormat::PrintToString(request, &requestText);
+            Cerr << "=== Discovery request ===" << Endl;
+            Cerr << requestText << Endl;
+        }
+
+        Ydb::Discovery::ListEndpointsResponse response;
+        grpc::ClientContext context;
+        AdjustContext(context, database);
+
+        grpc::Status status = stub->ListEndpoints(&context, request, &response);
+
+        if (VerboseMode) {
+            TString responseText;
+            google::protobuf::TextFormat::PrintToString(response, &responseText);
+            Cerr << "=== Discovery response ===" << Endl;
+            Cerr << responseText << Endl;
+        }
+
+        if (!status.ok()) {
+            Cerr << "Discovery gRPC call failed: " << status.error_message() << Endl;
+            return false;
+        }
+
+        if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+            Cerr << "Discovery failed with status: " << StatusToString(response.operation().status()) << Endl;
+            if (response.operation().issues_size() > 0) {
+                Cerr << "Issues:" << Endl;
+                for (const auto& issue : response.operation().issues()) {
+                    Cerr << "  " << issue.message() << Endl;
+                }
+            }
+            return false;
+        }
+
+        Ydb::Discovery::ListEndpointsResult result;
+        if (!response.operation().result().UnpackTo(&result)) {
+            Cerr << "Failed to unpack ListEndpointsResult" << Endl;
+            return false;
+        }
+
+        const TString selfLocation = result.self_location();
+        for (const auto& info : result.endpoints()) {
+            TString host = info.address();
+            if (host.empty() && info.ip_v4_size() > 0) {
+                host = info.ip_v4(0);
+            } else if (host.empty() && info.ip_v6_size() > 0) {
+                host = info.ip_v6(0);
+            }
+            if (host.empty() || info.port() == 0) {
+                continue;
+            }
+
+            TNodeEndpoint node;
+            node.HostPort = FormatHostPort(host, info.port());
+            node.UseTls = useTls;
+            node.SslTargetNameOverride = info.ssl_target_name_override();
+            if (node.UseTls && node.SslTargetNameOverride.empty() && host != info.address() && !info.address().empty()) {
+                node.SslTargetNameOverride = info.address();
+            }
+            node.LoadFactor = info.load_factor();
+            node.Local = !selfLocation.empty() && info.location() == selfLocation;
+            Nodes->push_back(std::move(node));
+        }
+
+        if (Nodes->empty()) {
+            Cerr << "Discovery returned no endpoints" << Endl;
+            return false;
+        }
+
+        if (VerboseMode) {
+            Cerr << "Discovered " << Nodes->size() << " endpoints";
+            if (!selfLocation.empty()) {
+                Cerr << ", self location: " << selfLocation;
+            }
+            Cerr << Endl;
+            for (const auto& node : *Nodes) {
+                Cerr << "  " << node.HostPort
+                     << " load=" << node.LoadFactor
+                     << (node.Local ? " local" : "")
+                     << Endl;
+            }
+        }
+
+        return true;
+    }
+};
 
 std::atomic<bool>* LoadStopFlag = nullptr;
 
@@ -216,9 +474,7 @@ private:
     std::chrono::milliseconds Duration_{0};
 };
 
-int DescribeVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int DescribeVolume(TKvStub& stub, const TString& database, const TString& path) {
 
     Ydb::KeyValue::DescribeVolumeRequest request;
     request.set_path(path);
@@ -234,7 +490,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
     grpc::ClientContext context;
     AdjustContext(context, database);
 
-    grpc::Status status = stub->DescribeVolume(&context, request, &response);
+    grpc::Status status = stub.DescribeVolume(&context, request, &response);
 
     if (VerboseMode) {
         TString responseText;
@@ -244,8 +500,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
     }
 
     if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
+        return FailGrpc(status);
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -288,9 +543,7 @@ int DescribeVolume(const TString& endpoint, const TString& database, const TStri
     return 0;
 }
 
-int CreateVolume(const TString& endpoint, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int CreateVolume(TKvStub& stub, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia) {
 
     Ydb::KeyValue::CreateVolumeRequest request;
     request.set_path(path);
@@ -314,7 +567,7 @@ int CreateVolume(const TString& endpoint, const TString& database, const TString
     grpc::ClientContext context;
     AdjustContext(context, database);
 
-    grpc::Status status = stub->CreateVolume(&context, request, &response);
+    grpc::Status status = stub.CreateVolume(&context, request, &response);
 
     if (VerboseMode) {
         TString responseText;
@@ -324,8 +577,7 @@ int CreateVolume(const TString& endpoint, const TString& database, const TString
     }
 
     if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
+        return FailGrpc(status);
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -343,9 +595,7 @@ int CreateVolume(const TString& endpoint, const TString& database, const TString
     return 0;
 }
 
-int RemoveVolume(const TString& endpoint, const TString& database, const TString& path, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int RemoveVolume(TKvStub& stub, const TString& database, const TString& path) {
 
     Ydb::KeyValue::DropVolumeRequest request;
     request.set_path(path);
@@ -361,7 +611,7 @@ int RemoveVolume(const TString& endpoint, const TString& database, const TString
     grpc::ClientContext context;
     AdjustContext(context, database);
 
-    grpc::Status status = stub->DropVolume(&context, request, &response);
+    grpc::Status status = stub.DropVolume(&context, request, &response);
 
     if (VerboseMode) {
         TString responseText;
@@ -371,8 +621,7 @@ int RemoveVolume(const TString& endpoint, const TString& database, const TString
     }
 
     if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
+        return FailGrpc(status);
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -390,9 +639,7 @@ int RemoveVolume(const TString& endpoint, const TString& database, const TString
     return 0;
 }
 
-int AlterVolume(const TString& endpoint, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int AlterVolume(TKvStub& stub, const TString& database, const TString& path, ui32 partitionCount, const TVector<TString>& channelMedia) {
 
     Ydb::KeyValue::AlterVolumeRequest request;
     request.set_path(path);
@@ -419,7 +666,7 @@ int AlterVolume(const TString& endpoint, const TString& database, const TString&
     grpc::ClientContext context;
     AdjustContext(context, database);
 
-    grpc::Status status = stub->AlterVolume(&context, request, &response);
+    grpc::Status status = stub.AlterVolume(&context, request, &response);
 
     if (VerboseMode) {
         TString responseText;
@@ -429,8 +676,7 @@ int AlterVolume(const TString& endpoint, const TString& database, const TString&
     }
 
     if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
+        return FailGrpc(status);
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -448,9 +694,7 @@ int AlterVolume(const TString& endpoint, const TString& database, const TString&
     return 0;
 }
 
-int ReadValue(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, ui64 offset, ui64 size, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int ReadValue(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, ui64 offset, ui64 size) {
 
     Ydb::KeyValue::ReadRequest request;
     request.set_path(path);
@@ -470,7 +714,7 @@ int ReadValue(const TString& endpoint, const TString& database, const TString& p
     grpc::ClientContext context;
     AdjustContext(context, database);
 
-    grpc::Status status = stub->Read(&context, request, &response);
+    grpc::Status status = stub.Read(&context, request, &response);
 
     if (VerboseMode) {
         TString responseText;
@@ -480,8 +724,7 @@ int ReadValue(const TString& endpoint, const TString& database, const TString& p
     }
 
     if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
+        return FailGrpc(status);
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -513,9 +756,7 @@ int ReadValue(const TString& endpoint, const TString& database, const TString& p
     return 0;
 }
 
-int WriteValue(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, bool useTls) {
-    auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int WriteValue(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel) {
 
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
@@ -540,7 +781,7 @@ int WriteValue(const TString& endpoint, const TString& database, const TString& 
     grpc::ClientContext context;
     AdjustContext(context, database);
 
-    grpc::Status status = stub->ExecuteTransaction(&context, request, &response);
+    grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
 
     if (VerboseMode) {
         TString responseText;
@@ -550,8 +791,7 @@ int WriteValue(const TString& endpoint, const TString& database, const TString& 
     }
 
     if (!status.ok()) {
-        Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return 1;
+        return FailGrpc(status);
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -631,6 +871,9 @@ int ExecuteTransaction(
     }
 
     if (!status.ok()) {
+        if (IsNodeUnavailable(status)) {
+            return TryNextNode;
+        }
         Cerr << "gRPC call failed: " << status.error_message() << Endl;
         return 1;
     }
@@ -655,7 +898,7 @@ int ExecuteTransaction(
     return 0;
 }
 
-bool ReadValueChunk(
+int ReadValueChunk(
     Ydb::KeyValue::V1::KeyValueService::Stub& stub,
     const TString& database,
     const TString& path,
@@ -694,8 +937,11 @@ bool ReadValueChunk(
     }
 
     if (!status.ok()) {
+        if (IsNodeUnavailable(status)) {
+            return TryNextNode;
+        }
         Cerr << "gRPC call failed: " << status.error_message() << Endl;
-        return false;
+        return 1;
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
@@ -706,15 +952,15 @@ bool ReadValueChunk(
                 Cerr << "  " << issue.message() << Endl;
             }
         }
-        return false;
+        return 1;
     }
 
     if (!response.operation().result().UnpackTo(&result)) {
         Cerr << "Failed to unpack ReadResult" << Endl;
-        return false;
+        return 1;
     }
 
-    return true;
+    return 0;
 }
 
 void CleanupPartKeys(
@@ -740,7 +986,7 @@ void CleanupPartKeys(
     }
 }
 
-int UploadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel, bool useTls) {
+int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, ui32 storageChannel) {
     const i64 fileSize = GetFileLength(filePath);
     if (fileSize < 0) {
         Cerr << "Failed to get file size: " << filePath << Endl;
@@ -748,9 +994,6 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
     }
 
     Cout << "Uploading file: " << filePath << " (" << fileSize << " bytes)" << Endl;
-
-    auto channel = MakeGrpcChannel(endpoint, useTls);
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
 
     if (static_cast<ui64>(fileSize) <= FileTransferChunkSize) {
         TFileInput fileInput(filePath);
@@ -767,8 +1010,8 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
             write->set_storage_channel(storageChannel);
         }
 
-        if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
-            return 1;
+        if (const int code = ExecuteTransaction(stub, database, std::move(request), "Write"); code != 0) {
+            return code;
         }
     } else {
         TVector<TString> partKeys;
@@ -799,9 +1042,11 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
             }
 
             Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
-            if (ExecuteTransaction(*stub, database, std::move(request), "Write") != 0) {
-                CleanupPartKeys(*stub, database, path, partitionId, partKeys);
-                return 1;
+            if (const int code = ExecuteTransaction(stub, database, std::move(request), "Write"); code != 0) {
+                if (code != TryNextNode) {
+                    CleanupPartKeys(stub, database, path, partitionId, partKeys);
+                }
+                return code;
             }
 
             ++partIndex;
@@ -819,9 +1064,11 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
         concat->set_keep_inputs(false);
 
         Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
-        if (ExecuteTransaction(*stub, database, std::move(request), "Concat") != 0) {
-            CleanupPartKeys(*stub, database, path, partitionId, partKeys);
-            return 1;
+        if (const int code = ExecuteTransaction(stub, database, std::move(request), "Concat"); code != 0) {
+            if (code != TryNextNode) {
+                CleanupPartKeys(stub, database, path, partitionId, partKeys);
+            }
+            return code;
         }
     }
 
@@ -829,9 +1076,7 @@ int UploadFile(const TString& endpoint, const TString& database, const TString& 
     return 0;
 }
 
-int DownloadFile(const TString& endpoint, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath, bool useTls) {
-    auto channel = MakeGrpcChannel(endpoint, useTls);
-    auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+int DownloadFile(TKvStub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& filePath) {
 
     ui64 offset = 0;
     ui64 totalBytes = 0;
@@ -839,8 +1084,8 @@ int DownloadFile(const TString& endpoint, const TString& database, const TString
 
     while (true) {
         Ydb::KeyValue::ReadResult result;
-        if (!ReadValueChunk(*stub, database, path, partitionId, key, offset, FileTransferChunkSize, result)) {
-            return 1;
+        if (const int code = ReadValueChunk(stub, database, path, partitionId, key, offset, FileTransferChunkSize, result); code != 0) {
+            return code;
         }
 
         if (result.value().empty()) {
@@ -894,7 +1139,15 @@ TString FormatOperationIssues(const Ydb::Operations::Operation& operation) {
     return issues;
 }
 
-bool DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
+EOpResult FromGrpcStatus(const grpc::Status& status, TString* errorOut) {
+    if (errorOut) {
+        *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
+            << " (code=" << static_cast<int>(status.error_code()) << ")";
+    }
+    return IsNodeUnavailable(status) ? EOpResult::Unavailable : EOpResult::Failed;
+}
+
+EOpResult DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -913,23 +1166,19 @@ bool DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString&
 
     grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
     if (!status.ok()) {
-        if (errorOut) {
-            *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
-                << " (code=" << static_cast<int>(status.error_code()) << ")";
-        }
-        return false;
+        return FromGrpcStatus(status, errorOut);
     }
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
         if (errorOut) {
             *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
                 << " issues=[" << FormatOperationIssues(response.operation()) << "]";
         }
-        return false;
+        return EOpResult::Failed;
     }
-    return true;
+    return EOpResult::Ok;
 }
 
-bool DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TVector<TString>& keys, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
+EOpResult DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TVector<TString>& keys, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -950,23 +1199,19 @@ bool DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString&
 
     grpc::Status status = stub.ExecuteTransaction(&context, request, &response);
     if (!status.ok()) {
-        if (errorOut) {
-            *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
-                << " (code=" << static_cast<int>(status.error_code()) << ")";
-        }
-        return false;
+        return FromGrpcStatus(status, errorOut);
     }
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
         if (errorOut) {
             *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
                 << " issues=[" << FormatOperationIssues(response.operation()) << "]";
         }
-        return false;
+        return EOpResult::Failed;
     }
-    return true;
+    return EOpResult::Ok;
 }
 
-bool DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, TString* errorOut = nullptr, const TString& traceparent = {}) {
+EOpResult DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ReadRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -980,20 +1225,16 @@ bool DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& 
 
     grpc::Status status = stub.Read(&context, request, &response);
     if (!status.ok()) {
-        if (errorOut) {
-            *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
-                << " (code=" << static_cast<int>(status.error_code()) << ")";
-        }
-        return false;
+        return FromGrpcStatus(status, errorOut);
     }
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
         if (errorOut) {
             *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
                 << " issues=[" << FormatOperationIssues(response.operation()) << "]";
         }
-        return false;
+        return EOpResult::Failed;
     }
-    return true;
+    return EOpResult::Ok;
 }
 
 ui64 Percentile(TVector<ui64>& values, double q) {
@@ -1048,11 +1289,10 @@ ui32 StickyPartitionId(ui32 threadIndex, ui32 partitionCount) {
 struct TLoadContext {
     static constexpr ui64 MaxLoggedErrors = 50;
 
-    TLoadContext(const TOptions& options, const TVector<TString>& endpoints, const TString& path, bool useTls)
+    TLoadContext(const TOptions& options, TNodeSession& session, const TString& path)
         : Options(options)
-        , Endpoints(endpoints)
+        , Session(session)
         , Path(path)
-        , UseTls(useTls)
         , ReportPeriod(options.ReportPeriod == 0 ? 1 : options.ReportPeriod)
         , DedicatedReaders(options.ReadThreads > 0)
         , InlineReadPercent(DedicatedReaders ? 0 : options.ReadPercent)
@@ -1148,9 +1388,8 @@ struct TLoadContext {
     }
 
     const TOptions& Options;
-    const TVector<TString>& Endpoints;
+    TNodeSession& Session;
     const TString Path;
-    const bool UseTls;
     const ui32 ReportPeriod;
     const bool DedicatedReaders;
     const ui32 InlineReadPercent;
@@ -1185,18 +1424,15 @@ struct TLoadContext {
 
 std::unique_ptr<TLoadContext> BuildLoadContext(
     const TOptions& options,
-    const TVector<TString>& endpoints,
-    const TString& path,
-    bool useTls)
+    TNodeSession& session,
+    const TString& path)
 {
-    return std::make_unique<TLoadContext>(options, endpoints, path, useTls);
+    return std::make_unique<TLoadContext>(options, session, path);
 }
 
 std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
     return std::thread([&ctx, t] {
-        const auto& ep = ctx.Endpoints[t % ctx.Endpoints.size()];
-        auto channel = MakeGrpcChannel(ep, ctx.UseTls, t + 1);
-        auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+        TNodeSession session = ctx.Session.Spawn(t, t + 1);
         std::mt19937 rng(static_cast<unsigned>(ctx.RunId + t));
         std::uniform_int_distribution<int> percent(1, 100);
 
@@ -1218,9 +1454,11 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
             TString error;
             const TTraceContext trace = ctx.NextTraceparent(ctx.WriteTraceCounter);
             TScopedTimer timer([&] {
-                return (ctx.Options.BatchSize == 1)
-                    ? DoWriteValue(*stub, ctx.Options.Database, ctx.Path, partitionId, keys[0], ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent)
-                    : DoWriteBatch(*stub, ctx.Options.Database, ctx.Path, partitionId, keys, ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent);
+                return session.Call([&](auto& stub) {
+                    return (ctx.Options.BatchSize == 1)
+                        ? DoWriteValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0], ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent)
+                        : DoWriteBatch(stub, ctx.Options.Database, ctx.Path, partitionId, keys, ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent);
+                }, &error);
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1239,7 +1477,9 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
 
             if (ok && ctx.InlineReadPercent > 0 && static_cast<ui32>(percent(rng)) <= ctx.InlineReadPercent) {
                 TScopedTimer readTimer([&] {
-                    return DoReadValue(*stub, ctx.Options.Database, ctx.Path, partitionId, keys[0]);
+                    return session.Call([&](auto& stub) {
+                        return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0]);
+                    }, nullptr);
                 });
                 ctx.Record(readTimer.GetResult(), readTimer.GetDuration().count(), false);
             }
@@ -1249,9 +1489,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
 
 std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
     return std::thread([&ctx, t] {
-        const auto& ep = ctx.Endpoints[(ctx.Options.Threads + t) % ctx.Endpoints.size()];
-        auto channel = MakeGrpcChannel(ep, ctx.UseTls, ctx.Options.Threads + t + 1);
-        auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+        TNodeSession session = ctx.Session.Spawn(ctx.Options.Threads + t, ctx.Options.Threads + t + 1);
         std::mt19937 rng(static_cast<unsigned>(ctx.RunId + 100000 + t));
         std::uniform_int_distribution<ui32> threadDist(0, ctx.Options.Threads - 1);
 
@@ -1272,7 +1510,9 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             TString error;
             const TTraceContext trace = ctx.NextTraceparent(ctx.ReadTraceCounter);
             TScopedTimer timer([&] {
-                return DoReadValue(*stub, ctx.Options.Database, ctx.Path, partitionId, key, &error, trace.Traceparent);
+                return session.Call([&](auto& stub) {
+                    return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, key, &error, trace.Traceparent);
+                }, &error);
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1287,7 +1527,7 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
     });
 }
 
-int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const TString& path, bool useTls) {
+int LoadVolume(const TOptions& options, TNodeSession& session, const TString& path) {
     if (options.PartitionCount == 0) {
         Cerr << "--partition-count must be specified for load command" << Endl;
         return 1;
@@ -1306,7 +1546,7 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
              << "consider --value-size " << 1_MB << " (1 MiB) to reach 4 GiB/s" << Endl;
     }
 
-    auto context = BuildLoadContext(options, endpoints, path, useTls);
+    auto context = BuildLoadContext(options, session, path);
     TLoadContext& ctx = *context;
 
     LoadStopFlag = &ctx.Stop;
@@ -1314,9 +1554,9 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     const auto prevTerm = std::signal(SIGTERM, HandleLoadSignal);
 
     Cout << "Load started:" << Endl;
-    Cout << "  endpoints: " << ctx.Endpoints.size() << Endl;
-    for (const auto& ep : ctx.Endpoints) {
-        Cout << "    " << ep << Endl;
+    Cout << "  endpoints: " << ctx.Session.Endpoints().size() << Endl;
+    for (const auto& ep : ctx.Session.Endpoints()) {
+        Cout << "    " << ep.HostPort << Endl;
     }
     Cout << "  storage channel: " << options.StorageChannel << Endl;
     Cout << "  write threads: " << options.Threads << Endl;
@@ -1451,7 +1691,7 @@ int LoadVolume(const TOptions& options, const TVector<TString>& endpoints, const
     return ctx.TotalErrors.load(std::memory_order_relaxed) == 0 ? 0 : 2;
 }
 
-int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const TString& path, bool useTls) {
+int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TString& path) {
     if (options.PartitionCount == 0) {
         Cerr << "--partition-count must be specified for load-channels command" << Endl;
         return 1;
@@ -1589,8 +1829,7 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
 
     for (const auto& config : workerConfigs) {
         workers.emplace_back([&, config] {
-            auto channel = grpc::CreateChannel(endpoint, MakeChannelCredentials(useTls));
-            auto stub = Ydb::KeyValue::V1::KeyValueService::NewStub(channel);
+            TNodeSession worker = session.Spawn(config.ThreadIndex, config.ThreadIndex + 1);
             std::mt19937 rng(static_cast<unsigned>(runId + config.ThreadIndex));
             std::uniform_int_distribution<int> percent(1, 100);
 
@@ -1601,7 +1840,9 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
 
                 TString error;
                 TScopedTimer writeTimer([&] {
-                    return DoWriteValue(*stub, options.Database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
+                    return worker.Call([&](auto& stub) {
+                        return DoWriteValue(stub, options.Database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
+                    }, config.IsS3 ? &error : nullptr);
                 });
                 const bool writeOk = writeTimer.GetResult();
                 const ui64 latencyMs = writeTimer.GetDuration().count();
@@ -1613,7 +1854,9 @@ int LoadVolumeChannels(const TOptions& options, const TString& endpoint, const T
                 if (writeOk && options.ReadPercent > 0 && static_cast<ui32>(percent(rng)) <= options.ReadPercent) {
                     error.clear();
                     TScopedTimer readTimer([&] {
-                        return DoReadValue(*stub, options.Database, path, partitionId, key, config.IsS3 ? &error : nullptr);
+                        return worker.Call([&](auto& stub) {
+                            return DoReadValue(stub, options.Database, path, partitionId, key, config.IsS3 ? &error : nullptr);
+                        }, config.IsS3 ? &error : nullptr);
                     });
                     const bool readOk = readTimer.GetResult();
                     const ui64 readLatencyMs = readTimer.GetDuration().count();
@@ -1932,16 +2175,14 @@ int main(int argc, char** argv) {
 
         VerboseMode = options.Verbose;
 
-        const bool useTls = IsSecureEndpoint(options.Endpoint);
-        const TString hostPort = ParseHostPort(options.Endpoint);
-        const TString volumePath = MakeVolumePath(options.Database, options.Path);
-
-        TVector<TString> loadEndpoints;
-        StringSplitter(options.Endpoint).Split(',').SkipEmpty().Collect(&loadEndpoints);
-        std::transform(loadEndpoints.begin(), loadEndpoints.end(), loadEndpoints.begin(), ParseHostPort);
-        if (loadEndpoints.empty()) {
-            loadEndpoints.push_back(hostPort);
+        TString bootstrap = options.Endpoint;
+        const size_t comma = bootstrap.find(',');
+        if (comma != TString::npos) {
+            bootstrap = bootstrap.substr(0, comma);
         }
+        const bool useTls = IsSecureEndpoint(bootstrap);
+        const TString hostPort = ParseHostPort(bootstrap);
+        const TString volumePath = MakeVolumePath(options.Database, options.Path);
 
         if (VerboseMode) {
             Cerr << "Endpoint: " << options.Endpoint << Endl;
@@ -1953,30 +2194,40 @@ int main(int argc, char** argv) {
             Cerr << Endl;
         }
 
-        if (options.Command == "create") {
-            return CreateVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.ChannelMedia, useTls);
-        } else if (options.Command == "describe") {
-            return DescribeVolume(hostPort, options.Database, volumePath, useTls);
-        } else if (options.Command == "alter") {
-            return AlterVolume(hostPort, options.Database, volumePath, options.PartitionCount, options.ChannelMedia, useTls);
-        } else if (options.Command == "remove") {
-            return RemoveVolume(hostPort, options.Database, volumePath, useTls);
-        } else if (options.Command == "read") {
-            return ReadValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize, useTls);
-        } else if (options.Command == "write") {
-            return WriteValue(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.Value, options.StorageChannel, useTls);
-        } else if (options.Command == "upload") {
-            return UploadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, options.StorageChannel, useTls);
-        } else if (options.Command == "download") {
-            return DownloadFile(hostPort, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, useTls);
-        } else if (options.Command == "load") {
-            return LoadVolume(options, loadEndpoints, volumePath, useTls);
-        } else if (options.Command == "load-channels") {
-            return LoadVolumeChannels(options, hostPort, volumePath, useTls);
+        TNodeSession session = TNodeSession::Discover(hostPort, useTls, options.Database);
+        if (!session.Ready) {
+            return 1;
         }
 
-        Cerr << "Unknown command: " << options.Command << Endl;
-        return 1;
+        if (options.Command == "load") {
+            return LoadVolume(options, session, volumePath);
+        }
+        if (options.Command == "load-channels") {
+            return LoadVolumeChannels(options, session, volumePath);
+        }
+
+        return session.Call([&](TKvStub& stub) {
+            if (options.Command == "create") {
+                return CreateVolume(stub, options.Database, volumePath, options.PartitionCount, options.ChannelMedia);
+            } else if (options.Command == "describe") {
+                return DescribeVolume(stub, options.Database, volumePath);
+            } else if (options.Command == "alter") {
+                return AlterVolume(stub, options.Database, volumePath, options.PartitionCount, options.ChannelMedia);
+            } else if (options.Command == "remove") {
+                return RemoveVolume(stub, options.Database, volumePath);
+            } else if (options.Command == "read") {
+                return ReadValue(stub, options.Database, volumePath, options.PartitionId, options.Key, options.ReadOffset, options.ReadSize);
+            } else if (options.Command == "write") {
+                return WriteValue(stub, options.Database, volumePath, options.PartitionId, options.Key, options.Value, options.StorageChannel);
+            } else if (options.Command == "upload") {
+                return UploadFile(stub, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath, options.StorageChannel);
+            } else if (options.Command == "download") {
+                return DownloadFile(stub, options.Database, volumePath, options.PartitionId, options.Key, options.FilePath);
+            }
+
+            Cerr << "Unknown command: " << options.Command << Endl;
+            return 1;
+        });
     } catch (const std::exception& e) {
         Cerr << "Error: " << e.what() << Endl;
         return 1;

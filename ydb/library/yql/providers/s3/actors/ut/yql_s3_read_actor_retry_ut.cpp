@@ -1,7 +1,3 @@
-// ClickHouse headers go first: memlog.h (via the actor headers) defines NO_SANITIZE_THREAD differently.
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
-
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -31,6 +27,11 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+
+#undef NO_SANITIZE_THREAD
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatFactory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 
 namespace NYql::NDq {
 

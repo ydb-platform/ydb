@@ -25,6 +25,8 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Functions/FunctionsConversion.h>
 
 #pragma clang diagnostic pop

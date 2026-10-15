@@ -1,5 +1,7 @@
 #include "events.h"
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
 
 namespace NYql::NDq {

@@ -11,6 +11,8 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
 namespace NYql::NBrotli {

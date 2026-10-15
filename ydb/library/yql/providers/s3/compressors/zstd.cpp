@@ -11,6 +11,8 @@
 #define ZSTD_STATIC_LINKING_ONLY
 #include <contrib/libs/zstd/include/zstd.h>
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
 namespace NYql::NZstd {

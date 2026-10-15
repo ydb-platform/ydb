@@ -20,6 +20,8 @@ IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& /*compression*/) 
 #include "gz.h"
 #include "output_queue_impl.h"
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
 namespace NYql {

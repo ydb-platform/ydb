@@ -4,6 +4,8 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBufferFromFile.h>
 
 namespace NYql::NCompressors {

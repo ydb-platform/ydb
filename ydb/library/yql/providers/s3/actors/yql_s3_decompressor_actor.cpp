@@ -12,6 +12,8 @@
 #include <util/generic/size_literals.h>
 
 #if defined(_linux_) || defined(_darwin_)
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #endif
 

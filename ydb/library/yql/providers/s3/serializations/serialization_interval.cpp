@@ -2,6 +2,8 @@
 
 #include <util/generic/serialized_enum.h>
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/Serializations/SerializationNumber.h>

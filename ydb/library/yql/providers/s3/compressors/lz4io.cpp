@@ -15,6 +15,8 @@
 #define LZ4F_STATIC_LINKING_ONLY
 #include <contrib/libs/lz4/lz4frame.h>
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
 namespace NYql::NLz4 {

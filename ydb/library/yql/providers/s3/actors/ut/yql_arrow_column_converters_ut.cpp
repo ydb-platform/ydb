@@ -1,7 +1,5 @@
 #include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
 
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatSettings.h>
-
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -13,6 +11,10 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
+
+#undef NO_SANITIZE_THREAD
+
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/FormatSettings.h>
 
 namespace NYql::NDq {
 

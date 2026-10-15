@@ -8,6 +8,9 @@
 #include <util/system/platform.h>
 #if defined(_linux_) || defined(_darwin_)
 #include "yql_s3_read_actor.h"
+
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Formats/registerFormats.h>
 #endif
 

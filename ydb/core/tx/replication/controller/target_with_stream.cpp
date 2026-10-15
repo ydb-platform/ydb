@@ -11,6 +11,9 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
@@ -32,19 +35,86 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             return; // TODO: hard error
         }
 
-        for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
-            if (!partition.GetParentPartitionIds().empty()) {
+        Partitions = result.GetTopicDescription().GetPartitions();
+        for (const auto& partition : Partitions) {
+            if (partition.GetParentPartitionIds().empty()) {
+                RunWorker(partition.GetPartitionId());
+            }
+        }
+
+        // the partition graph is only returned by DescribeTopic, the offsets by DescribeConsumer
+        DescribeConsumer();
+    }
+
+    void DescribeConsumer() {
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeConsumerRequest(SrcStreamPath, SrcStreamConsumerName,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)));
+    }
+
+    // A child partition gets its worker on the parent's DataEnd, which is not persisted,
+    // so after a restart it might run nowhere. Start the children whose parents are fully
+    // consumed (the consumer offset is committed only after the data is applied, so the read
+    // order is kept), unless the child and all its own children are fully consumed too.
+    void Handle(TEvYdbProxy::TEvDescribeConsumerResponse::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            // never give up: otherwise children are silently left unread
+            if (IsRetryableError(result)) {
+                LOG_W("Error of describing consumer '" << SrcStreamConsumerName << "' of '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
+            } else {
+                LOG_E("Error of describing consumer '" << SrcStreamConsumerName << "' of '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
+            }
+            return (void)Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(DescribeConsumerTag));
+        }
+
+        THashSet<ui64> consumed;
+        for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
+            const auto& stats = partition.GetPartitionStats();
+            const auto& consumerStats = partition.GetPartitionConsumerStats();
+            if (stats && consumerStats && consumerStats->GetCommittedOffset() >= stats->GetEndOffset()) {
+                consumed.insert(partition.GetPartitionId());
+            }
+        }
+
+        THashSet<ui64> consumedInactive;
+        for (const auto& partition : Partitions) {
+            if (!partition.GetActive() && consumed.contains(partition.GetPartitionId())) {
+                consumedInactive.insert(partition.GetPartitionId());
+            }
+        }
+
+        auto isConsumed = [&](ui64 id) { return consumedInactive.contains(id); };
+        for (const auto& partition : Partitions) {
+            const auto& parents = partition.GetParentPartitionIds();
+            if (parents.empty() || !AllOf(parents, isConsumed)) {
+                continue;
+            }
+            if (isConsumed(partition.GetPartitionId()) && AllOf(partition.GetChildPartitionIds(), isConsumed)) {
                 continue;
             }
 
-            auto ev = MakeRunWorkerEv(
-                ReplicationId, TargetId, Config, partition.GetPartitionId(),
-                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
-                BatchingSettings, Database);
-            Send(Parent, std::move(ev));
+            RunWorker(partition.GetPartitionId());
         }
 
         PassAway();
+    }
+
+    void RunWorker(ui64 partitionId) {
+        auto ev = MakeRunWorkerEv(
+            ReplicationId, TargetId, Config, partitionId,
+            ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
+            BatchingSettings, Database);
+        Send(Parent, std::move(ev));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == DescribeConsumerTag) {
+            DescribeConsumer();
+        } else {
+            Bootstrap();
+        }
     }
 
     void Retry() {
@@ -94,7 +164,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, Bootstrap);
+            hFunc(TEvYdbProxy::TEvDescribeConsumerResponse, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -113,6 +184,8 @@ private:
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;
+    std::vector<NYdb::NTopic::TPartitionInfo> Partitions;
+    static constexpr ui64 DescribeConsumerTag = 1;
 
 }; // TWorkerRegistar
 

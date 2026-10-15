@@ -324,6 +324,48 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL_C(s.WaitReplicated(200, TDuration::Seconds(60)), 200,
             "rows written after the split are lost: child partitions are never read");
     }
+
+    // After a controller restart a child whose parent is fully consumed must be started
+    // even if it is running nowhere: the parent's DataEnd is not persisted. A child whose
+    // parent is not consumed yet must not be started (it would be read out of order).
+    Y_UNIT_TEST(ChildrenStartAfterRestartWhenNotRunning) {
+        TSetup s;
+        auto& runtime = s.Env.GetRuntime();
+        const auto children = s.SplitRoot();
+
+        s.DataEnd(children);
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitStarted(children, TDuration::Seconds(30)).size(), 2);
+
+        // the parent is not consumed yet, the children are running nowhere
+        s.RebootController();
+        s.Handshake({s.Root});
+        {
+            // GrabEdgeEvent ignores its timeout with real threads, it throws once nothing happens for the dispatch timeout
+            // longer than one DescribeConsumer retry (10s), so the registrar has decided by then
+            const auto prev = runtime.SetDispatchTimeout(TDuration::Seconds(30));
+            UNIT_ASSERT_EXCEPTION_C(runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Service), TEmptyEventQueueException,
+                "a child is started before its parent is consumed");
+            runtime.SetDispatchTimeout(prev);
+        }
+
+        // what the service does when the parent is applied up to the end
+        NYdb::NTopic::TTopicClient client(s.Env.GetDriver());
+        const auto desc = client.DescribeTopic(s.StreamPath, NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).ExtractValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        for (const auto& partition : desc.GetTopicDescription().GetPartitions()) {
+            if (partition.GetPartitionId() == s.Root.WorkerId()) {
+                const auto result = client.CommitOffset(s.StreamPath, partition.GetPartitionId(), "replicationConsumer",
+                    partition.GetPartitionStats()->GetEndOffset()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        s.RebootController();
+        s.Handshake({s.Root});
+
+        const auto started = s.WaitStarted(children, TDuration::Seconds(60));
+        UNIT_ASSERT_VALUES_EQUAL_C(started.size(), 2, "child partitions are orphaned after a controller restart");
+    }
 }
 
 }

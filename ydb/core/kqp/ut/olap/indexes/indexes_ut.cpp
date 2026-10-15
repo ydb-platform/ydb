@@ -4184,11 +4184,23 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             };
-            runDml(R"(
-                $rows = ListMap(ListFromRange(1, 201), ($x) -> { RETURN AsStruct($x AS item); });
-                UPSERT INTO `/Root/complexLike` (key, value)
-                SELECT item AS key, "noise_" || CAST(item AS String) AS value FROM AS_TABLE($rows);
-            )");
+            // Inserted portions have no ngram blobs until compaction rebuilds them.
+            if (hintsEnabled) {
+                csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+                csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+                csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+                csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+                for (int pass = 0; pass < 2; ++pass) {
+                    runDml(TStringBuilder() << R"(
+                        $rows = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+                        UPSERT INTO `/Root/complexLike` (key, value)
+                        SELECT CAST(item AS Int32) + )" << (pass * 10) << R"( AS key,
+                               "noise_" || CAST(item AS String) AS value
+                        FROM AS_TABLE($rows);
+                    )");
+                }
+                UNIT_ASSERT_C(csController->WaitCompactions(TDuration::Seconds(30)), "ngram portions were not compacted");
+            }
             runDml(R"(
                 UPSERT INTO `/Root/complexLike` (key, value) VALUES
                     (1001, "xx aaabbb yy"),

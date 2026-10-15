@@ -15,7 +15,7 @@ const NYql::TExprNode* UnwrapQuote(const NYql::TExprNode* node) {
 
 const NYql::TExprNode* SkipJust(const NYql::TExprNode* node) {
     while (node && node->IsCallable("Just") && node->ChildrenSize() >= 1) {
-        node = node->Child(0);
+        node = SkipJust(UnwrapQuote(node->Child(0)));
     }
     return node;
 }
@@ -30,13 +30,20 @@ bool IsRe2Udf(const NYql::TExprNode& node, const std::string_view name) {
 }
 
 std::optional<bool> ReadCaseSensitive(const NYql::TExprNode& node) {
-    if (node.ChildrenSize() >= 2 && node.Child(0)->IsAtom("CaseSensitive")) {
-        const auto* value = SkipJust(node.Child(1));
-        if (value && value->IsCallable("Bool") && value->ChildrenSize() >= 1 && value->Head().IsAtom()) {
-            return value->Head().Content() == "true";
+    const auto* current = UnwrapQuote(&node);
+    if (!current) {
+        return std::nullopt;
+    }
+    if (current->ChildrenSize() >= 2) {
+        const auto* name = UnwrapQuote(current->Child(0));
+        if (name && name->IsAtom("CaseSensitive")) {
+            const auto* value = SkipJust(UnwrapQuote(current->Child(1)));
+            if (value && value->IsCallable("Bool") && value->ChildrenSize() >= 1 && value->Head().IsAtom()) {
+                return value->Head().Content() == "true";
+            }
         }
     }
-    for (const auto& child : node.Children()) {
+    for (const auto& child : current->Children()) {
         if (const auto found = ReadCaseSensitive(*child)) {
             return found;
         }
@@ -45,40 +52,85 @@ std::optional<bool> ReadCaseSensitive(const NYql::TExprNode& node) {
 }
 
 bool ExtractLiteral(const NYql::TExprNode& node, TString& value) {
-    if (!node.IsCallable({"String", "Utf8"}) || node.ChildrenSize() < 1 || !node.Head().IsAtom()) {
+    const auto* literal = SkipJust(UnwrapQuote(&node));
+    if (!literal || !literal->IsCallable({"String", "Utf8"}) || literal->ChildrenSize() < 1 || !literal->Head().IsAtom()) {
         return false;
     }
-    value = TString(node.Head().Content());
+    value = TString(literal->Head().Content());
     return true;
+}
+
+// Optional columns are applied via Map/FlatMap (UDF AutoMap). The matched column is that input,
+// or Unwrap(Member) when the match is applied directly.
+const NYql::TExprNode* MemberColumn(const NYql::TExprNode* node) {
+    node = SkipJust(UnwrapQuote(node));
+    while (node && node->IsCallable({"Unwrap", "SafeCast"})) {
+        node = SkipJust(UnwrapQuote(node->Child(0)));
+    }
+    if (node && node->IsCallable("Member")) {
+        return node;
+    }
+    return nullptr;
+}
+
+struct TLocatedMatch {
+    const NYql::TExprNode* Apply = nullptr;
+    const NYql::TExprNode* Column = nullptr;
+};
+
+std::optional<TLocatedMatch> LocateMatch(const NYql::TExprNode* node, const NYql::TExprNode* boundArg, const NYql::TExprNode* boundColumn) {
+    node = UnwrapQuote(node);
+    if (!node) {
+        return std::nullopt;
+    }
+    if (node->IsCallable("Coalesce") && node->ChildrenSize() >= 2 && IsFalseBool(node->Tail())) {
+        return LocateMatch(node->Child(0), boundArg, boundColumn);
+    }
+    if (node->IsCallable("Just")) {
+        return LocateMatch(&node->Head(), boundArg, boundColumn);
+    }
+    if (node->IsCallable({"Map", "FlatMap"}) && node->ChildrenSize() >= 2 && node->Tail().IsLambda()) {
+        const auto& lambda = node->Tail();
+        if (lambda.Head().ChildrenSize() != 1) {
+            return std::nullopt;
+        }
+        const auto* inputColumn = MemberColumn(node->Child(0));
+        if (!inputColumn) {
+            return std::nullopt;
+        }
+        return LocateMatch(&lambda.Tail(), &lambda.Head().Head(), inputColumn);
+    }
+    if (!node->IsCallable("Apply") || node->ChildrenSize() != 2 || !IsRe2Udf(node->Head(), "Re2.Match")) {
+        return std::nullopt;
+    }
+    const NYql::TExprNode* column = (boundArg && &node->Tail() == boundArg) ? boundColumn : MemberColumn(&node->Tail());
+    if (!column) {
+        return std::nullopt;
+    }
+    return TLocatedMatch{node, column};
 }
 
 }   // namespace
 
 std::optional<TLikeHint> TryParseLikeHint(const NYql::TExprNode& predicate) {
-    const NYql::TExprNode* body = &predicate;
-    if (body->IsCallable("Coalesce") && body->ChildrenSize() >= 2 && IsFalseBool(body->Tail())) {
-        body = body->Child(0);
-    }
-    if (!body->IsCallable("Apply") || body->ChildrenSize() != 2 || !IsRe2Udf(body->Head(), "Re2.Match")) {
-        return std::nullopt;
-    }
-    const NYql::TExprNode* column = &body->Tail();
-    if (!column->IsCallable("Member")) {
+    const auto located = LocateMatch(&predicate, nullptr, nullptr);
+    if (!located) {
         return std::nullopt;
     }
 
-    const auto& udf = NYql::SkipCallables(body->Head(), {"AssumeStrict"});
+    const auto& udf = NYql::SkipCallables(located->Apply->Head(), {"AssumeStrict"});
     const auto* runConfig = UnwrapQuote(udf.Child(1));
     if (!runConfig || runConfig->ChildrenSize() < 2) {
         return std::nullopt;
     }
-    const auto* patternApply = runConfig->Child(0);
-    if (!patternApply->IsCallable("Apply") || patternApply->ChildrenSize() < 2 || !IsRe2Udf(patternApply->Head(), "Re2.PatternFromLike")) {
+    const auto* patternApply = UnwrapQuote(runConfig->Child(0));
+    if (!patternApply || !patternApply->IsCallable("Apply") || patternApply->ChildrenSize() < 2 ||
+        !IsRe2Udf(patternApply->Head(), "Re2.PatternFromLike")) {
         return std::nullopt;
     }
 
     TLikeHint hint;
-    hint.Column = column;
+    hint.Column = located->Column;
     if (!ExtractLiteral(*patternApply->Child(1), hint.Pattern)) {
         return std::nullopt;
     }

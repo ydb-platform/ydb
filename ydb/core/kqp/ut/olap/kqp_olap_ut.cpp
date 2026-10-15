@@ -1555,7 +1555,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
                 if (node.IsMap()) {
                     for (const auto& [key, value] : node.GetMapSafe()) {
-                        if (key == "SsaProgram" && value.IsString()) {
+                        if (key == "SsaProgram") {
                             ssa += value.GetStringRobust();
                         }
                         walk(value);
@@ -1579,8 +1579,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const auto negated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%')");
         UNIT_ASSERT_C(!negated.Contains("PatternHint"), negated);
         const auto disjunction = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' OR message LIKE '%ccc%ddd%')");
-        UNIT_ASSERT_C(!disjunction.Contains("PatternHint"), disjunction);
-        const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '100#%%' ESCAPE '#')");
+        UNIT_ASSERT_C(disjunction.Contains("PatternHint"), disjunction);
+        const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%x#_%y%' ESCAPE '#')");
         UNIT_ASSERT_C(escaped.Contains("PatternHint"), escaped);
         const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
         const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", &params);

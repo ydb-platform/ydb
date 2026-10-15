@@ -14,7 +14,9 @@ struct TLikeHint {
     bool CaseSensitive = true;
 };
 
-// Accepts the predicate itself or Coalesce(predicate, false). Nothing for NOT, OR, a parameter, or a non-literal pattern.
+// Accepts a positive LIKE/ILIKE: the Apply itself, Coalesce(_, false), or Map/FlatMap produced for an
+// optional column. Nothing for NOT, a parameter, or a non-literal pattern. AND/OR are split by the
+// pushdown before this runs, so each positive branch can carry its own hint.
 std::optional<TLikeHint> TryParseLikeHint(const NYql::TExprNode& predicate);
 
 }   // namespace NKikimr::NKqp::NOpt

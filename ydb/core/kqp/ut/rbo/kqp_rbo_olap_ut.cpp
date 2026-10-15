@@ -3246,7 +3246,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
             if (node.IsMap()) {
                 for (const auto& [key, value] : node.GetMapSafe()) {
-                    if (key == "SsaProgram" && value.IsString()) {
+                    if (key == "SsaProgram") {
                         ssa += value.GetStringRobust();
                     }
                     walk(value);

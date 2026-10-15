@@ -9,6 +9,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -336,27 +337,30 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
     }
 
     /* Scenario:
-        - Without FeatureFlags.EnableComputeSchedulerMemory the service doesn't register in the memory controller and
-          doesn't push the query memory state to the resource manager.
+        - Without FeatureFlags.EnableComputeSchedulerMemory, or with it but without the CPU scheduled on the start, the
+          memory is not scheduled: the service doesn't register in the memory controller and doesn't push the query
+          memory state to the resource manager.
         - The memory limits of the pools are not set.
-        - With the CPU disabled as well no query is added, as before the scheduler had the memory.
+        - The query is added only with the CPU scheduled, as before the scheduler had the memory.
      */
-    Y_UNIT_TEST(MemoryDisabled) {
+    Y_UNIT_TEST_TWIN(MemoryDisabled, CpuEnabled) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
 
         auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
             MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             NScheduler::TOptions{
-                .Enabled = false,
+                .Enabled = CpuEnabled,
                 .DelayParams = NScheduler::TDelayParams{
                     .MaxDelay = TDuration::MicroSeconds(3'000'000),
                     .MinDelay = TDuration::MicroSeconds(10),
                     .AttemptBonus = TDuration::MicroSeconds(5),
                     .MaxRandomDelay = TDuration::MicroSeconds(100),
                 },
-                .MemoryEnabled = false,
+                // without the CPU the memory is not scheduled even if asked to
+                .MemoryEnabled = !CpuEnabled,
             });
+        UNIT_ASSERT(!scheduler->IsMemoryEnabled());
         scheduler->SetTotalMemoryLimit(1000_MB);
         runtime.GetAppData().KqpComputeScheduler = scheduler;
 
@@ -385,13 +389,49 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         addQuery->PoolId = "pool";
         addQuery->QueryId = 1;
         runtime.Send(new IEventHandle(service, sender, addQuery.Release(), 0, 1));
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<NScheduler::TEvQueryResponse>(sender)->Get()->Query);
+        UNIT_ASSERT_VALUES_EQUAL(!!runtime.GrabEdgeEvent<NScheduler::TEvQueryResponse>(sender)->Get()->Query, CpuEnabled);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(registrations, 0);
         UNIT_ASSERT_VALUES_EQUAL(memoryStates, 0);
         UNIT_ASSERT_VALUES_EQUAL(scheduler->GetOrCreateMemoryPool("db", "pool")->GetMemoryLimit(), NScheduler::NHdrf::Infinity());
+    }
+
+    /* Scenario:
+        - The scheduler is disabled at runtime by FeatureFlags.EnableResourcePoolsScheduler.
+        - With the memory scheduled it stays enabled till the restart: the memory is never scheduled without the CPU.
+     */
+    Y_UNIT_TEST_TWIN(DisableAtRuntime, MemoryEnabled) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        auto scheduler = std::make_shared<NScheduler::TComputeScheduler>(
+            MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            NScheduler::TOptions{
+                .DelayParams = NScheduler::TDelayParams{
+                    .MaxDelay = TDuration::MicroSeconds(3'000'000),
+                    .MinDelay = TDuration::MicroSeconds(10),
+                    .AttemptBonus = TDuration::MicroSeconds(5),
+                    .MaxRandomDelay = TDuration::MicroSeconds(100),
+                },
+                .MemoryEnabled = MemoryEnabled,
+            });
+        runtime.GetAppData().KqpComputeScheduler = scheduler;
+
+        runtime.RegisterService(NMemory::MakeMemoryControllerId(), runtime.AllocateEdgeActor());
+        runtime.RegisterService(MakeKqpRmServiceID(runtime.GetNodeId()), runtime.AllocateEdgeActor());
+
+        const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
+
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(false);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(service, sender, request.Release()));
+        runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->IsEnabled(), MemoryEnabled);
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->IsMemoryEnabled(), MemoryEnabled);
     }
 
 }

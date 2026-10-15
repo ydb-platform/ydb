@@ -57,8 +57,8 @@ private:
 
 using TSchedulableMemoryPtr = std::shared_ptr<TSchedulableMemory>;
 
-// Whether the memory of the queries is taken from the scheduler, see FeatureFlags.EnableComputeSchedulerMemory -
-// otherwise it's taken from the resource manager, as before the scheduler had the memory.
+// Whether the memory of the queries is taken from the scheduler, see TComputeScheduler::IsMemoryEnabled - otherwise
+// it's taken from the resource manager, as before the scheduler had the memory.
 bool IsMemoryScheduled();
 
 // The memory of a tx: of its query node, if there is one, otherwise of its pool - an empty database means the database

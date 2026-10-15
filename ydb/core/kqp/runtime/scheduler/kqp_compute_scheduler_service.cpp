@@ -144,7 +144,13 @@ public:
         const auto& event = ev->Get()->Record;
 
         // Only the CPU is toggled at runtime - the memory is scheduled or not since the start, see IsMemoryEnabled().
-        Scheduler->ToggleEnabled(event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler());
+        // The memory is never scheduled without the CPU, so the scheduler is not disabled till the restart.
+        const bool enable = event.GetConfig().GetFeatureFlags().GetEnableResourcePoolsScheduler();
+        if (!enable && Scheduler->IsMemoryEnabled()) {
+            YDB_LOG_WARN("The scheduler stays enabled till the restart: the memory of the queries is scheduled");
+        } else {
+            Scheduler->ToggleEnabled(enable);
+        }
         if (Scheduler->IsEnabled()) {
             YDB_LOG_INFO("Become enabled");
         } else {
@@ -242,10 +248,8 @@ public:
             .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
-        // With the memory the query is always added - its memory is accounted anyway, and the CPU is scheduled only
-        // when the scheduler is enabled (see the compute actor factory)
         auto response = MakeHolder<TEvQueryResponse>();
-        if (Scheduler->IsEnabled() || Scheduler->IsMemoryEnabled()) {
+        if (Scheduler->IsEnabled()) {
             auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
             response->Query = query;
             YDB_LOG_DEBUG("Add",
@@ -424,7 +428,7 @@ namespace NScheduler {
 
 TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TOptions& options)
     : Enabled(options.Enabled)
-    , MemoryEnabled(options.MemoryEnabled)
+    , MemoryEnabled(options.Enabled && options.MemoryEnabled)
     , Root(std::make_shared<TRoot>(counters))
     , DelayParams(options.DelayParams)
     , KqpCounters(counters)

@@ -21,8 +21,9 @@ public:
         return Enabled;
     }
 
-    // FeatureFlags.EnableComputeSchedulerMemory: the memory of the queries is limited by the scheduler, otherwise - by the
-    // resource manager, as before. Unlike the CPU, fixed on the start: otherwise the memory would be accounted by both.
+    // FeatureFlags.EnableComputeSchedulerMemory, only with the scheduler enabled on the start: the memory of the queries is
+    // limited by the scheduler, otherwise - by the resource manager, as before. Unlike the CPU, fixed on the start:
+    // otherwise the memory would be accounted by both. The memory is never scheduled without the CPU.
     bool IsMemoryEnabled() const {
         return MemoryEnabled;
     }

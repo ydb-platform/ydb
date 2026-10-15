@@ -1076,8 +1076,8 @@ public:
     };
     TMemoryArena Arena;
     std::atomic<bool> EnableMemoryArena = true;
-    // FeatureFlags.EnableComputeSchedulerMemory as of the start: the memory of the queries and of their execution
-    // units is in the compute scheduler, so the arena has nothing to back and is disabled
+    // FeatureFlags.EnableComputeSchedulerMemory (with EnableResourcePoolsScheduler) as of the start: the memory of the
+    // queries and of their execution units is in the compute scheduler, so the arena has nothing to back and is disabled
     std::atomic<bool> QueryMemoryScheduled = false;
     std::atomic<ui64> ExecutionUnitMemory = 0;
     std::atomic<ui64> MemoryArenaMinFreeSize = 0;
@@ -1152,7 +1152,9 @@ public:
             {"selfId", SelfId()},
             {"resourceBrokerId", ResourceBrokerId});
 
-        if (AppData()->FeatureFlags.GetEnableComputeSchedulerMemory()) {
+        // as the compute scheduler decides on its start, see TComputeScheduler::IsMemoryEnabled
+        const auto& featureFlags = AppData()->FeatureFlags;
+        if (featureFlags.GetEnableResourcePoolsScheduler() && featureFlags.GetEnableComputeSchedulerMemory()) {
             ResourceManager->QueryMemoryScheduled.store(true);
             ResourceManager->EnableMemoryArena.store(false);
         }

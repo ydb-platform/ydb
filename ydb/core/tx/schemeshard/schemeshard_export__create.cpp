@@ -615,7 +615,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items[itemIdx];
 
-        if (!NeedsTableSchemeUpload(exportInfo, item) || item.State != EState::UploadingCreateTable || item.SchemeUploader) {
+        if (!NeedsTableSchemeUpload(exportInfo, item) || item.State != EState::UploadTableSchemeSql || item.SchemeUploader) {
             return;
         }
 
@@ -1082,7 +1082,7 @@ private:
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 const auto& item = exportInfo->Items.at(itemIdx);
 
-                if (item.State == EState::UploadingCreateTable) {
+                if (item.State == EState::UploadTableSchemeSql) {
                     UploadTableScheme(*exportInfo, itemIdx, ctx);
                     continue;
                 }
@@ -1504,7 +1504,7 @@ private:
         }
 
         if (NeedsTableSchemeUpload(*exportInfo, item)) {
-            if (exportInfo->State == EState::Transferring && item.State == EState::UploadingCreateTable) {
+            if (exportInfo->State == EState::Transferring && item.State == EState::UploadTableSchemeSql) {
                 item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
@@ -1711,7 +1711,7 @@ private:
                 auto& item = exportInfo->Items[itemIdx];
 
                 if (NeedsTableSchemeUpload(*exportInfo, item)) {
-                    item.State = EState::UploadingCreateTable;
+                    item.State = EState::UploadTableSchemeSql;
                     Self->PersistExportItemState(db, *exportInfo, itemIdx);
                     UploadTableScheme(*exportInfo, itemIdx, ctx);
                     continue;

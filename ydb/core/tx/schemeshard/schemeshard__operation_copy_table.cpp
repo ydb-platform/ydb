@@ -577,7 +577,7 @@ public:
 
         auto schema = Transaction.GetCreateTable();
         const bool isBackup = schema.GetIsBackup();
-        const bool captureBackupSchemeSnapshot = isBackup && schema.GetCaptureBackupSchemeSnapshot();
+        const bool captureBackupSchemeSnapshot = isBackup && Transaction.GetCaptureBackupSchemeSnapshot();
         const EPathCategory pathCategory = isBackup ? EPathCategory::Backup : EPathCategory::Regular;
 
         TPath dstPath = parent.Child(name);
@@ -986,15 +986,13 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     {
         auto schema = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         schema.SetFailOnExist(tx.GetFailOnExist());
+        schema.SetCaptureBackupSchemeSnapshot(tx.GetCaptureBackupSchemeSnapshot());
 
         auto operation = schema.MutableCreateTable();
         operation->SetName(copying.GetName());
         operation->SetCopyFromTable(copying.GetCopyFromTable());
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
-        if (copying.GetCaptureBackupSchemeSnapshot()) {
-            operation->SetCaptureBackupSchemeSnapshot(true);
-        }
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
         if (cdcPeerOp) {
             schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);

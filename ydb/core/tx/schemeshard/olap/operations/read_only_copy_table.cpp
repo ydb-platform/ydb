@@ -506,7 +506,7 @@ public:
         }
 
         NKikimrSchemeOp::TBackupTask backupSchemeSnapshot;
-        if (opDescr.GetCaptureBackupSchemeSnapshot() && !MakeBackupTableSchemeSnapshot(
+        if (Transaction.GetCaptureBackupSchemeSnapshot() && !MakeBackupTableSchemeSnapshot(
                 context.SS, context.Ctx, srcPath.Base()->PathId, backupSchemeSnapshot, errStr)) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
@@ -560,12 +560,12 @@ public:
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
             tableInfo->Stats = {};
-            if (opDescr.GetCaptureBackupSchemeSnapshot()) {
+            if (Transaction.GetCaptureBackupSchemeSnapshot()) {
                 tableInfo->BackupSettings.Swap(&backupSchemeSnapshot);
             }
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
-        if (opDescr.GetCaptureBackupSchemeSnapshot()) {
+        if (Transaction.GetCaptureBackupSchemeSnapshot()) {
             context.DbChanges.PersistBackupSchemeSnapshot(dstPath.Base()->PathId);
         }
         context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "copy table info");

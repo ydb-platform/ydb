@@ -89,6 +89,8 @@ message TYdbComputeControlPlane {
     string DatabasePrefix = 5;
     string DatabasesCacheReloadPeriod = 6;
     TWorkloadManagerConfig DefaultWorkloadManagerConfig = 7;
+    // Reject new scopes without a compute_databases record; existing databases can still be recreated.
+    bool DisableSlsCreating = 8;
 }
 
 message TYdbCompute {

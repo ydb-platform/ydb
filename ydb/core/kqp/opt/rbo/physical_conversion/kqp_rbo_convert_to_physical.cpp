@@ -80,6 +80,8 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
         THashMap<ui32, TExprNode::TPtr> stages;
         THashMap<ui32, TVector<TExprNode::TPtr>> stageArgs;
         THashMap<ui32, TPositionHandle> stagePos;
+        // Types of the left rows passed through lookups in join mode; a lookup by keys of the input lookup reuses them.
+        THashMap<const IOperator*, const TStructExprType*> lookupJoinLeftRowTypes;
         auto& graph = root->PlanProps.StageGraph;
         THashSet<const TReplicate*> builtReplicates;
         for (auto id : graph.StageIds) {
@@ -301,9 +303,19 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 const auto connection = graph.TryGetConnection(inputStageId, opStageId);
                 auto* streamLookup = dynamic_cast<TStreamLookupConnection*>(connection.Get());
                 Y_ENSURE(streamLookup, "A table lookup must be fed by a stream lookup connection");
-                auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stages.at(inputStageId), ctx, names);
-                stages[inputStageId] = keys.InputStage;
-                streamLookup->SetInputType(keys.InputType);
+                if (lookup.KeysFromInputLookup) {
+                    // The output of the input lookup is passed as is: the rows it fetched are the lookup keys.
+                    const auto inputLookup = CastOperator<TOpTableLookup>(lookup.GetInput());
+                    const auto* leftRowType = lookupJoinLeftRowTypes.at(inputLookup.Get());
+                    lookupJoinLeftRowTypes[&lookup] = leftRowType;
+                    streamLookup->SetInputType(NLookupJoinBuilder::BuildKeysFromInputLookupType(
+                        *inputLookup, leftRowType, names, root->PlanProps.InfoUnitRegistry, ctx));
+                } else {
+                    auto keys = NLookupJoinBuilder::BuildLookupKeys(lookup, stages.at(inputStageId), ctx, names);
+                    stages[inputStageId] = keys.InputStage;
+                    streamLookup->SetInputType(keys.InputType);
+                    lookupJoinLeftRowTypes[&lookup] = keys.LeftRowType;
+                }
 
                 if (lookup.IsJoin()) {
                     YQL_CLOG(TRACE, CoreDq) << "Converted TableLookupJoin " << opStageId;

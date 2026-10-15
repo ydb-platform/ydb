@@ -115,6 +115,12 @@ public:
         const auto& result = ev->Get()->Record;
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
+            if (Config.GetYdb().GetControlPlane().GetDisableSlsCreating()) {
+                NYql::TIssue issue("Adding new clients is disabled");
+                issue.SetCode(TIssuesIds::ACCESS_DENIED, NYql::TSeverityIds::S_ERROR);
+                FailedAndPassAway(NYql::TIssues{issue});
+                return;
+            }
             YDB_LOG_TRACE("[ydb] [ComputeDatabaseControlPlane]: Couldn't find the information about database in control plane storage for this scope",
                 {"scope", Scope});
             Send(SynchronizationServiceActorId, new TEvYdbCompute::TEvInvalidateSynchronizationRequest(Scope));

@@ -1,5 +1,9 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(__init__.py)
+
 TEST_SRCS(
     test_resource_pool.py
 )

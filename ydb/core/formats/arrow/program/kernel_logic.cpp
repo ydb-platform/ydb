@@ -26,8 +26,7 @@ TConclusion<bool> TCoalesceKernelLogic::DoExecute(
     if (!first || !first->GetDataType()->Equals(*OutputType)) {
         return false;
     }
-    std::shared_ptr<arrow::Scalar> value;
-    if (first->CheckOneValueAccessor(value) != true || !value || !value->is_valid) {
+    if (first->HasNulls() != false) {
         return false;
     }
     resources.AddVerified(output.front().GetColumnId(), first, false);

@@ -110,6 +110,24 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
     return true;
 }
 
+std::optional<bool> TCompositeChunkedArray::DoHasNulls() const {
+    if (Chunks.empty()) {
+        return false;
+    }
+    bool unknown = false;
+    for (const auto& chunk : Chunks) {
+        const std::optional<bool> hasNulls = chunk->HasNulls();
+        if (hasNulls == true) {
+            return true;
+        }
+        if (!hasNulls) {
+            // May still get a definite `true` later
+            unknown = true;
+        }
+    }
+    return unknown ? std::optional<bool>() : std::optional<bool>(false);
+}
+
 std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
     ui32 pos = 0;
     std::vector<std::shared_ptr<arrow::Array>> chunks;

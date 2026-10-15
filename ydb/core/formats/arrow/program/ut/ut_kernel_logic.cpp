@@ -14,6 +14,7 @@
 
 #include <ydb/library/arrow_kernels/ut_common.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -408,10 +409,9 @@ void AssertCoalesceProcessor(const std::shared_ptr<NAccessor::IChunkedArray>& fi
     if (expectedShortcut) {
         UNIT_ASSERT_VALUES_EQUAL(output.get(), first.get());
     }
-    const auto firstValue = first->GetScalar(0);
-    const auto secondValue = second->GetScalar(0);
-    const auto& expectedValue = firstValue && firstValue->is_valid ? firstValue : secondValue;
-    auto expected = arrow::MakeArrayFromScalar(*expectedValue, first->GetRecordsCount()).ValueOrDie();
+    auto firstArray = arrow::Concatenate(first->GetChunkedArray()->chunks()).ValueOrDie();
+    auto secondArray = arrow::MakeArrayFromScalar(*second->GetScalar(0), first->GetRecordsCount()).ValueOrDie();
+    auto expected = arrow::compute::CallFunction("coalesce", {firstArray, secondArray}).ValueOrDie().make_array();
     auto actual = arrow::Concatenate(output->GetChunkedArray()->chunks()).ValueOrDie();
     UNIT_ASSERT(actual->Equals(*expected));
 }
@@ -461,6 +461,56 @@ Y_UNIT_TEST_SUITE(CoalesceKernelLogic) {
 
     Y_UNIT_TEST(ProcessorMaterializesSparseSecondInputOnFallback) {
         AssertCoalesceProcessor(std::make_shared<NAccessor::TSparsedArray>(nullptr, arrow::uint8(), 1000), false);
+    }
+
+    Y_UNIT_TEST(ReusesNullFreeNonUniformTrivialFirstInput) {
+        auto first = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, 1, 0}));
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), true);
+    }
+
+    Y_UNIT_TEST(ReusesNullFreeNonUniformSparseFirstInput) {
+        const auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, 1, 0}));
+        auto first = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), true);
+    }
+
+    Y_UNIT_TEST(ReusesNullFreeNonUniformDictionaryFirstInput) {
+        auto first = std::make_shared<NAccessor::TDictionaryArray>(
+            NKikimr::NKernels::UInt8VecToArray({0, 1}), NKikimr::NKernels::UInt8VecToArray({0, 1, 0}));
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), true);
+    }
+
+    Y_UNIT_TEST(ReusesNullFreeNonUniformCompositeFirstInput) {
+        auto first = BuildCompositePredicate();
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), true);
+    }
+
+    Y_UNIT_TEST(FallsBackForMixedNullFirstInput) {
+        auto first = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, std::nullopt, 1}));
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), false);
+    }
+
+    Y_UNIT_TEST(FallsBackForMixedNullSparseFirstInput) {
+        const auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({std::nullopt, 1, std::nullopt}));
+        auto first = NAccessor::TSparsedArray::Make(*source, nullptr);
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), false);
+    }
+
+    Y_UNIT_TEST(FallsBackForMixedNullDictionaryFirstInput) {
+        auto first = std::make_shared<NAccessor::TDictionaryArray>(
+            NKikimr::NKernels::UInt8VecToArray({0, 1}), NKikimr::NKernels::UInt8VecToArray({0, std::nullopt, 1}));
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), false);
+    }
+
+    Y_UNIT_TEST(FallsBackWhenDictionaryReferencesNullValue) {
+        auto first = std::make_shared<NAccessor::TDictionaryArray>(
+            NKikimr::NKernels::UInt8VecToArray({0, std::nullopt}), NKikimr::NKernels::UInt8VecToArray({0, 1, 0}));
+        AssertCoalesceShortcut(first, std::make_shared<arrow::UInt8Scalar>(1), first->GetDataType(), false);
+    }
+
+    Y_UNIT_TEST(ProcessorSkipsSparseSecondInputForNonUniformFirstInput) {
+        auto first = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({0, 1, 0}));
+        AssertCoalesceProcessor(first, true);
     }
 }; // Y_UNIT_TEST_SUITE(CoalesceKernelLogic)
 

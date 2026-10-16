@@ -4237,8 +4237,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (!BuildIndexEventIsIntercepted && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvBuildIndexCreateRequest)) {
                     Cerr << "NKikimr::TEvDataShard::TEvBuildIndexCreateRequest is intercepted\n";
                     BuildIndexEventIsIntercepted = true;
-                    BuildIndexRequestPromise.SetValue();
                     BuildIndexRequestEvent.Swap(event);
+                    BuildIndexRequestPromise.SetValue();
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;
                 } else if (!ValidateIndexEventIsIntercepted &&
                     ((!PauseValidationResponse && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvValidateUniqueIndexRequest)) ||
@@ -4247,8 +4247,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Cerr << "NKikimr::TEvDataShard validation "
                         << (PauseValidationResponse ? "response" : "request") << " is intercepted\n";
                     ValidateIndexEventIsIntercepted = true;
-                    ValidateIndexRequestPromise.SetValue();
                     ValidateIndexRequestEvent.Swap(event);
+                    ValidateIndexRequestPromise.SetValue();
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;
                 }
                 return NActors::TTestActorRuntimeBase::EEventAction::PROCESS;
@@ -4260,7 +4260,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         void ContinueBuildIndex() {
-            GetTestServer().GetRuntime()->Send(BuildIndexRequestEvent.Release());
+            GetTestServer().GetRuntime()->SendAsync(BuildIndexRequestEvent.Release());
         }
 
         void WaitValidateIndex() {
@@ -4268,7 +4268,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
 
         void ContinueValidateIndex() {
-            GetTestServer().GetRuntime()->Send(ValidateIndexRequestEvent.Release());
+            GetTestServer().GetRuntime()->SendAsync(ValidateIndexRequestEvent.Release());
         }
 
         ui64 GetValidateIndexTabletId() const {

@@ -59,7 +59,7 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
-#include <util/generic/object_counter.h>
+#include <util/generic/size_literals.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
@@ -845,26 +845,36 @@ public:
     }
 };
 
-class TCSMetadataSubscriber: public TDataAccessorsSubscriberBase, public TObjectCounter<TCSMetadataSubscriber> {
+class TCSMetadataSubscriber: public TDataAccessorsSubscriberBase {
 private:
     NActors::TActorId TabletActorId;
     const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
     const ui64 Generation;
+    // Per-tablet: TObjectCounter is process-wide, so one tablet's request closed every other's gate.
+    const std::shared_ptr<TAtomicCounter> InFlight;
+    TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied OnApplied;
 
     virtual void DoOnRequestsFinished(
         NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
         NActors::TActivationContext::Send(
             TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
-                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard))));
+                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard)), OnApplied));
     }
 
 public:
-    TCSMetadataSubscriber(
-        const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen)
+    TCSMetadataSubscriber(const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor,
+        const ui64 gen, const std::shared_ptr<TAtomicCounter>& inFlight, TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied)
         : TabletActorId(tabletActorId)
         , Processor(processor)
         , Generation(gen)
+        , InFlight(inFlight)
+        , OnApplied(onApplied)
     {
+        InFlight->Inc();
+    }
+
+    ~TCSMetadataSubscriber() {
+        InFlight->Dec();
     }
 };
 
@@ -899,28 +909,35 @@ public:
     }
 };
 
+void TColumnShard::StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
+    const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
+    TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied) {
+    for (auto&& i : requests) {
+        const ui64 accessorsMemory =
+            i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), taskContext,
+                                        std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
+                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation(), inFlight, onApplied),
+                                        DataAccessorsManager.GetObjectPtrVerified(), nullptr));
+    }
+}
+
 void TColumnShard::SetupMetadata() {
-    if (TObjectCounter<TCSMetadataSubscriber>::ObjectCount()) {
+    if (MetadataRequestsInFlight->Val()) {
         return;
     }
-    std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
-    for (const auto& request : requests) {
-        SubmitMetadataRequest(request);
-    }
+    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataRequestsInFlight);
 }
 
 void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
-    const ui64 memory = request.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-    auto task = std::make_shared<TAccessorsMemorySubscriber>(memory, request.GetRequest()->GetTaskId(), TTLTaskSubscription,
-        std::shared_ptr<NOlap::TDataAccessorsRequest>(request.GetRequest()),
-        std::make_shared<TCSMetadataSubscriber>(SelfId(), request.GetProcessor(), Generation()), DataAccessorsManager.GetObjectPtrVerified(),
-        nullptr);
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, task);
+    StartMetadataRequests({ request }, TTLTaskSubscription, MetadataRequestsInFlight);
 }
 
 bool TColumnShard::SetupTtl() {
-    if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() ||
-        !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL)) {
+    const bool ttlEnabled = AppDataVerified().ColumnShardConfig.GetTTLEnabled() &&
+                            NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL);
+    if (!ttlEnabled) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ttl"},
             {"reason", "disabled"});
@@ -928,9 +945,9 @@ bool TColumnShard::SetupTtl() {
     }
     Counters.GetCSCounters().OnSetupTtl();
 
-    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
-    std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges =
-        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit);
+    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : 512_MB;
+    std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
+        {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::ExceptMoveData);
 
     if (indexChanges.empty()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
@@ -938,7 +955,11 @@ bool TColumnShard::SetupTtl() {
             {"skipReason", "no_changes"});
         return false;
     }
+    StartTtlChanges(std::move(indexChanges));
+    return true;
+}
 
+void TColumnShard::StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges) {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     const ui64 tieringStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringStageMemoryLimit() : 1000000000;
     for (auto&& i : indexChanges) {
@@ -959,7 +980,6 @@ bool TColumnShard::SetupTtl() {
                     GetLastCompletedTx(), TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         }
     }
-    return true;
 }
 
 void TColumnShard::SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders) {
@@ -1300,11 +1320,13 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     }
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
+void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
+    // Run completion on the tablet actor, after the result has updated its state.
+    ev->Get()->NotifyApplied(*this, ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {
@@ -1673,7 +1695,10 @@ public:
         TInstant startTransactionTime = TInstant::Now();
         NIceDb::TNiceDb db(txc.DB);
 
-        TBlobGroupSelector selector(Self->Info());
+        const auto sharing = Self->GetStoragesManager()->GetDefaultOperator()->GetSharedBlobs();
+        TBlobGroupSelector selector(Self->Info(), [sharing](const TLogoBlobID& blob) {
+            return sharing->GetForeignGroup(blob);
+        });
         bool reask = false;
         YDB_LOG_CREATE_CONTEXT(
             {"event", "TTxAskPortionChunks::Execute"});
@@ -1699,9 +1724,13 @@ public:
                         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
-                        } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                        } else if (rowset.EndOfSet()) {
+                            // Cleanup erased the rows while the object lingers: only remove-marked portions may lack them.
+                            AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            Constructors.erase(itPortionConstructor);
+                            continue;
+                        } else {
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1737,6 +1766,10 @@ public:
         }
 
         for (auto&& i : Constructors) {
+            // A portion erased between restarts of this transaction is never revisited and would reach parsing without its records.
+            if (!i.second.IsReady()) {
+                continue;
+            }
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 
@@ -2010,6 +2043,7 @@ STFUNC(TColumnShard::StateWork) {
 
         HFunc(NActors::TEvents::TEvUndelivered, Handle);
 
+        HFunc(NOlap::NBlobOperations::NEvents::TEvDrainBorrowedBlobs, Handle);
         HFunc(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs, Handle);
         HFunc(NOlap::NBackground::TEvExecuteGeneralLocalTransaction, Handle);
         HFunc(NOlap::NBackground::TEvRemoveSession, Handle);
@@ -2033,6 +2067,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvDataShard::TEvCancelBackup, Handle);
         HFunc(TEvDataShard::TEvCancelRestore, Handle);
         HFunc(TEvDataShard::TEvCompactTable, Handle);
+        HFunc(TEvTablet::TEvMoveData, Handle);
 
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);

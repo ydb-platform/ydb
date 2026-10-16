@@ -8,6 +8,18 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NEvents {
 
+struct TEvDrainBorrowedBlobs: public NActors::TEventPB<TEvDrainBorrowedBlobs, NKikimrColumnShardBlobOperationsProto::TEvDrainBorrowedBlobs,
+                                  TEvColumnShard::EvDrainBorrowedBlobs> {
+    TEvDrainBorrowedBlobs() = default;
+
+    TEvDrainBorrowedBlobs(const ui64 ownerTabletId, const THashSet<TUnifiedBlobId>& blobIds) {
+        Record.SetOwnerTabletId(ownerTabletId);
+        for (const auto& blobId : blobIds) {
+            *Record.AddBlobIds() = blobId.ToStringNew();
+        }
+    }
+};
+
 struct TEvDeleteSharedBlobs: public NActors::TEventPB<TEvDeleteSharedBlobs, NKikimrColumnShardBlobOperationsProto::TEvDeleteSharedBlobs,
                                  TEvColumnShard::EvDeleteSharedBlobs> {
     TEvDeleteSharedBlobs() = default;

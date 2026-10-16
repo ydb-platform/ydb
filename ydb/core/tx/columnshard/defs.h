@@ -1,4 +1,5 @@
 #pragma once
+
 #include "common/blob.h"
 
 #include <ydb/core/base/blobstorage_tablet_types.h>
@@ -10,6 +11,9 @@
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <functional>
+#include <optional>
 
 namespace NKikimr::NColumnShard {
 
@@ -142,14 +146,22 @@ private:
 class TBlobGroupSelector: public NOlap::IBlobGroupSelector {
 private:
     TIntrusiveConstPtr<TTabletStorageInfo> TabletInfo;
+    const std::function<std::optional<ui32>(const TLogoBlobID&)> LookupForeignGroup;
 
 public:
-    explicit TBlobGroupSelector(TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo)
+    explicit TBlobGroupSelector(
+        TIntrusiveConstPtr<TTabletStorageInfo> tabletInfo, std::function<std::optional<ui32>(const TLogoBlobID&)> lookupForeignGroup = {})
         : TabletInfo(tabletInfo)
+        , LookupForeignGroup(std::move(lookupForeignGroup))
     {
     }
 
     ui32 GetGroup(const TLogoBlobID& blobId) const override {
+        if (blobId.TabletID() != TabletInfo->TabletID && LookupForeignGroup) {
+            if (const auto group = LookupForeignGroup(blobId)) {
+                return *group;
+            }
+        }
         return TabletInfo->GroupFor(blobId.Channel(), blobId.Generation());
     }
 };

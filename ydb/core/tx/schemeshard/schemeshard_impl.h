@@ -1594,6 +1594,8 @@ public:
     void Handle(NReplication::TEvController::TEvAlterReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    THashMap<ui64, TString> HnswReplicaFailures;
+    void Handle(TEvDataShard::TEvHnswReplicaStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);

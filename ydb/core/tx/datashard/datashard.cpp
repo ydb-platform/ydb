@@ -302,8 +302,7 @@ void TDataShard::Cleanup(const TActorContext& ctx) {
 void TDataShard::Die(const TActorContext& ctx) {
     InvalidateHnswIndexes();
     if (HnswCacheMemoryTracker) {
-        Send(NMemory::MakeMemoryControllerId(),
-            new NMemory::TEvConsumerUnregister(NMemory::EMemoryConsumerKind::SharedCache));
+        Send(MakeHnswCacheId(), new TEvHnswCache::TEvUnregister());
     }
     if (InMemoryRestoreActor) {
         InMemoryRestoreActor->OnTabletDead();
@@ -417,6 +416,14 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AllocCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "datashard");
 
+    // Recovery can replay redo that the previous follower journal never saw.
+    // Discard its generations and pending bootstrap state on every activation,
+    // including promotion of a follower to leader in the same tablet actor.
+    HnswFollowerSyncScheduled = false;
+    ++HnswFollowerSyncEpoch;
+    InvalidateHnswIndexes();
+    HnswIndexCache.clear();
+
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
@@ -433,7 +440,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncSchemeOnFollowerNeeded = true;
         // Do not rely on a sync queued before the reactivation, an extra one is a no-op
         SyncSchemeOnFollowerPending = false;
-        InvalidateHnswIndexes();
+        ScheduleHnswFollowerSync();
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
@@ -3703,6 +3710,15 @@ void TDataShard::Handle(TEvPrivate::TEvPersistScanState::TPtr& ev, const TActorC
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+    for (auto& [localTid, entry] : HnswIndexCache) {
+        if (entry.FollowerPipe == ev->Get()->ClientId) {
+            if (ev->Get()->Status != NKikimrProto::OK) {
+                InvalidateHnswIndex(localTid);
+                DeferHnswIndexBuild(localTid, TDuration::Seconds(1));
+            }
+            return;
+        }
+    }
     Y_ENSURE(ev->Get()->Leader, "Unexpectedly connected to follower of tablet " << ev->Get()->TabletId);
 
     if (ev->Get()->ClientId == SchemeShardPipe) {
@@ -3787,6 +3803,14 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
+    for (auto& [localTid, entry] : HnswIndexCache) {
+        if (entry.FollowerPipe == ev->Get()->ClientId) {
+            entry.FollowerPipe = {};
+            InvalidateHnswIndex(localTid);
+            DeferHnswIndexBuild(localTid, TDuration::Seconds(1));
+            return;
+        }
+    }
     if (ev->Get()->ClientId == SchemeShardPipe) {
         if (!TransQueue.HasNotAckedSchemaTx()) {
             YDB_LOG_ERROR_CTX(ctx, "Datashard's schemeshard pipe destroyed while no messages to sent",
@@ -4747,7 +4771,8 @@ void TDataShard::Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& e
 }
 
 void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType) {
+    if (ev->Get()->SourceType == NMemory::TEvConsumerRegister::EventType
+            || ev->Get()->SourceType == TEvHnswCache::TEvRegister::EventType) {
         // Some embedded runtimes, including tests, have no controller.
         // Distinguish that disabled cache from a pending first limit grant.
         if (HnswCacheMemoryTracker) {

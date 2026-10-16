@@ -18,6 +18,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/tx/datashard/hnsw/cache.h>
 #include <ydb/core/base/config_units.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/event_filter.h>
@@ -1497,6 +1498,8 @@ void TSharedCacheInitializer::InitializeServices(
         config.MergeFrom(Config.GetSharedCacheConfig());
     }
 
+    setup->LocalServices.emplace_back(NDataShard::MakeHnswCacheId(),
+        TActorSetupCmd(NDataShard::CreateHnswCache(), TMailboxType::ReadAsFilled, appData->IOPoolId));
     auto* actor = NSharedCache::CreateSharedPageCache(config, appData->Counters);
     setup->LocalServices.emplace_back(NSharedCache::MakeSharedPageCacheId(0),
         TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId));

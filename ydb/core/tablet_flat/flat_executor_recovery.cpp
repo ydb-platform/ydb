@@ -312,6 +312,7 @@ public:
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
     void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    ui32 GetFollowerSnapshotCheckpoint() override { Y_TABLET_ERROR("Not supported"); }
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override { Y_TABLET_ERROR("Not supported"); }
     bool HasLoanedParts() const override { Y_TABLET_ERROR("Not supported"); }
     bool HasBorrowed(ui32, ui64) const override { Y_TABLET_ERROR("Not supported"); }

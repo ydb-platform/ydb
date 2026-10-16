@@ -42,6 +42,7 @@ PEERDIR(
     ydb/core/audit/heartbeat_actor
     ydb/core/backup/controller
     ydb/core/base
+    ydb/core/tx/datashard/hnsw
     ydb/core/blob_depot
     ydb/core/blobstorage
     ydb/core/blobstorage/backpressure

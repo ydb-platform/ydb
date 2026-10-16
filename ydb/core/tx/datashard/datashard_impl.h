@@ -22,6 +22,8 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "hnsw_index.h"
+#include "hnsw/cache.h"
+#include <ydb/core/tablet_flat/flat_redo_observer.h>
 #include "hnsw_index_build_actor.h"
 #include "incr_restore_scan.h"
 #include "datashard_tli.h"
@@ -167,6 +169,7 @@ class IDataShardInMemoryStateActor;
 class TDataShard
     : public TActor<TDataShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
+    , public NTable::IRedoObserver
 {
     class TTxStopGuard;
     class TTxGetShardState;
@@ -391,6 +394,7 @@ class TDataShard
             EvHnswIndexBuildResult,
             EvRebuildHnswIndex,
             EvStartHnswSnapshotScan,
+            EvHnswFollowerSync,
             EvEnd
         };
 
@@ -425,6 +429,11 @@ class TDataShard
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
             bool HasSchemaChanges = false;
+        };
+
+        struct TEvHnswFollowerSync : TEventLocal<TEvHnswFollowerSync, EvHnswFollowerSync> {
+            explicit TEvHnswFollowerSync(ui64 epoch) : Epoch(epoch) {}
+            ui64 Epoch;
         };
 
         struct TEvRebuildHnswIndex : public TEventLocal<TEvRebuildHnswIndex, EvRebuildHnswIndex> {
@@ -1858,9 +1867,11 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
+    bool CanReuseHnswGraph(const TUserTable& previous, const TUserTable& next) const;
+
     void SetUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         if (auto it = TableInfos.find(tableId.LocalPathId); it != TableInfos.end() && (it->second->LocalTid != tableInfo->LocalTid
-                || it->second->GetSchema() != tableInfo->GetSchema())) {
+                || !CanReuseHnswGraph(*it->second, *tableInfo))) {
             InvalidateHnswIndex(it->second->LocalTid);
             HnswIndexCache.erase(it->second->LocalTid);
         }
@@ -1922,6 +1933,28 @@ public:
         return it != HnswIndexCache.end() && it->second.BuildObsolete;
     }
 
+    class TTxHnswFollowerSync;
+    class TTxHnswSnapshot;
+    class TTxHnswReplicaStatus;
+    void ScheduleHnswFollowerSync();
+    void PublishHnswGraph(ui32 localTid);
+    void TryInstallFollowerHnswIndex(ui32 localTid);
+    bool TrackFollowerHnswCommit(ui32 localTid, TRowVersion version);
+    void Handle(TEvPrivate::TEvHnswFollowerSync::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvRegistered::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvSnapshotRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvSnapshotResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvAcquired::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvStatusRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvHnswCache::TEvGraphAnnouncement::TPtr& ev, const TActorContext& ctx);
+    void OnFollowerPartsReplaced(ui32 localTid) override { InvalidateHnswIndex(localTid); }
+    NTable::IRedoObserver* GetFollowerRedoObserver() override;
+    void OnRedoUpdate(ui32 localTid, NTable::ERowOp op, TArrayRef<const TRawTypeValue> key,
+        TArrayRef<const NTable::TUpdateOp> updates, TArrayRef<const NPageCollection::TMemGlob> annex,
+        TRowVersion version, ui64 txId, ui32 savepoint) override;
+    void OnRedoCommit(ui32 localTid, ui64 txId, TRowVersion version) override;
+    void OnRedoRemove(ui32 localTid, ui64 txId) override;
+
     void PrepareFollowerHnswIndex(ui32 localTid, const NTable::TDatabase& db,
         const TRowVersion& readVersion);
     void InvalidateHnswIndex(ui32 localTid);
@@ -1955,10 +1988,7 @@ public:
     ui64 GetHnswCacheMemoryLimit() {
         if (!HnswCacheMemoryTracker) {
             HnswCacheMemoryTracker = std::make_shared<THnswCacheMemoryTracker>();
-            // Graphs, build buffers and MVCC journals share the node-wide
-            // SharedCache quota with the shared table-page cache.
-            Send(NMemory::MakeMemoryControllerId(),
-                new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache),
+            Send(MakeHnswCacheId(), new TEvHnswCache::TEvRegister(),
                 NActors::IEventHandle::FlagTrackDelivery);
         }
         return HnswCacheMemoryTracker->GetLimit();
@@ -1995,31 +2025,7 @@ public:
         HnswCacheMemoryTracker->SetConsumer(std::move(ev->Get()->Consumer));
     }
 
-    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&) {
-        Y_ENSURE(HnswCacheMemoryTracker);
-        const ui64 limit = ev->Get()->LimitBytes;
-        const ui64 previousLimit = HnswCacheMemoryTracker->GetLimit();
-        HnswCacheMemoryTracker->SetLimit(limit);
-        if (limit > previousLimit) {
-            for (auto& [localTid, entry] : HnswIndexCache) {
-                if (entry.NextScanAttemptAt != TInstant::Max()) {
-                    entry.NextScanAttemptAt = TInstant::Zero();
-                    if (entry.InitialBuildAttemptsLeft) {
-                        ScheduleHnswRebuild(localTid);
-                    }
-                }
-            }
-        }
-        if (HnswCacheMemoryTracker->GetUsed() > limit) {
-            HnswCacheMemoryTracker->ResetDemand();
-            for (auto& [localTid, entry] : HnswIndexCache) {
-                InvalidateHnswIndex(localTid);
-                if (HnswCacheMemoryTracker->GetUsed() <= limit) {
-                    break;
-                }
-            }
-        }
-    }
+    void Handle(NMemory::TEvConsumerLimit::TPtr& ev, const TActorContext&);
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
         std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0,
@@ -3186,6 +3192,16 @@ private:
         std::optional<NTable::TDatabase::TChangeCounter> FollowerChangeCounter;
         TRowVersion FollowerReadVersion = TRowVersion::Max();
         TInstant NextScanAttemptAt;
+        TString GraphKey;
+        NKikimrHnsw::TSnapshotResponse FollowerSnapshot;
+        std::shared_ptr<THnswIndex> FollowerGraph;
+        std::shared_ptr<const THnswJournalSnapshot> FollowerJournal;
+        TActorId FollowerPipe;
+        TInstant FollowerRequestAt;
+        THnswBootstrapChanges FollowerBootstrapChanges;
+        TRowVersion FollowerDesiredBase = TRowVersion::Min();
+        bool FollowerJournalTracking = false;
+        bool FollowerNotRequired = false;
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;
         ui64 Rebuilds = 0;
@@ -3194,6 +3210,10 @@ private:
         ui64 CandidateFallbacks = 0;
     };
     ui64 NextHnswBuildToken = 0;
+    ui64 NextHnswGraphId = 0;
+    ui64 HnswLastMemoryLimit = 0;
+    bool HnswFollowerSyncScheduled = false;
+    ui64 HnswFollowerSyncEpoch = 0;
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     TIntrusivePtr<TEvTabletCounters::TInFlightCookie> HnswCounterEventsInFlight;
     std::shared_ptr<THnswCacheMemoryTracker> HnswCacheMemoryTracker;
@@ -3673,6 +3693,13 @@ protected:
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
+            HFunc(TEvPrivate::TEvHnswFollowerSync, Handle);
+            HFunc(TEvHnswCache::TEvRegistered, Handle);
+            HFunc(TEvHnswCache::TEvSnapshotRequest, Handle);
+            HFunc(TEvHnswCache::TEvStatusRequest, Handle);
+            HFunc(TEvHnswCache::TEvGraphAnnouncement, Handle);
+            HFunc(TEvHnswCache::TEvSnapshotResponse, Handle);
+            HFunc(TEvHnswCache::TEvAcquired, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
@@ -3750,6 +3777,13 @@ protected:
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
+            HFunc(TEvPrivate::TEvHnswFollowerSync, Handle);
+            HFunc(TEvHnswCache::TEvRegistered, Handle);
+            HFunc(TEvHnswCache::TEvSnapshotRequest, Handle);
+            HFunc(TEvHnswCache::TEvStatusRequest, Handle);
+            HFunc(TEvHnswCache::TEvGraphAnnouncement, Handle);
+            HFunc(TEvHnswCache::TEvSnapshotResponse, Handle);
+            HFunc(TEvHnswCache::TEvAcquired, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
@@ -3868,6 +3902,13 @@ protected:
             HFunc(TEvPrivate::TEvHnswIndexBuildResult, Handle);
             HFunc(TEvPrivate::TEvRebuildHnswIndex, Handle);
             HFunc(TEvPrivate::TEvStartHnswSnapshotScan, Handle);
+            HFunc(TEvPrivate::TEvHnswFollowerSync, Handle);
+            HFunc(TEvHnswCache::TEvRegistered, Handle);
+            HFunc(TEvHnswCache::TEvSnapshotRequest, Handle);
+            HFunc(TEvHnswCache::TEvStatusRequest, Handle);
+            HFunc(TEvHnswCache::TEvGraphAnnouncement, Handle);
+            HFunc(TEvHnswCache::TEvSnapshotResponse, Handle);
+            HFunc(TEvHnswCache::TEvAcquired, Handle);
             HFunc(NMemory::TEvConsumerRegistered, Handle);
             HFunc(NMemory::TEvConsumerLimit, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);

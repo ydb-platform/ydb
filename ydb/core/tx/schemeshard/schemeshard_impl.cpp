@@ -3055,7 +3055,10 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceOwnerId>(txState.SourcePathId.OwnerId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject),
                 NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive),
-                NIceDb::TUpdate<Schema::TxInFlightV2::LoadSplitLineage>(txState.LoadSplitLineage)
+                NIceDb::TUpdate<Schema::TxInFlightV2::LoadSplitLineage>(txState.LoadSplitLineage),
+                NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitRequired>(txState.HnswWaitRequired),
+                NIceDb::TUpdate<Schema::TxInFlightV2::HnswSchemaVersion>(txState.HnswSchemaVersion),
+                NIceDb::TUpdate<Schema::TxInFlightV2::HnswWaitStartedAt>(txState.HnswWaitStartedAt.MicroSeconds())
                 );
 
     for (const auto& shardOp : txState.Shards) {
@@ -6091,6 +6094,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvDataShard::TEvSchemaChanged, Handle);
+        HFuncTraced(TEvDataShard::TEvHnswReplicaStatus, Handle);
         HFuncTraced(TEvDataShard::TEvStateChanged, Handle);
         HFuncTraced(TEvDataShard::TEvInitSplitMergeDestinationAck, Handle);
         HFuncTraced(TEvDataShard::TEvSplitAck, Handle);
@@ -6821,6 +6825,13 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
         );
         break;
     }
+}
+
+void TSchemeShard::Handle(TEvDataShard::TEvHnswReplicaStatus::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const TOperationId id(TTxId(record.GetOperationTxId()), TSubTxId(record.GetOperationPartId()));
+    if (const auto* state = FindTx(id); state && state->State == TTxState::WaitHnswReplicas)
+        Execute(CreateTxOperationReply(id, ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvSchemaChanged::TPtr& ev, const TActorContext &ctx) {

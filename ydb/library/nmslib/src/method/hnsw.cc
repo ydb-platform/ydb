@@ -362,6 +362,12 @@ namespace similarity {
             return;
         }
 
+        pmgr.CheckUnused();
+        OptimizeIndex();
+    }
+
+    template <typename dist_t>
+    void Hnsw<dist_t>::OptimizeIndex() {
         int friendsSectionSize = (maxM0_ + 1) * sizeof(int);
 
         // Checking for maximum size of the datasection:
@@ -419,12 +425,10 @@ namespace similarity {
             LOG(LIB_INFO) << "No appropriate custom distance function for " << space_.StrDesc();
             searchMethod_ = 0;
             LOG(LIB_INFO) << "searchMethod			  = " << searchMethod_;
-            pmgr.CheckUnused();
             return; // No optimized index
         }
         CHECK(dist_func_type_ != kDistTypeUnknown);
 
-        pmgr.CheckUnused();
         LOG(LIB_INFO) << "searchMethod			  = " << searchMethod_;
         memoryPerObject_ = dataSectionSize + friendsSectionSize;
 
@@ -774,6 +778,107 @@ namespace similarity {
                 throw runtime_error("Invalid searchMethod: " + ConvertToString(searchMethod_));
             break;
         };
+    }
+
+    namespace {
+        void WriteTopologyWord(std::ostream& output, uint32_t value) {
+            char bytes[4];
+            for (unsigned i = 0; i < 4; ++i)
+                bytes[i] = static_cast<char>(value >> (8 * i));
+            output.write(bytes, sizeof(bytes));
+        }
+
+        uint32_t ReadTopologyWord(std::istream& input) {
+            unsigned char bytes[4];
+            if (!input.read(reinterpret_cast<char*>(bytes), sizeof(bytes)))
+                throw std::runtime_error("Truncated HNSW topology");
+            uint32_t value = 0;
+            for (unsigned i = 0; i < 4; ++i)
+                value |= uint32_t(bytes[i]) << (8 * i);
+            return value;
+        }
+    }
+
+    template <typename dist_t>
+    void Hnsw<dist_t>::SaveTopology(std::ostream& output) const {
+        WriteTopologyWord(output, ElList_.size());
+        WriteTopologyWord(output, maxlevel_);
+        WriteTopologyWord(output, enterpointId_);
+        // Levels precede links so the loader can validate every target level.
+        for (const auto* node : ElList_)
+            WriteTopologyWord(output, node->level);
+        for (const auto* node : ElList_) {
+            for (const auto& friends : node->allFriends_) {
+                WriteTopologyWord(output, friends.size());
+                for (const auto* neighbor : friends)
+                    WriteTopologyWord(output, neighbor->getId());
+            }
+        }
+    }
+
+    template <typename dist_t>
+    void Hnsw<dist_t>::LoadTopology(std::istream& input, uint32_t connectivity, uint64_t maxBytes) {
+        if (!ElList_.empty() || data_level0_memory_)
+            throw std::runtime_error("HNSW topology must be loaded into a new index");
+        totalElementsStored_ = ReadTopologyWord(input);
+        const auto maxLevel = ReadTopologyWord(input);
+        enterpointId_ = ReadTopologyWord(input);
+        if (!totalElementsStored_ || totalElementsStored_ != this->data_.size()
+                || maxLevel > 64 || enterpointId_ >= totalElementsStored_
+                || connectivity < 1 || connectivity > 1000)
+            throw std::runtime_error("Invalid HNSW topology header");
+        maxlevel_ = maxLevel;
+        M_ = maxM_ = connectivity;
+        maxM0_ = 2 * connectivity;
+        searchMethod_ = 0;
+        SetQueryTimeParams(getEmptyParams());
+        // Include the optimized layout and its search bitmap before any
+        // allocations. Both graph representations coexist after loading.
+        uint64_t used = uint64_t(totalElementsStored_) * (sizeof(HnswNode) + sizeof(HnswNode*)
+            + this->data_[0]->bufferlength() + (maxM0_ + 1) * sizeof(int)
+            + sizeof(Object) + 2 * sizeof(void*) + 1) + 2 * EXTRA_MEM_PAD_SIZE;
+        if (used > maxBytes)
+            throw std::runtime_error("HNSW topology exceeds memory budget");
+        ElList_.resize(totalElementsStored_, nullptr);
+        for (unsigned id = 0; id < totalElementsStored_; ++id) {
+            const auto level = ReadTopologyWord(input);
+            if (level > maxLevel)
+                throw std::runtime_error("Invalid HNSW node level");
+            used += uint64_t(level + 1) * sizeof(std::vector<HnswNode*>)
+                + uint64_t(level) * (maxM_ + 1) * sizeof(int);
+            if (used > maxBytes)
+                throw std::runtime_error("HNSW topology exceeds memory budget");
+            auto* node = new HnswNode(this->data_[id], id);
+            ElList_[id] = node;
+            node->level = level;
+            node->maxsize = maxM_;
+            node->maxsize0 = maxM0_;
+            node->allFriends_.resize(level + 1);
+        }
+        if (ElList_[enterpointId_]->level != maxlevel_)
+            throw std::runtime_error("Invalid HNSW entry point level");
+        enterpoint_ = ElList_[enterpointId_];
+        for (unsigned id = 0; id < totalElementsStored_; ++id) {
+            auto& node = *ElList_[id];
+            for (unsigned level = 0; level < node.allFriends_.size(); ++level) {
+                const auto count = ReadTopologyWord(input);
+                if (count > (level ? maxM_ : maxM0_))
+                    throw std::runtime_error("Invalid HNSW neighbor count");
+                used += uint64_t(count) * sizeof(HnswNode*);
+                if (used > maxBytes)
+                    throw std::runtime_error("HNSW topology exceeds memory budget");
+                auto& friends = node.allFriends_[level];
+                friends.reserve(count);
+                for (unsigned i = 0; i < count; ++i) {
+                    const auto target = ReadTopologyWord(input);
+                    if (target >= totalElementsStored_ || target == id || ElList_[target]->level < level)
+                        throw std::runtime_error("Invalid HNSW neighbor id");
+                    friends.push_back(ElList_[target]);
+                }
+            }
+        }
+        visitedlistpool = new VisitedListPool(1, totalElementsStored_);
+        OptimizeIndex();
     }
 
     template <typename dist_t>

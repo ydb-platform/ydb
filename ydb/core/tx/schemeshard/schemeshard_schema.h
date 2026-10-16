@@ -1220,6 +1220,10 @@ struct Schema : NIceDb::Schema {
         // rows) = false = does not deepen.
         struct LoadSplitLineage : Column<18, NScheme::NTypeIds::Bool> {};
 
+        struct HnswWaitRequired : Column<19, NScheme::NTypeIds::Bool> {};
+        struct HnswSchemaVersion : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct HnswWaitStartedAt : Column<21, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
             TxId,
@@ -1239,7 +1243,10 @@ struct Schema : NIceDb::Schema {
             PlanStep,
             NeedUpdateObject,
             NeedSyncHive,
-            LoadSplitLineage
+            LoadSplitLineage,
+            HnswWaitRequired,
+            HnswSchemaVersion,
+            HnswWaitStartedAt
         >;
     };
 
@@ -2728,7 +2735,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct HnswReplicaFailures : Table<141> {
+        struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Error : Column<2, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<TxId>;
+        using TColumns = TableColumns<TxId, Error>;
+    };
+
     using TTables = SchemaTables<
+        HnswReplicaFailures,
         Paths,
         TxInFlight,
         TxDependencies,

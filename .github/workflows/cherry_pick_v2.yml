@@ -79,6 +79,7 @@ jobs:
               echo "GIT_CONFIG_COUNT=1"
               echo "GIT_CONFIG_KEY_0=url.${proxy_url}/https://github.com/.insteadOf"
               echo "GIT_CONFIG_VALUE_0=https://github.com/"
+              echo "GH_FETCH_PROXY_URL=${proxy_url}"
             } >> "$GITHUB_ENV"
           fi
       - name: checkout

@@ -91,6 +91,20 @@ void TStructuredMessage::Clear() {
 }
 
 
+void TStructuredMessage::CommitValue(std::vector<TKeyName>&& name, TNativeTypeCode typeCode, std::size_t offset) {
+    auto length = Data.size() - offset;
+
+    AttachedValues.emplace_back(std::move(name), typeCode, offset, length, ++AddNumber);
+    AttachedValuesSorted = false;
+}
+
+void TStructuredMessage::CommitValue(TKeyName&& name, TNativeTypeCode typeCode, std::size_t offset) {
+    std::vector<TKeyName> fullName;
+    fullName.reserve(1);
+    fullName.push_back(std::move(name));
+    CommitValue(std::move(fullName), typeCode, offset);
+}
+
 TStructuredMessage::TAttachedValue::TAttachedValue(
         std::vector<TKeyName>&& name,
         TNativeTypeCode typeCode,

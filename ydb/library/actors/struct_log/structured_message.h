@@ -36,10 +36,7 @@ public:
 
         auto offset = Data.size();
         TTypesMapping::Serialize(value, Data);
-        auto length = Data.size() - offset;
-
-        AttachedValues.emplace_back(std::move(name), typeCode, offset, length, ++AddNumber);
-        AttachedValuesSorted = false;
+        CommitValue(std::move(name), typeCode, offset);
 
         return *this;
     }
@@ -50,10 +47,7 @@ public:
 
         auto offset = Data.size();
         TTypesMapping::Serialize(TString(value), Data);
-        auto length = Data.size() - offset;
-
-        AttachedValues.emplace_back(std::move(name), typeCode, offset, length, ++AddNumber);
-        AttachedValuesSorted = false;
+        CommitValue(std::move(name), typeCode, offset);
 
         return *this;
     }
@@ -201,6 +195,20 @@ protected:
     TBinaryData Data;
 
     void EnsureSorted() const;
+
+    // Same as AppendValue(std::vector<TKeyName>{std::move(name)}, value)
+    template <typename T>
+    inline void AppendSingleKeyValue(TKeyName&& name, const T& value) {
+        auto typeCode = TTypesMapping::GetCode<T>();
+
+        auto offset = Data.size();
+        TTypesMapping::Serialize(value, Data);
+        CommitValue(std::move(name), typeCode, offset);
+    }
+
+    // Registers the value serialized into Data starting from offset
+    void CommitValue(std::vector<TKeyName>&& name, TNativeTypeCode typeCode, std::size_t offset);
+    void CommitValue(TKeyName&& name, TNativeTypeCode typeCode, std::size_t offset);
 
     void RemoveDups() const;
 };

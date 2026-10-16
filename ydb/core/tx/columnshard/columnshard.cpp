@@ -468,8 +468,8 @@ void TColumnShard::UpdateIndexCounters() {
 TColumnShard::TMetadataMemoryUsage TColumnShard::GetMetadataMemoryUsage() const {
     return {
         .TransactionsBytes = ProgressTxController->GetMemoryUsage(),
-        .ScanRecordsBytes = ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)),
-        .WaitingScanRecordsBytes = WaitingScans.size() * (sizeof(NOlap::TSnapshot) + sizeof(void*)),
+        .ScanRecordsBytes = ScanTxInFlight.size() * sizeof(decltype(ScanTxInFlight)::value_type),
+        .WaitingScanRecordsBytes = WaitingScans.size() * sizeof(decltype(WaitingScans)::value_type),
         .TablesBytes = TablesManager.GetMemoryUsage(),
     };
 }

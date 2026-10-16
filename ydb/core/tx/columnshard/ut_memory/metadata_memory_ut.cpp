@@ -149,14 +149,14 @@ Y_UNIT_TEST_SUITE(TColumnShardMetadataMemory) {
         TShardReader reader(env.Runtime, TTestTxConfig::TxTablet0, 1, NOlap::TSnapshot(step, 200));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(schema, { "timestamp", "message" }));
         UNIT_ASSERT(reader.InitializeScanner());
-        const auto active = env.WaitForScans(sizeof(ui64) + sizeof(TInstant), 0);
+        const auto active = env.WaitForScans(sizeof(THashMap<ui64, TInstant>::value_type), 0);
         reader.Ack();
         reader.ContinueReadAll();
         UNIT_ASSERT(!reader.IsError());
         const auto finished = env.WaitForScans(0, 0);
         UNIT_ASSERT_VALUES_EQUAL(finished.Tables, active.Tables);
 
-        constexpr ui64 waitingRecordBytes = sizeof(NOlap::TSnapshot) + sizeof(void*);
+        constexpr ui64 waitingRecordBytes = sizeof(TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr>::value_type);
         env.QueueScan(step.Val() + 1000000, 300);
         env.WaitForScans(0, waitingRecordBytes);
         env.QueueScan(step.Val() + 1000000, 301);

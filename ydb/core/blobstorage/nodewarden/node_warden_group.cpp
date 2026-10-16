@@ -492,8 +492,8 @@ namespace NKikimr::NStorage {
             return;
         }
         auto& syncer = const_cast<TWorkingSyncer&>(*it);
-        if (msg.BridgeProxyGroupGeneration != syncer.BridgeProxyGroupGeneration) {
-            return; // generation mismatch
+        if (msg.BridgeProxyGroupGeneration != syncer.BridgeProxyGroupGeneration || ev->Sender != syncer.ActorId) {
+            return; // completion from a stopped or replaced syncer
         }
 
         syncer.Finished = true;
@@ -511,7 +511,11 @@ namespace NKikimr::NStorage {
             TWorkingSyncer& syncer, bool forceProgress) {
         auto *item = update->AddSyncers();
         syncer.BridgeProxyGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetBridgeProxyGroupId);
-        item->SetBridgeProxyGroupGeneration(syncer.PendingBridgeProxyGroupGeneration);
+        // Completion and progress belong to the generation actually processed by the actor.
+        // A newer assignment can arrive before its group configuration, including across reconnects.
+        item->SetBridgeProxyGroupGeneration(syncer.SyncerDataStats
+            ? syncer.BridgeProxyGroupGeneration
+            : syncer.PendingBridgeProxyGroupGeneration);
         syncer.SourceGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetSourceGroupId);
         syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
         if (syncer.Finished) {

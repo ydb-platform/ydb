@@ -8,6 +8,7 @@ from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 import grpc
 import pytest
 import yatest.common
+import ydb
 
 from ydb.public.api.grpc.ydb_udf_v1_pb2_grpc import UdfServiceStub
 from ydb.public.api.protos import ydb_udf_pb2 as udf
@@ -80,6 +81,9 @@ def store_server(trace_collector):
         'backend': {'opentelemetry': {'collector_url': f'grpc://127.0.0.1:{trace_collector.port}', 'service_name': 'wasm-store-test'}},
         'uploader': {'max_batch_accumulation_milliseconds': 10, 'max_exported_spans_per_second': 10000, 'span_export_timeout_seconds': 5},
     }
+    config.yaml_config.setdefault('query_service_config', {})['available_external_data_sources'] = ['ExternalService']
+    config.yaml_config['feature_flags']['enable_external_data_sources'] = True
+    config.yaml_config['feature_flags']['enable_schema_secrets'] = True
     config.yaml_config['udf_store_config'] = {'enabled': True, 'enable_wasm_udf': True, 'kv_storage_media': 'hdd'}
     cluster = KiKiMR(configurator=config)
     cluster.start()
@@ -240,3 +244,57 @@ def test_service_only_store_module_http_and_grpc(store_server, services, trace_c
         assert all(auth == 'Bearer host-secret' for _, _, auth in services.requests)
     finally:
         client.channel.close()
+
+
+def test_kqp_service_store_http_and_grpc(store_server, services):
+    endpoint, database, _ = store_server
+    with open(yatest.common.source_path('ydb/udfs/wasm/profile/manifest.json')) as source:
+        manifest = json.load(source)
+    with open(yatest.common.source_path('ydb/udfs/wasm/profile/ut/data/profile.wasm'), 'rb') as source:
+        body = source.read()
+    metadata = (('x-ydb-database', database),)
+    with grpc.insecure_channel(endpoint) as channel:
+        stub = UdfServiceStub(channel)
+        upload(stub, metadata, manifest, body)
+        wait_for_module(stub, metadata, manifest['module_name'])
+    with ydb.Driver(endpoint='grpc://' + endpoint, database=database) as driver:
+        driver.wait(timeout=30)
+        with ydb.QuerySessionPool(driver, size=1) as pool:
+            pool.execute_with_retries("CREATE SECRET service_token WITH (value='host-secret');")
+            for protocol, address in (('HTTP', f'http://127.0.0.1:{services.http.server_port}'),
+                                      ('GRPC', f'127.0.0.1:{services.grpc_port}')):
+                name = 'service_' + protocol.lower()
+                pool.execute_with_retries(f"""CREATE EXTERNAL DATA SOURCE `{name}` WITH (
+                    SOURCE_TYPE='ExternalService', LOCATION='{address}', PROTOCOL='{protocol}',
+                    USE_TLS='false', AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='{database}/service_token');""")
+                sql = f"""$input = SELECT 42ul AS id;
+                $profiles = PROCESS $input USING EXTERNAL FUNCTION('WASM_PROFILE', 'Profile')
+                    WITH CONNECTION='{database}/{name}', INPUT_TYPE=Struct<id:Uint64>,
+                         OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>;
+                SELECT * FROM $profiles;"""
+                deadline = time.monotonic() + 90
+                while True:
+                    try:
+                        result = pool.execute_with_retries(sql)
+                        break
+                    except ydb.Error as error:
+                        message = str(error)
+                        assert time.monotonic() < deadline, message
+                        assert 'Unknown' in message or 'not loaded' in message, message
+                        time.sleep(0.5)
+                assert len(result[0].rows) == 1
+                assert result[0].rows[0].id == 42
+                assert result[0].rows[0].name == 'Ada'
+                assert result[0].rows[0].score == 97
+    assert {'http', 'grpc'} <= {kind for kind, _, _ in services.requests}
+    assert all(auth == 'Bearer host-secret' for _, _, auth in services.requests)
+
+    # KQP registers the common call metrics under its own counter group.
+    from urllib.request import urlopen
+    with urlopen(f'http://localhost:{store_server[2]}/counters/counters=kqp/json', timeout=10) as response:
+        sensors = json.load(response)['sensors']
+    for protocol in ('http', 'grpc'):
+        completed = [s['value'] for s in sensors if all(s['labels'].get(k) == v for k, v in
+                     dict(subsystem='wasm_services', component='requests', protocol=protocol,
+                          call_alias='profile.lookup', sensor='RequestsCompleted', outcome='success').items())]
+        assert len(completed) == 1 and completed[0] >= 1, sensors

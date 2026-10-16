@@ -186,6 +186,7 @@ namespace Tests {
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         std::shared_ptr<NKikimr::NDataShard::IExportFactory> DataShardExportFactory;
         bool InitializeFederatedQuerySetupFactory = false;
+        std::shared_ptr<NFq::NWasmServices::ITvmTicketProvider> WasmTvmProvider;
         TString ServerCertFilePath;
         bool Verbose = false;
         bool UseSectorMap = false;

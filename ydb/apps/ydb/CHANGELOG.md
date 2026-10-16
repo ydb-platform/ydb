@@ -1,5 +1,4 @@
 * Added support for repeating `--pile` in `ydb admin bridge failover` to disconnect multiple failed piles in one operation.
-* Added the `ydb admin cluster bridge convert` command to convert a non-bridged cluster into a bridged one with a single pile; `ydb admin cluster bridge list` now shows whether this conversion is still in progress.
 * Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
 
 * Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.

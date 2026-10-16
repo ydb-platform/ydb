@@ -256,6 +256,21 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.keep_only(target)
         self.write_data()
 
+    @pytest.mark.parametrize("survivor", ["r1", "r3"], ids=["primary-survives", "primary-lost"])
+    def test_two_piles_fail_together(self, survivor):
+        self.create_data()
+        failed = [name for name in self.pile_names if name != survivor]
+        with ThreadPoolExecutor(max_workers=len(failed)) as executor:
+            list(executor.map(self.stop_pile, failed))
+        changes = [(name, DISCONNECTED) for name in failed]
+        if survivor != self.primary:
+            changes.append((survivor, PRIMARY))
+        self.update(changes, via=survivor)
+        self.states = {name: PRIMARY if name == survivor else DISCONNECTED for name in self.pile_names}
+        self.wait_states()
+        self.check_data()
+        self.write_data()
+
     @pytest.mark.parametrize("failover", [False, True], ids=["switchover", "failover"])
     def test_switch_with_third_pile_disconnected(self, failover):
         self.create_data()
@@ -343,10 +358,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             ([("r4", PRIMARY)], StatusIds.BAD_REQUEST, "Invalid pile name"),
             ([("r2", PileState.PROMOTED), ("r3", PileState.PROMOTED)],
              StatusIds.BAD_REQUEST, "multiple promoted piles"),
-            ([("r2", DISCONNECTED), ("r3", DISCONNECTED)],
-             StatusIds.INTERNAL_ERROR, "Too many state changes"),
         ],
-        ids=["empty", "two-primary", "no-primary", "duplicate", "unknown-pile", "two-promoted", "two-disconnected"],
+        ids=["empty", "two-primary", "no-primary", "duplicate", "unknown-pile", "two-promoted"],
     )
     def test_invalid_updates(self, changes, status, issue):
         self.assert_rejected(changes, status, issue)

@@ -32,14 +32,13 @@ jobs:
           # Same transfer as actions/checkout: depth-1 clone. Both paths at once.
           # Speed is the last 5s that still received bytes. A finished clone is not 0.
           measure() {
-            local git_config dest pid i now n last back start end bps
+            local git_config dest err pid i now n last back start end bps
             git_config=$1
             dest=$(mktemp -d "${RUNNER_TEMP:-/tmp}/gh-probe.XXXXXX")
-            if [ -n "$git_config" ]; then
-              setsid git -c "$git_config" clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >/dev/null 2>&1 &
-            else
-              setsid git clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >/dev/null 2>&1 &
-            fi
+            err=$(mktemp)
+            # Ignore runner gitconfig and do not sit on a credential prompt.
+            # A hung askpass leaves only the .git templates, about 0.07 MB.
+            GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=0 GIT_TERMINAL_PROMPT=0     git -c credential.helper= ${git_config:+-c "$git_config"}     clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$err" 2>&1 &
             pid=$!
             local -a samples=()
             for i in $(seq 1 30); do
@@ -47,7 +46,8 @@ jobs:
               now=$(du -sb "$dest" 2>/dev/null | awk '{print $1}' || true)
               samples+=("${now:-0}")
             done
-            kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+            kill "$pid" 2>/dev/null || true
+            pkill -P "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
             rm -rf "$dest"
             n=${#samples[@]}
@@ -56,16 +56,22 @@ jobs:
               last=$((last - 1))
             done
             if [ "$last" -lt 1 ]; then
-              echo "${samples[0]:-0} 0"
-              return
+              end=${samples[0]:-0}
+              bps=0
+            else
+              back=5
+              if [ "$last" -lt 5 ]; then
+                back=$last
+              fi
+              end=${samples[$last]:-0}
+              start=${samples[$((last - back))]:-0}
+              bps=$(( (end - start) / back ))
             fi
-            back=5
-            if [ "$last" -lt 5 ]; then
-              back=$last
+            if [ "$end" -lt 1000000 ]; then
+              echo "probe clone stayed at ${end} bytes:" >&2
+              tail -n 40 "$err" >&2 || true
             fi
-            end=${samples[$last]:-0}
-            start=${samples[$((last - back))]:-0}
-            bps=$(( (end - start) / back ))
+            rm -f "$err"
             echo "$end $bps"
           }
 

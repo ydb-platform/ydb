@@ -59,6 +59,10 @@ void TSysViewProcessor::OnActivateExecutor(const TActorContext& ctx) {
         {"tabletId", TabletID()});
 
     // TODO: tablet counters
+    TControlBoard::RegisterSharedControl(DetailedMetricsMaxNodeOutputBytes,
+        AppData(ctx)->Icb->DetailedMetricsControls.MaxNodeOutputBytes);
+    TControlBoard::RegisterSharedControl(DetailedMetricsRestorePercent,
+        AppData(ctx)->Icb->DetailedMetricsControls.RestorePercent);
     Execute(CreateTxInitSchema(), ctx);
 }
 

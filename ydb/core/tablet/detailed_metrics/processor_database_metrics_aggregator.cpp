@@ -8,10 +8,19 @@
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/json/writer/json.h>
+#include <library/cpp/monlib/metrics/metric_type.h>
+
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <util/stream/length.h>
+#include <util/stream/null.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
+#include <util/system/guard.h>
+#include <util/system/mutex.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
@@ -30,6 +39,254 @@ namespace NKikimr {
             return key ? TStringBuilder() << key->first << ':' << key->second : TString("table");
         }
 
+        // The estimated JSON output of public series, as NMonitoring::ToJson writes them
+        struct TJsonSize {
+            ui64 Bytes = 0;
+            ui64 Series = 0;
+
+            TJsonSize& operator+=(const TJsonSize& other) {
+                Bytes += other.Bytes;
+                Series += other.Series;
+                return *this;
+            }
+
+            TJsonSize& operator-=(const TJsonSize& other) {
+                Bytes -= other.Bytes;
+                Series -= other.Series;
+                return *this;
+            }
+        };
+
+        // The widest ui64: values at max width keep the estimate value-independent
+        constexpr ui64 JSON_VALUE_BYTES = 20;
+        // ,"":"" per label
+        constexpr ui64 JSON_LABEL_BYTES = 6;
+        // ,{"kind":"","labels":{}} less the comma that JSON_LABEL_BYTES counts for the first label
+        constexpr ui64 JSON_SERIES_BYTES = 23;
+        // ,"value":
+        constexpr ui64 JSON_SCALAR_BYTES = 9;
+        // ,"hist":{"bounds":[],"buckets":[],"inf":} less the commas that 2 per bound count
+        // for the first bound and bucket
+        constexpr ui64 JSON_HISTOGRAM_BYTES = 39;
+
+        // A JSON string as the encoder writes it, quotes excluded. Bytes that are not UTF-8 count as is,
+        // as spack and Prometheus write them; the monlib JSON encoder rejects them.
+        ui64 JsonStringBytes(TStringBuf s) {
+            // Printable ASCII but '"' and '\' is written as is; the rest takes the encoder's own escaping
+            if (AllOf(s, [](char c) { return c >= 0x20 && c < 0x7f && c != '"' && c != '\\'; })) {
+                return s.size();
+            }
+            TCountingOutput out(&Cnull);
+            NJsonWriter::TBuf(NJsonWriter::HEM_UNSAFE, &out).WriteString(s);
+            return out.Counter() - 2;
+        }
+
+        // ,"name":"value"
+        ui64 JsonLabelBytes(TStringBuf name, TStringBuf value) {
+            return JsonStringBytes(name) + JsonStringBytes(value) + JSON_LABEL_BYTES;
+        }
+
+        ui64 JsonLabelBytes(const TSubgroupPath& labels) {
+            ui64 bytes = 0;
+            for (const auto& [name, value] : labels) {
+                bytes += JsonLabelBytes(name, value);
+            }
+            return bytes;
+        }
+
+        // Sizes the series of a group without subgroups as the compact JSON encoder writes them:
+        // ,{"kind":"K","labels":{...},"value":V} or ,"hist":{"bounds":[...],"buckets":[...],"inf":V}
+        class TJsonSizeEstimator final: public NMonitoring::ICountableConsumer {
+        public:
+            explicit TJsonSizeEstimator(ui64 groupLabelBytes)
+                : GroupLabelBytes(groupLabelBytes)
+            {
+            }
+
+            void OnCounter(
+                const TString& labelName, const TString& labelValue,
+                const NMonitoring::TCounterForPtr* counter) override {
+                Add(counter->ForDerivative() ? NMonitoring::EMetricType::RATE : NMonitoring::EMetricType::GAUGE,
+                    labelName, labelValue, JSON_SCALAR_BYTES + JSON_VALUE_BYTES);
+            }
+
+            void OnHistogram(
+                const TString& labelName, const TString& labelValue,
+                NMonitoring::IHistogramSnapshotPtr snapshot, bool derivative) override {
+                // The explicit histograms end with +Inf, written as "inf"
+                const ui32 bounds = snapshot->Count() - 1;
+                ui64 bytes = JSON_HISTOGRAM_BYTES + 2 * bounds + (bounds + 1) * JSON_VALUE_BYTES;
+                for (ui32 i = 0; i < bounds; ++i) {
+                    bytes += FloatToString(snapshot->UpperBound(i), PREC_NDIGITS, 10).size();
+                }
+                Add(derivative ? NMonitoring::EMetricType::HIST_RATE : NMonitoring::EMetricType::HIST,
+                    labelName, labelValue, bytes);
+            }
+
+            void OnGroupBegin(const TString&, const TString&, const NMonitoring::TDynamicCounters*) override {
+            }
+
+            void OnGroupEnd(const TString&, const TString&, const NMonitoring::TDynamicCounters*) override {
+            }
+
+            NMonitoring::TCountableBase::EVisibility Visibility() const override {
+                return NMonitoring::TCountableBase::EVisibility::Public;
+            }
+
+            TJsonSize Size;
+
+        private:
+            void Add(
+                NMonitoring::EMetricType type, const TString& labelName, const TString& labelValue,
+                ui64 valueBytes) {
+                Size.Bytes += JSON_SERIES_BYTES + NMonitoring::MetricTypeToStr(type).size() + GroupLabelBytes
+                    + JsonLabelBytes(labelName, labelValue) + valueBytes;
+                ++Size.Series;
+            }
+
+            const ui64 GroupLabelBytes;
+        };
+
+        // @param[in] labels The labels of the group below the target counter group
+        TJsonSize EstimateJson(const NMonitoring::TDynamicCounters& group, const TSubgroupPath& labels) {
+            TJsonSizeEstimator estimator(JsonLabelBytes(labels));
+            group.Accept(TString(), TString(), estimator);
+            return estimator.Size;
+        }
+
+        enum class EFold {
+            None,
+            // Over with the members ranked before folded: restores at RestorePercent of the limit
+            Budget,
+            // Over only while a member ranked before still publishes: restores at the limit
+            Provisional,
+        };
+
+        // The ydb_detailed output limit of one scrape endpoint, shared by its aggregators across actors.
+        // Rollups always publish; members fold by leaf bytes desc, then database path, until the total fits.
+        // Each member folds on its own fit, so the ones ranked after fold provisionally until it does.
+        class TOutputBudget: public TThrRefBase {
+        public:
+            explicit TOutputBudget(NMonitoring::TDynamicCounterPtr scope)
+                : Scope(std::move(scope))
+            {
+            }
+
+            // Joins the budget of the scope, a private one if null; Join and the last Leave are atomic
+            static TIntrusivePtr<TOutputBudget> Join(
+                const NMonitoring::TDynamicCounterPtr& scope, const TString& database, bool folded, ui64& memberId);
+
+            void Leave(ui64 memberId);
+
+            void SetLimit(ui64 maxBytes, ui64 restorePercent);
+
+            // Records the unfolded output of the member, and its fold at once if it has to fold.
+            // A member folded by the budget restores only at or below RestorePercent of the limit.
+            EFold MustFold(ui64 memberId, ui64 rollupBytes, ui64 leafBytes, bool foldedByBudget);
+
+            // Records that the member publishes its leaves again
+            void Restore(ui64 memberId);
+
+        private:
+            struct TMember {
+                TString Database;
+                ui64 RollupBytes = 0;
+                ui64 LeafBytes = 0;
+                bool Folded = false;
+            };
+
+            // The registry key, held so that its address is not reused while registered
+            const NMonitoring::TDynamicCounterPtr Scope;
+            ui64 Limit = Max<ui64>();
+            ui64 RestorePercent = 100;
+            THashMap<ui64, TMember> Members;
+        };
+
+        struct TBudgetRegistry {
+            // Guards the registry and the state of every budget
+            TMutex Mutex;
+            THashMap<const NMonitoring::TDynamicCounters*, TIntrusivePtr<TOutputBudget>> Budgets;
+            ui64 LastMemberId = 0;
+        };
+
+        TBudgetRegistry& GetBudgetRegistry() {
+            // Leaky: an aggregator may outlive the static destruction
+            static auto* registry = new TBudgetRegistry;
+            return *registry;
+        }
+
+        TIntrusivePtr<TOutputBudget> TOutputBudget::Join(
+            const NMonitoring::TDynamicCounterPtr& scope, const TString& database, bool folded, ui64& memberId) {
+            auto& registry = GetBudgetRegistry();
+            auto guard = Guard(registry.Mutex);
+            TIntrusivePtr<TOutputBudget> budget;
+            if (scope) {
+                auto& entry = registry.Budgets[scope.Get()];
+                if (!entry) {
+                    entry = MakeIntrusive<TOutputBudget>(scope);
+                }
+                budget = entry;
+            } else {
+                budget = MakeIntrusive<TOutputBudget>(nullptr);
+            }
+            memberId = ++registry.LastMemberId;
+            budget->Members[memberId] = {.Database = database, .Folded = folded};
+            return budget;
+        }
+
+        void TOutputBudget::Leave(ui64 memberId) {
+            auto& registry = GetBudgetRegistry();
+            auto guard = Guard(registry.Mutex);
+            Members.erase(memberId);
+            if (Members.empty() && Scope) {
+                // The caller still holds this budget
+                registry.Budgets.erase(Scope.Get());
+            }
+        }
+
+        void TOutputBudget::SetLimit(ui64 maxBytes, ui64 restorePercent) {
+            auto guard = Guard(GetBudgetRegistry().Mutex);
+            Limit = maxBytes;
+            RestorePercent = restorePercent;
+        }
+
+        EFold TOutputBudget::MustFold(ui64 memberId, ui64 rollupBytes, ui64 leafBytes, bool foldedByBudget) {
+            auto guard = Guard(GetBudgetRegistry().Mutex);
+            auto& self = Members[memberId];
+            self.RollupBytes = rollupBytes;
+            self.LeafBytes = leafBytes;
+            if (!leafBytes) {
+                return EFold::None;
+            }
+            // Greedy in rank order: the members ranked before this one fold first, then this one if still over.
+            // The published total keeps the leaves of the ones ranked before that have yet to fold.
+            ui64 total = 0;
+            ui64 published = 0;
+            for (const auto& [id, member] : Members) {
+                const bool rankedBefore = member.LeafBytes != self.LeafBytes ? member.LeafBytes > self.LeafBytes
+                    : member.Database != self.Database ? member.Database < self.Database
+                    : id < memberId;
+                total += member.RollupBytes + (rankedBefore ? 0 : member.LeafBytes);
+                published += member.RollupBytes + (rankedBefore && member.Folded ? 0 : member.LeafBytes);
+            }
+            // Limit * RestorePercent / 100 without overflow
+            const ui64 threshold = foldedByBudget
+                ? Limit / 100 * RestorePercent + Limit % 100 * RestorePercent / 100
+                : Limit;
+            const EFold fold = total > threshold ? EFold::Budget
+                : published > Limit ? EFold::Provisional
+                : EFold::None;
+            if (fold != EFold::None) {
+                self.Folded = true;
+            }
+            return fold;
+        }
+
+        void TOutputBudget::Restore(ui64 memberId) {
+            auto guard = Guard(GetBudgetRegistry().Mutex);
+            Members[memberId].Folded = false;
+        }
+
         // A TABLE partial or a PARTITION leaf, fed with public metric values (see NKikimrSysView::TDbCounters).
         // Rate and derivative histogram deltas accumulate and outlive a removed node while the bucket is live.
         // Gauges and non-derivative histograms are the full values of each node, replaced by every report
@@ -42,7 +299,8 @@ namespace NKikimr {
                 NMonitoring::TDynamicCounterPtr targetGroup,
                 EYdbMetricNameScope nameScope,
                 bool isFollowerSource)
-                : Desc(desc)
+                : Group(targetGroup)
+                , Desc(desc)
                 , IsPartitionBucket(nameScope == EYdbMetricNameScope::Partition)
                 , RateTotals(desc.Rates.size(), 0)
                 , DerivativeTotals(desc.Histograms.size())
@@ -144,6 +402,11 @@ namespace NKikimr {
                 }
             }
 
+            // The mapped group: public under tablet_id/follower_id unless folded
+            const NMonitoring::TDynamicCounterPtr Group;
+            // The estimated output of a leaf, empty for the TABLE partial
+            TJsonSize Size;
+
         private:
             struct TNodeSnapshot {
                 TVector<ui64> Gauges;
@@ -204,6 +467,7 @@ namespace NKikimr {
             NMonitoring::TDynamicCounterPtr PublicGroup;
             TYdbMetricsAggregatorPtr Aggregator;
             THashMap<TBucketKey, THolder<TPublishedBucket>> Buckets;
+            TJsonSize RollupSize;
         };
 
         class TProcessorDatabaseMetricsAggregatorImpl: public TProcessorDatabaseMetricsAggregator {
@@ -211,11 +475,19 @@ namespace NKikimr {
             TProcessorDatabaseMetricsAggregatorImpl(
                 NMonitoring::TDynamicCounterPtr targetCounterGroup,
                 const TString& databasePath,
-                TDetailedMetricsDescriptorGetter getDescriptor)
+                TDetailedMetricsDescriptorGetter getDescriptor,
+                NMonitoring::TDynamicCounterPtr budgetScope)
                 : TargetCounterGroup(targetCounterGroup)
                 , DatabasePrefix(ChopTrailingSlash(databasePath))
                 , GetDescriptor(getDescriptor)
+                // A scoped aggregator starts folded: no leaf flash after an SVP restart or move
+                , Budget(TOutputBudget::Join(budgetScope, DatabasePrefix, budgetScope != nullptr, MemberId))
+                , Folded(budgetScope != nullptr)
             {
+            }
+
+            ~TProcessorDatabaseMetricsAggregatorImpl() override {
+                Budget->Leave(MemberId);
             }
 
             void ApplyFromNode(
@@ -254,6 +526,8 @@ namespace NKikimr {
 
             void RecalculateAllCounters() override {
                 NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
+                Fit(true);
+                // Folded leaves keep publishing: they feed the rollup
                 for (auto& [_, table] : Tables) {
                     for (auto& [key, bucket] : table.Buckets) {
                         bucket->Publish();
@@ -262,7 +536,69 @@ namespace NKikimr {
                 }
             }
 
+            void SetOutputLimit(ui64 maxBytes, ui64 restorePercent, const TSubgroupPath& prefixLabels) override {
+                NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
+                Budget->SetLimit(maxBytes, restorePercent);
+                PrefixLabelBytes = JsonLabelBytes(prefixLabels);
+                Fit(false);
+            }
+
+            void FitOutput() override {
+                NProfiling::TMemoryTagScope memoryScope(ProcessorMemoryTag());
+                Fit(false);
+            }
+
+            ui64 GetEstimatedOutputBytes() const override {
+                return Bytes(Rollups) + Bytes(Leaves);
+            }
+
         private:
+            ui64 Bytes(const TJsonSize& size) const {
+                return size.Bytes + size.Series * PrefixLabelBytes;
+            }
+
+            // Folds as soon as the budget says so; restores after DETAILED_OUTPUT_RESTORE_TICKS fitting ticks in a row
+            void Fit(bool tick) {
+                const ui64 leafBytes = Bytes(Leaves);
+                const EFold fold = Budget->MustFold(MemberId, Bytes(Rollups), leafBytes, FoldedByBudget);
+                if (fold != EFold::None) {
+                    // A confirmed start fold restores through the dead band too
+                    FoldedByBudget |= fold == EFold::Budget;
+                    FitTicks = 0;
+                    if (!Folded) {
+                        SetFolded(true);
+                    }
+                } else if (Folded && tick && leafBytes && ++FitTicks >= DETAILED_OUTPUT_RESTORE_TICKS) {
+                    SetFolded(false);
+                }
+            }
+
+            void SetFolded(bool fold) {
+                // Restoring a provisional fold is routine
+                const bool notice = fold || FoldedByBudget;
+                Folded = fold;
+                if (!fold) {
+                    FoldedByBudget = false;
+                    Budget->Restore(MemberId);
+                }
+                for (auto& [_, table] : Tables) {
+                    for (const auto& [key, bucket] : table.Buckets) {
+                        if (!key) {
+                            continue;
+                        }
+                        if (fold) {
+                            table.PublicGroup->RemoveSubgroupChain(MakeTabletPath(*key));
+                        } else {
+                            RegisterTabletGroup(table.PublicGroup, *key, bucket->Group);
+                        }
+                    }
+                }
+                YDB_LOG(notice ? PRI_NOTICE : PRI_DEBUG, "Detailed metrics output level changed",
+                    {"database", DatabasePrefix},
+                    {"level", fold ? "TABLE" : "PARTITION"},
+                    {"estimatedBytes", GetEstimatedOutputBytes()});
+            }
+
             void ApplyContribution(
                 ui32 nodeId,
                 const TContribution& contribution,
@@ -280,14 +616,15 @@ namespace NKikimr {
                     table.PublicGroup = TargetCounterGroup->GetSubgroup(TABLE_LABEL, path);
                     table.Aggregator = CreateYdbMetricsAggregatorByTabletType(
                         type, table.PublicGroup, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+                    table.RollupSize = EstimateJson(*table.PublicGroup, {{TABLE_LABEL, path}});
+                    Rollups += table.RollupSize;
                 } else if (table.Type != type) {
                     return;
                 }
                 auto& bucket = table.Buckets[key];
                 if (!bucket) {
-                    auto mappedGroup = key
-                        ? GetOrCreateTabletGroup(table.PublicGroup, *key)
-                        : MakeIntrusive<NMonitoring::TDynamicCounters>();
+                    // Detached until published, inheriting the lookup counter as GetSubgroup does
+                    auto mappedGroup = MakeIntrusive<NMonitoring::TDynamicCounters>(table.PublicGroup.Get());
                     // The partial's mapped group is detached: only the combined table
                     // rollup is public, so partials and leaves never overwrite each other.
                     const EYdbMetricNameScope nameScope = key
@@ -296,6 +633,13 @@ namespace NKikimr {
                     const bool isFollowerSource = key && key->second != 0;
                     bucket = MakeHolder<TPublishedBucket>(*descriptor, mappedGroup, nameScope, isFollowerSource);
                     table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, isFollowerSource, nameScope);
+                    if (key) {
+                        bucket->Size = EstimateJson(*mappedGroup, MakeTabletPath(*key, {{TABLE_LABEL, path}}));
+                        Leaves += bucket->Size;
+                        if (!Folded) {
+                            RegisterTabletGroup(table.PublicGroup, *key, mappedGroup);
+                        }
+                    }
                 }
                 bucket->Apply(nodeId, values);
                 contributions.insert(contribution);
@@ -330,11 +674,13 @@ namespace NKikimr {
                 // values in the table rollup before detaching this source.
                 bucketIt->second->Publish();
                 table.Aggregator->RemoveSourceCountersGroup(SourceId(key));
+                Leaves -= bucketIt->second->Size;
                 table.Buckets.erase(bucketIt);
-                if (key) {
+                if (key && !Folded) {
                     table.PublicGroup->RemoveSubgroupChain(MakeTabletPath(*key));
                 }
                 if (table.Buckets.empty()) {
+                    Rollups -= table.RollupSize;
                     TargetCounterGroup->RemoveSubgroup(TABLE_LABEL, path);
                     Tables.erase(tableIt);
                 }
@@ -345,6 +691,19 @@ namespace NKikimr {
             const TDetailedMetricsDescriptorGetter GetDescriptor;
             THashMap<TString, TTableEntry> Tables;
             THashMap<TNodeRoleKey, TContributions> ContributionsByNodeRole;
+            ui64 MemberId = 0;
+            const TIntrusivePtr<TOutputBudget> Budget;
+            // Always published
+            TJsonSize Rollups;
+            // Published unless folded
+            TJsonSize Leaves;
+            ui64 PrefixLabelBytes = 0;
+            bool Folded;
+            // A provisional fold (the start one, or a larger member's pending) restores at the limit,
+            // a budget fold at RestorePercent of it
+            bool FoldedByBudget = false;
+            // Fitting ticks with leaves in a row while folded; a leafless tick neither counts nor resets
+            ui32 FitTicks = 0;
         };
 
     } // namespace
@@ -352,9 +711,11 @@ namespace NKikimr {
     TProcessorDatabaseMetricsAggregatorPtr CreateProcessorDatabaseMetricsAggregator(
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
-        TDetailedMetricsDescriptorGetter getDescriptor) {
+        TDetailedMetricsDescriptorGetter getDescriptor,
+        NMonitoring::TDynamicCounterPtr budgetScope) {
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-        return MakeIntrusive<TProcessorDatabaseMetricsAggregatorImpl>(targetCounterGroup, databasePath, getDescriptor);
+        return MakeIntrusive<TProcessorDatabaseMetricsAggregatorImpl>(
+            targetCounterGroup, databasePath, getDescriptor, std::move(budgetScope));
     }
 
 } // namespace NKikimr

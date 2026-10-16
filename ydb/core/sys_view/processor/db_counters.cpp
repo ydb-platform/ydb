@@ -334,14 +334,22 @@ void TSysViewProcessor::DetachDetailedCounters() {
     }
 
     NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-    std::vector<std::pair<TString, TString>> chain{{"host", ""}};
+    GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
+        ->RemoveSubgroupChain(MakeDetailedCountersChain());
+}
+
+NDetailedMetrics::TSubgroupPath TSysViewProcessor::MakeDetailedCountersChain() const {
+    NDetailedMetrics::TSubgroupPath chain{{"host", ""}};
     if (MonitoringProjectId) {
         chain.emplace_back("monitoring_project_id", MonitoringProjectId);
     }
     chain.emplace_back("database", Database);
+    return chain;
+}
 
-    GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
-        ->RemoveSubgroupChain(chain);
+void TSysViewProcessor::SetDetailedOutputLimit() {
+    DetailedAggregator->SetOutputLimit(DetailedMetricsMaxNodeOutputBytes, DetailedMetricsRestorePercent,
+        MakeDetailedCountersChain());
 }
 
 TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() {
@@ -352,7 +360,10 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
     // be built and fed on a plain db counters deployment.
     if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database);
+        // One budget per scrape endpoint: the node's ydb_detailed group
+        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database,
+            &GetDetailedMetricsDescriptor, GetServiceCounters(AppData()->Counters, "ydb_detailed", false));
+        SetDetailedOutputLimit();
     }
     return DetailedAggregator.Get();
 }
@@ -442,6 +453,8 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         if (!hasFollowerRole) {
             aggregator->ApplyFromNode(nodeId, /* isFollowerRole = */ true, {});
         }
+        // Once per report: an intermediate role apply may overshoot
+        aggregator->FitOutput();
     }
 
     YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersRequest: applying counters from node",
@@ -557,6 +570,8 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
     }
 
     if (auto* aggregator = DetailedAggregator.Get()) {
+        // Picks up ICB and monitoring_project_id changes
+        SetDetailedOutputLimit();
         aggregator->RecalculateAllCounters();
     }
 

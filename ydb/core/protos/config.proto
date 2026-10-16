@@ -2649,6 +2649,20 @@ message TImmediateControlsConfig {
             DefaultValue: 1 }];
     }
     optional TViewerControls ViewerControls = 24;
+
+    message TDetailedMetricsControls {
+        optional uint64 MaxNodeOutputBytes = 1 [(ControlOptions) = {
+            Description: "Estimated JSON bytes of one node's ydb_detailed output (all its SysView Processors); over it the databases with the most partition output publish table metrics only; 0 forces table metrics",
+            MinValue: 0,
+            MaxValue: 9223372036854775807,
+            DefaultValue: 100000000 }];
+        optional uint64 RestorePercent = 2 [(ControlOptions) = {
+            Description: "Percent of MaxNodeOutputBytes at or below which a folded database publishes partition metrics again; 100 disables the dead band",
+            MinValue: 1,
+            MaxValue: 100,
+            DefaultValue: 80 }];
+    }
+    optional TDetailedMetricsControls DetailedMetricsControls = 25;
 };
 
 message TMeteringConfig {

@@ -1317,6 +1317,7 @@ private:
         if (!Self->Imports.contains(msg.ImportId)) {
             LOG_E("TImport::TTxProgress: OnSchemeResult received unknown id"
                 << ": id# " << msg.ImportId);
+            Self->RunningImportSchemeGetters.erase(SchemeResult->Sender);
             return;
         }
 
@@ -1325,6 +1326,7 @@ private:
             LOG_E("TImport::TTxProgress: OnSchemeResult received unknown item"
                 << ": id# " << msg.ImportId
                 << ", item# " << msg.ItemIdx);
+            Self->RunningImportSchemeGetters.erase(SchemeResult->Sender);
             return;
         }
 
@@ -1332,6 +1334,14 @@ private:
 
         auto& item = importInfo->Items.at(msg.ItemIdx);
         Self->RunningImportSchemeGetters.erase(std::exchange(item.SchemeGetter, {}));
+
+        if (importInfo->State == EState::Cancelled || importInfo->State == EState::Done) {
+            // A late getter reply must not resurrect a finished import
+            LOG_D("TImport::TTxProgress: OnSchemeResult dropped, import is finished"
+                << ": id#" << msg.ImportId
+                << ", item#" << msg.ItemIdx);
+            return;
+        }
 
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
@@ -1378,7 +1388,12 @@ private:
         const TString parentSrc = importInfo->GetItemSrcPrefix(msg.ItemIdx);
         const TString parentDst = item.DstPathName;
         auto materializedIndexes = std::move(item.MaterializedIndexes);
-        item.ChildItems.reserve(materializedIndexes.size());
+        if (!item.ChildItems.empty()) {
+            // Children were already appended by a previous getter reply; do not
+            // duplicate impl-table items (and their persisted schemes) on re-runs
+            materializedIndexes.clear();
+        }
+        item.ChildItems.reserve(item.ChildItems.size() + materializedIndexes.size());
         importInfo->Items.reserve(importInfo->Items.size() + materializedIndexes.size());
 
         for (auto& [indexMetadata, scheme] : materializedIndexes) {
@@ -1427,6 +1442,7 @@ private:
         if (!Self->Imports.contains(msg.ImportId)) {
             LOG_E("TImport::TTxProgress: OnSchemaMappingResult received unknown id"
                 << ": id# " << msg.ImportId);
+            Self->RunningImportSchemeGetters.erase(SchemaMappingResult->Sender);
             return;
         }
 
@@ -1435,6 +1451,13 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
+
+        if (importInfo->State == EState::Cancelled || importInfo->State == EState::Done) {
+            // A late schema-mapping reply must not resurrect a finished import
+            LOG_D("TImport::TTxProgress: OnSchemaMappingResult dropped, import is finished"
+                << ": id#" << msg.ImportId);
+            return;
+        }
 
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, -1,
@@ -1480,6 +1503,7 @@ private:
             LOG_E("TImport::TTxProgress: OnSchemeQueryPreparation received unknown import id"
                 << ": id# " << message.ImportId
             );
+            Self->RunningImportSchemeQueryExecutors.erase(SchemeQueryResult->Sender);
             return;
         }
         if (message.ItemIdx >= importInfo->Items.size()) {
@@ -1488,6 +1512,7 @@ private:
                 << ", item index# " << message.ItemIdx
                 << ", number of items# " << importInfo->Items.size()
             );
+            Self->RunningImportSchemeQueryExecutors.erase(SchemeQueryResult->Sender);
             return;
         }
 
@@ -1495,6 +1520,14 @@ private:
 
         auto& item = importInfo->Items[message.ItemIdx];
         Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, {}));
+
+        if (importInfo->State == EState::Cancelled || importInfo->State == EState::Done) {
+            // A late query-executor reply must not resurrect a finished import
+            LOG_D("TImport::TTxProgress: OnSchemeQueryPreparation dropped, import is finished"
+                << ": id#" << message.ImportId
+                << ", itemIdx#" << message.ItemIdx);
+            return;
+        }
 
         if (message.Status == Ydb::StatusIds::SCHEME_ERROR) {
             // Scheme error happens when the creation query depends on other objects that are not yet imported.
@@ -1647,11 +1680,18 @@ private:
         if (!Self->Imports.contains(id)) {
             LOG_E("TImport::TTxProgress: OnModifyResult received unknown id"
                 << ": id# " << id);
+            Self->TxIdToImport.erase(txId);
             return;
         }
 
         TImportInfo::TPtr importInfo = Self->Imports.at(id);
         NIceDb::TNiceDb db(txc.DB);
+
+        if (importInfo->State == EState::Cancelled || importInfo->State == EState::Done) {
+            // A late propose result must not resurrect a finished import
+            Self->TxIdToImport.erase(txId);
+            return;
+        }
 
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -1779,6 +1819,7 @@ private:
         if (!Self->Imports.contains(id)) {
             LOG_E("TImport::TTxProgress: OnCreateIndexResult received unknown id"
                 << ": id# " << id);
+            Self->TxIdToImport.erase(txId);
             return;
         }
 
@@ -1820,6 +1861,7 @@ private:
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         if (importInfo->State != EState::Waiting) {
+            Self->TxIdToImport.erase(txId);
             CancelIndexBuilding(*importInfo, itemIdx);
             return;
         }
@@ -1845,10 +1887,13 @@ private:
         if (!Self->Imports.contains(id)) {
             LOG_E("TImport::TTxProgress: OnNotifyResult received unknown id"
                 << ": id# " << id);
+            Self->TxIdToImport.erase(txId);
             return;
         }
 
         TImportInfo::TPtr importInfo = Self->Imports.at(id);
+
+        Self->TxIdToImport.erase(txId);
 
         if (importInfo->State != EState::Waiting) {
             return;
@@ -1861,8 +1906,6 @@ private:
 
         item.WaitTxId = InvalidTxId;
         Self->PersistImportItemState(db, *importInfo, itemIdx);
-
-        Self->TxIdToImport.erase(txId);
 
         switch (item.State) {
         case EState::CreateSchemeObject:

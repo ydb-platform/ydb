@@ -141,6 +141,8 @@ class TestKvVolumeTool(StressFixture):
             [self._tool(), "describe", *self._base_args(), "--verbose"],
         )
         stderr = result.std_err
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
         assert "Discovered " in stderr, stderr
         assert "load=" in stderr, stderr
         self._run("remove")

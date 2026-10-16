@@ -13,12 +13,15 @@
 #include <util/string/builder.h>
 
 #include <array>
+#include <limits>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
 //////////////////////////////////////////////////////////////////////////////////
+
+constexpr size_t VChunksPerPage = 200;
 
 void RenderDbgList(
     IOutputStream& str,
@@ -333,11 +336,35 @@ void RenderDDiskImbalance(
 void RenderVChunks(
     IOutputStream& str,
     const TTabletInfo& tabletInfo,
-    const TDbgSnapshot& dbg)
+    const TDbgSnapshot& dbg,
+    size_t page)
 {
     HTML (str) {
         TAG (TH4) {
             str << "VChunks";
+        }
+        if (dbg.VChunkCount > VChunksPerPage) {
+            const size_t pageCount = dbg.VChunkCount / VChunksPerPage +
+                                     (dbg.VChunkCount % VChunksPerPage != 0);
+            const size_t displayedPage = page < pageCount ? page + 1 : page;
+            str << "<div class='btn-group pd-block' role='group'>";
+            if (page == 0) {
+                str << "<span class='btn btn-default disabled'>&larr;</span>";
+            } else {
+                str << "<a class='btn btn-default' href='?TabletID="
+                    << tabletInfo.TabletId << "&page=dbg&dbg=" << dbg.Index
+                    << "&vchunkpage=" << page - 1 << "'>&larr;</a>";
+            }
+            str << "<span class='btn btn-default disabled'>Page "
+                << displayedPage << " of " << pageCount << "</span>";
+            if (page >= pageCount - 1) {
+                str << "<span class='btn btn-default disabled'>&rarr;</span>";
+            } else {
+                str << "<a class='btn btn-default' href='?TabletID="
+                    << tabletInfo.TabletId << "&page=dbg&dbg=" << dbg.Index
+                    << "&vchunkpage=" << page + 1 << "'>&rarr;</a>";
+            }
+            str << "</div>";
         }
         RenderVChunkHostStateLegend(str);
         TABLE_CLASS ("table table-condensed table-bordered") {
@@ -416,7 +443,8 @@ void RenderVChunks(
 void RenderDbgDetail(
     IOutputStream& str,
     const TTabletInfo& tabletInfo,
-    const TDbgSnapshot& dbg)
+    const TDbgSnapshot& dbg,
+    size_t vChunkPage)
 {
     str << "<div class='pd-block'><a href='?TabletID=" << tabletInfo.TabletId
         << "&page=dbg'>&larr; back to DBGs</a></div>";
@@ -683,11 +711,26 @@ void RenderDbgDetail(
             }
         }
         RenderDDiskImbalance(str, tabletInfo, dbg);
-        RenderVChunks(str, tabletInfo, dbg);
+        RenderVChunks(str, tabletInfo, dbg, vChunkPage);
     }
 }
 
 }   // namespace
+
+TVChunkPageRange GetVChunkPageRange(size_t page)
+{
+    if (page > std::numeric_limits<size_t>::max() / VChunksPerPage) {
+        return {
+            .From = std::numeric_limits<size_t>::max(),
+            .Count = VChunksPerPage,
+        };
+    }
+
+    return {
+        .From = page * VChunksPerPage,
+        .Count = VChunksPerPage,
+    };
+}
 
 void RenderDbg(IOutputStream& str, const TMonPageData& data)
 {
@@ -697,7 +740,7 @@ void RenderDbg(IOutputStream& str, const TMonPageData& data)
     }
     for (const auto& dbg: data.Dbgs) {
         if (dbg.Index == *data.SelectedDbg) {
-            RenderDbgDetail(str, data.TabletInfo, dbg);
+            RenderDbgDetail(str, data.TabletInfo, dbg, data.VChunkPage);
             return;
         }
     }

@@ -1,4 +1,5 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render_dbg.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -817,6 +818,45 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(vchunks, "<td>4.00 KiB</td>");
         UNIT_ASSERT_STRING_CONTAINS(vchunks, "Enabled<br>DDisks");
         UNIT_ASSERT(!vchunks.Contains("Desired<br>PBuffers"));
+    }
+
+    Y_UNIT_TEST(DbgDetailPaginatesVChunks)
+    {
+        const auto firstPageRange = GetVChunkPageRange(0);
+        TDbgSnapshot dbg = MakeDbg(1);
+        dbg.VChunkCount = firstPageRange.Count + 1;
+        for (size_t i = 0; i < firstPageRange.Count; ++i) {
+            auto config = TVChunkConfig::MakeDefault(i * 32 + 1, 2, 1);
+            config.SetDBGIndex(1);
+            dbg.VChunks.push_back({.Config = std::move(config)});
+        }
+
+        TMonPageData data{
+            .Page = EMonPage::Dbg,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {std::move(dbg)},
+            .SelectedDbg = 1,
+        };
+
+        TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Page 1 of 2");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1&vchunkpage=1");
+        UNIT_ASSERT_VALUES_EQUAL(
+            firstPageRange.Count,
+            CountOccurrences(html, "page=vchunk&vchunk="));
+
+        auto config =
+            TVChunkConfig::MakeDefault(firstPageRange.Count * 32 + 1, 2, 1);
+        config.SetDBGIndex(1);
+        data.Dbgs.front().VChunks = {{.Config = std::move(config)}};
+        data.VChunkPage = 1;
+        html = RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        UNIT_ASSERT_STRING_CONTAINS(html, "Page 2 of 2");
+        UNIT_ASSERT_STRING_CONTAINS(html, "page=dbg&dbg=1&vchunkpage=0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            CountOccurrences(html, "page=vchunk&vchunk="));
     }
 
     Y_UNIT_TEST(DbgDetailShowsImbalanceAndBalanceButtons)

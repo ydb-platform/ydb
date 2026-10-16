@@ -2,114 +2,142 @@ name: Run and debug tests
 
 on:
   workflow_dispatch:
-    inputs:
-      test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
-        required: false
-        type: string
-        default: 'ydb/tests/olap/'
-      build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
-        required: false
-        type: string
-        default: 'relwithdebinfo, release-asan'
-      branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
-        required: false
-        type: string
-        default: ''
-      use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      branches_json: ${{ steps.format-branches.outputs.branches_json }}
-      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+  probe_vs_checkout:
+    name: Probe then checkout x5
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    timeout-minutes: 180
     steps:
-      - name: Format branches
-        id: format-branches
+      - name: Compare probe speed with checkout duration
+        env:
+          GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
+        shell: bash
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
-            echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
-            JSON_BRANCHES="["
-            FIRST=true
-            for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
-              if [ -n "$branch" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_BRANCHES+=", "
-                fi
-                JSON_BRANCHES+="\"$branch\""
-              fi
+          set -euo pipefail
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_CONFIG_GLOBAL=/dev/null
+
+          proxy_url="${GH_PROXY_URL:-}"
+          proxy_url="${proxy_url%/}"
+          if [ -z "$proxy_url" ]; then
+            echo "GH_PROXY_URL is empty"
+            exit 1
+          fi
+          repo_url=https://github.com/ydb-platform/ydb.git
+          instead="url.${proxy_url}/https://github.com/.insteadOf=https://github.com/"
+
+          # Same window as the CI probe: bytes added after tmp_pack passes 1 MB, for up to 15s.
+          pack_size() {
+            local f
+            f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
+            if [ -z "$f" ]; then echo 0; return; fi
+            stat -c %s "$f" 2>/dev/null || echo 0
+          }
+          final_pack() {
+            find "$1/.git/objects/pack" -name '*.pack' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}'
+          }
+          mbps() {
+            awk -v b="${1:-0}" 'BEGIN { printf "%.2f", (b + 0) / 1000000 }'
+          }
+
+          measure() {
+            local git_config=$1 dest log pid i sz s1 grown elapsed
+            dest=$(mktemp -d /tmp/gh-probe.XXXXXX)
+            log=$(mktemp)
+            if [ -n "$git_config" ]; then
+              git -c "$git_config" clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+            else
+              git clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+            fi
+            pid=$!
+            s1=0
+            for i in $(seq 1 45); do
+              sleep 1
+              sz=$(pack_size "$dest")
+              if [ "$sz" -gt 1000000 ]; then s1=$sz; break; fi
             done
-            JSON_BRANCHES+="]"
-            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
-          fi
+            grown=$s1
+            elapsed=0
+            if [ "$s1" -gt 0 ]; then
+              for i in $(seq 1 15); do
+                sleep 1
+                sz=$(pack_size "$dest")
+                if [ "$sz" -lt "$grown" ]; then sz=$grown; fi
+                if [ "$sz" -gt "$grown" ]; then grown=$sz; elapsed=$i; fi
+              done
+            fi
+            if [ "$elapsed" -lt 1 ]; then elapsed=1; fi
+            kill "$pid" 2>/dev/null || true
+            pkill -P "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            if [ "$s1" -eq 0 ]; then
+              echo "probe never received a pack:" >&2
+              tr '\r' '\n' < "$log" | grep -E 'Receiving objects|fatal:' | tail -3 >&2 || true
+            fi
+            rm -rf "$dest"
+            rm -f "$log"
+            echo "$(( (grown - s1) / elapsed ))"
+          }
 
-      - name: Format build presets
-        id: format-build-preset
-        run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
-          if [ -z "$BUILD_PRESET_INPUT" ]; then
-            BUILD_PRESET_INPUT="relwithdebinfo"
-          fi
-          
-          # Check if already JSON array
-          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
-            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
-            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
-            JSON_PRESETS="["
-            FIRST=true
-            for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
-              if [ -n "$preset" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_PRESETS+=", "
-                fi
-                JSON_PRESETS+="\"$preset\""
-              fi
-            done
-            JSON_PRESETS+="]"
-            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
-          fi
+          timed_clone() {
+            local git_config=$1 dest start end rc bytes secs
+            dest=$(mktemp -d /tmp/gh-co.XXXXXX)
+            start=$(date +%s)
+            rc=0
+            if [ -n "$git_config" ]; then
+              git -c "$git_config" clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$dest/clone.log" 2>&1 || rc=$?
+            else
+              git clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$dest/clone.log" 2>&1 || rc=$?
+            fi
+            end=$(date +%s)
+            bytes=$(final_pack "$dest")
+            secs=$((end - start))
+            if [ "$secs" -lt 1 ]; then secs=1; fi
+            if [ "$rc" -ne 0 ]; then
+              echo "clone failed rc=$rc" >&2
+              tail -5 "$dest/clone.log" >&2 || true
+            fi
+            rm -rf "$dest"
+            echo "$rc $secs $bytes $((bytes / secs))"
+          }
 
-  main:
-    name: Run and debug tests
-    needs: prepare
-    uses: ./.github/workflows/run_tests.yml
-    secrets: inherit
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
-    with:
-      test_targets: ${{ inputs.test_targets }}
-      test_size: small,medium
-      build_preset: ${{ matrix.build_preset }}
-      branches: ${{ needs.prepare.outputs.branches_json || '' }}
-      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+          summary=$(mktemp)
+          {
+            echo "probe is one path at a time, same 15s window as CI. checkouts of depth-1 main run together."
+            echo "round | probe direct MB/s | probe proxy MB/s | co direct s | co direct MB/s | co proxy s | co proxy MB/s | probe picks | checkout faster"
+          } | tee "$summary" "$GITHUB_STEP_SUMMARY"
 
-  collect_combined_summary:
-    needs: main
-    if: always()
-    uses: ./.github/workflows/collect_combined_summary.yml
+          for round in 1 2 3 4 5; do
+            echo "===== round $round probe ====="
+            direct_bps=$(measure "")
+            proxy_bps=$(measure "$instead")
+            echo "===== round $round checkout ====="
+            direct_out=$(mktemp)
+            proxy_out=$(mktemp)
+            timed_clone "" >"$direct_out" &
+            dpid=$!
+            timed_clone "$instead" >"$proxy_out" &
+            ppid=$!
+            wait "$dpid" || true
+            wait "$ppid" || true
+            read -r d_rc d_secs d_bytes d_co_bps <"$direct_out"
+            read -r p_rc p_secs p_bytes p_co_bps <"$proxy_out"
+            rm -f "$direct_out" "$proxy_out"
+
+            probe_pick=github
+            if [ "${proxy_bps:-0}" -gt "${direct_bps:-0}" ]; then probe_pick=proxy; fi
+            co_faster=github
+            if [ "${p_co_bps:-0}" -gt "${d_co_bps:-0}" ]; then co_faster=proxy; fi
+            line=$(printf '%s | %s | %s | %ss rc=%s | %s | %ss rc=%s | %s | %s | %s' \
+              "$round" \
+              "$(mbps "$direct_bps")" "$(mbps "$proxy_bps")" \
+              "$d_secs" "$d_rc" "$(mbps "$d_co_bps")" \
+              "$p_secs" "$p_rc" "$(mbps "$p_co_bps")" \
+              "$probe_pick" "$co_faster")
+            echo "$line" | tee -a "$summary" "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "===== summary ====="
+          cat "$summary"

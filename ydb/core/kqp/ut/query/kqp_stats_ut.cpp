@@ -234,6 +234,7 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
     UNIT_ASSERT(hits && misses && compilations && requests && queueSize);
     const ui64 initialHits = hits->Val();
     const ui64 initialMisses = misses->Val();
+    ui64 expectedMisses = initialMisses;
     auto context = MakeIntrusive<TUserRequestContext>("cache-scenarios", "/Root", "cache-scenarios");
     auto gucSettings = std::make_shared<TGUCSettings>();
     auto tempTables = std::make_shared<TKqpTempTablesState>();
@@ -265,19 +266,22 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
             response->Get()->CompileResult->Issues.ToString());
         UNIT_ASSERT(!response->Get()->Stats.FromCache);
-        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + attempt);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), ++expectedMisses);
         UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
     }
 
-    // Invalid SQL cannot be satisfied by either cache, even if AST translation fails first.
+    // Invalid SQL cannot be satisfied by either cache. With the AST cache the text miss is only
+    // reported after parsing, which fails here, so nothing is counted.
     const ui64 beforeInvalidCompilations = compilations->Val();
     send(makeQuery("SELEC invalid syntax;"), true);
     UNIT_ASSERT(receive()->Get()->CompileResult->Status != Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 3);
+    expectedMisses += AstCache ? 0 : 1;
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeInvalidCompilations + (AstCache ? 0 : 1));
 
-    // Both cold requests need a new plan, but share one physical compilation.
+    // Both cold requests need a new plan, but share one physical compilation. The queued waiter
+    // joins the active compilation; with the AST cache it never reaches the AST lookup.
     const auto shared = makeQuery(Q1_("SELECT 77 AS shared_compilation_counter;"));
     const ui64 beforeSharedCompilations = compilations->Val();
     const auto beforeSharedRequests = requests->Val();
@@ -303,13 +307,14 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
         }
         UNIT_ASSERT_VALUES_EQUAL(result->Uid, sharedUid);
     }
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 5);
+    expectedMisses += AstCache ? 1 : 2;
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSharedCompilations + 1);
 
     send(shared, true);
     UNIT_ASSERT(receive()->Get()->Stats.FromCache);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 5);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 1);
 
     // AST equivalence must not reuse another user's plan.
@@ -320,10 +325,10 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
     UNIT_ASSERT_VALUES_EQUAL_C(anotherResponse->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
         anotherResponse->Get()->CompileResult->Issues.ToString());
     UNIT_ASSERT(!anotherResponse->Get()->Stats.FromCache);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), ++expectedMisses);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 1);
 
-    // NeedToSplit and SPLIT are intermediate results, not completed client compilations.
+    // NeedToSplit is an ordinary lookup miss; the follow-up SPLIT request is not a lookup.
     const auto ctas = makeQuery(R"(
         CREATE TABLE `/Root/CompilationCacheCtas` (PRIMARY KEY (Key))
         WITH (STORE = ROW) AS SELECT 1u AS Key;
@@ -331,17 +336,17 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
     send(ctas, false);
     const auto ctasResponse = receive();
     UNIT_ASSERT(ctasResponse->Get()->CompileResult->NeedToSplit);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), ++expectedMisses);
     const ui64 beforeSplitCompilations = compilations->Val();
     send(ctas, false, ctasResponse->Get()->CompileResult->QueryAst, true);
     const auto splitResponse = runtime.GrabEdgeEvent<TEvKqp::TEvSplitResponse>(edge, TDuration::Seconds(30));
     UNIT_ASSERT(splitResponse);
     UNIT_ASSERT_VALUES_EQUAL_C(splitResponse->Get()->Status, Ydb::StatusIds::SUCCESS, splitResponse->Get()->Issues.ToString());
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 1);
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations);
 
-    // A missing UID is a service error, not a completed non-cached compilation.
+    // A UID lookup is a hit while the entry exists and a miss once it has been invalidated.
     const auto getRequests = internalCounters->FindCounter("Compilation/Requests/Get");
     UNIT_ASSERT(getRequests);
     const auto beforeGetRequests = getRequests->Val();
@@ -360,7 +365,10 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Stats.FromCache, !invalidated);
         UNIT_ASSERT_VALUES_EQUAL(getRequests->Val(), beforeGetRequests + (invalidated ? 2 : 1));
         UNIT_ASSERT_VALUES_EQUAL(requests->Val(), beforeUidCompileRequests);
-        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 6);
+        if (invalidated) {
+            ++expectedMisses;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
         UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
         UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations);
     }
@@ -369,7 +377,7 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
     UNIT_ASSERT_VALUES_EQUAL_C(afterInvalidation->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
         afterInvalidation->Get()->CompileResult->Issues.ToString());
     UNIT_ASSERT(!afterInvalidation->Get()->Stats.FromCache);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 7);
+    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), ++expectedMisses);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations + 1);
 
@@ -381,7 +389,7 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
         const auto parsed = runtime.GrabEdgeEvent<TEvKqp::TEvParseResponse>(edge, TDuration::Seconds(30));
         UNIT_ASSERT(parsed);
         UNIT_ASSERT_VALUES_EQUAL(parsed->Get()->AstStatements.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 7);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
         UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
         for (ui64 attempt = 0; attempt < 2; ++attempt) {
             const auto& ast = parsed->Get()->AstStatements[attempt];
@@ -390,20 +398,20 @@ Y_UNIT_TEST_TWIN(CompilationCacheRequestScenarios, AstCache) {
             UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
                 response->Get()->CompileResult->Issues.ToString());
             UNIT_ASSERT(!response->Get()->Stats.FromCache);
-            UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 8 + attempt);
+            UNIT_ASSERT_VALUES_EQUAL(misses->Val(), ++expectedMisses);
         }
     } else {
         const auto response = receive();
         UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS,
             response->Get()->CompileResult->Issues.ToString());
         UNIT_ASSERT(!response->Get()->Stats.FromCache);
-        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 8);
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), ++expectedMisses);
     }
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + 2);
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeSplitCompilations + (AstCache ? 3 : 2));
 }
 
-Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
+Y_UNIT_TEST_TWIN(CompilationCacheLookupCounters, AstCache) {
     auto settings = TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false);
     auto* config = settings.AppConfig.MutableTableServiceConfig();
     config->SetEnableAstCache(AstCache);
@@ -436,11 +444,11 @@ Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
     const auto dbHits = dbPublicCounters->FindNamedCounter("name", "table.query.compilation.cache_hits");
     const auto dbMisses = dbPublicCounters->FindNamedCounter("name", "table.query.compilation.cache_misses");
     TIntrusiveConstPtr<NACLib::TUserToken> token = new NACLib::TUserToken("root@builtin", {});
-    auto context = MakeIntrusive<TUserRequestContext>("completed-cache", "/Root", "completed-cache");
+    auto context = MakeIntrusive<TUserRequestContext>("lookup-cache", "/Root", "lookup-cache");
     auto gucSettings = std::make_shared<TGUCSettings>();
     auto send = [&](const TString& text, bool warmup = false, TInstant deadline = TInstant::Max(),
                     std::shared_ptr<std::atomic<bool>> interested = std::make_shared<std::atomic<bool>>(true)) {
-        TMaybe<TKqpQueryId> query = TKqpQueryId("db", "/Root", "completed-cache", "root@builtin", text,
+        TMaybe<TKqpQueryId> query = TKqpQueryId("db", "/Root", "lookup-cache", "root@builtin", text,
             TKqpQuerySettings(NKikimrKqp::QUERY_TYPE_SQL_DML), nullptr, *gucSettings);
         runtime.Send(new IEventHandle(service, edge, new TEvKqp::TEvCompileRequest(
             token, "", Nothing(), std::move(query), true, false, false, deadline, dbCounters, gucSettings,
@@ -452,24 +460,36 @@ Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
         UNIT_ASSERT(response && response->Get()->CompileResult);
         return response;
     };
+    ui64 expectedMisses = initialMisses;
+    auto assertMisses = [&] {
+        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), expectedMisses);
+        UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), expectedMisses - initialMisses);
+    };
 
-    // No miss is reported before completion, even with the compiler and queue occupied.
+    // A miss is reported at lookup time, before the request is queued. Without the AST cache every
+    // request is classified immediately, so later rejection, timeout or cancellation still counts.
+    // With the AST cache the text miss is deferred to the AST lookup after parsing, so requests
+    // that never leave the parse queue are not counted.
     TBlockEvents<TEvKqp::TEvCompileResponse> blocked(runtime, [&](const auto& ev) {
         return ev->GetRecipientRewrite() != edge;
     });
     send("SELECT 1 AS active;");
     runtime.WaitFor("active compilation", [&] { return !blocked.empty(); }, TDuration::Seconds(30));
+    ++expectedMisses;
+    assertMisses();
     send("SELECT 2 AS timed_out;", false, TInstant::MicroSeconds(1));
     auto interested = std::make_shared<std::atomic<bool>>(true);
     send("SELECT 3 AS cancelled;", false, TInstant::Max(), interested);
     runtime.WaitFor("queued requests", [&] { return queueSize->Val() == 2; }, TDuration::Seconds(30));
     UNIT_ASSERT_VALUES_EQUAL(requests->Val(), initialRequests + 3);
+    expectedMisses += AstCache ? 0 : 2;
+    assertMisses();
     send("SELECT 4 AS overloaded;");
     UNIT_ASSERT_VALUES_EQUAL(receive()->Get()->CompileResult->Status, Ydb::StatusIds::OVERLOADED);
     UNIT_ASSERT_VALUES_EQUAL(rejected->Val(), initialRejected + 1);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses);
+    expectedMisses += AstCache ? 0 : 1;
+    assertMisses();
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits);
-    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 1);
     interested->store(false);
     blocked.Stop().Unblock();
@@ -484,23 +504,25 @@ Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
     }
     UNIT_ASSERT(completed && timedOut);
     UNIT_ASSERT_VALUES_EQUAL(timeouts->Val(), initialTimeouts + 1);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 1);
-    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 1);
+    // Completion does not report anything on its own.
+    assertMisses();
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 1);
 
     // A later completed request also proves that the cancelled queued request was dropped.
     send("SELECT 5 AS after_cancellation;");
     UNIT_ASSERT_VALUES_EQUAL(receive()->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 2);
-    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 2);
+    ++expectedMisses;
+    assertMisses();
     UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), initialCompilations + 2);
 
-    // Warmup compilation does not add a client miss; a warmup cache hit is still a hit.
+    // Warmup lookups are counted like client lookups, so hits and misses stay symmetric.
     const TString warmQuery = "SELECT 6 AS warm_counter;";
     send(warmQuery, true);
     const auto warmResponse = receive();
     UNIT_ASSERT_VALUES_EQUAL(warmResponse->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT(!warmResponse->Get()->Stats.FromCache);
+    ++expectedMisses;
+    assertMisses();
     send(warmQuery, true);
     UNIT_ASSERT(receive()->Get()->Stats.FromCache);
     send("select 6 as warm_counter;", true);
@@ -508,20 +530,20 @@ Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
     UNIT_ASSERT_VALUES_EQUAL(warmAstResponse->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(warmAstResponse->Get()->Stats.FromCache, AstCache);
     const auto warmupHits = AstCache ? 2 : 1;
-    UNIT_ASSERT_VALUES_EQUAL(misses->Val(), initialMisses + 2);
+    expectedMisses += AstCache ? 0 : 1;
+    assertMisses();
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + warmupHits);
-    UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), 2);
     UNIT_ASSERT_VALUES_EQUAL(dbHits->Val(), warmupHits);
     send(warmQuery);
     UNIT_ASSERT(receive()->Get()->Stats.FromCache);
     UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + warmupHits + 1);
     UNIT_ASSERT_VALUES_EQUAL(dbHits->Val(), warmupHits + 1);
 
-    // Classify each waiter separately, regardless of which one starts the shared compilation.
+    // Each waiter is classified at its own lookup, regardless of which one starts the shared
+    // compilation. With the AST cache the queued waiter joins the active compilation before its
+    // AST lookup, so only the first request is counted.
     for (const bool warmupFirst : {false, true}) {
         const TString query = warmupFirst ? "SELECT 7 AS warmup_first;" : "SELECT 8 AS client_first;";
-        const auto beforeMisses = misses->Val();
-        const auto beforeDbMisses = dbMisses->Val();
         const auto beforeRequests = requests->Val();
         const auto beforeCompilations = compilations->Val();
         TBlockEvents<TEvKqp::TEvCompileResponse> shared(runtime, [&](const auto& ev) {
@@ -534,15 +556,15 @@ Y_UNIT_TEST_TWIN(CompilationCacheCompletedClientCounters, AstCache) {
         UNIT_ASSERT_VALUES_EQUAL(requests->Val(), beforeRequests + 2);
         UNIT_ASSERT_VALUES_EQUAL(shared.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeCompilations + 1);
-        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), beforeMisses);
+        expectedMisses += AstCache ? 1 : 2;
+        assertMisses();
         shared.Stop().Unblock();
         for (ui32 i = 0; i < 2; ++i) {
             const auto response = receive();
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->CompileResult->Status, Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT(!response->Get()->Stats.FromCache);
         }
-        UNIT_ASSERT_VALUES_EQUAL(misses->Val(), beforeMisses + 1);
-        UNIT_ASSERT_VALUES_EQUAL(dbMisses->Val(), beforeDbMisses + 1);
+        assertMisses();
         UNIT_ASSERT_VALUES_EQUAL(compilations->Val(), beforeCompilations + 1);
         UNIT_ASSERT_VALUES_EQUAL(hits->Val(), initialHits + warmupHits + 1);
         UNIT_ASSERT_VALUES_EQUAL(dbHits->Val(), warmupHits + 1);

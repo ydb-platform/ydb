@@ -45,7 +45,7 @@ bool TStoragesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionCon
     if (!Self->StoragesManager->LoadIdempotency(txc.DB)) {
         return false;
     }
-    Self->InitFindEmptyHistoryIntervals();
+    Self->FindEmptyHistoryIntervals.Initialize();
     return true;
 }
 

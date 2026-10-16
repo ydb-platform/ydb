@@ -21,8 +21,11 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, T
     Manager->OnGCFinishedOnExecute(CollectGenStepInFlight, dbBlobs);
 }
 
-bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& /*taskAction*/) {
     Manager->OnGCFinishedOnComplete(CollectGenStepInFlight);
+    if (CollectGenStepInFlight) {
+        self.StartFindEmptyHistoryIntervals(CollectGenStepInFlight->Generation(), TActivationContext::AsActorContext());
+    }
     return true;
 }
 

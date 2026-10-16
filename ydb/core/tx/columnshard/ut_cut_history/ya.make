@@ -13,6 +13,9 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(ut_cut_history.cpp)
+SRCS(
+    ut_cut_history.cpp
+    ut_portion_filter.cpp
+)
 
 END()

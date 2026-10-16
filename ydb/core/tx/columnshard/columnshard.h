@@ -95,6 +95,11 @@ enum EEv {
     EvOverloadReady,
     EvOverloadUnsubscribe,
 
+    EvFindEmptyHistoryIntervalsContinue,
+    EvFindEmptyHistoryIntervalsResourcesReady,
+    EvFindEmptyHistoryIntervalsAccessorsReady,
+    EvFindEmptyHistoryIntervalsScanFinished,
+
     EvEnd
 };
 

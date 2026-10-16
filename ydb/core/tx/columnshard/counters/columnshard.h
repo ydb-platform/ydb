@@ -272,8 +272,8 @@ public:
         CutHistoryScansAborted->Inc();
     }
 
-    void OnCutHistoryBlobGroupMismatch() const {
-        CutHistoryBlobGroupMismatches->Inc();
+    void OnCutHistoryBlobGroupMismatches(ui64 count) const {
+        CutHistoryBlobGroupMismatches->Add(count);
     }
 
     void OnCutHistoryScanFinished(const TDuration duration) const {

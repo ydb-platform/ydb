@@ -12,8 +12,6 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
-#include <set>
-
 namespace NKikimrColumnShardBlobOperationsProto {
 class TTabletByBlob;
 class TTabletsByBlob;
@@ -64,14 +62,6 @@ private:
     std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator> Blobs;
 
 public:
-    auto begin() const {
-        return Blobs.begin();
-    }
-
-    auto end() const {
-        return Blobs.end();
-    }
-
     [[nodiscard]] bool Add(const TLogoBlobID& blobId) {
         return Blobs.emplace(blobId).second;
     }

@@ -114,6 +114,7 @@ namespace NBlobOperations {
 namespace NBlobStorage {
 class TWriteAction;
 class TOperator;
+class TGCTask;
 }   // namespace NBlobStorage
 
 namespace NTier {
@@ -216,7 +217,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
     friend class TTxSaveCutHistoryRequests;
-    friend class TFindEmptyHistoryIntervalsResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -234,6 +234,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NCompaction::TGeneralCompactColumnEngineChanges;
     friend class NOlap::NBlobOperations::NBlobStorage::TWriteAction;
     friend class NOlap::NBlobOperations::NBlobStorage::TOperator;
+    friend class NOlap::NBlobOperations::NBlobStorage::TGCTask;
     friend class NOlap::NBlobOperations::NTier::TOperator;
 
     friend class NOlap::NDataSharing::TTxDataFromSource;
@@ -604,14 +605,10 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    std::optional<TEmptyHistoryIntervalsScan> EmptyHistoryIntervalsScan;
-    void InitFindEmptyHistoryIntervals();
-    void StartFindEmptyHistoryIntervals(const TActorContext& ctx);
-    void AbortFindEmptyHistoryIntervals();
-    void FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result);
-    void TryCutHistory(const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
+    TFindEmptyHistoryIntervals FindEmptyHistoryIntervals;
+    bool CanCutHistory() const;
+    void StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx);
+    void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();
@@ -638,7 +635,6 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
-    void ResumePostponedCutHistory(const TActorContext& ctx);
     ui64 TabletTxCounter = 0;
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {

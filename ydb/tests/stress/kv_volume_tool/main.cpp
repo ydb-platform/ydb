@@ -179,6 +179,20 @@ int FailGrpc(const grpc::Status& status) {
     return 1;
 }
 
+int FailOperation(const char* name, const Ydb::Operations::Operation& operation) {
+    if (operation.status() == Ydb::StatusIds::UNAVAILABLE) {
+        return TryNextNode;
+    }
+    Cerr << name << " failed with status: " << StatusToString(operation.status()) << Endl;
+    if (operation.issues_size() > 0) {
+        Cerr << "Issues:" << Endl;
+        for (const auto& issue : operation.issues()) {
+            Cerr << "  " << issue.message() << Endl;
+        }
+    }
+    return 1;
+}
+
 using TKvStub = Ydb::KeyValue::V1::KeyValueService::Stub;
 
 struct TNodeSession {
@@ -504,14 +518,7 @@ int DescribeVolume(TKvStub& stub, const TString& database, const TString& path) 
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "DescribeVolume failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("DescribeVolume", response.operation());
     }
 
     Ydb::KeyValue::DescribeVolumeResult result;
@@ -581,14 +588,7 @@ int CreateVolume(TKvStub& stub, const TString& database, const TString& path, ui
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "CreateVolume failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("CreateVolume", response.operation());
     }
 
     Cout << "Volume created successfully" << Endl;
@@ -625,14 +625,7 @@ int RemoveVolume(TKvStub& stub, const TString& database, const TString& path) {
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "DropVolume failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("DropVolume", response.operation());
     }
 
     Cout << "Volume removed successfully" << Endl;
@@ -680,14 +673,7 @@ int AlterVolume(TKvStub& stub, const TString& database, const TString& path, ui3
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "AlterVolume failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("AlterVolume", response.operation());
     }
 
     Cout << "Volume altered successfully" << Endl;
@@ -728,14 +714,7 @@ int ReadValue(TKvStub& stub, const TString& database, const TString& path, ui64 
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "Read failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("Read", response.operation());
     }
 
     Ydb::KeyValue::ReadResult result;
@@ -795,14 +774,7 @@ int WriteValue(TKvStub& stub, const TString& database, const TString& path, ui64
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "Write failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("Write", response.operation());
     }
 
     Ydb::KeyValue::ExecuteTransactionResult result;
@@ -879,14 +851,7 @@ int ExecuteTransaction(
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << operationName << " failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation(operationName, response.operation());
     }
 
     Ydb::KeyValue::ExecuteTransactionResult result;
@@ -945,14 +910,7 @@ int ReadValueChunk(
     }
 
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        Cerr << "Read failed with status: " << StatusToString(response.operation().status()) << Endl;
-        if (response.operation().issues_size() > 0) {
-            Cerr << "Issues:" << Endl;
-            for (const auto& issue : response.operation().issues()) {
-                Cerr << "  " << issue.message() << Endl;
-            }
-        }
-        return 1;
+        return FailOperation("Read", response.operation());
     }
 
     if (!response.operation().result().UnpackTo(&result)) {
@@ -1147,6 +1105,17 @@ EOpResult FromGrpcStatus(const grpc::Status& status, TString* errorOut) {
     return IsNodeUnavailable(status) ? EOpResult::Unavailable : EOpResult::Failed;
 }
 
+EOpResult FromOperationStatus(const Ydb::Operations::Operation& operation, TString* errorOut) {
+    if (operation.status() == Ydb::StatusIds::SUCCESS) {
+        return EOpResult::Ok;
+    }
+    if (errorOut) {
+        *errorOut = TStringBuilder() << "status=" << StatusToString(operation.status())
+            << " issues=[" << FormatOperationIssues(operation) << "]";
+    }
+    return operation.status() == Ydb::StatusIds::UNAVAILABLE ? EOpResult::Unavailable : EOpResult::Failed;
+}
+
 EOpResult DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
@@ -1168,12 +1137,8 @@ EOpResult DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TSt
     if (!status.ok()) {
         return FromGrpcStatus(status, errorOut);
     }
-    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        if (errorOut) {
-            *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
-                << " issues=[" << FormatOperationIssues(response.operation()) << "]";
-        }
-        return EOpResult::Failed;
+    if (const EOpResult result = FromOperationStatus(response.operation(), errorOut); result != EOpResult::Ok) {
+        return result;
     }
     return EOpResult::Ok;
 }
@@ -1201,12 +1166,8 @@ EOpResult DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TSt
     if (!status.ok()) {
         return FromGrpcStatus(status, errorOut);
     }
-    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        if (errorOut) {
-            *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
-                << " issues=[" << FormatOperationIssues(response.operation()) << "]";
-        }
-        return EOpResult::Failed;
+    if (const EOpResult result = FromOperationStatus(response.operation(), errorOut); result != EOpResult::Ok) {
+        return result;
     }
     return EOpResult::Ok;
 }
@@ -1227,12 +1188,8 @@ EOpResult DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TStr
     if (!status.ok()) {
         return FromGrpcStatus(status, errorOut);
     }
-    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
-        if (errorOut) {
-            *errorOut = TStringBuilder() << "status=" << StatusToString(response.operation().status())
-                << " issues=[" << FormatOperationIssues(response.operation()) << "]";
-        }
-        return EOpResult::Failed;
+    if (const EOpResult result = FromOperationStatus(response.operation(), errorOut); result != EOpResult::Ok) {
+        return result;
     }
     return EOpResult::Ok;
 }

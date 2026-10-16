@@ -20,6 +20,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -3284,6 +3285,122 @@ partitioning_settings {
             return GotModifyResult && ev->GetTypeRewrite() == TEvSchemeShard::EvNotifyTxCompletion;
         }
     };
+
+    Y_UNIT_TEST(CancelAfterSchemeUploadFailure) {
+        using namespace NKikimr::NWrappers::NExternalStorage;
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableViewExport(true);
+        ui64 txId = 100;
+        for (const TString name : {"View1", "View2"}) {
+            TestCreateView(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                Name: "%s" QueryText: "SELECT 1"
+            )", name.c_str()));
+            Env().TestWaitNotification(Runtime(), txId);
+        }
+
+        TBlockEvents<TEvPutObjectRequest> uploads(Runtime());
+        const ui64 exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/View1" destination_prefix: "view1" }
+                items { source_path: "/MyRoot/View2" destination_prefix: "view2" }
+            }
+        )", S3Port()));
+        Runtime().WaitFor("both schema uploads", [&] { return uploads.size() == 2; });
+
+        // Fail one upload while the other uploader is still waiting for S3.
+        const auto pendingUploader = uploads.back()->Sender;
+        TBlockEvents<TEvents::TEvPoisonPill> poison(Runtime(), [&](auto& ev) {
+            return ev->Recipient == pendingUploader;
+        });
+        const auto& failed = uploads.front();
+        Aws::Client::AWSError<Aws::S3::S3Errors> error(
+            Aws::S3::S3Errors::ACCESS_DENIED, "AccessDenied", "Injected schema upload failure", false);
+        error.SetResponseCode(Aws::Http::HttpResponseCode::FORBIDDEN);
+        Runtime().Send(new IEventHandle(failed->Sender, failed->Recipient,
+            new TEvPutObjectResponse(TString(failed->Get()->Request.GetKey()),
+                TEvPutObjectResponse::TOutcome(std::move(error)))), 0, true);
+
+        // Poison is sent after cancellation commits. No further response from
+        // the stopped sibling should be needed to finish the export.
+        Runtime().WaitFor("sibling uploader cancellation", [&] { return !poison.empty(); });
+        const auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(entry.HasEndTime());
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Injected schema upload failure");
+
+        poison.Stop().Unblock();
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(CancelExportInReadOnlyMode) {
+        Env();
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        ui64 backupTxId = 0;
+        auto observer = Runtime().AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup) {
+                backupTxId = record.GetTxId();
+            }
+        });
+        TBlockEvents<TEvDataShard::TEvSchemaChanged> schemaChanged(Runtime(), [&](auto& ev) {
+            return backupTxId && ev->Get()->Record.GetTxId() == backupTxId;
+        });
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletion> subscriptions(Runtime(), [&](auto& ev) {
+            return backupTxId && ev->Get()->Record.GetTxId() == backupTxId;
+        });
+
+        const ui64 exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_path: "/MyRoot/Table" destination_prefix: "table" }
+            }
+        )", S3Port()));
+        Runtime().WaitFor("export waiting for backup", [&] { return !subscriptions.empty(); });
+
+        const auto readOnly = SendSchemeShardMonRequest(Runtime(), TTestTxConfig::SchemeShard,
+            "/app?Page=AdminRequest&IsReadOnlyMode=1", HTTP_METHOD_POST);
+        UNIT_ASSERT_STRING_CONTAINS(readOnly.Body, "IsReadOnlyMode changed from 0 to 1");
+        TestMkDir(Runtime(), ++txId, "/MyRoot", "Rejected", {{NKikimrScheme::StatusReadOnly}});
+
+        TBlockEvents<TEvSchemeShard::TEvCancelTxResult> acknowledgements(Runtime());
+        TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+        Runtime().WaitFor("backup cancellation acknowledgement", [&] { return !acknowledgements.empty(); },
+            TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(acknowledgements.front()->Get()->Record.GetTargetTxId(), backupTxId);
+        UNIT_ASSERT_VALUES_EQUAL(acknowledgements.front()->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted);
+        acknowledgements.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), exportId);
+        const auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT(desc.GetResponse().GetEntry().HasEndTime());
+
+        schemaChanged.Stop().Unblock();
+        subscriptions.Stop().Unblock();
+        const auto writable = SendSchemeShardMonRequest(Runtime(), TTestTxConfig::SchemeShard,
+            "/app?Page=AdminRequest&IsReadOnlyMode=0", HTTP_METHOD_POST);
+        UNIT_ASSERT_STRING_CONTAINS(writable.Body, "IsReadOnlyMode changed from 1 to 0");
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
 
     Y_UNIT_TEST(CancelledExportEndTime) {
         Env(); // Init test env

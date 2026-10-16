@@ -21,6 +21,27 @@
 
 namespace NKikimr::NOlap {
 
+std::optional<ui32> TIndexInfo::GetBloomNgramSize(const ui32 columnId, const bool caseSensitive) const {
+    std::optional<ui32> smallest;
+    for (const auto& [_, container] : Indexes) {
+        if (!container) {
+            continue;
+        }
+        const auto ngramSize = container->GetCompatibleBloomNgramSize(caseSensitive);
+        if (!ngramSize) {
+            continue;
+        }
+        const auto indexedColumn = container->GetSingleColumnId();
+        if (!indexedColumn || *indexedColumn != columnId) {
+            continue;
+        }
+        if (!smallest || *ngramSize < *smallest) {
+            smallest = *ngramSize;
+        }
+    }
+    return smallest;
+}
+
 TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
         return TConclusionStatus::Fail(

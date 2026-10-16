@@ -146,6 +146,15 @@ bool TOlapStoreInfo::ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescrip
 
     size_t protoIndex = 0;
     for (const auto& presetProto : descriptionProto.GetSchemaPresets()) {
+        for (const auto& column : presetProto.GetSchema().GetColumns()) {
+            if (column.HasDefaultFromExpression()) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                    << "Generated column '" << column.GetName()
+                    << "' is not supported in TABLESTORE schema presets");
+                return false;
+            }
+        }
+
         TOlapStoreSchemaPreset preset;
         if (!preset.ParseFromRequest(presetProto, errors)) {
             return false;

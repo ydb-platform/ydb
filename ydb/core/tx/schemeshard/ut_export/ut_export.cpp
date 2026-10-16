@@ -1694,6 +1694,42 @@ partitioning_settings {
             Ydb::StatusIds::CANCELLED);
     }
 
+    Y_UNIT_TEST(ShouldRejectExportOfColumnTableWithGeneratedColumn) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        const TVector<TString> columnTables = {R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint64" NotNull: true }
+                Columns { Name: "source" Type: "Int64" }
+                Columns {
+                    Name: "derived"
+                    Type: "Int64"
+                    DefaultFromExpression {
+                        ExprText: "COALESCE(source, 0) + 1"
+                        DependencyColumnNames: "source"
+                        Stored: false
+                    }
+                }
+                KeyColumnNames: "key"
+            }
+        )"};
+
+        Run(Runtime(), Env(), TVector<TString>{}, Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/ColumnTable"
+                    destination_prefix: ""
+                }
+            }
+        )", S3Port()), Ydb::StatusIds::CANCELLED, "/MyRoot", false, "", "", {}, false, columnTables);
+    }
+
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
         const TTablesWithAttrs tables{
             {

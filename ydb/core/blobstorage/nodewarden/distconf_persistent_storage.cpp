@@ -11,7 +11,6 @@ namespace NKikimr::NStorage {
         class TReaderActor : public TActorBootstrapped<TReaderActor> {
             const std::vector<TString> Paths;
             const ui64 Cookie;
-            std::vector<ui32> RetryDelays;
             ui32 RepliesPending = 0;
             std::unique_ptr<TEvPrivate::TEvStorageConfigLoaded> Response = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
             TActorId ParentId;
@@ -20,7 +19,6 @@ namespace NKikimr::NStorage {
             TReaderActor(std::vector<TString> paths, ui64 cookie)
                 : Paths(std::move(paths))
                 , Cookie(cookie)
-                , RetryDelays(Paths.size(), 1)
             {}
 
             void Bootstrap(TActorId parentId) {
@@ -72,25 +70,11 @@ namespace NKikimr::NStorage {
                         break;
 
                     case NPDisk::EPDiskMetadataOutcome::ERROR:
-                        if (!Cookie) {
-                            // Bootstrap must learn every drive's contents before writing
-                            // back a local config: an unread drive may hold a newer commit.
-                            auto& delay = RetryDelays[index];
-                            Schedule(TDuration::Seconds(delay), new TEvents::TEvWakeup(index));
-                            delay = Min(delay * 2, 30u);
-                            return;
-                        }
                         Response->Errors.push_back(path);
                         break;
                 }
                 --RepliesPending;
                 CheckIfDone();
-            }
-
-            void Handle(TEvents::TEvWakeup::TPtr ev) {
-                const size_t index = ev->Get()->Tag;
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
-                    new TEvNodeWardenReadMetadata(Paths.at(index)), 0, index);
             }
 
             void CheckIfDone() {
@@ -102,7 +86,6 @@ namespace NKikimr::NStorage {
 
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvNodeWardenReadMetadataResult, Handle);
-                hFunc(TEvents::TEvWakeup, Handle);
             )
         };
         Register(new TReaderActor(std::move(paths), cookie));
@@ -312,6 +295,12 @@ namespace NKikimr::NStorage {
                 drivesToRead.push_back(drive.GetPath());
             };
 
+            // An empty record means a successful read of an empty disk. Keep it
+            // distinct from a failed read, whose existing metadata is still unknown.
+            for (const auto& [path, guid] : msg.NoMetadata) {
+                MetadataByPath.try_emplace(path);
+            }
+
             for (const auto& [path, m, guid] : msg.MetadataPerPath) {
                 MetadataByPath[path] = m;
 
@@ -360,7 +349,10 @@ namespace NKikimr::NStorage {
                     const auto [begin, end] = std::ranges::remove_if(drivesToWrite, [&](const TString& path) {
                         const auto it = MetadataByPath.find(path);
                         if (it == MetadataByPath.end()) {
-                            return false; // this drive did not contain any metadata at all, we have to write it
+                            // Do not overwrite unread metadata using a local commit:
+                            // this drive may contain a newer generation. Let bootstrap
+                            // finish so cluster quorum recovery can resolve the config.
+                            return true;
                         }
                         const NKikimrBlobStorage::TPDiskMetadataRecord& m = it->second;
                         if (!m.HasCommittedStorageConfig()) {

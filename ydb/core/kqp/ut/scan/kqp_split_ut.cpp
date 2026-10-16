@@ -21,6 +21,8 @@
 
 #include <library/cpp/threading/future/async.h>
 
+#include <util/system/mutex.h>
+
 namespace NKikimr {
 namespace NKqp {
 

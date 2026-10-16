@@ -468,23 +468,11 @@ namespace {
 
     // ==================== Test context and table helpers ====================
 
-    struct TTliLogs {
-        TString Snapshot() const {
-            TGuard<TMutex> guard(*Mutex_);
-            return Stream_.Str();
-        }
-
-    private:
-        friend TKikimrSettings MakeKikimrSettings(TTliLogs&);
-
-        TStringStream Stream_;
-        std::shared_ptr<TMutex> Mutex_ = std::make_shared<TMutex>();
-    };
+    using TTliLogs = TCapturedLog;
 
     TKikimrSettings MakeKikimrSettings(TTliLogs& ss) {
         TKikimrSettings settings;
-        settings.LogStream = &ss.Stream_;
-        settings.LogStreamMutex = ss.Mutex_;
+        settings.SetLogCapture(ss);
         settings.SetWithSampleTables(false);
         return settings;
     }

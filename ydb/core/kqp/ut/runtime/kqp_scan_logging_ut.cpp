@@ -11,9 +11,9 @@ using namespace NYdb::NTable;
 
 namespace {
 
-TKikimrSettings AppSettings(TStringStream& logStream) {
+TKikimrSettings AppSettings(const TCapturedLog& logStream) {
     TKikimrSettings serverSettings;
-    serverSettings.LogStream = &logStream;
+    serverSettings.LogCapture = logStream;
 
     return serverSettings;
 }
@@ -29,7 +29,7 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=300) {
 }
 
 void RunTestForQuery(const std::string& query, const std::string& expectedLog, bool enabledLogs) {
-    TStringStream logsStream;
+    TCapturedLog logsStream;
     {
         Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
         TKikimrRunner kikimr(AppSettings(logsStream));
@@ -56,9 +56,10 @@ void RunTestForQuery(const std::string& query, const std::string& expectedLog, b
         Cout << output << Endl;
     }
 
+    TStringStream input(logsStream.Snapshot());
     bool hasExpectedLog = false;
     TString line;
-    while (logsStream.ReadLine(line)) {
+    while (input.ReadLine(line)) {
         if (line.Contains(expectedLog)) {
             hasExpectedLog = true;
             break;

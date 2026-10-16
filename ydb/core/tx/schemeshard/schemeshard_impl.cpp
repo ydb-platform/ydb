@@ -4145,7 +4145,8 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::StreamingQueryState::AlterVersion>{streamingQuery->AlterVersion},
         NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()},
-        NIceDb::TUpdate<Schema::StreamingQueryState::OperationOwnerActorId>{streamingQuery->OperationOwnerActorId}
+        NIceDb::TUpdate<Schema::StreamingQueryState::OperationOwnerActorId>{streamingQuery->OperationOwnerActorId},
+        NIceDb::TUpdate<Schema::StreamingQueryState::OperationOwnerUserToken>{streamingQuery->OperationOwnerUserToken ? streamingQuery->OperationOwnerUserToken->SerializeAsString() : ""}
     );
 }
 
@@ -4173,7 +4174,9 @@ void TSchemeShard::ResumeStreamingQueriesOperations(const TVector<TPathId>& ids)
         ev->SetRequestGeneration(Generation());
         ev->SetObjectGeneration(streamingQuery->AlterVersion);
         ev->SetOperationOwner(streamingQuery->OperationOwnerActorId);
+        ev->SetUserToken(streamingQuery->OperationOwnerUserToken);
         ev->SetSchemeTxId(ui64(path.Base()->LastTxId));
+        ev->MutableProperties().reserve(streamingQuery->Properties.GetProperties().size());
         for (const auto& [key, value] : streamingQuery->Properties.GetProperties()) {
             ev->MutableProperties().emplace(key, value);
         }

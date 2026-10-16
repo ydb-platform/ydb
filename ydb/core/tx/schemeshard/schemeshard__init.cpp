@@ -2205,6 +2205,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
                 streamingQuery->OperationOwnerActorId = rowset.GetValue<Schema::StreamingQueryState::OperationOwnerActorId>();
 
+                if (const auto& serializedUserToken = rowset.GetValue<Schema::StreamingQueryState::OperationOwnerUserToken>()) {
+                    streamingQuery->OperationOwnerUserToken = NACLib::TUserToken(serializedUserToken);
+                }
+
                 const auto pathIt = Self->PathsById.find(pathId);
                 if (streamingQuery->OperationOwnerActorId && pathIt != Self->PathsById.end() && !pathIt->second->Dropped()) {
                     StreamingQueriesOperationsToResume.emplace_back(pathId);

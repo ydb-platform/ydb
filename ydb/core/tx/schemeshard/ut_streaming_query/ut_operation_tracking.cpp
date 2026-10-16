@@ -141,7 +141,7 @@ struct TFixture {
         return ev;
     }
 
-    TPathId CheckTracking(ui64 version, TActorId owner, const std::optional<TString>& token = std::nullopt,
+    TPathId CheckTracking(ui64 version, TActorId owner, const std::optional<NACLib::TUserToken>& token = std::nullopt,
         const TString& objectId = "DirStreamingQuery/Query")
     {
         auto ev = GrabTracking();
@@ -159,11 +159,22 @@ struct TFixture {
         UNIT_ASSERT_VALUES_EQUAL(request.GetRequestGeneration(), Generations.at(SchemeShardId));
         UNIT_ASSERT_VALUES_EQUAL(request.GetObjectGeneration(), version);
         UNIT_ASSERT_VALUES_EQUAL(request.GetOperationOwner(), owner);
-        const auto it = request.GetProperties().find("__operation_owner_user_token");
-        UNIT_ASSERT_VALUES_EQUAL(it != request.GetProperties().end(), token.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(request.GetUserToken().has_value(), token.has_value());
+
         if (token) {
-            UNIT_ASSERT_VALUES_EQUAL(it->second, *token);
+            const auto& restored = *request.GetUserToken();
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetUserSID(), token->GetUserSID());
+            const auto groups = token->GetGroupSIDs();
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetGroupSIDs().size(), groups.size());
+
+            for (const auto& group : groups) {
+                UNIT_ASSERT(restored.IsExist(group));
+            }
+
+            UNIT_ASSERT(restored.GetOriginalUserToken().empty());
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetSerializedToken(), restored.SerializeAsString());
         }
+
         UNIT_ASSERT(request.GetSchemeTxId());
         return request.GetPathId();
     }
@@ -186,7 +197,7 @@ struct TFixture {
                                "__stopped_by", "__created_at", "__modified_at"}) {
             properties.erase(key);
         }
-        UNIT_ASSERT_VALUES_EQUAL(properties.size(), properties.contains("__operation_owner_user_token") ? 2 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(properties.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), run);
     }
 
@@ -204,16 +215,17 @@ struct TFixture {
     }
 };
 
-std::optional<TString> MakeUserToken(bool enabled) {
+std::optional<NACLib::TUserToken> MakeUserToken(bool enabled) {
     if (enabled) {
-        return "opaque-user-token";
+        return NACLib::TUserToken("original-user-token", "streaming-user", TVector<TString>{"streaming-group", "all-users"});
     }
+
     return std::nullopt;
 }
 
-void SetUserToken(TEvTx& request, const std::optional<TString>& token) {
+void SetUserToken(TEvTx& request, const std::optional<NACLib::TUserToken>& token) {
     if (token) {
-        (*request.Record.MutableTransaction(0)->MutableCreateStreamingQuery()->MutableProperties()->MutableProperties())["__operation_owner_user_token"] = *token;
+        request.Record.SetUserToken(token->SerializeAsString());
     }
 }
 
@@ -222,20 +234,37 @@ void SetUserToken(TEvTx& request, const std::optional<TString>& token) {
 Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
     Y_UNIT_TEST_FLAGS(PendingOperationResumesAfterReboot, Alter, WithUserToken) {
         TFixture f;
+
         if (Alter) {
-            f.Propose(f.MakeRequest(false));
+            f.Propose(f.MakeRequest(/* alter */ false));
         }
+
         const auto token = MakeUserToken(WithUserToken);
         auto request = f.MakeRequest(Alter, f.Owner);
         SetUserToken(*request, token);
         f.Propose(std::move(request));
-        f.CheckRequests(0);
+        f.CheckQuery(/* version */ Alter ? 2 : 1);
+        f.CheckRequests(/* count */ 0);
+
         for (ui64 requests = 1; requests <= 2; ++requests) {
             f.Reboot();
             f.CheckQuery(Alter ? 2 : 1);
             f.CheckTracking(Alter ? 2 : 1, f.Owner, token);
             f.CheckRequests(requests);
         }
+    }
+
+    Y_UNIT_TEST_FLAG(ReplacementOperationResumesWithUserToken, WithUserToken) {
+        TFixture f;
+        f.Propose(f.MakeRequest(/* alter */ false));
+        const auto token = MakeUserToken(WithUserToken);
+        auto request = f.MakeRequest(/* alter */ true, f.Owner, /* version */ 1, /* replace */ true);
+        SetUserToken(*request, token);
+        f.Propose(std::move(request));
+        f.CheckQuery(/* version */ 2);
+        f.Reboot();
+        f.CheckQuery(/* version */ 2);
+        f.CheckTracking(/* version */ 2, f.Owner, token);
     }
 
     Y_UNIT_TEST_FLAG(TrackerUsesQueryDatabase, Alter) {
@@ -329,20 +358,25 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         f.CheckRequests(0);
     }
 
-    Y_UNIT_TEST(CompletingOperationChecksVersionAndClearsPersistedOwner) {
+    Y_UNIT_TEST(CompletingOperationChecksVersionAndClearsPersistedOwnerAndToken) {
         TFixture f;
-        f.Propose(f.MakeRequest(false, f.Owner));
-        f.Propose(f.MakeRequest(true, {}, 0), {NKikimrScheme::StatusPreconditionFailed, "ApplyIf"});
+        const auto token = MakeUserToken(/* enabled */ true);
+        auto request = f.MakeRequest(/* alter */ false, f.Owner);
+        SetUserToken(*request, token);
+        f.Propose(std::move(request));
+        f.Propose(f.MakeRequest(/* alter */ true, {}, /* version */ 0), {NKikimrScheme::StatusPreconditionFailed, "ApplyIf"});
         f.CheckOwner(f.Owner);
-        f.Propose(f.MakeRequest(true, {}, 1));
+        f.Reboot();
+        f.CheckTracking(/* version */ 1, f.Owner, token);
+        f.Propose(f.MakeRequest(/* alter */ true, {}, /* version */ 1));
         f.Reboot();
         f.CheckOwner({});
-        f.CheckQuery(2);
-        f.CheckRequests(0);
+        f.CheckQuery(/* version */ 2);
+        f.CheckRequests(/* count */ 1);
         const auto nextOwner = f.Runtime.AllocateEdgeActor();
-        f.Propose(f.MakeRequest(true, nextOwner, 2));
+        f.Propose(f.MakeRequest(/* alter */ true, nextOwner, /* version */ 2));
         f.Reboot();
-        f.CheckTracking(3, nextOwner);
+        f.CheckTracking(/* version */ 3, nextOwner);
     }
 
     Y_UNIT_TEST(DroppedQueryDoesNotResumeOperation) {

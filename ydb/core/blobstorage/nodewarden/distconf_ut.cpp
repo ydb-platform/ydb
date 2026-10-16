@@ -1066,6 +1066,70 @@ selector_config: []
         CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(1001));
     }
 
+    Y_UNIT_TEST(BootstrapReadErrorDoesNotOverwriteNewerConfig) {
+        auto initial = MakeStorageConfig(1, 0, {1});
+        initial.MutableSelfManagementConfig()->SetEnabled(true);
+        initial.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+        auto *drive = initial.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->AddDrive();
+        drive->SetPath("/dev/disk1_2");
+        drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+        auto older = initial;
+        older.SetGeneration(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&older);
+        auto newer = older;
+        newer.SetGeneration(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&newer);
+        TNodeWardenTestState state;
+        const auto oldKey = std::pair<ui32, TString>{1, "/dev/disk1_1"};
+        const auto newKey = std::pair<ui32, TString>{1, "/dev/disk1_2"};
+        state.Metadata[oldKey].MutableCommittedStorageConfig()->CopyFrom(older);
+        state.Metadata[newKey].MutableCommittedStorageConfig()->CopyFrom(newer);
+
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        bool failRead = true;
+        ui32 failedReads = 0;
+        ui32 writes = 0;
+        bool downgraded = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (failRead && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenReadMetadata>()->Path == newKey.second) {
+                ++failedReads;
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new NStorage::TEvNodeWardenReadMetadataResult(std::nullopt,
+                        NPDisk::EPDiskMetadataOutcome::ERROR, {}), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                ++writes;
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenWriteMetadata>();
+                const auto it = state.Metadata.find(std::pair<ui32, TString>{1, msg->Path});
+                if (it != state.Metadata.end() && msg->Record.GetCommittedStorageConfig().GetGeneration() <
+                        it->second.GetCommittedStorageConfig().GetGeneration()) {
+                    downgraded = true;
+                }
+            }
+            return true;
+        };
+        RegisterKeeper(runtime, initial, 1, state);
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(65));
+        UNIT_ASSERT(failedReads);
+        UNIT_ASSERT_C(!downgraded, "Bootstrap wrote an older configuration over a newer local commit");
+        UNIT_ASSERT_VALUES_EQUAL_C(state.Metadata.at(newKey).GetCommittedStorageConfig().GetGeneration(), 2,
+            "Bootstrap overwrote the unread newer committed configuration");
+        UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+        UNIT_ASSERT_C(failedReads > 1, "Bootstrap did not retry the failed metadata read");
+        failRead = false;
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return state.Metadata.at(oldKey).GetCommittedStorageConfig().GetGeneration() == 2;
+        }), "Bootstrap did not recover the newer configuration after the read succeeded");
+        UNIT_ASSERT_VALUES_EQUAL(state.Metadata.at(newKey).GetCommittedStorageConfig().GetGeneration(), 2);
+        UNIT_ASSERT(writes);
+        runtime.FilterFunction = nullptr;
+    }
+
     Y_UNIT_TEST(CommittedConfigQuorumArrivesAfterCollection) {
         auto config = MakeStorageConfig(8, 1, {1, 2, 3, 4, 5, 6, 7, 8},
                                         TBlobStorageGroupType::Erasure4Plus2Block);

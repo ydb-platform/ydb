@@ -31,11 +31,11 @@ void TPartitionActor::HandlePersistHostHealth(
     EHostHealth newHealth = msg->NewHealth;
 
     YDB_LOG_INFO_CTX(ctx, "Not implemented PersistHostHealth / ->",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_PrintDbgId(dbgId).c_str", PrintDbgId(dbgId)},
-        {"#_PrintHostIndex(hostIndex).c_str", PrintHostIndex(hostIndex)},
-        {"#_ToString(oldHealth).c_str", ToString(oldHealth)},
-        {"#_ToString(newHealth).c_str", ToString(newHealth)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"dbgId", PrintDbgId(dbgId)},
+        {"hostIndex", PrintHostIndex(hostIndex)},
+        {"oldHealth", ToString(oldHealth)},
+        {"newHealth", ToString(newHealth)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -150,8 +150,7 @@ void TCreateVolumeActor::DescribeVolumeBeforeCreate(const TActorContext& ctx)
     const auto& diskId = VolumeConfig.GetDiskId();
 
     YDB_LOG_DEBUG_CTX(ctx, "Sending describe request before create, for volume and diskId",
-        {"#_diskId.Quote().data", diskId.Quote().data()},
-        {"#_diskId.data", diskId.data()});
+        {"diskId", diskId.data()});
 
     auto request =
         std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(diskId.data());
@@ -182,8 +181,8 @@ void TCreateVolumeActor::CreateVolume(const TActorContext& ctx)
         std::make_unique<TEvSSProxy::TEvModifySchemeRequest>(modifyScheme);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sending create request for in directory",
-        {"#_VolumeName.Quote().data", VolumeName.Quote().data()},
-        {"#_VolumeDir.Quote().data", VolumeDir.Quote().data()});
+        {"volumeName", VolumeName.Quote().data()},
+        {"volumeDir", VolumeDir.Quote().data()});
 
     NYdb::NBS::Send(ctx, MakeSSProxyServiceId(), std::move(request));
 }
@@ -205,8 +204,8 @@ void TCreateVolumeActor::CreateNextDir(const TActorContext& ctx)
     TString itemName = VolumePathItems[NextItemToCreate];
 
     YDB_LOG_DEBUG_CTX(ctx, "Sending mkdir request for in directory",
-        {"#_itemName.Quote().data", itemName.Quote().data()},
-        {"#_parentDir.Quote().data", parentDir.Quote().data()});
+        {"itemName", itemName.Quote().data()},
+        {"parentDir", parentDir.Quote().data()});
 
     NKikimrSchemeOp::TModifyScheme modifyScheme;
     modifyScheme.SetWorkingDir(parentDir);
@@ -230,7 +229,7 @@ void TCreateVolumeActor::DescribeVolumeAfterCreate(const TActorContext& ctx)
     Become(&TThis::StateDescribeVolumeAfterCreate);
 
     YDB_LOG_DEBUG_CTX(ctx, "Volume sending describe request after create",
-        {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()});
+        {"diskId", VolumeConfig.GetDiskId().Quote().data()});
 
     auto request = std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(
         VolumeConfig.GetDiskId());
@@ -345,7 +344,7 @@ void TCreateVolumeActor::HandleDescribeVolumeBeforeCreateResponse(
         }
 
         YDB_LOG_ERROR_CTX(ctx, "Volume describe before create",
-            {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()},
+            {"diskId", VolumeConfig.GetDiskId().Quote().data()},
             {"failed", FormatError(error).data()});
 
         ReplyAndDie(
@@ -359,8 +358,8 @@ void TCreateVolumeActor::HandleDescribeVolumeBeforeCreateResponse(
 
     if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
         YDB_LOG_DEBUG_CTX(ctx, "Volume described path is not a BlockStoreVolume",
-            {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()},
-            {"#_msg->Path.data", msg->Path.data()});
+            {"diskId", VolumeConfig.GetDiskId().Quote().data()},
+            {"path", msg->Path.data()});
 
         CreateVolume(ctx);
         return;
@@ -418,7 +417,7 @@ void TCreateVolumeActor::HandleCreateVolumeResponse(
         }
 
         YDB_LOG_ERROR_CTX(ctx, "Volume create",
-            {"#_diskId.Quote().data", diskId.Quote().data()},
+            {"diskId", diskId.Quote().data()},
             {"failed", FormatError(error).data()});
 
         ReplyAndDie(
@@ -428,7 +427,7 @@ void TCreateVolumeActor::HandleCreateVolumeResponse(
     }
 
     YDB_LOG_INFO_CTX(ctx, "Volume created successfully",
-        {"#_diskId.Quote().data", diskId.Quote().data()});
+        {"diskId", diskId.Quote().data()});
 
     DescribeVolumeAfterCreate(ctx);
 }
@@ -442,9 +441,9 @@ void TCreateVolumeActor::HandleMkDirResponse(
     const auto& error = msg->GetError();
     if (FAILED(error.GetCode())) {
         YDB_LOG_ERROR_CTX(ctx, "Volume mkdir parentDir itemName",
-            {"#_VolumeConfig.GetDiskId().Quote().data", VolumeConfig.GetDiskId().Quote().data()},
-            {"#_ParentDirs[NextItemToCreate].Quote().data", ParentDirs[NextItemToCreate].Quote().data()},
-            {"#_VolumePathItems[NextItemToCreate].Quote().data", VolumePathItems[NextItemToCreate].Quote().data()},
+            {"diskId", VolumeConfig.GetDiskId().Quote().data()},
+            {"parentDir", ParentDirs[NextItemToCreate].Quote().data()},
+            {"volumePath", VolumePathItems[NextItemToCreate].Quote().data()},
             {"failed", FormatError(error).data()});
 
         ReplyAndDie(
@@ -468,7 +467,7 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
     auto error = msg->GetError();
     if (FAILED(error.GetCode())) {
         YDB_LOG_WARN_CTX(ctx, "Volume describe after create",
-            {"#_diskId.Quote().data", diskId.Quote().data()},
+            {"diskId", diskId.Quote().data()},
             {"failed", FormatError(error).data()});
 
         ReplyAndDie(
@@ -483,8 +482,8 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
 
     if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
         YDB_LOG_ERROR_CTX(ctx, "Volume describe after create failed: described path is not a BlockStoreVolume",
-            {"#_diskId.Quote().data", diskId.Quote().data()},
-            {"#_msg->Path.data", msg->Path.data()});
+            {"diskId", diskId.Quote().data()},
+            {"path", msg->Path.data()});
 
         ReplyAndDie(
             ctx,
@@ -517,7 +516,7 @@ void TCreateVolumeActor::HandleDescribeVolumeAfterCreateResponse(
 
     if (!VerifyVolume(ctx, describedVolumeConfig)) {
         YDB_LOG_ERROR_CTX(ctx, "Volume describe after create failed: described volume config mismatch",
-            {"#_diskId.Quote().data", diskId.Quote().data()});
+            {"diskId", diskId.Quote().data()});
 
         ReplyAndDie(
             ctx,
@@ -620,13 +619,13 @@ void TSSProxyActor::HandleCreateVolume(
     volumeConfig.CopyFrom(msg->VolumeConfig);
 
     YDB_LOG_DEBUG_CTX(ctx, "Volume volumeConfig before",
-        {"#_volumeConfig.GetDiskId().Quote().data", volumeConfig.GetDiskId().Quote().data()},
+        {"diskId", volumeConfig.GetDiskId().Quote().data()},
         {"resizeVolume", volumeConfig.DebugString().data()});
 
     ResizeVolume(NbsStorageConfig, volumeConfig);
 
     YDB_LOG_DEBUG_CTX(ctx, "Volume volumeConfig after",
-        {"#_volumeConfig.GetDiskId().Quote().data", volumeConfig.GetDiskId().Quote().data()},
+        {"diskId", volumeConfig.GetDiskId().Quote().data()},
         {"resizeVolume", volumeConfig.DebugString().data()});
 
     NYdb::NBS::Register<TCreateVolumeActor>(

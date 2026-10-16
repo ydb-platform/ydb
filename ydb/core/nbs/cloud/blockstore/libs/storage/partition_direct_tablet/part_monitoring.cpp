@@ -439,7 +439,7 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         const auto action = ParseChaosAction(cgi);
         if (action) {
             YDB_LOG_INFO_CTX(ctx, "Mon page requested chaos",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"action", cgi.Get("action")},
                 {"nodeId", action->NodeId},
                 {"dbg", cgi.Get("dbg")});
@@ -471,7 +471,7 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         TStringBuilder reply;
         if (FastPathService->GetDirectBlockGroup(*data.SelectedDbg)) {
             YDB_LOG_INFO_CTX(ctx, "Mon page requested AddHost",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"dbgId", *data.SelectedDbg});
 
             FastPathService->QueryAddHost(

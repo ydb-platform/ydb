@@ -58,7 +58,7 @@ TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 {
     if (!Promise.IsReady()) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+            {"withTime", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -102,13 +102,13 @@ void TReadSingleLocationRequestExecutor::StartReading()
             message << "Read from all available hosts failed. "
                     << ExtendedDebugState();
             YDB_LOG_ERROR_CTX(*ActorSystem, "",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"message", message});
             Reply(MakeError(E_REJECTED, std::move(message)));
         } else {
             YDB_LOG_DEBUG_CTX(*ActorSystem, "Read started from all available hosts",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-                {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+                {"withTime", LogTitle.GetWithTime()},
+                {"extendedDebugState", ExtendedDebugState()});
         }
         return;
     }
@@ -123,10 +123,10 @@ void TReadSingleLocationRequestExecutor::StartReading()
         printPriority = NActors::NLog::PRI_INFO;
     }
 
-    YDB_LOG_CTX(*ActorSystem, printPriority, "Will read from of try",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_num_0", fromDDisk ? "DDisk" : "PBuffer"},
-        {"#_PrintHostAndNode(*host).c_str", PrintHostAndNode(*host)},
+    YDB_LOG_CTX(*ActorSystem, printPriority, "Will read",
+        {"withTime", LogTitle.GetWithTime()},
+        {"from", fromDDisk ? "DDisk" : "PBuffer"},
+        {"hostAndNode", PrintHostAndNode(*host)},
         {"tryCount", tryCount});
 
     ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
@@ -170,10 +170,10 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     }
 
     YDB_LOG_WARN_CTX(*ActorSystem, "Response from",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_PrintHostAndNode(host).c_str", PrintHostAndNode(host)},
-        {"#_FormatError(response.Error).Quote().c_str", FormatError(response.Error)},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"hostAndNode", PrintHostAndNode(host)},
+        {"error", FormatError(response.Error)},
+        {"extendedDebugState", ExtendedDebugState()});
 
     StartReading();
 }
@@ -187,19 +187,19 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
     const auto duration = TInstant::Now() - StartAt;
     if (duration > SlowRequestTime) {
         YDB_LOG_INFO_CTX(*ActorSystem, "[?] Slow request",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()});
     }
 
     if (HasError(error)) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "[!] Reply",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"error", FormatError(error)},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"extendedDebugState", ExtendedDebugState()});
     } else {
         YDB_LOG_DEBUG_CTX(*ActorSystem, "Reply OK",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()});
     }
 
     ReadHint.Lock.Disarm();
@@ -215,9 +215,9 @@ void TReadSingleLocationRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnHedgingTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-        {"#_FormatDuration(hedgingDelay).c_str", FormatDuration(hedgingDelay)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()},
+        {"hedgingDelay", FormatDuration(hedgingDelay)});
 
     DirectBlockGroup->Schedule(
         hedgingDelay,
@@ -236,8 +236,8 @@ void TReadSingleLocationRequestExecutor::ScheduleRequestTimeout()
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"duration", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -256,8 +256,8 @@ void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "OnHedgingTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()});
 
     const bool allRetriesAreSpent = ReadHint.HostMask == Requested;
     if (!allRetriesAreSpent) {
@@ -272,8 +272,8 @@ void TReadSingleLocationRequestExecutor::OnRequestTimeout()
     }
 
     YDB_LOG_WARN_CTX(*ActorSystem, "OnRequestTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()});
 
     Reply(MakeError(E_TIMEOUT, "Request timeout"));
 }

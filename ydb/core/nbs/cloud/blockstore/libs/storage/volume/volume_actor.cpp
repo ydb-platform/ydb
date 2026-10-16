@@ -28,7 +28,7 @@ void TVolumeActor::Bootstrap(const TActorContext& ctx)
     Become(&TThis::StateWork);
 
     YDB_LOG_INFO_CTX(ctx, "Started NBS volume: tablet id",
-        {"#_SelfId", SelfId()});
+        {"selfId", SelfId()});
 }
 
 void TVolumeActor::OnDetach(const TActorContext& ctx)
@@ -120,8 +120,8 @@ void TVolumeActor::HandleServerConnected(
     const auto* msg = ev->Get();
 
     YDB_LOG_DEBUG_CTX(ctx, "Pipe client server connected to volume",
-        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
-        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TVolumeActor::HandleServerDisconnected(
@@ -131,8 +131,8 @@ void TVolumeActor::HandleServerDisconnected(
     const auto* msg = ev->Get();
 
     YDB_LOG_DEBUG_CTX(ctx, "Pipe client server disconnected from volume",
-        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
-        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TVolumeActor::HandleServerDestroyed(
@@ -142,8 +142,8 @@ void TVolumeActor::HandleServerDestroyed(
     const auto* msg = ev->Get();
 
     YDB_LOG_INFO_CTX(ctx, "Pipe client server got destroyed for volume",
-        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
-        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TVolumeActor::HandleClientConnected(

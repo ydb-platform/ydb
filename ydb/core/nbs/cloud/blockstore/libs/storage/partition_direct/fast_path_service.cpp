@@ -205,20 +205,20 @@ TFastPathService::TFastPathService(
     }
 
     YDB_LOG_INFO_CTX(*ActorSystem, "",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"regions", Regions.size()});
 }
 
 TFastPathService::~TFastPathService()
 {
     YDB_LOG_INFO_CTX(*ActorSystem, "Destroy",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
 {
     YDB_LOG_INFO_CTX(*ActorSystem, "Run",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
@@ -243,7 +243,7 @@ IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
 NThreading::TFuture<void> TFastPathService::Stop()
 {
     YDB_LOG_INFO_CTX(*ActorSystem, "TFastPathService::Stop",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     TVector<NThreading::TFuture<void>> stopFutures;
     for (size_t regionIndex = 0; regionIndex < Regions.size(); ++regionIndex) {
@@ -547,10 +547,10 @@ void TFastPathService::SetNodeChaosMode(
     TChaosConfig::TChaosNodeConfig::EChaosMode mode)
 {
     YDB_LOG_INFO_CTX(*ActorSystem, "SetChaosNodeMode",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_PrintNodeId(nodeId).c_str", PrintNodeId(nodeId)},
-        {"#_num_0", dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all"},
-        {"#_ToString(mode).c_str", ToString(mode)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"nodeId", PrintNodeId(nodeId)},
+        {"dbgIndex", dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all"},
+        {"mode", ToString(mode)});
 
     auto apply = [&](TChaosConfig::TDbgAndNodeId id)
     {
@@ -690,14 +690,14 @@ TFastPathService::GatherVChunkStats(
 void TFastPathService::OnRegionStopped(size_t regionIndex)
 {
     YDB_LOG_INFO_CTX(*ActorSystem, "OnRegionStopped",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"regionIndex", regionIndex});
 }
 
 void TFastPathService::OnAllRegionsStopped()
 {
     YDB_LOG_INFO_CTX(*ActorSystem, "OnAllRegionsStopped",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 }
 
 void TFastPathService::ScheduleDirtyMapDebugPrint()
@@ -752,8 +752,8 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
             std::move(DebugDumps));
     } catch (const std::exception& e) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Dump error",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_e.what", e.what()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"ex", e.what()});
     }
 
     ScheduleDirtyMapDebugPrint();

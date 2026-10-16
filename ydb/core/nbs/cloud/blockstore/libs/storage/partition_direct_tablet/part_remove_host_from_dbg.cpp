@@ -144,7 +144,7 @@ void TPartitionActor::CompleteCommitRemoveHost(
     const size_t dbgId = args.DirectBlockGroupId;
 
     YDB_LOG_INFO_CTX(ctx, "RemoveHost persisted the slot is dead until the next tablet start compacts it away",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"dbgId", dbgId},
         {"removeIndex", PrintHostIndex(args.RemoveIndex)});
 
@@ -173,7 +173,7 @@ void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
         YDB_LOG_INFO_CTX(ctx, "Skip RemoveHost BSC send during delete",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+            {"withTime", LogTitle.GetWithTime()});
         return;
     }
 
@@ -221,8 +221,8 @@ void TPartitionActor::HandleRemoveHostAllocationResult(
         // The deletion already applied (a crash between the BSC mutation and
         // the local commit); there is no listing to check.
         YDB_LOG_INFO_CTX(ctx, "RemoveHost already applied",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_(dbgId", dbgId},
+            {"withTime", LogTitle.GetWithTime()},
+            {"dbgId", dbgId},
             {"persisting", msg->Record.GetErrorReason()});
     } else {
         // A malformed or mismatching response keeps the intent, so the
@@ -231,8 +231,8 @@ void TPartitionActor::HandleRemoveHostAllocationResult(
             ValidateAllocationResponse(*msg, dbgId, LiveHostCount(updatedDbg));
         if (HasError(response.Error)) {
             YDB_LOG_WARN_CTX(ctx, "RemoveHost not completed, kept for retry",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-                {"#_(dbgId", dbgId},
+                {"withTime", LogTitle.GetWithTime()},
+                {"dbgId", dbgId},
                 {"recovery", FormatError(response.Error)});
             return;
         }
@@ -257,7 +257,7 @@ void TPartitionActor::HandleRemoveHostFromDBG(
         msg->DBGConnectionsConfigGeneration;
 
     YDB_LOG_INFO_CTX(ctx, "Handle RemoveHostFromDBG DBG connections config",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"dbgId", dbgId},
         {"hostIndex", PrintHostIndex(static_cast<THostIndex>(hostIndex))},
         {"generation", dbgConnectionsConfigGeneration});
@@ -376,9 +376,9 @@ void TPartitionActor::RejectRemoveHost(
     auto error = MakeError(E_REJECTED, message);
 
     YDB_LOG_ERROR_CTX(ctx, "RemoveHost failed",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_(dbgId", dbgId},
-        {"#_)", FormatError(error)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"dbgId", dbgId},
+        {"error", FormatError(error)});
 
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);

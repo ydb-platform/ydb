@@ -54,9 +54,9 @@ STFUNC(TBscProxy::StateWork)
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"type", ev->GetTypeRewrite()},
-                {"#_ev->ToString().c_str", ev->ToString()});
+                {"ev", ev->ToString()});
             break;
     }
 }
@@ -72,9 +72,9 @@ void TBscProxy::HandleSend(TEvSend::TPtr& ev, const TActorContext& ctx)
 
     if (InFlight) {
         YDB_LOG_INFO_CTX(ctx, "BSC request rejected already inflight",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"cookie", clientRequestCookie},
-            {"#_dup_cookie", InFlight->ClientRequestCookie});
+            {"inFlightCookie", InFlight->ClientRequestCookie});
         ctx.Send(
             Owner,
             MakePipeFailureResult("BSC request already in flight"),
@@ -98,7 +98,7 @@ void TBscProxy::HandleSend(TEvSend::TPtr& ev, const TActorContext& ctx)
     NTabletPipe::SendData(ctx, PipeClient, request.Release(), bscRequestCookie);
 
     YDB_LOG_INFO_CTX(ctx, "BSC request sent",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"clientRequestCookie", clientRequestCookie},
         {"bscRequestCookie", bscRequestCookie});
 }
@@ -109,7 +109,7 @@ void TBscProxy::HandleAllocateResult(
 {
     if (!InFlight || InFlight->BscRequestCookie != ev->Cookie) {
         YDB_LOG_INFO_CTX(ctx, "Ignore BSC result for untracked",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"cookie", ev->Cookie});
         return;
     }
@@ -133,7 +133,7 @@ void TBscProxy::HandleConnect(
     }
 
     YDB_LOG_ERROR_CTX(ctx, "BSController pipe connect",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"failed", NKikimrProto::EReplyStatus_Name(msg->Status)});
 
     FailInFlight(
@@ -151,7 +151,7 @@ void TBscProxy::HandleDisconnect(
     }
 
     YDB_LOG_ERROR_CTX(ctx, "BSController pipe destroyed",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     FailInFlight(ctx, "BSController pipe destroyed");
 }

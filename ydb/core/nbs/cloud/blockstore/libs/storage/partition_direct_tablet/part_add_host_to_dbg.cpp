@@ -151,7 +151,7 @@ void TPartitionActor::CompleteAddHostToDBG(
     const size_t dbgId = args.DirectBlockGroupId;
 
     YDB_LOG_INFO_CTX(ctx, "AddHost persisted",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"dbgId", dbgId},
         {"newHostIndex", PrintHostIndex(args.NewHostIndex)});
 
@@ -202,7 +202,7 @@ void TPartitionActor::HandleAddHostAllocationResult(
 
     if (!AddHostInFlight.has_value()) {
         YDB_LOG_WARN_CTX(ctx, "AddHost response with no in-flight request",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"cookie", ev->Cookie});
         return;
     }
@@ -236,8 +236,8 @@ void TPartitionActor::HandleAddHostAllocationResult(
         // Not cancelled: the intent stays persisted, so it is retried on the
         // next recovery until BSController grants the DDisk.
         YDB_LOG_WARN_CTX(ctx, "AddHost not completed, kept for retry",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_(dbgId", dbgId},
+            {"withTime", LogTitle.GetWithTime()},
+            {"dbgId", dbgId},
             {"recovery", FormatError(error)});
         return;
     }
@@ -261,7 +261,7 @@ void TPartitionActor::HandleAddHostToDBG(
         msg->DBGConnectionsConfigGeneration;
 
     YDB_LOG_INFO_CTX(ctx, "Handle AddHost to DBG connections config generation",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"dbgId", dbgId},
         {"dbgConnectionsConfigGeneration", dbgConnectionsConfigGeneration});
 
@@ -363,9 +363,9 @@ void TPartitionActor::RejectAddHost(
     auto error = MakeError(E_REJECTED, message);
 
     YDB_LOG_ERROR_CTX(ctx, "AddHost failed",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_(dbgId", dbgId},
-        {"#_)", FormatError(error)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"dbgId", dbgId},
+        {"error", FormatError(error)});
 
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);
@@ -380,7 +380,7 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
         YDB_LOG_INFO_CTX(ctx, "Skip AddHost BSC send during delete",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"dbgId", dbgId});
         return;
     }

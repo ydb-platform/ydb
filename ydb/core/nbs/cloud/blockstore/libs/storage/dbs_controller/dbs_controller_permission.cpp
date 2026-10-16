@@ -98,10 +98,10 @@ void TDbsControllerActor::CompleteNodeMaintenancePermission(
 {
     if (args.Allowed) {
         YDB_LOG_INFO_CTX(ctx, "NodeMaintenancePermission allowed for nodes",
-            {"#_args.NodeIds", args.NodeIds});
+            {"nodeIds", args.NodeIds});
     } else {
         YDB_LOG_INFO_CTX(ctx, "NodeMaintenancePermission denied for nodes, blocked by partitions",
-            {"#_args.NodeIds", args.NodeIds},
+            {"nodeIds", args.NodeIds},
             {"partitions", args.BlockingTablets});
     }
 

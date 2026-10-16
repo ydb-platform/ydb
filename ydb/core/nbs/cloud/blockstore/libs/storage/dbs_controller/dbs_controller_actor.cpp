@@ -55,7 +55,7 @@ void TDbsControllerActor::OnActivateExecutor(const TActorContext& ctx)
 
     YDB_LOG_INFO_CTX(ctx, "Started DbsController: actor id",
         {"tabletID", TabletID()},
-        {"#_SelfId", SelfId()});
+        {"selfId", SelfId()});
 
     if (!Executor()->GetStats().IsFollower()) {
         ExecuteTx(ctx, CreateTx<TInitSchema>());
@@ -78,8 +78,8 @@ void TDbsControllerActor::HandleServerConnected(
 
     YDB_LOG_DEBUG_CTX(ctx, "Pipe client server connected",
         {"tabletID", TabletID()},
-        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
-        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TDbsControllerActor::HandleServerDisconnected(
@@ -90,8 +90,8 @@ void TDbsControllerActor::HandleServerDisconnected(
 
     YDB_LOG_DEBUG_CTX(ctx, "Pipe client server disconnected",
         {"tabletID", TabletID()},
-        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
-        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TDbsControllerActor::HandleServerDestroyed(
@@ -102,8 +102,8 @@ void TDbsControllerActor::HandleServerDestroyed(
 
     YDB_LOG_INFO_CTX(ctx, "Pipe client server got destroyed",
         {"tabletID", TabletID()},
-        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
-        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
+        {"clientId", msg->ClientId},
+        {"serverId", msg->ServerId});
 }
 
 void TDbsControllerActor::ReportTabletState(const TActorContext& ctx)
@@ -153,7 +153,7 @@ STFUNC(TDbsControllerActor::StateWork)
                 YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
                     {"tabletID", TabletID()},
                     {"type", ev->GetTypeRewrite()},
-                    {"#_ev->ToString().c_str", ev->ToString()});
+                    {"ev", ev});
             }
             break;
     }

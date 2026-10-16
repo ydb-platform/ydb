@@ -42,7 +42,7 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
 {
     if (!Promise.IsReady()) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+            {"withTime", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -84,7 +84,7 @@ void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
 {
     if (HasError(response.Error)) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Erase",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"failed", FormatError(response.Error)});
 
         Reply({}, MakePBufferKeys(Hint.Segments));
@@ -111,8 +111,8 @@ void TEraseRequestExecutor::ScheduleRequestTimeout()
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"duration", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -131,7 +131,7 @@ void TEraseRequestExecutor::OnRequestTimeout()
     }
 
     YDB_LOG_WARN_CTX(*ActorSystem, "OnRequestTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     Reply({}, MakePBufferKeys(Hint.Segments));
 }

@@ -171,7 +171,7 @@ void TDDiskDataCopier::StartCopyRange()
     auto freshRange = GetFreshRange();
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Will copy",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"range", freshRange ? freshRange->Print().c_str() : "<empty>"});
 
     switch (State) {
@@ -218,10 +218,10 @@ void TDDiskDataCopier::CopyRange(
 {
     if (timeWaitBeforeExecution) {
         YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule copy range",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"syncId", syncId},
-            {"#_range.Print().c_str", range.Print()},
-            {"#_FormatDuration(timeWaitBeforeExecution).c_str", FormatDuration(timeWaitBeforeExecution)});
+            {"range", range.Print()},
+            {"waitBeforeExecution", FormatDuration(timeWaitBeforeExecution)});
 
         DirectBlockGroup->Schedule(
             timeWaitBeforeExecution,
@@ -236,9 +236,9 @@ void TDDiskDataCopier::CopyRange(
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Copy range",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"syncId", syncId},
-        {"#_range.Print().c_str", range.Print()});
+        {"range", range.Print()});
 
     auto copyRangeState = std::make_shared<TCopyRangeRequestState>(
         syncId,
@@ -306,16 +306,16 @@ void TDDiskDataCopier::OnRangeRead(
     copyRangeState->Span.Event("OnRangeRead");
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_copyRangeState->SyncId", copyRangeState->SyncId},
-        {"#_copyRangeState->Range.Print().c_str", copyRangeState->Range.Print()},
+        {"withTime", LogTitle.GetWithTime()},
+        {"syncId", copyRangeState->SyncId},
+        {"range", copyRangeState->Range.Print()},
         {"read", FormatError(response.Error)});
 
     if (HasError(response.Error)) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Read",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_copyRangeState->SyncId", copyRangeState->SyncId},
-            {"#_copyRangeState->Range.Print().c_str", copyRangeState->Range.Print()},
+            {"withTime", LogTitle.GetWithTime()},
+            {"syncId", copyRangeState->SyncId},
+            {"range", copyRangeState->Range.Print()},
             {"error", FormatError(response.Error)});
 
         Client->EndRangeSync(copyRangeState->SyncId, false);
@@ -352,16 +352,16 @@ void TDDiskDataCopier::OnRangeWritten(
     copyRangeState->Span.Event("OnRangeWritten");
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_copyRangeState->SyncId", copyRangeState->SyncId},
-        {"#_copyRangeState->Range.Print().c_str", copyRangeState->Range.Print()},
+        {"withTime", LogTitle.GetWithTime()},
+        {"syncId", copyRangeState->SyncId},
+        {"range", copyRangeState->Range.Print()},
         {"write", FormatError(response.Error)});
 
     if (HasError(response.Error)) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Write",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_copyRangeState->SyncId", copyRangeState->SyncId},
-            {"#_copyRangeState->Range.Print().c_str", copyRangeState->Range.Print()},
+            {"withTime", LogTitle.GetWithTime()},
+            {"syncId", copyRangeState->SyncId},
+            {"range", copyRangeState->Range.Print()},
             {"error", FormatError(response.Error)});
 
         Client->EndRangeSync(copyRangeState->SyncId, false);

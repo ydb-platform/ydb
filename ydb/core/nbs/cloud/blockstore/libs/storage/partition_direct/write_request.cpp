@@ -55,8 +55,8 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 {
     if (!IsReplied) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -106,8 +106,8 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
     RequestedIndirectWrites = hosts;
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "SendIndirectWriteRequest",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_RequestedIndirectWrites.Print().c_str", RequestedIndirectWrites.Print()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"requestedIndirectWrites", RequestedIndirectWrites.Print()});
 
     auto coordinator = DirectBlockGroup->GetOracle()->SelectBestPBufferHost(
         hosts,
@@ -140,15 +140,15 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
         if (!HasError(pbufferResponse.Error)) {
             YDB_LOG_DEBUG_CTX(*ActorSystem, "OnIndirectWriteResponse OK",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-                {"#_PrintHostAndNode(host).c_str", PrintHostAndNode(host)});
+                {"withTime", LogTitle.GetWithTime()},
+                {"hostAndNode", PrintHostAndNode(host)});
 
             completedWritesOfCurrentResponse.Set(host);
         } else {
             YDB_LOG_WARN_CTX(*ActorSystem, "OnIndirectWriteResponse",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-                {"#_PrintHostAndNode(host).c_str", PrintHostAndNode(host)},
-                {"#_FormatError(pbufferResponse.Error).Quote().c_str", FormatError(pbufferResponse.Error)});
+                {"withTime", LogTitle.GetWithTime()},
+                {"hostAndNode", PrintHostAndNode(host)},
+                {"error", FormatError(pbufferResponse.Error)});
 
             FailedWrites.Set(host);
             // The error will be set and replied below.
@@ -168,13 +168,13 @@ void TWriteRequestExecutor::MaybeSendAdditionalDirectWrites()
     }
 
     YDB_LOG_TRACE_CTX(*ActorSystem, "MaybeSendAdditionalDirectWrites",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()});
 
     if (!IsQuorumReachable()) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Quorum unreachable",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()});
         Reply(MakeError(E_FAIL, "Quorum unreachable " + ExtendedDebugState()));
         return;
     }
@@ -234,8 +234,8 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
 
     for (THostIndex host: hosts) {
         YDB_LOG_TRACE_CTX(*ActorSystem, "SendDirectWriteRequestsToHandoffs",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()});
 
         SendDirectWriteRequest(host);
         if (--count == 0) {
@@ -249,9 +249,9 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
     Y_DEBUG_ABORT_UNLESS(!IsReplied);
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Send DirectWriteRequest",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_PrintHostAndNode(host).c_str", PrintHostAndNode(host)},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"hostAndNode", PrintHostAndNode(host)},
+        {"extendedDebugState", ExtendedDebugState()});
 
     auto span = DirectBlockGroup->CreateChildSpan(
         Bundle->GetSpan().GetTraceId(),
@@ -284,9 +284,9 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
     std::shared_ptr<NWilson::TSpan> span)
 {
     YDB_LOG_DEBUG_CTX(*ActorSystem, "OnDirectWriteResponse",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_PrintHostAndNode(host).c_str", PrintHostAndNode(host)},
-        {"#_FormatError(response.Error).Quote().c_str", FormatError(response.Error)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"hostAndNode", PrintHostAndNode(host)},
+        {"error", FormatError(response.Error)});
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
@@ -308,9 +308,9 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
 
     if (!IsQuorumReachable()) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "It is impossible to reach a quorum",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-            {"#_FormatError(error).Quote().c_str", FormatError(error)});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()},
+            {"error", FormatError(error)});
         Reply(error);
         return;
     }
@@ -324,9 +324,9 @@ void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
 
     if (candidates.Empty()) {
         YDB_LOG_WARN_CTX(*ActorSystem, "All hand-offs attempts are",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-            {"#_FormatError(error).Quote().c_str", FormatError(error)});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()},
+            {"error", FormatError(error)});
         return;
     }
 
@@ -356,22 +356,22 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
     const auto duration = TInstant::Now() - StartAt;
     if (duration > SlowRequestTime) {
         YDB_LOG_INFO_CTX(*ActorSystem, "[?] Slow request",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-            {"#_FormatDuration(duration).c_str", FormatDuration(duration)});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()},
+            {"duration", FormatDuration(duration)});
     }
 
     if (HasError(error)) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "[!] Reply error",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-            {"#_FormatError(error).Quote().c_str", FormatError(error)});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()},
+            {"error", FormatError(error)});
 
         Y_ABORT_UNLESS(!IsQuorumReached());
     } else {
         YDB_LOG_DEBUG_CTX(*ActorSystem, "Reply OK",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"extendedDebugState", ExtendedDebugState()});
 
         Y_ABORT_UNLESS(IsQuorumReached());
     }
@@ -389,9 +389,9 @@ void TWriteRequestExecutor::NotifyBelated(THostMask completedOnCurrentResponse)
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "NotifyBelated",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-        {"#_completedOnCurrentResponse.Print().c_str", completedOnCurrentResponse.Print()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()},
+        {"completedOnCurrentResponse", completedOnCurrentResponse.Print()});
 
     Bundle->NotifyBelated(completedOnCurrentResponse);
 }
@@ -403,9 +403,9 @@ void TWriteRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnHedgingTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
-        {"#_FormatDuration(hedgingDelay).c_str", FormatDuration(hedgingDelay)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()},
+        {"hedgingDelay", FormatDuration(hedgingDelay)});
 
     DirectBlockGroup->Schedule(
         hedgingDelay,
@@ -424,8 +424,8 @@ void TWriteRequestExecutor::ScheduleRequestTimeout()
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout()",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"duration", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -440,8 +440,8 @@ void TWriteRequestExecutor::ScheduleRequestTimeout()
 void TWriteRequestExecutor::OnHedgingTimeout()
 {
     YDB_LOG_DEBUG_CTX(*ActorSystem, "OnHedgingTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()});
 
     if (IsReplied) {
         return;
@@ -462,8 +462,8 @@ void TWriteRequestExecutor::OnHedgingTimeout()
 void TWriteRequestExecutor::OnRequestTimeout()
 {
     YDB_LOG_WARN_CTX(*ActorSystem, "Request timeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
+        {"withTime", LogTitle.GetWithTime()},
+        {"extendedDebugState", ExtendedDebugState()});
 
     if (IsReplied) {
         return;

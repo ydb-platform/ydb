@@ -52,7 +52,7 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 {
     if (!Promise.IsReady()) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+            {"withTime", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -64,8 +64,8 @@ void TFlushRequestExecutor::Run()
         DoRun();
     } else {
         YDB_LOG_INFO_CTX(*ActorSystem, "Flush cooldown time",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_FormatDuration(Cooldown).c_str", FormatDuration(Cooldown)});
+            {"withTime", LogTitle.GetWithTime()},
+            {"cooldown", FormatDuration(Cooldown)});
         DirectBlockGroup->Schedule(
             Cooldown,
             [self = shared_from_this()]()
@@ -121,10 +121,10 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
     for (size_t i = 0; i < Hint.Segments.size(); ++i) {
         if (HasError(response.Errors[i])) {
             YDB_LOG_ERROR_CTX(*ActorSystem, "Flush",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-                {"failed", Hint.Segments[i].PBufferKey.Print()},
-                {"#_Hint.Segments[i].Range.Print().c_str", Hint.Segments[i].Range.Print()},
-                {"#_FormatError(response.Errors[i]).Quote().c_str", FormatError(response.Errors[i])});
+                {"withTime", LogTitle.GetWithTime()},
+                {"bufferKey", Hint.Segments[i].PBufferKey.Print()},
+                {"range", Hint.Segments[i].Range.Print()},
+                {"error", FormatError(response.Errors[i])});
 
             flushFailed.push_back(Hint.Segments[i].PBufferKey);
         } else {
@@ -152,8 +152,8 @@ void TFlushRequestExecutor::ScheduleRequestTimeout()
     }
 
     YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"duration", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -172,7 +172,7 @@ void TFlushRequestExecutor::OnRequestTimeout()
     }
 
     YDB_LOG_WARN_CTX(*ActorSystem, "OnRequestTimeout",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     Reply({}, MakePBufferKeys(Hint.Segments));
 }

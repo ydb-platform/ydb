@@ -78,7 +78,7 @@ TReadMultipleLocationRequestExecutor::~TReadMultipleLocationRequestExecutor()
 {
     if (!Promise.IsReady()) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "Reply has not been sent",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+            {"withTime", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -141,12 +141,12 @@ void TReadMultipleLocationRequestExecutor::Reply(
 
     if (HasError(error)) {
         YDB_LOG_ERROR_CTX(*ActorSystem, "",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"subRequest", index},
             {"error", FormatError(error)});
     } else {
         YDB_LOG_DEBUG_CTX(*ActorSystem, "OK",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+            {"withTime", LogTitle.GetWithTime()});
     }
 
     SgList.Close();

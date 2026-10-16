@@ -92,9 +92,7 @@ void TModifySchemeActor::HandleStatus(
     switch (status) {
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
             YDB_LOG_DEBUG_CTX(ctx, "Request with completed immediately",
-                {"#_NKikimrSchemeOp::EOperationType_Name(
-                    ModifyScheme.GetOperationType())
-                    .data", NKikimrSchemeOp::EOperationType_Name(
+                {"opName", NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
                     .data()},
                 {"txId", TxId});
@@ -105,9 +103,7 @@ void TModifySchemeActor::HandleStatus(
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::
             ExecInProgress:
             YDB_LOG_DEBUG_CTX(ctx, "Request with in progress, waiting for completion",
-                {"#_NKikimrSchemeOp::EOperationType_Name(
-                    ModifyScheme.GetOperationType())
-                    .data", NKikimrSchemeOp::EOperationType_Name(
+                {"opName", NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
                     .data()},
                 {"txId", TxId});
@@ -122,13 +118,11 @@ void TModifySchemeActor::HandleStatus(
 
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError: {
             YDB_LOG_DEBUG_CTX(ctx, "Request with failed with status",
-                {"#_NKikimrSchemeOp::EOperationType_Name(
-                    ModifyScheme.GetOperationType())
-                    .data", NKikimrSchemeOp::EOperationType_Name(
+                {"opName", NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
                     .data()},
                 {"txId", TxId},
-                {"#_NKikimrScheme::EStatus_Name(SchemeShardStatus).data", NKikimrScheme::EStatus_Name(SchemeShardStatus).data()});
+                {"schemeShardStatus", NKikimrScheme::EStatus_Name(SchemeShardStatus).data()});
 
             if ((SchemeShardStatus ==
                  NKikimrScheme::StatusMultipleModifications) &&
@@ -179,9 +173,7 @@ void TModifySchemeActor::HandleStatus(
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError:
             if (SchemeShardStatus == NKikimrScheme::StatusPathDoesNotExist) {
                 YDB_LOG_DEBUG_CTX(ctx, "Request failed to resolve parent path",
-                    {"#_NKikimrSchemeOp::EOperationType_Name(
-                        ModifyScheme.GetOperationType())
-                        .data", NKikimrSchemeOp::EOperationType_Name(
+                    {"opName", NKikimrSchemeOp::EOperationType_Name(
                         ModifyScheme.GetOperationType())
                         .data()});
 
@@ -207,9 +199,7 @@ void TModifySchemeActor::HandleStatus(
 
         default:
             YDB_LOG_DEBUG_CTX(ctx, "Request to tx_proxy failed with code",
-                {"#_NKikimrSchemeOp::EOperationType_Name(
-                    ModifyScheme.GetOperationType())
-                    .data", NKikimrSchemeOp::EOperationType_Name(
+                {"opName", NKikimrSchemeOp::EOperationType_Name(
                     ModifyScheme.GetOperationType())
                     .data()},
                 {"status", status});

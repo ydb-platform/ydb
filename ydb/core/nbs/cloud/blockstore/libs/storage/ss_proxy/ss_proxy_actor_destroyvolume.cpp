@@ -96,9 +96,9 @@ void TDestroyVolumeActor::DestroyVolume(const TActorContext& ctx)
         std::move(modifyScheme));
 
     YDB_LOG_DEBUG_CTX(ctx, "Sending drop request for in directory (diskId",
-        {"#_VolumeName.Quote().data", VolumeName.Quote().data()},
-        {"#_VolumeDir.Quote().data", VolumeDir.Quote().data()},
-        {"#_DiskId.Quote().data", DiskId.Quote().data()});
+        {"volumeName", VolumeName.Quote().data()},
+        {"volumeDir", VolumeDir.Quote().data()},
+        {"diskId", DiskId.Quote().data()});
 
     NYdb::NBS::Send(ctx, MakeSSProxyServiceId(), std::move(request));
 }
@@ -112,7 +112,7 @@ void TDestroyVolumeActor::HandleDestroyVolumeResponse(
 
     if (FAILED(error.GetCode())) {
         YDB_LOG_ERROR_CTX(ctx, "Volume drop",
-            {"#_DiskId.Quote().data", DiskId.Quote().data()},
+            {"diskId", DiskId.Quote().data()},
             {"failed", FormatError(error).data()});
 
         ReplyAndDie(
@@ -122,7 +122,7 @@ void TDestroyVolumeActor::HandleDestroyVolumeResponse(
     }
 
     YDB_LOG_INFO_CTX(ctx, "Volume dropped successfully",
-        {"#_DiskId.Quote().data", DiskId.Quote().data()});
+        {"diskId", DiskId.Quote().data()});
 
     ReplyAndDie(ctx, std::make_unique<TEvSSProxy::TEvDestroyVolumeResponse>());
 }

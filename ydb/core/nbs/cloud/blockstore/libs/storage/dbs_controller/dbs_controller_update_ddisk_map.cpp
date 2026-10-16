@@ -216,8 +216,8 @@ void TDbsControllerActor::CompleteUpdateDDiskMap(
     TTxDbsController::TUpdateDDiskMap& args)
 {
     YDB_LOG_INFO_CTX(ctx, "UpdateDDiskMap persisted data for tablet inverse records updated",
-        {"#_args.PartitionTabletId", args.PartitionTabletId},
-        {"#_args.ModifiedInverseRecords.size", args.ModifiedInverseRecords.size()});
+        {"partitionTabletId", args.PartitionTabletId},
+        {"modifiedInverseRecords", args.ModifiedInverseRecords.size()});
 
     auto response =
         std::make_unique<TEvDbsControllerPrivate::TEvUpdateDDiskMapResponse>(
@@ -257,7 +257,7 @@ bool TDbsControllerActor::PrepareRemoveTabletDDiskMap(
         if (removed != 1) {
             YDB_LOG_ERROR_CTX(ctx, "partition tablet id DDiskId",
                 {"removed", removed},
-                {"#_args.PartitionTabletId", args.PartitionTabletId},
+                {"partitionTabletId", args.PartitionTabletId},
                 {"key", key});
         }
     }
@@ -288,8 +288,8 @@ void TDbsControllerActor::CompleteRemoveTabletDDiskMap(
     TTxDbsController::TRemoveTabletDDiskMap& args)
 {
     YDB_LOG_INFO_CTX(ctx, "RemoveTabletDDiskMap cleared data for tablet inverse records updated",
-        {"#_args.PartitionTabletId", args.PartitionTabletId},
-        {"#_args.ModifiedInverseRecords.size", args.ModifiedInverseRecords.size()});
+        {"partitionTabletId", args.PartitionTabletId},
+        {"modifiedInverseRecords", args.ModifiedInverseRecords.size()});
 
     auto response = std::make_unique<
         TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapResponse>(

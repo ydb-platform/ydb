@@ -108,9 +108,9 @@ protected:
             Step = tx.Step;
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, T::LogComponent, "Prepare",
-                {"#_Self->TabletID", Self->TabletID()},
-                {"#_TTx::Name", TTx::Name},
-                {"#_(gen", Generation},
+                {"tabletId", Self->TabletID()},
+                {"txName", TTx::Name},
+                {"gen", Generation},
                 {"step", Step});
 
             if (!TTx::Prepare(*Self, ctx, tx, Args)) {
@@ -121,9 +121,9 @@ protected:
             tx.DB.NoMoreReadsForTx();
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, T::LogComponent, "Execute",
-                {"#_Self->TabletID", Self->TabletID()},
-                {"#_TTx::Name", TTx::Name},
-                {"#_(gen", Generation},
+                {"tabletId", Self->TabletID()},
+                {"txName", TTx::Name},
+                {"gen", Generation},
                 {"step", Step});
 
             TTx::Execute(*Self, ctx, tx, Args);
@@ -140,9 +140,9 @@ protected:
             }
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, T::LogComponent, "Complete",
-                {"#_Self->TabletID", Self->TabletID()},
-                {"#_TTx::Name", TTx::Name},
-                {"#_(gen", Generation},
+                {"tabletId", Self->TabletID()},
+                {"txName", TTx::Name},
+                {"gen", Generation},
                 {"step", Step});
 
             TTx::Complete(*Self, ctx, Args);

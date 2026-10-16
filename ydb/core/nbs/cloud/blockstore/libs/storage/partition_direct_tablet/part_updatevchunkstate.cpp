@@ -59,8 +59,8 @@ void TPartitionActor::CompleteUpdateVChunkState(
 
     if (!PendingUpdateVChunkStateRequests.empty()) {
         YDB_LOG_INFO_CTX(ctx, "Execute pending UpdateVChunkStateRequests",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_PendingUpdateVChunkStateRequests.size", PendingUpdateVChunkStateRequests.size()});
+            {"withTime", LogTitle.GetWithTime()},
+            {"pendingUpdateVChunkStateRequests", PendingUpdateVChunkStateRequests.size()});
 
         ExecutingUpdateVChunkState = true;
         ExecuteTx(

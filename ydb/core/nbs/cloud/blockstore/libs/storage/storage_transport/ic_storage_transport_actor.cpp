@@ -207,7 +207,7 @@ void TICStorageTransportActor::HandleConnect(
 {
     const ui64 requestId = ++RequestIdGenerator;
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvConnect with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto [it, inserted] =
@@ -232,7 +232,7 @@ void TICStorageTransportActor::HandleConnectUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvConnect undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
@@ -244,7 +244,7 @@ void TICStorageTransportActor::HandleConnectUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_WARN_CTX(ctx, "ConnectEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -256,7 +256,7 @@ void TICStorageTransportActor::HandleConnectResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvConnectResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
@@ -279,7 +279,7 @@ void TICStorageTransportActor::HandleConnectResult(
     } else {
         // That means that request is already completed
         YDB_LOG_WARN_CTX(ctx, "ConnectEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -449,7 +449,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvWriteToPBuffer with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto guard = msg->Data.Acquire()) {
@@ -484,7 +484,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvWriteToPBuffer with was failed - can't acquire data. Returning an immediate error",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto errorResponse =
@@ -508,7 +508,7 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvWritePersistentBufferResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = WriteToPBufferRequests.FindPtr(requestId)) {
@@ -518,7 +518,7 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "WritePersistentBufferEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -530,7 +530,7 @@ void TICStorageTransportActor::HandleWritePersistentBufferUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvWritePersistentBuffer undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = WriteToPBufferRequests.FindPtr(requestId)) {
@@ -543,7 +543,7 @@ void TICStorageTransportActor::HandleWritePersistentBufferUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "WritePersistentBufferEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -571,7 +571,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto guard = msg->Data.Acquire()) {
@@ -608,7 +608,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     }
 
     YDB_LOG_ERROR_CTX(ctx, "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with was failed - can't acquire data. Immediate error's returning",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto errorResponse = MakeWritePersistentBuffersResult(
@@ -632,7 +632,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvWritePersistentBuffers undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
@@ -650,7 +650,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersUndelivery(
         WriteToManyPBuffersRequests.erase(requestId);
     } else {
         YDB_LOG_ERROR_CTX(ctx, "WriteToManyPersistentBuffersEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -662,7 +662,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvWriteToManyPersistentBuffersResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
@@ -681,7 +681,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         }
     } else {
         YDB_LOG_WARN_CTX(ctx, "TEvWriteToManyPersistentBuffersResult with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -698,7 +698,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent HandleWriteToDDisk with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto guard = msg->Data.Acquire()) {
@@ -727,7 +727,7 @@ void TICStorageTransportActor::HandleWriteToDDisk(
     }
 
     YDB_LOG_INFO_CTX(ctx, "Sent HandleWriteToDDisk with was failed - can't acquire data. Returning an immediate error",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto errorResponse = std::make_unique<NKikimr::NDDisk::TEvWriteResult>();
@@ -750,7 +750,7 @@ void TICStorageTransportActor::HandleWriteToDDiskUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvWrite undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = WriteToDDiskRequests.FindPtr(requestId)) {
@@ -762,7 +762,7 @@ void TICStorageTransportActor::HandleWriteToDDiskUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "HandleWriteToDDiskEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -774,7 +774,7 @@ void TICStorageTransportActor::HandleWriteToDDiskResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received HandleWriteToDDiskResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = WriteToDDiskRequests.FindPtr(requestId)) {
@@ -784,7 +784,7 @@ void TICStorageTransportActor::HandleWriteToDDiskResult(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "HandleWriteToDDiskResult with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -802,7 +802,7 @@ void TICStorageTransportActor::HandleBatchErasePersistentBuffer(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvBatchEraseFromPBuffer with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto request = std::make_unique<NDDisk::TEvBatchErasePersistentBuffer>(
@@ -834,7 +834,7 @@ void TICStorageTransportActor::HandleBarrierErasePersistentBuffer(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvBarrierEraseFromPBuffer with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId},
         {"lsn", msg->Lsn});
 
@@ -858,7 +858,7 @@ void TICStorageTransportActor::HandleBatchErasePersistentBufferUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvBatchErasePersistentBuffer undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = BatchEraseFromPBufferRequests.FindPtr(requestId)) {
@@ -871,7 +871,7 @@ void TICStorageTransportActor::HandleBatchErasePersistentBufferUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "TEvBatchErasePersistentBuffer with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -883,7 +883,7 @@ void TICStorageTransportActor::HandleBarrierErasePersistentBufferUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvErasePersistentBuffer undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = BarrierEraseFromPBufferRequests.FindPtr(requestId)) {
@@ -896,7 +896,7 @@ void TICStorageTransportActor::HandleBarrierErasePersistentBufferUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "TEvErasePersistentBuffer with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -908,7 +908,7 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvErasePersistentBufferResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = BatchEraseFromPBufferRequests.FindPtr(requestId)) {
@@ -925,7 +925,7 @@ void TICStorageTransportActor::HandleErasePersistentBufferResult(
     }
     // That means that request is already completed
     YDB_LOG_ERROR_CTX(ctx, "ErasePersistentBufferEvent with not found",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 }
 
@@ -942,7 +942,7 @@ void TICStorageTransportActor::HandleReadPersistentBuffer(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvReadFromPBuffer with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto request = std::make_unique<NDDisk::TEvReadPersistentBuffer>(
@@ -968,7 +968,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvReadPersistentBuffer undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ReadFromPBufferRequests.FindPtr(requestId)) {
@@ -980,7 +980,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferUndelivery(
         ReadFromPBufferRequests.erase(requestId);
     } else {
         YDB_LOG_ERROR_CTX(ctx, "ReadPersistentBufferEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -992,7 +992,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvReadPersistentBufferResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     // That means that request is already completed
@@ -1004,7 +1004,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
             YDB_LOG_INFO_CTX(ctx, "Received TEvReadPersistentBufferResult with was failed - can't acquire data. Aborting",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"requestId", requestId});
 
             NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult
@@ -1016,7 +1016,7 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
         ReadFromPBufferRequests.erase(requestId);
     } else {
         YDB_LOG_ERROR_CTX(ctx, "ReadPersistentBufferEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1033,7 +1033,7 @@ void TICStorageTransportActor::HandleRead(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvReadFromDDisk with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto request = std::make_unique<NDDisk::TEvRead>(
@@ -1057,7 +1057,7 @@ void TICStorageTransportActor::HandleReadUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvRead undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ReadFromDDiskRequests.FindPtr(requestId)) {
@@ -1069,7 +1069,7 @@ void TICStorageTransportActor::HandleReadUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "ReadEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1081,7 +1081,7 @@ void TICStorageTransportActor::HandleReadResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvReadResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ReadFromDDiskRequests.FindPtr(requestId)) {
@@ -1092,7 +1092,7 @@ void TICStorageTransportActor::HandleReadResult(
             request.Promise.SetValue(std::move(ev->Get()->Record));
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "Received TEvReadResult with was failed - can't acquire data",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"requestId", requestId});
 
             NKikimrBlobStorage::NDDisk::TEvReadResult errorResult;
@@ -1104,7 +1104,7 @@ void TICStorageTransportActor::HandleReadResult(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "ReadEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1126,7 +1126,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBuffer(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvSyncWithPBuffer with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto request = std::make_unique<NDDisk::TEvSync>(msg->Credentials);
@@ -1161,7 +1161,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvSync undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
@@ -1173,7 +1173,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "SyncEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1185,7 +1185,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvSyncResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = FlushFromPBufferRequests.FindPtr(requestId)) {
@@ -1195,7 +1195,7 @@ void TICStorageTransportActor::HandleSyncWithPersistentBufferResult(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "SyncEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1238,7 +1238,7 @@ void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
     }
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvListPersistentBuffer undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ListPBufferEntriesRequests.FindPtr(requestId)) {
@@ -1251,7 +1251,7 @@ void TICStorageTransportActor::HandleListPersistentBufferUndelivery(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "ListPBufferEntries with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1270,7 +1270,7 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "Received HandleListPersistentBufferResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = ListPBufferEntriesRequests.FindPtr(requestId)) {
@@ -1280,7 +1280,7 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
     } else {
         // That means that request is already completed
         YDB_LOG_ERROR_CTX(ctx, "ListPBufferEntries with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1297,7 +1297,7 @@ void TICStorageTransportActor::HandleDeleteTabletChunks(
     Y_ABORT_UNLESS(inserted);
 
     YDB_LOG_DEBUG_CTX(ctx, "Sent TEvDeleteTabletChunks with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     auto request =
@@ -1319,7 +1319,7 @@ void TICStorageTransportActor::HandleDeleteTabletChunksUndelivery(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_WARN_CTX(ctx, "Received NDDisk::TEvDeleteTabletChunks undelivery with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = DeleteTabletChunksRequests.FindPtr(requestId)) {
@@ -1330,7 +1330,7 @@ void TICStorageTransportActor::HandleDeleteTabletChunksUndelivery(
         DeleteTabletChunksRequests.erase(requestId);
     } else {
         YDB_LOG_ERROR_CTX(ctx, "TEvDeleteTabletChunks with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1342,7 +1342,7 @@ void TICStorageTransportActor::HandleDeleteTabletChunksResult(
     const ui64 requestId = ev->Cookie;
 
     YDB_LOG_DEBUG_CTX(ctx, "Received TEvDeleteTabletChunksResult with",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"requestId", requestId});
 
     if (auto* r = DeleteTabletChunksRequests.FindPtr(requestId)) {
@@ -1351,7 +1351,7 @@ void TICStorageTransportActor::HandleDeleteTabletChunksResult(
         DeleteTabletChunksRequests.erase(requestId);
     } else {
         YDB_LOG_ERROR_CTX(ctx, "DeleteTabletChunksEvent with not found",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"requestId", requestId});
     }
 }
@@ -1383,7 +1383,7 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_WARN_CTX(ctx, "All session's requests for node were rejected",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"nodeId", nodeId});
 
     RejectRequestsForNode(ConnectRequests, nodeId);
@@ -1440,7 +1440,7 @@ void TICStorageTransportActor::HandleICNodeConnected(
     auto directSession = ev->Get()->DirectSession;
 
     YDB_LOG_DEBUG_CTX(ctx, "Node connected",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"nodeId", nodeId},
         {"hasDirectSession", directSession ? "true" : "false"});
 
@@ -1464,7 +1464,7 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
     const ui32 nodeId = ev->Get()->NodeId;
 
     YDB_LOG_WARN_CTX(ctx, "Node disconnected",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"nodeId", nodeId});
 
     if (DirectSessionRegistry) {
@@ -1489,7 +1489,7 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
 STFUNC(TICStorageTransportActor::StateWork)
 {
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"event", ev->GetTypeName().data()},
         {"sender", ev->Sender.LocalId()});
 
@@ -1602,9 +1602,9 @@ STFUNC(TICStorageTransportActor::StateWork)
 
         default:
             YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
-                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"withTime", LogTitle.GetWithTime()},
                 {"type", ev->GetTypeRewrite()},
-                {"#_ev->ToString().c_str", ev->ToString()});
+                {"ev", ev->ToString()});
             break;
     }
 }

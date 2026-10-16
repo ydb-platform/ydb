@@ -36,8 +36,8 @@ void TPartitionActor::HandleDeletePartition(
     const bool teardownRunning = !InflightDeleteRequests.empty();
 
     YDB_LOG_INFO_CTX(ctx, "Handle DeletePartition request",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_(teardownRunning", static_cast<int>(teardownRunning)});
+        {"withTime", LogTitle.GetWithTime()},
+        {"teardownRunning", static_cast<int>(teardownRunning)});
 
     InflightDeleteRequests.push_back(
         {.Sender = ev->Sender, .Cookie = ev->Cookie});
@@ -53,7 +53,7 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
     Become(&TThis::StateDelete);
 
     YDB_LOG_INFO_CTX(ctx, "Become StateDelete",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     StopBscProxy(ctx);
     AddHostInFlight.reset();
@@ -92,7 +92,7 @@ void TPartitionActor::HandleFastPathServiceStoppedDuringDelete(
     Y_UNUSED(ev);
 
     YDB_LOG_INFO_CTX(ctx, "FastPathService stopped, starting cleanup",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     FastPathService.reset();
     if (CleanupActor || InflightDeleteRequests.empty()) {
@@ -108,13 +108,13 @@ void TPartitionActor::StartCleanupActor(
 {
     if (CleanupActor) {
         YDB_LOG_ERROR_CTX(ctx, "StartCleanupActor skipped: cleanup already running",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"withTime", LogTitle.GetWithTime()},
             {"cleanupActor", CleanupActor});
         return;
     }
 
     YDB_LOG_INFO_CTX(ctx, "StartCleanupActor",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"groups", connections.DirectBlockGroupConnectionsSize()});
 
     CleanupActor = ctx.Register(CreatePartitionCleanupActor({
@@ -137,8 +137,8 @@ void TPartitionActor::HandlePartitionCleanupCompleted(
 {
     if (ev->Sender != CleanupActor) {
         YDB_LOG_WARN_CTX(ctx, "Ignore stale cleanup completion from (current",
-            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-            {"#_ev->Sender.ToString().c_str", ev->Sender},
+            {"withTime", LogTitle.GetWithTime()},
+            {"sender", ev->Sender},
             {"cleanupActor", CleanupActor});
         return;
     }
@@ -146,7 +146,7 @@ void TPartitionActor::HandlePartitionCleanupCompleted(
     const auto& error = ev->Get()->Error;
 
     YDB_LOG_INFO_CTX(ctx, "",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"handlePartitionCleanupCompleted", FormatError(error)});
 
     CleanupActor = {};
@@ -180,7 +180,7 @@ void TPartitionActor::ReplyToDeleteWaiters(
 void TPartitionActor::FinishDelete(const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "FinishDelete",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     ReplyToDeleteWaiters(ctx, {});
 }
@@ -191,7 +191,7 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "Ignore AllocateDDiskBlockGroupResult during",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"delete", ev->Get()->Record.ShortDebugString()});
 }
 
@@ -201,7 +201,7 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "Reject UpdateVolumeConfig: partition is being deleted",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     // Schemeshard aborts on any status other than OK or
     // ERROR_UPDATE_IN_PROGRESS. The partition cannot apply a new config while
@@ -218,7 +218,7 @@ void TPartitionActor::HandleStatVolumeDuringDelete(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "Reject StatVolume: partition is being deleted",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     auto response = std::make_unique<
         NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse>(
@@ -232,7 +232,7 @@ void TPartitionActor::HandleUpdateVChunkConfigDuringDelete(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "Drop UpdateVChunkConfig during",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"delete", ev->Get()->VChunkConfig.DebugPrint()});
 
     ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
@@ -243,8 +243,8 @@ void TPartitionActor::HandleUpdateDirtyMapStateDuringDelete(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "Drop UpdateDirtyMapState during delete: vchunk",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_ev->Get()->VChunkIndex", ev->Get()->VChunkIndex});
+        {"withTime", LogTitle.GetWithTime()},
+        {"VChunkIndex", ev->Get()->VChunkIndex});
 
     ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
@@ -256,8 +256,8 @@ void TPartitionActor::HandleSetVChunkTouchedDuringDelete(
     auto* msg = ev->Get();
 
     YDB_LOG_INFO_CTX(ctx, "Drop SetVChunkTouched during delete: vchunk",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_msg->VChunkIndex", msg->VChunkIndex});
+        {"withTime", LogTitle.GetWithTime()},
+        {"VChunkIndex", msg->VChunkIndex});
 
     msg->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
@@ -268,7 +268,7 @@ void TPartitionActor::HandleFastPathServiceShutdownDuringDelete(
     const NActors::TActorContext& ctx)
 {
     YDB_LOG_INFO_CTX(ctx, "FastPathServiceShutdown during delete",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 
     Reply(
         ctx,
@@ -289,8 +289,8 @@ void TPartitionActor::HandleAddHostToDBGDuringDelete(
     }
 
     YDB_LOG_INFO_CTX(ctx, "Drop AddHost during delete FastPathService stopped",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_(dbgId", dbgId});
+        {"withTime", LogTitle.GetWithTime()},
+        {"dbgId", dbgId});
 }
 
 void TPartitionActor::HandlePersistHostHealthDuringDelete(
@@ -299,7 +299,7 @@ void TPartitionActor::HandlePersistHostHealthDuringDelete(
 {
     Y_UNUSED(ev);
     YDB_LOG_INFO_CTX(ctx, "Drop PersistHostHealth during delete",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
+        {"withTime", LogTitle.GetWithTime()});
 }
 
 void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
@@ -314,8 +314,8 @@ void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
     }
 
     YDB_LOG_INFO_CTX(ctx, "Drop RemoveHost during delete FastPathService stopped",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
-        {"#_(dbgId", dbgId});
+        {"withTime", LogTitle.GetWithTime()},
+        {"dbgId", dbgId});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -323,7 +323,7 @@ void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
 STFUNC(TPartitionActor::StateDelete)
 {
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing",
-        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"withTime", LogTitle.GetWithTime()},
         {"event", ev->GetTypeName().data()},
         {"sender", ev->Sender.LocalId()});
 

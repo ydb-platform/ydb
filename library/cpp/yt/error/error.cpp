@@ -124,7 +124,7 @@ public:
         return OriginAttributes_.Pid;
     }
 
-    NThreading::TThreadId GetTid() const noexcept
+    TThreadId GetTid() const noexcept
     {
         return OriginAttributes_.Tid;
     }
@@ -185,7 +185,7 @@ private:
 
     TOriginAttributes OriginAttributes_{
         .Pid = 0,
-        .Tid = NThreading::InvalidThreadId,
+        .Tid = InvalidThreadId,
     };
 
     TErrorAttributes Attributes_;
@@ -425,10 +425,10 @@ TProcessId TError::GetPid() const
     return Impl_->GetPid();
 }
 
-NThreading::TThreadId TError::GetTid() const
+TThreadId TError::GetTid() const
 {
     if (!Impl_) {
-        return NThreading::InvalidThreadId;
+        return InvalidThreadId;
     }
     return Impl_->GetTid();
 }

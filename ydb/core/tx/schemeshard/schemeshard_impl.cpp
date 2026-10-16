@@ -6168,6 +6168,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NBackground::TEvListRequest, Handle);
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
+        HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -7944,13 +7945,8 @@ void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx) {
-    if (IsReadOnlyMode) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignoring message TEvSchemeShard::TEvCancelTx: schemeshard in readonly",
-            {"schemeshard", TabletID()},
-        );
-        return;
-    }
-
+    // Read-only mode rejects new schema operations, but existing backups and
+    // restores must still be cancellable so exports and imports can finish.
     Execute(CreateTxOperationPropose(ev), ctx);
 }
 
@@ -9273,6 +9269,18 @@ void TSchemeShard::ConfigureExternalSources(
     const TActorContext& ctx) {
     const auto& hostnamePatterns = config.GetHostnamePatterns();
     const auto& availableExternalDataSources = config.GetAvailableExternalDataSources();
+    std::set<NYql::EDatabaseType> availableTypes;
+    for (const auto& type : availableExternalDataSources) {
+        // YdbTopics is a legacy configuration alias, not a valid EDS type.
+        if (type == "YdbTopics") {
+            availableTypes.insert(NYql::EDatabaseType::Ydb);
+        } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+            availableTypes.insert(*databaseType);
+        } else {
+            YDB_LOG_WARN_CTX(ctx, "Unknown external data source type, ignoring it",
+                {"sourceType", type});
+        }
+    }
     ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
         std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
         nullptr,
@@ -9281,7 +9289,7 @@ void TSchemeShard::ConfigureExternalSources(
         EnableExternalSourceSchemaInference,
         config.GetS3().GetAllowLocalFiles(),
         config.GetAllExternalDataSourcesAreAvailable(),
-        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
+        availableTypes
     );
 
     YDB_LOG_NOTICE_CTX(ctx, "ExternalSources configured",

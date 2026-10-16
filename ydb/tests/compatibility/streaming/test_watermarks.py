@@ -12,10 +12,12 @@ from ydb.tests.library.compatibility.fixtures import (
 )
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
+from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 from ydb.tests.fq.streaming_common.common import (
     MessageAcceptor,
     YdbClient,
     read_and_check_data,
+    wait_completed_checkpoints,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ class StreamingTestBase:
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",
-            "enable_shared_reading_in_streaming_queries",
+            "enable_streaming_queries_counters",
         ]
 
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
@@ -171,6 +173,15 @@ class StreamingTestBase:
             END DO;
         """)
 
+    def wait_first_checkpoint(self: Self) -> None:
+        wait_completed_checkpoints(
+            self.cluster,
+            f"/Root/{self.query_name}",
+            timeout=plain_or_under_sanitizer_wrapper(120, 300),
+            checkpoints_count=1,
+            wait_delta=False,
+        )
+
     def do_write_read(self: Self, input_data: list[str], acceptor: MessageAcceptor) -> None:
         logger.debug("do_write_read")
         time.sleep(2)
@@ -251,6 +262,7 @@ class TestWatermarksRestartToAnotherVersion(StreamingTestBase, RestartToAnotherV
     def test_restart_to_another_version(self: Self, external: bool) -> None:
         self.create_objects(external)
         self.create_streaming_query()
+        self.wait_first_checkpoint()
         acceptor = MessageAcceptor()
         self.do_test_part1(acceptor)
         self.change_cluster_version()

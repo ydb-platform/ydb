@@ -1577,6 +1577,7 @@ protected:
             .BypassActivated = BypassActivated,
             .FastFinalizeEnabled = bool(FastFinalizer),
             .SpillingBucketsRead = SpillingStack.empty() ? 0 : SpillingStack.back().CurrentBucket,
+            .InputRowMemoryUsageMultiplier = InputRowMemoryUsageMultiplier,
         });
     }
 

@@ -1268,7 +1268,8 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
     EXTRACT_VAL(Interval64, int64, i64);
     case NScheme::NTypeIds::Json :
     case NScheme::NTypeIds::Utf8 : {
-            TString v = val.Gettext_value();
+            // the cell must point into the proto value, not into a local copy of it
+            const TString& v = val.Gettext_value();
             c = TCell(v.data(), v.size());
             break;
         }
@@ -1294,7 +1295,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         break;
     }
     case NScheme::NTypeIds::Yson : {
-            TString v = val.Getbytes_value();
+            const TString& v = val.Getbytes_value();
             c = TCell(v.data(), v.size());
             break;
         }

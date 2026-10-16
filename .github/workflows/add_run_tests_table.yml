@@ -1,9 +1,8 @@
 name: Add run tests table to PR
 
 on:
-  pull_request_target:
-    types:
-      - opened
+  # pull_request_target is off: every new PR took an analytic-node runner for a table comment.
+  # Re-enable when the runner pool can absorb it again.
   workflow_dispatch:
     inputs:
       pr_number:

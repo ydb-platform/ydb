@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {prepareChartKitSeries, formatSeriesName, seriesStats} from '../chart.js';
+import {prepareChartKitSeries, formatSeriesName, formatMetricValue, seriesStats} from '../chart.js';
 const point=(time,value)=>({time,value,raw:String(value)});
 const line=(key,values,extra={})=>({key,display:key,color:'#2678bc',points:values.map(([t,v])=>point(t,v)),...extra});
 
@@ -53,4 +53,26 @@ test('disjoint histories cannot multiply aligned data without a bound',()=>{
  assert.equal(data.sampled,true);
  assert.ok(data.graphs.reduce((n,g)=>n+g.data.length,0)<=1000000);
  assert.ok(data.graphs[0].data.some((v,i)=>v===null&&data.timeline[i]>31900&&data.timeline[i]<32200));
+});
+
+test('DDisk units preserve IOPS and IEC throughput',()=>{
+ assert.equal(formatMetricValue(2048,{unit:'bytesPerSecond',precision:0}),'2 KiB/s');
+ assert.equal(formatMetricValue(8,{unit:'iops',precision:0}),'8 ops/s');
+});
+test('explicit area outlines follow the top of the stack',()=>{
+ const data=prepareChartKitSeries([
+  line('a',[[0,2],[10,3]],{type:'area',width:1.5}),
+  line('b',[[0,4],[10,5]],{type:'area',width:1.5}),
+ ],0,10);
+ assert.equal(data.graphs[2].lineWidth,1.5);
+ assert.equal(data.graphs[2].data.at(-1),8);
+ assert.equal(data.graphs[2].color,'#2678bc');
+ assert.equal(data.bands[1].fill,'#2678bc59');
+});
+test('isolated samples separated by gaps stay visible',()=>{
+ const data=prepareChartKitSeries([line('points',[[0,2],[10,null],[20,3]])],0,20);
+ assert.equal(data.graphs[0].type,'dots');
+ const mixed=prepareChartKitSeries([line('mixed',[[0,2],[10,3],[20,null],[30,4]])],0,30);
+ assert.equal(mixed.graphs[1].type,'dots');
+ assert.deepEqual(mixed.graphs[1].data.filter(x=>x!==null),[4,4]);
 });

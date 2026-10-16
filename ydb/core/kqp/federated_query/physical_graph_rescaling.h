@@ -8,8 +8,6 @@ namespace NKikimr::NKqp {
 
 // Patches a saved physical graph to rescale PQ source stages.
 // Must be called before RestoreTasksGraphInfo().
-void PatchQueryPhysicalGraphForRescaling(
-    NKikimrKqp::TQueryPhysicalGraph& graph,
-    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
+void PatchQueryPhysicalGraphForRescaling(NKikimrKqp::TQueryPhysicalGraph& graph, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

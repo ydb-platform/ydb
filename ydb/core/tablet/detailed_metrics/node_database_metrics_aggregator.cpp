@@ -71,8 +71,7 @@ namespace NKikimr {
                 const TTabletCountersBase& executorCounters,
                 const TTabletCountersBase& appCounters,
                 TInstant now) {
-                // The aggregates identify their sources by a single ui64, while a bucket may hold
-                // several followers of the same tablet, hence the synthetic source IDs
+                // Synthetic source IDs, one per (tablet, follower) of the bucket; SourceIds also tracks emptiness
                 auto [it, inserted] = SourceIds.try_emplace(tablet, NextSourceId);
                 if (inserted) {
                     ++NextSourceId;

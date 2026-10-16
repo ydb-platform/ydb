@@ -33,7 +33,7 @@ TString CanonizeAstLogicalId(TString ast) {
     return std::regex_replace(ast.c_str(), re, "$010").c_str();
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 class TFqRunner::TImpl {
     using EVerbosity = TFqSetupSettings::EVerbosity;
@@ -45,20 +45,23 @@ public:
         , FqSetup(options.FqSettings)
         , CerrColors(NColorizer::AutoColors(Cerr))
         , CoutColors(NColorizer::AutoColors(Cout))
-    {}
+    {
+    }
 
     bool ExecuteQuery(const TRequestOptions& query) {
         StartTraceOpt(query.QueryId);
 
         if (VerbosityLevel >= EVerbosity::QueriesText) {
-            Cout << CoutColors.Cyan() << "Starting " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
+            Cout << CoutColors.Cyan() << "Starting " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n"
+                 << CoutColors.Default() << query.Query << Endl;
         }
 
         CurrentOptions = query.FqOptions;
         const TRequestResult status = FqSetup.QueryRequest(query, QueryId);
 
         if (!status.IsSuccess()) {
-            Cerr << CerrColors.Red() << "Failed to start stream request execution, reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
+            Cerr << CerrColors.Red() << "Failed to start stream request execution, reason:" << CerrColors.Default() << Endl << status.ToString()
+                 << Endl;
             return false;
         }
 
@@ -71,12 +74,15 @@ public:
         for (i32 resultSetId = 0; resultSetId < static_cast<i32>(ExecutionMeta.ResultSetSizes.size()); ++resultSetId) {
             const auto rowsCount = ExecutionMeta.ResultSetSizes[resultSetId];
             if (rowsCount > MAX_RESULT_SET_ROWS) {
-                Cerr << CerrColors.Red() << "Result set with id " << resultSetId << " have " << rowsCount << " rows, it is larger than allowed limit " << MAX_RESULT_SET_ROWS << ", results will be truncated" << CerrColors.Default() << Endl;
+                Cerr << CerrColors.Red() << "Result set with id " << resultSetId << " have " << rowsCount
+                     << " rows, it is larger than allowed limit " << MAX_RESULT_SET_ROWS << ", results will be truncated" << CerrColors.Default()
+                     << Endl;
             }
 
             const TRequestResult status = FqSetup.FetchQueryResults(QueryId, resultSetId, CurrentOptions, ResultSets[resultSetId]);
             if (!status.IsSuccess()) {
-                Cerr << CerrColors.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
+                Cerr << CerrColors.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors.Default() << Endl
+                     << status.ToString() << Endl;
                 return false;
             }
         }
@@ -106,12 +112,14 @@ public:
             const TRequestResult status = FqSetup.CreateConnection(connection, options, connectionId);
 
             if (!status.IsSuccess()) {
-                Cerr << CerrColors.Red() << "Failed to create connection '" << connection.name() << "', reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
+                Cerr << CerrColors.Red() << "Failed to create connection '" << connection.name() << "', reason:" << CerrColors.Default() << Endl
+                     << status.ToString() << Endl;
                 return false;
             }
 
             if (!ConnectionNameToId.emplace(std::make_pair(options.Scope, connection.name()), connectionId).second) {
-                Cerr << CerrColors.Red() << "Got duplicated connection name '" << connection.name() << "' in scope " << options.Scope << CerrColors.Default() << Endl;
+                Cerr << CerrColors.Red() << "Got duplicated connection name '" << connection.name() << "' in scope " << options.Scope
+                     << CerrColors.Default() << Endl;
                 return false;
             }
         }
@@ -127,7 +135,8 @@ public:
 
             const auto it = ConnectionNameToId.find(std::make_pair(options.Scope, binding.connection_id()));
             if (it == ConnectionNameToId.end()) {
-                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', connection with name '" << binding.connection_id() << "' not found in scope " << options.Scope << CerrColors.Default() << Endl;
+                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', connection with name '"
+                     << binding.connection_id() << "' not found in scope " << options.Scope << CerrColors.Default() << Endl;
                 return false;
             }
 
@@ -135,7 +144,8 @@ public:
             const TRequestResult status = FqSetup.CreateBinding(binding, options);
 
             if (!status.IsSuccess()) {
-                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
+                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', reason:" << CerrColors.Default() << Endl
+                     << status.ToString() << Endl;
                 return false;
             }
         }
@@ -147,7 +157,8 @@ public:
         StartTraceOpt(query.QueryId);
 
         if (VerbosityLevel >= EVerbosity::QueriesText) {
-            Cout << CoutColors.Cyan() << "Starting async " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
+            Cout << CoutColors.Cyan() << "Starting async " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n"
+                 << CoutColors.Default() << query.Query << Endl;
         }
 
         FqSetup.QueryRequestAsync(query, Options.PingPeriod);
@@ -164,7 +175,8 @@ private:
             TFqSetup::StopTraceOpt();
         };
 
-        auto printStats = [this, queryId, astPrinter = GetAstPrinter(queryId), planPrinter = GetPlanPrinter(queryId)](const TExecutionMeta& meta, bool allowEmpty = false) mutable {
+        auto printStats = [this, queryId, astPrinter = GetAstPrinter(queryId), planPrinter = GetPlanPrinter(queryId)](
+                              const TExecutionMeta& meta, bool allowEmpty = false) mutable {
             if (astPrinter) {
                 astPrinter->Print(meta.Ast, allowEmpty);
             }
@@ -179,7 +191,8 @@ private:
             TExecutionMeta meta;
             const TRequestResult status = FqSetup.DescribeQuery(QueryId, CurrentOptions, meta);
 
-            if (const auto newIssues = meta.TransientIssues.ToString(); newIssues && previousIssues != newIssues && VerbosityLevel >= EVerbosity::Info) {
+            if (const auto newIssues = meta.TransientIssues.ToString();
+                newIssues && previousIssues != newIssues && VerbosityLevel >= EVerbosity::Info) {
                 previousIssues = newIssues;
                 Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << newIssues << Endl;
             }
@@ -204,7 +217,9 @@ private:
         }
 
         if (ExecutionMeta.Status != FederatedQuery::QueryMeta::COMPLETED) {
-            Cerr << CerrColors.Red() << "Failed to execute query, invalid final status " << FederatedQuery::QueryMeta::ComputeStatus_Name(ExecutionMeta.Status) << ", issues:" << CerrColors.Default() << Endl << ExecutionMeta.Issues.ToString() << Endl;
+            Cerr << CerrColors.Red() << "Failed to execute query, invalid final status "
+                 << FederatedQuery::QueryMeta::ComputeStatus_Name(ExecutionMeta.Status) << ", issues:" << CerrColors.Default() << Endl
+                 << ExecutionMeta.Issues.ToString() << Endl;
             return false;
         }
 
@@ -294,7 +309,8 @@ private:
 
 TFqRunner::TFqRunner(const TRunnerOptions& options)
     : Impl(new TImpl(options))
-{}
+{
+}
 
 bool TFqRunner::ExecuteQuery(const TRequestOptions& query) const {
     return Impl->ExecuteQuery(query);
@@ -324,4 +340,4 @@ void TFqRunner::FinalizeRunner() const {
     Impl->FinalizeRunner();
 }
 
-}  // namespace NFqRun
+}   // namespace NFqRun

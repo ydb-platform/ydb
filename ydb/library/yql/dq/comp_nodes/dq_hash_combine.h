@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 #include <vector>
 
 #include <yql/essentials/public/udf/udf_value.h>
@@ -15,6 +16,7 @@ struct TDqHashCombineTestState {
     bool BypassActivated = false;
     bool FastFinalizeEnabled = false;
     size_t SpillingBucketsRead = 0;
+    std::optional<double> InputRowMemoryUsageMultiplier;
 };
 
 using TTestStateCallback = std::function<void(const TDqHashCombineTestState&)>;

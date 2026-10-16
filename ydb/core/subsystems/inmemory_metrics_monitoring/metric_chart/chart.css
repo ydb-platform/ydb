@@ -4,3 +4,7 @@
 .ymc-allocation .ymc-dot{display:inline-block;flex:none;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .imo #imo-lines .ymc-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}.ymc-allocation-bar>span{cursor:crosshair}
 .ymc-canvas{width:100%;min-width:0;position:relative}.ymc-canvas .chartkit,.ymc-canvas .chartkit-widget,.ymc-canvas .yagr,.ymc-canvas .g-root{height:100%;min-height:0}.ymc-canvas .u-over{touch-action:none}.ymc-cursor{position:absolute;top:0;bottom:0;border-left:1px dashed #8b97a7;pointer-events:none;z-index:5}.ymc-selection{position:absolute;top:0;bottom:0;background:#2678bc20;pointer-events:none;z-index:4}.ymc-cursor[hidden]{display:none}
+
+.ymc-allocation-bar>a,.ymc-allocation-bar>button{display:flex;align-items:center;justify-content:center;min-width:0;border:0;padding:0;color:#20252a;font:inherit;text-decoration:none;cursor:pointer}.ymc-allocation-bar>a>span,.ymc-allocation-bar>button>span{background:#ffffffd9;border-radius:3px;padding:1px 4px;font-size:12px}.ymc-striped{background-image:repeating-linear-gradient(135deg,transparent,transparent 4px,#0002 4px,#0002 8px)!important}
+
+.ymc-allocation-bar>a,.ymc-allocation-bar>button{flex:none;height:100%}.ymc-allocation-legend>a{display:inline-flex;align-items:center;font:inherit;padding:2px 5px;border:1px solid #dce1e8;border-radius:4px;text-decoration:none}

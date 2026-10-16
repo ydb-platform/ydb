@@ -62,7 +62,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics),
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::DataCenter>(op.DataCenter));
                     follower.InitTabletMetrics();
-                    follower.BecomeStopped();
+                    follower.BecomeStopped(EHiveEventReason::InitialState);
                     follower.InitiateBoot();
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
                     YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute created follower",
@@ -86,7 +86,7 @@ public:
                     }
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Delete();
                     db.Table<Schema::Metrics>().Key(op.TabletId).Delete();
-                    tablet->InitiateStop(SideEffects);
+                    tablet->InitiateStop(SideEffects, EHiveEventReason::FollowerRemoved);
                     auto& followers = dc.Followers[{op.TabletId.first, op.GroupId}]; // Note: there are at most 3 followers here, see TPartitionConfigMerger
                     auto iter = std::find_if(followers.begin(), followers.end(), [tabletId = op.TabletId](const auto& fw) {
                         return fw->GetFullTabletId() == tabletId;

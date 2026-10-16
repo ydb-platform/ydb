@@ -1,10 +1,10 @@
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_queue.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
 
-#include <ydb/library/actors/testlib/test_runtime.h>
-#include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/providers/common/http_gateway/mock/yql_http_mock_gateway.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
@@ -17,12 +17,21 @@ using TRequest = TEvS3Provider::TEvGetNextBatch;
 using TBatch = TEvS3Provider::TEvObjectPathBatch;
 using TAck = TEvS3Provider::TEvAck;
 using TUpdate = TEvS3Provider::TEvUpdateConsumersCount;
-size_t Count(const TBatch& batch) { return batch.Record.ObjectPathsSize(); }
-bool Finished(const TBatch& batch) { return batch.Record.GetNoMoreFiles(); }
-TString Item(const TBatch& batch) { return batch.Record.GetObjectPaths(0).GetPath(); }
 
-struct TFixture : public NUnitTest::TBaseFixture {
-    TTestActorRuntimeBase Runtime{2};
+size_t Count(const TBatch& batch) {
+    return batch.Record.ObjectPathsSize();
+}
+
+bool Finished(const TBatch& batch) {
+    return batch.Record.GetNoMoreFiles();
+}
+
+TString Item(const TBatch& batch) {
+    return batch.Record.GetObjectPaths(0).GetPath();
+}
+
+struct TFixture: public NUnitTest::TBaseFixture {
+    TTestActorRuntimeBase Runtime{ 2 };
     TActorId QueueId;
     TActorId Consumer;
     std::deque<THolder<IEventHandle>> Responses;
@@ -31,8 +40,8 @@ struct TFixture : public NUnitTest::TBaseFixture {
 
     TFixture() {
         Runtime.Initialize();
-        Runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+        Runtime.GetLogSettings(0)->Append(
+            NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
         Consumer = Runtime.AllocateEdgeActor(1);
         // Keep transport deterministic: capture remote output and drive connection
         // notifications explicitly, without a live interconnect or wall-clock timers.
@@ -42,8 +51,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
                     ++Unsubscribes;
                     return true;
                 }
-                if (ev->Type >= TEvS3Provider::EvBegin
-                    && ev->Type < TEvS3Provider::EvEnd) {
+                if (ev->Type >= TEvS3Provider::EvBegin && ev->Type < TEvS3Provider::EvEnd) {
                     Responses.emplace_back(ev.Release());
                     return true;
                 }
@@ -64,15 +72,13 @@ struct TFixture : public NUnitTest::TBaseFixture {
         Runtime.SimulateSleep(TDuration::MilliSeconds(1));
     }
 
-    void Start(ui32 items, ui64 consumers = 1) {
+    void Start(ui32 items, ui64 consumers = 1, bool useRuntimeListing = true) {
         NS3Details::TPathList paths;
         for (ui32 i = 0; i < items; ++i) {
             paths.emplace_back(TStringBuilder() << "object-" << i, 100, false, i);
         }
-        QueueId = Runtime.Register(CreateS3FileQueueActor("test", std::move(paths),
-            1000, 1000, 1000, true, consumers, 1000, 1, nullptr, nullptr, "",
-            TS3Credentials{}, "*", NS3Lister::ES3PatternVariant::FilePattern,
-            NS3Lister::ES3PatternType::Wildcard, false));
+        QueueId = Runtime.Register(CreateS3FileQueueActor("test", std::move(paths), 1000, 1000, 1000, useRuntimeListing, consumers, 1000, 1,
+            nullptr, nullptr, "", TS3Credentials{}, "*", NS3Lister::ES3PatternVariant::FilePattern, NS3Lister::ES3PatternType::Wildcard, false));
         Pump();
     }
 
@@ -129,7 +135,7 @@ struct TFixture : public NUnitTest::TBaseFixture {
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
     Y_UNIT_TEST_F(DisconnectedConsumerFailsWholeQueue, TFixture) {
@@ -169,10 +175,10 @@ Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
         UNIT_ASSERT_VALUES_EQUAL(Pop(1, 1)->Record.SerializeAsString(), original);
         Disconnect();
         UNIT_ASSERT_VALUES_EQUAL(DisconnectDeadlines.size(), 2);
-        ExpireDeadline(); // First outage's timer must not expire the second outage.
+        ExpireDeadline();   // First outage's timer must not expire the second outage.
         Connect();
         UNIT_ASSERT_VALUES_EQUAL(Pop(1, 1)->Record.SerializeAsString(), original);
-        ExpireDeadline(); // Second outage has also recovered.
+        ExpireDeadline();   // Second outage has also recovered.
         Send(new TRequest(), 2, 1);
         UNIT_ASSERT_VALUES_EQUAL(Item(*Pop(2, 2)), "object-1");
     }
@@ -183,8 +189,8 @@ Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
         Connect();
         Pop(1, 1);
         for (unsigned i = 0; i != 2; ++i) {
-            Runtime.Send(new IEventHandle(QueueId, Consumer,
-                new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::Disconnected)));
+            Runtime.Send(
+                new IEventHandle(QueueId, Consumer, new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::Disconnected)));
             Pump();
         }
         UNIT_ASSERT_VALUES_EQUAL(DisconnectDeadlines.size(), 1);
@@ -292,8 +298,8 @@ Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
         Send(new TRequest(), 1, 0, other);
         Connect();
         Responses.clear();
-        Runtime.Send(new IEventHandle(QueueId, Consumer,
-            new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
+        Runtime.Send(
+            new IEventHandle(QueueId, Consumer, new TEvents::TEvUndelivered(TBatch::EventType, TEvents::TEvUndelivered::ReasonActorUnknown)));
         Pump();
         UNIT_ASSERT_VALUES_EQUAL(Unsubscribes, 0);
         Reconnect();
@@ -338,16 +344,14 @@ Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
     Y_UNIT_TEST_F(ListingErrorSurvivesReconnect, TFixture) {
         auto gateway = IHTTPMockGateway::Make();
         gateway->AddDefaultResponse([](TString, IHTTPGateway::THeaders, TString) {
-            return IHTTPGateway::TResult(IHTTPGateway::TContent(
-                "<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
-                "<IsTruncated>false</IsTruncated><MaxKeys>1000</MaxKeys><KeyCount>1</KeyCount><Contents>"
-                "<Key>object</Key><Size>2000</Size></Contents></ListBucketResult>", 200));
+            return IHTTPGateway::TResult(
+                IHTTPGateway::TContent("<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
+                                       "<IsTruncated>false</IsTruncated><MaxKeys>1000</MaxKeys><KeyCount>1</KeyCount><Contents>"
+                                       "<Key>object</Key><Size>2000</Size></Contents></ListBucketResult>", 200));
         });
-        QueueId = Runtime.Register(CreateS3FileQueueActor("test",
-            NS3Details::TPathList{{"", 0, true, 0}}, 1000, 1000, 2000,
-            true, 1, 1000, 1, gateway, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(),
-            "http://bucket/", TS3Credentials{}, "*", NS3Lister::ES3PatternVariant::FilePattern,
-            NS3Lister::ES3PatternType::Wildcard, false));
+        QueueId = Runtime.Register(CreateS3FileQueueActor("test", NS3Details::TPathList{ { "", 0, true, 0 } }, 1000, 1000, 2000, true, 1, 1000,
+            1, gateway, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(), "http://bucket/", TS3Credentials{}, "*",
+            NS3Lister::ES3PatternVariant::FilePattern, NS3Lister::ES3PatternType::Wildcard, false));
         Pump();
         Send(new TRequest(), 1);
         Connect();
@@ -356,8 +360,34 @@ Y_UNIT_TEST_SUITE(TS3SourceQueueRetry) {
         UNIT_ASSERT(error->Record.IssuesSize());
         Send(new TRequest(), 1);
         Reconnect();
-        UNIT_ASSERT_VALUES_EQUAL(Pop<TEvS3Provider::TEvObjectPathReadError>(1, 1)->Record.SerializeAsString(),
-            error->Record.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            Pop<TEvS3Provider::TEvObjectPathReadError>(1, 1)->Record.SerializeAsString(), error->Record.SerializeAsString());
         UNIT_ASSERT(Responses.empty());
+    }
+}
+
+Y_UNIT_TEST_SUITE(TS3FileQueue) {
+    // The owning read actor stops its local queue with TEvPoison
+    // even after it has connected (the runtime-listing PoisonTimeout rule does not apply).
+    Y_UNIT_TEST_F(LocalQueueStopsOnOwnerPoison, TFixture) {
+        Consumer = Runtime.AllocateEdgeActor(0);
+        Start(3, 1, /* useRuntimeListing */ false);
+        Send(new TRequest(), 0);
+        UNIT_ASSERT(!Finished(*Pop(0, 0)));
+        Runtime.Send(new IEventHandle(QueueId, Consumer, new TEvents::TEvPoison()));
+        Pump();
+        AssertStopped();
+    }
+
+    // Runtime listing: the PoisonTimeout safety net is ignored while all consumers are connected.
+    Y_UNIT_TEST_F(SharedQueueIgnoresPoisonTimeoutWithConnectedConsumers, TFixture) {
+        Start(3);
+        Send(new TRequest(), 1);
+        Connect();
+        Pop(1, 1);
+        Runtime.Send(new IEventHandle(QueueId, QueueId, new TEvents::TEvPoison()));
+        Pump();
+        Send(new TRequest(), 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(Count(*Pop(2, 2)), 1);
     }
 }

@@ -1,11 +1,11 @@
 #include "retry_events_queue_ut_event.h"
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
 using namespace NYql::NDq;
@@ -15,43 +15,47 @@ namespace {
 const ui64 EventQueueId = 777;
 
 struct TEvPrivate {
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvSend = EvBegin + 10,
         EvData,
         EvDisconnect,
         EvEnd
     };
+
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-    struct TEvSend : public TEventLocal<TEvSend, EvSend> {};
-    struct TEvData : public TEventLocal<TEvData, EvData> {};
-    struct TEvDisconnect : public TEventLocal<TEvDisconnect, EvDisconnect> {};
+
+    struct TEvSend: public TEventLocal<TEvSend, EvSend> {};
+
+    struct TEvData: public TEventLocal<TEvData, EvData> {};
+
+    struct TEvDisconnect: public TEventLocal<TEvDisconnect, EvDisconnect> {};
 };
 
-class ClientActor : public TActorBootstrapped<ClientActor> {
+class ClientActor: public TActorBootstrapped<ClientActor> {
 public:
-    ClientActor(
-        NActors::TActorId clientEdgeActorId,
-        NActors::TActorId serverActorId)
-     : ServerActorId(serverActorId)
-     , ClientEdgeActorId(clientEdgeActorId) {}
+    ClientActor(NActors::TActorId clientEdgeActorId, NActors::TActorId serverActorId)
+        : ServerActorId(serverActorId)
+        , ClientEdgeActorId(clientEdgeActorId)
+    {
+    }
 
     void Bootstrap() {
         Become(&ClientActor::StateFunc);
         Init();
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ) {
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         EventsQueue.Retry();
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ) {
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
         if (EventsQueue.Heartbeat()) {
             EventsQueue.Send(new TEvDqCompute::TEvInjectCheckpoint());
         }
     }
 
-    void Handle(const TEvPrivate::TEvSend::TPtr& ) {
+    void Handle(const TEvPrivate::TEvSend::TPtr&) {
         EventsQueue.Send(new TEvDqCompute::TEvInjectCheckpoint());
     }
 
@@ -88,10 +92,12 @@ public:
     NActors::TActorId ClientEdgeActorId;
 };
 
-class ServerActor : public TActorBootstrapped<ServerActor> {
+class ServerActor: public TActorBootstrapped<ServerActor> {
 public:
     ServerActor(NActors::TActorId serverEdgeActorId)
-        : ServerEdgeActorId(serverEdgeActorId) {}
+        : ServerEdgeActorId(serverEdgeActorId)
+    {
+    }
 
     void Bootstrap() {
         Become(&ServerActor::StateFunc);
@@ -106,11 +112,11 @@ public:
         hFunc(TEvents::TEvPoisonPill, Handle);
     )
 
-    void Handle(const TEvents::TEvPoisonPill::TPtr& ) {
+    void Handle(const TEvents::TEvPoisonPill::TPtr&) {
         PassAway();
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ) {
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         EventsQueue.Retry();
     }
 
@@ -161,8 +167,8 @@ struct TRuntime {
     }
 };
 
-struct TRemoteQueueFixture : public NUnitTest::TBaseFixture {
-    TTestActorRuntimeBase Runtime{2};
+struct TRemoteQueueFixture: public NUnitTest::TBaseFixture {
+    TTestActorRuntimeBase Runtime{ 2 };
     TActorId SenderId;
     TActorId RecipientId;
     TRetryEventsQueue Queue;
@@ -235,15 +241,15 @@ struct TRemoteQueueFixture : public NUnitTest::TBaseFixture {
     }
 
     TRetryEventsQueue::ESessionState Undelivered(const TActorId& sender, ui32 reason) {
-        TEvents::TEvUndelivered::TPtr event = reinterpret_cast<TEvents::TEvUndelivered::THandle*>(new IEventHandle(
-            SenderId, sender, new TEvents::TEvUndelivered(TEvDqCompute::TEvInjectCheckpoint::EventType, reason)));
+        TEvents::TEvUndelivered::TPtr event = reinterpret_cast<TEvents::TEvUndelivered::THandle*>(
+            new IEventHandle(SenderId, sender, new TEvents::TEvUndelivered(TEvDqCompute::TEvInjectCheckpoint::EventType, reason)));
         return Runtime.RunCall([&] {
             return Queue.HandleUndelivered(event);
         });
     }
 };
 
-struct TUnorderedRemoteQueueFixture : public TRemoteQueueFixture {
+struct TUnorderedRemoteQueueFixture: public TRemoteQueueFixture {
     TUnorderedRemoteQueueFixture() {
         Queue.Init("TxId", SenderId, SenderId, EventQueueId, /* keepAlive */ false, /* useConnect */ false, /* ordered */ false);
     }
@@ -287,11 +293,15 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
         UNIT_ASSERT(SentEvents.empty());
         UNIT_ASSERT(ScheduledEvents.empty());
 
-        Act([&] { Queue.HandleNodeConnected(RecipientId.NodeId()); });
+        Act([&] {
+            Queue.HandleNodeConnected(RecipientId.NodeId());
+        });
         ExpectEvent(1);
         ExpectEvent(2);
         ExpectEvent(3);
-        Act([&] { Queue.HandleNodeConnected(RecipientId.NodeId()); });
+        Act([&] {
+            Queue.HandleNodeConnected(RecipientId.NodeId());
+        });
         UNIT_ASSERT(SentEvents.empty());
         Send();
         ExpectEvent(4);
@@ -311,19 +321,27 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(ScheduledEvents.front().second, TDuration::Zero());
         ScheduledEvents.clear();
 
-        Act([&] { Queue.Retry(); });
+        Act([&] {
+            Queue.Retry();
+        });
         UNIT_ASSERT_VALUES_EQUAL(SentEvents.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(SentEvents.front()->Type, TEvInterconnect::TEvConnectNode::EventType);
         UNIT_ASSERT_VALUES_EQUAL(SentEvents.front()->Recipient, Runtime.GetInterconnectProxy(0, 1));
         SentEvents.clear();
 
-        Act([&] { Queue.HandleNodeDisconnected(RecipientId.NodeId()); });
+        Act([&] {
+            Queue.HandleNodeDisconnected(RecipientId.NodeId());
+        });
         UNIT_ASSERT_VALUES_EQUAL(ScheduledEvents.size(), 1);
         UNIT_ASSERT(ScheduledEvents.front().second > TDuration::Zero());
-        Act([&] { Queue.HandleNodeConnected(RecipientId.NodeId()); });
+        Act([&] {
+            Queue.HandleNodeConnected(RecipientId.NodeId());
+        });
         ExpectEvent(1);
         ExpectEvent(2);
-        Act([&] { Queue.Retry(); });
+        Act([&] {
+            Queue.Retry();
+        });
         UNIT_ASSERT(SentEvents.empty());
     }
 
@@ -335,7 +353,9 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
         UNIT_ASSERT(Undelivered(RecipientId, TEvents::TEvUndelivered::Disconnected) == TRetryEventsQueue::ESessionState::Disconnected);
         Send();
         UNIT_ASSERT(SentEvents.empty());
-        Act([&] { Queue.HandleNodeConnected(RecipientId.NodeId()); });
+        Act([&] {
+            Queue.HandleNodeConnected(RecipientId.NodeId());
+        });
         ExpectEvent(1);
         ExpectEvent(2);
 
@@ -345,16 +365,22 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     Y_UNIT_TEST_F(UnsubscribeStopsSendingUntilReconnected, TRemoteQueueFixture) {
         Send();
         ExpectEvent(1);
-        Act([&] { Queue.Unsubscribe(); });
+        Act([&] {
+            Queue.Unsubscribe();
+        });
         UNIT_ASSERT_VALUES_EQUAL(SentEvents.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(SentEvents.front()->Type, TEvents::TEvUnsubscribe::EventType);
         UNIT_ASSERT_VALUES_EQUAL(SentEvents.front()->Recipient, Runtime.GetInterconnectProxy(0, 1));
         SentEvents.clear();
 
-        Act([&] { Queue.Unsubscribe(); });
+        Act([&] {
+            Queue.Unsubscribe();
+        });
         Send();
         UNIT_ASSERT(SentEvents.empty());
-        Act([&] { Queue.HandleNodeConnected(RecipientId.NodeId()); });
+        Act([&] {
+            Queue.HandleNodeConnected(RecipientId.NodeId());
+        });
         ExpectEvent(1);
         ExpectEvent(2);
     }
@@ -376,7 +402,9 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(ScheduledEvents.size(), 1);
         ScheduledEvents.clear();
         Queue.HandleNodeDisconnected(RecipientId.NodeId());
-        Act([&] { UNIT_ASSERT(!Queue.Heartbeat()); });
+        Act([&] {
+            UNIT_ASSERT(!Queue.Heartbeat());
+        });
         UNIT_ASSERT(ScheduledEvents.empty());
     }
 
@@ -533,8 +561,7 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
             UNIT_ASSERT(Receive(seqNo));
         }
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            Receive(TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT + 3),
-            yexception, "Too wide window of reordered events");
+            Receive(TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT + 3), yexception, "Too wide window of reordered events");
         UNIT_ASSERT(Receive(1));
         Send();
         ExpectEvent(1, TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT + 2);
@@ -614,12 +641,10 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     Y_UNIT_TEST(SendDisconnectAfterPoisonPill) {
         TRuntime runtime;
 
-        runtime.Runtime.Send(new IEventHandle(
-            runtime.ClientActorId,
-            runtime.ClientEdgeActorId,
-            new TEvPrivate::TEvSend()));
+        runtime.Runtime.Send(new IEventHandle(runtime.ClientActorId, runtime.ClientEdgeActorId, new TEvPrivate::TEvSend()));
 
-        TEvDqCompute::TEvInjectCheckpoint::TPtr event = runtime.Runtime.GrabEdgeEvent<TEvDqCompute::TEvInjectCheckpoint>(runtime.ServerEdgeActorId);
+        TEvDqCompute::TEvInjectCheckpoint::TPtr event =
+            runtime.Runtime.GrabEdgeEvent<TEvDqCompute::TEvInjectCheckpoint>(runtime.ServerEdgeActorId);
         UNIT_ASSERT(event);
 
         runtime.Runtime.Send(runtime.ServerActorId, runtime.ServerEdgeActorId, new TEvents::TEvPoisonPill());
@@ -629,4 +654,4 @@ Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
     }
 }
 
-} // namespace
+}   // namespace

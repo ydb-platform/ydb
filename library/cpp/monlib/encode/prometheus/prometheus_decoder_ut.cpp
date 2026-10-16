@@ -506,6 +506,46 @@ Y_UNIT_TEST_SUITE(TPrometheusDecoderTest) {
         }
     }
 
+    Y_UNIT_TEST(HistogramWithQuantiles) {
+        auto samples = Decode(
+                "# TYPE request_duration_seconds histogram\n"
+                "request_duration_seconds{method=\"GET\",quantile=\"0.5\"} 0.05\n"
+                "request_duration_seconds{method=\"GET\",quantile=\"0.99\"} 0.2\n"
+                "request_duration_seconds_bucket{method=\"GET\",le=\"0.1\"} 3\n"
+                "request_duration_seconds_bucket{method=\"GET\",le=\"+Inf\"} 5\n"
+                "request_duration_seconds_count{method=\"GET\"} 5\n"
+                "request_duration_seconds_sum{method=\"GET\"} 0.35\n");
+
+        UNIT_ASSERT_EQUAL(samples.SamplesSize(), 5);
+        {
+            const auto& sample = samples.GetSamples(0);
+            UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::GAUGE);
+            UNIT_ASSERT_EQUAL(sample.LabelsSize(), 3);
+            ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "request_duration_seconds.quantile");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(1), "method", "GET");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(2), "quantile", "0.5");
+            ASSERT_DOUBLE_POINT(sample, TInstant::Zero(), 0.05);
+        }
+        {
+            const auto& sample = samples.GetSamples(1);
+            UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::GAUGE);
+            UNIT_ASSERT_EQUAL(sample.LabelsSize(), 3);
+            ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "request_duration_seconds.quantile");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(1), "method", "GET");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(2), "quantile", "0.99");
+            ASSERT_DOUBLE_POINT(sample, TInstant::Zero(), 0.2);
+        }
+        {
+            const auto& sample = samples.GetSamples(4);
+            UNIT_ASSERT_EQUAL(sample.GetMetricType(), NProto::EMetricType::HIST_RATE);
+            UNIT_ASSERT_EQUAL(sample.LabelsSize(), 2);
+            ASSERT_LABEL_EQUAL(sample.GetLabels(0), "sensor", "request_duration_seconds");
+            ASSERT_LABEL_EQUAL(sample.GetLabels(1), "method", "GET");
+            auto histogram = ExplicitHistogramSnapshot({0.1, HISTOGRAM_INF_BOUND}, {3, 2});
+            ASSERT_HIST_POINT(sample, TInstant::Zero(), *histogram);
+        }
+    }
+
     Y_UNIT_TEST(QuotedHistogramName) {
         auto samples = Decode(
                 "# TYPE \"request.duration\" histogram\n"

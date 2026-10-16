@@ -500,8 +500,7 @@ public:
             TString lambda;
             if (filter) {
                 YQL_ENSURE(exprCtx);
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    Services_.FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
                 TProgramBuilder pgmBuilder(typeEnv, *Services_.FunctionRegistry);
@@ -817,8 +816,7 @@ public:
             TExpressionResorceUsage extraUsage;
             TString lambda;
             {
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    Services_.FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings(), options.BridgeMode(), options.BridgeBinaryPath());
                 TVector<TRuntimeNode> tupleNodes;
@@ -2455,8 +2453,7 @@ private:
             if (filterLambda && !names.empty()) {
                 YQL_CLOG(DEBUG, ProviderYt) << "Executing range filter";
                 {
-                    TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                        execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                    TScopedAlloc alloc(__LOCATION__);
                     alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                     TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -3673,8 +3670,7 @@ private:
         const NYT::TNode& rowSpec,
         const TVector<TString>& columns)
     {
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-            execCtx->FunctionRegistry_->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         TMemoryUsageInfo memInfo("Pull");
         TTypeEnvironment env(alloc);
@@ -3826,8 +3822,7 @@ private:
         TString lambda;
         bool hasListResult = false;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                Services_.FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings(), options.BridgeMode(), options.BridgeBinaryPath());
             auto rootNode = builder.BuildLambda(*MkqlCompiler_, result.Input().Ptr(), ctx);
@@ -4270,8 +4265,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec userJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4474,8 +4468,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec userJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4716,8 +4709,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec mapUserJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4749,8 +4741,7 @@ private:
 
             {
                 TUserJobSpec reduceUserJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4912,8 +4903,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec reduceUserJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -5055,8 +5045,7 @@ private:
             }
             mapExtraUsage = execCtx->ScanExtraResourceUsage(mapReduce.Mapper().Cast<TCoLambda>().Body().Ref(), true);
 
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
@@ -5074,8 +5063,7 @@ private:
         }
         TString reduceLambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             reduceLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Reducer(), ctx);
@@ -5230,8 +5218,7 @@ private:
             }
             {
                 TUserJobSpec userJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -5344,8 +5331,7 @@ private:
     TFuture<void> DoFill(TYtFill fill, const TExecContext<TRunOptions>::TPtr& execCtx, TExprContext& ctx) {
         TString lambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                Services_.FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             lambda = builder.BuildLambdaWithIO(*MkqlCompiler_, fill.Content(), ctx);
@@ -5960,8 +5946,7 @@ private:
         {
             execCtx->SetNodeExecProgress("Preparing");
             TUserJobSpec userJobSpec;
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(execCtx->Options_.SecureParams());
             TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get(), execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
@@ -6106,8 +6091,7 @@ private:
 
                 auto reader = entry->Tx->CreateTableReader<NYT::TNode>(tmpTable);
 
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TMemoryUsageInfo memInfo("Calc");
                 TTypeEnvironment env(alloc);

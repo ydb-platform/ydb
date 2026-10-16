@@ -5,6 +5,7 @@
 #include "registration.h"
 #include "scheme_describe.h"
 
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/services/metadata/initializer/common.h>
 #include <ydb/services/metadata/initializer/fetcher.h>
 #include <ydb/services/metadata/initializer/manager.h>
@@ -13,13 +14,11 @@
 #include <ydb/services/metadata/scheme_transaction/interface.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <unordered_map>
 
 namespace NKikimr::NMetadata::NProvider {
 
-class TService : public NActors::TActorBootstrapped<TService> {
+class TService: public NActors::TActorBootstrapped<TService> {
     using TBase = NActors::TActor<TService>;
 
     struct TTrackOperationId {
@@ -69,8 +68,7 @@ class TService : public NActors::TActorBootstrapped<TService> {
 public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    STATEFN(StateMain) {
-        switch (ev->GetTypeRewrite()) {
+    STRICT_STFUNC(StateMain,
             hFunc(TEvTxUserProxy::TEvProposeTransaction, Handle);
             hFunc(TEvObjectsOperation, Handle);
             hFunc(TEvRefreshSubscriberData, Handle);
@@ -81,18 +79,15 @@ public:
             hFunc(TEvResetManagerRegistration, Handle);
             hFunc(TEvTrackOperationCompletion, Handle);
             hFunc(TEvTrackOperationFinished, Handle);
-
-            default:
-                Y_ABORT_UNLESS(false);
-        }
-    }
+    );
 
     TService(const TConfig& config)
-        : Config(config) {
+        : Config(config)
+    {
         TServiceOperator::Register(Config);
     }
 };
 
 NActors::IActor* CreateService(const TConfig& config);
 
-} // namespace NKikimr::NMetadata::NProvider
+}   // namespace NKikimr::NMetadata::NProvider

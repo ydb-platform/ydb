@@ -130,7 +130,6 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
             "resource_id",
             "tvm_source_id",
             "tvm_destination_id",
-            "tvm_secret_name",
         };
         for (const auto& names : EDS_SECRETS_SETTINGS) {
             settings.insert(names.Name);
@@ -140,7 +139,7 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
         return settings;
     }();
     const static TMap<TStringBuf, TExternalDataSourceAuthFields> AuthMethodFields{ { "NONE", TExternalDataSourceAuthFields{} },
-        { "TVM", TExternalDataSourceAuthFields({ "tvm_source_id", "tvm_destination_id", "tvm_secret_name" }, {}) },
+        { "TVM", TExternalDataSourceAuthFields({ "tvm_source_id", "tvm_destination_id" }, { TSecretSettingsNames("tvm_secret") }) },
         { "SERVICE_ACCOUNT", TExternalDataSourceAuthFields({ "service_account_id" },
                                  {
                                      TSecretSettingsNames("service_account_secret"),

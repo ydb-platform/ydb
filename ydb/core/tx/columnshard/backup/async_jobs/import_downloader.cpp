@@ -17,8 +17,8 @@
 
 namespace NKikimr::NColumnShard::NBackup {
 
-TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId,
-    const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
+TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId,
+    ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
     const auto settingsKind = restoreTask.GetSettingsCase();
     switch (settingsKind) {
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:

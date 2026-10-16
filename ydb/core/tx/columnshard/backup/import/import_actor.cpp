@@ -216,8 +216,8 @@ void TImportActor::OnBootstrap(const TActorContext& /*ctx*/) {
 
     const auto& restoreTask = ImportSession->GetTask().GetRestoreTask();
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
-    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-        SelfId(), static_cast<ui64>(TabletId), 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
+    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(SelfId(), static_cast<ui64>(TabletId), 0, restoreTask,
+        NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
     ImportActorId = Register(importActor.release());
     SwitchStage(EStage::Initialization, EStage::WaitData);
     Counters.OnReadStarted();

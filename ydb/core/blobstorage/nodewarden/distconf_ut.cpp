@@ -83,13 +83,12 @@ namespace {
 
     TIntrusivePtr<TNodeWardenConfig> MakeNodeWardenConfig(const NKikimrBlobStorage::TStorageConfig& storageConfig,
             const NKikimrConfig::TBridgeConfig *bridgeConfig = nullptr) {
-        auto config = MakeIntrusive<TNodeWardenConfig>();
+        auto config = MakeIntrusive<TNodeWardenConfig>(TIntrusivePtr<IPDiskServiceFactory>{});
         if (bridgeConfig) {
-            config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(*bridgeConfig);
+            config->BridgeConfig = *bridgeConfig;
         }
-        config->NameserviceConfig = std::make_unique<NKikimrConfig::TStaticNameserviceConfig>();
         for (const auto& node : storageConfig.GetAllNodes()) {
-            auto *nsNode = config->NameserviceConfig->AddNode();
+            auto *nsNode = config->NameserviceConfig.AddNode();
             nsNode->SetNodeId(node.GetNodeId());
             nsNode->SetHost(node.GetHost());
             nsNode->SetInterconnectHost(node.GetHost());

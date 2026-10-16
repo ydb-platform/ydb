@@ -1623,6 +1623,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(5, startOffset);
         UNIT_ASSERT_VALUES_EQUAL(8 + 1, endOffset);
 
+        // The end_partition_session event for the exhausted max_offset window
+        // is deferred by the server until all in-flight direct reads are
+        // acked. This test deliberately leaves direct read 1 un-acked so the
+        // batch is re-delivered after the tablet restart, so no EOF arrives
+        // here and none must be expected.
         Cerr << "XXXXX Kill tablet\n";
         auto pathDescr = server.Server->AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
         auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
@@ -9246,6 +9251,75 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TestConsumerAvailabilityPeriod(false);
     }
 
+    // Waits for the next read session event with a timeout, so a test failure
+    // does not hang indefinitely, and returns it.
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> GetEventWithTimeout(
+        NYdb::NTopic::IReadSession& readSession,
+        TDuration timeout = TDuration::Seconds(5))
+    {
+        UNIT_ASSERT_C(readSession.WaitEvent().Wait(timeout), "Timed out waiting for a read session event");
+        return readSession.GetEvent(false);
+    }
+
+    // Result of reading from a session: the collected message payloads and
+    // whether the end of the partition session (EOF) was reached.
+    struct TReadResult {
+        TVector<TString> Messages;
+        bool EndOfPartition = false;
+    };
+
+    // Reads events from the session until `count` messages are collected
+    // (messages may arrive batched in several events) or the end of the
+    // partition session (EOF) is reached, whichever comes first. The EOF event
+    // may arrive interleaved with the data events and also as a separate event
+    // right after the last data event, so a test that expects the read window
+    // to be exhausted polls for it with a separate ReadMessages(session, 0)
+    // call: it returns zero messages and the EOF flag, or times out (failing
+    // the test) if no event arrives. Returns the collected messages and
+    // whether EOF was reached; the caller asserts on the result.
+    TReadResult ReadMessages(NYdb::NTopic::IReadSession& readSession, size_t count) {
+        TReadResult result;
+        while (!result.EndOfPartition
+               && (count == 0 || result.Messages.size() < count)) {
+            auto ev = GetEventWithTimeout(readSession);
+            UNIT_ASSERT(ev.has_value());
+            if (auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                for (const auto& msg : dataEv->GetMessages()) {
+                    result.Messages.push_back(TString(msg.GetData()));
+                }
+            } else if (std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*ev)) {
+                result.EndOfPartition = true;
+            } else {
+                UNIT_ASSERT_C(false, "Unexpected read session event");
+            }
+        }
+        return result;
+    }
+
+    // Opens a read session for the "debug" consumer and confirms the partition
+    // session with the given read/commit/max offsets (max_offset is
+    // inclusive). Returns the session; the caller reads from it with
+    // ReadMessages and asserts on the results.
+    std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSessionWithMaxOffset(
+        NYdb::NTopic::TTopicClient& topicClient,
+        const TString& topicFullName,
+        std::optional<ui64> readOffset,
+        std::optional<ui64> commitOffset,
+        std::optional<ui64> maxOffset)
+    {
+        NYdb::NTopic::TReadSessionSettings rSettings;
+        rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+        auto readSession = topicClient.CreateReadSession(rSettings);
+
+        auto ev = GetEventWithTimeout(*readSession);
+        UNIT_ASSERT(ev.has_value());
+        auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+        UNIT_ASSERT(spsEv);
+        spsEv->Confirm(readOffset, commitOffset, maxOffset);
+
+        return readSession;
+    }
+
     Y_UNIT_TEST(ReadCommitMaxOffset) {
         NPersQueue::TTestServer server;
         TString topicFullName = "rt3.dc1--topic1";
@@ -9263,31 +9337,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto res = writer->Close();
         UNIT_ASSERT(res);
 
-        {
-            std::optional<ui64> readOffset = 4;
-            std::optional<ui64> commitOffset = 3;
-            std::optional<ui64> maxOffset = 6; //inclusive
-            NYdb::NTopic::TReadSessionSettings rSettings;
-            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
-            auto readSession = topicClient.CreateReadSession(rSettings);
-
-            auto ev = readSession->GetEvent(true);
-            UNIT_ASSERT(ev.has_value());
-            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
-            UNIT_ASSERT(spsEv);
-            spsEv->Confirm(readOffset, commitOffset, maxOffset);
-            ev = readSession->GetEvent(true);
-            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
-            UNIT_ASSERT(dataEv);
-            const auto& messages = dataEv->GetMessages();
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_5");
-            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_6");
-            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_7");
-
-            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
-        }
-
+        auto readSession = CreateReadSessionWithMaxOffset(
+            topicClient, topicFullName,
+            /*readOffset=*/4, /*commitOffset=*/3, /*maxOffset=*/6); //inclusive
+        const auto result = ReadMessages(*readSession, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(result.Messages[0], "Message_5");
+        UNIT_ASSERT_VALUES_EQUAL(result.Messages[1], "Message_6");
+        UNIT_ASSERT_VALUES_EQUAL(result.Messages[2], "Message_7");
+        // max_offset reached: the partition session must terminate.
+        const auto eof = ReadMessages(*readSession, 0);
+        UNIT_ASSERT(eof.EndOfPartition);
     }
 
     Y_UNIT_TEST(ReadCommitMaxOffsetWithGaps) {
@@ -9296,17 +9356,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto driver = SetupTestAndGetDriver(server, topicFullName);
 
         auto topicClient = NYdb::NTopic::TTopicClient(*driver);
-
-        /*NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
-        wSettings.DirectWriteToPartition(false);
-        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-        for (int i = 1; i <= 10; ++i) {
-            auto res = writer->Write("Message_" + ToString(i), i);
-            UNIT_ASSERT(res);
-        }
-        auto res = writer->Close();
-        UNIT_ASSERT(res);
-        */
 
         auto write = [&](TRequestWritePQ& writeRequest, const TString& data, const TMaybe<i64>& writeOffset = {}) {
             NKikimrPQClient::TDataChunk dataChunk;
@@ -9332,58 +9381,274 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             write(writeRequest, "Message_" + ToString(i));
         }
 
+        // set max offset in the gap - should get back messages 8, 9, 10
         {
-            // set max offset in the gap - should get back messages 8, 9, 10
-            std::optional<ui64> readOffset = 7;
-            std::optional<ui64> commitOffset = 3;
-            std::optional<ui64> maxOffset = 12; //inclusive
-            NYdb::NTopic::TReadSessionSettings rSettings;
-            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
-            auto readSession = topicClient.CreateReadSession(rSettings);
-
-            auto ev = readSession->GetEvent(true);
-            UNIT_ASSERT(ev.has_value());
-            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
-            UNIT_ASSERT(spsEv);
-            spsEv->Confirm(readOffset, commitOffset, maxOffset);
-            ev = readSession->GetEvent(true);
-            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
-            UNIT_ASSERT(dataEv);
-            const auto& messages = dataEv->GetMessages();
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_8");
-            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_9");
-            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_10");
-
-            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+            auto readSession = CreateReadSessionWithMaxOffset(
+                topicClient, topicFullName,
+                /*readOffset=*/7, /*commitOffset=*/3, /*maxOffset=*/12); //inclusive
+            const auto result = ReadMessages(*readSession, 3);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[0], "Message_8");
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[1], "Message_9");
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[2], "Message_10");
+            // max_offset reached: the partition session must terminate.
+            const auto eof = ReadMessages(*readSession, 0);
+            UNIT_ASSERT(eof.EndOfPartition);
         }
 
+        // set read offset before the gap, max offset after the gap - should get back messages 10, 21, 22
         {
-            // set read offset before the gap, max offset after the gap - should get back messages 10, 21, 22
-            std::optional<ui64> readOffset = 9;
-            std::optional<ui64> commitOffset = 3;
-            std::optional<ui64> maxOffset = 21; //inclusive
-            NYdb::NTopic::TReadSessionSettings rSettings;
-            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
-            auto readSession = topicClient.CreateReadSession(rSettings);
-
-            auto ev = readSession->GetEvent(true);
-            UNIT_ASSERT(ev.has_value());
-            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
-            UNIT_ASSERT(spsEv);
-            spsEv->Confirm(readOffset, commitOffset, maxOffset);
-            ev = readSession->GetEvent(true);
-            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
-            UNIT_ASSERT(dataEv);
-            const auto& messages = dataEv->GetMessages();
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_10");
-            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_21");
-            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_22");
-
-            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+            auto readSession = CreateReadSessionWithMaxOffset(
+                topicClient, topicFullName,
+                /*readOffset=*/9, /*commitOffset=*/3, /*maxOffset=*/21); //inclusive
+            const auto result = ReadMessages(*readSession, 3);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[0], "Message_10");
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[1], "Message_21");
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[2], "Message_22");
+            // max_offset reached: the partition session must terminate.
+            const auto eof = ReadMessages(*readSession, 0);
+            UNIT_ASSERT(eof.EndOfPartition);
         }
 
+    }
+
+    // max_offset reached must terminate the partition session: the client receives
+    // TEndPartitionSessionEvent instead of the server staying silent. The read
+    // balancer is not notified (the partition is alive), so the partition stays
+    // locked to the session until it is closed; a second session of the same
+    // consumer can read the partition only after the first session is closed.
+    Y_UNIT_TEST(SendsEndPartitionSessionOnMaxOffsetReached) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        auto write = [&](TRequestWritePQ& writeRequest, const TString& data, const TMaybe<i64>& writeOffset = {}) {
+            NKikimrPQClient::TDataChunk dataChunk;
+            dataChunk.SetCreateTime(42);
+            dataChunk.SetSeqNo(++writeRequest.SeqNo);
+            dataChunk.SetData(data);
+
+            TString serialized;
+            UNIT_ASSERT(dataChunk.SerializeToString(&serialized));
+            server.AnnoyingClient->WriteToPQ(writeRequest, serialized, "", NMsgBusProxy::MSTATUS_OK, NMsgBusProxy::MSTATUS_OK, writeOffset);
+        };
+
+        // Write messages at offsets 0..3, then a gap at offsets 4..6, then messages at offsets 7..9.
+        TRequestWritePQ writeRequest = {topicFullName, 0, NPQ::NSourceIdEncoding::Decode("srcId"), 0};
+        for (ui64 i = 1; i <= 4; ++i) {
+            write(writeRequest, "Message_" + ToString(i));
+        }
+        // Write one message with an offset gap - offset = 7 (offsets 4..6 are missing).
+        write(writeRequest, "Message_8", 7);
+        for (ui64 i = 9; i <= 10; ++i) {
+            write(writeRequest, "Message_" + ToString(i));
+        }
+
+        // First session: max_offset = 4 lies inside the gap. Reading from 0 returns
+        // messages 1..4 (offsets 0..3), then the partition is exhausted and the
+        // server must terminate the partition session.
+        {
+            auto readSession = CreateReadSessionWithMaxOffset(
+                topicClient, topicFullName,
+                /*readOffset=*/0, /*commitOffset=*/0, /*maxOffset=*/4); //inclusive
+            const auto result = ReadMessages(*readSession, 4);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 4u);
+            for (size_t i = 0; i < 4; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(result.Messages[i], "Message_" + ToString(i + 1));
+            }
+            // max_offset reached: the partition session must terminate.
+            const auto eof = ReadMessages(*readSession, 0);
+            UNIT_ASSERT(eof.EndOfPartition);
+            // Close the session to release the partition: it stays locked to
+            // the session until the session is closed.
+            readSession.reset();
+        }
+
+        // A new session with a different (higher) max_offset must be able to read the
+        // messages past the gap.
+        {
+            auto readSession = CreateReadSessionWithMaxOffset(
+                topicClient, topicFullName,
+                /*readOffset=*/7, /*commitOffset=*/0, /*maxOffset=*/9); //inclusive
+            const auto result = ReadMessages(*readSession, 3);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[0], "Message_8");
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[1], "Message_9");
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[2], "Message_10");
+            // max_offset reached: the partition session must terminate.
+            const auto eof = ReadMessages(*readSession, 0);
+            UNIT_ASSERT(eof.EndOfPartition);
+        }
+    }
+
+    // max_offset greater than the partition end offset: the read window is not
+    // exhausted, so the behaviour must match the case without max_offset - all
+    // available data is read, no end_partition_session is sent, and the session
+    // keeps receiving new data as it is written (the partition stays assigned to
+    // the session, see the read balancer README).
+    Y_UNIT_TEST(MaxOffsetBeyondEndOffsetBehavesAsWithoutMaxOffset) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        for (int i = 1; i <= 10; ++i) {
+            auto res = writer->Write("Message_" + ToString(i), i);
+            UNIT_ASSERT(res);
+        }
+
+        // max_offset far beyond the end offset (10): the window is not exhausted,
+        // so no end_partition_session is sent and the session stays alive.
+        auto readSession = CreateReadSessionWithMaxOffset(
+            topicClient, topicFullName,
+            /*readOffset=*/0, /*commitOffset=*/0, /*maxOffset=*/100); //inclusive
+        const auto result = ReadMessages(*readSession, 10);
+        UNIT_ASSERT_VALUES_EQUAL(result.Messages.size(), 10u);
+        for (size_t i = 0; i < 10; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(result.Messages[i], "Message_" + ToString(i + 1));
+        }
+        // The window is not exhausted: no EOF must arrive with the data.
+        UNIT_ASSERT(!result.EndOfPartition);
+
+        // New data written to the partition is delivered to the same session.
+        for (int i = 11; i <= 12; ++i) {
+            auto res = writer->Write("Message_" + ToString(i), i);
+            UNIT_ASSERT(res);
+        }
+        const auto tail = ReadMessages(*readSession, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tail.Messages.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(tail.Messages[0], "Message_11");
+        UNIT_ASSERT_VALUES_EQUAL(tail.Messages[1], "Message_12");
+        UNIT_ASSERT(!tail.EndOfPartition);
+
+        auto res = writer->Close();
+        UNIT_ASSERT(res);
+    }
+
+    // Regression for the partition-id-only lookup: in a session subscribed to
+    // several topics, a max_offset exhaustion on one topic's partition must end
+    // that topic's partition session, not another topic's partition that happens
+    // to have the same partition id (both topics here have a single partition 0).
+    Y_UNIT_TEST(MultiTopicMaxOffsetEndsCorrectPartition) {
+        NPersQueue::TTestServer server;
+        TString topic1 = "rt3.dc1--topic1";
+        TString topic2 = "rt3.dc1--topic2";
+        auto driver = SetupTestAndGetDriver(server, topic1);
+
+        // Create the second topic with the same "debug" consumer.
+        server.AnnoyingClient->CreateTopic(topic2, 1);
+        {
+            auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+            auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+            alterSettings.BeginAddConsumer("debug");
+            auto alterRes = topicClient.AlterTopic(TString("/Root/PQ/") + topic2, alterSettings).GetValueSync();
+            UNIT_ASSERT(alterRes.IsSuccess());
+        }
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        for (const auto& t : {topic1, topic2}) {
+            NYdb::NTopic::TWriteSessionSettings wSettings {t, "srcId", "srcId"};
+            wSettings.DirectWriteToPartition(false);
+            auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+            for (int i = 1; i <= 10; ++i) {
+                UNIT_ASSERT(writer->Write("Message_" + ToString(i), i));
+            }
+            UNIT_ASSERT(writer->Close());
+        }
+
+        NYdb::NTopic::TReadSessionSettings rSettings;
+        rSettings.ConsumerName("debug");
+        rSettings.AppendTopics(NYdb::NTopic::TTopicReadSettings(topic1));
+        rSettings.AppendTopics(NYdb::NTopic::TTopicReadSettings(topic2));
+        auto readSession = topicClient.CreateReadSession(rSettings);
+
+        // The server reports the modern topic path (e.g. "/Root/topic1"),
+        // not the legacy "rt3.dc1--topic1" name, so match the short name.
+        auto isTopic1 = [&](const std::string& path) { return TString(path).EndsWith("topic1"); };
+
+        // Both partitions have id 0. Collect their start events and confirm;
+        // exhaust the read window on topic1 only.
+        ui64 assignIdTopic1 = 0;
+        ui64 assignIdTopic2 = 0;
+        for (int i = 0; i < 20 && (assignIdTopic1 == 0 || assignIdTopic2 == 0); ++i) {
+            auto ev = GetEventWithTimeout(*readSession);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            if (!spsEv) {
+                continue;
+            }
+            const auto& ps = spsEv->GetPartitionSession();
+            if (isTopic1(ps->GetTopicPath())) {
+                assignIdTopic1 = ps->GetPartitionSessionId();
+                spsEv->Confirm(/*readOffset=*/0, /*commitOffset=*/0, /*maxOffset=*/4);
+            } else {
+                assignIdTopic2 = ps->GetPartitionSessionId();
+                spsEv->Confirm();
+            }
+        }
+        UNIT_ASSERT(assignIdTopic1 != 0);
+        UNIT_ASSERT(assignIdTopic2 != 0);
+        UNIT_ASSERT(assignIdTopic1 != assignIdTopic2);
+
+        // Read until topic1's partition session ends and topic2 delivered all data.
+        bool sawEndTopic1 = false;
+        size_t endCount = 0;
+        size_t messagesTopic2 = 0;
+        for (int i = 0; i < 50 && !(sawEndTopic1 && messagesTopic2 >= 10); ++i) {
+            auto ev = GetEventWithTimeout(*readSession);
+            UNIT_ASSERT(ev.has_value());
+            if (auto* dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                if (!isTopic1(dataEv->GetPartitionSession()->GetTopicPath())) {
+                    messagesTopic2 += dataEv->GetMessages().size();
+                }
+            } else if (auto* endEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*ev)) {
+                ++endCount;
+                const auto& ps = endEv->GetPartitionSession();
+                // The exhausted partition must be topic1's, not topic2's.
+                UNIT_ASSERT_VALUES_EQUAL(ps->GetPartitionSessionId(), assignIdTopic1);
+                UNIT_ASSERT(isTopic1(ps->GetTopicPath()));
+                sawEndTopic1 = true;
+            }
+        }
+
+        UNIT_ASSERT(sawEndTopic1);
+        UNIT_ASSERT_VALUES_EQUAL(endCount, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(messagesTopic2, 10u);
+    }
+
+    // The read window may already be exhausted when the partition session starts
+    // (readOffset == max_offset). The server must still send end_partition_session
+    // instead of silently starting a read that can never deliver data.
+    Y_UNIT_TEST(MaxOffsetExhaustedOnFirstReadSendsEndPartitionSession) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        for (int i = 1; i <= 10; ++i) {
+            UNIT_ASSERT(writer->Write("Message_" + ToString(i), i));
+        }
+        UNIT_ASSERT(writer->Close());
+
+        // readOffset == maxOffset + 1: the window is exhausted before any read.
+        auto readSession = CreateReadSessionWithMaxOffset(
+            topicClient, topicFullName,
+            /*readOffset=*/6, /*commitOffset=*/0, /*maxOffset=*/5); //inclusive
+        const auto eof = ReadMessages(*readSession, 0);
+        UNIT_ASSERT(eof.EndOfPartition);
+        UNIT_ASSERT_VALUES_EQUAL(eof.Messages.size(), 0u);
     }
 }
 }

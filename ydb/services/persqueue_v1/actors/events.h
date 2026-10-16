@@ -80,6 +80,7 @@ struct TEvPQProxy {
         EvAlterTopicResponse,
         EvParentCommitedToFinish,
         EvUpdateReadMetrics,
+        EvReadWindowExhausted,
         EvEnd,
     };
 
@@ -619,9 +620,10 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, ui64 assignId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
             : Topic(topic)
             , PartitionId(partitionId)
+            , AssignId(assignId)
             , FirstMessage(first)
             , AdjacentPartitionIds(std::move(adjacentPartitionIds))
             , ChildPartitionIds(std::move(childPartitionIds))
@@ -630,11 +632,31 @@ struct TEvPQProxy {
 
         TString Topic;
         ui32 PartitionId;
+        ui64 AssignId;
         bool FirstMessage;
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
 
+        ui64 EndOffset;
+    };
+
+    // Reading stopped because the client's max_offset was reached. Unlike
+    // TEvReadingFinished this does NOT mean the partition is closed by
+    // auto-partitioning: the partition is still alive and writable. The read
+    // balancer must not be notified; the partition stays locked to the session
+    // until the session is closed.
+    struct TEvReadWindowExhausted : public TEventLocal<TEvReadWindowExhausted, EvReadWindowExhausted> {
+        TEvReadWindowExhausted(const TString& topic, ui32 partitionId, ui64 assignId, ui64 endOffset)
+            : Topic(topic)
+            , PartitionId(partitionId)
+            , AssignId(assignId)
+            , EndOffset(endOffset)
+        {}
+
+        TString Topic;
+        ui32 PartitionId;
+        ui64 AssignId;
         ui64 EndOffset;
     };
 };

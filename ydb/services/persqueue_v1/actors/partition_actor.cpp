@@ -84,6 +84,7 @@ TPartitionActor::TPartitionActor(
     , Protocol(protocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
+    , WindowExhaustedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
 {
 }
@@ -976,6 +977,10 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     PARTITION_ENSURE(!RequestInfly)
         ("direct_read_id", DirectReadId);
 
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        return SendReadWindowExhausted(ctx);
+    }
+
     if (isInFlightMemoryOk && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
     } else if (IsNeedMorePartitionData()) {
@@ -1074,6 +1079,10 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
             TDuration::MilliSeconds(res.GetWaitQuotaTimeMs())
         );
         ctx.Send(ParentId, readResponse.Release());
+    }
+
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        SendReadWindowExhausted(ctx);
     }
 
     PipeGeneration = 0; //reset tries counter - all ok
@@ -1259,6 +1268,11 @@ void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReady(Partition, WTime, SizeLag, ReadOffset, EndOffset));
 }
 
+void TPartitionActor::SendReadWindowExhausted(const TActorContext& ctx) {
+    WindowExhaustedSent = true;
+    ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, Partition.AssignId, EndOffset));
+}
+
 
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
@@ -1416,6 +1430,10 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
             SendCommit(CommitsInfly.back().first, CommitsInfly.back().second.Offset, ctx);
     } else {
         ClientCommitOffset = CommittedOffset;
+    }
+
+    if (!WindowExhaustedSent && IsPartitionExhausted()) {
+        return SendReadWindowExhausted(ctx);
     }
 
     if (!MaxTimeLagMs && !ReadTimestampMs && IsPartitionDataReady()) {
@@ -1736,9 +1754,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
             childPartitionIds.reserve(record.GetChildPartitionIds().size());
             childPartitionIds.insert(childPartitionIds.end(), record.GetChildPartitionIds().begin(), record.GetChildPartitionIds().end());
 
-            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, FirstRead,
+            ctx.Send(ParentId, new TEvPQProxy::TEvReadingFinished(Topic->GetInternalName(), Partition.Partition, Partition.AssignId, FirstRead,
                      std::move(adjacentPartitionIds), std::move(childPartitionIds), EndOffset));
-        } else if (FirstRead) {
+        } else if (FirstRead && !WindowExhaustedSent) {
             ctx.Send(ParentId, new TEvPQProxy::TEvReadingStarted(Topic->GetInternalName(), Partition.Partition));
         }
 
@@ -1949,6 +1967,10 @@ bool TPartitionActor::IsPartitionDataReady() const {
 
 bool TPartitionActor::IsNeedMorePartitionData() const {
     return ReadOffset >= EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
+}
+
+bool TPartitionActor::IsPartitionExhausted() const {
+    return ClientMaxOffset.Defined() && ReadOffset >= *ClientMaxOffset;
 }
 
 }

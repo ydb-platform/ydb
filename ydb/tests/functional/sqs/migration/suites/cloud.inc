@@ -10,12 +10,11 @@ DATA(
 )
 
 REQUIREMENTS(cpu:2)
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+
 IF (SANITIZER_TYPE == "thread")
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32)
-ELSE()
-    SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(

@@ -327,21 +327,31 @@ class YtClient:
             params["recursive"] = "true"
         self._api_call("remove", params=params, http_method="POST")
 
-    def create_queue(self, path: str, data_column: str = "data", timeout: int = 60, tablet_count: int = 1) -> None:
+    def create_queue(
+        self,
+        path: str,
+        schema_columns: List[str],
+        timeout: int = 60,
+        tablet_count: int = 1,
+    ) -> None:
         """Create an ordered dynamic table at the given path and mount it as a queue.
 
-        The schema includes the user-defined data column plus the two system
-        columns required by the YT Queue Agent (``$timestamp`` and
+        The schema includes the supplied columns plus the two system columns
+        required by the YT Queue Agent (``$timestamp`` and
         ``$cumulative_data_weight``).  The table is mounted synchronously so
         it is ready for queue operations immediately after this call returns.
         """
-        # Use YSON format for attributes with quoted names for special characters
+        # Use YSON format for attributes with quoted names for special characters.
         attrs = (
-            f'{{dynamic=%true;schema=['
-            f'{{name={data_column};type=string}};'
-            f'{{name="$timestamp";type=uint64}};'
-            f'{{name="$cumulative_data_weight";type=int64}}'
-            f']}}'
+            '{dynamic=%true;schema=['
+            + ';'.join(
+                [
+                    *schema_columns,
+                    '{name="$timestamp";type=uint64}',
+                    '{name="$cumulative_data_weight";type=int64}',
+                ]
+            )
+            + ']}'
         )
         self._run_yt_cli(
             ["create", "table", path, "--attributes", attrs],

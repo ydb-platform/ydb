@@ -4,7 +4,7 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TSolomonDataSourceExecTransformer : public TExecTransformerBase {
+class TSolomonDataSourceExecTransformer: public TExecTransformerBase {
 public:
     TSolomonDataSourceExecTransformer(TSolomonState::TPtr state)
         : State_(state)
@@ -19,4 +19,4 @@ THolder<TExecTransformerBase> CreateSolomonDataSourceExecTransformer(TSolomonSta
     return THolder(new TSolomonDataSourceExecTransformer(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -3,10 +3,14 @@
 
 namespace NFq::NMessageStream::NTest {
 namespace {
-class TCallbackQuotaFactory final : public IDqSchedulableWorkFactory {
-    class TWork final : public IDqSchedulableWork {
+class TCallbackQuotaFactory final: public IDqSchedulableWorkFactory {
+    class TWork final: public IDqSchedulableWork {
     public:
-        explicit TWork(TCallbackQuotaFactory& owner) : Owner(owner) {}
+        explicit TWork(TCallbackQuotaFactory& owner)
+            : Owner(owner)
+        {
+        }
+
         std::optional<TDuration> TryStartExecution(TMonotonic) override {
             ++Owner.Attempts;
             if (Owner.Permits) {
@@ -15,30 +19,45 @@ class TCallbackQuotaFactory final : public IDqSchedulableWorkFactory {
             }
             return TDuration::Hours(1);
         }
-        void StopExecution() override { ++Owner.Stops; }
-        void NotifyResumed(bool scheduler) override { Owner.Resumes.push_back(scheduler); }
-        void RegisterForResume(const NActors::TActorId&) override {}
-        TWorkScope GetWorkScope() const override { return {}; }
+
+        void StopExecution() override {
+            ++Owner.Stops;
+        }
+
+        void NotifyResumed(bool scheduler) override {
+            Owner.Resumes.push_back(scheduler);
+        }
+
+        void RegisterForResume(const NActors::TActorId&) override {
+        }
+
+        TWorkScope GetWorkScope() const override {
+            return {};
+        }
+
     private:
         TCallbackQuotaFactory& Owner;
     };
+
 public:
     ui32 Permits = 0;
     ui32 Attempts = 0;
     ui32 Stops = 0;
     TVector<bool> Resumes;
+
     std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() override {
         return std::make_unique<TWork>(*this);
     }
-    TWorkScope GetWorkScope() const override { return {}; }
+
+    TWorkScope GetWorkScope() const override {
+        return {};
+    }
 };
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
     Y_UNIT_TEST(AllocatorIsRequired) {
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            CreateMessageStreamReadActor(TMessageStreamReadActorSettings{}, std::make_unique<TState>()),
-            yexception,
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateMessageStreamReadActor(TMessageStreamReadActorSettings{}, std::make_unique<TState>()), yexception,
             "Message stream read actor requires an allocator");
     }
 
@@ -73,14 +92,18 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         runtime.Send(new IEventHandle(actorId, TActorId(), new TEvExecuteMessageStreamCallback([&] {
             callbacks.push_back(2);
         })));
-        dispatchUntil([&] { return timers.size() == 1; });
+        dispatchUntil([&] {
+            return timers.size() == 1;
+        });
         UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 1);
         UNIT_ASSERT(callbacks.empty());
 
         // Resume the first callback, then block on the second one with a new timer.
         factory->Permits = 1;
         runtime.Send(new IEventHandle(actorId, TActorId(), new TEvents::TEvWakeup(201)));
-        dispatchUntil([&] { return timers.size() == 2; });
+        dispatchUntil([&] {
+            return timers.size() == 2;
+        });
         UNIT_ASSERT_VALUES_EQUAL(callbacks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(callbacks[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 3);
@@ -97,14 +120,15 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         UNIT_ASSERT_VALUES_EQUAL(callbacks.size(), 1);
 
         runtime.Send(timers[1].Release());
-        dispatchUntil([&] { return callbacks.size() == 2; });
+        dispatchUntil([&] {
+            return callbacks.size() == 2;
+        });
         UNIT_ASSERT_VALUES_EQUAL(callbacks[1], 2);
         UNIT_ASSERT_VALUES_EQUAL(factory->Attempts, 4);
         UNIT_ASSERT_VALUES_EQUAL(factory->Stops, 2);
         UNIT_ASSERT_VALUES_EQUAL(factory->Resumes.size(), 2);
         UNIT_ASSERT(!factory->Resumes[1]);
     }
-
 
     Y_UNIT_TEST(StreamingDoesNotRequireWriteTimeOrEndOffset) {
         TFixture f;
@@ -169,7 +193,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         const auto error = f.Setup.AsyncInputPromises->FatalError.GetFuture();
         f.Start(1);
         f.Data(0);
-        f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{f.Control});
+        f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{ f.Control });
         UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
         UNIT_ASSERT(!f.Finished);
         UNIT_ASSERT_VALUES_EQUAL(f.Control->Exhausted, 0);
@@ -185,7 +209,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Init(true);
         const auto error = f.Setup.AsyncInputPromises->FatalError.GetFuture();
         f.Start(0);
-        f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{f.Control});
+        f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{ f.Control });
         f.Read();
         UNIT_ASSERT(error.Wait(TDuration::Seconds(5)));
         UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToString(), "auto partitioning is not supported");
@@ -246,7 +270,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Init(true);
         f.Start(2);
         f.Data(0);
-        f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{f.Control});
+        f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{ f.Control });
         UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Control->Stopped, 0);
         UNIT_ASSERT(f.Control->Ranges.empty());
@@ -261,7 +285,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
     }
     Y_UNIT_TEST_TWIN(ConfirmationIgnoresOtherPartitionCheckpoints, Exhausted) {
         TFixture f;
-        f.PartitionIds = {0, 1};
+        f.PartitionIds = { 0, 1 };
         f.EnableStreamingAutopartitioning = true;
         auto other = std::make_shared<TControl>(1);
         f.Init(true);
@@ -279,9 +303,9 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Setup.SaveSourceState(CreateCheckpoint(2), later);
         f.Data(other, 2);
         if constexpr (Exhausted) {
-            f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{f.Control});
+            f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{ f.Control });
         } else {
-            f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{f.Control});
+            f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{ f.Control });
         }
         UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Control->Stopped + f.Control->Exhausted, 0);
@@ -295,7 +319,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
     }
     Y_UNIT_TEST_TWIN(ConfirmationIgnoresOtherPartitionBufferedData, Exhausted) {
         TFixture f;
-        f.PartitionIds = {0, 1};
+        f.PartitionIds = { 0, 1 };
         f.WatermarksEnabled = true;
         f.EnableStreamingAutopartitioning = true;
         auto other = std::make_shared<TControl>(1);
@@ -307,9 +331,9 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         // The preceding watermark splits the next record into another batch.
         f.Data(other, 1, "buffered", true);
         if constexpr (Exhausted) {
-            f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{f.Control});
+            f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{ f.Control });
         } else {
-            f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{f.Control});
+            f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{ f.Control });
         }
         UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 2);
         UNIT_ASSERT(f.LastWatermark.Defined());
@@ -329,7 +353,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Read();
         TSourceState saved;
         f.Setup.SaveSourceState(CreateCheckpoint(1), saved);
-        f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{f.Control});
+        f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{ f.Control });
         f.Read();
         UNIT_ASSERT_VALUES_EQUAL(f.Control->Stopped, 1);
     }
@@ -342,7 +366,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Control = std::make_shared<TControl>();
         f.Start(1);
         f.Data(0);
-        f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{previous});
+        f.Session->Events.emplace_back(TMessageStreamPartitionStopRequestedEvent{ previous });
         UNIT_ASSERT_VALUES_EQUAL(f.Read().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(previous->Stopped, 1);
         UNIT_ASSERT_VALUES_EQUAL(f.Control->Stopped, 0);
@@ -360,7 +384,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Setup.Execute([&](TFakeActor&) {
             f.Control = std::make_shared<TControl>();
             f.Start(2);
-            f.Session->Events.emplace_back(TMessageStreamPartitionClosedEvent{previous});
+            f.Session->Events.emplace_back(TMessageStreamPartitionClosedEvent{ previous });
         });
         f.Read();
         f.Commit(1);
@@ -372,7 +396,7 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         f.Init();
         f.Start(1);
         f.Data(0);
-        f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{f.Control});
+        f.Session->Events.emplace_back(TMessageStreamPartitionExhaustedEvent{ f.Control });
         f.Read();
         UNIT_ASSERT(f.Finished);
         UNIT_ASSERT(!f.Session->Closed);
@@ -511,4 +535,4 @@ Y_UNIT_TEST_SUITE(MessageStreamReadActor) {
         UNIT_ASSERT_VALUES_EQUAL(saved.Data.front().Blob, "1");
     }
 }
-}
+}   // namespace NFq::NMessageStream::NTest

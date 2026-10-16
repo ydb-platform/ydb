@@ -1,5 +1,8 @@
-#include "yql_s3_provider_impl.h"
 #include "yql_s3_dq_integration.h"
+#include "yql_s3_provider_impl.h"
+
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
@@ -8,9 +11,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/proto/credentials.pb.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -19,16 +19,18 @@ using namespace NNodes;
 
 namespace {
 
-class TS3DataSourceProvider : public TDataProviderBase {
+class TS3DataSourceProvider: public TDataProviderBase {
 public:
     TS3DataSourceProvider(TS3State::TPtr state)
         : State_(std::move(state))
         , IODiscoveryTransformer_(CreateS3IODiscoveryTransformer(State_))
-        , ConfigurationTransformer_(MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{S3ProviderName}))
+        , ConfigurationTransformer_(
+              MakeHolder<NCommon::TProviderConfigurationTransformer>(State_->Configuration, *State_->Types, TString{ S3ProviderName }))
         , CallableExecutionTransformer_(CreateS3SourceCallableExecutionTransformer(State_))
         , TypeAnnotationTransformer_(CreateS3DataSourceTypeAnnotationTransformer(State_))
         , DqIntegration_(CreateS3DqIntegration(State_))
-    {}
+    {
+    }
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
         State_->Configuration->AddValidCluster(name);
@@ -39,7 +41,8 @@ public:
         }
         auto authMethod = properties.Value("authMethod", "");
         if (authMethod == "SERVICE_ACCOUNT") {
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""),
+                properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
             return;
         }
 
@@ -47,11 +50,13 @@ public:
             NS3::TAwsParams params;
             params.SetAwsAccessKey(properties.Value("awsAccessKeyId", ""));
             params.SetAwsRegion(properties.Value("awsRegion", ""));
-            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForBasicAuthWithSecret(params.SerializeAsString(), properties.Value("awsSecretAccessKeyReference", ""), properties.Value("awsSecretAccessKey", ""));
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForBasicAuthWithSecret(
+                params.SerializeAsString(), properties.Value("awsSecretAccessKeyReference", ""), properties.Value("awsSecretAccessKey", ""));
             return;
         }
 
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccount(
+            properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignature", ""), properties.Value("authToken", ""));
     }
 
     TStringBuf GetName() const override {
@@ -61,9 +66,9 @@ public:
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Head().Content() == S3ProviderName) {
-                if (const auto& clusterName = node.Child(1)->Content(); NCommon::ALL_CLUSTERS != clusterName && !State_->Configuration->HasCluster(clusterName)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Tail().Pos()), TStringBuilder() <<
-                        "Unknown s3 cluster name: " << clusterName));
+                if (const auto& clusterName = node.Child(1)->Content();
+                    NCommon::ALL_CLUSTERS != clusterName && !State_->Configuration->HasCluster(clusterName)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Tail().Pos()), TStringBuilder() << "Unknown s3 cluster name: " << clusterName));
                     return false;
                 } else {
                     cluster = clusterName;
@@ -155,6 +160,7 @@ public:
     IDqIntegration* GetDqIntegration() override {
         return DqIntegration_.Get();
     }
+
 private:
     const TS3State::TPtr State_;
     const THolder<IGraphTransformer> IODiscoveryTransformer_;
@@ -164,10 +170,10 @@ private:
     const THolder<IDqIntegration> DqIntegration_;
 };
 
-}
+}   // namespace
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state) {
     return new TS3DataSourceProvider(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

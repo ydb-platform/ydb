@@ -1,5 +1,6 @@
 #include "udf_module.h"
 #include "udf_module_behaviour.h"
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NUdfStore {
@@ -125,7 +126,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfModule::GetColumnDescription() 
 }
 
 TVector<TString> TUdfModule::GetPk() {
-    return {NameColName};
+    return { NameColName };
 }
 
 bool TUdfModule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
@@ -168,19 +169,12 @@ NMetadata::NInternal::TTableRecord TUdfModule::SerializeToRecord() const {
 
 TString TUdfModule::SerializeToString() const {
     return TStringBuilder() << "{"
-        << "Uid: " << Uid
-        << ", Md5: " << Md5
-        << ", Size: " << Size
-        << ", Name: " << Name
-        << ", Type: " << TypeToString(Type)
-        << ", Manifest: " << Manifest
-        << ", Version: " << Version
-        << ", ChunkCount: " << ChunkCount
-        << "}";
+                            << "Uid: " << Uid << ", Md5: " << Md5 << ", Size: " << Size << ", Name: " << Name << ", Type: " << TypeToString(Type)
+                            << ", Manifest: " << Manifest << ", Version: " << Version << ", ChunkCount: " << ChunkCount << "}";
 }
 
 NMetadata::IClassBehaviour::TPtr TUdfModule::GetBehaviour() {
     return TUdfModuleBehaviour::GetInstance();
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

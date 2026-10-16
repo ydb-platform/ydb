@@ -3,9 +3,6 @@
 #include "private_events.h"
 #include "schema.h"
 
-#include <ydb/services/udf_store/compile_controller/events.h>
-#include <ydb/services/udf_store/metadata_subscription/snapshot.h>
-
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -18,9 +15,11 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/tx_processing.h>
-#include <ydb/services/metadata/service.h>
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/services/metadata/service.h>
+#include <ydb/services/udf_store/compile_controller/events.h>
+#include <ydb/services/udf_store/metadata_subscription/snapshot.h>
 
 #include <deque>
 #include <memory>
@@ -47,15 +46,12 @@ struct TGapKey {
 
 struct TGapKeyHash {
     size_t operator()(const TGapKey& key) const {
-        return CombineHashes(
-            CombineHashes(THash<TString>()(key.Name), THash<TString>()(key.Kind)),
+        return CombineHashes(CombineHashes(THash<TString>()(key.Name), THash<TString>()(key.Kind)),
             CombineHashes(THash<TString>()(key.Uid), THash<TString>()(key.CpuSpec)));
     }
 };
 
-class TWasmCompileController
-    : public NActors::TActor<TWasmCompileController>,
-      public NTabletFlatExecutor::TTabletExecutedFlat {
+class TWasmCompileController: public NActors::TActor<TWasmCompileController>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
     using Schema = TCompileControllerSchema;
 
@@ -309,4 +305,4 @@ private:
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr SnapshotFetcher;
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

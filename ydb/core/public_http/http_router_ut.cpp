@@ -1,5 +1,6 @@
-#include <library/cpp/testing/unittest/registar.h>
 #include "http_router.h"
+
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NPublicHttp;
 using namespace NActors;
@@ -10,7 +11,7 @@ THttpHandler AsTestHandler(IActor* a) {
         return a;
     };
 }
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(HttpRouter) {
     Y_UNIT_TEST(Basic) {

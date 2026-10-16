@@ -15,7 +15,6 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/wait/wait.h>
-
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -37,11 +36,12 @@ using namespace NThreading;
 using namespace NYdb::NTopic;
 
 template <typename TDerived>
-class TPqCheckpointActorBase : public TActorBootstrapped<TDerived>, public IActorExceptionHandler {
+class TPqCheckpointActorBase: public TActorBootstrapped<TDerived>, public IActorExceptionHandler {
 protected:
     explicit TPqCheckpointActorBase(TPromise<TIssues> promise)
         : Promise(std::move(promise))
-    {}
+    {
+    }
 
     void Finish(TIssues issues) {
         Promise.SetValue(std::move(issues));
@@ -59,11 +59,11 @@ private:
     TPromise<TIssues> Promise;
 };
 
-class TPqGraphCleanupActor final : public TPqCheckpointActorBase<TPqGraphCleanupActor> {
+class TPqGraphCleanupActor final: public TPqCheckpointActorBase<TPqGraphCleanupActor> {
     using TBase = TPqCheckpointActorBase<TPqGraphCleanupActor>;
 
     struct TEvPrivate {
-        enum EEv : ui32 {
+        enum EEv: ui32 {
             EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
 
             EvListPublications = EvBegin,
@@ -74,36 +74,35 @@ class TPqGraphCleanupActor final : public TPqCheckpointActorBase<TPqGraphCleanup
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvListPublications : TEventLocal<TEvListPublications, EvListPublications> {
+        struct TEvListPublications: TEventLocal<TEvListPublications, EvListPublications> {
             explicit TEvListPublications(const TAsyncListPublicationsResult& result)
                 : Result(result)
-            {}
+            {
+            }
 
             TAsyncListPublicationsResult Result;
         };
 
-        struct TEvCancelPublication : TEventLocal<TEvCancelPublication, EvCancelPublication> {
+        struct TEvCancelPublication: TEventLocal<TEvCancelPublication, EvCancelPublication> {
             explicit TEvCancelPublication(const TAsyncCancelPublicationResult& result)
                 : Result(result)
-            {}
+            {
+            }
 
             TAsyncCancelPublicationResult Result;
         };
     };
 
 public:
-    TPqGraphCleanupActor(
-        IDeferredPublishClient::TPtr client,
-        TString database,
-        TString writerIdentity,
-        std::optional<ui64> generationUpperBound,
+    TPqGraphCleanupActor(IDeferredPublishClient::TPtr client, TString database, TString writerIdentity, std::optional<ui64> generationUpperBound,
         TPromise<TIssues> promise)
         : TBase(std::move(promise))
         , Client(std::move(client))
         , Database(std::move(database))
         , WriterIdentity(std::move(writerIdentity))
         , GenerationUpperBound(generationUpperBound)
-    {}
+    {
+    }
 
     void Bootstrap() {
         YDB_LOG_DEBUG("[CheckpointCleanup] Starting PQ sink cleanup",
@@ -123,7 +122,7 @@ private:
         YDB_LOG_ERROR("[CheckpointCleanup] Got unexpected exception",
             {"logPrefix", LogPrefix()},
             {"exception", e.what()});
-        Finish({TIssue(TStringBuilder() << "PQ checkpoint graph cleanup failed: " << e.what())});
+        Finish({ TIssue(TStringBuilder() << "PQ checkpoint graph cleanup failed: " << e.what()) });
         return true;
     }
 
@@ -142,7 +141,8 @@ private:
 
         Publications.reserve(result.GetPublications().size());
         for (const auto& publication : result.GetPublications()) {
-            Y_VALIDATE(publication.WriterIdentity == WriterIdentity, "Unexpected writer identity in checkpoint cleanup publications for writer: " << WriterIdentity << ", got identity: " << publication.WriterIdentity);
+            Y_VALIDATE(publication.WriterIdentity == WriterIdentity, "Unexpected writer identity in checkpoint cleanup publications for writer: "
+                                                                         << WriterIdentity << ", got identity: " << publication.WriterIdentity);
 
             if (GenerationUpperBound) {
                 TStringBuf identity(publication.ExtPublicationId);
@@ -150,11 +150,8 @@ private:
                 TStringBuf sequenceStr;
                 ui64 generation = 0;
                 ui64 sequence = 0;
-                if (!identity.SkipPrefix(WriterIdentity + ':')
-                    || !identity.TrySplit(':', generationStr, sequenceStr)
-                    || !TryFromString(generationStr, generation)
-                    || !TryFromString(sequenceStr, sequence)
-                    || generation >= *GenerationUpperBound) {
+                if (!identity.SkipPrefix(WriterIdentity + ':') || !identity.TrySplit(':', generationStr, sequenceStr) ||
+                    !TryFromString(generationStr, generation) || !TryFromString(sequenceStr, sequence) || generation >= *GenerationUpperBound) {
                     YDB_LOG_TRACE("[CheckpointCleanup] Skipping publication outside the cleanup generation range",
                         {"logPrefix", LogPrefix()},
                         {"publicationId", publication.IntPublicationId},
@@ -212,11 +209,12 @@ private:
     }
 
     void Fail(const TString& message, const NYdb::TStatus& status) {
-        TIssue issue(TStringBuilder() << "Failed to clean up publications for writer '" << WriterIdentity << "', " << message << ", status: " << status.GetStatus());
+        TIssue issue(TStringBuilder() << "Failed to clean up publications for writer '" << WriterIdentity << "', " << message
+                                      << ", status: " << status.GetStatus());
         for (const auto& subIssue : status.GetIssues()) {
             issue.AddSubIssue(MakeIntrusive<TIssue>(NYdb::NAdapters::ToYqlIssue(subIssue)));
         }
-        Finish({issue});
+        Finish({ issue });
     }
 
     void Finish(TIssues issues) {
@@ -236,8 +234,8 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[TPqGraphCleanupActor] ActorId: " << SelfId()
-            << " Database: " << Database << " WriterIdentity: " << WriterIdentity << ". ";
+        return TStringBuilder() << "[TPqGraphCleanupActor] ActorId: " << SelfId() << " Database: " << Database
+                                << " WriterIdentity: " << WriterIdentity << ". ";
     }
 
     const IDeferredPublishClient::TPtr Client;
@@ -258,13 +256,13 @@ struct TSourceRecoveryPartition {
     std::shared_ptr<NFq::IMessageStreamReadSession> Session;
 };
 
-class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceRecoveryActor> {
+class TPqSourceRecoveryActor final: public TPqCheckpointActorBase<TPqSourceRecoveryActor> {
     using TBase = TPqCheckpointActorBase<TPqSourceRecoveryActor>;
-    static constexpr ui64 READ_SESSION_MEMORY = 1_MB; // SDK minimum for read sessions.
+    static constexpr ui64 READ_SESSION_MEMORY = 1_MB;   // SDK minimum for read sessions.
     static constexpr TDuration PREPARATION_TIMEOUT = TDuration::Seconds(30);
 
     struct TEvPrivate {
-        enum EEv : ui32 {
+        enum EEv: ui32 {
             EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvConsumer = EvBegin,
             EvPartition,
@@ -275,39 +273,43 @@ class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceReco
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
 
-        struct TEvConsumer : TEventLocal<TEvConsumer, EvConsumer> {
+        struct TEvConsumer: TEventLocal<TEvConsumer, EvConsumer> {
             explicit TEvConsumer(NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> result)
                 : Result(std::move(result))
-            {}
+            {
+            }
 
             NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> Result;
         };
 
-        struct TEvPartition : TEventLocal<TEvPartition, EvPartition> {
+        struct TEvPartition: TEventLocal<TEvPartition, EvPartition> {
             TEvPartition(const size_t index, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> result)
                 : Index(index)
                 , Result(std::move(result))
-            {}
+            {
+            }
 
             const size_t Index = 0;
             NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> Result;
         };
 
-        struct TEvRewind : TEventLocal<TEvRewind, EvRewind> {
+        struct TEvRewind: TEventLocal<TEvRewind, EvRewind> {
             TEvRewind(const size_t index, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> result)
                 : Index(index)
                 , Result(std::move(result))
-            {}
+            {
+            }
 
             const size_t Index;
             NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> Result;
         };
 
-        struct TEvReadReady : TEventLocal<TEvReadReady, EvReadReady> {
+        struct TEvReadReady: TEventLocal<TEvReadReady, EvReadReady> {
             TEvReadReady(const size_t index, TFuture<void> result)
                 : Index(index)
                 , Result(std::move(result))
-            {}
+            {
+            }
 
             const size_t Index;
             TFuture<void> Result;
@@ -315,13 +317,15 @@ class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceReco
     };
 
 public:
-    TPqSourceRecoveryActor(std::shared_ptr<NFq::IMessageStreamClient> client, TString topic, TString consumer, TVector<TSourceRecoveryPartition> partitions, TPromise<TIssues> promise)
+    TPqSourceRecoveryActor(std::shared_ptr<NFq::IMessageStreamClient> client, TString topic, TString consumer,
+        TVector<TSourceRecoveryPartition> partitions, TPromise<TIssues> promise)
         : TBase(std::move(promise))
         , Client(std::move(client))
         , Topic(std::move(topic))
         , Consumer(std::move(consumer))
         , Partitions(std::move(partitions))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TThis::StateWork);
@@ -331,10 +335,10 @@ public:
             Finish({});
         } else if (Consumer.empty()) {
             for (size_t index = 0; index < Partitions.size(); ++index) {
-                Subscribe<TEvPrivate::TEvPartition>(Client->DescribePartition(NFq::TMessageStreamPartitionId{Partitions[index].Id}), index);
+                Subscribe<TEvPrivate::TEvPartition>(Client->DescribePartition(NFq::TMessageStreamPartitionId{ Partitions[index].Id }), index);
             }
         } else {
-            Subscribe<TEvPrivate::TEvConsumer>(Client->DescribeConsumer(Consumer, {.IncludeStats = true}));
+            Subscribe<TEvPrivate::TEvConsumer>(Client->DescribeConsumer(Consumer, { .IncludeStats = true }));
         }
     }
 
@@ -348,7 +352,7 @@ public:
 
 private:
     bool OnUnhandledException(const std::exception& e) final {
-        Finish({TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << Topic << ": " << e.what())});
+        Finish({ TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << Topic << ": " << e.what()) });
         return true;
     }
 
@@ -388,7 +392,7 @@ private:
         const auto index = ev->Get()->Index;
         auto& partition = Partitions[index];
 
-        for (auto& event : partition.Session->GetEvents({.Block = false})) {
+        for (auto& event : partition.Session->GetEvents({ .Block = false })) {
             if (auto* const start = std::get_if<NFq::TMessageStreamPartitionStartRequestedEvent>(&event)) {
                 start->PartitionControl->ConfirmStart(partition.StartOffset, std::nullopt);
             } else if (auto* data = std::get_if<NFq::TMessageStreamDataEvent>(&event)) {
@@ -398,21 +402,19 @@ private:
 
                 const auto& first = data->Records.front();
                 if (partition.Offset) {
-                    Y_ENSURE(first.Id.Offset <= *partition.Offset,
-                        "Required history has expired for partition " << partition.Id
-                            << ": requested checkpoint offset " << *partition.Offset
-                            << " precedes first retained message offset " << first.Id.Offset);
+                    Y_ENSURE(first.Id.Offset <= *partition.Offset, "Required history has expired for partition "
+                                                                       << partition.Id << ": requested checkpoint offset " << *partition.Offset
+                                                                       << " precedes first retained message offset " << first.Id.Offset);
                 } else {
                     const auto timestamp = TInstant::MilliSeconds(partition.TimestampMs);
                     if (!first.WriteTime) {
                         ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::Unsupported)
                             << "Timestamp recovery requires backend message write time";
                     }
-                    Y_ENSURE(*first.WriteTime <= timestamp,
-                        "Required history has expired for partition " << partition.Id
-                            << ": requested recovery timestamp " << timestamp
-                            << " precedes first retained message write time " << *first.WriteTime
-                            << " (offset " << first.Id.Offset << ")");
+                    Y_ENSURE(*first.WriteTime <= timestamp, "Required history has expired for partition "
+                                                                << partition.Id << ": requested recovery timestamp " << timestamp
+                                                                << " precedes first retained message write time " << *first.WriteTime
+                                                                << " (offset " << first.Id.Offset << ")");
                 }
 
                 Complete(index);
@@ -420,8 +422,9 @@ private:
             } else if (auto* stop = std::get_if<NFq::TMessageStreamPartitionStopRequestedEvent>(&event)) {
                 stop->PartitionControl->ConfirmStop();
             } else if (auto* closed = std::get_if<NFq::TMessageStreamSessionClosedEvent>(&event)) {
-                ythrow yexception() << "Cannot check topic history: " << closed->Issues.ToOneLineString();
-            } else if (std::holds_alternative<NFq::TMessageStreamPartitionExhaustedEvent>(event) || std::holds_alternative<NFq::TMessageStreamPartitionClosedEvent>(event)) {
+                ythrow yexception() << "Cannot check topic history: " << closed -> Issues.ToOneLineString();
+            } else if (std::holds_alternative<NFq::TMessageStreamPartitionExhaustedEvent>(event) ||
+                       std::holds_alternative<NFq::TMessageStreamPartitionClosedEvent>(event)) {
                 ythrow yexception() << "Partition session ended before the recovery boundary was validated for partition " << partition.Id;
             }
         }
@@ -430,7 +433,8 @@ private:
     }
 
     void HandleTimeout() {
-        Finish({TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << Topic << ": timed out after " << PREPARATION_TIMEOUT)});
+        Finish(
+            { TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << Topic << ": timed out after " << PREPARATION_TIMEOUT) });
     }
 
     void PreparePartition(size_t index, ui64 startOffset, ui64 endOffset, std::optional<ui64> committedOffset) {
@@ -453,9 +457,9 @@ private:
         }
 
         if (partition.StartOffset == partition.EndOffset) {
-            Y_ENSURE(partition.Offset || !partition.StartOffset,
-                "Required history has expired for partition " << partition.Id
-                    << ": no retained messages at recovery timestamp " << TInstant::MilliSeconds(partition.TimestampMs));
+            Y_ENSURE(partition.Offset || !partition.StartOffset, "Required history has expired for partition "
+                                                                     << partition.Id << ": no retained messages at recovery timestamp "
+                                                                     << TInstant::MilliSeconds(partition.TimestampMs));
             Complete(index);
             return;
         }
@@ -464,7 +468,8 @@ private:
             Y_ENSURE(committedOffset, "Consumer partition statistics are unavailable");
 
             const auto committed = *committedOffset;
-            const bool rewind = partition.Offset ? *partition.Offset < committed : TInstant::MilliSeconds(partition.TimestampMs) < TInstant::Now();
+            const bool rewind =
+                partition.Offset ? *partition.Offset < committed : TInstant::MilliSeconds(partition.TimestampMs) < TInstant::Now();
             if (rewind && partition.StartOffset < committed) {
                 YDB_LOG_INFO("Rewinding PQ consumer for source recovery",
                     {"topic", Topic},
@@ -474,7 +479,8 @@ private:
                     {"recoveryOffset", partition.Offset},
                     {"recoveryTimestampMs", partition.TimestampMs},
                     {"startOffset", partition.StartOffset});
-                Subscribe<TEvPrivate::TEvRewind>(Client->CommitPosition(NFq::TMessageStreamPartitionId{partition.Id}, Consumer, partition.StartOffset), index);
+                Subscribe<TEvPrivate::TEvRewind>(
+                    Client->CommitPosition(NFq::TMessageStreamPartitionId{ partition.Id }, Consumer, partition.StartOffset), index);
                 return;
             }
         }
@@ -490,7 +496,7 @@ private:
         }
 
         NFq::TMessageStreamReadSessionSettings settings;
-        settings.PartitionIds = {NFq::TMessageStreamPartitionId{partition.Id}};
+        settings.PartitionIds = { NFq::TMessageStreamPartitionId{ partition.Id } };
         settings.MaxMemoryUsageBytes = READ_SESSION_MEMORY;
         settings.RequireWriteTime = !partition.Offset.has_value();
         if (!Consumer.empty()) {
@@ -536,7 +542,7 @@ private:
     size_t Completed = 0;
 };
 
-class TPqCheckpointProviderIntegration final : public NFq::ICheckpointProviderIntegration {
+class TPqCheckpointProviderIntegration final: public NFq::ICheckpointProviderIntegration {
     struct TAuthorizationContext {
         TString Database;
         TIntrusivePtr<NACLib::TUserToken> UserToken;
@@ -552,7 +558,7 @@ class TPqCheckpointProviderIntegration final : public NFq::ICheckpointProviderIn
         IDeferredPublishClient::TPtr Client;
     };
 
-    struct TCleanupBatch : TAuthorizationContext {
+    struct TCleanupBatch: TAuthorizationContext {
         TVector<TPreparedSink> Sinks;
     };
 
@@ -562,13 +568,14 @@ class TPqCheckpointProviderIntegration final : public NFq::ICheckpointProviderIn
         TString Token;
     };
 
-    struct TRecoveryBatch : TAuthorizationContext {
+    struct TRecoveryBatch: TAuthorizationContext {
         TVector<TPreparedSource> Sources;
         TIssues Issues;
     };
 
 public:
-    TPqCheckpointProviderIntegration(TActorSystem* actorSystem, IPqStaticGateway::TPtr pqGateway, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
+    TPqCheckpointProviderIntegration(TActorSystem* actorSystem, IPqStaticGateway::TPtr pqGateway, NYdb::TDriver driver,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
         : ActorSystem(actorSystem)
         , PqGateway(std::move(pqGateway))
         , Driver(std::move(driver))
@@ -600,19 +607,21 @@ private:
             }
         }
 
-        return ResolveSecrets(*batch).Apply([self = TIntrusivePtr(this), batch](const TFuture<std::map<TString, TString>>& future) {
-            return self->PrepareReaders(*batch, future.GetValue());
-        }).Apply([batch](const TFuture<TIssues>& result) {
-            TIssues issues = batch->Issues;
-            try {
-                issues.AddIssues(result.GetValue());
-            } catch (const std::exception& e) {
-                issues.AddIssue(TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what()));
-            }
-            return issues;
-        });
+        return ResolveSecrets(*batch)
+            .Apply([self = TIntrusivePtr(this), batch](const TFuture<std::map<TString, TString>>& future) {
+                return self->PrepareReaders(*batch, future.GetValue());
+            })
+            .Apply([batch](const TFuture<TIssues>& result) {
+                TIssues issues = batch->Issues;
+                try {
+                    issues.AddIssues(result.GetValue());
+                } catch (const std::exception& e) {
+                    issues.AddIssue(TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what()));
+                }
+                return issues;
+            });
     } catch (const std::exception& e) {
-        return MakeFuture(TIssues{TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what())});
+        return MakeFuture(TIssues{ TIssue(TStringBuilder() << "PQ source recovery preparation failed: " << e.what()) });
     }
 
     TStringBuf GetSinkName() const final {
@@ -623,31 +632,34 @@ private:
         auto batch = std::make_shared<TCleanupBatch>();
         PrepareSinks(std::move(sinks), *batch);
 
-        return ResolveSecrets(*batch).Apply([self = TIntrusivePtr(this), batch, generationUpperBound](const TFuture<std::map<TString, TString>>& future) {
-            return self->CleanupWriters(*batch, future.GetValue(), generationUpperBound);
-        }).Apply([actorSystem = ActorSystem](const TFuture<TIssues>& result) {
-            TIssues issues;
-            try {
-                issues = result.GetValue();
-            } catch (const std::exception& e) {
-                issues.AddIssue(TIssue(TStringBuilder() << "PQ checkpoint graph cleanup failed: " << e.what()));
-            }
+        return ResolveSecrets(*batch)
+            .Apply([self = TIntrusivePtr(this), batch, generationUpperBound](const TFuture<std::map<TString, TString>>& future) {
+                return self->CleanupWriters(*batch, future.GetValue(), generationUpperBound);
+            })
+            .Apply([actorSystem = ActorSystem](const TFuture<TIssues>& result) {
+                TIssues issues;
+                try {
+                    issues = result.GetValue();
+                } catch (const std::exception& e) {
+                    issues.AddIssue(TIssue(TStringBuilder() << "PQ checkpoint graph cleanup failed: " << e.what()));
+                }
 
-            if (issues.Empty()) {
-                YDB_LOG_DEBUG_CTX(*actorSystem, "[CheckpointCleanup] PQ sink batch cleanup succeeded");
-            } else {
-                YDB_LOG_WARN_CTX(*actorSystem, "[CheckpointCleanup] PQ sink batch cleanup failed",
+                if (issues.Empty()) {
+                    YDB_LOG_DEBUG_CTX(*actorSystem, "[CheckpointCleanup] PQ sink batch cleanup succeeded");
+                } else {
+                    YDB_LOG_WARN_CTX(*actorSystem, "[CheckpointCleanup] PQ sink batch cleanup failed",
                     {"issues", issues.ToOneLineString()});
-            }
-            return issues;
-        });
+                }
+                return issues;
+            });
     } catch (const std::exception& e) {
         YDB_LOG_WARN_CTX(*ActorSystem, "[CheckpointCleanup] Failed to start PQ sink batch cleanup",
             {"exception", e.what()});
-        return MakeFuture(TIssues{TIssue(TStringBuilder() << "PQ checkpoint graph cleanup failed: " << e.what())});
+        return MakeFuture(TIssues{ TIssue(TStringBuilder() << "PQ checkpoint graph cleanup failed: " << e.what()) });
     }
 
-    static TString PrepareToken(const TString& tokenName, const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& requestContext, TAuthorizationContext& batch) {
+    static TString PrepareToken(const TString& tokenName, const THashMap<TString, TString>& secureParams,
+        const THashMap<TString, TString>& requestContext, TAuthorizationContext& batch) {
         const auto token = secureParams.find(tokenName);
         Y_ENSURE(token != secureParams.end(), "Missing auth references for checkpoint provider operation");
         TString tokenValue = token->second;
@@ -659,7 +671,8 @@ private:
             const auto database = requestContext.find("Database");
             const auto userSid = requestContext.find("UserSID");
             const auto groupSids = requestContext.find("UserGroupSIDs");
-            Y_ENSURE(database != requestContext.end() && userSid != requestContext.end() && groupSids != requestContext.end(), "Missing authorization context for checkpoint provider operation");
+            Y_ENSURE(database != requestContext.end() && userSid != requestContext.end() && groupSids != requestContext.end(),
+                "Missing authorization context for checkpoint provider operation");
 
             if (!batch.UserToken) {
                 TVector<NACLib::TSID> groups;
@@ -674,10 +687,8 @@ private:
                 batch.UserToken = MakeIntrusive<NACLib::TUserToken>(userSid->second, groups);
                 batch.UserGroupSids = groupSids->second;
             } else {
-                Y_ENSURE(batch.Database == database->second
-                    && batch.UserToken->GetUserSID() == userSid->second
-                    && batch.UserGroupSids == groupSids->second,
-                    "Inconsistent authorization context for checkpoint provider operation");
+                Y_ENSURE(batch.Database == database->second && batch.UserToken->GetUserSID() == userSid->second &&
+                             batch.UserGroupSids == groupSids->second, "Inconsistent authorization context for checkpoint provider operation");
             }
 
             if (parser.HasTransientToken()) {
@@ -696,12 +707,13 @@ private:
 
     TFuture<std::map<TString, TString>> ResolveSecrets(const TAuthorizationContext& context) const {
         const auto resolution = context.SecretNames.empty()
-            ? MakeFuture(TEvDescribeSecretsResponse::TDescription(std::vector<TString>{}))
-            : NSecret::DescribeSecret(context.SecretNames, context.UserToken, context.Database, ActorSystem);
+                                    ? MakeFuture(TEvDescribeSecretsResponse::TDescription(std::vector<TString>{}))
+                                    : NSecret::DescribeSecret(context.SecretNames, context.UserToken, context.Database, ActorSystem);
 
         return resolution.Apply([names = context.SecretNames](const TFuture<TEvDescribeSecretsResponse::TDescription>& future) {
             const auto& result = future.GetValue();
-            Y_ENSURE(result.Status == Ydb::StatusIds::SUCCESS, "Failed to resolve secrets for checkpoint provider operation: " << result.Issues.ToOneLineString());
+            Y_ENSURE(result.Status == Ydb::StatusIds::SUCCESS,
+                "Failed to resolve secrets for checkpoint provider operation: " << result.Issues.ToOneLineString());
             Y_VALIDATE(result.SecretValues.size() == names.size(), "Unexpected number of resolved secrets");
 
             std::map<TString, TString> secrets;
@@ -765,7 +777,8 @@ private:
                     timestamp = std::min(timestamp.value_or(state.GetStartingMessageTimestampMs()), state.GetStartingMessageTimestampMs());
 
                     for (const auto& partition : state.GetPartitions()) {
-                        auto [it, inserted] = offsets.emplace(std::make_pair(partition.GetCluster(), partition.GetPartition()), partition.GetOffset());
+                        auto [it, inserted] =
+                            offsets.emplace(std::make_pair(partition.GetCluster(), partition.GetPartition()), partition.GetOffset());
                         if (!inserted) {
                             it->second = std::min(it->second, partition.GetOffset());
                         }
@@ -791,11 +804,14 @@ private:
                                 continue;
                             }
 
-                            Y_ENSURE(cluster.Partitions.emplace(id, TSourceRecoveryPartition{
-                                .Id = id,
-                                .Offset = offset ? std::optional(*offset) : std::nullopt,
-                                .TimestampMs = *timestamp,
-                            }).second, "Duplicate partition in source recovery");
+                            Y_ENSURE(cluster.Partitions
+                                         .emplace(id,
+                                             TSourceRecoveryPartition{
+                                                 .Id = id,
+                                                 .Offset = offset ? std::optional(*offset) : std::nullopt,
+                                                 .TimestampMs = *timestamp,
+                                             })
+                                         .second, "Duplicate partition in source recovery");
                         }
                     }
                 }
@@ -822,16 +838,17 @@ private:
 
                 auto promise = NewPromise<TIssues>();
                 recoveries.emplace_back(promise.GetFuture());
-                ActorSystem->Register(new TPqSourceRecoveryActor(std::move(client), cluster.Settings.GetTopicPath(), cluster.Settings.GetConsumerName(), std::move(partitions), promise));
+                ActorSystem->Register(new TPqSourceRecoveryActor(
+                    std::move(client), cluster.Settings.GetTopicPath(), cluster.Settings.GetConsumerName(), std::move(partitions), promise));
             }
-
         };
 
         for (auto& source : batch.Sources) {
             try {
                 prepareSource(source);
             } catch (const std::exception& e) {
-                recoveries.emplace_back(MakeFuture(TIssues{TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << source.Settings.GetTopicPath() << ": " << e.what())}));
+                recoveries.emplace_back(MakeFuture(TIssues{ TIssue(
+                    TStringBuilder() << "Cannot prepare topic source recovery for " << source.Settings.GetTopicPath() << ": " << e.what()) }));
             }
             source.Token.clear();
         }
@@ -854,7 +871,7 @@ private:
         for (auto& sink : sinks) {
             Y_VALIDATE(sink.Sink.GetType() == GetSinkName(), "Unexpected sink type for PQ checkpoint cleanup: " << sink.Sink.GetType());
 
-            TPreparedSink prepared = {.Args = std::move(sink.Args)};
+            TPreparedSink prepared = { .Args = std::move(sink.Args) };
             Y_ENSURE(sink.Sink.GetSettings().UnpackTo(&prepared.Settings), "Failed to unpack PQ sink settings for checkpoint graph cleanup");
             if (!prepared.Settings.GetDeferredPublicationExtIdPrefix() || prepared.Args.TaskIds.empty()) {
                 YDB_LOG_DEBUG_CTX(*ActorSystem, "[CheckpointCleanup] Skipping PQ output without deferred publications or tasks",
@@ -862,12 +879,14 @@ private:
                 continue;
             }
 
-            prepared.Token = PrepareToken(prepared.Settings.GetToken().GetName(), prepared.Args.SecureParams, prepared.Args.RequestContext, batch);
+            prepared.Token =
+                PrepareToken(prepared.Settings.GetToken().GetName(), prepared.Args.SecureParams, prepared.Args.RequestContext, batch);
             batch.Sinks.emplace_back(std::move(prepared));
         }
     }
 
-    TFuture<TIssues> CleanupWriters(TCleanupBatch& batch, const std::map<TString, TString>& secrets, std::optional<ui64> generationUpperBound) const {
+    TFuture<TIssues> CleanupWriters(
+        TCleanupBatch& batch, const std::map<TString, TString>& secrets, std::optional<ui64> generationUpperBound) const {
         for (auto& sink : batch.Sinks) {
             sink.Token = CreateStructuredTokenParser(sink.Token).ToBuilder().ReplaceReferences(secrets).ToJson();
 
@@ -876,11 +895,12 @@ private:
                 {"endpoint", sink.Settings.GetEndpoint()},
                 {"outputIndex", sink.Args.OutputIndex},
                 {"tasksCount", sink.Args.TaskIds.size()});
-            sink.Client = PqGateway->GetDeferredPublishClient(Driver, NYdb::TCommonClientSettings()
-                .Database(sink.Settings.GetDatabase())
-                .DiscoveryEndpoint(sink.Settings.GetEndpoint())
-                .SslCredentials(NYdb::TSslCredentials(sink.Settings.GetUseSsl()))
-                .CredentialsProviderFactory(CredentialsFactory->Create(sink.Token, sink.Settings.GetAddBearerToToken())));
+            sink.Client = PqGateway->GetDeferredPublishClient(
+                Driver, NYdb::TCommonClientSettings()
+                            .Database(sink.Settings.GetDatabase())
+                            .DiscoveryEndpoint(sink.Settings.GetEndpoint())
+                            .SslCredentials(NYdb::TSslCredentials(sink.Settings.GetUseSsl()))
+                            .CredentialsProviderFactory(CredentialsFactory->Create(sink.Token, sink.Settings.GetAddBearerToToken())));
             sink.Token.clear();
         }
 
@@ -891,8 +911,10 @@ private:
                 auto promise = NewPromise<TIssues>();
                 cleanups.push_back(promise.GetFuture());
 
-                const TString writerIdentity = TStringBuilder() << sink.Settings.GetDeferredPublicationExtIdPrefix() << ':' << taskId << ':' << sink.Args.OutputIndex;
-                ActorSystem->Register(new TPqGraphCleanupActor(sink.Client, sink.Settings.GetDatabase(), writerIdentity, generationUpperBound, promise));
+                const TString writerIdentity = TStringBuilder() << sink.Settings.GetDeferredPublicationExtIdPrefix() << ':' << taskId << ':'
+                                                                << sink.Args.OutputIndex;
+                ActorSystem->Register(
+                    new TPqGraphCleanupActor(sink.Client, sink.Settings.GetDatabase(), writerIdentity, generationUpperBound, promise));
             }
         }
 
@@ -911,15 +933,12 @@ private:
     const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-NFq::ICheckpointProviderIntegration::TPtr CreatePqCheckpointProviderIntegration(
-    NActors::TActorSystem* actorSystem,
-    NYql::IPqStaticGateway::TPtr pqGateway,
-    NYdb::TDriver driver,
-    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
+NFq::ICheckpointProviderIntegration::TPtr CreatePqCheckpointProviderIntegration(NActors::TActorSystem* actorSystem,
+    NYql::IPqStaticGateway::TPtr pqGateway, NYdb::TDriver driver, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
 {
     return MakeIntrusive<TPqCheckpointProviderIntegration>(actorSystem, std::move(pqGateway), std::move(driver), std::move(credentialsFactory));
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -56,6 +56,8 @@ git checkout CLI_2.5.0
 
 ## Build
 
+For a reusable Linux build environment with configurable CPU and memory limits,
+see [Building in Docker](ydb/tools/build_local/README.md).
 
 Run `ya make` from the repository root, followed by an optional relative path to the build target. By default, `ya make` compiles a `debug` configuration, while you can choose to have `release` or `relwithdebinfo`. The latter is recommended for faster builds, as it leverages the YDB remote build cache.
 

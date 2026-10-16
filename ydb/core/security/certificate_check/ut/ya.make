@@ -5,7 +5,6 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
-    ydb/core/testlib/default
     ydb/core/security/certificate_check/test_utils
 )
 

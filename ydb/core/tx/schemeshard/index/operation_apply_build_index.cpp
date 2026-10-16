@@ -16,7 +16,8 @@ namespace NSchemeShard {
 namespace {
 
 ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard,
-        const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription* vectorDescription, const TString& embeddingColumn) {
+        const NKikimrSchemeOp::TVectorIndexKmeansTreeDescription* vectorDescription, const TString& embeddingColumn,
+        ui64 buildId) {
     TPath implTable = index.Child(name);
     {
         // To safely fill the TransactionTemplate below, we need to check if the table is valid.
@@ -59,6 +60,11 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
             *operation->MutableVectorIndexKmeansTreeDescription() = *vectorDescription;
             operation->SetVectorIndexHnsw(true);
             operation->SetVectorIndexEmbeddingColumn(embeddingColumn);
+            if (buildId) {
+                operation->SetHnswInitialBuildId(buildId);
+                operation->SetHnswInitialBuildDeadlineUs(
+                    (context.Ctx.Now() + context.SS->HnswIndexBuildWaitTimeout).MicroSeconds());
+            }
             const TPath mainTable = index.Parent();
             mainTable.Base()->PathId.ToProto(operation->MutableVectorIndexTablePathId());
             operation->SetVectorIndexTablePath(mainTable.PathString());
@@ -253,7 +259,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(),
                     isPostingTable && isHnsw && config.HasVectorIndexKmeansTreeDescription()
                         ? &config.GetVectorIndexKmeansTreeDescription() : nullptr,
-                    isPostingTable ? embeddingColumn : TString{}));
+                    isPostingTable ? embeddingColumn : TString{}, config.GetBuildIndexId()));
             }
         }
     }

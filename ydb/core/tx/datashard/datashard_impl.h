@@ -1962,6 +1962,7 @@ public:
     void PruneHnswIndexes();
     void ScheduleHnswRebuild(ui32 localTid);
     void ScheduleHnswInitialBuilds();
+    bool IsHnswInitialBuildDeferred(const TUserTable& table) const;
     void TrackHnswOpenTransactions(ui32 localTid, const NTable::TDatabase& db);
     TRowVersion GetHnswBuildVersion() const;
     void StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table, TRowVersion base,
@@ -3186,6 +3187,8 @@ private:
         TRowVersion BuildVersion = TRowVersion::Min();
         ui64 BuildToken = 0;
         ui32 InitialBuildAttemptsLeft = 0;
+        // Deliberately transient: a restarted/split shard must be authorized again.
+        ui64 CoordinatedBuildId = 0;
         bool RebuildScheduled = false;
         bool Building = false;
         bool BuildObsolete = false;

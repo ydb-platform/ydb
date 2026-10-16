@@ -1065,6 +1065,10 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
             op.GetVectorIndexKmeansTreeDescription());
         alterData->TableDescriptionFull->SetVectorIndexHnsw(op.GetVectorIndexHnsw());
+        if (op.HasHnswInitialBuildId()) {
+            alterData->TableDescriptionFull->SetHnswInitialBuildId(op.GetHnswInitialBuildId());
+            alterData->TableDescriptionFull->SetHnswInitialBuildDeadlineUs(op.GetHnswInitialBuildDeadlineUs());
+        }
         alterData->TableDescriptionFull->SetVectorIndexEmbeddingColumn(
             op.GetVectorIndexEmbeddingColumn());
         if (op.HasVectorIndexEmbeddingColumnId()) {

@@ -1515,6 +1515,8 @@ struct Schema : NIceDb::Schema {
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
         struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
         struct HnswWaitStartedAt : Column<61, NScheme::NTypeIds::Uint64> {};
+        struct HnswPhase : Column<62, NScheme::NTypeIds::Uint32> {};
+        struct HnswProbeRound : Column<63, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1578,7 +1580,9 @@ struct Schema : NIceDb::Schema {
             ParentBuildId,
             IsRebuild,
             RebuildIndexName,
-            HnswWaitStartedAt
+            HnswWaitStartedAt,
+            HnswPhase,
+            HnswProbeRound
         >;
     };
 

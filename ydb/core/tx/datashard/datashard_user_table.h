@@ -490,6 +490,8 @@ struct TUserTable : public TThrRefBase {
     TString VectorIndexPath;
     std::optional<Ydb::Table::VectorIndexSettings> HnswSettings;
     ui32 HnswVectorColumnTag = 0;
+    ui64 HnswInitialBuildId = 0;
+    TInstant HnswInitialBuildDeadline;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;

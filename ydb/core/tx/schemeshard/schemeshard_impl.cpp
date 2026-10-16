@@ -38,6 +38,7 @@
 #include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_sysviews_update.h>
 
@@ -8453,6 +8454,10 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
             alterData->TableDescriptionFull->GetVectorIndexKmeansTreeDescription());
         proto->SetVectorIndexHnsw(alterData->TableDescriptionFull->GetVectorIndexHnsw());
+        if (alterData->TableDescriptionFull->HasHnswInitialBuildId()) {
+            proto->SetHnswInitialBuildId(alterData->TableDescriptionFull->GetHnswInitialBuildId());
+            proto->SetHnswInitialBuildDeadlineUs(alterData->TableDescriptionFull->GetHnswInitialBuildDeadlineUs());
+        }
         proto->SetVectorIndexEmbeddingColumn(
             alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumn());
         if (alterData->TableDescriptionFull->HasVectorIndexEmbeddingColumnId()) {
@@ -8586,6 +8591,26 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
                 tableDescr->SetVectorIndexPath(PathToString(indexPath));
                 indexPath->ParentPathId.ToProto(tableDescr->MutableVectorIndexTablePathId());
                 tableDescr->SetVectorIndexTablePath(PathToString(PathsById.at(indexPath->ParentPathId)));
+                // Modern split destinations use this schema rather than the
+                // source shard's. Keep them deferred until the active build
+                // has finished planning their own size splits.
+                for (const auto& [buildId, build] : IndexBuilds) {
+                    if (build->IndexType != NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                            || build->TablePathId != indexPath->ParentPathId
+                            || build->State != TIndexBuildInfo::EState::Applying) {
+                        continue;
+                    }
+                    const bool replacing = build->SubState == TIndexBuildInfo::ESubState::RebuildReplacing
+                        && build->ApplyTxDone && build->IndexName == indexPath->Name;
+                    if (build->GetBuildIndexName() != indexPath->Name && !replacing) {
+                        continue;
+                    }
+                    const auto started = build->HnswWaitStartedAt
+                        ? build->HnswWaitStartedAt : AppData()->TimeProvider->Now();
+                    tableDescr->SetHnswInitialBuildId(ui64(buildId));
+                    tableDescr->SetHnswInitialBuildDeadlineUs((started + HnswIndexBuildWaitTimeout).MicroSeconds());
+                    break;
+                }
                 break;
             }
         }

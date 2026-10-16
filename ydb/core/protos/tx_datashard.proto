@@ -1045,6 +1045,8 @@ message TEvGetTableStats {
     optional uint64 HnswProbeRound = 7;
     optional NActorsProto.TActorId HnswReplyTo = 8;
     optional uint64 HnswTableOwnerId = 9;
+    optional bool HnswStartBuild = 10;
+    optional bool HnswReleaseBuild = 11;
 }
 
 message TEvGetTableStatsResult {
@@ -1064,6 +1066,10 @@ message TEvGetTableStatsResult {
     optional bool HnswStatsFresh = 14;
     optional uint32 HnswFollowersCount = 15;
     optional bool HnswStatisticsDisabled = 16;
+    // Absence means a legacy shard: retain the old in-progress-only protocol.
+    optional bool HnswBuildFinished = 17;
+    optional string HnswFallbackReason = 18;
+    optional bool HnswBuildReleased = 19;
 }
 
 message TEvPeriodicTableStats {

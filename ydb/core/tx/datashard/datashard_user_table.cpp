@@ -339,6 +339,10 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         HnswSettings = descr.GetVectorIndexKmeansTreeDescription().GetSettings().settings();
         HnswVectorColumnTag = descr.GetVectorIndexEmbeddingColumnId();
     }
+    if (descr.HasHnswInitialBuildId()) {
+        HnswInitialBuildId = descr.GetHnswInitialBuildId();
+        HnswInitialBuildDeadline = TInstant::MicroSeconds(descr.GetHnswInitialBuildDeadlineUs());
+    }
     if (descr.HasVectorIndexTablePathId()) {
         VectorIndexTablePathId = TPathId::FromProto(descr.GetVectorIndexTablePathId());
         VectorIndexTablePath = descr.GetVectorIndexTablePath();
@@ -760,6 +764,10 @@ void TUserTable::ApplyAlter(
         schema.SetVectorIndexTablePath(delta.GetVectorIndexTablePath());
         schema.MutableVectorIndexPathId()->CopyFrom(delta.GetVectorIndexPathId());
         schema.SetVectorIndexPath(delta.GetVectorIndexPath());
+    }
+    if (delta.HasHnswInitialBuildId()) {
+        schema.SetHnswInitialBuildId(delta.GetHnswInitialBuildId());
+        schema.SetHnswInitialBuildDeadlineUs(delta.GetHnswInitialBuildDeadlineUs());
     }
 
     SetSchema(schema);

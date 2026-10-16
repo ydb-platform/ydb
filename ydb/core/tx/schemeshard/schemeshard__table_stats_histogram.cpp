@@ -223,6 +223,9 @@ void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const 
         status.StatisticsDisabled = rec.GetHnswStatisticsDisabled();
         status.StatisticsReady = status.StatisticsDisabled || (rec.GetFullStatsReady() && rec.GetHnswStatsFresh());
         status.Building = rec.GetHnswBuildInProgress();
+        status.Finished = rec.HasHnswBuildFinished() ? rec.GetHnswBuildFinished() : !status.Building;
+        status.Released = rec.HasHnswBuildReleased() ? rec.GetHnswBuildReleased() : true;
+        status.FallbackReason = rec.GetHnswFallbackReason();
         status.ShardState = rec.GetShardState();
         status.DataSize = rec.GetTableStats().GetDataSize();
         if (const auto table = Tables.find(buildInfo.HnswPostingPathId); table != Tables.end()) {

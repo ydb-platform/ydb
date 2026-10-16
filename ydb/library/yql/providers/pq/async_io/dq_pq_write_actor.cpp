@@ -1317,9 +1317,9 @@ std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateDqPqWriteActor(
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, std::function<bool()> getEnableDeduplicationFeatureFlag) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters, enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters, getEnableDeduplicationFeatureFlag = std::move(getEnableDeduplicationFeatureFlag)](
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
@@ -1354,7 +1354,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 enableStreamingQueriesCounters,
                 DqPqDefaultFreeSpace,
                 currentExecutionGeneration,
-                enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
+                getEnableDeduplicationFeatureFlag(),
                 hasCheckpoints
             );
         }

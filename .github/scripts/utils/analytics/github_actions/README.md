@@ -182,7 +182,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `s3_sync_try` | залить `PUBLIC_DIR` на публичный S3, чтобы ссылки из комментария открывались |
 | `upload_tests_results` | залить результаты тестов в таблицу `test_results` (это не `ci_metrics`) |
 | `runner_info` | одна строка на весь job, **до** цикла `ya make`: сколько ядер, RAM и диска у машины. Не длительность (`kind = info`), потому что железо за job не меняется. На дашборде: отфильтровать «медленно на 8 ядрах» от «медленно на 64». Не путать с `--runner`/`--usage` на фазе сборки — те пишутся в labels той фазы (спека на старте, занятость в конце) |
-| `github_proxy` | проба checkout: `labels.use_proxy`, скорости последних 5 с в `labels.direct_last5_mbps` и `labels.proxy_last5_mbps`. `value` — скорость выбранного пути, МБ/с |
+| `github_proxy` | проба checkout, пишется в Init, до `ya make`: `labels.use_proxy`, скорости последних 5 с в `labels.direct_last5_mbps` и `labels.proxy_last5_mbps`. `value` — скорость выбранного пути, МБ/с |
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
 [`ya_evlog_phases.py`](ya_evlog_phases.py) по `ya_evlog.jsonl` — те же узлы,

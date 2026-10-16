@@ -808,7 +808,7 @@ public:
         return true;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& info = Transaction.GetSplitMergeTablePartitions();
@@ -1120,7 +1120,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TSplitMerge");
     }
 

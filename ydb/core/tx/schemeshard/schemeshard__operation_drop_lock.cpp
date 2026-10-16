@@ -92,7 +92,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
 
@@ -213,9 +213,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TDropLock AbortPropose"
             << ": opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Add(1);
     }
 

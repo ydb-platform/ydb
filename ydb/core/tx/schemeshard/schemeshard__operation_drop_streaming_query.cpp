@@ -146,7 +146,7 @@ class TDropStreamingQuery : public TSubOperation {
         return true;
     }
 
-    void PersistDropStreamingQuery(const TOperationContext& context, const TPath& dstPath) const {
+    void PersistDropStreamingQuery(const TProposeContext& context, const TPath& dstPath) const {
         const TPathId& pathId = dstPath.Base()->PathId;
 
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
@@ -180,7 +180,7 @@ class TDropStreamingQuery : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         Y_UNUSED(owner);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -211,8 +211,13 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TDropStreamingQuery AbortPropose: opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

@@ -317,7 +317,13 @@ class TCreateOlapStore: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TCreateOlapStore"; }
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -522,7 +528,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateOlapStore");
     }
 

@@ -102,7 +102,7 @@ class TAlterCdcStream: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetAlterCdcStream();
         const auto& streamName = op.GetStreamName();
@@ -220,9 +220,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterCdcStream AbortPropose"
             << ": opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
@@ -360,7 +365,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetAlterCdcStream();
         const auto& tableName = op.GetTableName();
@@ -477,9 +482,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterCdcStreamAtTable AbortPropose"
             << ": opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {

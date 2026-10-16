@@ -353,7 +353,7 @@ class TUpdateMainTableOnIndexMove: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto opDescr = Transaction.GetAlterTable();
@@ -436,11 +436,16 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TUpdateMainTableOnIndexMove AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

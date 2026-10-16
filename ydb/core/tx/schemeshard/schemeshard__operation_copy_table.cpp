@@ -141,8 +141,8 @@ public:
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
 
                 // Get coordinated version from source table's AlterData (shared across both drop and create)
-                // GrabTable is needed for proper rollback if operation fails
-                context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
+                // NOTE: no MemChanges.GrabTable here: this runs in the progress/reply transaction,
+                // where TMemoryChanges::UnDo is never invoked, so a Grab would be inert.
                 auto srcTable = context.SS->Tables.at(txState->SourcePathId);
                 srcTable->InitAlterData(OperationId);
                 ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
@@ -306,7 +306,6 @@ public:
             }
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
-                context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
                 // Don't call InitAlterData() here - it was already called in ConfigureParts,
@@ -328,7 +327,6 @@ public:
                 if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
                     auto parentPath = context.SS->PathsById.at(parentPathId);
                     if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, parentPathId);
                         auto index = context.SS->Indexes.at(parentPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -352,7 +350,6 @@ public:
                         continue;
                     }
                     if (context.SS->Indexes.contains(childPathId)) {
-                        context.MemChanges.GrabIndex(context.SS, childPathId);
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -371,7 +368,6 @@ public:
             context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
-                context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
                 auto stream = context.SS->CdcStreams.at(txState->CdcPathId);
                 if (stream->AlterData) {
                     stream->FinishAlter();
@@ -388,8 +384,6 @@ public:
                     if (streamPath->IsCdcStream() &&
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
-
-                        context.MemChanges.GrabCdcStream(context.SS, id);
 
                         context.SS->PersistRemoveCdcStream(db, id);
                         context.SS->CdcStreams.erase(id);
@@ -510,7 +504,7 @@ public:
         return AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
         const TString& parentPath = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateTable().GetName();
@@ -922,11 +916,16 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCopyTable AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

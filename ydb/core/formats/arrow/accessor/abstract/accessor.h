@@ -354,8 +354,15 @@ public:
         return true;
     }
 
+    // nullopt: no check available; false: has more than one value; true: all rows have one value.
+    // Only on true the value is defined: it is non-null and may be an Arrow NULL scalar.
+    // NULL is considered a distinct value.
     std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-        return DoCheckOneValueAccessor(value);
+        const auto result = DoCheckOneValueAccessor(value);
+        if (result && *result) {
+            AFL_VERIFY(value);
+        }
+        return result;
     }
 
     virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {

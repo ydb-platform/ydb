@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
     }
 
-    // A 256-value dictionary uses UInt16 positions; the slice has one value and uses UInt8.
+    // The source dictionary needs UInt16 positions; the two-entry slice uses UInt8.
     Y_UNIT_TEST(DictionarySliceWithWidePositionsRoundTrips) {
         auto builder = NAccessor::TTrivialArray::MakeBuilderBinary(257, 1024);
         // Exercise null preservation while remapping slice positions.
@@ -286,7 +286,8 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(dictionary->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT16));
 
         const auto slice = std::static_pointer_cast<NAccessor::TDictionaryArray>(dictionary->ISlice(0, 2));
-        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->length(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetDictionary()->null_count(), 1);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(slice->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
 
         const NAccessor::TChunkConstructionData sliceData(slice->GetRecordsCount(), nullptr, arrow::binary(), serializer);
@@ -297,7 +298,6 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         UNIT_ASSERT(restored->GetChunkedArray()->Equals(*slice->GetChunkedArray()));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(restored->GetPositions()->type_id()), static_cast<int>(arrow::Type::UINT8));
     }
-
 }
 
 // End-to-end: build a TSubColumnsArray, serialize, deserialize, and compare the reconstructed JSON

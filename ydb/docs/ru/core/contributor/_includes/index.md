@@ -4,3 +4,4 @@
 * [Разработка акторов](../actor-system/index.md)
 * [Архитектура распределённого хранилища](../distributed-storage.md)
 * [Тестирование с помощью нагружающих акторов](../load-actors-overview.md)
+* [Рекомендации по безопасности Developer UI](../developer-ui-security-guidelines.md)

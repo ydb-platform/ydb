@@ -8,6 +8,10 @@
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
+namespace NYql {
+class IHTTPGateway;
+}
+
 namespace NKikimr::NExternalSource {
 
 IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
@@ -15,7 +19,8 @@ IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegEx
                                                         size_t pathsLimit,
                                                         std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                                         bool enableInfer,
-                                                        bool allowLocalFiles);
+                                                        bool allowLocalFiles,
+                                                        std::shared_ptr<NYql::IHTTPGateway> httpGateway = nullptr);
 
 NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit, const TString& location);
 

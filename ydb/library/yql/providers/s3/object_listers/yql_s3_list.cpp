@@ -385,7 +385,7 @@ private:
 
             auto earlyStop = false;
             for (const auto& content : parsedResponse.Contents) {
-                if (content.Path.EndsWith('/')) {
+                if (content.Path.EndsWith('/') && !ctx.ListingRequest.IncludeDirectoryMarkers) {
                     // skip 'directories'
                     continue;
                 }

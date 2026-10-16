@@ -32,6 +32,41 @@ Y_UNIT_TEST(CreateExternalTable) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateExternalTableValidationBoolean) {
+    for (const TString value : {"TRUE", "false", "\"true\"", "\"false\""}) {
+        const auto res = SqlToYql(TStringBuilder() << R"sql(
+            USE plato;
+            CREATE EXTERNAL TABLE mytable (a Int32) WITH (
+                DATA_SOURCE="source", LOCATION="/", validate=)sql" << value << ");");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        const TString expected = value.Contains("false") ? "false" : "true";
+        UNIT_ASSERT_STRING_CONTAINS(GetPrettyPrint(res),
+            TStringBuilder() << "'('validate (String '\"" << expected << "\"))");
+    }
+}
+
+Y_UNIT_TEST(CreateExternalTableValidationRejectsOtherLiteralTypes) {
+    for (const TString value : {"0", "enabled"}) {
+        const auto res = SqlToYql(TStringBuilder() << R"sql(
+            USE plato;
+            CREATE EXTERNAL TABLE mytable (a Int32) WITH (
+                DATA_SOURCE="source", LOCATION="/", validate=)sql" << value << ");");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "VALIDATE value should be a boolean or a string literal");
+    }
+}
+
+Y_UNIT_TEST(OtherExternalTableParametersStillRequireStrings) {
+    const auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL TABLE mytable (a Int32) WITH (
+            DATA_SOURCE="source", LOCATION="/", FORMAT=FALSE
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "FORMAT value should be a string literal");
+}
+
 Y_UNIT_TEST(CreateExternalTableWithTablePrefix) {
     NYql::TAstParseResult res = SqlToYql(R"sql(
                     USE plato;

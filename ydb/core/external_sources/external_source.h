@@ -148,6 +148,14 @@ struct IExternalSource : public TThrRefBase {
         of the previous method.
     */
     virtual bool CanLoadDynamicMetadata() const = 0;
+
+    // Run all additional remote checks before creating or replacing an external
+    // table. The DDL layer calls this only when VALIDATE is enabled.
+    // Local definition validation belongs in Pack and is always required.
+    virtual NThreading::TFuture<void> ValidateExternalTable(const TMetadata&) {
+        return NThreading::MakeErrorFuture<void>(std::make_exception_ptr(
+            TExternalSourceException() << "External table validation is not supported for this external source"));
+    }
 };
 
 }

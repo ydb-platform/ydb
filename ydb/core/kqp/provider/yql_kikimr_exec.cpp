@@ -3,6 +3,7 @@
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/kqp/provider/external_table_validation.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -1829,10 +1830,12 @@ public:
     TKiSinkCallableExecutionTransformer(
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
+        TIntrusivePtr<IKikimrQueryExecutor> queryExecutor,
+        const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory)
         : Gateway(gateway)
         , SessionCtx(sessionCtx)
-        , QueryExecutor(queryExecutor) {}
+        , QueryExecutor(queryExecutor)
+        , ExternalSourceFactory(externalSourceFactory) {}
 
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx)
@@ -1937,8 +1940,8 @@ public:
             bool replaceIfExists = (maybeCreate.ReplaceIfExists().Cast().Value() == "1");
             switch (tableTypeItem) {
                 case ETableType::ExternalTable: {
-                    future = Gateway->CreateExternalTable(cluster,
-                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), true, existingOk, replaceIfExists);
+                    future = CreateExternalTable(cluster,
+                        ParseCreateExternalTableSettings(maybeCreate.Cast(), table.Metadata->TableSettings), existingOk, replaceIfExists);
                     break;
                 }
                 case ETableType::TableStore: {
@@ -4526,9 +4529,51 @@ private:
     }
 
 private:
+    TFuture<IKikimrGateway::TGenericResult> CreateExternalTable(
+        const TString& cluster, TCreateExternalTableSettings settings, bool existingOk, bool replaceIfExists)
+    {
+        // Prepared DDL is validated by the scheme executer, after earlier DDL
+        // statements have run. EXPLAIN also reaches this branch without I/O.
+        if (SessionCtx->Query().PrepareOnly) {
+            return Gateway->CreateExternalTable(cluster, settings, true, existingOk, replaceIfExists);
+        }
+        bool validateExternal = false;
+        for (auto it = settings.SourceTypeParameters.begin(); it != settings.SourceTypeParameters.end();) {
+            if (to_lower(it->first) != "validate") {
+                ++it;
+                continue;
+            }
+            const auto value = to_lower(it->second);
+            if (value != "true" && value != "false") {
+                return MakeFuture(ResultFromIssues<IKikimrGateway::TGenericResult>(TIssuesIds::KIKIMR_BAD_REQUEST,
+                    "VALIDATE must be 'true' or 'false'", {}));
+            }
+            validateExternal = value == "true";
+            it = settings.SourceTypeParameters.erase(it);
+        }
+        if (!validateExternal) {
+            return Gateway->CreateExternalTable(cluster, settings, true, existingOk, replaceIfExists);
+        }
+
+        return ValidateExternalTable(settings.ExternalTable, settings.DataSourcePath, settings.Location,
+            existingOk && !replaceIfExists, ExternalSourceFactory,
+            [gateway = Gateway, cluster](const TString& path, bool auth) {
+                return gateway->LoadTableMetadata(cluster, path,
+                    IKikimrGateway::TLoadTableMetadataSettings().WithExternalDatasources(true).WithAuthInfo(auth));
+            }).Apply([gateway = Gateway, cluster, settings, existingOk, replaceIfExists]
+                (const TFuture<IKikimrGateway::TGenericResult>& validation) {
+                const auto& result = validation.GetValue();
+                if (!result.Success()) {
+                    return MakeFuture(result);
+                }
+                return gateway->CreateExternalTable(cluster, settings, true, existingOk, replaceIfExists);
+            });
+    }
+
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TIntrusivePtr<IKikimrQueryExecutor> QueryExecutor;
+    NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
 };
 
 } // anonymous namespace
@@ -4544,9 +4589,10 @@ TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
 TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-    TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
+    TIntrusivePtr<IKikimrQueryExecutor> queryExecutor,
+    const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory)
 {
-    return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor);
+    return new TKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor, externalSourceFactory);
 }
 
 } // namespace NYql

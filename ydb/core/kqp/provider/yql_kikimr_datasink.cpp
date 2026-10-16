@@ -565,7 +565,7 @@ public:
         , TypeAnnotationTransformer(CreateKiSinkTypeAnnotationTransformer(gateway, sessionCtx, types))
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
-        , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
+        , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor, externalSourceFactory))
         , DqTypeAnnTransformer(NDq::CreateDqTypeAnnotationTransformer())
         , ConstraintsTransformer(CreateKiSinkConstraintsTransformer(sessionCtx))
     {

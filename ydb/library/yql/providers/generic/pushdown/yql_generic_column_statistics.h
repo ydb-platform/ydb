@@ -75,6 +75,7 @@ namespace NYql::NGenericPushDown {
         TMaybe<TString> lowValue;
         TMaybe<TString> highValue;
         TMaybe<i64> numNulls;
+        bool IsRfc4122 = false;
     };
 
     struct TColumnStatistics {

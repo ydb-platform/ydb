@@ -209,6 +209,14 @@ namespace NYql::NGenericPushDown {
             return bytes;
         }
 
+        TString YqlUuidBytesToRfc4122(TString bytes) {
+            std::swap(bytes.begin()[0], bytes.begin()[3]);
+            std::swap(bytes.begin()[1], bytes.begin()[2]);
+            std::swap(bytes.begin()[4], bytes.begin()[5]);
+            std::swap(bytes.begin()[6], bytes.begin()[7]);
+            return bytes;
+        }
+
         ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation SwapComparison(
             ::NYql::NConnector::NApi::TPredicate::TComparison::EOperation operation
         ) {
@@ -272,9 +280,19 @@ namespace NYql::NGenericPushDown {
             if (statistics->UuidStats->lowValue->size() != 16 || statistics->UuidStats->highValue->size() != 16) {
                 return Triple::Unknown;
             }
-            const auto constant = TypedValueToUuidBytes(typedValue);
+            if (statistics->UuidStats->IsRfc4122
+                && operation != ::NYql::NConnector::NApi::TPredicate::TComparison::EQ
+                && operation != ::NYql::NConnector::NApi::TPredicate::TComparison::NE) {
+                // UUID comparison in YQL uses its internal byte layout, whose order
+                // differs from RFC 4122 byte order. RFC min/max cannot safely prune ranges.
+                return Triple::Unknown;
+            }
+            auto constant = TypedValueToUuidBytes(typedValue);
             if (!constant || constant->size() != 16) {
                 return Triple::Unknown;
+            }
+            if (statistics->UuidStats->IsRfc4122) {
+                constant = YqlUuidBytesToRfc4122(std::move(*constant));
             }
             return CompareMinMax(*statistics->UuidStats->lowValue, *statistics->UuidStats->highValue, operation, *constant);
         }
@@ -327,6 +345,10 @@ namespace NYql::NGenericPushDown {
                 case Ydb::Type::DATE:
                     return BetweenTimestamp(statistics, least, greatest, 24 * 3600 * 1000000LL);
                 case Ydb::Type::UUID: {
+                    if (statistics.UuidStats && statistics.UuidStats->IsRfc4122) {
+                        // RFC byte ordering does not preserve YQL's internal UUID ordering.
+                        return Triple::Unknown;
+                    }
                     if (!statistics.UuidStats || !statistics.UuidStats->lowValue || !statistics.UuidStats->highValue) {
                         return Triple::Unknown;
                     }

@@ -197,14 +197,16 @@ class TestS3ParquetPushdown(TestYdsBase):
         )
 
     @yq_v2
-    def test_s3_push_down_parquet_uuid_skipped_row_group(self, kikimr, s3, client, unique_prefix):
-        # Seven groups: skip group 3; the all-NULL group is retained by min/max pushdown.
-        # Six selected groups with five readers force another prefetch after the initial batch.
-        uuids = [f"{i:08x}-0000-4000-8000-000000000000" for i in range(1, 7)]
-        ids = [self._yql_uuid_bytes(value) for value in uuids for _ in range(2)] + [None, None]
-        fruits = [f"row-{i}" for i in range(len(ids))]
-        table = pa.table({'id': pa.array(ids, type=pa.binary(16)), 'fruit': fruits})
-        filename = 'uuid_skipped_row_group.parquet'
+    def test_s3_push_down_parquet_skipped_row_group(self, kikimr, s3, client, unique_prefix):
+        # Six timestamp groups, one skipped by min/max, plus an all-NULL group.
+        # Five parallel readers must prefetch the sixth selected group afterwards.
+        timestamps = [day * 86_400_000 for day in range(6) for _ in range(2)] + [None, None]
+        fruits = [f"row-{i}" for i in range(len(timestamps))]
+        table = pa.table({
+            'ts': pa.array(timestamps, type=pa.timestamp('ms')),
+            'fruit': fruits,
+        })
+        filename = 'skipped_row_group.parquet'
         conn = self.setup_s3_and_connection(s3, client, unique_prefix, filename, table)
         kikimr.control_plane.wait_bootstrap(1)
 
@@ -213,10 +215,10 @@ class TestS3ParquetPushdown(TestYdsBase):
             PRAGMA s3.ArrowRowGroupReordering = "true";
             SELECT fruit
             FROM `{conn}`.`/{filename}`
-            WITH (FORMAT="parquet", SCHEMA=(id Uuid, fruit Utf8 NOT NULL))
-            WHERE id != Uuid("{uuids[3]}")
+            WITH (FORMAT="parquet", SCHEMA=(ts Timestamp, fruit Utf8 NOT NULL))
+            WHERE ts != Timestamp("1970-01-04T00:00:00Z")
             '''
-        # SQL filtering removes both the excluded UUID and NULLs.
+        # SQL filtering removes both the excluded timestamp group and NULLs.
         expected = [(fruits[i],) for i in range(12) if i // 2 != 3]
         self._assert_pushdown_correctness(client, sql, expected)
 

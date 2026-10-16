@@ -110,6 +110,7 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
                 columnStatistics.UuidStats.ConstructInPlace();
                 columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
                 columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
+                columnStatistics.UuidStats->IsRfc4122 = true;
                 columns[columnName] = columnStatistics;
             }
             break;
@@ -145,21 +146,7 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
             case parquet::LogicalType::Type::type::NONE:
             break;
         }
-        // FLBA(16) without UUID logical type: treat as UUID (pyarrow 5 compatibility).
-        // FLBA has SortOrder::UNSIGNED by default, so this check is independent of sort_order.
-        if (physicalType == parquet::Type::type::FIXED_LEN_BYTE_ARRAY
-            && column->type_length() == 16
-            && logicalType->type() == parquet::LogicalType::Type::type::NONE) {
-            const auto* typedStatistics = static_cast<const parquet::FLBAStatistics*>(columnChunkMetadata->statistics().get());
-            const TString columnName{column->name()};
-            NYql::NGenericPushDown::TColumnStatistics columnStatistics;
-            columnStatistics.ColumnName = columnName;
-            columnStatistics.ColumnType.set_type_id(::Ydb::Type::UUID);
-            columnStatistics.UuidStats.ConstructInPlace();
-            columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
-            columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
-            columns[columnName] = columnStatistics;
-        }
+
     }
     return NYql::NGenericPushDown::MatchPredicate(columns, predicate);
 }

@@ -289,6 +289,34 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
         UNIT_ASSERT_VALUES_EQUAL(kept[0], 0);
     }
 
+    Y_UNIT_TEST(UuidLogicalTypeUsesRfc4122Statistics) {
+        // Parquet UUID logical types store RFC 4122 bytes. YQL literals use the
+        // internal UUID byte order, so the pushdown matcher must convert them.
+        TString rfcUuid("\x00\x11\x22\x33\x44\x55\x46\x77\x88\x99\xaa\xbb\xcc\xdd\xee\xff", 16);
+        TString yqlUuid = rfcUuid;
+        std::swap(yqlUuid.begin()[0], yqlUuid.begin()[3]);
+        std::swap(yqlUuid.begin()[1], yqlUuid.begin()[2]);
+        std::swap(yqlUuid.begin()[4], yqlUuid.begin()[5]);
+        std::swap(yqlUuid.begin()[6], yqlUuid.begin()[7]);
+
+        TFileMetaDataBuilder builder{MakeLogicalUuidSchema("id")};
+        auto metadata = builder.AddRowGroup()
+                               .AddColumnFlbaStatistics(0, rfcUuid, rfcUuid)
+                               .Build()
+                        .Build();
+        auto predicate = BuildPredicate(
+            TStringBuilder() << R"proto(comparison {
+                operation: EQ
+                left_value { column: "id" }
+                right_value { typed_value { type { type_id: UUID } value { )proto"
+                             << UuidValueField(yqlUuid) << R"proto( } } }
+            })proto");
+
+        auto groups = NDq::MatchedRowGroups(metadata, predicate);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(groups[0], 0);
+    }
+
     Y_UNIT_TEST(UuidMatchSecondGroup) {
         const TString firstLo(16, '\x10');
         const TString firstHi(16, '\x11');
@@ -319,7 +347,8 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
         UNIT_ASSERT_VALUES_EQUAL(rowGroups[0], 1);
     }
 
-    Y_UNIT_TEST(FixedSizeBinaryWithoutUuidLogicalType) {
+    Y_UNIT_TEST(Flba16WithoutUuidLogicalTypeKeepsGroup) {
+        // FLBA(16) without UUID annotation is ambiguous; do not use its min/max as UUID stats.
         const TString lo(16, '\x10');
         const TString hi(16, '\x20');
         const TString outside(16, '\x30');
@@ -339,58 +368,6 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
                     left_value { column: "id" }
                     right_value { typed_value { type { type_id: UUID } value { )proto"
                              << UuidValueField(outside) << R"proto( } } }
-                }
-            )proto");
-        // pyarrow 5 writes Uuid as FLBA(16) without UUID logical type; skip using raw bytes.
-        UNIT_ASSERT_VALUES_EQUAL(NDq::MatchedRowGroups(fileMetadata, predicate).size(), 0);
-    }
-
-    Y_UNIT_TEST(Flba16WithoutUuidLogicalTypeIsTreatedAsUuid) {
-        // FLBA(16) with NONE logical type is treated as UUID (pyarrow 5 compatibility).
-        const TString lo(16, '\x10');
-        const TString hi(16, '\x20');
-        const TString outside(16, '\x30');
-
-        TFileMetaDataBuilder builder{{
-            arrow::field("data", arrow::fixed_size_binary(16))
-        }};
-        auto fileMetadata = builder.AddRowGroup()
-                                   .AddColumnFlbaStatistics(0, lo, hi)
-                                   .Build()
-                            .Build();
-
-        auto predicate = BuildPredicate(
-            TStringBuilder() << R"proto(
-                comparison {
-                    operation: EQ
-                    left_value { column: "data" }
-                    right_value { typed_value { type { type_id: UUID } value { )proto"
-                             << UuidValueField(outside) << R"proto( } } }
-                }
-            )proto");
-        UNIT_ASSERT_VALUES_EQUAL(NDq::MatchedRowGroups(fileMetadata, predicate).size(), 0);
-    }
-
-    Y_UNIT_TEST(Flba16WithoutUuidLogicalTypeKeepGroup) {
-        const TString lo(16, '\x10');
-        const TString hi(16, '\x20');
-        const TString inside(16, '\x15');
-
-        TFileMetaDataBuilder builder{{
-            arrow::field("data", arrow::fixed_size_binary(16))
-        }};
-        auto fileMetadata = builder.AddRowGroup()
-                                   .AddColumnFlbaStatistics(0, lo, hi)
-                                   .Build()
-                            .Build();
-
-        auto predicate = BuildPredicate(
-            TStringBuilder() << R"proto(
-                comparison {
-                    operation: EQ
-                    left_value { column: "data" }
-                    right_value { typed_value { type { type_id: UUID } value { )proto"
-                             << UuidValueField(inside) << R"proto( } } }
                 }
             )proto");
         auto kept = NDq::MatchedRowGroups(fileMetadata, predicate);

@@ -142,15 +142,13 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -204,7 +202,8 @@ bool IsCompatibleKeyTypes(
     bool uniformTable,
     TString& explain);
 
-// Fulltext and JSON indexes require exactly one Int64/Int32/Uint64/Uint32 primary key column
+// Fulltext and JSON indexes without RowId require exactly one Int64/Int32/Uint64/Uint32 primary key column
+bool IsSingleIntegerPrimaryKey(const TTableColumns& baseTableColumns, const TColumnTypes& baseColumnTypes);
 bool CheckSingleIntegerPrimaryKey(
     const TTableColumns& baseTableColumns,
     const TColumnTypes& baseColumnTypes,

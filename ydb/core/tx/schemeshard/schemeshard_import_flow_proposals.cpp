@@ -91,8 +91,11 @@ bool CheckIndexMaterializationCompatible(
 
         google::protobuf::util::MessageDifferencer diff;
         // TypeId is redundant with Type, and the backup scheme is parsed without it.
-        diff.IgnoreField(NKikimrSchemeOp::TTableDescription::descriptor()->FindFieldByName("type_id"));
-        if (!diff.Compare(backupDesc, expectedIt->second)) {
+        diff.IgnoreField(NKikimrSchemeOp::TColumnDescription::descriptor()->FindFieldByName("TypeId"));
+        if (!std::equal(backupDesc.GetColumns().begin(), backupDesc.GetColumns().end(),
+                expectedIt->second.GetColumns().begin(), [&](const auto& a, const auto& b) { return diff.Compare(a, b); }) ||
+            !std::equal(backupDesc.GetKeyColumnNames().begin(), backupDesc.GetKeyColumnNames().end(),
+                expectedIt->second.GetKeyColumnNames().begin())) {
             error = TStringBuilder() << "materialized index '" << indexDesc.GetName()
                 << "' has a scheme incompatible with this database";
             return false;

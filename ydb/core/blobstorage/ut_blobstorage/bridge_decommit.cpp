@@ -5,6 +5,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <algorithm>
+#include <deque>
 #include <iterator>
 
 using namespace NBridgeTest;
@@ -103,30 +104,25 @@ namespace {
         UNIT_FAIL("decommit status " << NKikimrBlobStorage::TGroupDecommitStatus::E_Name(expected) << " not reached");
     }
 
-    // keeps decommission in IN_PROGRESS state by holding the puts copying assimilated data into BlobDepot channels; blocks
-    // and barriers get assimilated meanwhile, so the BlobDepot is ready for agent queries, while the data still resides
-    // in the group being decommitted
-    class TCopyingHold {
+    // keeps events matching the predicate until released
+    class TEventHold {
         TEnvironmentSetup& Env;
+        const std::function<bool(IEventHandle&)> Predicate;
         bool Hold = true;
         std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held;
 
     public:
-        TCopyingHold(TEnvironmentSetup& env)
+        TEventHold(TEnvironmentSetup& env, std::function<bool(IEventHandle&)> predicate)
             : Env(env)
-        {
-            Env.Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-                if (Hold && ev->GetTypeRewrite() == TEvBlobStorage::EvPut &&
-                        ev->Get<TEvBlobStorage::TEvPut>()->WriteSource == TWriteSource::BlobDepotPut) {
-                    Held.emplace_back(nodeId, std::move(ev));
-                    return false;
-                }
-                return true;
-            };
-        }
+            , Predicate(std::move(predicate))
+        {}
 
-        ~TCopyingHold() {
-            Env.Runtime->FilterFunction = {};
+        bool Filter(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (Hold && Predicate(*ev)) {
+                Held.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return true;
         }
 
         bool HasHeld() const {
@@ -135,12 +131,134 @@ namespace {
 
         void Release() {
             Hold = false;
-            Env.Runtime->FilterFunction = {};
             for (auto& [nodeId, ev] : std::exchange(Held, {})) {
-                Env.Runtime->Send(ev.release(), nodeId);
+                // runtime resolves service id of the recipient at send, and the actor it was resolved to may be gone
+                // already, so the event is sent anew
+                const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
+                Env.Runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags,
+                    ev->Cookie, forwardOnNondelivery ? &forwardOnNondelivery : nullptr), nodeId);
             }
         }
     };
+
+    // runtime has the only filter function, this one combines several filters
+    class TFilterChain {
+        using TFilter = std::function<bool(ui32, std::unique_ptr<IEventHandle>&)>;
+
+        TEnvironmentSetup& Env;
+        std::deque<TFilter> Filters;
+        std::deque<TEventHold> Holds;
+
+    public:
+        TFilterChain(TEnvironmentSetup& env)
+            : Env(env)
+        {
+            Env.Runtime->FilterFunction = [this](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                for (auto& filter : Filters) {
+                    if (!filter(nodeId, ev)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+        }
+
+        ~TFilterChain() {
+            Env.Runtime->FilterFunction = {};
+        }
+
+        void Add(TFilter filter) {
+            Filters.push_back(std::move(filter));
+        }
+
+        TEventHold& AddHold(std::function<bool(IEventHandle&)> predicate) {
+            TEventHold& hold = Holds.emplace_back(Env, std::move(predicate));
+            Add([&hold](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) { return hold.Filter(nodeId, ev); });
+            return hold;
+        }
+    };
+
+    // BlobDepot agent forwards assimilation requests to the proxy serving the physical part of the decommitted group,
+    // which is the bridge proxy in case of bridge proxy group; remember it, as it is not reachable through service id
+    void CaptureBridgeProxyBehindAgent(TFilterChain& chain, std::optional<TActorId>& res) {
+        chain.Add([&res](ui32, std::unique_ptr<IEventHandle>& ev) {
+            // the agent forwards to the actor id; requests sent through the service id before the agent was started may
+            // come to node warden as undelivered ones (runtime resolves service ids at send, so original recipient is used)
+            const TActorId recipient = ev->Recipient;
+            if (!res && ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate && !recipient.IsService() &&
+                    recipient != MakeBlobStorageNodeWardenID(recipient.NodeId())) {
+                res.emplace(recipient);
+            }
+            return true;
+        });
+    }
+
+    std::vector<ui32> GetPileGroupIds(TEnvironmentSetup& env, ui32 proxyGroupId) {
+        // piles of bridge proxy group get subsequent group ids
+        const auto baseConfig = env.FetchBaseConfig();
+        UNIT_ASSERT(FindGroup(baseConfig, proxyGroupId).GetIsProxyGroup());
+        std::vector<ui32> res;
+        for (ui32 i = 0; i < env.Settings.NumPiles; ++i) {
+            const auto& group = FindGroup(baseConfig, proxyGroupId + 1 + i);
+            UNIT_ASSERT(!group.GetIsProxyGroup());
+            UNIT_ASSERT(group.VSlotIdSize());
+            res.push_back(group.GetGroupId());
+        }
+        return res;
+    }
+
+    void SwitchPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
+        auto clusterState = QueryStorageConfig(env).GetClusterState();
+        clusterState.SetPerPileState(pileIndex, state);
+        clusterState.SetGeneration(clusterState.GetGeneration() + 1);
+        const auto res = InvokeDistconf(env, [&](auto& record) {
+            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+    }
+
+    NKikimrBridge::TClusterState::EPileState GetPileState(TEnvironmentSetup& env, ui32 pileIndex) {
+        return QueryStorageConfig(env).GetClusterState().GetPerPileState(pileIndex);
+    }
+
+    void WaitForPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
+        for (ui32 i = 0; i < 60; ++i) {
+            if (GetPileState(env, pileIndex) == state) {
+                return;
+            }
+            env.Sim(TDuration::Seconds(10));
+        }
+        UNIT_FAIL("pile state " << NKikimrBridge::TClusterState::EPileState_Name(state) << " not reached, current one is "
+            << NKikimrBridge::TClusterState::EPileState_Name(GetPileState(env, pileIndex)));
+    }
+
+    TEnvironmentSetup::TSettings MakeBridgedSettings() {
+        return {
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SetupHive = true,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        };
+    }
+
+    // create two bridge proxy groups with their piles and write some data to the first one, which is returned
+    ui32 PrepareBridgedCluster(TEnvironmentSetup& env, TDataChecker& checker) {
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        const ui32 groupId = groups.front();
+
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        checker.CheckAll();
+        return groupId;
+    }
 
     struct TPoolSnapshot {
         std::set<ui32> Groups;
@@ -159,16 +277,27 @@ namespace {
         return res;
     }
 
+    struct TDecommitHooks {
+        std::function<void()> InProgress; // called when decommission is in progress, while data still resides in the group
+        std::function<void()> Done; // called right after decommission is over
+    };
+
     // decommit the whole bridged group, checking data through restarted nodes while decommission is in progress; returns
     // the groups that vanished during decommission
-    std::set<ui32> RunDecommission(TEnvironmentSetup& env, TDataChecker& checker, ui32 groupId,
-            const std::vector<ui32>& nodesToRestart) {
+    std::set<ui32> RunDecommission(TEnvironmentSetup& env, TFilterChain& chain, TDataChecker& checker, ui32 groupId,
+            const std::vector<ui32>& nodesToRestart, const TDecommitHooks& hooks = {}) {
         SetupSchemeCacheStub(env);
 
         const TPoolSnapshot before = MakePoolSnapshot(env);
         UNIT_ASSERT(before.Groups.contains(groupId));
 
-        TCopyingHold hold(env);
+        // keep decommission in IN_PROGRESS state by holding the puts copying assimilated data into BlobDepot channels;
+        // blocks and barriers get assimilated meanwhile, so the BlobDepot is ready for agent queries, while the data still
+        // resides in the group being decommitted
+        TEventHold& hold = chain.AddHold([](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvBlobStorage::EvPut &&
+                ev.Get<TEvBlobStorage::TEvPut>()->WriteSource == TWriteSource::BlobDepotPut;
+        });
         const auto response = DecommitGroup(env, groupId);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
@@ -186,9 +315,15 @@ namespace {
             env.Sim(TDuration::Seconds(30));
             checker.CheckAll(nodeId);
         }
+        if (hooks.InProgress) {
+            hooks.InProgress();
+        }
 
         hold.Release();
         WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::DONE);
+        if (hooks.Done) {
+            hooks.Done();
+        }
         env.Sim(TDuration::Seconds(10));
 
         const TPoolSnapshot after = MakePoolSnapshot(env);
@@ -237,43 +372,17 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
 
     // bridge proxy group with its own pile groups is decommitted as a whole, pile groups vanish along with their VDisks
     Y_UNIT_TEST(DecommitProxyGroup) {
-        TEnvironmentSetup env{{
-            .NodeCount = 16,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgedLocation,
-            .SetupHive = true,
-            .SelfManagementConfig = true,
-            .NumPiles = 2,
-            .AutomaticBootstrap = true,
-        }};
-        env.CreatePool(2);
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
-        const ui32 groupId = groups.front();
-
+        TEnvironmentSetup env(MakeBridgedSettings());
         TDataChecker checker(env);
-        for (ui32 i = 0; i < 10; ++i) {
-            checker.Write(groupId);
-        }
-        checker.CheckAll();
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
 
         // single pile of the bridged group can't be decommitted
-        const auto baseConfig = env.FetchBaseConfig();
-        std::optional<ui32> pileGroupId;
-        for (const auto *group : GetPoolGroups(baseConfig, 1)) {
-            if (std::ranges::find(groups, group->GetGroupId()) == groups.end()) {
-                pileGroupId = group->GetGroupId();
-                break;
-            }
-        }
-        UNIT_ASSERT(pileGroupId);
-        const auto response = DecommitGroup(env, *pileGroupId);
+        const auto response = DecommitGroup(env, GetPileGroupIds(env, groupId).front());
         UNIT_ASSERT(!response.GetSuccess());
         UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "pile");
 
-        const auto vanished = RunDecommission(env, checker, groupId, {4, 12});
+        TFilterChain chain(env);
+        const auto vanished = RunDecommission(env, chain, checker, groupId, {4, 12});
         UNIT_ASSERT_VALUES_EQUAL(vanished.size(), 2);
     }
 
@@ -308,8 +417,196 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         }
         checker.CheckAll();
 
-        const auto vanished = RunDecommission(env, checker, groupId, {5});
+        TFilterChain chain(env);
+        const auto vanished = RunDecommission(env, chain, checker, groupId, {5});
         UNIT_ASSERT(vanished.empty());
+    }
+
+    // piles don't know that their bridge proxy group is being decommitted, so writes not coming from the BlobDepot are
+    // blocked by the bridge proxy
+    Y_UNIT_TEST(BridgeProxyBlocksWrites) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+
+        TFilterChain chain(env);
+        std::optional<TActorId> bridgeProxyId;
+        CaptureBridgeProxyBehindAgent(chain, bridgeProxyId);
+
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
+            UNIT_ASSERT(bridgeProxyId);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(bridgeProxyId->NodeId(), __FILE__, __LINE__);
+            auto send = [&](IEventBase *ev) {
+                env.Runtime->Send(new IEventHandle(*bridgeProxyId, edge, ev), edge.NodeId());
+            };
+            auto checkBlocked = [&](const auto& res) {
+                UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::ERROR, res->Get()->ToString());
+                UNIT_ASSERT_STRING_CONTAINS(res->Get()->ErrorReason, "decommitted");
+            };
+
+            const TString data = "write behind the agent";
+            send(new TEvBlobStorage::TEvPut(TLogoBlobID(100501, 1, 1, 0, data.size(), 0), data, TInstant::Max()));
+            checkBlocked(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false));
+
+            send(new TEvBlobStorage::TEvBlock(100501, 2, TInstant::Max()));
+            checkBlocked(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false));
+
+            send(new TEvBlobStorage::TEvCollectGarbage(100501, 1, 0, 0, true, 1, 1, nullptr, nullptr, TInstant::Max(),
+                false));
+            checkBlocked(env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false));
+
+            // reads are served as usual, the agent needs them
+            const auto& [_, id, expected] = checker.GetWritten().front();
+            send(new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            auto& m = *res->Get();
+            UNIT_ASSERT_VALUES_EQUAL_C(m.Status, NKikimrProto::OK, m.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(m.ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(m.Responses[0].Status, NKikimrProto::OK, m.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), expected);
+        }});
+    }
+
+    // request of the agent racing with the pile proxy, which hasn't got the new configuration yet, is restarted by the
+    // bridge proxy itself rather than through the service id of the group, which belongs to the agent
+    Y_UNIT_TEST(RaceRestartedInBridgeProxy) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        const auto pileGroupIds = GetPileGroupIds(env, groupId);
+
+        TFilterChain chain(env);
+        std::optional<TActorId> bridgeProxyId;
+        CaptureBridgeProxyBehindAgent(chain, bridgeProxyId);
+
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
+            UNIT_ASSERT(bridgeProxyId);
+            const TActorId bridgeProxy = *bridgeProxyId;
+            const ui32 nodeId = bridgeProxy.NodeId();
+            const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+            const TLogoBlobID id = std::get<1>(checker.GetWritten().back());
+            const TString expected = std::get<2>(checker.GetWritten().back());
+
+            // the filter outlives this function, so its state is shared
+            struct TRaceState {
+                bool Armed = true;
+                bool GetSent = false;
+                bool RaceSeen = false;
+                std::vector<std::unique_ptr<IEventHandle>> HeldConfigs;
+            };
+            auto state = std::make_shared<TRaceState>();
+            chain.Add([&env, state, pileGroupIds, bridgeProxy, nodeId, edge, id](ui32 eventNodeId,
+                    std::unique_ptr<IEventHandle>& ev) {
+                if (!state->Armed) {
+                    return true;
+                } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
+                    const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                    if (eventNodeId == nodeId && info && std::ranges::count(pileGroupIds, info->GroupID.GetRawId())) {
+                        state->HeldConfigs.push_back(std::move(ev)); // pile proxies lag behind
+                        return false;
+                    } else if (ev->GetRecipientRewrite() == bridgeProxy && info && !state->GetSent) {
+                        // bridge proxy gets new configuration, so the request issued right after it races
+                        state->GetSent = true;
+                        env.Runtime->Send(new IEventHandle(bridgeProxy, edge, new TEvBlobStorage::TEvGet(id, 0, 0,
+                            TInstant::Max(), NKikimrBlobStorage::FastRead)), nodeId);
+                    }
+                } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && state->GetSent &&
+                        ev->GetRecipientRewrite() == bridgeProxy) {
+                    const auto& msg = *ev->Get<TEvBlobStorage::TEvGetResult>();
+                    if (msg.Status == NKikimrProto::RACE && msg.ResponseSz == 1 && msg.Responses[0].Id == id) {
+                        state->RaceSeen = true;
+                        state->Armed = false;
+                        for (auto& config : std::exchange(state->HeldConfigs, {})) {
+                            env.Runtime->Send(config.release(), nodeId);
+                        }
+                    }
+                }
+                return true;
+            });
+
+            // pile state change spins generation of the whole bridged group
+            SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT(state->GetSent);
+            UNIT_ASSERT(state->RaceSeen);
+            auto& m = *res->Get();
+            UNIT_ASSERT_VALUES_EQUAL_C(m.Status, NKikimrProto::OK, m.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(m.ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(m.Responses[0].Status, NKikimrProto::OK, m.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), expected);
+            // the agent would answer itself, if it got the restarted request
+            UNIT_ASSERT_VALUES_EQUAL(res->Sender, bridgeProxy);
+        }});
+    }
+
+    // pile of the group being decommitted gets synced as usual: piles don't block writes, so syncers proceed
+    Y_UNIT_TEST(PileSyncDuringDecommit) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+
+        // let the second pile miss some data
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+
+        TFilterChain chain(env);
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
+            SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+            WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+            UNIT_ASSERT(FindGroup(env.FetchBaseConfig(), groupId).GetVirtualGroupInfo().GetDecommitStatus() ==
+                NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
+            checker.CheckAll(9);
+        }});
+    }
+
+    // decommission is over while the pile is still being synced; the pile becomes synchronized, as there is nothing to sync
+    // for the decommitted group anymore
+    Y_UNIT_TEST(DoneWhilePileUnsynced) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+        const auto pileGroupIds = GetPileGroupIds(env, groupId);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+
+        TFilterChain chain(env);
+        // stop syncing piles of the group being decommitted, while the other group gets synced
+        TEventHold& syncerHold = chain.AddHold([&](IEventHandle& ev) {
+            if (ev.GetTypeRewrite() != TEvBlobStorage::EvAssimilate || !ev.Get<TEvBlobStorage::TEvAssimilate>()->Reverse) {
+                return false;
+            }
+            for (ui32 pileGroupId : pileGroupIds) {
+                if (ev.Recipient == MakeBlobStorageProxyID(pileGroupId)) { // recipient rewrite is resolved already
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        RunDecommission(env, chain, checker, groupId, {}, {
+            .InProgress = [&] {
+                SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+                for (ui32 i = 0; i < 60 && !syncerHold.HasHeld(); ++i) {
+                    env.Sim(TDuration::Seconds(1));
+                }
+                UNIT_ASSERT(syncerHold.HasHeld());
+                env.Sim(TDuration::Minutes(1)); // the other group gets synced meanwhile
+                UNIT_ASSERT(GetPileState(env, 1) != NKikimrBridge::TClusterState::SYNCHRONIZED);
+            },
+            .Done = [&] {
+                syncerHold.Release();
+                WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+            },
+        });
+        checker.CheckAll(9);
     }
 
 }

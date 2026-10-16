@@ -38,6 +38,10 @@ namespace NBridgeTest {
             Written.emplace_back(groupId, id, data);
         }
 
+        const std::vector<std::tuple<ui32, TLogoBlobID, TString>>& GetWritten() const {
+            return Written;
+        }
+
         void CheckAll(ui32 nodeId = 1) {
             const TActorId edge = Env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
             for (const auto& [groupId, id, data] : Written) {

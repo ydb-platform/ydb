@@ -1054,6 +1054,14 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransacti
             NIceDb::TNiceDb(txc.DB).Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
         }
     }
+
+    if (!targetGroupIds.empty()) {
+        // the pile may have been waiting only for the dropped targets to get synced
+        state.Callbacks.push_back([this] {
+            RecheckUnsyncedBridgePiles = true;
+            CheckUnsyncedBridgePiles();
+        });
+    }
 }
 
 } // NKikimr::NBsController

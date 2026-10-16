@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/getopt
     library/cpp/streams/bzip2
     ydb/core/blobstorage
     ydb/core/blobstorage/groupinfo
@@ -12,3 +13,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(ut)

@@ -180,8 +180,8 @@ runs:
           analytics track github_proxy --kind info --source ya_phase \
             --value "$chosen_mbps" --unit "MB/s" \
             --label "use_proxy=${GH_PROXY_USED}" \
-            --label "direct_last5_mbps=${GH_PROXY_DIRECT_MBPS}" \
-            --label "proxy_last5_mbps=${GH_PROXY_PROXY_MBPS}"
+            --label "direct_mbps=${GH_PROXY_DIRECT_MBPS}" \
+            --label "proxy_mbps=${GH_PROXY_PROXY_MBPS}"
           analytics flush
         fi
 

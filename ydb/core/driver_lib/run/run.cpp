@@ -73,7 +73,7 @@
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
 #endif
 
@@ -152,7 +152,7 @@
 #include <ydb/services/tablet/ydb_tablet.h>
 #include <ydb/services/view/grpc_service.h>
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
 #include <ydb/services/nbs/grpc_service.h>
 #endif
 
@@ -862,7 +862,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["bridge"] = &hasBridge;
         TServiceCfg hasTestShard = services.empty();
         names["test_shard"] = &hasTestShard;
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
         TServiceCfg hasNbs = services.empty();
         names["nbs"] = &hasNbs;
 #endif
@@ -1172,7 +1172,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasTestShard) {
             server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
         if (hasNbs) {
             server.AddService(new NGRpcService::TNbsGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
@@ -2205,7 +2205,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TOverloadManagerInitializer(runConfig));
     }
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     if (serviceMask.EnableNBSService) {
         sil->AddServiceInitializer(new TNbsServiceInitializer(runConfig));
     }
@@ -2244,7 +2244,7 @@ void TKikimrRunner::KikimrStart() {
         SqsHttp->Start();
     }
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     NYdb::NBS::NBlockStore::StartNbsService();
 #endif
 
@@ -2296,7 +2296,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     DisableActorCallstack();
 
-#if defined(OS_LINUX)
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
     NYdb::NBS::NBlockStore::StopNbsService();
 #endif
 

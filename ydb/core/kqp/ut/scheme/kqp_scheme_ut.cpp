@@ -5115,7 +5115,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (!BuildIndexEventIsIntercepted && event->Type == static_cast<ui32>(NKikimr::TEvDataShard::EvBuildIndexCreateRequest)) {
                     Cerr << "NKikimr::TEvDataShard::TEvBuildIndexCreateRequest is intercepted\n";
                     BuildIndexEventIsIntercepted = true;
-                    // Store the event before waking the client thread.
                     BuildIndexRequestEvent.Swap(event);
                     BuildIndexRequestPromise.SetValue();
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;
@@ -5126,7 +5125,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     Cerr << "NKikimr::TEvDataShard validation "
                         << (PauseValidationResponse ? "response" : "request") << " is intercepted\n";
                     ValidateIndexEventIsIntercepted = true;
-                    // Store the event before waking the client thread.
                     ValidateIndexRequestEvent.Swap(event);
                     ValidateIndexRequestPromise.SetValue();
                     return NActors::TTestActorRuntimeBase::EEventAction::DROP;

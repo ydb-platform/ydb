@@ -342,6 +342,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx) {
+    UpdateMetadataMemoryCounters(GetMetadataMemoryUsage());
     if (ev->Get()->Manual) {
         YDB_LOG_DEBUG("",
             {"event", "TEvPrivate::TEvPeriodicWakeup::MANUAL"},
@@ -464,11 +465,22 @@ void TColumnShard::UpdateIndexCounters() {
         {"tabletId", TabletID()});
 }
 
-ui64 TColumnShard::MemoryUsage() const {
-    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
-    memory += TablesManager.GetMemoryUsage();
-    return memory;
+TColumnShard::TMetadataMemoryUsage TColumnShard::GetMetadataMemoryUsage() const {
+    return {
+        .TransactionsBytes = ProgressTxController->GetMemoryUsage(),
+        .ScanRecordsBytes = ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)),
+        .WaitingScanRecordsBytes = WaitingScans.size() * (sizeof(NOlap::TSnapshot) + sizeof(void*)),
+        .TablesBytes = TablesManager.GetMemoryUsage(),
+    };
+}
+
+void TColumnShard::UpdateMetadataMemoryCounters(const TMetadataMemoryUsage& memory) {
+    const auto& counters = Counters.GetTabletCounters();
+    counters->SetCounter(COUNTER_METADATA_MEMORY_ESTIMATED_BYTES, memory.GetTotalBytes());
+    counters->SetCounter(COUNTER_METADATA_TX_MEMORY_ESTIMATED_BYTES, memory.TransactionsBytes);
+    counters->SetCounter(COUNTER_METADATA_SCAN_MEMORY_ESTIMATED_BYTES, memory.ScanRecordsBytes);
+    counters->SetCounter(COUNTER_METADATA_WAITING_SCAN_MEMORY_ESTIMATED_BYTES, memory.WaitingScanRecordsBytes);
+    counters->SetCounter(COUNTER_METADATA_TABLE_MEMORY_ESTIMATED_BYTES, memory.TablesBytes);
 }
 
 void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage) {
@@ -482,14 +494,15 @@ void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage&
         Counters.GetTabletCounters()->GetValue(COUNTER_INSERTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_COMPACTED_BYTES) +
         Counters.GetTabletCounters()->GetValue(COUNTER_SPLIT_COMPACTED_BYTES) + Counters.GetTabletCounters()->GetValue(COUNTER_INACTIVE_BYTES);
 
-    ui64 memory = MemoryUsage();
+    const auto memory = GetMetadataMemoryUsage();
+    UpdateMetadataMemoryCounters(memory);
 
     TInstant now = TAppData::TimeProvider->Now();
     metrics->CPU.Increment(usage.CPUExecTime, now);
     metrics->Network.Increment(usage.Network, now);
     //metrics->StorageSystem
     metrics->StorageUser.Set(storageBytes);
-    metrics->Memory.Set(memory);
+    metrics->Memory.Set(memory.GetTotalBytes());
     //metrics->ReadThroughput
     //metrics->WriteThroughput
 

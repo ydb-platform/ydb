@@ -38,3 +38,4 @@ Change the `feature_flags` settings only if you are sure of the consequences. In
 | `enable_external_data_sources` | Enabling [external data sources](../../concepts/datamodel/external_data_source.md) |
 | `enable_grpc_audit` | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |
 | `enable_fs_backups` | Enabling [backup and restore operations to a network file system](../../concepts/backup.md#nfs) |
+| `enable_add_colums_with_defaults` | Support for default values in [ADD COLUMN](../../yql/reference/syntax/alter_table/columns.md) in `ALTER TABLE` |

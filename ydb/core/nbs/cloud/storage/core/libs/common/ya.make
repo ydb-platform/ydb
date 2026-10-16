@@ -14,13 +14,16 @@ SRCS(
     guarded_sglist.cpp
     helpers.cpp
     page_size.cpp
+    proto_helpers.cpp
     ring_buffer.cpp
     scheduler_test.cpp
     scheduler.cpp
     sglist_iter.cpp
     sglist_test.cpp
     sglist.cpp
+    size_interval.cpp
     startable.cpp
+    task_queue.cpp
     thread.cpp
     timer_test.cpp
     timer.cpp
@@ -33,6 +36,7 @@ PEERDIR(
     ydb/library/actors/prof
 
     library/cpp/lwtrace
+    library/cpp/protobuf/util
     library/cpp/json/writer
     library/cpp/threading/future
 

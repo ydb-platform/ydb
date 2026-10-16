@@ -65,12 +65,54 @@ class ChangesAlreadyAppliedError(Exception):
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
     """Run git command"""
+<<<<<<< HEAD
     result = subprocess.run(
         ['git'] + cmd,
         cwd=repo_path,
         capture_output=True,
         text=True,
         check=check
+=======
+    try:
+        result = subprocess.run(
+            ['git'] + cmd,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=check
+        )
+        return result
+    except subprocess.CalledProcessError as e:
+        logger.error(f'Non-zero return code {e.returncode} of command {e.cmd}, stdout: {e.stdout}, stderr: {e.stderr}')
+        raise
+
+
+def fetch_proxy_args() -> List[str]:
+    """Rewrite only this git command's GitHub URL, when the workflow probe chose a proxy.
+
+    Not stored in repo config, so a later push still goes to github.com and can
+    carry the auth header. The header is attached to https://github.com/, not to
+    the rewritten proxy URL.
+    """
+    proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
+    if not proxy:
+        return []
+    return ["-c", f"url.{proxy}/https://github.com/.insteadOf=https://github.com/"]
+
+
+def configure_push_auth(repo_path: str, token: str, logger) -> None:
+    """Authenticate later git calls without putting the token in the remote URL.
+
+    GitHub redirects push to the same repo with a trailing slash, and git drops
+    credentials that were embedded in the clone URL. http.extraheader is sent
+    on the redirected request as well.
+    """
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    run_git(
+        repo_path,
+        ['config', 'http.https://github.com/.extraheader', f'AUTHORIZATION: basic {basic}'],
+        logger,
+>>>>>>> 4a39bc71bdf (ci: send the cherry-pick clone and fetch through the faster proxy)
     )
     return result
 
@@ -629,8 +671,8 @@ def process_branch(
     all_conflict_files = []
     cherry_pick_logs = []
     
-    # Prepare branch
-    run_git(repo_path, ['fetch', 'origin', target_branch], logger)
+    # Prepare branch. Fetch may go through the probe-selected proxy; push below does not.
+    run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', target_branch], logger)
     run_git(repo_path, ['reset', '--hard', 'HEAD'], logger)
     run_git(repo_path, ['checkout', '-B', target_branch, f'origin/{target_branch}'], logger)
     run_git(repo_path, ['checkout', '-b', dev_branch_name, target_branch], logger)
@@ -639,7 +681,7 @@ def process_branch(
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
         # Fetch commit to ensure it's available locally (needed for unmerged PRs)
-        run_git(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
+        run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', commit_sha], logger, check=False)
         try:
             result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
@@ -687,7 +729,8 @@ def process_branch(
             f"All requested changes are already present in {target_branch}"
         )
     
-    # Push branch
+    # Push stays on github.com. Auth is configured here, after the fetches.
+    configure_push_auth(repo_path, token, logger)
     run_git(repo_path, ['push', '--set-upstream', 'origin', dev_branch_name], logger)
     
     # Create PR
@@ -948,8 +991,10 @@ def main():
     try:
         repo_url = f"https://{token}@github.com/{repo_name}.git"
         logger.info("Cloning repository: %s to %s", repo_url, repo_dir)
+        if fetch_proxy_args():
+            logger.info("Cloning through %s", os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/"))
         subprocess.run(
-            ['git', 'clone', repo_url, repo_dir],
+            ['git', *fetch_proxy_args(), 'clone', repo_url, repo_dir],
             env={**os.environ, 'GIT_PROTOCOL': '2'},
             check=True,
             text=True,

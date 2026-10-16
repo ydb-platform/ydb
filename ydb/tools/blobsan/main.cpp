@@ -375,7 +375,7 @@ int main(int argc, char **argv) {
     opts.SetTitle("Analyze BlobStorage VDisk index snapshots for incomplete blob layouts.");
     opts.SetFreeArgsNum(1);
     opts.SetFreeArgTitle(0, "erasure", "Erasure species of all input groups, e.g. mirror-3-dc or block-4-2");
-    opts.AddLongOption("write2x2-candidates", "Find write2x2 recovery candidates using local parts from the snapshot")
+    opts.AddLongOption("write2x2-candidates", "Find mirror-3-dc write2x2 recovery candidates using local parts from the snapshot")
         .StoreTrue(&Write2x2Candidates);
     opts.AddSection("Input",
         "Read a binary snapshot from stdin, as produced by `ydb-dstool group take-snapshot`."
@@ -386,7 +386,7 @@ int main(int argc, char **argv) {
         "By default, check Keep blobs below quorum-confirmed GC barriers for"
         " incomplete local data or ingress layouts. Parts on missing VDisks may"
         " be inferred from ingress metadata."
-        " --write2x2-candidates is intended for mirror-3-dc recovery scans. Judge"
+        " --write2x2-candidates requires mirror-3-dc. Judge"
         " completeness using only local parts from captured VDisks, include blobs"
         " above barriers and accept barriers without quorum. Skip hard-collected"
         " and DoNotKeep blobs; blobs below soft barriers still require Keep."
@@ -398,6 +398,8 @@ int main(int argc, char **argv) {
         "stderr: GroupId#/BlobId# reports with part layouts, Keep flags, VDisk"
         " coverage masks and GC barriers. An optional TrashSize# line"
         " estimates the size of misplaced and phantom-like parts."
+        " In write2x2 mode this estimate may include blobs still being written"
+        " above GC barriers; it does not establish that these parts can be deleted."
         " FULL marks a write2x2 candidate whose merged ingress layout is full"
         " while its local-part layout from captured VDisks is incomplete.");
     opts.AddSection("Exit status",
@@ -419,6 +421,10 @@ int main(int argc, char **argv) {
     TBlobStorageGroupType::EErasureSpecies species;
     if (!TBlobStorageGroupType::ParseErasureName(species, erasure)) {
         Cerr << "invalid erasure species name: " << erasure << Endl;
+        return 1;
+    }
+    if (Write2x2Candidates && species != TBlobStorageGroupType::ErasureMirror3dc) {
+        Cerr << "--write2x2-candidates requires mirror-3-dc" << Endl;
         return 1;
     }
     TBlobStorageGroupType type(species);

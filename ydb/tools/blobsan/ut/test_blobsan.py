@@ -17,7 +17,7 @@ def ingress_bit(position):
 
 
 class Snapshot:
-    """Build and display the records encoded in a mirror-3-dc snapshot.
+    """Build and display snapshot records using the generic ingress format.
 
     VDisk indexes are group order numbers; known nodes are subgroup positions.
     Part indexes are zero-based. Barrier keys contain tablet, channel/hard bits,

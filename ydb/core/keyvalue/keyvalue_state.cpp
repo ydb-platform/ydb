@@ -2054,6 +2054,159 @@ void TKeyValueState::OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev
     WeightManager = std::move(ev->Get()->WeightManager);
 }
 
+void TKeyValueState::PublishAdmissionCounters() {
+    const auto stats = Admission.GetStats();
+    auto& counters = TabletCounters->Simple();
+    counters[COUNTER_MEMORY_ADMISSION_RUNNING_BYTES].Set(stats.RunningBytes);
+    counters[COUNTER_MEMORY_ADMISSION_RUNNING_COUNT].Set(stats.RunningCount);
+    counters[COUNTER_MEMORY_ADMISSION_QUEUED_BYTES].Set(stats.PostponedBytes);
+    counters[COUNTER_MEMORY_ADMISSION_QUEUED_COUNT].Set(stats.PostponedCount);
+}
+
+void TKeyValueState::OnMemoryZone(NMemory::EMemoryZone zone) {
+    Admission.OnZoneChanged(zone);
+    PublishAdmissionCounters();
+}
+
+void TKeyValueState::AdmitIntermediate(THolder<TIntermediate>&& intermediate) {
+    const ui64 charge = GetBudgetCharge(*intermediate);
+    const ui64 uid = intermediate->RequestUid;
+    const TInstant deadline = intermediate->Deadline;
+    const auto result = Admission.Admit(uid, std::move(intermediate), charge);
+    Y_ABORT_UNLESS(result != NMemory::EAdmitResult::Duplicate);
+    if (result == NMemory::EAdmitResult::Queued && deadline != TInstant::Max()) {
+        AdmissionDeadlines.emplace(std::make_pair(deadline, uid), true);
+        AdmissionDeadlineByUid.emplace(uid, deadline);
+        ScheduleAdmissionDeadline();
+    }
+    PublishAdmissionCounters();
+}
+
+void TKeyValueState::AddAdmissionDeadline(const TIntermediate& intermediate) {
+    if (intermediate.Deadline != TInstant::Max()) {
+        AdmissionDeadlines.emplace(std::make_pair(intermediate.Deadline, intermediate.RequestUid), true);
+        AdmissionDeadlineByUid.emplace(intermediate.RequestUid, intermediate.Deadline);
+        ScheduleAdmissionDeadline();
+    }
+}
+
+void TKeyValueState::PostponeTrim(THolder<TIntermediate>&& intermediate) {
+    if (AppData(TActivationContext::AsActorContext())->FeatureFlags.GetEnableTabletMemoryHost()) {
+        AddAdmissionDeadline(*intermediate);
+    }
+    const ui64 uid = intermediate->RequestUid;
+    PostponedTrimBytes += GetBudgetCharge(*intermediate);
+    CmdTrimLeakedBlobsPostponed.push_back(std::move(intermediate));
+    PostponedTrimByUid.emplace(uid, std::prev(CmdTrimLeakedBlobsPostponed.end()));
+}
+
+void TKeyValueState::RemoveAdmissionDeadline(ui64 requestUid) {
+    const auto it = AdmissionDeadlineByUid.find(requestUid);
+    if (it != AdmissionDeadlineByUid.end()) {
+        AdmissionDeadlines.erase({it->second, requestUid});
+        AdmissionDeadlineByUid.erase(it);
+    }
+}
+
+void TKeyValueState::ScheduleAdmissionDeadline() {
+    if (AdmissionDeadlineScheduled || AdmissionDeadlines.empty()) {
+        return;
+    }
+    AdmissionDeadlineScheduled = true;
+    const TInstant now = TAppData::TimeProvider->Now();
+    const TInstant next = AdmissionDeadlines.begin()->first.first;
+    TActivationContext::Schedule(Min(next > now ? next - now : TDuration::Zero(), TDuration::MilliSeconds(100)),
+        MakeHolder<IEventHandle>(KeyValueActorId, KeyValueActorId, new TEvKeyValue::TEvAdmissionDeadline()));
+}
+
+void TKeyValueState::OnAdmissionDeadline() {
+    AdmissionDeadlineScheduled = false;
+    const TInstant now = TAppData::TimeProvider->Now();
+    while (!AdmissionDeadlines.empty() && AdmissionDeadlines.begin()->first.first <= now) {
+        const ui64 uid = AdmissionDeadlines.begin()->first.second;
+        RemoveAdmissionDeadline(uid);
+        auto item = Admission.CancelQueued(uid);
+        if (!item) {
+            const auto trim = PostponedTrimByUid.find(uid);
+            if (trim != PostponedTrimByUid.end()) {
+                PostponedTrimBytes -= GetBudgetCharge(**trim->second);
+                item.emplace(std::move(*trim->second));
+                CmdTrimLeakedBlobsPostponed.erase(trim->second);
+                PostponedTrimByUid.erase(trim);
+            }
+        }
+        if (item) {
+            // A terminal timeout actor uses the usual reply/refcount cleanup protocol.
+            // Its explicit flag prevents I/O even if the deadline clock moves backwards.
+            (*item)->AdmissionTimedOut = true;
+            StartAdmittedIntermediate(std::move(*item), NMemory::EAdmitSource::FromQueue);
+        }
+    }
+    PublishAdmissionCounters();
+    ScheduleAdmissionDeadline();
+}
+
+void TKeyValueState::StartAdmitted(THolder<TIntermediate>&& intermediate, NMemory::EAdmitSource source) {
+    StartAdmittedIntermediate(std::move(intermediate), source);
+}
+
+ui64 TKeyValueState::GetBudgetCharge(const TIntermediate& intermediate) {
+    ui64 bytes = 0;
+    for (const TIntermediate::TWrite& write : intermediate.Writes) {
+        bytes += write.Data.size();
+    }
+    for (const TIntermediate::TCmd& command : intermediate.Commands) {
+        if (std::holds_alternative<TIntermediate::TWrite>(command)) {
+            bytes += std::get<TIntermediate::TWrite>(command).Data.size();
+        }
+    }
+    if (intermediate.Stat.RequestType == TRequestType::ReadOnlyInline) {
+        bytes += intermediate.TotalSize;
+    }
+    return bytes;
+}
+
+void TKeyValueState::StartAdmittedIntermediate(THolder<TIntermediate>&& intermediate, NMemory::EAdmitSource source) {
+    const bool alreadyStarted = intermediate->MemoryAdmissionStarted;
+    const bool expired = intermediate->Deadline != TInstant::Max() &&
+        intermediate->Deadline <= TAppData::TimeProvider->Now();
+    if (source == NMemory::EAdmitSource::FromQueue) {
+        intermediate->WaitedInMemoryAdmission = true;
+        if (expired && AppData(TActivationContext::AsActorContext())->FeatureFlags.GetEnableTabletMemoryHost()) {
+            intermediate->AdmissionTimedOut = true;
+        }
+    }
+    if (!alreadyStarted && intermediate->TrimLeakedBlobs && IsCollectEventSent &&
+        !intermediate->AdmissionTimedOut && !expired) {
+        // GC-ineligible work yields the admission slot and rejoins after GC completes.
+        // Its resident payload remains charged in the owner's GC waiting ledger.
+        const ui64 uid = intermediate->RequestUid;
+        PostponeTrim(std::move(intermediate));
+        Admission.Release(uid);
+        PublishAdmissionCounters();
+        return;
+    }
+    intermediate->MemoryAdmissionStarted = true;
+    RemoveAdmissionDeadline(intermediate->RequestUid);
+    if (!alreadyStarted && intermediate->WaitedInMemoryAdmission) {
+        CountLatencyQueue(intermediate->Stat);
+    }
+    if (!alreadyStarted && intermediate->Stat.RequestType == TRequestType::ReadOnlyInline) {
+        ++RoInlineIntermediatesInFlight;
+        TabletCounters->Simple()[COUNTER_REQ_RO_INLINE_IN_FLY].Set(RoInlineIntermediatesInFlight);
+    }
+    const TActorContext& ctx = TActivationContext::AsActorContext();
+    switch (intermediate->EvType) {
+    case TEvKeyValue::TEvRead::EventType:
+    case TEvKeyValue::TEvReadRange::EventType:
+        RegisterReadRequestActor(ctx, std::move(intermediate), TabletInfo.Get(), ExecutorGeneration);
+        break;
+    default:
+        RegisterRequestActor(ctx, std::move(intermediate), TabletInfo.Get(), ExecutorGeneration);
+        break;
+    }
+}
+
 TVector<ui32> TKeyValueState::GetAcquiredChannels(const TIntermediate &intermediate) const {
     std::bitset<256> acquiredChannels;
 
@@ -2272,6 +2425,9 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
     if (!releasedChannels.empty()) {
         ProcessPostponedChannels(releasedChannels, ctx, info);
     }
+    RemoveAdmissionDeadline(requestUid);
+    Admission.Release(requestUid);
+    PublishAdmissionCounters();
 
     CmdTrimLeakedBlobsUids.erase(requestUid);
     CancelInFlight(requestUid);
@@ -3616,6 +3772,15 @@ void TKeyValueState::RegisterReadRequestActor(const TActorContext &ctx, THolder<
 void TKeyValueState::RegisterRequestActor(const TActorContext &ctx, THolder<TIntermediate> &&intermediate,
         const TTabletStorageInfo *info, ui32 tabletGeneration)
 {
+    const bool expired = intermediate->Deadline != TInstant::Max() &&
+        intermediate->Deadline <= TAppData::TimeProvider->Now();
+    if (intermediate->TrimLeakedBlobs && !intermediate->AdmissionTimedOut && !expired) {
+        if (IsCollectEventSent) {
+            PostponeTrim(std::move(intermediate));
+            return;
+        }
+        CmdTrimLeakedBlobsUids.insert(intermediate->RequestUid);
+    }
     auto fixWrite = [&](TIntermediate::TWrite& write) {
         for (auto& logoBlobId : write.LogoBlobIds) {
             Y_ABORT_UNLESS(logoBlobId.TabletID() == 0);
@@ -3675,16 +3840,27 @@ void TKeyValueState::ProcessPostponedIntermediate(const TActorContext& ctx, THol
 
 void TKeyValueState::ProcessPostponedTrims(const TActorContext& ctx, const TTabletStorageInfo *info) {
     if (!IsCollectEventSent) {
-        for (auto& interm : CmdTrimLeakedBlobsPostponed) {
-            CmdTrimLeakedBlobsUids.insert(interm->RequestUid);
-            const TRequestType::EType requestType = interm->Stat.RequestType;
-            if (requestType == TRequestType::ReadOnlyInline) {
-                ++RoInlineIntermediatesInFlight;
-                CountRequestTakeOffOrEnqueue(requestType);
-            }
-            RegisterRequestActor(ctx, std::move(interm), info, ExecutorGeneration);
-        }
+        auto postponed = std::move(CmdTrimLeakedBlobsPostponed);
         CmdTrimLeakedBlobsPostponed.clear();
+        PostponedTrimByUid.clear();
+        for (auto& interm : postponed) {
+            PostponedTrimBytes -= GetBudgetCharge(*interm);
+            RemoveAdmissionDeadline(interm->RequestUid);
+            const auto requestType = interm->Stat.RequestType;
+            if (AppData(ctx)->FeatureFlags.GetEnableTabletMemoryHost() &&
+                interm->Deadline != TInstant::Max() && interm->Deadline <= TAppData::TimeProvider->Now()) {
+                interm->AdmissionTimedOut = true;
+                StartAdmittedIntermediate(std::move(interm), NMemory::EAdmitSource::FromQueue);
+            } else if (!interm->MemoryAdmissionStarted &&
+                (requestType == TRequestType::WriteOnly || requestType == TRequestType::ReadOnlyInline)) {
+                // One GC has finished. Reserve this trim's turn while it rejoins
+                // admission, so another GC cannot repeatedly postpone it.
+                CmdTrimLeakedBlobsUids.insert(interm->RequestUid);
+                AdmitIntermediate(std::move(interm));
+            } else {
+                RegisterRequestActor(ctx, std::move(interm), info, ExecutorGeneration);
+            }
+        }
     }
 }
 
@@ -3704,8 +3880,7 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
             YDB_LOG_DEBUG("Create storage inline read request,",
                 {"keyValue", TabletId},
                 {"marker", "KV49"});
-            RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-            ++RoInlineIntermediatesInFlight;
+            AdmitIntermediate(std::move(intermediate));
         } else {
             if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                 YDB_LOG_DEBUG("Create storage read request, /",
@@ -3744,8 +3919,7 @@ void TKeyValueState::OnEvReadRangeRequest(TEvKeyValue::TEvReadRange::TPtr &ev, c
             YDB_LOG_DEBUG("Create storage inline read range request,",
                 {"keyValue", TabletId},
                 {"marker", "KV58"});
-            RegisterReadRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-            ++RoInlineIntermediatesInFlight;
+            AdmitIntermediate(std::move(intermediate));
         } else {
             if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                 YDB_LOG_DEBUG("Create storage read range request, /",
@@ -3783,7 +3957,7 @@ void TKeyValueState::OnEvExecuteTransaction(TEvKeyValue::TEvExecuteTransaction::
         YDB_LOG_DEBUG("Create storage request for WO,",
             {"keyValue", TabletId},
             {"marker", "KV67"});
-        RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+        AdmitIntermediate(std::move(intermediate));
 
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
@@ -3880,22 +4054,18 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
     if (PrepareIntermediate(ev, intermediate, requestType, ctx, info)) {
         // Spawn KeyValueStorageRequest actor on the same thread
         if (hasTrim && IsCollectEventSent) {
-            CmdTrimLeakedBlobsPostponed.push_back(std::move(intermediate));
+            PostponeTrim(std::move(intermediate));
         } else {
-            if (hasTrim) {
-                CmdTrimLeakedBlobsUids.insert(intermediate->RequestUid);
-            }
             if (requestType == TRequestType::WriteOnly) {
                 YDB_LOG_DEBUG("Create storage request for WO,",
                     {"keyValue", TabletId},
                     {"marker", "KV42"});
-                RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
+                AdmitIntermediate(std::move(intermediate));
             } else if (requestType == TRequestType::ReadOnlyInline) {
                 YDB_LOG_DEBUG("Create storage request for RO_INLINE,",
                     {"keyValue", TabletId},
                     {"marker", "KV45"});
-                RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-                ++RoInlineIntermediatesInFlight;
+                AdmitIntermediate(std::move(intermediate));
             } else {
                 if (TryStartOrPostponeIntermediate(intermediate, ctx)) {
                     YDB_LOG_DEBUG("Create storage request for RO/RW, /",

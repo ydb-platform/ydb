@@ -69,8 +69,12 @@ public:
     }
 
     void Bootstrap() {
+        if (IntermediateResult->AdmissionTimedOut) {
+            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT);
+            return;
+        }
         if (IntermediateResult->Deadline != TInstant::Max()) {
-            TInstant now = TActivationContext::Now();
+            TInstant now = TAppData::TimeProvider->Now();
             if (IntermediateResult->Deadline <= now) {
                 YDB_LOG_ERROR("Deadline reached before processing request",
                     {"marker", "KV313"},

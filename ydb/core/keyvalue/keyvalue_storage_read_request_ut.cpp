@@ -266,6 +266,38 @@ struct TRangeReadRequestBuilder {
 
 Y_UNIT_TEST_SUITE(KeyValueReadStorage) {
 
+Y_UNIT_TEST(AdmissionTimeoutIsTerminalEvenWithFutureDeadline) {
+    for (bool legacy : {false, true}) {
+        TTestEnv env;
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        const auto edge = runtime.AllocateEdgeActor(1);
+        TReadRequestBuilder builder("a");
+        builder.AddToEnd("b", TLogoBlobID(1, 2, 3, 2, 1, 0), 0, 1);
+        auto [intermediate, values] = builder.Build(edge, edge);
+        intermediate->Deadline = TInstant::Max(); // A later clock check would admit I/O.
+        intermediate->AdmissionTimedOut = true;
+        if (legacy) {
+            intermediate->Reads.push_back(std::move(std::get<TIntermediate::TRead>(*intermediate->ReadCommand)));
+            intermediate->ReadCommand.reset();
+            intermediate->EvType = TEvKeyValue::TEvRequest::EventType;
+            runtime.Register(CreateKeyValueStorageRequest(std::move(intermediate), env.TabletInfo.release(), 1,
+                &env.State, env.State.GetLifetimeToken()), 1);
+        } else {
+            runtime.Register(CreateKeyValueStorageReadRequest(std::move(intermediate), env.TabletInfo.release(), 1,
+                &env.State, env.State.GetLifetimeToken()), 1);
+        }
+        // No blob-storage actors are registered: any attempted I/O would hang this request.
+        auto reply = runtime.WaitForEdgeActorEvent({edge});
+        if (legacy) {
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get<TEvKeyValue::TEvResponse>()->Record.GetStatus(), NMsgBusProxy::MSTATUS_TIMEOUT);
+        } else {
+            UNIT_ASSERT_EQUAL(reply->Get<TEvKeyValue::TEvReadResponse>()->Record.status(), NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT);
+        }
+        runtime.Stop();
+    }
+}
+
 void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
         const std::vector<ui32> &groupIds, NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK,
         const TString &expectedError = {}) {

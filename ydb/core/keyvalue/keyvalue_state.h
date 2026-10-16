@@ -15,6 +15,7 @@
 #include <util/generic/set.h>
 #include <util/generic/hash_multi_map.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_memory_admission.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_metrics.h>
@@ -312,7 +313,9 @@ protected:
     TMap<ui64, ui64> InFlightForStep;
     TMap<std::tuple<ui64, ui32>, ui32> RequestUidStepToCount;
     THashSet<ui64> CmdTrimLeakedBlobsUids;
-    std::vector<THolder<TIntermediate>> CmdTrimLeakedBlobsPostponed;
+    std::list<THolder<TIntermediate>> CmdTrimLeakedBlobsPostponed;
+    THashMap<ui64, decltype(CmdTrimLeakedBlobsPostponed)::iterator> PostponedTrimByUid;
+    ui64 PostponedTrimBytes = 0;
     THashMap<ui64, TInstant> RequestInputTime;
     ui64 NextRequestUid = 1;
     TIntrusivePtr<TCollectOperation> CollectOperation;
@@ -378,6 +381,12 @@ protected:
     TControlWrapper UsePerChannelReadQueues_Base;
     TMemorizableControlWrapper UsePerChannelReadQueues;
     std::optional<TMemorizableControlWrapper> RequestsInFlightLimit;
+
+    // admission of write and inline-read requests by the node memory zone
+    NMemory::TMemoryAdmission<THolder<TIntermediate>, TKeyValueState> Admission{*this};
+    TMap<std::pair<TInstant, ui64>, bool> AdmissionDeadlines;
+    THashMap<ui64, TInstant> AdmissionDeadlineByUid;
+    bool AdmissionDeadlineScheduled = false;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
@@ -573,6 +582,24 @@ public:
     void OnPeriodicRefresh();
     void OnUpdateWeights(TChannelBalancer::TEvUpdateWeights::TPtr ev);
 
+    void OnMemoryZone(NMemory::EMemoryZone zone);
+    void OnAdmissionDeadline();
+    void ScheduleAdmissionDeadline();
+    void RemoveAdmissionDeadline(ui64 requestUid);
+    void AddAdmissionDeadline(const TIntermediate& intermediate);
+    void PostponeTrim(THolder<TIntermediate>&& intermediate);
+    void PublishAdmissionCounters();
+    void AdmitIntermediate(THolder<TIntermediate>&& intermediate);
+    void StartAdmitted(THolder<TIntermediate>&& intermediate, NMemory::EAdmitSource source);
+
+    ui64 GetMemoryWaitingForGC() const {
+        return PostponedTrimBytes;
+    }
+
+    NMemory::TMemoryAdmissionStats GetMemoryAdmissionStats() const {
+        return Admission.GetStats();
+    }
+
     void OnRequestComplete(ui64 requestUid, ui64 generation, ui64 step, const TActorContext &ctx,
         const TTabletStorageInfo *info, NMsgBusProxy::EResponseStatus status, const TRequestStat &stat,
         const TVector<ui32> &acquiredChannels);
@@ -761,6 +788,11 @@ public:
     void ProcessPostponedIntermediate(const TActorContext& ctx, THolder<TIntermediate> &&intermediate,
              const TTabletStorageInfo *info);
 
+    // write payloads plus the response estimate of an inline read
+    static ui64 GetBudgetCharge(const TIntermediate& intermediate);
+    // the admission start callback: the actor of an admitted write or inline read
+    void StartAdmittedIntermediate(THolder<TIntermediate>&& intermediate, NMemory::EAdmitSource source);
+
     bool ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRange& from, TKeyRange *to,
                       const TActorContext& ctx, THolder<TIntermediate>& intermediate, const char *cmd, ui32 index);
 
@@ -901,6 +933,10 @@ private:
     void EraseTrash(TSet<TLogoBlobID>& trashBin, const TLogoBlobID& id);
 
 public: // For testing
+    size_t GetRunningTrimsCount() const {
+        return CmdTrimLeakedBlobsUids.size();
+    }
+
     TStateBytes RecountStateBytes() const;
     TString Dump() const;
     void VerifyEqualIndex(const TKeyValueState& state) const;

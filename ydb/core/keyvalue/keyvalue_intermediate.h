@@ -155,6 +155,9 @@ struct TIntermediate {
     ui64 Generation;
     ui64 RequestUid;
     TInstant Deadline;
+    bool AdmissionTimedOut = false;
+    bool MemoryAdmissionStarted = false;
+    bool WaitedInMemoryAdmission = false;
     bool HasCookie;
     bool HasGeneration;
     bool HasIncrementGeneration;

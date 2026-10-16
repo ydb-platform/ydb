@@ -48,6 +48,7 @@ namespace TEvKeyValue {
         EvAdvanceMoveDataResult = EvResponse + 512,
         EvBlobCopied,
         EvCheckTrash,
+        EvAdmissionDeadline,
 
         EvEnd
     };
@@ -382,6 +383,9 @@ namespace TEvKeyValue {
     };
 
     struct TEvCheckTrash : public TEventLocal<TEvCheckTrash, EvCheckTrash> {};
+
+    struct TEvAdmissionDeadline : public TEventLocal<TEvAdmissionDeadline, EvAdmissionDeadline> {};
+
 }
 
 } // NKikimr

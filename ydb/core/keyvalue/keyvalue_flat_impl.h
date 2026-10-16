@@ -874,6 +874,7 @@ public:
         if (HandleHook(ev))
             return;
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvKeyValue::TEvAdmissionDeadline, Handle);
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);
             hFunc(TEvKeyValue::TEvExecuteTransaction, Handle);
@@ -939,6 +940,10 @@ public:
         State.OnInitQueueEmpty();
     }
 
+    void Handle(TEvKeyValue::TEvAdmissionDeadline::TPtr&) {
+        State.OnAdmissionDeadline();
+    }
+
     void UpdateTabletYellow() {
         if (Executor()) {
             State.SetTabletYellowMove(Executor()->GetStats().IsAnyChannelYellowMove);
@@ -952,6 +957,20 @@ public:
 
     bool ReassignChannelsEnabled() const override {
         return true;
+    }
+
+    // Owner attribution excludes executor memory and is used only with the host flag enabled.
+    NMemory::TConsumerReport GetMemoryReport() const override {
+        const ui64 used = State.GetStateBytes().Total() + State.GetMemoryAdmissionStats().HeldBytes() + State.GetMemoryWaitingForGC();
+        return {.Used = used, .Demand = used, .Reclaimable = 0};
+    }
+
+    NMemory::TMemoryAdmissionStats GetMemoryAdmissionStats() const override {
+        return State.GetMemoryAdmissionStats();
+    }
+
+    void OnMemoryZone(NMemory::EMemoryZone zone) override {
+        State.OnMemoryZone(zone);
     }
 
     bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const {

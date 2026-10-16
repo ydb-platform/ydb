@@ -144,6 +144,10 @@ enum ESimpleCounters {
     COUNTER_MEMORY_INLINE_DATA_BYTES = 19                            [(CounterOpts) = {Name: "MemoryInlineDataBytes"}];
     COUNTER_MEMORY_REF_COUNTS_BYTES = 20                             [(CounterOpts) = {Name: "MemoryRefCountsBytes"}];
     COUNTER_MEMORY_TRASH_BYTES = 21                                  [(CounterOpts) = {Name: "MemoryTrashBytes"}];
+    COUNTER_MEMORY_ADMISSION_RUNNING_BYTES = 22 [(CounterOpts) = {Name: "MemoryAdmissionRunningBytes"}];
+    COUNTER_MEMORY_ADMISSION_RUNNING_COUNT = 23 [(CounterOpts) = {Name: "MemoryAdmissionRunningCount"}];
+    COUNTER_MEMORY_ADMISSION_QUEUED_BYTES = 24 [(CounterOpts) = {Name: "MemoryAdmissionQueuedBytes"}];
+    COUNTER_MEMORY_ADMISSION_QUEUED_COUNT = 25 [(CounterOpts) = {Name: "MemoryAdmissionQueuedCount"}];
 }
 
 enum EPercentileCounters {

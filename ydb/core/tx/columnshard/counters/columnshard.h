@@ -280,8 +280,8 @@ public:
         CutHistoryScanDurationMs->Collect(duration.MilliSeconds());
     }
 
-    void OnCutHistoryRequestSent(const TDuration duration) const {
-        CutHistoryRequestsSent->Inc();
+    void OnCutHistoryRequestsSent(const ui64 count, const TDuration duration) const {
+        CutHistoryRequestsSent->Add(count);
         CutHistoryWaitDurationMs->Collect(duration.MilliSeconds());
     }
 

@@ -836,7 +836,6 @@ TString TTxMonitoring::RenderCutHistoryPage() {
         H3_CLASS("") {
             html << "Persisted CutHistory request intents (latest " << CutHistoryRequestLimit << "; Hive confirmation is not tracked)";
         }
-        html << "Diagnostic candidates only: GC queues are not checked and requests are not sent.";
         PRE() {
             html << TEscapeHtml(CutHistoryReport);
         }

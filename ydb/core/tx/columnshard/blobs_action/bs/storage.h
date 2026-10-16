@@ -5,6 +5,8 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 
+#include <utility>
+
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 class TOperator: public IBlobsStorageOperator {
@@ -38,6 +40,11 @@ public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
         const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
         bool weightedDataChannelSelection = false);
+
+    template <class TVisitor>
+    void VisitPendingGCBlobs(const ui32 toGeneration, TVisitor&& visitor) const {
+        Manager->VisitPendingGCBlobs(toGeneration, std::forward<TVisitor>(visitor));
+    }
 
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
         return Manager->HasToDelete(blobId, tabletId);

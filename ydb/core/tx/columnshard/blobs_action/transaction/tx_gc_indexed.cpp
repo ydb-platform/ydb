@@ -13,12 +13,13 @@ bool TTxGarbageCollectionFinished::Execute(TTransactionContext& txc, const TActo
     return true;
 }
 
-void TTxGarbageCollectionFinished::Complete(const TActorContext& /*ctx*/) {
+void TTxGarbageCollectionFinished::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxGarbageCollectionFinished::Complete");
     YDB_LOG_DEBUG("",
         {"tx", "TxGarbageCollectionFinished"},
         {"event", "complete"});
     Action->OnCompleteTxAfterCleaning(*Self, Action);
+    Self->ResumePostponedCutHistory(ctx);
 }
 
 bool TTxGarbageCollectionStart::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {

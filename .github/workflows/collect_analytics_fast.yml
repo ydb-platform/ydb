@@ -56,7 +56,7 @@ jobs:
           local -a samples=()
           for i in $(seq 1 30); do
             sleep 1
-            now=$(du -sb "$dest" 2>/dev/null | awk '{print $1}')
+            now=$(du -sb "$dest" 2>/dev/null | awk '{print $1}' || true)
             samples+=("${now:-0}")
           done
           kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
@@ -272,7 +272,7 @@ jobs:
           local -a samples=()
           for i in $(seq 1 30); do
             sleep 1
-            now=$(du -sb "$dest" 2>/dev/null | awk '{print $1}')
+            now=$(du -sb "$dest" 2>/dev/null | awk '{print $1}' || true)
             samples+=("${now:-0}")
           done
           kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true

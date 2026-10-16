@@ -437,6 +437,9 @@ public:
 
         TMaybe<NBackup::TEncryptionIV> schemeIV;
         if (IV) {
+            if (IV->Size() != NBackup::TEncryptionIV::SIZE) {
+                return Finish(false, "Invalid IV size for SQL scheme upload");
+            }
             schemeIV = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::TableCreate, 0 /* backupItemNumber */, 0 /* shardNumber */);
         }
 

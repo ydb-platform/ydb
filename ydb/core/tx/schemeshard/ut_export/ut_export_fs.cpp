@@ -295,13 +295,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
                      "Data file doesn't contain expected rows");
     }
 
-    Y_UNIT_TEST(TableBackupAsSqlChecksumFailureStopsFsExportBeforeDataStage) {
+    Y_UNIT_TEST(TableBackupAsSqlChecksumFailureContinuesFsExport) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
         runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -359,17 +360,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
             response.Release(), request->Flags, request->Cookie);
         checksumUploads.Stop();
         checksumUploads.clear();
+        backupProposals.Stop().Unblock();
         runtime.Send(failure.Release(), 0, true);
 
         env.TestWaitNotification(runtime, exportId);
-        auto desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        const auto& entry = desc.GetResponse().GetEntry();
-        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
-        UNIT_ASSERT_C(entry.IssuesSize() > 0, entry.DebugString());
-        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "create_table.sql.sha256");
-        UNIT_ASSERT_C(backupProposals.empty(), "failed FS export must not reach data backup");
-        UNIT_ASSERT(!FileExists(metadataPath));
-        UNIT_ASSERT(!FileExists(dataPath));
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(FileExists(sqlPath));
+        UNIT_ASSERT(!FileExists(checksumPath));
+        UNIT_ASSERT(FileExists(metadataPath));
+        UNIT_ASSERT(FileExists(MakeExportPath(basePath, destination, "scheme.pb")));
+        UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(dataPath), "1,\"row1\"\n");
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 1u);
         WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 2, "row2");
@@ -383,9 +383,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         const TString exportPath = Sprintf("/MyRoot/export-%" PRIu64, exportId);
         TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathExist});
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_C(desc.GetResponse().GetEntry().IssuesSize() > 0, desc.GetResponse().GetEntry().DebugString());
-        UNIT_ASSERT_C(backupProposals.empty(), "failed FS export must not restart after reboot");
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
         env.TestWaitNotification(runtime, exportId);
@@ -395,7 +393,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         TestDescribeResult(DescribePath(runtime, exportPath), {NLs::PathNotExist});
-        UNIT_ASSERT_C(backupProposals.empty(), "forgotten FS export must not be resurrected after reboot");
         backupProposals.Stop();
     }
 

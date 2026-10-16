@@ -570,8 +570,14 @@ private:
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
 
+        auto fail = [&](const TString& error) {
+            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
+        };
+
         TSettings exportSettings;
-        Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+        if (!exportSettings.ParseFromString(exportInfo.Settings)) {
+            return fail("Cannot parse settings for SQL scheme upload");
+        }
 
         const TPath sourcePath = TPath::Init(item.SourcePathId, Self);
         const TPath exportItemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
@@ -596,15 +602,16 @@ private:
             : PrepareExportTableSchemeContext(Self, sourcePath, exportItemPath, context, error);
 
         if (!prepared || !FillExportTableSchemePaths(Self, item.SourcePathName, context, error)) {
-            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
-            return;
+            return fail(error);
         }
 
         context.IncludeIndexData = exportInfo.IncludeIndexData;
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
-            Y_ABORT_UNLESS(itemIdx < ui32(exportInfo.ExportMetadata.SchemaMappingSize()));
+            if (itemIdx >= ui32(exportInfo.ExportMetadata.SchemaMappingSize())) {
+                return fail("Schema mapping entry is missing for SQL scheme upload");
+            }
             iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
         }
 
@@ -1489,6 +1496,39 @@ private:
         auto& item = exportInfo->Items[itemIdx];
         Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, {}));
 
+        if (NeedsTableSchemeUpload(*exportInfo, item)) {
+            if (item.State != EState::UploadTableSchemeSql) {
+                return;
+            }
+
+            if (exportInfo->State == EState::Transferring) {
+                if (!result.Success) {
+                    YDB_LOG_WARN("Failed to upload CREATE TABLE SQL, export will continue without it",
+                        {"id", exportId},
+                        {"itemIdx", itemIdx},
+                        {"error", result.Error},
+                    );
+                }
+
+                item.State = EState::Transferring;
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+
+                exportInfo->PendingItems.emplace_back(itemIdx);
+                AllocateTxId(*exportInfo, itemIdx);
+            } else if (exportInfo->State == EState::Cancellation || exportInfo->State == EState::Cancelled) {
+                item.State = EState::Cancelled;
+                Self->PersistExportItemState(db, *exportInfo, itemIdx);
+
+                if (exportInfo->State == EState::Cancellation && AllOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
+                    // on cancellation we wait only for transferring items
+                    return item.State != EState::Transferring;
+                })) {
+                    EndExport(exportInfo, EState::Cancelled, db);
+                }
+            }
+            return;
+        }
+
         if (!result.Success) {
             item.State = EState::Cancelled;
             item.Issue = result.Error;
@@ -1503,27 +1543,6 @@ private:
             Self->PersistExportState(db, *exportInfo);
             Self->EraseEncryptionKey(db, *exportInfo);
             return SendNotificationsIfFinished(exportInfo);
-        }
-
-        if (NeedsTableSchemeUpload(*exportInfo, item)) {
-            if (exportInfo->State == EState::Transferring && item.State == EState::UploadTableSchemeSql) {
-                item.State = EState::Transferring;
-                Self->PersistExportItemState(db, *exportInfo, itemIdx);
-
-                exportInfo->PendingItems.emplace_back(itemIdx);
-                AllocateTxId(*exportInfo, itemIdx);
-            } else if (exportInfo->State == EState::Cancellation) {
-                item.State = EState::Cancelled;
-                Self->PersistExportItemState(db, *exportInfo, itemIdx);
-
-                if (AllOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
-                    // on cancellation we wait only for transferring items
-                    return item.State != EState::Transferring;
-                })) {
-                    EndExport(exportInfo, EState::Cancelled, db);
-                }
-            }
-            return;
         }
 
         if (exportInfo->State == EState::Transferring) {

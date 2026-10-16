@@ -51,6 +51,7 @@ TEST_SRCS(
     test_yq_streaming.py
 )
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

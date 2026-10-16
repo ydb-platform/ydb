@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     yql_decimal_ut.cpp
     yql_wide_int_ut.cpp

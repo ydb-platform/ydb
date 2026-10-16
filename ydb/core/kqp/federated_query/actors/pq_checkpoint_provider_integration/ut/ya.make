@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     pq_checkpoint_provider_integration_ut.cpp
 )

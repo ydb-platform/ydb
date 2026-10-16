@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/syncer)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/apps/version

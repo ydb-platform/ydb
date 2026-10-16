@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/yt/actors)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     yt/yql/providers/yt/codec/codegen/llvm16
     yt/yql/providers/yt/comp_nodes/llvm16

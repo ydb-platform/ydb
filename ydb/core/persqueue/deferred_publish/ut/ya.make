@@ -1,6 +1,7 @@
 UNITTEST()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/protos

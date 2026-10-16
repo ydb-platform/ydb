@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/anubis_osiris)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt

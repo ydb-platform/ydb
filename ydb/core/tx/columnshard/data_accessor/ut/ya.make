@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/data_accessor)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     ut_manager.cpp
 )

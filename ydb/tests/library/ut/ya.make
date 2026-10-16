@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 DEPENDS(
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/library
     yql/essentials/providers/common/proto

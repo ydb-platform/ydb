@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/persqueue)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/persqueue/ut/common

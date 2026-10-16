@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yaml_config)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/path_aliasing
     ydb/library/yaml_config/ut/protos

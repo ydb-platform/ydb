@@ -67,6 +67,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  custom_ya_bin_s3_uri:
+    type: string
+    required: false
+    default: ""
+    description: "s3:// URI of a replacement ya-bin tarball"
 defaults:
   run:
     shell: bash
@@ -129,3 +134,4 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps != 'false' }}
         pull_number: ${{ inputs.pull_number }}
+        custom_ya_bin_s3_uri: ${{ inputs.custom_ya_bin_s3_uri }}

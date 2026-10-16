@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/gateway/behaviour/streaming_query)
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     scheme_transaction_ut.cpp

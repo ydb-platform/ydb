@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/persqueue/pqtablet/partition/mirrorer)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 YQL_LAST_ABI_VERSION()
 

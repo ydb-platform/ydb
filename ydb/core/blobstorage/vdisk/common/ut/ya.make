@@ -2,7 +2,8 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/common)
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 REQUIREMENTS(cpu:4)
 
 PEERDIR(

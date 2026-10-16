@@ -10,6 +10,7 @@ TEST_SRCS(
 
 REQUIREMENTS(
     ram:32
+    cpu:1
 )
 
 SIZE(LARGE)

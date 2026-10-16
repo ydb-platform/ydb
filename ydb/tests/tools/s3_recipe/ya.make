@@ -4,6 +4,7 @@ STYLE_PYTHON()
 
 PY_SRCS(__main__.py)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/python/requests
     library/python/port_manager

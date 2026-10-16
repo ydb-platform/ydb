@@ -1,6 +1,7 @@
 G_BENCHMARK(nbs_block_range_field_benchmark)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 # Keeps the benchmark inside the SMALL test budget. Run the binary directly
 # without this option when comparing performance numbers.

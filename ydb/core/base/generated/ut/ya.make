@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/base/generated)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/protos
 )

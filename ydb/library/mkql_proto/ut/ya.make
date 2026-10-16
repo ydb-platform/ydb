@@ -5,6 +5,7 @@ ALLOCATOR(J)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     mkql_proto_ut.cpp

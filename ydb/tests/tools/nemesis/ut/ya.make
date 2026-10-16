@@ -8,7 +8,8 @@ TEST_SRCS(
     test_tablet.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 REQUIREMENTS(cpu:4)
 
 

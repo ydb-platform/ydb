@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/idx_test)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

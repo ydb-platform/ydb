@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/services/rate_limiter)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ENDIF()

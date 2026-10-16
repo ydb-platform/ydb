@@ -4,6 +4,7 @@ UNITTEST_FOR(ydb/core/kqp/runtime)
 # test server); these tests need nothing but the actor system.
 # MEDIUM rather than SMALL: 46 tests, each spinning up a test actor runtime.
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_vector_search_actor_ut.cpp

@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/public/lib/validation)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

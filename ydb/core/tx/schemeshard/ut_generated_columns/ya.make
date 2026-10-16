@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

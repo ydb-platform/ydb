@@ -8,6 +8,7 @@ PY_SRCS(
     __main__.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/python/testing/recipe
     ydb/tests/library/logbroker_federation

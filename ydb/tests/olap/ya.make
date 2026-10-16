@@ -23,12 +23,13 @@ PY3TEST()
     FORK_SUBTESTS()
     SPLIT_FACTOR(150)
 
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:4)
     IF (SANITIZER_TYPE)
         SIZE(LARGE)
         INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
-        SIZE(MEDIUM)
+        SIZE(LARGE)
+        TAG(ya:fat)
     ENDIF()
 
     DEPENDS(

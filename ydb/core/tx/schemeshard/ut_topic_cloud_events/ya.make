@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 FORK_SUBTESTS()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/json

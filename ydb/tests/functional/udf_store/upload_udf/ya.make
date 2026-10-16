@@ -6,6 +6,7 @@ PY_SRCS(
     __main__.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/functional/udf_store/lib
     ydb/tests/oss/ydb_sdk_import

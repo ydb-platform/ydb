@@ -7,6 +7,7 @@ TEST_SRCS(
     test_sql_streaming.py
 )
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

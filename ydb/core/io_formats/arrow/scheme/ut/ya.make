@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/io_formats/arrow/scheme)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     # for NYql::NUdf alloc stuff used in binary_json

@@ -15,7 +15,8 @@ TEST_SRCS(
     test_nbs_load_actor.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 TIMEOUT(600)
 REQUIREMENTS(cpu:4)
 REQUIREMENTS(ram:16)

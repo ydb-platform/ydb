@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/solomon/actors)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ELSE()

@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(kqp_info_unit_ut.cpp)
 
 PEERDIR(

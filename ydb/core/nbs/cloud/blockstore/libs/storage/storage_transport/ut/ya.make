@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     ic_direct_storage_transport_ut.cpp

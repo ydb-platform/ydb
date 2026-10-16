@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/fq/libs/control_plane_proxy)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/testing/unittest

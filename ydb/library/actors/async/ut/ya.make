@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/actors/async)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/actors/testlib
 )

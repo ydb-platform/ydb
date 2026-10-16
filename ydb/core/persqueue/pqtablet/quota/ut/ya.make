@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/persqueue/pqtablet/quota)
 YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 TIMEOUT(30)
 
 SRCS(

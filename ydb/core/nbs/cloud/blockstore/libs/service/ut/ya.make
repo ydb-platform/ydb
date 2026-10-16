@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/service)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/core/nbs/cloud/storage/core/tests/recipes/small.inc)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     blocks_info_ut.cpp
     device_handler_ut.cpp

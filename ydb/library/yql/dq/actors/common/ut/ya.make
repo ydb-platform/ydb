@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/dq/actors/common)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     retry_events_queue_ut.cpp
 )

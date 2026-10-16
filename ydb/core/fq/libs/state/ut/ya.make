@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/fq/libs/state)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     dq_state_load_plan_ut.cpp
 )

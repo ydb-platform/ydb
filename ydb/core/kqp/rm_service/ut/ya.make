@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp/rm_service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_rm_ut.cpp

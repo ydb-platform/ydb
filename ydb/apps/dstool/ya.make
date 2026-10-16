@@ -8,6 +8,7 @@ PY_SRCS(
     main.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/apps/dstool/lib
     contrib/python/six

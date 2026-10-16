@@ -2,6 +2,7 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/tx/datashard/ut_common
     ydb/core/tx/datashard

@@ -1,6 +1,7 @@
 GTEST()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/library/net

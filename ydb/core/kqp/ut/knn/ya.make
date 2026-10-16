@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     kqp_knn_ut.cpp

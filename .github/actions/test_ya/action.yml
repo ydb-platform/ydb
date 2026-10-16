@@ -79,6 +79,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  custom_ya_bin_s3_uri:
+    type: string
+    required: false
+    default: ""
+    description: "s3:// URI of a ya-bin tarball (ya-bin at archive root). Replaces ./ya for the make invocation and enables per-test CPU cgroup quotas."
 
 outputs:
   success:
@@ -205,8 +210,10 @@ runs:
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
+        CUSTOM_YA_BIN_S3_URI: ${{ inputs.custom_ya_bin_s3_uri }}
       run: |
         set -ex
+        . .github/scripts/custom_ya_launch.sh
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
         trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
@@ -369,12 +376,13 @@ runs:
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
         echo "::debug::get version"
-        ./ya --version
+        use_custom_ya_bin
+        "$YA_BIN" --version
 
         if [ true = ${{ inputs.run_tests }} ]; then
             params+=(-A)
         fi
-        YA_MAKE_COMMAND="./ya make ${params[@]}"
+        YA_MAKE_COMMAND="$YA_BIN make ${params[@]}"
         GRAPH_PATH=$(realpath graph.json)
         CONTEXT_PATH=$(realpath context.json)
         if [ "${{ inputs.increment }}" = "true" ]; then
@@ -522,7 +530,7 @@ runs:
           echo "Launching ./ya make under systemd-run scope=${YA_MAKE_SCOPE_NAME} with MemoryMax=${YA_MAKE_MEM_MAX}"
 
           YA_MAKE_CMD=(
-            ./ya make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
+            "$YA_BIN" make "${params[@]}" $YA_MAKE_TARGET $GRAPH_OPTS
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl"
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
@@ -530,17 +538,7 @@ runs:
 
           # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
           # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
-          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
-            YA_MAKE_RUN_CMD=(
-              prlimit --core=unlimited:unlimited
-              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
-              "${YA_MAKE_CMD[@]}"
-            )
-          else
-            YA_MAKE_RUN_CMD=(
-              sudo -n -E -u "$(id -un)" -- "${YA_MAKE_CMD[@]}"
-            )
-          fi
+          install_cpu_quota_wrapper
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
@@ -555,6 +553,7 @@ runs:
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
+             "${DELEGATE_CPU[@]}" \
              -- "${YA_MAKE_RUN_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e

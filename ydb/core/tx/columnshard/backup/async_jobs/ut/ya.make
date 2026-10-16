@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/backup/async_jobs)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

@@ -1,6 +1,7 @@
 G_BENCHMARK(interconnect_benchmark)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 # Keeps the ~110-case matrix inside the SMALL test budget. Run the binary directly without this option
 # (or with a larger --benchmark_min_time) when comparing numbers before and after a change.

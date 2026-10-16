@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/public_http)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     http_router_ut.cpp

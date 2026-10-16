@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/tx/tx_proxy

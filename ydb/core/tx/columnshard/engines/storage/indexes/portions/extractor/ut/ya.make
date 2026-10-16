@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     ut_sub_column.cpp
 )

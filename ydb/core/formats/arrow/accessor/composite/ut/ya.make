@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/formats/arrow/accessor/sparsed)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/formats/arrow/accessor/composite

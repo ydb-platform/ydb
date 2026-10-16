@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/s3/provider)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     yql_s3_listing_strategy_ut.cpp
 )

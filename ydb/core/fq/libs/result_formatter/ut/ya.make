@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/fq/libs/result_formatter)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
 ENDIF()

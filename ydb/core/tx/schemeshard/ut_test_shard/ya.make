@@ -9,6 +9,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/testlib/default

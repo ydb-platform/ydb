@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/services/persqueue_cluster_discovery/cluster_ordering)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     weighed_ordering_ut.cpp
 )

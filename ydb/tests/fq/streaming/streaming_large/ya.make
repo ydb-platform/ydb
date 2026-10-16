@@ -15,6 +15,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:1)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TAG(ya:fat)
 

@@ -1,4 +1,5 @@
 PY3TEST()
+REQUIREMENTS(cpu:1)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/functional/nbs/suite.inc)
 

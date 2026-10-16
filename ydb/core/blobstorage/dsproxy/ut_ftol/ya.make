@@ -9,7 +9,8 @@ IF (SANITIZER_TYPE OR BUILD_TYPE == "DEBUG")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    SIZE(MEDIUM)
+    SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 PEERDIR(

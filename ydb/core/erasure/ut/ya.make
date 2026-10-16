@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(30)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/digest/crc32c

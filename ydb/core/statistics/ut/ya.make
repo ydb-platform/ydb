@@ -3,6 +3,7 @@ UNITTEST()
 FORK_SUBTESTS()
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/testing/unittest

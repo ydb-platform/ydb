@@ -18,6 +18,7 @@ ELSE()
     )
 ENDIF()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/blobstorage/crypto/chacha_512
 )

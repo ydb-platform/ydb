@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/blobstorage/vdisk/defrag)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/graph/shard)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRC(
     shard_ut.cpp

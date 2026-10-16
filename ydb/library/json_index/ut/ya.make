@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/json_index)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     yql/essentials/minikql/jsonpath/parser

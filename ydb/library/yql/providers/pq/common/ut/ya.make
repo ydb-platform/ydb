@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/pq/common)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     pq_meta_fields_ut.cpp
     pq_shared_reading_ut.cpp

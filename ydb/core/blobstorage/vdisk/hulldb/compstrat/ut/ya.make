@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/hulldb/compstrat)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/base

@@ -1,4 +1,5 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
+REQUIREMENTS(cpu:1)
 
     SIZE(SMALL)
 

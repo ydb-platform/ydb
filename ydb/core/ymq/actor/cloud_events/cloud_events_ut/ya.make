@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/testlib/default
     ydb/core/ymq/actor/cloud_events

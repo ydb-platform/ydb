@@ -3,6 +3,7 @@ UNITTEST()
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/blobstorage/dsproxy

@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/engines/storage/optimizer)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/core/testlib/actors

@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/local_proxy/local_pq_client)
 
 FORK_SUBTESTS()
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 SIZE(MEDIUM)
 
 SRCS(

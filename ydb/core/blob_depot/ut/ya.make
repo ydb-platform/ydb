@@ -1,4 +1,5 @@
 UNITTEST_FOR(ydb/core/blob_depot)
+REQUIREMENTS(cpu:1)
 
     SIZE(MEDIUM)
 

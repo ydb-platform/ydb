@@ -1,5 +1,6 @@
 GTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     provider_ut.cpp
 )

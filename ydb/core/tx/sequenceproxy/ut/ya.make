@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/sequenceproxy)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     sequenceproxy_ut.cpp
 )

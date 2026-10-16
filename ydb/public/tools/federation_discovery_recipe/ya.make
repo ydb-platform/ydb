@@ -2,6 +2,7 @@ PY3_PROGRAM(federation_discovery_recipe)
 
 PY_SRCS(__main__.py)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/python/grpcio
     library/python/port_manager

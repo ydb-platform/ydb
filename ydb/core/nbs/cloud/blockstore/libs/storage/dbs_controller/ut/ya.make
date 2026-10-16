@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     dbs_controller_database_ut.cpp
     dbs_controller_ut.cpp

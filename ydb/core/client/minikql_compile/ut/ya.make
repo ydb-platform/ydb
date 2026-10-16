@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/client/minikql_compile)
 
 ALLOCATOR(J)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     yql_expr_minikql_compile_ut.cpp
 )

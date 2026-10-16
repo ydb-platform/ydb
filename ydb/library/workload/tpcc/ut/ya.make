@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/workload/tpcc)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     circular_queue_ut.cpp
     data_splitter_ut.cpp

@@ -5,6 +5,7 @@ TEST_SRCS(
     test_set_not_null_concurrency.py
 )
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(cpu:2)
 ENDIF()

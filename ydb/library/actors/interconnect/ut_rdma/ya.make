@@ -1,5 +1,6 @@
 GTEST()
 
+REQUIREMENTS(cpu:1)
 IF (OS_LINUX AND SANITIZER_TYPE != "memory")
 
 IF (SANITIZER_TYPE == "thread")

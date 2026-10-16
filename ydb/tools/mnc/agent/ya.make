@@ -1,4 +1,5 @@
 PY3_PROGRAM(mnc_agent)
+REQUIREMENTS(cpu:2)
 
     SUBSCRIBER(kruall)
 

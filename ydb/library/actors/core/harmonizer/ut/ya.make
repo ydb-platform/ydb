@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/actors/core/harmonizer)
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     TIMEOUT(600)

@@ -12,7 +12,8 @@ IF (SANITIZER_TYPE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32)
 ELSE()
-    SIZE(MEDIUM)
+    SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 DEPENDS(

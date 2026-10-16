@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/commands)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     library/cpp/json
 )

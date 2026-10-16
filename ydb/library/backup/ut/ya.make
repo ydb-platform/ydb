@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/backup)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 SRC(ut.cpp)
 

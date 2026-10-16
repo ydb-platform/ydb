@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/plan2svg)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     plan2svg_ut.cpp

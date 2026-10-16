@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/common)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     contrib/libs/jwt-cpp
     ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers

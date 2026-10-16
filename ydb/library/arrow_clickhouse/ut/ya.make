@@ -4,6 +4,7 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     ut_aggregator.cpp

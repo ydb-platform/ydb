@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/formats/arrow/accessor/sub_columns)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     yql/essentials/types/binary_json

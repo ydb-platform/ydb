@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/http_proxy)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 FORK_SUBTESTS()
 

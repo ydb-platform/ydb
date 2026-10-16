@@ -6,6 +6,7 @@ EXECTEST()
 # Sample datasets are resolved via the Arcadia source root (see
 # test/testdataset.h) and made available to the test through DATA().
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "memory")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

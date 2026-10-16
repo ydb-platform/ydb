@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/dq/worker_manager)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     local_worker_manager_ut.cpp
 )

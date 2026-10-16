@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/actorlib_impl)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SPLIT_FACTOR(20)
     SIZE(LARGE)

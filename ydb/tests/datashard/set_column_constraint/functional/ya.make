@@ -8,6 +8,7 @@ TEST_SRCS(
 FORK_SUBTESTS()
 FORK_TEST_FILES()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/tests/datashard/lib
     ydb/tests/sql/lib

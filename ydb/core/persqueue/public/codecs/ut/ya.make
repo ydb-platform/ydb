@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/persqueue/public/codecs)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
 )
 

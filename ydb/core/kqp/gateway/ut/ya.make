@@ -1,5 +1,6 @@
 GTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     metadata_conversion.cpp
 )

@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/providers/pq/comp_nodes)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     dq_pq_parsing_wrapper_ut.cpp
 )

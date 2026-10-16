@@ -5,6 +5,7 @@ TEST_SRCS(
 )
 
 SIZE(LARGE)
+REQUIREMENTS(cpu:1)
 TAG(ya:manual)
 
 DATA(

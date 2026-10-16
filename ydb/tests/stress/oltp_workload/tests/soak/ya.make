@@ -5,7 +5,7 @@ TEST_SRCS(
     test_feature_index_soak.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:1)
 TAG(ya:external)
 
 SIZE(LARGE)

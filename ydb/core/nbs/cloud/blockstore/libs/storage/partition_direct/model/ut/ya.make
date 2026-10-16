@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     count_size_ut.cpp
     ddisk_balance_ut.cpp

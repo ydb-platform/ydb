@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/testing/gmock_in_unittest

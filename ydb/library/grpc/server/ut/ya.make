@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/grpc/server)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     ydb/library/grpc/server

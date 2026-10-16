@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/sequenceshard)
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/testlib/default
 )

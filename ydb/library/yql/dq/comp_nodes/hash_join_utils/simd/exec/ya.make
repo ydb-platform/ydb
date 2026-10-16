@@ -20,6 +20,7 @@ DEPENDS(
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/exec/tuples_to_bucket
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
 )

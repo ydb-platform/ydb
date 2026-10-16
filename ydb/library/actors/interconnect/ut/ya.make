@@ -7,7 +7,8 @@ IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    SIZE(MEDIUM)
+    SIZE(LARGE)
+    TAG(ya:fat)
 ENDIF()
 
 SRCS(

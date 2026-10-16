@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tablet_flat)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:1)
 
 SRCS(
     util_pool_ut.cpp

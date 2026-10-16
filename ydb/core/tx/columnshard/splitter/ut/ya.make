@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/splitter)
 
 SIZE(SMALL)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     contrib/libs/apache/arrow

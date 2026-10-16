@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 SRCS(
     dynamic_group_line_ut.cpp
     compressed_line_storage_ut.cpp

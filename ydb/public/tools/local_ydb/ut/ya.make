@@ -21,7 +21,7 @@ ENV(YDB_TINY_MODE=true)
 
 SIZE(MEDIUM)
 TIMEOUT(600)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 IF (SANITIZER_TYPE == "address")
     # Allow additional memory for the instrumented server and CLI processes.

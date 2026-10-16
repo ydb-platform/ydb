@@ -4,6 +4,7 @@ PY_SRCS(
     __main__.py
 )
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior

@@ -13,6 +13,8 @@ BENCHMARK_OPTS(
     --benchmark_min_time=0.05s
 )
 
-SIZE(SMALL)
+SIZE(LARGE)
+TAG(ya:fat)
+REQUIREMENTS(cpu:4)
 
 END()

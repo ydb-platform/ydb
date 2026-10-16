@@ -1,5 +1,6 @@
 UNITTEST()
 
+REQUIREMENTS(cpu:1)
 PEERDIR(
     ydb/core/base
     ydb/core/ymq/base

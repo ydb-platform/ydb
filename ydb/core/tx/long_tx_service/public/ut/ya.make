@@ -1,5 +1,6 @@
 UNITTEST_FOR(ydb/core/tx/long_tx_service/public)
 
+REQUIREMENTS(cpu:1)
 SRCS(
     snapshot_registry_ut.cpp
     types_ut.cpp

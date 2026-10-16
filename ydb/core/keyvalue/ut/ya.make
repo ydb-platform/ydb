@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/keyvalue)
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(30)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE  == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

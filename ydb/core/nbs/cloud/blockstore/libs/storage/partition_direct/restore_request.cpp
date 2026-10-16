@@ -10,7 +10,17 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/datetime/base.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr TDuration ListRetryDelay = TDuration::MilliSeconds(100);
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,6 +53,10 @@ void TRestoreRequestExecutor::Run()
 
 void TRestoreRequestExecutor::DoRun(THostIndex hostIndex)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     auto future = DirectBlockGroup->ListPBuffers(hostIndex);
     future.Subscribe(
         [self = shared_from_this(), hostIndex]   //
@@ -63,8 +77,23 @@ void TRestoreRequestExecutor::OnResponse(
     THostIndex hostIndex,
     TListPBufferResponse response)
 {
+    if (Promise.IsReady()) {
+        return;
+    }
+
     if (HasError(response.Error)) {
-        Reply(response.Error);
+        // This host has not answered. Ask again. The list is published
+        // only when every host has answered.
+        DirectBlockGroup->Schedule(
+            ListRetryDelay,
+            [self = shared_from_this(), hostIndex]()
+            {
+                self->DoRun(hostIndex);
+            });
+        return;
+    }
+
+    if (Response->Meta.find(hostIndex) != Response->Meta.end()) {
         return;
     }
 

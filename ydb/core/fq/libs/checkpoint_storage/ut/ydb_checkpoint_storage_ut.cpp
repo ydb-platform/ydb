@@ -392,6 +392,27 @@ Y_UNIT_TEST_SUITE(TCheckpointStorageTest) {
         UNIT_ASSERT(issues.Empty());
     }
 
+    Y_UNIT_TEST_F(ShouldRejectDuplicateCheckpointFromSeparateRequest, TSdkCheckpoints)
+    {
+        TCoordinatorId coordinator("graph1", 11);
+        auto issues = Storage->RegisterGraphCoordinator(coordinator).GetValueSync();
+        UNIT_ASSERT_C(issues.Empty(), issues.ToString());
+
+        const auto firstResult = Storage->CreateCheckpoint(
+            coordinator,
+            CheckpointId1,
+            NProto::TCheckpointGraphDescription(),
+            ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(firstResult.second.Empty(), firstResult.second.ToString());
+
+        const auto duplicateResult = Storage->CreateCheckpoint(
+            coordinator,
+            CheckpointId1,
+            NProto::TCheckpointGraphDescription(),
+            ECheckpointStatus::Pending).GetValueSync();
+        UNIT_ASSERT_C(!duplicateResult.second.Empty(), "A separate request must not treat an existing checkpoint as its own retry");
+    }
+
     // TODO: add more tests on checkpoints manipulations
 
     Y_UNIT_TEST_F(ShouldCreateGetCheckpoints, TSdkCheckpoints)

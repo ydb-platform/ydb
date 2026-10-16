@@ -70,6 +70,7 @@ struct TCheckpointContext : public TThrRefBase {
     TGenerationContextPtr GenerationContext;
     TCheckpointGraphDescriptionContextPtr CheckpointGraphDescriptionContext;
     IEntityIdGenerator::TPtr EntityIdGenerator;
+    bool CreateAttempted = false;
 
     TCheckpointContext(const TCheckpointId& id,
                        ECheckpointStatus status,
@@ -241,6 +242,62 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
         });
 }
 
+TFuture<TDataQueryResult> SelectCheckpointGraphDescId(const TCheckpointContextPtr& context) {
+    const auto& generationContext = context->GenerationContext;
+
+    auto query = Sprintf(R"(
+        --!syntax_v1
+        PRAGMA TablePathPrefix("%s");
+        DECLARE $graph_id AS String;
+        DECLARE $coordinator_generation AS Uint64;
+        DECLARE $seq_no AS Uint64;
+
+        SELECT graph_description_id
+        FROM %s
+        WHERE graph_id = $graph_id
+          AND coordinator_generation = $coordinator_generation
+          AND seq_no = $seq_no;
+    )", generationContext->TablePathPrefix.c_str(), CheckpointsMetadataTable);
+
+    auto params = std::make_shared<NYdb::TParamsBuilder>();
+    params->
+         AddParam("$graph_id")
+            .String(generationContext->PrimaryKey)
+            .Build()
+        .AddParam("$coordinator_generation")
+            .Uint64(context->CheckpointId.CoordinatorGeneration)
+            .Build()
+        .AddParam("$seq_no")
+            .Uint64(context->CheckpointId.SeqNo)
+            .Build();
+
+    return generationContext->Session->ExecuteDataQuery(
+        query,
+        TTxControl::ContinueTx(),
+        std::move(params),
+        generationContext->ExecDataQuerySettings);
+}
+
+TFuture<TStatus> CreateCheckpointAfterRetry(const TCheckpointContextPtr& context) {
+    return SelectCheckpointGraphDescId(context).Apply(
+        [context](const TFuture<TDataQueryResult>& future) {
+            const auto& result = future.GetValue();
+            if (!result.IsSuccess()) {
+                return MakeFuture<TStatus>(result);
+            }
+
+            TResultSetParser parser(result.GetResultSet(0));
+            if (parser.TryNextRow()) {
+                const auto graphDescId = parser.ColumnParser("graph_description_id").GetOptionalString();
+                if (graphDescId && *graphDescId == context->CheckpointGraphDescriptionContext->GraphDescId) {
+                    return RollbackTransaction(context->GenerationContext);
+                }
+            }
+
+            return CreateCheckpoint(context);
+        });
+}
+
 TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
     const auto& generationContext = context->GenerationContext;
 
@@ -366,6 +423,12 @@ TFuture<TStatus> CreateCheckpointWrapper(
                         if (!result.GetValue().IsSuccess()) {
                             return MakeFuture(result.GetValue());
                         }
+
+                        if (context->CreateAttempted) {
+                            return CreateCheckpointAfterRetry(context);
+                        }
+
+                        context->CreateAttempted = true;
                         return CreateCheckpoint(context);
                     });
         });

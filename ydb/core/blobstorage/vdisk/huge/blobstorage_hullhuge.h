@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
+#include <optional>
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -26,18 +28,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
-<<<<<<< HEAD
-=======
-        // New chunks for this put must pass the same bound as its Fresh index.
-        // Unset for recovery writers; those retain their existing BLACK bound.
-        std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
-        // Index capacity already charged to Fresh; transferred back to Skeleton
-        // on success or allocation refusal, and held until replay or rejection.
-        TFreshAdmission FreshAdmission;
         // Present for VPut requests; internal replication does not acknowledge a client write.
         std::optional<ui32> AdmittedGroupGeneration;
-        NPDisk::EAllocationPurpose AllocationPurpose = NPDisk::EAllocationPurpose::Recovery;
->>>>>>> a4a70734f34 (Bridge assimilation write fence (#55964))
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -99,19 +91,8 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
-<<<<<<< HEAD
-=======
-        const bool IsStripe;
-        // The colour at which reserving Fresh chunks for this blob's index record is refused, as for any put
-        // of its data kind. Unset for writers Fresh admission does not gate, such as replication.
-        const std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> FreshRefuseAtColor;
-        // The index record's Fresh admission, taken before the data was written; empty exactly when
-        // FreshRefuseAtColor is unset or the gate is off. Skeleton lands it once the record is in Fresh, or
-        // instead of that when HugeKeeper refused the data.
-        TFreshAdmission FreshAdmission;
         // Present for VPut requests; internal replication does not acknowledge a client write.
         std::optional<ui32> AdmittedGroupGeneration;
->>>>>>> a4a70734f34 (Bridge assimilation write fence (#55964))
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,

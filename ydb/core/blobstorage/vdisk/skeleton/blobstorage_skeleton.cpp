@@ -917,25 +917,14 @@ namespace NKikimr {
                 auto hugeWrite = CreateHullWriteHugeBlob(ev->Sender, ev->Cookie, ignoreBlock, handleClass, info,
                     std::move(result), ev->Get()->RewriteBlob);
                 hugeWrite->Orbit = std::move(ev->Get()->Orbit);
-<<<<<<< HEAD
-=======
-                hugeWrite->FreshAdmission = TakePendingFreshAdmission();
                 hugeWrite->AdmittedGroupGeneration = SelfVDiskId.GroupGeneration;
-                hugeWrite->AllocationPurpose = allocationPurpose;
->>>>>>> a4a70734f34 (Bridge assimilation write fence (#55964))
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(traceId));
             } else {
-                ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
+                auto logHuge = std::make_unique<TEvHullLogHugeBlob>(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
                     info.IssueKeepFlag, ev->Sender, ev->Cookie, handleClass, std::move(result), &info.ExtraBlockChecks,
-<<<<<<< HEAD
-                    info.WriteSource),
-                    0, 0, std::move(info.TraceId));
-=======
-                    info.WriteSource, false, false, freshRefuseAtColor);
-                logHuge->FreshAdmission = TakePendingFreshAdmission();
+                    info.WriteSource);
                 logHuge->AdmittedGroupGeneration = SelfVDiskId.GroupGeneration;
                 ctx.Send(SelfId(), logHuge.release(), 0, 0, std::move(info.TraceId));
->>>>>>> a4a70734f34 (Bridge assimilation write fence (#55964))
             }
         }
 

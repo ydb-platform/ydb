@@ -499,6 +499,8 @@ private:
                         Output->Consume(std::move(*PendingCheckpoint));
                         PendingCheckpoint.Clear();
                     }
+                    // Consumers must retain the barrier position: FIFO buffers
+                    // queue it, while v1 channels report HardLimit until it drains.
                     Output->Flush();
                     Callback->ResumeExecution();
                 }

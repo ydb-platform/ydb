@@ -3,6 +3,103 @@
 using namespace NFq::NWasmServices::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
+    Y_UNIT_TEST(StreamingSlowV1DownstreamCheckpointAndRestore) {
+        THttpMock http;
+        TGrpcMock grpc;
+        auto binding = Bindings(http, grpc)[2];
+        TVector<ui64> checkpointedRows;
+        bool repliedBeforeBarrier = false;
+        auto drainRows = [&](TQueryTransformEnv& env) {
+            env.Setup.Execute([&](auto& actor) {
+                NYql::NDq::TDqSerializedBatch data;
+                while (env.RealChannel->Pop(data)) {
+                    auto* type = env.RealChannel->GetOutputType();
+                    NKikimr::NMiniKQL::TUnboxedValueBatch rows(type);
+                    NYql::NDq::TDqDataSerializer serializer(actor.TypeEnv, actor.HolderFactory, NYql::NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
+                        NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumTestValidationMode);
+                    serializer.Deserialize(std::move(data), type, rows);
+                    rows.ForEachRow([&](const auto& row) {
+                        checkpointedRows.push_back(row.GetElement(0).template Get<ui64>());
+                    });
+                }
+            });
+        };
+        {
+            TQueryTransformEnv env(binding, 5000, 1, 0, 65536, 0, true, false, true);
+            env.Start({ 42 }, false);
+            http.State->Wait();
+            // DQ snapshots the upstream offset before injecting C. Its replay
+            // starts at row 43; the downstream snapshot must contain only 42.
+            env.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(1));
+            http.State->Reply(0, R"({"id":42,"name":"Ada","score":97,"version":1})", 200);
+            Eventually([&] {
+                bool ready = false;
+                env.Setup.Execute([&](auto& actor) {
+                    ready = env.RealChannel->GetValuesCount() == 1 && actor.DqAsyncOutput->GetFreeSpace() > 0;
+                });
+                return ready;
+            });
+            // Withhold Pop, as a peer with no network credit does. There is lots
+            // of local capacity, but the pending barrier must block more output.
+            env.Start({ 43 }, false);
+            Eventually([&] {
+                bool blocked = false;
+                env.Setup.Execute([&](auto&) {
+                    blocked = env.RealChannel->GetFillLevel() == NYql::NDq::HardLimit;
+                });
+                // Wait for an observable result, not a timeout asserting absence
+                // of an RPC. If admission stayed open, complete the later call
+                // before allowing the downstream to read its checkpoint.
+                return blocked || http.State->Count() >= 2;
+            });
+            if (http.State->Count() >= 2) {
+                repliedBeforeBarrier = true;
+                http.State->Reply(1, R"({"id":43,"name":"Ada","score":97,"version":1})", 200);
+                Eventually([&] {
+                    bool ready = false;
+                    env.Setup.Execute([&](auto&) {
+                        ready = env.RealChannel->GetValuesCount() == 2;
+                    });
+                    return ready;
+                });
+            }
+            drainRows(env);
+            bool popped = false;
+            env.Setup.Execute([&](auto& actor) {
+                NYql::NDqProto::TCheckpoint checkpoint;
+                popped = env.RealChannel->Pop(checkpoint) && checkpoint.GetId() == 1;
+                actor.DqAsyncOutput->CommitState(NYql::NDq::CreateCheckpoint(1));
+                actor.DqAsyncOutput->OnOutputConsumerReady();
+            });
+            UNIT_ASSERT(popped);
+            // The peer is ready again: execution must resume without polling.
+            http.State->Wait(1);
+            // Crash with post-C work in flight. Only the saved upstream offset
+            // and downstream rows survive; the transform has no private state.
+            env.Setup.Terminate();
+        }
+        TQueryTransformEnv restored(binding, 5000, 1, 0, 65536, 0, true, false, true);
+        restored.Setup.LoadSink({}, NYql::NDq::CreateCheckpoint(1));
+        restored.Start({ 43 }, false);
+        http.State->Wait(2);
+        if (!repliedBeforeBarrier) {
+            http.State->Reply(1, R"({"id":43,"name":"old","score":1,"version":1})", 200);
+        }
+        http.State->Reply(2, R"({"id":43,"name":"Ada","score":97,"version":1})", 200);
+        Eventually([&] {
+            bool ready = false;
+            restored.Setup.Execute([&](auto&) {
+                ready = restored.RealChannel->GetValuesCount() == 1;
+            });
+            return ready;
+        });
+        drainRows(restored);
+        UNIT_ASSERT_VALUES_EQUAL_C(checkpointedRows, (TVector<ui64>{ 42, 43 }),
+            "A post-checkpoint row must not be saved downstream and then applied again on source replay");
+    }
+
     Y_UNIT_TEST(StreamingBarriersWaitForNetworkAndOutputBackpressure) {
         THttpMock http;
         TGrpcMock grpc;

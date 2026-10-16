@@ -25,12 +25,16 @@ class MockServices:
         self.started = threading.Event()
         self.release = threading.Event()
         self.delay_timeout = 30
+        self.pause_all = False
         self.cancelled = threading.Event()
         owner = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
+                if owner.pause_all:
+                    owner.started.set()
+                    owner.release.wait(owner.delay_timeout)
                 if self.path == '/echo':
                     with owner.lock:
                         owner.requests.append(('echo', body, self.headers.get('Authorization')))
@@ -213,3 +217,13 @@ def client(kikimr, services, batch_config):
         headers={'Content-Type': 'application/octet-stream'},
     )
     return client
+
+
+@pytest.fixture
+def downstream_service():
+    mock = MockServices()
+    mock.delay_timeout = 180
+    try:
+        yield mock
+    finally:
+        mock.stop()

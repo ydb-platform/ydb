@@ -7,6 +7,8 @@
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
 #include <ydb/services/udf_store/wasm/single_module_loader.h>
@@ -108,9 +110,10 @@ struct TQueryTransformEnv {
     NYql::NDq::TDqAsyncIoFactory Factory;
     std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
     NYql::NDq::TFakeCASetup Setup;
+    NYql::NDq::IDqOutputChannel::TPtr RealChannel;
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0, ui32 maxBufferedRows = 65536,
-        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false)
+        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false)
         : Module(MakeTempName())
         , Manifest(MakeTempName())
     {
@@ -191,9 +194,13 @@ struct TQueryTransformEnv {
             desc.MutableTransform()->MutableSettings()->PackFrom(settings);
             THashMap<TString, TString> params;
             params[ServiceConnectionKey("profiles")] = PrepareServiceConnection(connection, {});
-            auto [sink, sinkActor] =
-                Factory.CreateDqOutputTransform({ .OutputDesc = desc, .OutputIndex = 0, .StatsLevel = NYql::NDq::None, .TxId = {}, .TaskId = 1,
-                    .TransformOutput = new TProfileConsumer(Output),
+            NYql::NDq::IDqOutputConsumer::TPtr consumer = new TProfileConsumer(Output);
+            if (realChannel) {
+                RealChannel = NYql::NDq::CreateDqOutputChannel({ .RowType = output, .HolderFactory = &actor.HolderFactory, .ChannelId = 1 });
+                consumer = NYql::NDq::CreateOutputMapConsumer(RealChannel);
+            }
+            auto [sink, sinkActor] = Factory.CreateDqOutputTransform(
+                { .OutputDesc = desc, .OutputIndex = 0, .StatsLevel = NYql::NDq::None, .TxId = {}, .TaskId = 1, .TransformOutput = consumer,
                     .Callback = &actor.GetAsyncOutputCallbacks(),
                     .SecureParams = params,
                     .TaskParams = params,
@@ -207,6 +214,12 @@ struct TQueryTransformEnv {
     }
 
     ~TQueryTransformEnv() {
+        // The channel owns values allocated by the fake compute actor.
+        if (RealChannel) {
+            Setup.Execute([&](auto&) {
+                RealChannel.Reset();
+            });
+        }
         if (UsesStore) {
             NKikimr::NUdfStore::NWasm::GetWasmModuleCatalog().Unregister(TString(ProfileTransformType));
         }

@@ -3,6 +3,7 @@
 # Only git operations (rebase, push) are performed - no build/test scripts.
 # Preflight checks require a repository collaborator to trigger rebase and,
 # for fork PRs, maintainer_can_modify (Allow edits from maintainers).
+# Trigger labels: rebase-and-check (preferred) and rebase-user-branch (alias).
 # Do NOT add steps that execute untrusted code from the PR head.
 name: Rebase user branch
 
@@ -22,7 +23,7 @@ concurrency:
 
 jobs:
   rebase:
-    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'rebase-user-branch'
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'rebase-and-check' || github.event.label.name == 'rebase-user-branch'
 
     runs-on: ubuntu-latest
     permissions:
@@ -221,7 +222,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-user-branch` label.' + footer
+              body: '❌ **Rebase failed unexpectedly.**\n\nPlease check the workflow logs or try re-applying the `rebase-and-check` or `rebase-user-branch` label.' + footer
             });
 
       - name: Fail on unexpected error
@@ -252,7 +253,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: issueNumber,
-              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-user-branch` label to retry.' + footer
+              body: '⚠️ **Rebase succeeded but push failed.**\n\nThe remote branch may have been updated.' + forkHint + '\n\nPlease re-apply the `rebase-and-check` or `rebase-user-branch` label to retry.' + footer
             });
 
       - name: Add success comment
@@ -311,16 +312,18 @@ jobs:
         with:
           script: |
             const issueNumber = Number.parseInt('${{ steps.pr.outputs.number }}', 10);
-            try {
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issueNumber,
-                name: 'rebase-user-branch'
-              });
-            } catch (error) {
-              if (!error.status || error.status != 404) {
-                throw error;
+            for (const name of ['rebase-and-check', 'rebase-user-branch']) {
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  name
+                });
+              } catch (error) {
+                if (!error.status || error.status != 404) {
+                  throw error;
+                }
               }
             }
 

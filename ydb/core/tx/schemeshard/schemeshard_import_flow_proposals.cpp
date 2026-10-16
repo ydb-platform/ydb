@@ -94,6 +94,17 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
+        if (item.YtImportPlan) {
+            // The source plan defines the layout independently of the default table profile.
+            tableDesc.ClearUniformPartitionsCount();
+            tableDesc.ClearSplitBoundary();
+            // Part 0 belongs to the initial unbounded-below partition. Each later
+            // part starts a new partition at its first key, already in internal encoding.
+            for (size_t i = 1; i < item.YtImportPlan->PartsSize(); ++i) {
+                tableDesc.AddSplitBoundary()->SetSerializedKeyPrefix(item.YtImportPlan->GetParts(i).GetFirstKey());
+            }
+        }
+
         if (!NeedToBuildIndexes(importInfo, itemIdx) && !FillIndexDescription(indexedTable, *item.Table,
                 ss->EnableCompactFulltextIndex, status, error)) {
             return nullptr;
@@ -153,6 +164,7 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
             dstColumn.set_type(column.GetType());
             dstColumn.set_typeid_(column.GetTypeId());
             dstColumn.set_id(column.GetId());
+            dstColumn.set_notnull(column.GetNotNull());
             columnIds[column.GetName()] = column.GetId();
         }
 
@@ -280,6 +292,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
             restoreSettings.SetPath(importInfo.GetItemSrcPrefix(itemIdx));
         }
         break;
+    }
+
+    if (item.YtImportPlan) {
+        *task.MutableYtImport()->MutablePlan() = *item.YtImportPlan;
+        task.SetValidateChecksums(false);
+        return propose;
     }
 
     const auto* metadata = &item.Metadata;

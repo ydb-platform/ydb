@@ -5279,6 +5279,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Table = table;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::YtImportPlan>()) {
+                        NKikimrSchemeOp::TYtImportPlan plan;
+                        if (!ParseFromStringNoSizeLimit(plan, rowset.GetValue<Schema::ImportItems::YtImportPlan>()) || plan.GetVersion() != 1) {
+                            return false;
+                        } else {
+                            item.YtImportPlan = std::move(plan);
+                        }
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {
                         item.CreationQuery = rowset.GetValue<Schema::ImportItems::CreationQuery>();
                     }

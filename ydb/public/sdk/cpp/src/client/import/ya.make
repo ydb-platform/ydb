@@ -13,6 +13,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/impl/internal/make_request
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/types/operation
 )

@@ -718,6 +718,27 @@ public:
             }
         }
 
+        if (TxType == TTxState::TxRestore && Transaction.GetRestore().HasYtImport()) {
+            const auto& ytImport = Transaction.GetRestore().GetYtImport();
+            if (!ytImport.HasPlan() || ytImport.GetPlan().GetVersion() != 1 || ytImport.HasPart()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "YT restore requires a version 1 source plan");
+                return result;
+            }
+            const auto pathId = path.Base()->PathId;
+            const bool isRowTable = path->IsTable();
+            const bool isRestore = isRowTable ? context.SS->Tables.at(pathId)->IsRestore
+                : context.SS->ColumnTables.at(pathId)->IsRestore;
+            const size_t shards = isRowTable ? context.SS->Tables.at(pathId)->GetPartitions().size()
+                : context.SS->ColumnTables.at(pathId)->GetPartitions().size();
+            // Import creates the destination from this plan. IsRestore keeps its
+            // layout fixed until restore completes, including across restarts.
+            const size_t expectedShards = isRowTable ? Max<size_t>(1, ytImport.GetPlan().PartsSize()) : 1;
+            if (!isRestore || shards != expectedShards) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "YT restore requires a restore table matching the source plan");
+                return result;
+            }
+        }
+
         if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
             TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
             for (const auto& [_, column] : table->Columns) {

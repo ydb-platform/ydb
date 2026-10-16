@@ -8,6 +8,7 @@ RECURSE(
     endpoints
     iam
     iam_private
+    import
     oauth2_token_exchange
     oidc
     observability

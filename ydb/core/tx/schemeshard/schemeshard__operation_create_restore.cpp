@@ -41,6 +41,18 @@ struct TRestore {
         const auto& pathId = txState.TargetPathId;
         const TPath sourcePath = TPath::Init(pathId, context.SS);
         const auto seqNo = context.SS->StartRound(txState);
+        auto shardSettings = restoreSettings;
+        const NKikimrSchemeOp::TYtImportPlan* rowPlan = nullptr;
+        if (sourcePath->IsTable() && restoreSettings.HasYtImport()) {
+            const auto& plan = restoreSettings.GetYtImport().GetPlan();
+            // Checked on admission; IsRestore prevents splits and merges afterwards.
+            Y_ABORT_UNLESS(txState.Shards.size() == Max<size_t>(1, plan.PartsSize()));
+            // An empty source restores its single destination shard without a part.
+            if (plan.PartsSize()) {
+                rowPlan = &plan;
+            }
+            shardSettings.MutableYtImport()->ClearPlan();
+        }
         for (ui32 i = 0; i < txState.Shards.size(); ++i) {
             const auto& idx = txState.Shards[i].Idx;
             const auto& shardId = context.SS->ShardInfos[idx].TabletID;
@@ -52,9 +64,13 @@ struct TRestore {
             );
 
             auto fillRestoreTask = [&](auto& restore) {
-                restore.CopyFrom(restoreSettings);
+                restore.CopyFrom(shardSettings);
                 restore.SetTableId(pathId.LocalPathId);
                 restore.SetShardNum(i);
+                if (rowPlan) {
+                    // Keep the full plan on SchemeShard; each shard receives only its own object.
+                    *restore.MutableYtImport()->MutablePart() = rowPlan->GetParts(i);
+                }
             };
 
             if (sourcePath->IsTable()) {

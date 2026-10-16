@@ -79,6 +79,32 @@ TImportFromS3Response::TImportFromS3Response(TStatus&& status, Ydb::Operations::
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
     Metadata_.Settings.IndexPopulationMode(TProtoAccessor::FromProto(metadata.settings().index_population_mode()));
 
+    switch (metadata.settings().source_format()) {
+    case ImportFromS3Settings::SOURCE_FORMAT_YDB:
+        Metadata_.Settings.SourceFormat(EImportSourceFormat::Ydb);
+        break;
+    case ImportFromS3Settings::SOURCE_FORMAT_YT:
+        Metadata_.Settings.SourceFormat(EImportSourceFormat::Yt);
+        break;
+    default:
+        Metadata_.Settings.SourceFormat(EImportSourceFormat::Unknown);
+        break;
+    }
+
+    switch (metadata.settings().destination_store_type()) {
+        case Ydb::Table::STORE_TYPE_UNSPECIFIED:
+            break;
+        case Ydb::Table::STORE_TYPE_ROW:
+            Metadata_.Settings.DestinationStoreType(EImportDestinationStoreType::Row);
+            break;
+        case Ydb::Table::STORE_TYPE_COLUMN:
+            Metadata_.Settings.DestinationStoreType(EImportDestinationStoreType::Column);
+            break;
+        default:
+            Metadata_.Settings.DestinationStoreType(EImportDestinationStoreType::Unknown);
+            break;
+    }
+
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
     Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
@@ -280,6 +306,30 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
     auto request = MakeOperationRequest<ImportFromS3Request>(settings);
     Ydb::Import::ImportFromS3Settings& settingsProto = *request.mutable_settings();
     FillS3Settings(settingsProto, settings);
+
+    switch (settings.SourceFormat_) {
+    case EImportSourceFormat::Ydb:
+        // Keep the default request compatible with servers predating this setting.
+        break;
+    case EImportSourceFormat::Yt:
+        settingsProto.set_source_format(ImportFromS3Settings::SOURCE_FORMAT_YT);
+        break;
+    default:
+        throw TContractViolation("Unknown S3 import source format");
+    }
+
+    if (settings.DestinationStoreType_) {
+        switch (*settings.DestinationStoreType_) {
+            case EImportDestinationStoreType::Row:
+                settingsProto.set_destination_store_type(Ydb::Table::STORE_TYPE_ROW);
+                break;
+            case EImportDestinationStoreType::Column:
+                settingsProto.set_destination_store_type(Ydb::Table::STORE_TYPE_COLUMN);
+                break;
+            default:
+                throw TContractViolation("Unknown S3 import destination store type");
+        }
+    }
 
     for (const auto& item : settings.Item_) {
         if (!item.Src.empty() && !item.SrcPath.empty()) {

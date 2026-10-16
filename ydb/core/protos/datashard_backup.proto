@@ -31,6 +31,13 @@ message TS3DownloadState {
         optional bool ChecksumComplete = 3;
     }
     optional TParquet Parquet = 2;
+
+    message TYsonGzipState {
+        optional uint32 Version = 1;
+        optional uint64 CommittedRows = 2;
+        optional bool Finished = 3;
+    }
+    optional TYsonGzipState YsonGzip = 3;
 }
 
 message TChangeMetadata {

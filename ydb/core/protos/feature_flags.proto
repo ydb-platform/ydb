@@ -453,4 +453,7 @@ message TFeatureFlags {
     // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
     // Existing TTL settings continue to execute when the flag is disabled.
     optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
+    // Enable only after SchemeShard, DataShard and ColumnShard hosts support YT import.
+    // Finish or cancel active YT imports before downgrading those hosts.
+    optional bool EnableImportFromYt = 367 [default = false];
 }

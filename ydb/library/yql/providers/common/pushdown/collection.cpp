@@ -273,7 +273,7 @@ private:
             return false;
         }
 
-        auto toBytesExpr = TExprBase(toBytes.Ref().Child(0));
+        auto toBytesExpr = TExprBase(toBytes.Ref().ChildPtr(0));
         if (!IsStringExpr(toBytesExpr)) {
             return false;
         }
@@ -289,7 +289,7 @@ private:
             return false;
         }
 
-        auto toStringExpr = TExprBase(toString.Ref().Child(0));
+        auto toStringExpr = TExprBase(toString.Ref().ChildPtr(0));
         if (!IsStringExpr(toStringExpr)) {
             return false;
         }
@@ -636,8 +636,8 @@ private:
             return false;
         }
 
-        const auto left = TExprBase(predicate.Ref().Child(0));
-        const auto right = TExprBase(predicate.Ref().Child(1));
+        const auto left = TExprBase(predicate.Ref().ChildPtr(0));
+        const auto right = TExprBase(predicate.Ref().ChildPtr(1));
         if (!CheckExpressionNodeForPushdown(left) || !CheckExpressionNodeForPushdown(right)) {
             return false;
         }
@@ -700,12 +700,12 @@ private:
                 // Expected exactly two run config settings
                 return false;
             }
-            if (!TExprBase(runConfig.Child(1)).Maybe<TCoNothing>()) {
+            if (!TExprBase(runConfig.ChildPtr(1)).Maybe<TCoNothing>()) {
                 // Expected empty regexp settings
                 return false;
             }
 
-            return CheckExpressionNodeForPushdown(TExprBase(runConfig.Child(0)));
+            return CheckExpressionNodeForPushdown(TExprBase(runConfig.ChildPtr(0)));
         }
         return false;
     }
@@ -719,7 +719,7 @@ private:
 
         // Check if all arguments can be pushed
         for (size_t i = 1; i < apply.Ref().ChildrenSize(); ++i) {
-            if (!CheckExpressionNodeForPushdown(TExprBase(apply.Ref().Child(i)))) {
+            if (!CheckExpressionNodeForPushdown(TExprBase(apply.Ref().ChildPtr(i)))) {
                 return false;
             }
         }

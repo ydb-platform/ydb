@@ -163,7 +163,7 @@ static int Run(int argc, char **argv) {
     ValidatePDiskSectorMapOptions(res, ddisk);
 #endif
     auto& paths = cli.Paths;
-    const auto inFlight = ResolveInFlight(res, ddisk);
+    const auto inFlight = ResolveInFlight(res);
 #ifdef _linux_
     const auto serverNodeId = cli.ServerNodeId;
     const auto clientNodeId = cli.ClientNodeId;

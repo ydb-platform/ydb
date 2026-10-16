@@ -168,14 +168,14 @@ TCommandLine::TCommandLine(bool ddisk)
 #endif
 }
 
-TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res, bool ddisk) {
+TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res) {
     if (res.Has("inflight")) {
         Y_ENSURE(!res.Has("inflight-from") && !res.Has("inflight-to"),
             "--inflight cannot be combined with --inflight-from/--inflight-to");
         const auto value = ToString(PositiveValue(res, "inflight"));
         return {value, value};
     }
-    if (ddisk && (res.Has("inflight-from") || res.Has("inflight-to"))) {
+    if (res.Has("inflight-from") || res.Has("inflight-to")) {
         Y_ENSURE(res.Has("inflight-from") && res.Has("inflight-to"),
             "--inflight-from and --inflight-to must be specified together");
         const ui32 from = PositiveValue(res, "inflight-from");
@@ -183,7 +183,6 @@ TInFlightOptions ResolveInFlight(const NLastGetopt::TOptsParseResult& res, bool 
         Y_ENSURE(from <= to, "--inflight-from must not exceed --inflight-to");
         return {ToString(from), ToString(to)};
     }
-    // Preserve legacy parsing and its treatment of zero/incomplete ranges.
     return {res.Get("inflight-from"), res.Get("inflight-to")};
 }
 

@@ -114,17 +114,21 @@ Y_UNIT_TEST_SUITE(TStressToolCli) {
 
     Y_UNIT_TEST(InFlightOptions) {
         for (bool ddisk : {false, true}) {
+            TParsed defaults({"tool"}, ddisk);
+            const auto unset = ResolveInFlight(defaults.Result);
+            UNIT_ASSERT_VALUES_EQUAL(unset.From, "0");
+            UNIT_ASSERT_VALUES_EQUAL(unset.To, "0");
             TParsed single({"tool", "--inflight", "17"}, ddisk);
-            const auto one = ResolveInFlight(single.Result, ddisk);
+            const auto one = ResolveInFlight(single.Result);
             UNIT_ASSERT_VALUES_EQUAL(one.From, "17");
             UNIT_ASSERT_VALUES_EQUAL(one.To, "17");
             TParsed conflict({"tool", "--inflight", "17", "--inflight-from", "1"}, ddisk);
-            UNIT_ASSERT_EXCEPTION(ResolveInFlight(conflict.Result, ddisk), yexception);
+            UNIT_ASSERT_EXCEPTION(ResolveInFlight(conflict.Result), yexception);
+            TParsed range({"tool", "--inflight-from", "3", "--inflight-to", "12"}, ddisk);
+            const auto values = ResolveInFlight(range.Result);
+            UNIT_ASSERT_VALUES_EQUAL(values.From, "3");
+            UNIT_ASSERT_VALUES_EQUAL(values.To, "12");
         }
-        TParsed range({"tool ddisk", "--inflight-from", "3", "--inflight-to", "12"});
-        const auto values = ResolveInFlight(range.Result, true);
-        UNIT_ASSERT_VALUES_EQUAL(values.From, "3");
-        UNIT_ASSERT_VALUES_EQUAL(values.To, "12");
         UNIT_ASSERT_VALUES_EQUAL(InFlightValues(3, 12), (TVector<ui32>{3, 6, 12}));
         UNIT_ASSERT_VALUES_EQUAL(InFlightValues(3, 11), (TVector<ui32>{3, 6}));
         UNIT_ASSERT_VALUES_EQUAL(InFlightValues(1u << 31, Max<ui32>()), (TVector<ui32>{1u << 31}));
@@ -133,29 +137,32 @@ Y_UNIT_TEST_SUITE(TStressToolCli) {
     }
 
     Y_UNIT_TEST(InvalidInFlightOptions) {
-        for (auto args : {
-                std::initializer_list<const char*>{"tool ddisk", "--inflight", "0"},
-                {"tool ddisk", "--inflight", "-1"},
-                {"tool ddisk", "--inflight", "4294967296"},
-                {"tool ddisk", "--inflight-from", "1"},
-                {"tool ddisk", "--inflight-to", "10"},
-                {"tool ddisk", "--inflight-from", "0", "--inflight-to", "10"},
-                {"tool ddisk", "--inflight-from", "10", "--inflight-to", "1"},
-                {"tool ddisk", "--inflight-from", "1", "--inflight-to", "4294967296"}}) {
-            TParsed parsed(args);
-            UNIT_ASSERT_EXCEPTION(ResolveInFlight(parsed.Result, true), yexception);
+        for (bool ddisk : {false, true}) {
+            for (const char* name : {"--inflight-from", "--inflight-to"}) {
+                TParsed incomplete({"tool", name, "8"}, ddisk);
+                UNIT_ASSERT_EXCEPTION_CONTAINS(ResolveInFlight(incomplete.Result), yexception,
+                    "--inflight-from and --inflight-to must be specified together");
+            }
+            TParsed inverted({"tool", "--inflight-from", "8", "--inflight-to", "4"}, ddisk);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ResolveInFlight(inverted.Result), yexception,
+                "--inflight-from must not exceed --inflight-to");
+            for (const char* value : {"0", "-1", "bad", "", "4294967296"}) {
+                TParsed single({"tool", "--inflight", value}, ddisk);
+                UNIT_ASSERT_EXCEPTION_CONTAINS(ResolveInFlight(single.Result), yexception,
+                    "--inflight requires a positive uint32 value");
+                TParsed from({"tool", "--inflight-from", value, "--inflight-to", "8"}, ddisk);
+                UNIT_ASSERT_EXCEPTION_CONTAINS(ResolveInFlight(from.Result), yexception,
+                    "--inflight-from requires a positive uint32 value");
+                TParsed to({"tool", "--inflight-from", "1", "--inflight-to", value}, ddisk);
+                UNIT_ASSERT_EXCEPTION_CONTAINS(ResolveInFlight(to.Result), yexception,
+                    "--inflight-to requires a positive uint32 value");
+            }
         }
     }
 
-    Y_UNIT_TEST(LegacyDefaultsAndIncompleteRanges) {
+    Y_UNIT_TEST(LegacyDefaults) {
         TParsed defaults({"tool"}, false);
         UNIT_ASSERT_VALUES_EQUAL(defaults.Result.Get("cfg"), "cfg.txt");
-        for (const char* value : {"0", "5", "-1", "bad"}) {
-            TParsed parsed({"tool", "--inflight-from", value}, false);
-            const auto range = ResolveInFlight(parsed.Result, false);
-            UNIT_ASSERT_VALUES_EQUAL(range.From, value);
-            UNIT_ASSERT_VALUES_EQUAL(range.To, "0");
-        }
         UNIT_ASSERT_EXCEPTION((TParsed({"tool", "--areas", "2"}, false)), yexception);
     }
 
@@ -173,7 +180,7 @@ Y_UNIT_TEST_SUITE(TStressToolCli) {
         UNIT_ASSERT_VALUES_EQUAL(load.GetDelayBeforeMeasurementsSeconds(), 5);
         UNIT_ASSERT_VALUES_EQUAL(load.GetInFlight(), 7);
         UNIT_ASSERT_VALUES_EQUAL(load.GetAreas(0).GetAreaSize(), 10485760);
-        UNIT_ASSERT_VALUES_EQUAL(ResolveInFlight(parsed.Result, true).From, "8");
+        UNIT_ASSERT_VALUES_EQUAL(ResolveInFlight(parsed.Result).From, "8");
         for (const auto& [name, value] : TVector<std::pair<const char*, const char*>>{
                 {"--areas", "32"}, {"--duration", "10"}, {"--io-size", "4096"},
                 {"--background-write-ratio", "0"}, {"--background-write-size-kib", "4"}}) {

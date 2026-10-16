@@ -30,9 +30,13 @@ Each example runs for two seconds after initialization and sets
 Read and write examples use one chunk; the log example uses one worker. The
 current log report confirms completion but does not expose throughput or IOPS.
 
-The path syntax is `SectorMap:<name>[:<GiB>[:<mode>]]`. The defaults are 100 GiB
-and mode `NONE`; supported modes are `NONE`, `HDD`, `SSD`, and `NVME`. `NONE`
-adds no device timing emulation; the other modes emulate device timing.
+The path syntax is `SectorMap:<name>[:<GiB>[:<mode>]]`, with a nonempty name.
+Omitted size and mode default to 100 GiB and `NONE`. An explicit size must be a
+positive decimal integer within the unsigned 32-bit range; mode must be exactly
+`NONE`, `HDD`, `SSD`, or `NVME`. Invalid values and extra components are rejected.
+`NONE` adds no device timing emulation; the other modes emulate device timing.
+PDisk maps must hold at least 201 full chunks: with the tool's 128-MiB chunks,
+specify at least 26 GiB.
 The name labels the virtual device. Capacity is logical: a 64-GiB sector map
 does not allocate 64 GiB at startup. Memory use grows with the sectors written,
 including PDisk metadata and log data, so keep the workload's chunk count and
@@ -42,8 +46,9 @@ selected timing emulation, rather than physical storage performance.
 Repeat `--path` for multiple sector maps and use `--run-count N` to repeat runs.
 Read and write loads support `--inflight N` or the pair `--inflight-from N
 --inflight-to N`; these overrides are rejected for log loads, whose queue depth
-is configured by each worker's `MaxInFlight`. Output, monitoring, logging, and
-PDisk encryption options are also available.
+is configured by each worker's `MaxInFlight`. Values must be positive integers,
+and ranges must include both bounds with `from <= to`. Output, monitoring,
+logging, and PDisk encryption options are also available.
 
 ## DDisk command
 
@@ -76,7 +81,8 @@ Area size and measurement delay have no CLI options.
 
 Use common `--inflight N` for one queue depth, or both `--inflight-from N` and
 `--inflight-to N` for a doubling sweep. These forms are mutually exclusive.
-The `ddisk` command requires positive values and an ordered, complete range.
+Both the `ddisk` command and legacy invocation require positive integer values
+and an ordered, complete range.
 
 ```bash
 ydb_stress_tool ddisk --path /dev/nvme0n1 --read-only --areas 16 --duration 20 \
@@ -106,8 +112,8 @@ runtime/network options remain available. Config values, including measurement
 delay, are preserved unless overridden by the common inflight controls.
 
 The legacy invocation, `ydb_stress_tool --cfg FILE <options>`, remains supported,
-including implicit `cfg.txt` loading, its existing inflight-range parsing, and its
-disk formatting behavior. The new `ddisk` command never implicitly reads `cfg.txt`.
+including implicit `cfg.txt` loading and its disk formatting behavior. The new
+`ddisk` command never implicitly reads `cfg.txt`.
 
 ## Configuration File
 

@@ -336,6 +336,19 @@ void TDataShardUserDb::EraseRow(
 
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
+<<<<<<< HEAD
+=======
+
+    if (CollectAffectedRows && rowExists) {
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
+    }
+    if (rowExists) {
+        // rowExists can only be true when RowExists() was actually executed
+        // (see the CollectAffectedRows / OptimisticSnapshotIsolation gate
+        // above); that existence check is a real read, account it.
+        IncreaseSelectCounters(key);
+    }
+>>>>>>> 9d3a5b628d3 (Account erased rows for Snapshot Isolation in stats too (#54714))
 }
 
 bool TDataShardUserDb::PrechargeRow(

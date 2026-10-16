@@ -144,6 +144,10 @@ class TQytMessageStreamClient final : public IMessageStreamClient, public std::e
             ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
                 << "QYT does not support seeking by write time";
         }
+        if (Settings.Schema.Columns().empty()) {
+            ythrow TMessageStreamException(EMessageStreamStatus::InvalidArgument)
+                << "QYT read session requires schema columns";
+        }
         const auto memoryLimit = settings.MaxMemoryUsageBytes ? settings.MaxMemoryUsageBytes : (16ULL << 20);
         auto events = std::make_shared<TQytEventQueue>(memoryLimit);
         std::vector<std::shared_ptr<IMessageStreamReadSession>> sessions;

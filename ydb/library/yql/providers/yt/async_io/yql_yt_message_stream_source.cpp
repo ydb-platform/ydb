@@ -49,8 +49,10 @@ void RegisterYtMessageStreamReadActorFactory(TDqAsyncIoFactory& factory, IStruct
         cluster.CreateClient = [source, token, credentials, client](const NActors::TActorContext&) {
             if (!*client) {
                 const auto auth = credentials->Create(token)->CreateProvider()->GetAuthInfo();
-                *client = CreateQytMessageStreamClient(source.GetPath(), {
-                    .Client = CreateYtClient(TString(source.GetEndpoint()), TString(auth))});
+                TQytMessageStreamClientSettings config;
+                config.Client = CreateYtClient(TString(source.GetEndpoint()), TString(auth));
+                NYT::NTableClient::FromProto(&config.Schema, source.GetSchema());
+                *client = CreateQytMessageStreamClient(source.GetPath(), config);
             }
             return *client;
         };

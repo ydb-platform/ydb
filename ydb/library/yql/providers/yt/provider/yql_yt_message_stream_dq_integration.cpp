@@ -2,9 +2,9 @@
 #include "yql_yt_message_stream_impl.h"
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_message_stream_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/proto/source.pb.h>
-#include <ydb/library/yql/providers/common/message_stream/provider.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/mkql/parser.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -34,15 +34,28 @@ public:
         }
         const TYtMessageStreamReadTable queue(read);
         const auto cluster = queue.DataSource().Cluster().StringValue();
+        const auto* rowType = read->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]
+            ->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        TExprNode::TListType columns;
+        for (const auto* item : rowType->GetItems()) {
+            columns.push_back(ctx.NewAtom(read->Pos(), item->GetName()));
+        }
         auto settings = ctx.NewCallable(read->Pos(), TYtMessageStreamSourceSettings::CallableName(), {
             queue.World().Ptr(), queue.Table().Ptr(),
             Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_") + cluster).Done().Ptr(),
-            ctx.NewList(read->Pos(), {ctx.NewAtom(read->Pos(), "Data")}), queue.Consumer().Ptr(),
+            ctx.NewList(read->Pos(), std::move(columns)), queue.Consumer().Ptr(),
             ctx.NewAtom(read->Pos(), ToString(State_->Partitions.at(std::make_pair(cluster, queue.Table().StringValue()))))});
+        auto parseSettings = Build<TCoNameValueTupleList>(ctx, read->Pos())
+            .Add<TCoNameValueTuple>()
+                .Name().Build("format")
+                .Value(ctx.NewAtom(read->Pos(), "json_each_row"))
+                .Build()
+            .Done();
         return Build<TDqSourceWrap>(ctx, read->Pos())
             .Input(settings)
             .DataSource(queue.DataSource().Cast<TCoDataSource>())
-            .RowType(ExpandType(read->Pos(), *NFq::NMessageStream::MakeRawRowType(ctx), ctx))
+            .RowType(ExpandType(read->Pos(), *rowType, ctx))
+            .Settings(parseSettings)
             .Done().Ptr();
     }
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
@@ -69,6 +82,8 @@ public:
         desc.SetPath(TString(input.Child(1)->Content()));
         desc.SetToken(TCoSecureParam(input.ChildPtr(2)).Name().StringValue());
         desc.SetConsumer(TString(input.Child(4)->Content()));
+        const auto& schema = State_->Schemas.at(std::make_pair(cluster, TString(input.Child(1)->Content())));
+        NYT::NTableClient::ToProto(desc.MutableSchema(), schema);
         settings.PackFrom(desc);
         sourceType = "QytSource";
     }
@@ -77,6 +92,9 @@ public:
             const TDqSourceWideWrap wrap(&node);
             if (!TYtMessageStreamDataSource::Match(&wrap.DataSource().Ref())) {
                 return NKikimr::NMiniKQL::TRuntimeNode();
+            }
+            if (const auto parsed = TryWrapWithParser(wrap, ctx)) {
+                return *parsed;
             }
             auto input = NCommon::MkqlBuildExpr(wrap.Input().Ref(), ctx);
             return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input, {}), [](NKikimr::NMiniKQL::TRuntimeNode item) {

@@ -1,11 +1,13 @@
 #include "yql_qyt_message_stream_client.h"
 #include "yql_qyt_blocking_queue.h"
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <future>
 
 #include <library/cpp/threading/future/async.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/queue_client.h>
@@ -22,6 +24,7 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/stream/str.h>
 
 #include <util/datetime/base.h>
 
@@ -193,7 +196,7 @@ public:
         std::shared_ptr<TQytPartitionSession> session,
         int partitionIndex,
         i64 startOffset,
-        TString dataColumn,
+        NYT::NTableClient::TTableSchema schema,
         TQueueRowBatchReadOptions readOptions,
         TDuration pollPeriod,
         bool tableMode,
@@ -207,7 +210,7 @@ public:
         , Session(std::move(session))
         , PartitionIndex(partitionIndex)
         , Offset(startOffset)
-        , DataColumn(std::move(dataColumn))
+        , Schema(std::move(schema))
         , ReadOptions(readOptions)
         , PollPeriod(pollPeriod)
         , TableMode(tableMode)
@@ -301,47 +304,48 @@ public:
     }
 
 private:
-    TMessage MakeMessage(const std::optional<TString>& data, i64 offset, std::optional<TInstant> writeTime) {
+    TMessage MakeMessage(TString data, i64 offset, std::optional<TInstant> writeTime) {
         TMessage message;
-        message.Data = data;
+        message.Data = std::move(data);
         message.Id = {Session->GetPartitionId(), static_cast<ui64>(offset)};
         message.WriteTime = writeTime;
         return message;
     }
 
-    // Extracts the payload of a single queue row as a string. If a DataColumn is
-    // configured it returns that column's value.
-    // Supports string-like value types: String, Any, Composite (binary data is
-    // stored as String in YT queues).
-    std::optional<TString> ExtractRowData(const NYT::NTableClient::TNameTablePtr& nameTable, TUnversionedRow row) {
-        Y_ENSURE(!DataColumn.empty(), "DataColumn must be configured for QYT topic read session");
-
-        std::optional<int> dataId = nameTable->FindId(DataColumn);
-        Y_ENSURE(dataId.has_value(), TStringBuilder() << "Data column '" << DataColumn << "' not found in row name table");
-
-        TStringBuilder data;
-        for (const auto& value : row) {
-            if (value.Id != static_cast<ui16>(*dataId)) {
+    // Temporary solution to fit the PQ json_each_row format.
+    TString EncodeStructuredRow(const std::vector<int>& columnIds,
+        const std::vector<const TUnversionedValue*>& values) {
+        TString json;
+        TStringOutput output(json);
+        NJson::TJsonWriter writer(&output, false);
+        writer.OpenMap();
+        for (size_t index = 0; index < Schema.Columns().size(); ++index) {
+            const auto& column = Schema.Columns()[index];
+            const TStringBuf name(column.Name().data(), column.Name().size());
+            const int id = columnIds[index];
+            const TUnversionedValue* found = id >= 0 && static_cast<size_t>(id) < values.size() ? values[id] : nullptr;
+            if (!found || found->Type == NYT::NTableClient::EValueType::Null) {
+                Y_ENSURE(!column.Required(), "Required YT queue column '" << name << "' is null or missing");
+                writer.WriteNull(name);
                 continue;
             }
-            switch (value.Type) {
+            switch (found->Type) {
                 case NYT::NTableClient::EValueType::String:
-                case NYT::NTableClient::EValueType::Any:
-                case NYT::NTableClient::EValueType::Composite:
-                    data << TStringBuf(value.Data.String, value.Length);
+                    writer.Write(name, TStringBuf(found->Data.String, found->Length));
                     break;
-                case NYT::NTableClient::EValueType::Null:
-                    return std::nullopt;
+                case NYT::NTableClient::EValueType::Int64:
+                    writer.Write(name, found->Data.Int64);
+                    break;
+                case NYT::NTableClient::EValueType::Uint64:
+                    writer.Write(name, found->Data.Uint64);
+                    break;
                 default:
-                    // Non-string-like types (Int64, Uint64, Double, Boolean) are not
-                    // supported as data columns for topic messages.
-                    throw std::runtime_error(TStringBuilder()
-                        << "Unsupported value type '" << static_cast<int>(value.Type)
-                        << "' for data column '" << DataColumn
-                        << "'. Only string-like types (String, Any, Composite) are supported.");
+                    ythrow yexception() << "Unsupported YT queue value type for column '" << name << "'";
             }
         }
-        return TString(data);
+        writer.CloseMap();
+        writer.Flush();
+        return json;
     }
 
     void PollLoop() {
@@ -451,6 +455,13 @@ private:
             }
 
             const auto& nameTable = rowset->GetNameTable();
+            std::vector<int> columnIds;
+            columnIds.reserve(Schema.Columns().size());
+            for (const auto& column : Schema.Columns()) {
+                columnIds.push_back(nameTable->FindId(column.Name()).value_or(-1));
+            }
+            const auto timestampId = nameTable->FindId("$timestamp");
+            std::vector<const TUnversionedValue*> values(nameTable->GetSize(), nullptr);
             i64 rowOffset = rowset->GetStartOffset();
             Session->SkipRemovedRange(Offset.load(), rowOffset);
 
@@ -461,20 +472,25 @@ private:
                 if (readEnd && static_cast<ui64>(rowOffset) >= *readEnd) {
                     break;
                 }
-                auto data = ExtractRowData(nameTable, row);
-                std::optional<TInstant> writeTime;
-                const auto timestampId = nameTable->FindId("$timestamp");
+                std::fill(values.begin(), values.end(), nullptr);
                 for (const auto& value : row) {
-                    if (timestampId && value.Id == *timestampId && value.Type == NYT::NTableClient::EValueType::Uint64) {
-                        writeTime = NYT::NTransactionClient::TimestampToInstant(NYT::NTransactionClient::TTimestamp(value.Data.Uint64)).first;
+                    if (value.Id < values.size()) {
+                        values[value.Id] = &value;
                     }
+                }
+                TString data = EncodeStructuredRow(columnIds, values);
+                std::optional<TInstant> writeTime;
+                const TUnversionedValue* timestamp = timestampId && static_cast<size_t>(*timestampId) < values.size()
+                    ? values[*timestampId] : nullptr;
+                if (timestamp && timestamp->Type == NYT::NTableClient::EValueType::Uint64) {
+                    writeTime = NYT::NTransactionClient::TimestampToInstant(NYT::NTransactionClient::TTimestamp(timestamp->Data.Uint64)).first;
                 }
                 if (RequireWriteTime && !writeTime) {
                     ythrow TMessageStreamException(EMessageStreamStatus::Unsupported)
                         << "QYT requires the $timestamp column for reads with write-time metadata";
                 }
-                batchSize += data ? data->size() : 0;
-                msgs.emplace_back(MakeMessage(data, rowOffset, writeTime));
+                batchSize += data.size();
+                msgs.emplace_back(MakeMessage(std::move(data), rowOffset, writeTime));
                 ++rowOffset;
             }
 
@@ -509,7 +525,7 @@ private:
     const std::shared_ptr<TQytPartitionSession> Session;
     const int PartitionIndex;
     std::atomic<i64> Offset;
-    const TString DataColumn;
+    const NYT::NTableClient::TTableSchema Schema;
     const TQueueRowBatchReadOptions ReadOptions;
     const TDuration PollPeriod;
     const bool TableMode;
@@ -576,7 +592,8 @@ std::shared_ptr<NFq::IMessageStreamReadSession> CreateQytPartitionReadSession(
     options.MaxRowCount = config.MaxRowCount;
     options.MaxDataWeight = config.MaxDataWeight;
     auto session = std::make_shared<TQytReadSession>(config.Client, queue, consumer,
-        control, partition, start, config.DataColumn, options, TDuration::MilliSeconds(config.PollPeriodMs),
+        control, partition, start, config.Schema,
+        options, TDuration::MilliSeconds(config.PollPeriodMs),
         !settings.AutoPartitioningSupport, end, settings.MaxMemoryUsageBytes,
         settings.RequireWriteTime || settings.ReadFromWriteTime.has_value(), std::move(events));
     session->StartPolling();

@@ -425,6 +425,67 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
     // static node not reporting its bridge capability (being disconnected) may still run without BridgeConfig, so it
     // must block conversion
+    // put started by DS proxy before conversion races with VDisks having new group generation and gets restarted
+    // through node warden to the service of the group, which is the bridge proxy by then
+    Y_UNIT_TEST(PutRestartedAfterConversion) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        // hold VDisk writes of the put until the group is converted
+        const ui64 tabletId = 100502;
+        bool hold = true;
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (hold && ev->GetTypeRewrite() == TEvBlobStorage::EvVPut &&
+                    LogoBlobIDFromLogoBlobID(ev->Get<TEvBlobStorage::TEvVPut>()->Record.GetBlobID()).TabletID() == tabletId) {
+                held.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "data of put restarted after conversion";
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+        });
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(!held.empty());
+
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(5));
+
+        // VDisks have new generation now, so they reply RACE to these writes
+        hold = false;
+        for (auto& ev : held) {
+            const ui32 nodeId = ev->Sender.NodeId();
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        auto putRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putRes->Get()->Status, NKikimrProto::OK, putRes->Get()->ToString());
+
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
+        });
+        auto getRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(getRes->Get()->Status, NKikimrProto::OK, getRes->Get()->ToString());
+        UNIT_ASSERT_VALUES_EQUAL(getRes->Get()->Responses[0].Buffer.ConvertToString(), data);
+
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
     Y_UNIT_TEST(AbsentStaticNodeBlocksConversion) {
         TEnvironmentSetup env(MakeSettings());
         env.CreatePool();

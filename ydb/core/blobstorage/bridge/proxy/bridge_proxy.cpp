@@ -1031,6 +1031,12 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
+            // puts restarted by DS proxy of the inline pile, which were started before the group got converted and
+            // came back through node warden to the service of the group
+            ev->Get()->Process(this);
+        }
+
         void FixGroupId(IEventBase& ev) {
             switch (ev.Type()) {
                 case TEvBlobStorage::EvPutResult:
@@ -1059,6 +1065,7 @@ namespace NKikimr {
             DSPROXY_ENUM_EVENTS(HANDLE_RESULT)
 
             hFunc(TEvBlobStorage::TEvConfigureProxy, Handle)
+            hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle)
             hFunc(TEvNodeWardenStorageConfig, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup)

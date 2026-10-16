@@ -4452,7 +4452,8 @@ state: STATE_ENABLED
             }
         )", s3Port));
         env.TestWaitNotification(runtime, txId);
-        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const auto importResult = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_C(importResult.GetResponse().GetEntry().GetIssues().empty(), importResult.GetResponse().GetEntry().DebugString());
 
         const TString importedIndexPath = "/MyRoot/TableImported/index";
         TestDescribeResult(DescribePrivatePath(runtime, importedIndexPath), {
@@ -4612,22 +4613,40 @@ state: STATE_ENABLED
     // this mismatch (no crash).
     void IndexMaterializationCompactFlagMismatch(
         TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port,
-        const TString& indexDesc, NKikimrSchemeOp::EIndexType expectedIndexType)
+        bool withRelevance, bool withRowId)
     {
         runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::PRI_TRACE);
 
         ui64 txId = 100;
+        auto expectedIndexType = withRelevance
+            ? NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+            : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
-              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "key" Type: "%s" }
               Columns { Name: "value" Type: "Utf8" }
               KeyColumnNames: ["key"]
             }
-            %s
-        )", indexDesc.c_str()));
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: %s
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )", withRowId ? "String" : "Uint64", withRelevance ? "EIndexTypeGlobalFulltextCompactRelevance" : "EIndexTypeGlobalFulltextCompact"));
         env.TestWaitNotification(runtime, txId);
 
         // Backup made with the compact flag on.
@@ -4700,46 +4719,17 @@ state: STATE_ENABLED
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactBackupToNonCompactDb) {
         EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
-        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextCompact
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )", NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain);
+        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), false, false);
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactRelevanceBackupToNonCompactDb) {
         EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
-        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), R"(
-            IndexDescription {
-              Name: "index"
-              KeyColumnNames: ["value"]
-              Type: EIndexTypeGlobalFulltextCompactRelevance
-              FulltextIndexDescription {
-                Settings {
-                  columns: {
-                    column: "value"
-                    analyzers: {
-                      tokenizer: STANDARD
-                      use_filter_lowercase: true
-                    }
-                  }
-                }
-              }
-            }
-        )", NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
+        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), true, false);
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactRelevanceRowidBackupToNonCompactDb) {
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
+        IndexMaterializationCompactFlagMismatch(Env(), Runtime(), S3Mock(), S3Port(), true, true);
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalJson) {

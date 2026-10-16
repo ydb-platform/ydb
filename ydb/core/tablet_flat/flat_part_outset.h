@@ -4,6 +4,10 @@
 #include "flat_sausage_packet.h"
 #include "flat_sausage_fetch.h"
 
+#include <ydb/core/base/row_version.h>
+
+#include <optional>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -33,6 +37,7 @@ namespace NTable {
         TVector<TString> Deltas;
         // Optional underlying part epoch
         TEpoch Epoch;
+        std::optional<TRowVersion> HiddenSince = std::nullopt;
 
         TEpoch GetEpoch() const;
     };

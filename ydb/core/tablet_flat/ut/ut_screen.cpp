@@ -224,6 +224,25 @@ Y_UNIT_TEST_SUITE(TScreen) {
         }
     }
 
+    Y_UNIT_TEST(ShrinkKeepsEraseAllVisibility)
+    {
+        using namespace NTable::NTest;
+
+        const TRowTool tool(*Eggs0().Scheme);
+        TTestEnv env;
+        TShrink shrink(&env, Eggs0().Scheme->Keys);
+        auto partView = Eggs0().ToPartView();
+        partView.HiddenSince = TRowVersion(5, 1);
+
+        auto begin = tool.LookupKey(Mass0().Saved[666]);
+        auto end = tool.LookupKey(Mass0().Saved[891]);
+        shrink.Put(partView, begin, end);
+
+        UNIT_ASSERT_VALUES_EQUAL(shrink.Skipped, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(shrink.PartView.size(), 1u);
+        UNIT_ASSERT(shrink.PartView.front().HiddenSince == partView.HiddenSince);
+    }
+
     Y_UNIT_TEST(Cook)
     {
         TScreen::TCook cook;

@@ -617,6 +617,9 @@ TCompactionLogic::HandleCompaction(
         TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
         Y_ENSURE(params->TaskId == inMem.CompactionTask.TaskId);
 
+        if (params->PartialMem) {
+            inMem.CompactingSteps = 0;
+        }
         switch (inMem.State) {
         case ECompactionState::Compaction:
             inMem.Steps -= std::exchange(inMem.CompactingSteps, 0);
@@ -626,10 +629,18 @@ TCompactionLogic::HandleCompaction(
             break;
         case ECompactionState::SnapshotCompaction:
             Y_ENSURE(tableInfo->SnapRequests);
-            Y_ENSURE(edge == tableInfo->SnapRequests.front().Edge);
-            if (ret) {
-                ret->CompleteSnapshots.push_back(tableInfo->SnapRequests.front().Context);
-                tableInfo->SnapRequests.pop_front();
+            if (!params->PartialMem) {
+                Y_ENSURE(edge == tableInfo->SnapRequests.front().Edge);
+                if (ret) {
+                    ret->CompleteSnapshots.push_back(tableInfo->SnapRequests.front().Context);
+                    tableInfo->SnapRequests.pop_front();
+                }
+            } else {
+                // An erase flushed only the oldest frozen group. The snapshot
+                // stays queued and is retried for the remaining groups.
+                const auto& reqEdge = tableInfo->SnapRequests.front().Edge;
+                Y_ENSURE(edge.TxStamp == reqEdge.TxStamp);
+                Y_ENSURE(edge.Head < reqEdge.Head);
             }
             inMem.Steps -= std::exchange(inMem.CompactingSteps, 0);
             inMem.State = ECompactionState::Free;
@@ -641,7 +652,9 @@ TCompactionLogic::HandleCompaction(
         }
 
         if (tableInfo->ForcedCompactionState == EForcedCompactionState::CompactingMem) {
-            tableInfo->ForcedCompactionState = EForcedCompactionState::None;
+            tableInfo->ForcedCompactionState = params->PartialMem
+                ? EForcedCompactionState::PendingMem
+                : EForcedCompactionState::None;
         }
 
         if (tableInfo->SnapRequests) {
@@ -650,7 +663,7 @@ TCompactionLogic::HandleCompaction(
                                  tableInfo->Policy->DefaultTaskPriority,
                                  inMem.CompactionTask);
             inMem.State = ECompactionState::SnapshotPending;
-        } else if (tableInfo->ForcedCompactionState == EForcedCompactionState::PendingMem) {
+        } else if (tableInfo->ForcedCompactionState == EForcedCompactionState::PendingMem || params->PartialMem) {
             // There is another memory compaction request
             SubmitCompactionTask(tableId, 0,
                                  tableInfo->Policy->InMemResourceBrokerTask,

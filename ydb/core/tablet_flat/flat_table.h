@@ -12,6 +12,7 @@
 #include "flat_table_part.h"
 #include "flat_table_stats.h"
 #include "flat_table_subset.h"
+#include "flat_table_metadata.h"
 #include "flat_table_misc.h"
 #include "flat_table_observer.h"
 #include "flat_sausage_solid.h"
@@ -342,6 +343,18 @@ public:
         return RemovedRowVersions;
     }
 
+    bool HasEraseAll() const {
+        return EraseAll;
+    }
+    bool ShouldCoalesceErase(TRowVersion version) const;
+    void AddEraseAll(TRowVersion version, TEpoch epoch);
+    const TVector<TVersionedTableMetadata>& GetVersionedMetadata() const {
+        return VersionedMetadata;
+    }
+    void SetVersionedMetadata(TVector<TVersionedTableMetadata> metadata);
+    std::optional<TRowVersion> SourceHiddenSince(TEpoch epoch, const std::optional<TRowVersion>& stamp) const;
+    TAutoPtr<TSubset> DropExpiredSources(bool& metadataChanged);
+
     TCompactionStats GetCompactionStats() const;
 
     void SetTableObserver(TIntrusivePtr<ITableObserver> ptr);
@@ -349,6 +362,11 @@ public:
 private:
     TMemTable& MemTable();
     void AddSafe(TPartView partView);
+    bool IsHidden(TEpoch epoch, const std::optional<TRowVersion>& stamp, TRowVersion snapshot) const;
+    std::optional<TRowVersion> StampOf(const TPart* part) const;
+    const TRun* VisibleRun(const TRun& run, TRowVersion snapshot, TVector<std::shared_ptr<const TRun>>& owned) const;
+    void RefreshEraseAll();
+    bool RetireEraseEffects();
 
     void AddStat(const TPartView& partView);
     void RemoveStat(const TPartView& partView);
@@ -360,6 +378,20 @@ private:
     void RemoveTxStatusRef(ui64 txId);
 
 private:
+    struct TReadLevels : TLevels {
+        using TLevels::TLevels;
+
+        struct TVisibleRun {
+            // Inclusive snapshot bounds with identical source visibility.
+            TRowVersion Lower;
+            TRowVersion Upper;
+            std::shared_ptr<const TRun> Run;
+        };
+
+        // One visibility interval per run bounds the cache; readers retain their filtered runs.
+        THashMap<const TRun*, TVisibleRun> VisibleRuns;
+    };
+
     TEpoch Epoch; /* Monotonic table change number, with holes */
     ui64 Annexed = 0; /* Monotonic serial of attached external blobs */
     TIntrusiveConstPtr<TRowScheme> Scheme;
@@ -370,7 +402,7 @@ private:
     THashMap<TLogoBlobID, TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     TEpoch FlattenEpoch = TEpoch::Min(); /* Current maximum flatten epoch */
     TStat Stat_;
-    mutable THolder<TLevels> Levels;
+    mutable THolder<TReadLevels> Levels;
     mutable TIntrusivePtr<TKeyRangeCache> ErasedKeysCache;
 
     bool EraseCacheEnabled = false;
@@ -378,6 +410,9 @@ private:
     const TIntrusivePtr<TKeyRangeCacheNeedGCList> EraseCacheGCList;
 
     TRowVersionRanges RemovedRowVersions;
+    TVector<TVersionedTableMetadata> VersionedMetadata;
+    std::optional<TVector<TVersionedTableMetadata>> MetadataBackup;
+    bool EraseAll = false;
 
     // The number of entities (memtable/sst) that have rows with a TxId. As
     // long as there is at least one row with a TxId its commit/remove status

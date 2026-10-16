@@ -15,6 +15,8 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -100,6 +102,14 @@ void TTable::RollbackChanges()
     }
     Y_ENSURE(!MutableBackup);
 
+    if (MetadataBackup) {
+        VersionedMetadata = std::move(*MetadataBackup);
+        MetadataBackup.reset();
+    }
+    if (EraseAll) {
+        RefreshEraseAll();
+    }
+
     Epoch = state.Epoch;
     Annexed = state.Annexed;
     if (state.Scheme) {
@@ -154,6 +164,7 @@ void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
     }
     Y_ENSURE(!MutableBackup);
 
+    MetadataBackup.reset();
     RollbackState.reset();
 }
 
@@ -371,18 +382,29 @@ TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot)
     // invisible top layer (as sorted by epoch) may be excluded from subset.
 
     for (auto& it : ColdParts) {
+        if (EraseAll && IsHidden(it.second->Epoch, it.second->HiddenSince, snapshot)) {
+            continue;
+        }
         subset->ColdParts.push_back(it.second);
     }
 
     for (auto& it : Flatten) {
+        if (EraseAll && IsHidden(it.second.Epoch(), it.second.HiddenSince, snapshot)) {
+            continue;
+        }
         subset->Flatten.push_back(it.second);
     }
 
     for (auto& it : Frozen) {
+        if (EraseAll && IsHidden(it->Epoch, std::nullopt, snapshot)) {
+            continue;
+        }
         subset->Frozen.emplace_back(it, it->Immediate());
     }
 
-    if (Mutable && Mutable->GetMinRowVersion() <= snapshot) {
+    if (Mutable && Mutable->GetMinRowVersion() <= snapshot
+        && !(EraseAll && IsHidden(Mutable->Epoch, std::nullopt, snapshot)))
+    {
         subset->Frozen.emplace_back(Mutable, Mutable->Snapshot());
     }
 
@@ -660,6 +682,10 @@ void TTable::Replace(
         // cache valid.
         ErasedKeysCache.Reset();
     }
+
+    if (EraseAll) {
+        RefreshEraseAll();
+    }
 }
 
 void TTable::Merge(TPartView partView)
@@ -719,6 +745,9 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part)
     const auto label = part->Label;
 
     Epoch = Max(Epoch, part->Epoch + 1);
+    if (part->HiddenSince) {
+        EraseAll = true;
+    }
     ColdParts.emplace(label, std::move(part));
 
     Levels.Reset();
@@ -800,7 +829,7 @@ const TLevels& TTable::GetLevels() const
                 }
                 return a->Part->Label < b->Part->Label;
             });
-        Levels.Reset(new TLevels(Scheme->Keys));
+        Levels.Reset(new TReadLevels(Scheme->Keys));
         for (const TPartView* p : parts) {
             Levels->Add(p->Part, p->Slices);
         }
@@ -882,12 +911,18 @@ void TTable::AddSafe(TPartView partView)
             FlattenEpoch = partView->Epoch;
             if (Levels) {
                 // Slices from this part may be added on top
+                if (EraseAll || partView.HiddenSince) {
+                    Levels->VisibleRuns.clear();
+                }
                 Levels->Add(partView.Part, partView.Slices);
             }
         } else {
             Levels.Reset();
         }
 
+        if (partView.HiddenSince) {
+            EraseAll = true;
+        }
         bool done = Flatten.emplace(partView->Label, std::move(partView)).second;
         Y_ENSURE(done);
     }
@@ -923,6 +958,9 @@ TPrechargeResult TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef 
             auto pos = run.Find(key);
             if (pos != run.end()) {
                 const auto* part = pos->Part.Get();
+                if (EraseAll && IsHidden(part->Epoch, StampOf(part), snapshot)) {
+                    continue;
+                }
                 if ((flg & EHint::NoByKey) ||
                     part->MightHaveKeyPrefix(prefix))
                 {
@@ -945,15 +983,24 @@ TPrechargeResult TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef 
         const TCelled minKey(minKey_, *Scheme->Keys, false);
         const TCelled maxKey(maxKey_, *Scheme->Keys, false);
 
+        TVector<std::shared_ptr<const TRun>> ownedRuns;
         for (const auto& run : GetLevels()) {
+            const TRun* visible = &run;
+            if (EraseAll) {
+                visible = VisibleRun(run, snapshot, ownedRuns);
+                if (!visible) {
+                    continue;
+                }
+            }
+
             TPrechargeResult chargeResult;
 
             switch (direction) {
                 case EDirection::Forward:
-                    chargeResult = ChargeRange(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    chargeResult = ChargeRange(env, minKey, maxKey, *visible, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
                 case EDirection::Reverse:
-                    chargeResult = ChargeRangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    chargeResult = ChargeRangeReverse(env, maxKey, minKey, *visible, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
             }
 
@@ -1275,24 +1322,34 @@ TAutoPtr<TTableIter> TTable::Iterate(const TCelled& key, TTagsRef tags, IPages* 
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
-    if (Mutable) {
+    if (Mutable && (!EraseAll || !IsHidden(Mutable->Epoch, std::nullopt, snapshot))) {
         dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     if (!RollbackState || !RollbackState->Truncated) {
-        if (MutableBackup) {
+        if (MutableBackup && (!EraseAll || !IsHidden(MutableBackup->Epoch, std::nullopt, snapshot))) {
             dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
         }
 
         for (auto& fti : Frozen) {
             const TMemTable* memTable = fti.Get();
+            if (EraseAll && IsHidden(memTable->Epoch, std::nullopt, snapshot)) {
+                continue;
+            }
 
             dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
         }
 
         if (Flatten) {
             for (const auto& run : GetLevels()) {
-                auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+                const TRun* visible = &run;
+                if (EraseAll) {
+                    visible = VisibleRun(run, snapshot, dbIter->KeepRuns());
+                    if (!visible) {
+                        continue;
+                    }
+                }
+                auto iter = MakeHolder<TRunIter>(*visible, dbIter->Remap.Tags, Scheme->Keys, env);
 
                 if (iter->Seek(key, seek) != EReady::Gone)
                     dbIter->Push(std::move(iter));
@@ -1300,7 +1357,9 @@ TAutoPtr<TTableIter> TTable::Iterate(const TCelled& key, TTagsRef tags, IPages* 
         }
     }
 
-    if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
+    // Skipping hidden sources can make a cached erased range depend on the
+    // table's erase boundary as well as on the surviving row tombstones.
+    if (!EraseAll && EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
         if (HasAppData() && AppData()->FeatureFlags.GetDisableLocalDBEraseCache()) {
             // Note: it's not very clean adding dependency to appdata here, but
             // we want to allow disabling erase cache at runtime without alters.
@@ -1329,24 +1388,34 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
             TMergedTransactionMap::Create(visible, CommittedTransactions),
             observer));
 
-    if (Mutable) {
+    if (Mutable && (!EraseAll || !IsHidden(Mutable->Epoch, std::nullopt, snapshot))) {
         dbIter->Push(TMemIter::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     if (!RollbackState || !RollbackState->Truncated) {
-        if (MutableBackup) {
+        if (MutableBackup && (!EraseAll || !IsHidden(MutableBackup->Epoch, std::nullopt, snapshot))) {
             dbIter->Push(TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
         }
 
         for (auto& fti : Frozen) {
             const TMemTable* memTable = fti.Get();
+            if (EraseAll && IsHidden(memTable->Epoch, std::nullopt, snapshot)) {
+                continue;
+            }
 
             dbIter->Push(TMemIter::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
         }
 
         if (Flatten) {
             for (const auto& run : GetLevels()) {
-                auto iter = MakeHolder<TRunIter>(run, dbIter->Remap.Tags, Scheme->Keys, env);
+                const TRun* visible = &run;
+                if (EraseAll) {
+                    visible = VisibleRun(run, snapshot, dbIter->KeepRuns());
+                    if (!visible) {
+                        continue;
+                    }
+                }
+                auto iter = MakeHolder<TRunIter>(*visible, dbIter->Remap.Tags, Scheme->Keys, env);
 
                 if (iter->SeekReverse(key, seek) != EReady::Gone)
                     dbIter->Push(std::move(iter));
@@ -1354,7 +1423,7 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
         }
     }
 
-    if (EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
+    if (!EraseAll && EraseCacheEnabled && (!RollbackState || !RollbackState->DisableEraseCache)) {
         if (HasAppData() && AppData()->FeatureFlags.GetDisableLocalDBEraseCache()) {
             // Note: it's not very clean adding dependency to appdata here, but
             // we want to allow disabling erase cache at runtime without alters.
@@ -1398,7 +1467,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     const auto prevInvisibleRowSkips = stats.InvisibleRowSkips;
 
     // Mutable has the newest data
-    if (Mutable) {
+    if (Mutable && (!EraseAll || !IsHidden(Mutable->Epoch, std::nullopt, snapshot))) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
@@ -1413,7 +1482,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
 
     if (!RollbackState || !RollbackState->Truncated) {
         // Mutable data that is transitioning to frozen
-        if (MutableBackup && !row.IsFinalized()) {
+        if (MutableBackup && !row.IsFinalized() && (!EraseAll || !IsHidden(MutableBackup->Epoch, std::nullopt, snapshot))) {
             lastEpoch = MutableBackup->Epoch;
             if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
@@ -1427,6 +1496,9 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
         // Frozen are sorted by epoch, apply in reverse order
         for (auto pos = Frozen.rbegin(); !row.IsFinalized() && pos != Frozen.rend(); ++pos) {
             const auto& memTable = *pos;
+            if (EraseAll && IsHidden(memTable->Epoch, std::nullopt, snapshot)) {
+                continue;
+            }
             Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
             lastEpoch = memTable->Epoch;
             if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
@@ -1444,6 +1516,9 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                 auto pos = run.Find(key);
                 if (pos != run.end()) {
                     const auto* part = pos->Part.Get();
+                    if (EraseAll && IsHidden(part->Epoch, StampOf(part), snapshot)) {
+                        continue;
+                    }
                     if ((flg & EHint::NoByKey) ||
                         part->MightHaveKeyPrefix(prefix))
                     {
@@ -1542,8 +1617,10 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         return result;
     };
 
+    const TRowVersion head = TRowVersion::Max();
+
     // Mutable has the newest data
-    if (Mutable) {
+    if (Mutable && (!EraseAll || !IsHidden(Mutable->Epoch, std::nullopt, head))) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
@@ -1558,7 +1635,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
 
     if (!RollbackState || !RollbackState->Truncated) {
         // Mutable data that is transitioning to frozen
-        if (MutableBackup) {
+        if (MutableBackup && (!EraseAll || !IsHidden(MutableBackup->Epoch, std::nullopt, head))) {
             lastEpoch = MutableBackup->Epoch;
             if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
@@ -1572,6 +1649,9 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         // Frozen are sorted by epoch, apply in reverse order
         for (auto pos = Frozen.rbegin(); pos != Frozen.rend(); ++pos) {
             const auto& memTable = *pos;
+            if (EraseAll && IsHidden(memTable->Epoch, std::nullopt, head)) {
+                continue;
+            }
             Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
             lastEpoch = memTable->Epoch;
             if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
@@ -1588,6 +1668,9 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             auto pos = run.Find(key);
             if (pos != run.end()) {
                 const auto* part = pos->Part.Get();
+                if (EraseAll && IsHidden(part->Epoch, StampOf(part), head)) {
+                    continue;
+                }
                 if ((readFlags & EHint::NoByKey) ||
                     part->MightHaveKeyPrefix(prefix))
                 {
@@ -1718,9 +1801,229 @@ TKeyRangeCache* TTable::GetErasedKeysCache() const
     return ErasedKeysCache.Get();
 }
 
+bool TTable::IsHidden(TEpoch epoch, const std::optional<TRowVersion>& stamp, TRowVersion snapshot) const
+{
+    return IsHiddenAt(epoch, stamp, snapshot, VersionedMetadata);
+}
+
+std::optional<TRowVersion> TTable::StampOf(const TPart* part) const
+{
+    if (!part) {
+        return std::nullopt;
+    }
+    auto it = Flatten.find(part->Label);
+    if (it == Flatten.end()) {
+        return std::nullopt;
+    }
+    return it->second.HiddenSince;
+}
+
+std::optional<TRowVersion> TTable::SourceHiddenSince(TEpoch epoch, const std::optional<TRowVersion>& stamp) const
+{
+    return NTable::SourceHiddenSince(epoch, stamp, VersionedMetadata);
+}
+
+bool TTable::ShouldCoalesceErase(TRowVersion version) const
+{
+    if (!EraseAll) {
+        return false;
+    }
+    const bool mutableEmpty = !Mutable || Mutable->GetOpsCount() == 0;
+    if (!mutableEmpty) {
+        return false;
+    }
+    for (const auto& meta : VersionedMetadata) {
+        if (meta.Version > version) {
+            break;
+        }
+        for (const auto& effect : meta.Effects) {
+            if (const auto* erase = std::get_if<TTableEraseBoundary>(&effect)) {
+                if (erase->Epoch == Epoch) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void TTable::AddEraseAll(TRowVersion version, TEpoch epoch)
+{
+    if (Levels) {
+        Levels->VisibleRuns.clear();
+    }
+    if (RollbackState && !MetadataBackup) {
+        MetadataBackup = VersionedMetadata;
+    }
+
+    auto pos = std::lower_bound(VersionedMetadata.begin(), VersionedMetadata.end(), version,
+        [](const TVersionedTableMetadata& meta, TRowVersion key) {
+            return meta.Version < key;
+        });
+    if (pos == VersionedMetadata.end() || version < pos->Version) {
+        pos = VersionedMetadata.insert(pos, { version, { } });
+    }
+    pos->Effects.emplace_back(TTableEraseBoundary{epoch});
+    EraseAll = true;
+}
+
+void TTable::SetVersionedMetadata(TVector<TVersionedTableMetadata> metadata)
+{
+    Y_DEBUG_ABORT_UNLESS(std::adjacent_find(metadata.begin(), metadata.end(),
+        [](const auto& a, const auto& b) { return a.Version >= b.Version; }) == metadata.end());
+    VersionedMetadata = std::move(metadata);
+    MetadataBackup.reset();
+    RefreshEraseAll();
+}
+
+bool TTable::RetireEraseEffects()
+{
+    TEpoch oldest = TEpoch::Max();
+    if (Mutable) {
+        oldest = Min(oldest, Mutable->Epoch);
+    }
+    if (MutableBackup) {
+        oldest = Min(oldest, MutableBackup->Epoch);
+    }
+    if (Frozen) {
+        oldest = Min(oldest, (*Frozen.begin())->Epoch);
+    }
+    for (const auto& part : Flatten) {
+        oldest = Min(oldest, part.second.Epoch());
+    }
+    for (const auto& part : ColdParts) {
+        oldest = Min(oldest, part.second->Epoch);
+    }
+
+    bool changed = false;
+    for (auto& meta : VersionedMetadata) {
+        const auto size = meta.Effects.size();
+        meta.Effects.erase(std::remove_if(meta.Effects.begin(), meta.Effects.end(),
+            [&](const TTableMetadataEffect& effect) {
+                if (const auto* erase = std::get_if<TTableEraseBoundary>(&effect)) {
+                    return erase->Epoch <= oldest;
+                }
+                return false;
+            }), meta.Effects.end());
+        changed |= size != meta.Effects.size();
+    }
+    VersionedMetadata.erase(std::remove_if(VersionedMetadata.begin(), VersionedMetadata.end(),
+        [](const TVersionedTableMetadata& meta) {
+            return meta.Effects.empty();
+        }), VersionedMetadata.end());
+    RefreshEraseAll();
+    return changed;
+}
+
+void TTable::RefreshEraseAll()
+{
+    if (Levels) {
+        Levels->VisibleRuns.clear();
+    }
+    if (!VersionedMetadata.empty()) {
+        EraseAll = true;
+        return;
+    }
+    for (const auto& part : Flatten) {
+        if (part.second.HiddenSince) {
+            EraseAll = true;
+            return;
+        }
+    }
+    for (const auto& part : ColdParts) {
+        if (part.second->HiddenSince) {
+            EraseAll = true;
+            return;
+        }
+    }
+    EraseAll = false;
+}
+
+const TRun* TTable::VisibleRun(const TRun& run, TRowVersion snapshot, TVector<std::shared_ptr<const TRun>>& owned) const
+{
+    auto [it, inserted] = Levels->VisibleRuns.try_emplace(&run);
+    auto& cached = it->second;
+    if (inserted || snapshot < cached.Lower || cached.Upper < snapshot) {
+        cached.Lower = TRowVersion::Min();
+        cached.Upper = TRowVersion::Max();
+        cached.Run.reset();
+        for (const auto& item : run) {
+            const auto hidden = SourceHiddenSince(item.Part->Epoch, StampOf(item.Part.Get()));
+            if (!hidden) {
+                continue;
+            }
+            if (snapshot < *hidden) {
+                cached.Upper = Min(cached.Upper, hidden->Prev());
+            } else {
+                cached.Lower = Max(cached.Lower, *hidden);
+                if (!cached.Run) {
+                    auto filtered = std::make_shared<TRun>(*Scheme->Keys);
+                    for (const auto& visible : run) {
+                        if (!IsHidden(visible.Part->Epoch, StampOf(visible.Part.Get()), snapshot)) {
+                            filtered->Insert(visible.Part, visible.Slice);
+                        }
+                    }
+                    cached.Run = std::move(filtered);
+                }
+            }
+        }
+    }
+    if (!cached.Run) {
+        return &run;
+    }
+    if (cached.Run->empty()) {
+        return nullptr;
+    }
+    owned.push_back(cached.Run);
+    return cached.Run.get();
+}
+
 bool TTable::RemoveRowVersions(const TRowVersion& lower, const TRowVersion& upper)
 {
     return RemovedRowVersions.Add(lower, upper);
+}
+
+TAutoPtr<TSubset> TTable::DropExpiredSources(bool& metadataChanged)
+{
+    if (!EraseAll) {
+        return nullptr;
+    }
+    Y_ENSURE(!RollbackState, "Cannot drop expired sources in a transaction");
+
+    auto expired = [&](TEpoch epoch, const std::optional<TRowVersion>& stamp) {
+        const auto hidden = SourceHiddenSince(epoch, stamp);
+        if (!hidden) {
+            return false;
+        }
+        // An erase at Min hides every snapshot, and [Min, Min) cannot be recorded.
+        if (*hidden == TRowVersion::Min()) {
+            return true;
+        }
+        return RemovedRowVersions.Contains(TRowVersion::Min(), *hidden);
+    };
+
+    TVector<TPartView> flatten;
+    for (const auto& part : Flatten) {
+        if (expired(part.second.Epoch(), part.second.HiddenSince)) {
+            flatten.push_back(part.second);
+        }
+    }
+    TVector<TIntrusiveConstPtr<TColdPart>> cold;
+    for (const auto& part : ColdParts) {
+        if (expired(part.second->Epoch, part.second->HiddenSince)) {
+            cold.push_back(part.second);
+        }
+    }
+
+    TAutoPtr<TSubset> subset;
+    if (flatten || cold) {
+        subset = new TSubset(Epoch, Scheme);
+        subset->Flatten = std::move(flatten);
+        subset->ColdParts = std::move(cold);
+        Replace(*subset, { }, { });
+    }
+    metadataChanged |= RetireEraseEffects();
+    return subset;
 }
 
 TCompactionStats TTable::GetCompactionStats() const

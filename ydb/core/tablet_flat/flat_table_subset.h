@@ -40,9 +40,12 @@ namespace NTable {
             return epoch;
         }
 
-        bool IsStickedToHead() const
+        bool IsStickedToHead(bool eraseAll = false) const
         {
-            return Head == TEpoch::Zero() || Head == Epoch() + 1;
+            // Erase groups may omit newer persisted parts. Memory flushes must
+            // still reach the head; parts must always remain below it.
+            return Head == TEpoch::Zero() || Head == Epoch() + 1
+                || (eraseAll && Frozen.empty() && Epoch() < Head);
         }
 
         void Describe(IOutputStream &out) const

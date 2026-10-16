@@ -16,6 +16,8 @@
 #include "util_basics.h"
 #include "util_deref.h"
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -263,6 +265,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(Annex.empty());
             Y_DEBUG_ABORT_UNLESS(Flushed.empty());
             Y_DEBUG_ABORT_UNLESS(Prepared.empty());
+            Y_DEBUG_ABORT_UNLESS(VersionedMetadataTouched.empty());
         }
 
         TEpoch FlushTable(ui32 tid)
@@ -288,6 +291,23 @@ namespace NTable {
             wrap->PrepareTruncate();
             wrap.DataModified = true;
             wrap.Truncated = true;
+        }
+
+        bool TruncateTable(ui32 tid, TRowVersion version)
+        {
+            Y_ENSURE(InTransaction);
+            auto& wrap = Get(tid, true);
+            Y_ENSURE(!wrap.Truncated, "Cannot truncate a truncated table");
+            Y_ENSURE(!wrap.DataModified, "Cannot truncate a modified table");
+            if (wrap.Created || wrap->ShouldCoalesceErase(version)) {
+                return false;
+            }
+            PrepareRollback(wrap);
+            const TEpoch opened = PrepareSnapshot(wrap);
+            wrap->AddEraseAll(version, opened);
+            wrap.DataModified = true;
+            VersionedMetadataTouched[tid] = true;
+            return true;
         }
 
         void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
@@ -442,6 +462,7 @@ namespace NTable {
             Affects.clear();
 
             RollbackScheme();
+            VersionedMetadataTouched.clear();
             Serial_ = Begin_;
             InTransaction = false;
         }
@@ -887,6 +908,8 @@ namespace NTable {
         TGarbage Garbage;       /* Unused full table subsets */
         TVector<ui32> Deleted;
         TVector<TChange::TTruncate> Truncated;
+        // True when the transaction changed metadata, false when only checking expiry.
+        THashMap<ui32, bool> VersionedMetadataTouched;
         TDbStats Stats;
         ui64 First_ = Max<ui64>(); /* First used serial after Switch() */
     };

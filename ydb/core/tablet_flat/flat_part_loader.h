@@ -276,6 +276,7 @@ namespace NTable {
         const TString Opaque;
         const TVector<TString> Deltas;
         const TEpoch Epoch;
+        const std::optional<TRowVersion> HiddenSince;
         EStage Stage = EStage::Meta;
         bool Rooted = false; /* Has full topology metablob */
         TPageId SchemeId = Max<TPageId>();

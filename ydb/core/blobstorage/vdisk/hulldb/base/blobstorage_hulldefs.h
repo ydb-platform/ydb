@@ -14,6 +14,8 @@
 #include <util/ysaveload.h>
 #include <array>
 
+#include <optional>
+
 // FIXME: only for TIngressCache (put it to vdisk/common)
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
@@ -138,8 +140,14 @@ namespace NKikimr {
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
         const bool AddHeader;
+        // Production FullBatch has a VDisk-wide cadence. It must not be
+        // retriggered by every newly created SST with an uninitialized ratio.
+        std::optional<TInstant> StorageRatioFullBatchNextCalculationTime;
 
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
+        NMonGroup::TStorageRatioGroup StorageRatioGroup;
+        NMonGroup::TStorageRatioAlgorithmGroup StorageRatioPerSstGroup;
+        NMonGroup::TStorageRatioAlgorithmGroup StorageRatioBatchGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         std::array<NMonGroup::TLsmCompactionRankGroup, ui32(EHullDbType::Max)> LsmCompactionRankGroups;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;

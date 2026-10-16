@@ -294,6 +294,29 @@ Y_UNIT_TEST_SUITE(SelectorEquivalence) {
         UNIT_ASSERT_VALUES_EQUAL(result.Ratios.at(0)->IndexItemsKeep, records);
     }
 
+    Y_UNIT_TEST(RecalculateFullBatchStorageRatioAfterYield) {
+        constexpr ui32 records = 256;
+        auto result = CheckEquivalent<TKeyLogoBlob, TMemRecLogoBlob>([](auto& input) {
+            input.HullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioOptimization(true);
+            input.HullCtx->StorageRatioFullBatchNextCalculationTime = TInstant::Zero();
+            input.AddSst(LastLevel - 1, 1, records, 10);
+            input.AddSst(LastLevel, 1, records, 11);
+            for (const auto& sst : input.Ssts) {
+                sst->StorageRatio.Get()->Time = TInstant::Zero();
+            }
+        }, ActNothing, ESelectStrategy::None, [](auto& input) {
+            // Suspend inside the batch scan, before publishing any ratios.
+            for (const auto& sst : input.Ssts) {
+                UNIT_ASSERT_VALUES_EQUAL(sst->StorageRatio.Get()->Time, TInstant::Zero());
+            }
+        }, MakeHolder<TManualScheduler>(), TDuration::Zero());
+        for (const auto& ratio : result.Ratios) {
+            UNIT_ASSERT(ratio->Time != TInstant::Zero());
+            UNIT_ASSERT_VALUES_EQUAL(ratio->IndexItemsTotal, records);
+            UNIT_ASSERT_VALUES_EQUAL(ratio->IndexItemsKeep, records);
+        }
+    }
+
     Y_UNIT_TEST(GarbageCollectionAfterYield) {
         constexpr ui32 records = 500'000;
         for (bool allowGc : {false, true}) {

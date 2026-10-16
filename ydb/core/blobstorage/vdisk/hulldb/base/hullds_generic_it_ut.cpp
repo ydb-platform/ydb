@@ -55,6 +55,42 @@ Y_UNIT_TEST_SUITE(THullDsGenericNWayIt) {
         UNIT_ASSERT_EQUAL(allData, TVector<int>({10, 11, 15}));
     }
 
+    Y_UNIT_TEST(ForwardCopyAssignment) {
+        using TIterator = TGenericNWayForwardIterator<int, TVectorIt>;
+        TIntContainer ds1(TVector<int>{1, 4, 7});
+        TIntContainer ds2(TVector<int>{2, 4, 8});
+        TIntContainer oldData(TVector<int>{100});
+        TIterator assigned(nullptr, {&oldData});
+        assigned.SeekToFirst();
+
+        {
+            TIterator source(nullptr, {&ds1, &ds2});
+            source.Seek(4);
+            UNIT_ASSERT(&(assigned = source) == &assigned);
+            UNIT_ASSERT(assigned.Valid() && assigned.GetCurKey() == 4);
+
+            source.Next();
+            UNIT_ASSERT(source.Valid() && source.GetCurKey() == 7);
+            UNIT_ASSERT(assigned.Valid() && assigned.GetCurKey() == 4);
+
+            const TIterator& self = assigned;
+            UNIT_ASSERT(&(assigned = self) == &assigned);
+            UNIT_ASSERT(assigned.Valid() && assigned.GetCurKey() == 4);
+        }
+
+        TVector<int> allData;
+        while (assigned.Valid()) {
+            allData.push_back(assigned.GetCurKey());
+            assigned.Next();
+        }
+        UNIT_ASSERT_EQUAL(allData, TVector<int>({4, 7, 8}));
+
+        assigned.SeekToFirst();
+        const TIterator empty(nullptr, {});
+        UNIT_ASSERT(&(assigned = empty) == &assigned);
+        UNIT_ASSERT(!assigned.Valid());
+    }
+
     Y_UNIT_TEST(BackwardIteration) {
         TIntContainer ds1(TVector<int>{1, 4, 5, 7, 8, 10});
         TIntContainer ds2(TVector<int>{2, 4, 5, 6, 8, 9, 10, 11, 15});
@@ -97,6 +133,42 @@ Y_UNIT_TEST_SUITE(THullDsGenericNWayIt) {
             it2.Prev();
         }
         UNIT_ASSERT_EQUAL(allData, TVector<int>({10, 9, 8, 7, 6, 5, 4, 2, 1}));
+    }
+
+    Y_UNIT_TEST(BackwardCopyAssignment) {
+        using TIterator = TGenericNWayBackwardIterator<int, TVectorIt>;
+        TIntContainer ds1(TVector<int>{1, 4, 7});
+        TIntContainer ds2(TVector<int>{2, 4, 8});
+        TIntContainer oldData(TVector<int>{100});
+        TIterator assigned(nullptr, {&oldData});
+        assigned.Seek(100);
+
+        {
+            TIterator source(nullptr, {&ds1, &ds2});
+            source.Seek(7);
+            UNIT_ASSERT(&(assigned = source) == &assigned);
+            UNIT_ASSERT(assigned.Valid() && assigned.GetCurKey() == 7);
+
+            source.Prev();
+            UNIT_ASSERT(source.Valid() && source.GetCurKey() == 4);
+            UNIT_ASSERT(assigned.Valid() && assigned.GetCurKey() == 7);
+
+            const TIterator& self = assigned;
+            UNIT_ASSERT(&(assigned = self) == &assigned);
+            UNIT_ASSERT(assigned.Valid() && assigned.GetCurKey() == 7);
+        }
+
+        TVector<int> allData;
+        while (assigned.Valid()) {
+            allData.push_back(assigned.GetCurKey());
+            assigned.Prev();
+        }
+        UNIT_ASSERT_EQUAL(allData, TVector<int>({7, 4, 2, 1}));
+
+        assigned.Seek(8);
+        const TIterator empty(nullptr, {});
+        UNIT_ASSERT(&(assigned = empty) == &assigned);
+        UNIT_ASSERT(!assigned.Valid());
     }
 }
 

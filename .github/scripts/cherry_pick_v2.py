@@ -64,13 +64,14 @@ class ChangesAlreadyAppliedError(Exception):
     """Raised when all requested commits are already present in the target branch."""
 
 
-def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
-    """Run git command"""
+def run_git(repo_path: str, cmd: List[str], logger, check=True, stream=False) -> subprocess.CompletedProcess:
+    """Run git command. stream=True lets GIT_TRACE reach the Actions log."""
     try:
         result = subprocess.run(
             ['git'] + cmd,
             cwd=repo_path,
-            capture_output=True,
+            env={**os.environ, 'GIT_TRACE': '1'} if stream else None,
+            capture_output=not stream,
             text=True,
             check=check
         )
@@ -663,7 +664,7 @@ def process_branch(
     cherry_pick_logs = []
     
     # Prepare branch. Fetch may go through the probe-selected proxy; push below does not.
-    run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', target_branch], logger)
+    run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', target_branch], logger, stream=bool(fetch_proxy_args()))
     run_git(repo_path, ['reset', '--hard', 'HEAD'], logger)
     run_git(repo_path, ['checkout', '-B', target_branch, f'origin/{target_branch}'], logger)
     run_git(repo_path, ['checkout', '-b', dev_branch_name, target_branch], logger)
@@ -672,7 +673,7 @@ def process_branch(
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
         # Fetch commit to ensure it's available locally (needed for unmerged PRs)
-        run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', commit_sha], logger, check=False)
+        run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', commit_sha], logger, check=False, stream=bool(fetch_proxy_args()))
         try:
             result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
@@ -981,15 +982,13 @@ def main():
     repo_dir = tempfile.mkdtemp(prefix="ydb-cherry-pick-")
     try:
         repo_url = f"https://github.com/{repo_name}.git"
-        logger.info("Cloning repository: %s to %s", repo_url, repo_dir)
-        if fetch_proxy_args():
-            logger.info("Cloning through %s", os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/"))
+        proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
+        logger.info("Cloning repository: %s to %s via %s", repo_url, repo_dir, proxy or "direct")
         subprocess.run(
             ['git', *fetch_proxy_args(), 'clone', repo_url, repo_dir],
-            env={**os.environ, 'GIT_PROTOCOL': '2'},
+            env={**os.environ, 'GIT_PROTOCOL': '2', **({'GIT_TRACE': '1'} if proxy else {})},
             check=True,
             text=True,
-            capture_output=True
         )
         
         # Process each target branch

@@ -74,10 +74,13 @@ class TestStreamingServices(TestYdsBase):
 
     @yq_v1
     @pytest.mark.parametrize(
-        'batch_config', [{'streaming': True, 'rows': 1, 'buffered_rows': 2}], indirect=True,
+        'batch_config', [
+            {'streaming': True, 'rows': 1, 'buffered_rows': 2},
+            {'streaming': True, 'rows': 2, 'buffered_rows': 2},
+        ], indirect=True,
     )
     def test_slow_downstream_checkpoint_recovery(self, client, kikimr, services, downstream_service, batch_config):
-        self.init_topics('wasm_slow_downstream')
+        self.init_topics('wasm_slow_downstream_' + str(batch_config['rows']))
         client.create_yds_connection('events', os.getenv('YDB_DATABASE'), os.getenv('YDB_ENDPOINT'))
         client.create_external_service_connection(
             'slow_profiles', f'http://127.0.0.1:{downstream_service.http.server_port}', insecure=True,
@@ -107,7 +110,7 @@ class TestStreamingServices(TestYdsBase):
             # producing. A two-row transform buffer propagates backpressure;
             # exact exhausted-channel-credit ordering is covered by the native test.
             downstream_service.pause_all = True
-            rows = [str(i) for i in range(1000, 1004)]
+            rows = [str(i) for i in range(1000, 1200)]
             before = plane.get_completed_checkpoints(query_id)
             self.write_stream(rows)
             assert downstream_service.started.wait(30), client.describe_query(query_id).result.query

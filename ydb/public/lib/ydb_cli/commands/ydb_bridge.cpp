@@ -371,8 +371,7 @@ int TCommandBridgeRejoin::Run(TConfig& config) {
 
 TCommandBridgeConvert::TCommandBridgeConvert(bool allowEmptyDatabase)
     : TYdbCommand("convert", {}, "Convert a non-bridged cluster into a bridged one with a single pile. All nodes must "
-        "already run with a single-pile bridge config. Storage groups are converted in the background; "
-        "\"bridge list\" shows when it's finished")
+        "already run with a single-pile bridge config. Storage groups are converted in the background.")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }

@@ -284,14 +284,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         TVector<NPq::NProto::TDqReadTaskParams> readTaskParamsMsg;
         ui32 topicPartitionsCount = ExtractPartitionsFromParams(readTaskParamsMsg, args.TaskParams, args.ReadRanges);
 
-        auto txId = args.TxId;
-        auto taskParamsIt = args.TaskParams.find("query_path");
-        if (taskParamsIt != args.TaskParams.end()) {
-            txId = taskParamsIt->second;
-        }
-
         TDuration checkPartitionCountPeriod;
-        taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
+        auto taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
         if (taskParamsIt != args.TaskParams.end()) {
             if (taskParamsIt->second == "true") {
                 checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod;
@@ -317,7 +311,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 std::move(settings),
                 args.InputIndex,
                 args.StatsLevel,
-                txId,
+                args.TxId,
                 args.TaskId,
                 args.SecureParams,
                 std::move(readTaskParamsMsg),
@@ -349,7 +343,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             std::move(settings),
             args.InputIndex,
             args.StatsLevel,
-            txId,
+            args.TxId,
             args.TaskId,
             args.SecureParams,
             std::move(readTaskParamsMsg),

@@ -32,6 +32,7 @@ Change the `feature_flags` settings only if you are sure of the consequences. In
 | `enable_strict_acl_check` | Prohibition on granting rights to non-existent users and on deleting users who have been granted rights |
 | `enable_strict_user_management` | Strict rules for administering local users (i.e., only a cluster or database administrator can administer local users) |
 | `enable_database_admin` | Adding the database administrator role |
+| `enable_kill_session` | Forced session termination with [KILL SESSION](../../yql/reference/syntax/kill-session.md) |
 | `enable_kafka_native_balancing` | Client-side balancing of partitions when reading via the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_compactification_by_key` | Enabling topic compaction in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_kafka_transactions` | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |

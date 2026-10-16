@@ -11,6 +11,7 @@
 #include "schemeshard_operation_registry.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -108,6 +109,18 @@ bool TSchemeShard::ProcessOperationParts(
 {
     auto selfId = TabletID();
     const TString owner = record.GetOwner().empty() ? BUILTIN_ACL_ROOT : record.GetOwner();
+
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
+        && context.UserToken
+        && !context.UserToken->IsSystemUser()
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
+    {
+        response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusPreconditionFailed, ui64(txId), selfId,
+            "Client schema modifications are disabled for non-administrators");
+        AbortOperationPropose(txId, context);
+        return false;
+    }
 
     if (parts.size() > 1) {
         // allow altering impl index tables as part of consistent operation

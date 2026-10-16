@@ -1,6 +1,7 @@
 #include <ydb/tests/functional/federation_test/common_functions.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/grpc/include/grpcpp/grpcpp.h>
+#include <util/string/cast.h>
 
 
 using namespace NYdb;
@@ -93,6 +94,51 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
         }
     }
 
+    // A mirrored message with its metadata. The mirrorer preserves the source
+    // message's seqno and offset, but the source topic has 1s retention and
+    // reuses offsets after cleanup, so only the seqno identifies the message.
+    struct TMirroredMessage {
+        uint64_t Offset;
+        uint64_t SeqNo;
+        TString Data;
+    };
+
+    // Reads up to wantCount messages preserving delivery order. Unlike
+    // ReadMessages (which keys by offset and silently drops duplicates),
+    // this keeps every delivered message, including ones at reused offsets.
+    static std::vector<TMirroredMessage> ReadMirroredMessages(std::shared_ptr<IReadSession> session, size_t wantCount,
+                                                             TDuration timeout = TDuration::Seconds(30)) {
+        std::vector<TMirroredMessage> result;
+        bool commitAckPending = false;
+        TInstant deadline = TInstant::Now() + timeout;
+
+        while (TInstant::Now() < deadline) {
+            auto event = session->GetEvent(/*block=*/false);
+            if (!event) {
+                Sleep(TDuration::MilliSeconds(50));
+                continue;
+            }
+            if (auto* e = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                e->Confirm();
+            } else if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                for (const auto& msg : e->GetMessages()) {
+                    result.push_back({msg.GetOffset(), msg.GetSeqNo(), TString(msg.GetData())});
+                }
+                e->Commit();
+                commitAckPending = true;
+            } else if (std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
+                commitAckPending = false;
+            } else if (std::holds_alternative<TSessionClosedEvent>(*event)) {
+                break;
+            }
+
+            if (result.size() >= wantCount && !commitAckPending) {
+                break;
+            }
+        }
+        return result;
+    }
+
     Y_UNIT_TEST(CreateRemoteMirrorRuleWithGaps) {
         NFederationTests::TClusterEndpoints env;
 
@@ -167,14 +213,28 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
                     .AppendTopics(TTopicReadSettings(shortMirroredTopicPath))
             );
 
-            std::map<uint64_t, TString> mirroredMessages = ReadMessages(session, 1000, TDuration::Seconds(10));
+            std::vector<TMirroredMessage> mirroredMessages = ReadMirroredMessages(session, 1000, TDuration::Seconds(10));
             Cerr << TInstant::Now() << " WrittenMessages.size()=" << writtenPayloads.size() << ", mirroredMessages.size()=" << mirroredMessages.size() << Endl;
             UNIT_ASSERT(mirroredMessages.size() < writtenPayloads.size());
-            for (auto& [offset, data] : mirroredMessages) {
-                Cerr << "Offset=" << offset << " mirrored: " << data.substr(0, 10) << ", size=" << data.size() << Endl;
-                Cerr << "Offset=" << offset << " written: " << writtenPayloads[offset].substr(0, 10) << ", size=" << writtenPayloads[offset].size() << Endl;
+            for (const auto& msg : mirroredMessages) {
+                Cerr << "Offset=" << msg.Offset << " SeqNo=" << msg.SeqNo << " mirrored: " << msg.Data.substr(0, 10) << ", size=" << msg.Data.size() << Endl;
+                // The source topic has 1s retention and is fully cleaned several times
+                // during the run, so source offsets are reused. The mirrorer preserves
+                // the (reused) source offset, therefore a mirrored offset cannot be used
+                // as an index into writtenPayloads. The mirrorer also preserves the
+                // source seqno, and the source assigns seqnos 1..100 (msg index + 1),
+                // so the seqno identifies the message.
+                UNIT_ASSERT_C(msg.SeqNo >= 1 && msg.SeqNo <= writtenPayloads.size(),
+                    "Mirrored message seqno " << msg.SeqNo << " is out of range at offset " << msg.Offset);
+                const size_t index = msg.SeqNo - 1;
+                UNIT_ASSERT_EQUAL_C(writtenPayloads[index], msg.Data,
+                    TStringBuilder() << "Mirrored message at offset " << msg.Offset << " seqno " << msg.SeqNo
+                                    << " does not match written payload #" << index);
+                // Cross-check that the payload's "msg-N" prefix agrees with the seqno.
+                UNIT_ASSERT_C(msg.Data.StartsWith("msg-" + std::to_string(index) + ":"),
+                    "Mirrored payload prefix does not match its seqno at offset " << msg.Offset
+                        << ": " << msg.Data.substr(0, 30));
                 Cerr << "~~~~~~~~~~~~~" << Endl;
-                UNIT_ASSERT_EQUAL(writtenPayloads[offset], data);
             }
         }
     }

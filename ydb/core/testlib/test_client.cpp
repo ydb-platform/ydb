@@ -593,6 +593,7 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
             MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
             MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
+            MERGE_CFG_FROM_APP_CFG(UdfStoreConfig);
             MERGE_CFG_FROM_APP_CFG(BridgeConfig);
             MERGE_CFG_FROM_SETTINGS(BridgeConfig);
             MERGE_CFG_FROM_APP_CFG(StatisticsConfig);

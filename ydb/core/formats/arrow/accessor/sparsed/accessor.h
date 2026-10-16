@@ -145,7 +145,7 @@ private:
         if (Record.GetNotDefaultRecordsCount()) {
             return false;
         } else {
-            value = DefaultValue;
+            value = DefaultValue ? DefaultValue : arrow::MakeNullScalar(GetDataType());
             return true;
         }
     }
@@ -155,6 +155,10 @@ protected:
 
     virtual ui32 DoGetNullsCount() const override {
         return Record.GetNullsCount();
+    }
+    virtual std::optional<bool> DoHasNulls() const override {
+        return ((!DefaultValue || !DefaultValue->is_valid) && Record.GetNotDefaultRecordsCount() < GetRecordsCount()) ||
+            Record.GetColValue()->null_count() != 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
         return Record.GetValueRawBytes();

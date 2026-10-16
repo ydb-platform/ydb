@@ -1,16 +1,16 @@
 #include "streaming_queries.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
-#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/library/query_actor/query_actor.h>
-
-#include <contrib/libs/fmt/include/fmt/format.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
+
+#include <contrib/libs/fmt/include/fmt/format.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 

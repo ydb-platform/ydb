@@ -35,14 +35,14 @@ TEST(TYtMessageStreamIntegration, CredentialsRemainBoundToEdsPath) {
 
 namespace NYql {
 namespace {
-TExprNode::TPtr Read(TExprContext& ctx, TStringBuf format, bool consumer) {
+TExprNode::TPtr Read(TExprContext& ctx, TStringBuf format, bool consumer, TStringBuf cluster = "cluster") {
     const auto pos = TPositionHandle();
     TExprNode::TListType settings;
     if (consumer) {
         settings.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "consumer"), ctx.NewAtom(pos, "//consumer")}));
     }
     return ctx.NewCallable(pos, "Read!", {
-        ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {ctx.NewAtom(pos, "yt"), ctx.NewAtom(pos, "cluster"), ctx.NewAtom(pos, "message_stream")}),
+        ctx.NewWorld(pos), ctx.NewCallable(pos, "DataSource", {ctx.NewAtom(pos, "yt"), ctx.NewAtom(pos, cluster), ctx.NewAtom(pos, "message_stream")}),
         ctx.NewCallable(pos, "MrTableConcat", {ctx.NewCallable(pos, "MrObject", {
             ctx.NewAtom(pos, "//queue"), ctx.NewAtom(pos, format), ctx.NewAtom(pos, "")})}),
         ctx.NewCallable(pos, "Void", {}), ctx.NewList(pos, std::move(settings))});
@@ -50,14 +50,9 @@ TExprNode::TPtr Read(TExprContext& ctx, TStringBuf format, bool consumer) {
 }
 TEST(TYtMessageStreamIntegration, ParseKqpReadSettings) {
     TExprContext ctx;
-    const auto read = ParseYtMessageStreamReadSettings(*Read(ctx, "raw", true));
+    const auto read = ParseYtMessageStreamReadSettings(*Read(ctx, "", true));
     EXPECT_EQ(read.Path, "//queue");
     EXPECT_EQ(read.Consumer, "//consumer");
-}
-TEST(TYtMessageStreamIntegration, RejectMissingConsumerAndUnsupportedFormat) {
-    TExprContext ctx;
-    EXPECT_ANY_THROW(ParseYtMessageStreamReadSettings(*Read(ctx, "raw", false)));
-    EXPECT_ANY_THROW(ParseYtMessageStreamReadSettings(*Read(ctx, "json_each_row", true)));
 }
 TEST(TYtMessageStreamIntegration, NoAuthProducesUsableSecureParameter) {
     auto credentials = CreateStructuredTokenCredentialsFactory();
@@ -66,6 +61,33 @@ TEST(TYtMessageStreamIntegration, NoAuthProducesUsableSecureParameter) {
     const auto& token = source->GetClusterTokens().at("/Root/eds");
     EXPECT_FALSE(token.empty());
     EXPECT_TRUE(credentials->Create(token)->CreateProvider()->GetAuthInfo().empty());
+}
+TEST(TYtMessageStreamIntegration, YtExternalDataSourceRejectsInvalidReadSettings) {
+    auto source = CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory());
+    source->AddCluster("/Root/eds", {{"source_type", "YT"}, {"location", "localhost:1"}});
+
+    {
+        TExprContext ctx;
+        EXPECT_ANY_THROW(ParseYtMessageStreamReadSettings(*Read(ctx, "", false, "/Root/eds")));
+    }
+
+    const auto checkFormat = [&](TStringBuf format, bool inSettings) {
+        TExprContext ctx;
+        auto read = Read(ctx, format, true, "/Root/eds");
+        if (inSettings) {
+            auto settings = read->Child(4)->ChildrenList();
+            settings.push_back(ctx.NewList(TPositionHandle(), {
+                ctx.NewAtom(TPositionHandle(), "format"), ctx.NewAtom(TPositionHandle(), "raw")}));
+            read = ctx.ChangeChild(*read, 4, ctx.NewList(TPositionHandle(), std::move(settings)));
+        }
+        EXPECT_TRUE(source->CanParse(*read));
+        const auto right = ctx.NewCallable(TPositionHandle(), "Right!", {read});
+        EXPECT_FALSE(source->RewriteIO(right, ctx));
+        EXPECT_NE(ctx.IssueManager.GetIssues().ToString().find("FORMAT is not supported for QYT reads"), TString::npos);
+    };
+    checkFormat("raw", false);
+    checkFormat("json_each_row", false);
+    checkFormat("", true);
 }
 }
 
@@ -80,7 +102,7 @@ TEST(TYtMessageStreamIntegration, SharesYtProviderWithTables) {
     auto provider = WrapYtDataSourceWithMessageStreams(CreateYtDataSource(state), streams);
     types->AddDataSource(YtProviderName, provider);
 
-    const auto streamRead = Read(ctx, "raw", true);
+    const auto streamRead = Read(ctx, "", true);
     const auto tableSource = ctx.NewCallable(TPositionHandle(), "DataSource", {ctx.NewAtom(TPositionHandle(), "yt"), ctx.NewAtom(TPositionHandle(), "cluster")});
     const auto tableRead = ctx.ChangeChild(*streamRead, 1, TExprNode::TPtr(tableSource));
     EXPECT_EQ(types->DataSourceMap.size(), 1u);
@@ -172,7 +194,7 @@ TEST(TYtMessageStreamIntegration, LowersStreamsBeforeTableDiscoveryAndAfterRewin
     for (size_t attempt = 0; attempt < 2; ++attempt) {
         TExprContext ctx;
         const auto pos = TPositionHandle();
-        const auto stream = Read(ctx, "raw", true);
+        const auto stream = Read(ctx, "", true);
         const auto table = ctx.ChangeChild(*stream, 1, ctx.NewCallable(pos, "DataSource", {
             ctx.NewAtom(pos, "yt"), ctx.NewAtom(pos, "cluster")}));
         auto input = ctx.NewList(pos, {
@@ -205,7 +227,7 @@ TEST(TYtMessageStreamIntegration, RejectsInvalidStreamBeforeTableDiscovery) {
     auto provider = WrapYtDataSourceWithMessageStreams(tables,
         CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory()));
     TExprContext ctx;
-    auto input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", false)});
+    auto input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "", false)});
     TExprNode::TPtr output;
     EXPECT_EQ(provider->GetIODiscoveryTransformer().Transform(input, output, ctx).Level, IGraphTransformer::TStatus::Error);
     EXPECT_EQ(tables->DiscoveryCalls, 0u);
@@ -222,7 +244,7 @@ TEST(TYtMessageStreamIntegration, RoutesIntentsForStreamsAndTables) {
     auto& intent = provider->GetIntentDeterminationTransformer();
     for (size_t attempt = 0; attempt < 2; ++attempt) {
         TExprContext ctx;
-        auto stream = Read(ctx, "raw", true);
+        auto stream = Read(ctx, "", true);
         TExprNode::TPtr output;
         EXPECT_EQ(intent.Transform(stream, output, ctx).Level, IGraphTransformer::TStatus::Ok);
         EXPECT_EQ(output, stream);
@@ -244,7 +266,7 @@ namespace NYql {
 TEST(TYtMessageStreamIntegration, ValidatesRawReadsBeforeMetadataLoading) {
     auto streams = CreateYtMessageStreamIntegration(CreateStructuredTokenCredentialsFactory());
     TExprContext ctx;
-    auto input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", false)});
+    auto input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "", false)});
     TExprNode::TPtr output;
     EXPECT_EQ(streams->GetLoadTableMetadataTransformer().Transform(input, output, ctx).Level,
         IGraphTransformer::TStatus::Error);
@@ -275,7 +297,7 @@ TEST(TYtMessageStreamIntegration, RediscoversStreamAfterInitialPassWithoutRewind
     TExprContext ctx;
     auto input = ctx.NewWorld(TPositionHandle());
     ASSERT_EQ(RunProviderPhase(discovery, input, ctx).Level, IGraphTransformer::TStatus::Ok);
-    input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", true)});
+    input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "", true)});
     ASSERT_EQ(RunProviderPhase(discovery, input, ctx).Level, IGraphTransformer::TStatus::Ok);
     EXPECT_TRUE(NNodes::TYtMessageStreamReadTable::Match(input->Child(0)));
     EXPECT_EQ(tables->StreamReads, 1u);
@@ -288,7 +310,7 @@ TEST(TYtMessageStreamIntegration, ReloadsStreamMetadataAfterInitialPassWithoutRe
     TExprContext ctx;
     auto input = ctx.NewWorld(TPositionHandle());
     ASSERT_EQ(RunProviderPhase(metadata, input, ctx).Level, IGraphTransformer::TStatus::Ok);
-    input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "raw", false)});
+    input = ctx.NewCallable(TPositionHandle(), "Right!", {Read(ctx, "", false)});
     EXPECT_EQ(RunProviderPhase(metadata, input, ctx).Level, IGraphTransformer::TStatus::Error);
     EXPECT_FALSE(ctx.IssueManager.GetIssues().Empty());
 }

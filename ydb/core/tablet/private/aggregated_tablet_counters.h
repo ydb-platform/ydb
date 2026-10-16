@@ -64,17 +64,19 @@ public:
      *          RecalcAll() must be called explicitly afterwards.
      *
      * @param[in] now Used to differentiate the cumulative counters into per second rates
+     * @param[in] followerId Tells the followers of one tablet apart (0 = leader)
      */
     void Apply(
         ui64 tabletId,
         const TTabletCountersBase* counters,
         TTabletTypes::EType tabletType,
-        TInstant now);
+        TInstant now,
+        ui32 followerId = 0);
 
     /**
      * Drop the contribution of a single tablet from the aggregate.
      */
-    void Forget(ui64 tabletId);
+    void Forget(ui64 tabletId, ui32 followerId = 0);
 
     void RecalcAll();
 
@@ -114,7 +116,7 @@ private:
     TAggregatedCumulativeCounters AggregatedCumulativeCounters;
     TAggregatedHistogramCounters AggregatedHistogramCounters;
 
-    THashMap<ui64, TInstant> LastAggregateUpdateTime;
+    THashMap<TTabletKey, TInstant> LastAggregateUpdateTime;
 
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
     ::NMonitoring::TCountableBase::EVisibility Visibility;

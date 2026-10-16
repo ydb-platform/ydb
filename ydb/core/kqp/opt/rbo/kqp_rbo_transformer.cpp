@@ -632,6 +632,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     earlyPushFilterRules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    earlyPushFilterRules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push filters before inlining", std::move(earlyPushFilterRules)));
 
     // Subplan inlining. For correlated subqueries we create dependent join.
@@ -681,6 +682,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
@@ -689,6 +691,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_II_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));

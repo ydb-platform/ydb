@@ -30,6 +30,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
@@ -13954,11 +13956,156 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             const auto result = executeQuery(R"(
                 --!syntax_v1
+                ALTER TOPIC `/Root/table/feed` SET (max_active_partitions = 0)
+            )");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetPartitioningSettings().GetMaxActivePartitions(), 3);
+        }
+        {
+            const auto result = executeQuery(R"(
+                --!syntax_v1
                 ALTER TOPIC `/Root/table/feed` RESET (retention_period)
             )");
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(DescribeTopic(pq, "/Root/table/feed").GetRetentionPeriod(), TDuration::Days(1));
         }
+    }
+
+    Y_UNIT_TEST(ShowCreateChangefeedSettingsAsIndependentQueries) {
+        using namespace NTopic;
+
+        struct TTopicSnapshot {
+            TDuration RetentionPeriod;
+            ui64 MinActivePartitions;
+            ui64 MaxActivePartitions;
+            EAutoPartitioningStrategy AutoPartitioningStrategy;
+            TDuration AutoPartitioningStabilizationWindow;
+            ui32 AutoPartitioningUpUtilizationPercent;
+            ui32 AutoPartitioningDownUtilizationPercent;
+            size_t PartitionCount;
+        };
+
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()));
+        auto topicClient = TTopicClient(kikimr.GetDriver(), TTopicClientSettings().Database("/Root"));
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto querySession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&querySession](const TString& query) {
+            auto result = querySession.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                result.GetIssues().ToString() << "\nQuery:\n" << query);
+        };
+
+        auto describeTable = [&tableSession]() {
+            auto result = tableSession.DescribeTable("/Root/show_create_changefeed").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto description = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+            description.mutable_self()->clear_created_at();
+            return description;
+        };
+
+        auto describeTopic = [&topicClient]() {
+            const auto description = DescribeTopic(topicClient, "/Root/show_create_changefeed/feed");
+            const auto& partitioningSettings = description.GetPartitioningSettings();
+            const auto& autoPartitioningSettings = partitioningSettings.GetAutoPartitioningSettings();
+
+            return TTopicSnapshot{
+                .RetentionPeriod = description.GetRetentionPeriod(),
+                .MinActivePartitions = partitioningSettings.GetMinActivePartitions(),
+                .MaxActivePartitions = partitioningSettings.GetMaxActivePartitions(),
+                .AutoPartitioningStrategy = autoPartitioningSettings.GetStrategy(),
+                .AutoPartitioningStabilizationWindow = autoPartitioningSettings.GetStabilizationWindow(),
+                .AutoPartitioningUpUtilizationPercent = autoPartitioningSettings.GetUpUtilizationPercent(),
+                .AutoPartitioningDownUtilizationPercent = autoPartitioningSettings.GetDownUtilizationPercent(),
+                .PartitionCount = description.GetPartitions().size(),
+            };
+        };
+
+        executeQuery(R"(
+            CREATE TABLE `/Root/show_create_changefeed` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )");
+        executeQuery(R"(
+            ALTER TABLE `/Root/show_create_changefeed` ADD CHANGEFEED `feed` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON',
+                BARRIERS_INTERVAL = INTERVAL('PT1S'),
+                RETENTION_PERIOD = INTERVAL('PT12H'),
+                TOPIC_AUTO_PARTITIONING = 'ENABLED',
+                TOPIC_MIN_ACTIVE_PARTITIONS = 2,
+                TOPIC_MAX_ACTIVE_PARTITIONS = 4
+            );
+        )");
+        executeQuery(R"(
+            ALTER TOPIC `/Root/show_create_changefeed/feed` SET (
+                retention_period = INTERVAL('PT6H'),
+                min_active_partitions = 3,
+                max_active_partitions = 8,
+                auto_partitioning_strategy = 'paused',
+                auto_partitioning_stabilization_window = INTERVAL('PT15M'),
+                auto_partitioning_up_utilization_percent = 70,
+                auto_partitioning_down_utilization_percent = 25
+            );
+        )");
+
+        const auto originalTableDescription = describeTable();
+        const auto originalTopicDescription = describeTopic();
+
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.RetentionPeriod, TDuration::Hours(6));
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, 3);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, 8);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, EAutoPartitioningStrategy::Paused);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStabilizationWindow, TDuration::Minutes(15));
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningUpUtilizationPercent, 70);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningDownUtilizationPercent, 25);
+
+        auto showCreateResult = querySession.ExecuteQuery(
+            "SHOW CREATE TABLE `/Root/show_create_changefeed`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(showCreateResult.GetStatus(), EStatus::SUCCESS, showCreateResult.GetIssues().ToString());
+        UNIT_ASSERT(!showCreateResult.GetResultSets().empty());
+
+        TResultSetParser parser(showCreateResult.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto showCreateQuery = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
+        UNIT_ASSERT_C(showCreateQuery.has_value(), "SHOW CREATE TABLE returned an empty CreateQuery");
+
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        TVector<TString> statements;
+        NYql::TIssues issues;
+        UNIT_ASSERT_C(NSQLTranslationV1::SplitQueryToStatements(
+            TString(*showCreateQuery), NSQLTranslationV1::MakeLexer(lexers, false), statements, issues),
+            issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(statements.size(), 3, *showCreateQuery);
+
+        executeQuery("DROP TABLE `/Root/show_create_changefeed`;");
+        for (const auto& statement : statements) {
+            executeQuery(statement);
+        }
+
+        const auto recreatedTableDescription = describeTable();
+        const auto recreatedTopicDescription = describeTopic();
+        google::protobuf::util::MessageDifferencer differencer;
+        TString descriptionDiff;
+        differencer.ReportDifferencesToString(&descriptionDiff);
+        UNIT_ASSERT_C(differencer.Compare(originalTableDescription, recreatedTableDescription),
+            "Table descriptions differ after SHOW CREATE TABLE replay:\n" << descriptionDiff
+            << "\nDDL:\n" << *showCreateQuery);
+
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.RetentionPeriod, recreatedTopicDescription.RetentionPeriod);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MinActivePartitions, recreatedTopicDescription.MinActivePartitions);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.MaxActivePartitions, recreatedTopicDescription.MaxActivePartitions);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStrategy, recreatedTopicDescription.AutoPartitioningStrategy);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningStabilizationWindow, recreatedTopicDescription.AutoPartitioningStabilizationWindow);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningUpUtilizationPercent, recreatedTopicDescription.AutoPartitioningUpUtilizationPercent);
+        UNIT_ASSERT_VALUES_EQUAL(originalTopicDescription.AutoPartitioningDownUtilizationPercent, recreatedTopicDescription.AutoPartitioningDownUtilizationPercent);
+
+        // Altering the minimum partition count may repartition asynchronously, so compare only the stable settings.
+        UNIT_ASSERT_VALUES_EQUAL(recreatedTopicDescription.PartitionCount, 3);
     }
 
     Y_UNIT_TEST_TWIN(CreateTopicMeteringModeRequestUnits, UseQueryService) {
@@ -16034,7 +16181,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
             TTestHelper::TColumnSchema().SetName("resource_id").SetType(NScheme::NTypeIds::Utf8),
-            TTestHelper::TColumnSchema().SetName("level").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")})
+            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Int32)
         };
         TTestHelper::TColumnTableStore testTableStore;
 
@@ -16054,11 +16201,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
 
         {
-            schema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")}));
             auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `" << testTableStore.GetName() << "` ADD COLUMN new_column pgfloat4;";
 
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR, alterResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToString(),
+                "Type 'pgfloat4' specified for column 'new_column' is not supported for column tables");
         }
 
         {
@@ -16068,26 +16216,14 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             const auto& description = describeResult.GetTableDescription();
             auto columns = description.GetTableColumns();
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 3);
         }
 
-        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[#]]");
-        testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[[\"test_res_1\"]]]");
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(3).Add("test_res_3").Add(-321).Add(-3.14f);
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[3;\"-321\";\"-3.14\";[\"test_res_3\"]]]");
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[\"-3.14\"]]");
-        testHelper.ReadData("SELECT resource_id FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=3", "[[[\"test_res_3\"]]]");
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` ORDER BY new_column", "[[#];[#];[\"-3.14\"]]");
+        testHelper.ReadData("SELECT * FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=1", "[[1;#;[\"test_res_1\"]]]");
+        testHelper.ReadData("SELECT level FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=2", "[[[-123]]]");
 
         testHelper.RebootTablets(testTable.GetName());
-        testHelper.ReadData("SELECT new_column FROM `/Root/TableStoreTest/ColumnTableTest` ORDER BY new_column", "[[#];[#];[\"-3.14\"]]");
+        testHelper.ReadData("SELECT level FROM `/Root/TableStoreTest/ColumnTableTest` WHERE id=2", "[[[-123]]]");
     }
 
     Y_UNIT_TEST(AddColumnErrors) {
@@ -17069,157 +17205,42 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         }
     }
 
-    Y_UNIT_TEST(PgInt2Column) {
+    void CheckPgColumnRejected(const TString& typeName) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint2")})
+            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName(typeName)})
         };
 
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
+        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            TStringBuilder() << "Type '" << typeName << "' specified for column 'val' is not supported for column tables");
+    }
 
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add<i16>(0);
-            tableInserter.AddRow().Add(2).Add<i16>(42);
-            tableInserter.AddRow().Add(3).Add<i16>(-42);
-            tableInserter.AddRow().Add(4).AddNull();
-            tableInserter.AddRow().Add(5).Add<i16>(32767);   // INT16_MAX
-            tableInserter.AddRow().Add(6).Add<i16>(-32768);  // INT16_MIN
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"42\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-42\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"32767\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=6", "[[\"-32768\"]]");
+    Y_UNIT_TEST(PgInt2Column) {
+        CheckPgColumnRejected("pgint2");
     }
 
     Y_UNIT_TEST(PgInt4Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint4")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0);
-            tableInserter.AddRow().Add(2).Add(123);
-            tableInserter.AddRow().Add(3).Add(-123);
-            tableInserter.AddRow().Add(4).AddNull();
-            tableInserter.AddRow().Add(5).Add(2147483647);   // INT32_MAX
-            tableInserter.AddRow().Add(6).Add(-2147483648);  // INT32_MIN
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"123\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-123\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=5", "[[\"2147483647\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=6", "[[\"-2147483648\"]]");
+        CheckPgColumnRejected("pgint4");
     }
 
     Y_UNIT_TEST(PgInt8Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgint8")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add<i64>(0);
-            tableInserter.AddRow().Add(2).Add<i64>(123456789012345LL);
-            tableInserter.AddRow().Add(3).Add<i64>(-123456789012345LL);
-            tableInserter.AddRow().Add(4).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"123456789012345\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-123456789012345\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
+        CheckPgColumnRejected("pgint8");
     }
 
     Y_UNIT_TEST(PgFloat4Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat4")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0.0f);
-            tableInserter.AddRow().Add(2).Add(3.14f);
-            tableInserter.AddRow().Add(3).Add(-2.5f);
-            tableInserter.AddRow().Add(4).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"3.14\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-2.5\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
+        CheckPgColumnRejected("pgfloat4");
     }
 
     Y_UNIT_TEST(PgFloat8Column) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("val").SetTypeInfo({NPg::TypeDescFromPgTypeName("pgfloat8")})
-        };
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add(0.0);
-            tableInserter.AddRow().Add(2).Add(3.141592653589793);
-            tableInserter.AddRow().Add(3).Add(-2.5);
-            tableInserter.AddRow().Add(4).AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=1", "[[\"0\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=2", "[[\"3.141592653589793\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=3", "[[\"-2.5\"]]");
-        testHelper.ReadData("SELECT val FROM `/Root/ColumnTableTest` WHERE id=4", "[[#]]");
+        CheckPgColumnRejected("pgfloat8");
     }
 
     Y_UNIT_TEST(PgMultipleTypesColumn) {
@@ -17238,23 +17259,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
 
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-
-        {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add<i16>(-1).Add(-1).Add<i64>(-1).Add(-1.5f).Add(-1.5);
-            tableInserter.AddRow().Add(2).Add<i16>(100).Add(100000).Add<i64>(100000000000LL).Add(1.25f).Add(1.25);
-            tableInserter.AddRow().Add(3).AddNull().AddNull().AddNull().AddNull().AddNull();
-            testHelper.BulkUpsert(testTable, tableInserter);
-        }
-
-        // SELECT * returns columns in alphabetical order: f4, f8, i2, i4, i8, id
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1",
-            "[[\"-1.5\";\"-1.5\";\"-1\";\"-1\";\"-1\";1]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2",
-            "[[\"1.25\";\"1.25\";\"100\";\"100000\";\"100000000000\";2]]");
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=3",
-            "[[#;#;#;#;#;3]]");
+        auto result = testHelper.GetSession().ExecuteSchemeQuery(testTable.BuildQuery()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "is not supported for column tables");
     }
 
     Y_UNIT_TEST(BackupReturnsOperationId) {

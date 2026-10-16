@@ -2599,7 +2599,9 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 10);
+        UNIT_ASSERT(s3Mock.GetData().contains("/data_complete.json"));
+        UNIT_ASSERT(s3Mock.GetData().contains("/export_complete.json"));
 
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -2681,7 +2683,9 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 10);
+        UNIT_ASSERT(s3Mock.GetData().contains("/data_complete.json"));
+        UNIT_ASSERT(s3Mock.GetData().contains("/export_complete.json"));
 
         // Make corruption
         corruption(s3Mock.GetData());
@@ -5697,6 +5701,80 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvPrivate::EvImportSchemeReady;
         }, EnableDataShardDirectPartImport);
+    }
+
+    // Regression test: a manual cancel while the schema-mapping getter is in flight
+    // must not be resurrected by the late getter reply. Previously the reply flipped
+    // the cancelled import back to Waiting and restarted the whole import, pinning
+    // schemeshard memory and re-appending duplicated items on every cancel.
+    Y_UNIT_TEST_FLAG(CancelWhileGettingSchemaMappingShouldNotResurrect, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        // Needed to reach EState::DownloadExportMetadata, which is what spawns the
+        // schema-mapping getter.
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        THolder<IEventHandle> delayed;
+        auto prevObserver = SetDelayObserver(runtime, delayed, [](TAutoPtr<IEventHandle>& ev) {
+            return ev->GetTypeRewrite() == TEvPrivate::EvImportSchemaMappingReady;
+        });
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              destination_path: "/MyRoot/Restored"
+            }
+        )", port));
+
+        WaitForDelayed(runtime, delayed, prevObserver);
+
+        // Cancel while the schema-mapping getter reply is still in flight
+        TestCancelImport(runtime, ++txId, "/MyRoot", importId);
+        env.TestWaitNotification(runtime, importId);
+
+        // Deliver the late getter reply: it must be dropped, not resurrect the import
+        runtime.Send(delayed.Release(), 0, true);
+        env.TestWaitNotification(runtime, importId);
+
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+        // The cancelled import must be forgettable
+        TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
 
     Y_UNIT_TEST_FLAG(CancelUponCreatingTableShouldSucceed, EnableDataShardDirectPartImport) {

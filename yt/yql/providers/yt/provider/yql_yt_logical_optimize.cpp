@@ -1071,7 +1071,7 @@ protected:
 
     TMaybeNode<TExprBase> ReplaceEmptyOpWithTouch(TExprBase node, TExprContext& ctx) const {
         auto op = node.Cast<TYtTransientOpBase>();
-        if (op.Ref().StartsExecution() || op.Input().Size() != 1) {
+        if (op.Maybe<TYtPersist>() || op.Ref().StartsExecution() || op.Input().Size() != 1) {
             return node;
         }
 

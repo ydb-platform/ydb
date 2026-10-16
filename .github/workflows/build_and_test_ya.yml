@@ -78,33 +78,44 @@ jobs:
           exit 0
         fi
 
-        archive=https://github.com/ydb-platform/ydb/archive/refs/heads/main.tar.gz
+        repo_url=https://github.com/ydb-platform/ydb.git
 
-        # Total bytes, and bytes/sec over the last 5s. The average from the start hides the slow tail.
+        # Same transfer as actions/checkout: depth-1 clone. Both paths at once.
+        # Speed is the last 5s that still received bytes. A finished clone is not 0.
         measure() {
-          local out pid i now n end start back bps
-          out=$(mktemp)
-          curl -L --http2 --max-time 30 -o "$out" -s "$1" &
+          local git_config dest pid i now n last back start end bps
+          git_config=$1
+          dest=$(mktemp -d "${RUNNER_TEMP:-/tmp}/gh-probe.XXXXXX")
+          if [ -n "$git_config" ]; then
+            setsid git -c "$git_config" clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >/dev/null 2>&1 &
+          else
+            setsid git clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >/dev/null 2>&1 &
+          fi
           pid=$!
           local -a samples=()
           for i in $(seq 1 30); do
             sleep 1
-            now=$(wc -c < "$out" | tr -d ' ')
+            now=$(du -sb "$dest" 2>/dev/null | awk '{print $1}')
             samples+=("${now:-0}")
           done
-          kill "$pid" 2>/dev/null || true
+          kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
           wait "$pid" 2>/dev/null || true
-          rm -f "$out"
+          rm -rf "$dest"
           n=${#samples[@]}
-          end=${samples[$((n - 1))]:-0}
+          last=$((n - 1))
+          while [ "$last" -gt 0 ] && [ "${samples[$last]}" -eq "${samples[$((last - 1))]}" ]; do
+            last=$((last - 1))
+          done
+          if [ "$last" -lt 1 ]; then
+            echo "${samples[0]:-0} 0"
+            return
+          fi
           back=5
-          if [ "$n" -le 5 ]; then
-            back=$((n - 1))
+          if [ "$last" -lt 5 ]; then
+            back=$last
           fi
-          if [ "$back" -lt 1 ]; then
-            back=1
-          fi
-          start=${samples[$((n - 1 - back))]:-0}
+          end=${samples[$last]:-0}
+          start=${samples[$((last - back))]:-0}
           bps=$(( (end - start) / back ))
           echo "$end $bps"
         }
@@ -113,8 +124,17 @@ jobs:
           awk -v bytes="${1:-0}" 'BEGIN { printf "%.2f", (bytes + 0) / 1000000 }'
         }
 
-        read -r direct_bytes direct_tail <<< "$(measure "$archive")" || true
-        read -r proxy_bytes proxy_tail <<< "$(measure "${proxy_url}/${archive}")" || true
+        direct_out=$(mktemp)
+        proxy_out=$(mktemp)
+        measure "" >"$direct_out" &
+        direct_pid=$!
+        measure "url.${proxy_url}/https://github.com/.insteadOf=https://github.com/" >"$proxy_out" &
+        proxy_pid=$!
+        wait "$direct_pid" || true
+        wait "$proxy_pid" || true
+        read -r direct_bytes direct_tail <"$direct_out" || true
+        read -r proxy_bytes proxy_tail <"$proxy_out" || true
+        rm -f "$direct_out" "$proxy_out"
 
         faster=$(awk -v direct="${direct_tail:-0}" -v proxy="${proxy_tail:-0}" 'BEGIN {
           print (proxy + 0 > direct + 0) ? "proxy" : "github"
@@ -124,7 +144,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "GitHub $(megabytes "${direct_bytes:-0}") MB, last 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+        echo "shallow clone GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
         {
           echo "GH_PROXY_MEASURED=1"
           echo "GH_PROXY_USED=$use_proxy"

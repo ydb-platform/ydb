@@ -163,7 +163,6 @@ def test_without_wasm(service, tmp_path, backend):
 @pytest.mark.parametrize('extra,execution,backend,error', [
     ((), 'analytics', 'ydb', 'WASM services require IN_PLACE'),
     ((), 'analytics', None, 'WASM services require IN_PLACE'),
-    ((), 'stream', 'in-place', 'streaming is unsupported'),
     (('--single-compute-db',), 'analytics', 'in-place', 'cannot be combined'),
     (('--shared-compute-db=/Root/db@localhost:1',), 'analytics', 'in-place', 'cannot be combined'),
 ])
@@ -658,3 +657,17 @@ def test_query_tracing_auth_deadline(service, tmp_path, protocol):
             # cancelled at the absolute invocation deadline. Dropping the runtime
             # handle before decoding the result must not lose that timeout cause.
             assert attrs['outcome'] == 'timeout', span
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+@pytest.mark.parametrize('execution', ['stream', 'async-stream'])
+@pytest.mark.parametrize('inherit_connections', [False, True])
+def test_streaming_mode_with_checkpoints(service, tmp_path, protocol, execution, inherit_connections):
+    runner = Runner(tmp_path, service)
+    if inherit_connections:
+        lines = [line for line in runner.config.read_text().splitlines() if 'AvailableStreamingConnection:' not in line]
+        runner.config.write_text('\n'.join(lines))
+    process = runner.start('profiles_' + protocol, execution=execution, extra=('--checkpoints-db',))
+    assert runner.wait(process) == 0, runner.output()
+    assert len(service.requests) == 2
+    assert all(request[0] == protocol for request in service.requests)

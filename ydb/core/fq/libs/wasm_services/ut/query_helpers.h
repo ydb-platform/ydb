@@ -17,6 +17,7 @@ namespace NFq::NWasmServices::NTestHelpers {
 struct TQueryOutput {
     std::mutex Mutex;
     TVector<TProfile> Rows;
+    TVector<TString> Events;
     std::atomic<bool> Blocked = false;
     std::atomic<bool> Finished = false;
     std::atomic<ui32> BlockAfterRows = 0;
@@ -43,6 +44,7 @@ public:
         profile.Score = row.GetElement(2).Get<ui32>();
         std::lock_guard lock(Output->Mutex);
         Output->Rows.push_back(profile);
+        Output->Events.push_back(TStringBuilder() << "row:" << profile.Id);
         if (Output->BlockAfterRows && Output->Rows.size() >= Output->BlockAfterRows) {
             Output->Blocked = true;
         }
@@ -52,15 +54,19 @@ public:
         UNIT_FAIL("Unexpected wide Profile output");
     }
 
-    void Consume(NYql::NDqProto::TCheckpoint&&) override {
-        UNIT_FAIL("Unexpected checkpoint");
+    void Consume(NYql::NDqProto::TCheckpoint&& checkpoint) override {
+        std::lock_guard lock(Output->Mutex);
+        Output->Events.push_back(TStringBuilder() << "checkpoint:" << checkpoint.GetId());
     }
 
-    void Consume(NYql::NDqProto::TWatermark&&) override {
-        UNIT_FAIL("Unexpected watermark");
+    void Consume(NYql::NDqProto::TWatermark&& watermark) override {
+        std::lock_guard lock(Output->Mutex);
+        Output->Events.push_back(TStringBuilder() << "watermark:" << watermark.GetTimestampUs());
     }
 
     void Finish() override {
+        std::lock_guard lock(Output->Mutex);
+        Output->Events.push_back("finish");
         Output->Finished = true;
     }
 

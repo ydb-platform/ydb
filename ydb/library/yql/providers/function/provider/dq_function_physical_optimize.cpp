@@ -35,6 +35,14 @@ public:
             return node;
         }
         if (!apply.Arg(1).Maybe<TDqCnUnionAll>()) {
+            // A provider read is not a pure literal input. Wait until its
+            // optimizer exposes the DQ connection, otherwise the read may turn
+            // into a nested DqCnUnionAll inside a zero-input stage program.
+            if (FindNode(apply.Arg(1).Ptr(), [](const TExprNode::TPtr& input) {
+                    return TCoDataSource::Match(input.Get());
+                })) {
+                return node;
+            }
             const auto input = DqBuildPureExprStage(apply.Arg(1), ctx);
             if (input.Ptr() != apply.Arg(1).Ptr()) {
                 return TExprBase(ctx.ChangeChild(apply.Ref(), 1, input.Ptr()));

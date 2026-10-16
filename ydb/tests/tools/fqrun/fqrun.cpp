@@ -746,9 +746,6 @@ private:
         if (!config.GetWasmServices().GetEnabled()) {
             return;
         }
-        Y_ENSURE(!ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Stream) &&
-                     !ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncStream),
-            "WASM services require analytical queries (-C analytics or -C async-analytics); streaming is unsupported");
         const NFq::TComputeConfig compute(config.GetCompute());
         // Also validate daemon-only startup, which can receive queries over gRPC.
         for (size_t i = 0; i < std::max<size_t>(1, ExecutionOptions.Queries.size()); ++i) {

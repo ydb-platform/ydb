@@ -3,6 +3,109 @@
 using namespace NFq::NWasmServices::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
+    Y_UNIT_TEST(StreamingBarriersWaitForNetworkAndOutputBackpressure) {
+        THttpMock http;
+        TGrpcMock grpc;
+        for (const auto bindingIndex : { 2, 3 }) {
+            TQueryTransformEnv env(Bindings(http, grpc)[bindingIndex]);
+            auto state = bindingIndex == 2 ? http.State : grpc.State;
+            env.Start({ 42 }, false);
+            state->Wait();
+            env.Setup.Execute([](NYql::NDq::TFakeActor& actor) {
+                NYql::NDqProto::TWatermark watermark;
+                watermark.SetTimestampUs(123);
+                actor.DqAsyncOutput->SendDataWithWatermark(
+                    NKikimr::NMiniKQL::TUnboxedValueBatch{}, 0, watermark, NYql::NDq::CreateCheckpoint(7), false);
+                UNIT_ASSERT_VALUES_EQUAL(actor.DqAsyncOutput->GetFreeSpace(), 0);
+            });
+            {
+                std::lock_guard lock(env.Output->Mutex);
+                UNIT_ASSERT(env.Output->Events.empty());
+            }
+            env.Output->Blocked = true;
+            state->Reply(0, bindingIndex == 2 ? TString(R"({"id":42,"name":"Ada","score":97,"version":1})") : GrpcProfilePayload(),
+                bindingIndex == 2 ? 200 : 0);
+            // A blocked consumer cannot receive either rows or control records.
+            env.Setup.Execute([](NYql::NDq::TFakeActor& actor) {
+                actor.DqAsyncOutput->OnOutputConsumerReady();
+            });
+            {
+                std::lock_guard lock(env.Output->Mutex);
+                UNIT_ASSERT(env.Output->Events.empty());
+            }
+            env.Output->Blocked = false;
+            env.Setup.Execute([](NYql::NDq::TFakeActor& actor) {
+                actor.DqAsyncOutput->OnOutputConsumerReady();
+            });
+            Eventually([&] {
+                std::lock_guard lock(env.Output->Mutex);
+                return env.Output->Events.size() == 3;
+            });
+            env.Setup.Execute([](NYql::NDq::TFakeActor& actor) {
+                UNIT_ASSERT(actor.DqAsyncOutput->GetFreeSpace() > 0);
+                actor.DqAsyncOutput->CommitState(NYql::NDq::CreateCheckpoint(7));
+                actor.DqAsyncOutput->CommitState(NYql::NDq::CreateCheckpoint(7));
+            });
+            env.Start({}, true);
+            Eventually([&] {
+                return env.Output->Finished.load();
+            });
+            // DQ also propagates subsequent checkpoints through finished branches.
+            env.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(8), true);
+            Eventually([&] {
+                std::lock_guard lock(env.Output->Mutex);
+                return env.Output->Events.size() == 5;
+            });
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(
+                env.Output->Events, (TVector<TString>{ "row:42", "watermark:123", "checkpoint:7", "finish", "checkpoint:8" }));
+        }
+    }
+
+    Y_UNIT_TEST(StreamingZeroCheckpointAndFreshCompartmentOnReplay) {
+        THttpMock http;
+        TGrpcMock grpc;
+        auto binding = Bindings(http, grpc)[2];
+        {
+            TQueryTransformEnv env(binding);
+            env.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(0));
+            Eventually([&] {
+                std::lock_guard lock(env.Output->Mutex);
+                return env.Output->Events.size() == 1;
+            });
+            env.Start({ 42 }, false);
+            http.State->Wait();
+            env.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(1));
+            // Kill the compartment with a pending RPC and barrier.
+            env.Setup.Terminate();
+            std::lock_guard lock(env.Output->Mutex);
+            UNIT_ASSERT_VALUES_EQUAL(env.Output->Events, (TVector<TString>{ "checkpoint:0" }));
+        }
+        TQueryTransformEnv restored(binding);
+        restored.Setup.LoadSink({}, NYql::NDq::CreateCheckpoint(0));
+        restored.Start({ 42 }, false);
+        http.State->Wait(1);
+        // The response to the previous execution cannot publish into the new one.
+        http.State->Reply(0, R"({"id":42,"name":"old","score":1,"version":1})", 200);
+        http.State->Reply(1, R"({"id":42,"name":"Ada","score":97,"version":1})", 200);
+        restored.Setup.AsyncOutputWrite([](auto&) {
+            return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+        }, NYql::NDq::CreateCheckpoint(1), true);
+        Eventually([&] {
+            return restored.Output->Finished.load();
+        });
+        std::lock_guard lock(restored.Output->Mutex);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Rows[0].Score, 97);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Output->Events, (TVector<TString>{ "row:42", "checkpoint:1", "finish" }));
+    }
+
     Y_UNIT_TEST(StoreAcceptsModulesLoadedAfterFactoryStartup) {
         THttpMock http;
         TGrpcMock grpc;

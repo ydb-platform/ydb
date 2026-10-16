@@ -206,6 +206,17 @@ struct IDqComputeActorAsyncOutput {
     virtual void SendData(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) = 0;
 
+    // Ordered control records for transforms. Existing sinks discard watermarks.
+    // The order is batch, watermark, checkpoint, finish. An asynchronous transform
+    // must preserve it when publishing to its downstream consumer.
+    virtual void SendDataWithWatermark(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 dataSize,
+        const TMaybe<NDqProto::TWatermark>& watermark, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) {
+        if (watermark && batch.empty() && !checkpoint && !finished) {
+            return;
+        }
+        SendData(std::move(batch), dataSize, checkpoint, finished);
+    }
+
     // Checkpointing.
 
     // Apply side effects related to this checkpoint. Should call ICallbacks::OnAsyncOutputStateCommitted() when state was committed.

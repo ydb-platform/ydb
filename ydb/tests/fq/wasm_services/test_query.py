@@ -416,3 +416,15 @@ def test_small_buffer_empty_strings(client, services, yq_version, batch_config):
     client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
     assert len(client.get_result_data(query_id).result.result_set.rows) == 3
     assert len(services.requests) == 3
+
+
+@yq_v1
+def test_projection_after_external_transform(client, services, yq_version):
+    # Projection and filtering use the output schema, not the transform input (id).
+    sql = query('profiles_http').replace(
+        'SELECT id, name, score FROM $profiles;', 'SELECT score FROM $profiles WHERE score > 90u;')
+    query_id = start(client, sql)
+    client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+    rows = client.get_result_data(query_id).result.result_set.rows
+    assert len(rows) == 1 and rows[0].items[0].uint32_value == 97
+    assert len(services.requests) == 1

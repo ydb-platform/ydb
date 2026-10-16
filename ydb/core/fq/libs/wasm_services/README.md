@@ -1,7 +1,7 @@
 # Experimental FQ WASM service integration
 
 This directory contains service-independent native HTTP/gRPC clients and an
-analytical FQ/DQ output transform. Concrete adapters live in `ydb/udfs/wasm`:
+analytical and append-only streaming FQ/DQ output transform. Concrete adapters live in `ydb/udfs/wasm`:
 `profile` owns its JSON/protobuf contracts and decoding; `echo` is a second
 module with different input/output schemas and two methods. Adding a module
 does not require modifying this transform or the coroutine runtime.
@@ -131,7 +131,9 @@ priority is unchanged. Only connections referenced by output transforms are
 sent to compute actors through the existing private `SecureParams` channel;
 credentials are not added to saved graphs, public AST/plans or guest buffers.
 Modifying a connection affects subsequently submitted queries, not an already
-running query's snapshot. Streaming connections remain disabled for this type.
+running query's snapshot. For streaming, also allow `EXTERNAL_SERVICE` in an
+explicit `AvailableStreamingConnection` list; an empty list inherits
+`AvailableConnection` according to the existing FQ configuration rule.
 
 `MaxBatchRows` zero/one selects scalar mode; 2..64 requests batching. Selected
 methods must declare batch support. Cardinality is capped by the method limit,
@@ -260,10 +262,20 @@ installation's config/storage unchanged. The installed binary must point to
 the current build. Example-module build/regeneration commands are documented
 in `ydb/udfs/wasm/profile/README.md` and `ydb/udfs/wasm/echo/README.md`.
 
-This remains opt-in analytical FQ/DQ v1, not KQP/YQv2, synchronous robust UDF
-calls or the production WASM object ABI. Streaming/checkpoints, nested/optional
-row types, Arrow, parallel batches, automatic retries and replay guarantees
-are not implemented. Service-account credentials/refresh, connection-aware pooling and production
+Streaming FQ/DQ v1 uses the same `EXTERNAL FUNCTION` operator with a STREAMING
+query and Topic sources/sinks. The transform drains pre-barrier rows asynchronously,
+then forwards watermark/checkpoint/finish in order. DQ owns checkpoint storage and
+recovery; the transform has no serialized state, compartment, or socket handles.
+After recovery the source replays uncheckpointed events into a fresh compartment.
+External RPCs may repeat or return different results; the service owns idempotency.
+Modules are not pinned: a new transform may load updated code from UDF Store.
+Existing call deadlines, backpressure, quotas and error reporting still apply.
+
+`test_streaming.py` covers Topic -> HTTP/gRPC enrichment -> Topic, checkpoints with
+pending RPCs and actual compute-process restart. Local fqrun loading stays unchanged.
+This does not add KQP/YQv2, gRPC streaming, synchronous robust UDF calls or the
+production WASM object ABI. Nested/optional row types, Arrow, parallel batches,
+automatic per-call retries and exactly-once external effects are not implemented. Service-account credentials/refresh, connection-aware pooling and production
 tenant resource accounting
 remain separate gates. Arbitrary service endpoints need an operator-controlled
 egress policy before enabling this on shared production tenants. This does not

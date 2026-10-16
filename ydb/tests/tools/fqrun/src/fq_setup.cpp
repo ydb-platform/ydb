@@ -120,6 +120,11 @@ private:
             if (Find(storage->GetAvailableConnection(), "EXTERNAL_SERVICE") == storage->GetAvailableConnection().end()) {
                 storage->AddAvailableConnection("EXTERNAL_SERVICE");
             }
+            // An empty streaming list inherits AvailableConnection in FQ.
+            if (storage->AvailableStreamingConnectionSize() &&
+                Find(storage->GetAvailableStreamingConnection(), "EXTERNAL_SERVICE") == storage->GetAvailableStreamingConnection().end()) {
+                storage->AddAvailableStreamingConnection("EXTERNAL_SERVICE");
+            }
         }
 
         const TString endpoint = TStringBuilder() << "localhost:" << grpcPort;

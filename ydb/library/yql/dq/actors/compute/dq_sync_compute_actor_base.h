@@ -237,7 +237,11 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         }
 
         for (const auto& [outputIndex, sink] : this->SinksMap) {
-            sink.Buffer->Push(NDqProto::TCheckpoint(checkpoint));
+            // A transform forwards its barrier after all preceding results.
+            // Injecting directly into its sink would bypass those pending rows.
+            if (!this->OutputTransformsMap.contains(outputIndex)) {
+                sink.Buffer->Push(NDqProto::TCheckpoint(checkpoint));
+            }
         }
 
         for (const auto& [outputIndex, transform] : this->OutputTransformsMap) {

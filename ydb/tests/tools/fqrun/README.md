@@ -71,10 +71,11 @@ it, existing routing is preserved (the bundled config routes analytics to YDB).
 
 ## WASM service adapters
 
-The experimental service adapters run in analytical FQ/DQ in-place execution.
-Use `-C analytics --compute=in-place`; `async-analytics` can submit concurrent
-queries. This is separate from native UDF loading with `--udf`/`--udfs-dir`.
-Streaming/checkpoints and YDB/KQP compute are unsupported for this integration.
+The experimental service adapters run in analytical and append-only streaming
+FQ/DQ in-place execution. Use `-C analytics --compute=in-place` or `-C stream`;
+`async-analytics` and `async-stream` can submit concurrent queries. This is
+separate from native UDF loading with `--udf`/`--udfs-dir`. YDB/KQP compute is
+unsupported for this integration.
 
 Configure modules and limits in the existing `--cfg` application configuration:
 
@@ -388,8 +389,16 @@ invalid HTTP response. Stop the mock with Ctrl-C after finishing the examples.
 
 To build new guest artifacts see `ydb/udfs/wasm/profile/README.md` and
 `ydb/udfs/wasm/echo/README.md`; the manifest and module must agree on the service
-ABI. Object-style SQL, cache/singleflight and streaming recovery
-remain separate steps of the service-adapter RFC.
+ABI. Object-style SQL and cache/singleflight remain separate steps of the RFC.
+
+For streaming use `-C stream` (or `-C async-stream`) with `--compute=in-place`.
+Add `--checkpoints-db` to enable the existing checkpoint coordinator with the
+local database, or `--checkpoints-db=database@endpoint` for an external database.
+Local WASM loading is unchanged. A durable recovery setup also needs persistent
+control-plane/checkpoint storage and retained query identity; restarting an
+ordinary ephemeral fqrun process alone is not a recovery procedure.
+The common transform forwards barriers after pending results; external calls may
+repeat after DQ recovery and service-side idempotency remains the service's responsibility.
 
 ### Verification
 

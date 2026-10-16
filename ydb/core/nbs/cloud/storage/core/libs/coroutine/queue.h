@@ -137,6 +137,12 @@ public:
 
         return false;
     }
+
+    // Pop one item when the queue is not empty. Does not wait.
+    bool TryDequeue(T* item)
+    {
+        return Queue.Dequeue(item);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

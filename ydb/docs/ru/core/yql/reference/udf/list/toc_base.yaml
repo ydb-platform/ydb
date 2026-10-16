@@ -15,5 +15,6 @@ items:
 - { name: Re2,                    href: re2.md }
 - { name: String,                 href: string.md }
 - { name: Unicode,                href: unicode.md }
+- { name: Uuid,                   href: uuid.md }
 - { name: Url,                    href: url.md }
 - { name: Yson,                   href: yson.md }

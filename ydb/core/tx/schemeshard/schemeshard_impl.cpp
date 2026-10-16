@@ -5915,6 +5915,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = appData->FeatureFlags.GetEnableDataErasure();
     EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
+    SmallBlobsQuotaConfig = appData->SmallBlobsQuotaConfig;
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -8896,6 +8897,7 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
             (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
             (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
             (ui32)NKikimrConsole::TConfigItem::QueryServiceConfigItem,
+            (ui32)NKikimrConsole::TConfigItem::SmallBlobsQuotaConfigItem,
         }),
         IEventHandle::FlagTrackDelivery
     );
@@ -8961,6 +8963,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureExternalSources(queryServiceConfig, ctx);
     }
 
+    if (appConfig.HasSmallBlobsQuotaConfig()) {
+        ApplySmallBlobsQuotaConfig(appConfig.GetSmallBlobsQuotaConfig(), ctx);
+    }
+
     if (appConfig.HasAuthConfig()) {
         ConfigureLoginProvider(appConfig.GetAuthConfig(), ctx);
         ConfigureAccountLockout(appConfig.GetAuthConfig(), ctx);
@@ -8973,6 +8979,28 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         }
 
         StartStopShred();
+    }
+}
+
+void TSchemeShard::ApplySmallBlobsQuotaConfig(const NKikimrConfig::TSmallBlobsQuotaConfig& config, const TActorContext& ctx) {
+    if (SmallBlobsQuotaConfig.SerializeAsString() == config.SerializeAsString()) {
+        return;
+    }
+
+    TVector<std::pair<TSubDomainInfo::TPtr, TSubDomainInfo::TSmallBlobsQuotas>> prevQuotas;
+    prevQuotas.reserve(SubDomains.size());
+    for (const auto& [_, domainInfo] : SubDomains) {
+        prevQuotas.emplace_back(domainInfo, domainInfo->GetSmallBlobsQuotas());
+    }
+
+    YDB_LOG_NOTICE_CTX(ctx, "ApplyConsoleConfigs: SmallBlobsQuotaConfig has been changed",
+        {"oldValue", SmallBlobsQuotaConfig.ShortDebugString()},
+        {"newValue", config.ShortDebugString()},
+    );
+    SmallBlobsQuotaConfig = config;
+
+    for (const auto& [domainInfo, prev] : prevQuotas) {
+        domainInfo->CountSmallBlobsQuotas(this, prev, domainInfo->GetSmallBlobsQuotas());
     }
 }
 

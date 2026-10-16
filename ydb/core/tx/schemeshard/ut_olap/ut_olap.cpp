@@ -2045,6 +2045,41 @@ Y_UNIT_TEST_SUITE(TOlap) {
         StoreStatsSmallBlobsQuotaImpl(/*checkCount=*/false);
     }
 
+    // 10 TiB disk hard quota makes SmallBlobsStorageUnits == 1, so per-10TiB config values are the quotas.
+    Y_UNIT_TEST(SmallBlobsQuotaConfigFromConsole) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "SomeDatabase"
+            DatabaseQuotas {
+                data_size_hard_quota: 10995116277760
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeHardQuotaBytes", 1073741824);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCountHardQuota", 5000000);
+
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto* quota = request->Record.MutableConfig()->MutableSmallBlobsQuotaConfig();
+        quota->SetVolumeBytesPer10TiB(2147483648);
+        quota->SetCountPer10TiB(1000);
+        quota->SetSoftRatio(0.5);
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
+
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeHardQuotaBytes", 2147483648);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCountHardQuota", 1000);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeSoftQuotaBytes", 1073741824);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCountSoftQuota", 500);
+
+        // A notification that does not carry this item must leave the applied config in place.
+        SetConfig(runtime, TTestTxConfig::SchemeShard, MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>());
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsVolumeHardQuotaBytes", 2147483648);
+        CheckSimpleCounter(runtime, "SchemeShard/SmallBlobsCountHardQuota", 1000);
+    }
+
     Y_UNIT_TEST(DropColumnTableResetsSmallBlobsCounters) {
         TTestBasicRuntime runtime;
 

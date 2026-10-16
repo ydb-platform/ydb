@@ -15,6 +15,7 @@ from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 import ydb.public.api.protos.ydb_config_pb2 as config
+from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,9 @@ class TestBridgeConversion(object):
             if read_resp.operation.status != StatusIds.SUCCESS:
                 logger.debug("kv_read failed: %s", read_resp)
                 return False
+            result = ReadResult()
+            assert_that(read_resp.operation.result.Unpack(result))
+            assert_that(result.value.decode("utf-8") == value_for(key, tablet_id))
         return True
 
     def get_cluster_state(self):

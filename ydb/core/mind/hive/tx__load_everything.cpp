@@ -382,6 +382,13 @@ public:
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
                 node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                if (!node.BridgePileId && Self->BridgeInfo && Self->BridgeInfo->Piles.size() == 1) {
+                    // node was registered before the cluster got its single-pile bridge config (it is being converted into
+                    // bridged one), so it implicitly belongs to the only pile; its Local may survive Hive restart and
+                    // register again without the change of actor id, so the pile is assigned here
+                    node.BridgePileId = TBridgePileId::FromPileIndex(0);
+                    db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                }
                 node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();

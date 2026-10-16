@@ -1,4 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -13,11 +15,12 @@ namespace {
         return TNodeLocation(location);
     }
 
-    TEnvironmentSetup::TSettings MakeSettings() {
+    TEnvironmentSetup::TSettings MakeSettings(bool setupHive = false) {
         return {
             .NodeCount = 9, // one spare node to make disk reassignment possible
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .LocationGenerator = GetLocation,
+            .SetupHive = setupHive,
             .SelfManagementConfig = true,
             .AutomaticBootstrap = true,
         };
@@ -42,6 +45,16 @@ namespace {
             });
             auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+            Written.emplace_back(groupId, id, data);
+        }
+
+        // send put without waiting for its result, which is to be checked by the caller
+        void SendPut(ui32 groupId, TActorId edge) {
+            const TString data = TStringBuilder() << "data for step " << Step;
+            const TLogoBlobID id(100500, 1, Step++, 0, data.size(), 0);
+            Env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
             Written.emplace_back(groupId, id, data);
         }
 
@@ -324,6 +337,221 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             env.Sim(TDuration::Seconds(30));
             checkThroughBridgeProxy(nodeId);
         }
+    }
+
+    // puts batched by the DS proxy before the bridge proxy is put in front of it must not be processed by the DS proxy
+    // itself with the inline pile view, as they have no forced generation
+    void BatchedPutDuringConversion(ui32 numPuts) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        const ui32 nodeId = 1;
+        const TActorId dsProxyId = env.Runtime->GetNode(nodeId)->ActorSystem->LookupLocalService(
+            MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(dsProxyId);
+
+        // hold the event making DS proxy stop batching puts until it gets the inline pile view of the group
+        bool holdStopBatching = true;
+        bool inlineViewConfigured = false;
+        std::vector<std::unique_ptr<IEventHandle>> held;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() != dsProxyId) {
+                return true;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
+                const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                if (info && !info->IsBridged() && info->GetBridgeProxyGroupId() == TGroupId::FromValue(groupId)) {
+                    inlineViewConfigured = true;
+                }
+            } else if (holdStopBatching && ev->Sender == dsProxyId && ev->GetTypeName().Contains("TEvStopBatchingPutRequests")) {
+                held.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        for (ui32 i = 0; i < numPuts; ++i) {
+            checker.SendPut(groupId, edge);
+        }
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(held.size(), 1);
+
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(1);
+        env.Runtime->Sim([&] { return !inlineViewConfigured && env.Runtime->GetClock() <= deadline; });
+        UNIT_ASSERT(inlineViewConfigured);
+        env.Sim(TDuration::Seconds(5)); // let DS proxy return to working state with the inline pile view
+
+        holdStopBatching = false;
+        for (auto& ev : held) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        for (ui32 i = 0; i < numPuts; ++i) {
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        }
+
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        checker.Write(groupId);
+        for (ui32 nodeId : env.Runtime->GetNodes()) {
+            checker.CheckAll(nodeId);
+        }
+    }
+
+    Y_UNIT_TEST(BatchedPutDuringConversion) {
+        BatchedPutDuringConversion(1);
+    }
+
+    Y_UNIT_TEST(BatchOfPutsDuringConversion) {
+        BatchedPutDuringConversion(3);
+    }
+
+    // static node not reporting its bridge capability (being disconnected) may still run without BridgeConfig, so it
+    // must block conversion
+    Y_UNIT_TEST(AbsentStaticNodeBlocksConversion) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        // all nodes but the last one are prepared; the last one goes away while still running old settings
+        const auto nodes = env.Runtime->GetNodes();
+        std::vector<ui32> nodeIds(nodes.begin(), nodes.end());
+        const ui32 absentNodeId = nodeIds.back();
+        nodeIds.pop_back();
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId, nodeIds);
+        env.StopNode(absentNodeId);
+        env.Sim(TDuration::Seconds(30));
+
+        auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            res.GetErrorReason());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "did not report");
+        UNIT_ASSERT(!QueryStorageConfig(env).HasClusterState());
+        checker.Write(groupId);
+
+        // the node returns with new settings, so the cluster may be converted now
+        env.StartNode(absentNodeId);
+        env.Sim(TDuration::Seconds(30));
+        res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        checker.Write(groupId, absentNodeId);
+        checker.CheckAll(absentNodeId);
+        checker.CheckAll();
+    }
+
+    // node that runs without BridgeConfig after the conversion (e.g. dynamic one missed by capability check) must not
+    // crash when serving bridged group, it just can't serve such groups until restarted with BridgeConfig
+    Y_UNIT_TEST(NodeWithoutBridgeConfigAfterConversion) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+
+        // restart one node without bridge config
+        const ui32 nodeId = 2;
+        auto& bridgeConfig = env.Runtime->GetAppDataBridgeConfig();
+        const NKikimrConfig::TBridgeConfig saved = bridgeConfig;
+        bridgeConfig.Clear();
+        env.RestartNode(nodeId);
+        bridgeConfig = saved;
+        env.Sim(TDuration::Seconds(30));
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        const TString data = "data written through not prepared node";
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(TLogoBlobID(100501, 1, 1, 0, data.size(), 0), data,
+                TInstant::Max()));
+        });
+        auto putRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putRes->Get()->Status, NKikimrProto::ERROR, putRes->Get()->ToString());
+        UNIT_ASSERT_STRING_CONTAINS(putRes->Get()->ErrorReason, "BridgeConfig");
+
+        // other nodes keep working
+        checker.Write(groupId);
+        checker.CheckAll();
+
+        // and the node is fine after being restarted with bridge config
+        env.RestartNode(nodeId);
+        env.Sim(TDuration::Seconds(30));
+        checker.Write(groupId, nodeId);
+        checker.CheckAll(nodeId);
+    }
+
+    // Hive restarted on bridge-capable node must keep nodes registered before (and whose Local actors survived Hive
+    // restart) eligible for running tablets, as they implicitly belong to the only pile
+    Y_UNIT_TEST(HiveKeepsUntouchedNodesEligible) {
+        TEnvironmentSetup env(MakeSettings(true));
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        // restart only the node hosting Hive with bridge config; Locals on other nodes stay the same
+        const ui32 hiveNodeId = env.Settings.ControllerNodeId;
+        env.Runtime->GetAppDataBridgeConfig().AddPiles()->SetName("pile_1");
+        env.RestartNode(hiveNodeId);
+        env.Sim(TDuration::Seconds(30));
+
+        // create tablet that may run only on one of untouched nodes
+        const ui32 targetNodeId = 5;
+        UNIT_ASSERT_VALUES_UNEQUAL(targetNodeId, hiveNodeId);
+        const TActorId edge = env.Runtime->AllocateEdgeActor(hiveNodeId, __FILE__, __LINE__);
+        const TActorId clientId = env.Runtime->Register(NTabletPipe::CreateClient(edge, MakeDefaultHiveID(),
+            NTabletPipe::TClientRetryPolicy::WithRetries()), edge.NodeId());
+        {
+            auto res = env.WaitForEdgeActorEvent<TEvTabletPipe::TEvClientConnected>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        }
+        env.Runtime->WrapInActorContext(edge, [&] {
+            auto ev = std::make_unique<TEvHive::TEvCreateTablet>();
+            auto& record = ev->Record;
+            record.SetOwner(1);
+            record.SetOwnerIdx(1);
+            record.SetTabletType(TTabletTypes::BlobDepot);
+            record.AddAllowedNodeIDs(targetNodeId);
+            for (ui32 i = 0; i < 3; ++i) {
+                record.AddBindedChannels()->SetStoragePoolName(env.StoragePoolName);
+            }
+            NTabletPipe::SendData(edge, clientId, ev.release());
+        });
+        {
+            auto res = env.WaitForEdgeActorEvent<TEvHive::TEvCreateTabletReply>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Record.GetStatus(), NKikimrProto::OK, res->Get()->Record.ShortDebugString());
+        }
+        auto res = env.WaitForEdgeActorEvent<TEvHive::TEvTabletCreationResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Minutes(1));
+        UNIT_ASSERT_C(res, "tablet constrained to untouched node did not start");
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(ConvertStaticGroup) {

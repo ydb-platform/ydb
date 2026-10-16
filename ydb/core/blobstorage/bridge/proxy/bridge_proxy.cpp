@@ -657,6 +657,7 @@ namespace NKikimr {
 
         std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         TBridgeInfo::TPtr BridgeInfo;
+        bool NotCapableReported = false;
 
         std::deque<std::unique_ptr<IEventHandle>> PendingQ;
         std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>> PendingForNextGeneration;
@@ -717,7 +718,17 @@ namespace NKikimr {
 
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev) {
-            Y_ABORT_UNLESS(BridgeInfo);
+            if (!BridgeInfo) {
+                // this process runs without BridgeConfig, but the group is bridged one; this happens when the node was
+                // not prepared before the cluster got converted to bridged one, and it can't serve bridged groups until
+                // restarted with BridgeConfig
+                STLOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, BS_PROXY_BRIDGE, BPB04,
+                    "bridged group request on node running without BridgeConfig", (GroupId, GroupId));
+                NotCapableReported = true;
+                Send(ev->Sender, ev->Get()->MakeErrorResponse(NKikimrProto::ERROR,
+                    "node runs without BridgeConfig and can't serve bridged group", GroupId), 0, ev->Cookie);
+                return;
+            }
 
             std::unique_ptr<TEvent> evPtr(ev->Release().Release());
             const TEvent& originalRequest = *evPtr;

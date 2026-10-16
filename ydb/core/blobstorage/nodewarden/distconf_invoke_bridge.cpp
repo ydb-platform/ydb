@@ -326,7 +326,10 @@ namespace NKikimr::NStorage {
         }
 
         // nodes running without BridgeConfig won't be able to work in bridged cluster, so ensure there are none of them
-        // among static nodes and dynamic nodes connected to them
+        // among static nodes and dynamic nodes connected to them; every configured static node must positively report
+        // its capability, as the one being temporarily disconnected may still run without BridgeConfig and return
+        // after the conversion; dynamic nodes can't be enumerated this way, the ones that are missed here can't serve
+        // bridged groups until restarted with BridgeConfig
         TEvScatter task;
         task.MutableCollectBridgeCapability();
         IssueScatterTask(std::move(task), [this](TEvGather *res) {
@@ -337,16 +340,34 @@ namespace NKikimr::NStorage {
 
             const THashSet<ui32> capable(response.GetCapableNodeIds().begin(), response.GetCapableNodeIds().end());
             std::set<ui32> notCapable(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
-            for (const auto& [node, _] : Self->AllBoundNodes) {
-                if (!capable.contains(node.NodeId())) {
-                    notCapable.insert(node.NodeId()); // node of older version that does not report anything
+            std::set<ui32> unknown;
+            for (const auto& node : Self->StorageConfig->GetAllNodes()) {
+                if (const ui32 nodeId = node.GetNodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId)) {
+                    unknown.insert(nodeId); // node is not connected or runs older version that doesn't report anything
                 }
             }
-            if (!notCapable.empty()) {
+            for (const auto& [node, _] : Self->AllBoundNodes) {
+                if (const ui32 nodeId = node.NodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId)) {
+                    unknown.insert(nodeId);
+                }
+            }
+            if (!notCapable.empty() || !unknown.empty()) {
                 TStringBuilder err;
-                err << "Some nodes are running without BridgeConfig NodeIds#";
-                for (const ui32 nodeId : notCapable) {
-                    err << ' ' << nodeId;
+                if (!notCapable.empty()) {
+                    err << "Some nodes are running without BridgeConfig NodeIds#";
+                    for (const ui32 nodeId : notCapable) {
+                        err << ' ' << nodeId;
+                    }
+                }
+                if (!unknown.empty()) {
+                    if (!notCapable.empty()) {
+                        err << "; ";
+                    }
+                    err << "Some static nodes did not report their BridgeConfig, they must be running and connected"
+                        " NodeIds#";
+                    for (const ui32 nodeId : unknown) {
+                        err << ' ' << nodeId;
+                    }
                 }
                 throw TExError() << err;
             }

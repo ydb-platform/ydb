@@ -1765,6 +1765,8 @@ public:
         auto* cursor = batch.DownloadStateAfter.MutableYsonGzip();
         cursor->SetVersion(1);
         cursor->SetCommittedRows(SeenRows);
+        // All rows may be committed before gzip CRC, YSON EOF and row count are
+        // validated. Finished persists that validation in a possibly zero-row checkpoint.
         cursor->SetFinished(Finished);
         Waiting = batch;
         return TDataResult{.Status = EDataStatus::Ready, .Batch = batch};

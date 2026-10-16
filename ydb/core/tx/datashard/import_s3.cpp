@@ -476,7 +476,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 return RetryOrFinish(result.GetError(), dataKey);
             }
 
-            if (DataFormatSelected) {
+            if (!AllowDataFileFallback) {
                 return RetryOrFinish(result.GetError(), dataKey);
             }
 
@@ -498,11 +498,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return HeadObject(GetDataKey());
         }
 
+        // S3 objects can be replaced after planning. Import only the pinned object,
+        // including when a retry or tablet restart downloads it again.
         if (YtSource && (result.GetResult().GetETag() != YtPart->GetETag()
             || static_cast<ui64>(result.GetResult().GetContentLength()) != YtPart->GetContentLength())) {
             return Finish(false, "YT source object does not match the completed import plan");
         }
-        DataFormatSelected = true;
+        AllowDataFileFallback = false;
         if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet
             && !AppData()->FeatureFlags.GetEnableImportInParquet()) {
             return Finish(false, "Parquet import is disabled by feature flag EnableImportInParquet");
@@ -1237,6 +1239,7 @@ public:
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::YdbDump)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
+        , AllowDataFileFallback(!task.HasYtImport())
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
         , Retries(task.GetNumberOfRetries())
@@ -1249,9 +1252,6 @@ public:
         , YtSource(task.HasYtImport())
         , YtPart(task.GetYtImport().HasPart() ? TMaybe<NKikimrSchemeOp::TYtImportPart>(task.GetYtImport().GetPart()) : Nothing())
     {
-        if (YtSource) {
-            DataFormatSelected = true;
-        }
     }
 
     void Bootstrap() {
@@ -1366,7 +1366,7 @@ private:
     const TStorageSettings Settings;
     NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
-    bool DataFormatSelected = false;
+    bool AllowDataFileFallback;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
     TMaybe<TNotNullColumns> NotNullColumns; // set by the first row: the scheme is checked by then

@@ -3011,7 +3011,8 @@ value {
             size_t resultFileSize,
             size_t readBatchSize,
             bool compressed,
-            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None)
+            EEncryptedImportRebootMode rebootMode = EEncryptedImportRebootMode::None,
+            size_t finalReadSize = 0)
     {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
@@ -3024,6 +3025,10 @@ value {
 
         const auto [lines, contentLength] = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
         UNIT_ASSERT_GT(contentLength, 0);
+        if (finalReadSize) {
+            UNIT_ASSERT_GT(contentLength, 2 * finalReadSize);
+            readBatchSize = contentLength - finalReadSize;
+        }
 
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
@@ -3047,6 +3052,7 @@ value {
 
         bool wholeFileRead = false;
         bool readyToReboot = false;
+        bool restoreSucceeded = false;
         ui32 rebootCount = 0;
 
         if (rebootMode != EEncryptedImportRebootMode::None) {
@@ -3072,6 +3078,19 @@ value {
                         readyToReboot = true;
                     }
                     break;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+
+        if (finalReadSize) {
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvDataShard::EvSchemaChanged) {
+                    const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+                    if (record.GetTxId() == txId && record.HasOpResult()) {
+                        UNIT_ASSERT_C(record.GetOpResult().GetSuccess(), record.ShortDebugString());
+                        restoreSucceeded = true;
+                    }
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
@@ -3135,8 +3154,18 @@ value {
 
         env.TestWaitNotification(runtime, txId);
 
+        if (finalReadSize) {
+            UNIT_ASSERT(restoreSucceeded);
+        }
         const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+    }
+
+    Y_UNIT_TEST_TWIN(ImportEncryptedFileWithSeparateTerminator, Compressed) {
+        for (size_t finalReadSize = 1; finalReadSize <= 20; ++finalReadSize) {
+            ImportBigEncryptedFile(555_B, 2_KB, 8_KB, Compressed,
+                EEncryptedImportRebootMode::None, finalReadSize);
+        }
     }
 
     Y_UNIT_TEST(ImportBigEncryptedFileWithRebootAfterLastPortion) {

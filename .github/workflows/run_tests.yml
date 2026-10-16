@@ -379,6 +379,8 @@ jobs:
           fi
       - name: Checkout ${{ matrix.branch }}
         uses: actions/checkout@v5
+        env:
+          GIT_TRACE: "1"
         with:
           ref: ${{ matrix.branch }}
 

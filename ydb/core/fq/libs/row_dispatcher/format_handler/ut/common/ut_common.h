@@ -3,17 +3,25 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/library/testlib/common/test_with_actor_system.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+
+#include <functional>
 
 namespace NFq::NRowDispatcher::NTests {
 
 static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(20);
 
-class TBaseFixture : public NTestUtils::TTestWithActorSystemFixture, public TTypeParser {
-    using TBase = NTestUtils::TTestWithActorSystemFixture;
+class TFormatHandlerTestRuntime : public NActors::TTestActorRuntimeBase {
+public:
+    TFormatHandlerTestRuntime();
+
+protected:
+    void InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) override;
+};
+
+class TBaseFixture : public NUnitTest::TBaseFixture, public TTypeParser {
 
 public:
     // Helper classes for checking serialized rows in multi type format
@@ -70,7 +78,18 @@ public:
 public:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemoryInfo;
     std::unique_ptr<NKikimr::NMiniKQL::THolderFactory> HolderFactory;
+
+protected:
+    TFormatHandlerTestRuntime Runtime;
+
+private:
+    std::unique_ptr<NActors::TMailbox> Mailbox;
+    std::unique_ptr<NActors::TExecutorThread> ExecutorThread;
+    std::unique_ptr<NActors::TActorContext> ActorCtx;
+    NActors::TActivationContext* PrevActorCtx = nullptr;
 };
+
+void WaitFor(TDuration timeout, const TString& description, std::function<bool()> predicate);
 
 NActors::IActor* CreatePurecalcCompileServiceMock(NActors::TActorId owner, const TDuration& responseDelay = {});
 

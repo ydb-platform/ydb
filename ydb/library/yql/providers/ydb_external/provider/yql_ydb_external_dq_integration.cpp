@@ -1,15 +1,15 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "yql_ydb_external_provider_impl.h"
-
-#include <library/cpp/json/json_value.h>
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/mkql/parser.h>
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb_external/proto/source.pb.h>
-#include <yql/essentials/core/yql_opt_utils.h>
+
+#include <library/cpp/json/json_value.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 
 namespace NYql::NYdbExternal {
@@ -17,7 +17,7 @@ namespace {
 
 using namespace NNodes;
 
-class TDqIntegration final : public TDqIntegrationBase {
+class TDqIntegration final: public TDqIntegrationBase {
 public:
     explicit TDqIntegration(TState::TPtr state)
         : State_(std::move(state))
@@ -42,7 +42,8 @@ public:
             return node;
         }
         const TYdbExternalReadTable read(node);
-        const auto* row = node->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto* row =
+            node->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         TExprNode::TListType columns;
         for (const auto* item : row->GetItems()) {
             columns.emplace_back(ctx.NewAtom(node->Pos(), item->GetName()));
@@ -110,14 +111,13 @@ public:
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
-        compiler.ChainCallable(TDqSourceWideBlockWrap::CallableName(),
-            [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
-                const TDqSourceWideBlockWrap wrapper(&node);
-                if (wrapper.DataSource().Category().Value() == YdbExternalProviderName) {
-                    return *TryWrapWithParserForArrowIPCStreaming(wrapper, ctx);
-                }
-                return NKikimr::NMiniKQL::TRuntimeNode();
-            });
+        compiler.ChainCallable(TDqSourceWideBlockWrap::CallableName(), [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            const TDqSourceWideBlockWrap wrapper(&node);
+            if (wrapper.DataSource().Category().Value() == YdbExternalProviderName) {
+                return *TryWrapWithParserForArrowIPCStreaming(wrapper, ctx);
+            }
+            return NKikimr::NMiniKQL::TRuntimeNode();
+        });
     }
 
     bool FillSourcePlanProperties(const TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
@@ -142,10 +142,10 @@ private:
     const TState::TPtr State_;
 };
 
-} // namespace
+}   // namespace
 
 THolder<IDqIntegration> CreateDqIntegration(TState::TPtr state) {
     return MakeHolder<TDqIntegration>(std::move(state));
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

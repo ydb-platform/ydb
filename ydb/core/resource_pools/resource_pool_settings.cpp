@@ -2,7 +2,6 @@
 
 #include <util/string/builder.h>
 
-
 namespace NKikimr::NResourcePool {
 
 //// TPoolSettings::TParser
@@ -17,7 +16,8 @@ void TPoolSettings::TParser::operator()(i32* setting) const {
 void TPoolSettings::TParser::operator()(TDuration* setting) const {
     ui64 seconds = FromString<ui64>(Value);
     if (seconds > std::numeric_limits<ui64>::max() / 1000) {
-        throw yexception() << "Invalid seconds value " << seconds << ", it is should be less or equal than " << std::numeric_limits<ui64>::max() / 1000;
+        throw yexception() << "Invalid seconds value " << seconds << ", it is should be less or equal than "
+                           << std::numeric_limits<ui64>::max() / 1000;
     }
     *setting = TDuration::Seconds(seconds);
 }
@@ -48,25 +48,20 @@ TString TPoolSettings::TExtractor::operator()(TDuration* setting) const {
 TPoolSettings::TPoolSettings(const google::protobuf::Map<TString, TString>& properties) {
     for (auto& [property, value] : GetPropertiesMap()) {
         if (auto propertyIt = properties.find(property); propertyIt != properties.end()) {
-            std::visit(TPoolSettings::TParser{propertyIt->second}, value);
+            std::visit(TPoolSettings::TParser{ propertyIt->second }, value);
         }
     }
 }
 
 std::unordered_map<TString, TPoolSettings::TProperty> TPoolSettings::GetPropertiesMap(bool restricted) {
-    std::unordered_map<TString, TProperty> properties = {
-        {"concurrent_query_limit", &ConcurrentQueryLimit},
-        {"queue_size", &QueueSize},
-        {"query_memory_limit_percent_per_node", &QueryMemoryLimitPercentPerNode},
-        {"total_memory_limit_percent_per_node", &TotalMemoryLimitPercentPerNode},
-        {"database_load_cpu_threshold", &DatabaseLoadCpuThreshold},
-        {"total_cpu_limit_percent_per_node", &TotalCpuLimitPercentPerNode},
-        {"total_cpu_guarantee_percent_per_node", &TotalCpuGuaranteePercentPerNode},
-        {"query_cpu_limit_percent_per_node", &QueryCpuLimitPercentPerNode},
-        {"resource_weight", &ResourceWeight}
-    };
+    std::unordered_map<TString, TProperty> properties = { { "concurrent_query_limit", &ConcurrentQueryLimit }, { "queue_size", &QueueSize },
+        { "query_memory_limit_percent_per_node", &QueryMemoryLimitPercentPerNode },
+        { "total_memory_limit_percent_per_node", &TotalMemoryLimitPercentPerNode }, { "database_load_cpu_threshold", &DatabaseLoadCpuThreshold },
+        { "total_cpu_limit_percent_per_node", &TotalCpuLimitPercentPerNode },
+        { "total_cpu_guarantee_percent_per_node", &TotalCpuGuaranteePercentPerNode },
+        { "query_cpu_limit_percent_per_node", &QueryCpuLimitPercentPerNode }, { "resource_weight", &ResourceWeight } };
     if (!restricted) {
-        properties.insert({"query_cancel_after_seconds", &QueryCancelAfter});
+        properties.insert({ "query_cancel_after_seconds", &QueryCancelAfter });
     }
     return properties;
 }
@@ -85,10 +80,14 @@ std::optional<TString> TPoolSettings::Validate() const {
         return "Invalid resource pool configuration, resource_weight is not supported";
     }
     if (ConcurrentQueryLimit > POOL_MAX_CONCURRENT_QUERY_LIMIT) {
-        return TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;
+        return TStringBuilder() << "Invalid resource pool configuration, concurrent_query_limit is " << ConcurrentQueryLimit
+                                << ", that exceeds limit in " << POOL_MAX_CONCURRENT_QUERY_LIMIT;
     }
-    if (TotalCpuGuaranteePercentPerNode >= 0 && TotalCpuLimitPercentPerNode >= 0 && TotalCpuGuaranteePercentPerNode > TotalCpuLimitPercentPerNode) {
-        return TStringBuilder() << "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is " << TotalCpuGuaranteePercentPerNode << ", that exceeds total_cpu_limit_percent_per_node in " << TotalCpuLimitPercentPerNode;
+    if (TotalCpuGuaranteePercentPerNode >= 0 && TotalCpuLimitPercentPerNode >= 0 &&
+        TotalCpuGuaranteePercentPerNode > TotalCpuLimitPercentPerNode) {
+        return TStringBuilder() << "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is "
+                                << TotalCpuGuaranteePercentPerNode << ", that exceeds total_cpu_limit_percent_per_node in "
+                                << TotalCpuLimitPercentPerNode;
     }
     if (QueueSize != -1 && ConcurrentQueryLimit == -1 && DatabaseLoadCpuThreshold < 0.0) {
         return "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold";
@@ -96,4 +95,4 @@ std::optional<TString> TPoolSettings::Validate() const {
     return std::nullopt;
 }
 
-}  // namespace NKikimr::NResourcePool
+}   // namespace NKikimr::NResourcePool

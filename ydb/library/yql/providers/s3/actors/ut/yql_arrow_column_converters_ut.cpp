@@ -1,16 +1,13 @@
 #include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/deque.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <util/generic/deque.h>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
 
 #undef NO_SANITIZE_THREAD
 
@@ -23,8 +20,8 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 struct TTestFixture {
-    TScopedAlloc Alloc{__LOCATION__};
-    TTypeEnvironment Env{Alloc};
+    TScopedAlloc Alloc{ __LOCATION__ };
+    TTypeEnvironment Env{ Alloc };
     TDeque<TString> Names;
     std::unordered_map<TStringBuf, TType*, THash<TStringBuf>> RowTypes;
     NDB::FormatSettings Settings;
@@ -63,8 +60,8 @@ std::shared_ptr<arrow::Array> MakeArray(const std::vector<TValue>& values) {
 
 template <bool Nullable, typename TArrowType>
 void CheckTemporalToString(const std::shared_ptr<arrow::DataType>& sourceType, bool utf8, size_t length,
-    const std::vector<typename arrow::TypeTraits<TArrowType>::BuilderType::value_type>& values,
-    const std::vector<TString>& strings, bool withNulls = false)
+    const std::vector<typename arrow::TypeTraits<TArrowType>::BuilderType::value_type>& values, const std::vector<TString>& strings,
+    bool withNulls = false)
 {
     TTestFixture f;
     const auto typeId = utf8 ? NUdf::TDataType<NUdf::TUtf8>::Id : NUdf::TDataType<char*>::Id;
@@ -81,7 +78,8 @@ void CheckTemporalToString(const std::shared_ptr<arrow::DataType>& sourceType, b
     size_t nullCount = 0;
     auto isNull = [&](size_t i) {
         // Nulls immediately before and after the payload split, and in a later chunk.
-        return withNulls && (i == valuesPerChunk - 1 || i == valuesPerChunk || i == valuesPerChunk + 2 || i == valuesPerChunk + 4 || i == 2 * valuesPerChunk + 3);
+        return withNulls && (i == valuesPerChunk - 1 || i == valuesPerChunk || i == valuesPerChunk + 2 || i == valuesPerChunk + 4 ||
+                                i == 2 * valuesPerChunk + 3);
     };
     for (size_t i = 0; i < length; ++i) {
         if (isNull(i)) {
@@ -119,29 +117,29 @@ void CheckTemporalToString(const std::shared_ptr<arrow::DataType>& sourceType, b
         }
     }
     // Consumers require one array per column in a RecordBatch.
-    const auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("ts", targetType, Nullable)}), length, {output});
+    const auto batch = arrow::RecordBatch::Make(arrow::schema({ arrow::field("ts", targetType, Nullable) }), length, { output });
     UNIT_ASSERT(batch->ValidateFull().ok());
 }
 
 template <bool Nullable>
 void CheckTimestampToString(bool utf8, size_t length, bool withNulls = false) {
-    for (const auto unit : {arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO}) {
+    for (const auto unit : { arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO }) {
         const i64 scale = unit == arrow::TimeUnit::SECOND ? 1 : unit == arrow::TimeUnit::MILLI ? 1000 : 1000000;
         const i64 fraction = unit == arrow::TimeUnit::SECOND ? 0 : unit == arrow::TimeUnit::MILLI ? 123 : 123456;
         const TString fractionalText = unit == arrow::TimeUnit::SECOND ? "000000" : unit == arrow::TimeUnit::MILLI ? "123000" : "123456";
         CheckTemporalToString<Nullable, arrow::TimestampType>(arrow::timestamp(unit), utf8, length,
-            {1712059260 * scale, 1712059261 * scale + fraction, 1712059320 * scale},
-            {"2024-04-02T12:01:00.000000Z", "2024-04-02T12:01:01." + fractionalText + "Z", "2024-04-02T12:02:00.000000Z"}, withNulls);
+            { 1712059260 * scale, 1712059261 * scale + fraction, 1712059320 * scale },
+            { "2024-04-02T12:01:00.000000Z", "2024-04-02T12:01:01." + fractionalText + "Z", "2024-04-02T12:02:00.000000Z" }, withNulls);
     }
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
     Y_UNIT_TEST(TimestampConversionRangeChecks) {
         const i64 maxTimestamp = NUdf::MAX_TIMESTAMP;
-        for (const bool nullable : {false, true}) {
-            for (const auto typeId : {NUdf::TDataType<NUdf::TTimestamp>::Id, NUdf::TDataType<char*>::Id, NUdf::TDataType<NUdf::TUtf8>::Id}) {
+        for (const bool nullable : { false, true }) {
+            for (const auto typeId : { NUdf::TDataType<NUdf::TTimestamp>::Id, NUdf::TDataType<char*>::Id, NUdf::TDataType<NUdf::TUtf8>::Id }) {
                 TTestFixture f;
                 if (nullable) {
                     f.AddOptionalColumn("ts", typeId);
@@ -149,8 +147,9 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
                     f.AddColumn("ts", typeId);
                 }
                 const auto targetType = typeId == NUdf::TDataType<NUdf::TTimestamp>::Id ? arrow::uint64()
-                    : typeId == NUdf::TDataType<NUdf::TUtf8>::Id ? arrow::utf8() : arrow::binary();
-                for (const auto unit : {arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO}) {
+                                        : typeId == NUdf::TDataType<NUdf::TUtf8>::Id    ? arrow::utf8()
+                                                                                        : arrow::binary();
+                for (const auto unit : { arrow::TimeUnit::SECOND, arrow::TimeUnit::MILLI, arrow::TimeUnit::MICRO }) {
                     const i64 multiplier = unit == arrow::TimeUnit::SECOND ? 1000000 : unit == arrow::TimeUnit::MILLI ? 1000 : 1;
                     const auto sourceType = arrow::timestamp(unit);
                     const auto converter = BuildColumnConverter("ts", sourceType, targetType, f.RowTypes.at("ts"), f.Settings);
@@ -166,7 +165,7 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
                         UNIT_ASSERT(builder.Finish(&input).ok());
                         return input;
                     };
-                    const auto output = converter(makeInput({0, maxTimestamp / multiplier}));
+                    const auto output = converter(makeInput({ 0, maxTimestamp / multiplier }));
                     UNIT_ASSERT_C(output->ValidateFull().ok(), output->ValidateFull().ToString());
                     UNIT_ASSERT_VALUES_EQUAL(output->length(), nullable ? 3 : 2);
                     UNIT_ASSERT_VALUES_EQUAL(output->null_count(), nullable ? 1 : 0);
@@ -175,13 +174,14 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
                         UNIT_ASSERT_VALUES_EQUAL(timestamps.Value(0), 0);
                         UNIT_ASSERT_VALUES_EQUAL(timestamps.Value(1), maxTimestamp / multiplier * multiplier);
                     }
-                    for (const i64 value : {i64{-1}, maxTimestamp + 1}) {
-                        const TString message = TStringBuilder() << "timestamp in parquet is out of range [0, " << maxTimestamp << "]: " << value;
-                        UNIT_ASSERT_EXCEPTION_CONTAINS(converter(makeInput({value})), parquet::ParquetException, message);
+                    for (const i64 value : { i64{ -1 }, maxTimestamp + 1 }) {
+                        const TString message = TStringBuilder()
+                                                << "timestamp in parquet is out of range [0, " << maxTimestamp << "]: " << value;
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(converter(makeInput({ value })), parquet::ParquetException, message);
                     }
                     if (multiplier > 1) {
                         const i64 value = maxTimestamp / multiplier + 1;
-                        UNIT_ASSERT_EXCEPTION_CONTAINS(converter(makeInput({value})), parquet::ParquetException, "after transformation");
+                        UNIT_ASSERT_EXCEPTION_CONTAINS(converter(makeInput({ value })), parquet::ParquetException, "after transformation");
                     }
                 }
             }
@@ -189,14 +189,14 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
     }
 
     Y_UNIT_TEST(TimestampToStringChunkBoundary) {
-        for (const size_t length : {1, 9102, 9103}) {
+        for (const size_t length : { 1, 9102, 9103 }) {
             CheckTimestampToString<false>(false, length);
             CheckTimestampToString<true>(false, length);
         }
     }
 
     Y_UNIT_TEST(TimestampToUtf8ChunkBoundary) {
-        for (const size_t length : {1, 9102, 9103}) {
+        for (const size_t length : { 1, 9102, 9103 }) {
             CheckTimestampToString<false>(true, length);
             CheckTimestampToString<true>(true, length);
         }
@@ -215,15 +215,15 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
     }
 
     Y_UNIT_TEST(Date32ToStringChunkBoundary) {
-        for (const bool utf8 : {false, true}) {
-            for (const size_t length : {24576, 24577, 60000}) {
-                CheckTemporalToString<false, arrow::Date32Type>(arrow::date32(), utf8, length,
-                    {19815, 19816, 19817}, {"2024-04-02", "2024-04-03", "2024-04-04"});
-                CheckTemporalToString<true, arrow::Date32Type>(arrow::date32(), utf8, length,
-                    {19815, 19816, 19817}, {"2024-04-02", "2024-04-03", "2024-04-04"});
+        for (const bool utf8 : { false, true }) {
+            for (const size_t length : { 24576, 24577, 60000 }) {
+                CheckTemporalToString<false, arrow::Date32Type>(
+                    arrow::date32(), utf8, length, { 19815, 19816, 19817 }, { "2024-04-02", "2024-04-03", "2024-04-04" });
+                CheckTemporalToString<true, arrow::Date32Type>(
+                    arrow::date32(), utf8, length, { 19815, 19816, 19817 }, { "2024-04-02", "2024-04-03", "2024-04-04" });
             }
-            CheckTemporalToString<true, arrow::Date32Type>(arrow::date32(), utf8, 60000,
-                {19815, 19816, 19817}, {"2024-04-02", "2024-04-03", "2024-04-04"}, true);
+            CheckTemporalToString<true, arrow::Date32Type>(
+                arrow::date32(), utf8, 60000, { 19815, 19816, 19817 }, { "2024-04-02", "2024-04-03", "2024-04-04" }, true);
         }
     }
 
@@ -234,26 +234,22 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         f.AddOptionalColumn("c", NUdf::TDataType<i64>::Id);
 
         auto outputSchema = arrow::schema({
-            arrow::field("a", arrow::int32(), false),
-            arrow::field("b", arrow::binary(), true),
-            arrow::field("c", arrow::int64(), true),
+            arrow::field("a", arrow::int32(), false), arrow::field("b", arrow::binary(), true), arrow::field("c", arrow::int64(), true),
         });
         auto dataSchema = arrow::schema({
-            arrow::field("c", arrow::int64(), true),
-            arrow::field("a", arrow::int32(), false),
+            arrow::field("c", arrow::int64(), true), arrow::field("a", arrow::int32(), false),
         });
         f.Build(outputSchema, dataSchema);
 
-        UNIT_ASSERT_VALUES_EQUAL(f.ColumnIndices, (std::vector<int>{1, 0}));
+        UNIT_ASSERT_VALUES_EQUAL(f.ColumnIndices, (std::vector<int>{ 1, 0 }));
         UNIT_ASSERT_VALUES_EQUAL(f.ColumnConverters.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(f.MissingColumns.Columns.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(f.MissingColumns.Columns[0].OutputIndex, 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.MissingColumns.Columns[0].Field->name(), "b");
         UNIT_ASSERT(f.MissingColumns.Schema->Equals(*outputSchema));
 
-        auto batch = arrow::RecordBatch::Make(
-            arrow::schema({outputSchema->field(0), outputSchema->field(2)}), 3,
-            {MakeArray<arrow::Int32Type>(std::vector<i32>{1, 2, 3}), MakeArray<arrow::Int64Type>(std::vector<i64>{10, 20, 30})});
+        auto batch = arrow::RecordBatch::Make(arrow::schema({ outputSchema->field(0), outputSchema->field(2) }), 3,
+            { MakeArray<arrow::Int32Type>(std::vector<i32>{ 1, 2, 3 }), MakeArray<arrow::Int64Type>(std::vector<i64>{ 10, 20, 30 }) });
 
         auto converted = f.Convert(batch);
         UNIT_ASSERT(converted->Validate().ok());
@@ -277,20 +273,18 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         f.AddOptionalColumn("c", NUdf::TDataType<double>::Id);
 
         auto outputSchema = arrow::schema({
-            arrow::field("a", arrow::int32(), true),
-            arrow::field("b", arrow::int64(), false),
-            arrow::field("c", arrow::float64(), true),
+            arrow::field("a", arrow::int32(), true), arrow::field("b", arrow::int64(), false), arrow::field("c", arrow::float64(), true),
         });
-        auto dataSchema = arrow::schema({arrow::field("b", arrow::int64(), false)});
+        auto dataSchema = arrow::schema({ arrow::field("b", arrow::int64(), false) });
         f.Build(outputSchema, dataSchema);
 
-        UNIT_ASSERT_VALUES_EQUAL(f.ColumnIndices, (std::vector<int>{0}));
+        UNIT_ASSERT_VALUES_EQUAL(f.ColumnIndices, (std::vector<int>{ 0 }));
         UNIT_ASSERT_VALUES_EQUAL(f.MissingColumns.Columns.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(f.MissingColumns.Columns[0].OutputIndex, 0u);
         UNIT_ASSERT_VALUES_EQUAL(f.MissingColumns.Columns[1].OutputIndex, 2u);
 
-        auto batch = arrow::RecordBatch::Make(
-            arrow::schema({outputSchema->field(1)}), 2, {MakeArray<arrow::Int64Type>(std::vector<i64>{7, 8})});
+        auto batch =
+            arrow::RecordBatch::Make(arrow::schema({ outputSchema->field(1) }), 2, { MakeArray<arrow::Int64Type>(std::vector<i64>{ 7, 8 }) });
 
         auto converted = f.Convert(batch);
         UNIT_ASSERT(converted->Validate().ok());
@@ -309,10 +303,9 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         f.AddOptionalColumn("b", NUdf::TDataType<char*>::Id);
 
         auto outputSchema = arrow::schema({
-            arrow::field("a", arrow::int32(), true),
-            arrow::field("b", arrow::binary(), true),
+            arrow::field("a", arrow::int32(), true), arrow::field("b", arrow::binary(), true),
         });
-        auto dataSchema = arrow::schema({arrow::field("x", arrow::int64(), false)});
+        auto dataSchema = arrow::schema({ arrow::field("x", arrow::int64(), false) });
         f.Build(outputSchema, dataSchema);
 
         UNIT_ASSERT(f.ColumnIndices.empty());
@@ -341,7 +334,7 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
             // first half of the columns and every other column of the second half are absent in the file
             if (i >= numColumns / 2 && i % 2 == 0) {
                 dataFields.push_back(outputFields.back());
-                dataColumns.push_back(MakeArray<arrow::Int32Type>(std::vector<i32>{static_cast<i32>(i), -static_cast<i32>(i)}));
+                dataColumns.push_back(MakeArray<arrow::Int32Type>(std::vector<i32>{ static_cast<i32>(i), -static_cast<i32>(i) }));
             }
         }
         auto outputSchema = arrow::schema(outputFields);
@@ -375,10 +368,9 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         f.AddColumn("b", NUdf::TDataType<char*>::Id);
 
         auto outputSchema = arrow::schema({
-            arrow::field("a", arrow::int32(), false),
-            arrow::field("b", arrow::binary(), false),
+            arrow::field("a", arrow::int32(), false), arrow::field("b", arrow::binary(), false),
         });
-        auto dataSchema = arrow::schema({arrow::field("a", arrow::int32(), false)});
+        auto dataSchema = arrow::schema({ arrow::field("a", arrow::int32(), false) });
 
         UNIT_ASSERT_EXCEPTION_CONTAINS(f.Build(outputSchema, dataSchema), parquet::ParquetException, "Missing field: b");
     }
@@ -387,16 +379,16 @@ Y_UNIT_TEST_SUITE(TArrowColumnConvertersTest) {
         TTestFixture f;
         f.AddOptionalColumn("a", NUdf::TDataType<i32>::Id);
 
-        auto outputSchema = arrow::schema({arrow::field("a", arrow::int32(), true)});
-        auto dataSchema = arrow::schema({arrow::field("a", arrow::int32(), true)});
+        auto outputSchema = arrow::schema({ arrow::field("a", arrow::int32(), true) });
+        auto dataSchema = arrow::schema({ arrow::field("a", arrow::int32(), true) });
         f.Build(outputSchema, dataSchema);
         UNIT_ASSERT(f.MissingColumns.Columns.empty());
-        UNIT_ASSERT_VALUES_EQUAL(f.ColumnIndices, (std::vector<int>{0}));
+        UNIT_ASSERT_VALUES_EQUAL(f.ColumnIndices, (std::vector<int>{ 0 }));
 
-        auto batch = arrow::RecordBatch::Make(dataSchema, 2, {MakeArray<arrow::Int32Type>(std::vector<i32>{1, 2})});
+        auto batch = arrow::RecordBatch::Make(dataSchema, 2, { MakeArray<arrow::Int32Type>(std::vector<i32>{ 1, 2 }) });
         auto converted = f.Convert(batch);
         UNIT_ASSERT(converted->Equals(*batch));
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

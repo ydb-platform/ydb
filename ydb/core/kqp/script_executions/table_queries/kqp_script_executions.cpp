@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/script_executions/run_script_actor/kqp_run_script_actor.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/util/proto_duration.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -33,18 +34,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
+#include <contrib/libs/fmt/include/fmt/format.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/retry/retry_policy.h>
-
-#include <contrib/libs/fmt/include/fmt/format.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
 #include <util/generic/maybe.h>
@@ -55,6 +51,8 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 #include <util/system/types.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <memory>
 #include <optional>
@@ -90,15 +88,15 @@ Ydb::Query::ExecMode GetExecModeFromAction(const NKikimrKqp::EQueryAction action
     }
 }
 
-template<typename TDerived, typename TResponse>
-class TQueryBase : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDerived, TResponse> {
+template <typename TDerived, typename TResponse>
+class TQueryBase: public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDerived, TResponse> {
     using TBase = NKikimr::TQueryBase;
 
 public:
     using TThis = TDerived;
 
     struct TSettings {
-        TString Database;  // Only for logging, request will be executed in AppData()->TenantName
+        TString Database;   // Only for logging, request will be executed in AppData()->TenantName
         TString ExecutionId;
         TString SessionId;
         std::optional<i64> LeaseGeneration;
@@ -114,8 +112,9 @@ public:
     }
 
 private:
-    template<typename T>
-    std::optional<std::vector<T>> ParseJsonArray(NYdb::TResultSetParser& result, const TString& columnName, const TString& error, std::function<void(const NJson::TJsonValue&, T&)> itemParser) {
+    template <typename T>
+    std::optional<std::vector<T>> ParseJsonArray(NYdb::TResultSetParser& result, const TString& columnName, const TString& error,
+        std::function<void(const NJson::TJsonValue&, T&)> itemParser) {
         std::vector<T> parsed;
 
         if (const auto& serializedJson = result.ColumnParser(columnName).GetOptionalJsonDocument()) {
@@ -172,13 +171,7 @@ protected:
 
     NYdb::TParamsBuilder CreateParams() const {
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database")
-                .Utf8(Database)
-                .Build()
-            .AddParam("$execution_id")
-                .Utf8(ExecutionId)
-                .Build();
+        params.AddParam("$database").Utf8(Database).Build() .AddParam("$execution_id").Utf8(ExecutionId).Build();
         return params;
     }
 
@@ -214,7 +207,8 @@ protected:
 
     static std::optional<TString> ParseCompressedColumn(const TString& columnName, NYdb::TResultSetParser& result) {
         if (std::optional<TString> resultCompressed = result.ColumnParser(TStringBuilder() << columnName << "_compressed").GetOptionalString()) {
-            if (const std::optional<TString>& resultCompressionMethod = result.ColumnParser(TStringBuilder() << columnName << "_compression_method").GetOptionalUtf8()) {
+            if (const std::optional<TString>& resultCompressionMethod =
+                    result.ColumnParser(TStringBuilder() << columnName << "_compression_method").GetOptionalUtf8()) {
                 const TCompressor compressor(*resultCompressionMethod);
                 return compressor.Decompress(*resultCompressed);
             }
@@ -241,27 +235,31 @@ protected:
     }
 
     std::optional<std::vector<Ydb::Query::ResultSetMeta>> ParseResultSetMetas(NYdb::TResultSetParser& result) {
-        return ParseJsonArray<Ydb::Query::ResultSetMeta>(result, "result_set_metas", "Result set meta is corrupted", [](const NJson::TJsonValue& value, Ydb::Query::ResultSetMeta& dst) {
-            NProtobufJson::Json2Proto(value, dst);
-        });
+        return ParseJsonArray<Ydb::Query::ResultSetMeta>(
+            result, "result_set_metas", "Result set meta is corrupted", [](const NJson::TJsonValue& value, Ydb::Query::ResultSetMeta& dst) {
+                NProtobufJson::Json2Proto(value, dst);
+            });
     }
 
     std::optional<std::vector<NKqpProto::TKqpExternalSink>> ParseScriptSinks(NYdb::TResultSetParser& result) {
-        return ParseJsonArray<NKqpProto::TKqpExternalSink>(result, "script_sinks", "Script sinks are corrupted", [](const NJson::TJsonValue& value, NKqpProto::TKqpExternalSink& dst) {
-            DeserializeBinaryProto(value, dst);
-        });
+        return ParseJsonArray<NKqpProto::TKqpExternalSink>(
+            result, "script_sinks", "Script sinks are corrupted", [](const NJson::TJsonValue& value, NKqpProto::TKqpExternalSink& dst) {
+                DeserializeBinaryProto(value, dst);
+            });
     }
 
     std::optional<std::vector<TString>> ParseSecretNames(NYdb::TResultSetParser& result) {
-        return ParseJsonArray<TString>(result, "script_secret_names", "Script secret names are corrupted", [](const NJson::TJsonValue& value, TString& dst) {
-            dst = value.GetString();
-        });
+        return ParseJsonArray<TString>(
+            result, "script_secret_names", "Script secret names are corrupted", [](const NJson::TJsonValue& value, TString& dst) {
+                dst = value.GetString();
+            });
     }
 
     std::optional<std::vector<NACLib::TSID>> ParseUserGroupSids(NYdb::TResultSetParser& result) {
-        return ParseJsonArray<NACLib::TSID>(result, "user_group_sids", "User group SIDs are corrupted", [](const NJson::TJsonValue& value, NACLib::TSID& dst) {
-            dst = value.GetString();
-        });
+        return ParseJsonArray<NACLib::TSID>(
+            result, "user_group_sids", "User group SIDs are corrupted", [](const NJson::TJsonValue& value, NACLib::TSID& dst) {
+                dst = value.GetString();
+            });
     }
 
     bool ValidateLease(NYdb::TResultSetParser& result, const ELeaseState expectedLeaseState) {
@@ -279,13 +277,16 @@ protected:
         }
 
         if (LeaseGeneration != *leaseGenerationInDatabase) {
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Lease was lost, expected generation: " << LeaseGeneration << ", got: " << *leaseGenerationInDatabase);
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED,
+                TStringBuilder() << "Lease was lost, expected generation: " << LeaseGeneration << ", got: " << *leaseGenerationInDatabase);
             return false;
         }
 
         const auto leaseState = result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning));
         if (leaseState != static_cast<i32>(expectedLeaseState)) {
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Script execution has lease state: " << leaseState << ", when for operation " << OperationName << " expected lease state: " << expectedLeaseState);
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                                                            << "Script execution has lease state: " << leaseState << ", when for operation "
+                                                            << OperationName << " expected lease state: " << expectedLeaseState);
             return false;
         }
 
@@ -302,8 +303,8 @@ protected:
     const i64 LeaseGeneration = 0;
 };
 
-template<typename TDerived, typename TResponse>
-class TQueryWithAccessValidationBase : public TQueryBase<TDerived, TResponse> {
+template <typename TDerived, typename TResponse>
+class TQueryWithAccessValidationBase: public TQueryBase<TDerived, TResponse> {
     using TBase = TQueryBase<TDerived, TResponse>;
 
 public:
@@ -312,7 +313,8 @@ public:
     TQueryWithAccessValidationBase(const TString& operationName, TBase::TSettings&& settings, std::optional<TString> userSID)
         : TBase(operationName, std::move(settings))
         , UserSID(std::move(userSID))
-    {}
+    {
+    }
 
 protected:
     bool ValidateUserSID() {
@@ -346,7 +348,7 @@ protected:
     std::optional<TString> UserSID;
 };
 
-class TScriptExecutionsTablesCreator final : public NTableCreator::TMultiTableCreator {
+class TScriptExecutionsTablesCreator final: public NTableCreator::TMultiTableCreator {
     using TBase = NTableCreator::TMultiTableCreator;
 
     static constexpr TDuration TTL_DEADLINE_OFFSET = TDuration::Minutes(20);
@@ -354,13 +356,11 @@ class TScriptExecutionsTablesCreator final : public NTableCreator::TMultiTableCr
 
 public:
     TScriptExecutionsTablesCreator(const bool enableSecureScriptExecutions, const ui64 generation)
-        : TBase({
-            GetScriptExecutionsCreator(enableSecureScriptExecutions),
-            GetScriptExecutionLeasesCreator(enableSecureScriptExecutions),
-            GetScriptResultSetsCreator(enableSecureScriptExecutions)
-        })
+        : TBase({ GetScriptExecutionsCreator(enableSecureScriptExecutions), GetScriptExecutionLeasesCreator(enableSecureScriptExecutions),
+              GetScriptResultSetsCreator(enableSecureScriptExecutions) })
         , Generation(generation)
-    {}
+    {
+    }
 
 private:
     static NACLib::TDiffACL GetTableACL(const bool enableSecureScriptExecutions) {
@@ -371,52 +371,31 @@ private:
     }
 
     static IActor* GetScriptExecutionsCreator(const bool enableSecureScriptExecutions) {
-        return CreateTableCreator(
-            { ".metadata", "script_executions" },
+        return CreateTableCreator({ ".metadata", "script_executions" },
             {
-                Col("database", NScheme::NTypeIds::Text),
-                Col("execution_id", NScheme::NTypeIds::Text),
-                Col("run_script_actor_id", NScheme::NTypeIds::Text),
-                Col("operation_status", NScheme::NTypeIds::Int32),
-                Col("execution_status", NScheme::NTypeIds::Int32),
-                Col("finalization_status", NScheme::NTypeIds::Int32),
-                Col("execution_mode", NScheme::NTypeIds::Int32),
-                Col("start_ts", NScheme::NTypeIds::Timestamp),
-                Col("end_ts", NScheme::NTypeIds::Timestamp),
-                Col("query_text", NScheme::NTypeIds::Text),
-                Col("syntax", NScheme::NTypeIds::Int32),
-                Col("ast", NScheme::NTypeIds::Text),
-                Col("ast_compressed", NScheme::NTypeIds::String),
-                Col("ast_compression_method", NScheme::NTypeIds::Text),
-                Col("issues", NScheme::NTypeIds::JsonDocument),
-                Col("transient_issues", NScheme::NTypeIds::JsonDocument), // Issues from previous query retries
-                Col("plan", NScheme::NTypeIds::JsonDocument),
-                Col("plan_compressed", NScheme::NTypeIds::String),
-                Col("plan_compression_method", NScheme::NTypeIds::Text),
-                Col("meta", NScheme::NTypeIds::JsonDocument),
-                Col("streaming_disposition", NScheme::NTypeIds::Json),
-                Col("parameters", NScheme::NTypeIds::String), // TODO: store parameters separately to support bigger storage.
-                Col("result_set_metas", NScheme::NTypeIds::JsonDocument),
-                Col("stats", NScheme::NTypeIds::JsonDocument),
-                Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
-                Col("customer_supplied_id", NScheme::NTypeIds::Text),
-                Col("user_token", NScheme::NTypeIds::Text), // UserSID
-                Col("user_group_sids", NScheme::NTypeIds::JsonDocument),
-                Col("script_sinks", NScheme::NTypeIds::JsonDocument),
-                Col("script_secret_names", NScheme::NTypeIds::JsonDocument),
-                Col("retry_state", NScheme::NTypeIds::JsonDocument),
-                Col("graph_compressed", NScheme::NTypeIds::String),
-                Col("graph_compression_method", NScheme::NTypeIds::Text),
-                Col("lease_generation", NScheme::NTypeIds::Int64), // Incremented after each script execution retry
+                Col("database", NScheme::NTypeIds::Text), Col("execution_id", NScheme::NTypeIds::Text),
+                Col("run_script_actor_id", NScheme::NTypeIds::Text), Col("operation_status", NScheme::NTypeIds::Int32),
+                Col("execution_status", NScheme::NTypeIds::Int32), Col("finalization_status", NScheme::NTypeIds::Int32),
+                Col("execution_mode", NScheme::NTypeIds::Int32), Col("start_ts", NScheme::NTypeIds::Timestamp),
+                Col("end_ts", NScheme::NTypeIds::Timestamp), Col("query_text", NScheme::NTypeIds::Text), Col("syntax", NScheme::NTypeIds::Int32),
+                Col("ast", NScheme::NTypeIds::Text), Col("ast_compressed", NScheme::NTypeIds::String),
+                Col("ast_compression_method", NScheme::NTypeIds::Text), Col("issues", NScheme::NTypeIds::JsonDocument),
+                Col("transient_issues", NScheme::NTypeIds::JsonDocument),   // Issues from previous query retries
+                Col("plan", NScheme::NTypeIds::JsonDocument), Col("plan_compressed", NScheme::NTypeIds::String),
+                Col("plan_compression_method", NScheme::NTypeIds::Text), Col("meta", NScheme::NTypeIds::JsonDocument),
+                Col("streaming_disposition", NScheme::NTypeIds::Json), Col("parameters", NScheme::NTypeIds::String),
+                // TODO: store parameters separately to support bigger storage.
+                Col("result_set_metas", NScheme::NTypeIds::JsonDocument), Col("stats", NScheme::NTypeIds::JsonDocument),
+                Col("expire_at", NScheme::NTypeIds::Timestamp),   // Will be deleted from database after this deadline.
+                Col("customer_supplied_id", NScheme::NTypeIds::Text), Col("user_token", NScheme::NTypeIds::Text),   // UserSID
+                Col("user_group_sids", NScheme::NTypeIds::JsonDocument), Col("script_sinks", NScheme::NTypeIds::JsonDocument),
+                Col("script_secret_names", NScheme::NTypeIds::JsonDocument), Col("retry_state", NScheme::NTypeIds::JsonDocument),
+                Col("graph_compressed", NScheme::NTypeIds::String), Col("graph_compression_method", NScheme::NTypeIds::Text),
+                Col("lease_generation", NScheme::NTypeIds::Int64),   // Incremented after each script execution retry
             },
-            { "database", "execution_id" },
-            NKikimrServices::KQP_PROXY,
-            TtlCol("expire_at", TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
-            /* database */ {},
-            /* isSystemUser */ enableSecureScriptExecutions,
-            /* partitioningPolicy */ Nothing(),
-            GetTableACL(enableSecureScriptExecutions)
-        );
+            { "database", "execution_id" }, NKikimrServices::KQP_PROXY, TtlCol("expire_at", TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
+            /* database */ {}, /* isSystemUser */ enableSecureScriptExecutions, /* partitioningPolicy */ Nothing(),
+            GetTableACL(enableSecureScriptExecutions));
     }
 
     static IActor* GetScriptExecutionLeasesCreator(const bool enableSecureScriptExecutions) {
@@ -455,49 +434,32 @@ private:
         //      `TScriptExecutionLeaseCheckActor` restarts the script execution operation
         //      with the same ID.
 
-        return CreateTableCreator(
-            { ".metadata", "script_execution_leases" },
+        return CreateTableCreator({ ".metadata", "script_execution_leases" },
             {
-                Col("database", NScheme::NTypeIds::Text),
-                Col("execution_id", NScheme::NTypeIds::Text),
-                Col("lease_deadline", NScheme::NTypeIds::Timestamp),
-                Col("lease_generation", NScheme::NTypeIds::Int64),
-                Col("lease_state", NScheme::NTypeIds::Int32), // Operation for which lease was created (ELeaseState)
-                Col("expire_at", NScheme::NTypeIds::Timestamp), // Will be deleted from database after this deadline.
+                Col("database", NScheme::NTypeIds::Text), Col("execution_id", NScheme::NTypeIds::Text),
+                Col("lease_deadline", NScheme::NTypeIds::Timestamp), Col("lease_generation", NScheme::NTypeIds::Int64),
+                Col("lease_state", NScheme::NTypeIds::Int32),   // Operation for which lease was created (ELeaseState)
+                Col("expire_at", NScheme::NTypeIds::Timestamp),   // Will be deleted from database after this deadline.
             },
-            { "database", "execution_id" },
-            NKikimrServices::KQP_PROXY,
-            TtlCol("expire_at", TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
-            /* database */ {},
-            /* isSystemUser */ enableSecureScriptExecutions,
-            /* partitioningPolicy */ Nothing(),
-            GetTableACL(enableSecureScriptExecutions)
-        );
+            { "database", "execution_id" }, NKikimrServices::KQP_PROXY, TtlCol("expire_at", TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
+            /* database */ {}, /* isSystemUser */ enableSecureScriptExecutions, /* partitioningPolicy */ Nothing(),
+            GetTableACL(enableSecureScriptExecutions));
     }
 
     static IActor* GetScriptResultSetsCreator(const bool enableSecureScriptExecutions) {
-        return CreateTableCreator(
-            { ".metadata", "result_sets" },
+        return CreateTableCreator({ ".metadata", "result_sets" },
             {
-                Col("database", NScheme::NTypeIds::Text),
-                Col("execution_id", NScheme::NTypeIds::Text),
-                Col("result_set_id", NScheme::NTypeIds::Int32),
-                Col("row_id", NScheme::NTypeIds::Int64),
-                Col("expire_at", NScheme::NTypeIds::Timestamp),
-                Col("result_set", NScheme::NTypeIds::String),
+                Col("database", NScheme::NTypeIds::Text), Col("execution_id", NScheme::NTypeIds::Text),
+                Col("result_set_id", NScheme::NTypeIds::Int32), Col("row_id", NScheme::NTypeIds::Int64),
+                Col("expire_at", NScheme::NTypeIds::Timestamp), Col("result_set", NScheme::NTypeIds::String),
                 Col("accumulated_size", NScheme::NTypeIds::Int64),
             },
-            { "database", "execution_id", "result_set_id", "row_id" },
-            NKikimrServices::KQP_PROXY,
-            TtlCol("expire_at", TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL),
-            /* database */ {},
-            /* isSystemUser */ enableSecureScriptExecutions,
-            /* partitioningPolicy */ Nothing(),
-            GetTableACL(enableSecureScriptExecutions)
-        );
+            { "database", "execution_id", "result_set_id", "row_id" }, NKikimrServices::KQP_PROXY,
+            TtlCol("expire_at", TTL_DEADLINE_OFFSET, TTL_BRO_RUN_INTERVAL), /* database */ {}, /* isSystemUser */ enableSecureScriptExecutions,
+            /* partitioningPolicy */ Nothing(), GetTableACL(enableSecureScriptExecutions));
     }
 
-    void OnTablesCreated(const bool success, NYql::TIssues issues) override  {
+    void OnTablesCreated(const bool success, NYql::TIssues issues) override {
         Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)), /* flags */ 0, Generation);
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvStartScriptExecutionBackgroundChecks());
     }
@@ -507,14 +469,15 @@ private:
 
 // Creates new script execution, may requested from gRPC API / streaming query creation or modification
 
-class TCreateScriptOperationQuery final : public TQueryBase<TCreateScriptOperationQuery, TEvPrivate::TEvCreateScriptOperationResponse> {
+class TCreateScriptOperationQuery final: public TQueryBase<TCreateScriptOperationQuery, TEvPrivate::TEvCreateScriptOperationResponse> {
 public:
     TCreateScriptOperationQuery(TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest req,
-        NKikimrKqp::TScriptExecutionOperationMeta meta, const TDuration maxRunTime,
-        NKikimrKqp::TScriptExecutionRetryState retryState, std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> streamingDisposition,
-        const i64 generation, TString streamingQueryPath, TString streamingQueryOperationId)
-        : TQueryBase(__func__, {.Database = req.GetRequest().GetDatabase(), .ExecutionId = std::move(executionId), .LeaseGeneration = generation})
+        NKikimrKqp::TScriptExecutionOperationMeta meta, const TDuration maxRunTime, NKikimrKqp::TScriptExecutionRetryState retryState,
+        std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> streamingDisposition, const i64 generation, TString streamingQueryPath,
+        TString streamingQueryOperationId)
+        : TQueryBase(
+              __func__, { .Database = req.GetRequest().GetDatabase(), .ExecutionId = std::move(executionId), .LeaseGeneration = generation })
         , RunScriptActorId(runScriptActorId)
         , Request(std::move(req))
         , Meta(std::move(meta))
@@ -525,7 +488,8 @@ public:
         , StreamingQueryPath(std::move(streamingQueryPath))
         , StreamingQueryOperationId(std::move(streamingQueryOperationId))
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -597,7 +561,8 @@ private:
         }
 
         if (const auto& currentOwner = state.GetOperationActorId(); currentOwner != StreamingQueryOperationId) {
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId
+                                                                         << "' was lost, current operation id: '" << currentOwner << "'");
             return;
         }
 
@@ -778,16 +743,18 @@ private:
     const TCompressor Compressor;
 };
 
-class TCreateScriptExecutionActor final : public TActorBootstrapped<TCreateScriptExecutionActor>, IActorExceptionHandler {
+class TCreateScriptExecutionActor final: public TActorBootstrapped<TCreateScriptExecutionActor>, IActorExceptionHandler {
 public:
-    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, const TDuration maxRunTime, const TDuration leaseDuration)
+    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig,
+        TIntrusivePtr<TKqpCounters> counters, const TDuration maxRunTime, const TDuration leaseDuration)
         : Event(std::move(ev))
         , QueryServiceConfig(std::move(queryServiceConfig))
         , Counters(std::move(counters))
         , ExecutionId(Event->Get()->ExecutionId ? *Event->Get()->ExecutionId : CreateGuidAsString())
         , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
         , MaxRunTime(maxRunTime)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
@@ -797,7 +764,9 @@ public:
         const auto& request = eventProto.GetRequest();
         if (ev.SaveQueryPhysicalGraph) {
             if (request.GetAction() != NKikimrKqp::QUERY_ACTION_EXECUTE) {
-                SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Save query physical graph is allowed only for execute action (got " << NKikimrKqp::EQueryAction_Name(request.GetAction()) << ")");
+                SendFailResponse(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
+                                                                     << "Save query physical graph is allowed only for execute action (got "
+                                                                     << NKikimrKqp::EQueryAction_Name(request.GetAction()) << ")");
                 return;
             }
 
@@ -812,36 +781,35 @@ public:
         // Start request.
         // All non compile-time only setting must be persisted into TScriptExecutionOperationMeta
         // and also passed in TRestartScriptOperationQuery for correct operation restart.
-        RunScriptActorId = Register(CreateRunScriptActor(eventProto, {
-            .Database = request.GetDatabase(),
-            .ExecutionId = ExecutionId,
-            .TraceId = NWilson::TTraceId(Event->TraceId),
-            .LeaseGeneration = ev.Generation,
-            .LeaseDuration = LeaseDuration,
-            .ResultsTtl = GetDuration(meta.GetResultsTtl()),
-            .ProgressStatsPeriod = ev.ProgressStatsPeriod,
-            .CheckpointInterval = ev.CheckpointInterval,
-            .Counters = Counters,
-            .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
-            .PhysicalGraph = ev.QueryPhysicalGraph,
-            .DisableDefaultTimeout = ev.DisableDefaultTimeout,
-            .CheckpointId = ev.CheckpointId,
-            .StreamingQueryPath = ev.StreamingQueryPath,
-            .CustomerSuppliedId = ev.CustomerSuppliedId,
-            .WatermarkLateEventsPolicy = ev.WatermarkLateEventsPolicy,
-            .StreamingDisposition = ev.StreamingDisposition,
-        }, QueryServiceConfig));
+        RunScriptActorId = Register(CreateRunScriptActor(eventProto,
+            {
+                .Database = request.GetDatabase(),
+                .ExecutionId = ExecutionId,
+                .TraceId = NWilson::TTraceId(Event->TraceId),
+                .LeaseGeneration = ev.Generation,
+                .LeaseDuration = LeaseDuration,
+                .ResultsTtl = GetDuration(meta.GetResultsTtl()),
+                .ProgressStatsPeriod = ev.ProgressStatsPeriod,
+                .CheckpointInterval = ev.CheckpointInterval,
+                .Counters = Counters,
+                .SaveQueryPhysicalGraph = ev.SaveQueryPhysicalGraph,
+                .PhysicalGraph = ev.QueryPhysicalGraph,
+                .DisableDefaultTimeout = ev.DisableDefaultTimeout,
+                .CheckpointId = ev.CheckpointId,
+                .StreamingQueryPath = ev.StreamingQueryPath,
+                .CustomerSuppliedId = ev.CustomerSuppliedId,
+                .WatermarkLateEventsPolicy = ev.WatermarkLateEventsPolicy,
+                .StreamingDisposition = ev.StreamingDisposition,
+            }, QueryServiceConfig));
 
         auto disposition = ev.StreamingDisposition;
         if (ev.QueryPhysicalGraph && ev.QueryPhysicalGraph->GetZeroCheckpointSaved()) {
-            disposition = nullptr; // Do not save disposition if state already saved
+            disposition = nullptr;   // Do not save disposition if state already saved
         }
 
-        const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(
-            SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(),
-            ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation,
-            ev.StreamingQueryPath, ev.StreamingQueryOperationId
-        ));
+        const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record,
+            std::move(meta), MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation,
+            ev.StreamingQueryPath, ev.StreamingQueryOperationId));
         YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCreateScriptOperationQuery",
             {"logPrefix", LogPrefix()},
             {"creatorId", creatorId},
@@ -855,7 +823,8 @@ public:
                 {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
-            SendFailResponse(status, AddRootIssue("Internal error. Failed to save meta information about new script execution", ev->Get()->Issues));
+            SendFailResponse(
+                status, AddRootIssue("Internal error. Failed to save meta information about new script execution", ev->Get()->Issues));
             return;
         }
 
@@ -864,12 +833,9 @@ public:
             {"sender", ev->Sender},
             {"runScriptActorId", RunScriptActorId});
 
-        Send(Event->Sender, new TEvKqp::TEvScriptResponse(
-            ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId),
-            ev->Get()->ExecutionId,
-            Ydb::Query::EXEC_STATUS_STARTING,
-            GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())
-        ));
+        Send(
+            Event->Sender, new TEvKqp::TEvScriptResponse(ScriptExecutionOperationFromExecutionId(ev->Get()->ExecutionId), ev->Get()->ExecutionId,
+                               Ydb::Query::EXEC_STATUS_STARTING, GetExecModeFromAction(Event->Get()->Record.GetRequest().GetAction())));
         Send(RunScriptActorId, new TEvents::TEvWakeup());
         PassAway();
     }
@@ -896,7 +862,7 @@ private:
     }
 
     void SendFailResponse(const Ydb::StatusIds::StatusCode status, const TString& error) {
-        SendFailResponse(status, {NYql::TIssue(error)});
+        SendFailResponse(status, { NYql::TIssue(error) });
     }
 
     NKikimrKqp::TScriptExecutionOperationMeta GetOperationMeta() const {
@@ -954,7 +920,8 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[TCreateScriptExecutionActor] OwnerId: " << Event->Sender << " ActorId: " << SelfId() << " Database: " << Event->Get()->Record.GetRequest().GetDatabase() << " ExecutionId: " << ExecutionId << ". ";
+        return TStringBuilder() << "[TCreateScriptExecutionActor] OwnerId: " << Event->Sender << " ActorId: " << SelfId()
+                                << " Database: " << Event->Get()->Record.GetRequest().GetDatabase() << " ExecutionId: " << ExecutionId << ". ";
     }
 
     const TEvKqp::TEvScriptRequest::TPtr Event;
@@ -968,12 +935,13 @@ private:
 
 // Created from TRunScriptActor and advances runtime lease with state ELeaseState::ScriptRunning
 
-class TScriptLeaseUpdaterQuery final : public TQueryBase<TScriptLeaseUpdaterQuery, TEvScriptLeaseUpdateResponse> {
+class TScriptLeaseUpdaterQuery final: public TQueryBase<TScriptLeaseUpdaterQuery, TEvScriptLeaseUpdateResponse> {
 public:
     TScriptLeaseUpdaterQuery(TString database, TString executionId, const TDuration leaseDuration, const i64 leaseGeneration)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , LeaseDuration(leaseDuration)
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -1034,10 +1002,7 @@ private:
         )";
 
         auto params = CreateParams();
-        params
-            .AddParam("$lease_duration")
-                .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
-                .Build();
+        params.AddParam("$lease_duration").Interval(static_cast<i64>(LeaseDuration.MicroSeconds())).Build();
 
         SetQueryResultHandler(&TThis::OnQueryResult, "Update lease");
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -1056,16 +1021,17 @@ private:
 // Restart script execution after expiration of lease with state ELeaseState::WaitRetry (now used only in script executions from streaming queries).
 // Can be runned multiple times in parallel for same script execution operation.
 
-class TRestartScriptOperationQuery final : public TQueryBase<TRestartScriptOperationQuery, TEvScriptExecutionRestarted> {
+class TRestartScriptOperationQuery final: public TQueryBase<TRestartScriptOperationQuery, TEvScriptExecutionRestarted> {
     static constexpr ui64 MAX_TRANSIENT_ISSUES_COUNT = 10;
 
 public:
     TRestartScriptOperationQuery(TString database, TString executionId, const i64 leaseGeneration,
         NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , QueryServiceConfig(std::move(queryServiceConfig))
         , Counters(std::move(counters))
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -1153,7 +1119,8 @@ private:
 
             const auto finalizationStatus = result.ColumnParser("finalization_status").GetOptionalInt32();
             if (finalizationStatus) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Cannot restart execution while finalization is not finished, current status: " << *finalizationStatus);
+                Finish(Ydb::StatusIds::INTERNAL_ERROR,
+                    TStringBuilder() << "Cannot restart execution while finalization is not finished, current status: " << *finalizationStatus);
                 return;
             }
 
@@ -1230,8 +1197,10 @@ private:
             }
 
             *request.MutableQuery() = std::move(*queryText);
-            request.SetAction(GetActionFromExecMode(static_cast<Ydb::Query::ExecMode>(result.ColumnParser("execution_mode").GetOptionalInt32().value_or(Ydb::Query::EXEC_MODE_UNSPECIFIED))));
-            request.SetSyntax(static_cast<Ydb::Query::Syntax>(result.ColumnParser("syntax").GetOptionalInt32().value_or(Ydb::Query::SYNTAX_UNSPECIFIED)));
+            request.SetAction(GetActionFromExecMode(static_cast<Ydb::Query::ExecMode>(
+                result.ColumnParser("execution_mode").GetOptionalInt32().value_or(Ydb::Query::EXEC_MODE_UNSPECIFIED))));
+            request.SetSyntax(
+                static_cast<Ydb::Query::Syntax>(result.ColumnParser("syntax").GetOptionalInt32().value_or(Ydb::Query::SYNTAX_UNSPECIFIED)));
 
             const std::optional<TString> serializedMeta = result.ColumnParser("meta").GetOptionalJsonDocument();
             if (!serializedMeta) {
@@ -1263,23 +1232,25 @@ private:
         request.SetPoolId(meta.GetResourcePoolId());
 
         const bool hasPhysicalGraph = physicalGraph.has_value();
-        RunScriptActorId = Register(CreateRunScriptActor(queryRequest, {
-            .Database = request.GetDatabase(),
-            .ExecutionId = ExecutionId,
-            .LeaseGeneration = LeaseGeneration + 1,
-            .LeaseDuration = LeaseDuration,
-            .ResultsTtl = GetDuration(meta.GetResultsTtl()),
-            .ProgressStatsPeriod = NProtoInterop::CastFromProto(meta.GetProgressStatsPeriod()),
-            .CheckpointInterval = meta.HasCheckpointInterval() ? std::optional(NProtoInterop::CastFromProto(meta.GetCheckpointInterval())) : std::nullopt,
-            .Counters = Counters,
-            .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
-            .PhysicalGraph = std::move(physicalGraph),
-            .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
-            .CheckpointId = meta.GetCheckpointId(),
-            .StreamingQueryPath = meta.GetStreamingQueryPath(),
-            .CustomerSuppliedId = meta.GetCustomerSuppliedId(),
-            .StreamingDisposition = streamingDisposition,
-        }, QueryServiceConfig));
+        RunScriptActorId = Register(CreateRunScriptActor(queryRequest,
+            {
+                .Database = request.GetDatabase(),
+                .ExecutionId = ExecutionId,
+                .LeaseGeneration = LeaseGeneration + 1,
+                .LeaseDuration = LeaseDuration,
+                .ResultsTtl = GetDuration(meta.GetResultsTtl()),
+                .ProgressStatsPeriod = NProtoInterop::CastFromProto(meta.GetProgressStatsPeriod()),
+                .CheckpointInterval =
+                    meta.HasCheckpointInterval() ? std::optional(NProtoInterop::CastFromProto(meta.GetCheckpointInterval())) : std::nullopt,
+                .Counters = Counters,
+                .SaveQueryPhysicalGraph = meta.GetSaveQueryPhysicalGraph(),
+                .PhysicalGraph = std::move(physicalGraph),
+                .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
+                .CheckpointId = meta.GetCheckpointId(),
+                .StreamingQueryPath = meta.GetStreamingQueryPath(),
+                .CustomerSuppliedId = meta.GetCustomerSuppliedId(),
+                .StreamingDisposition = streamingDisposition,
+            }, QueryServiceConfig));
 
         YDB_LOG_DEBUG("[ScriptExecutions] Restarting script execution operation",
             {"logPrefix", LogPrefix()},
@@ -1388,7 +1359,8 @@ private:
 
 // Get full information about current script execution state and lease state
 
-class TCheckLeaseStatusQueryActor final : public TQueryWithAccessValidationBase<TCheckLeaseStatusQueryActor, NPrivate::TEvPrivate::TEvLeaseCheckResult> {
+class TCheckLeaseStatusQueryActor final
+    : public TQueryWithAccessValidationBase<TCheckLeaseStatusQueryActor, NPrivate::TEvPrivate::TEvLeaseCheckResult> {
 public:
     struct TSettings {
         ui64 Cookie = 0;
@@ -1396,10 +1368,12 @@ public:
     };
 
     TCheckLeaseStatusQueryActor(TString database, TString executionId, TSettings settings)
-        : TQueryWithAccessValidationBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId)}, std::move(settings.UserSID))
+        : TQueryWithAccessValidationBase(
+              __func__, { .Database = std::move(database), .ExecutionId = std::move(executionId) }, std::move(settings.UserSID))
         , Cookie(settings.Cookie)
         , Response(std::make_unique<NPrivate::TEvPrivate::TEvLeaseCheckResult>())
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -1514,7 +1488,8 @@ private:
             }
 
             Response->LeaseGeneration = *leaseGeneration;
-            const auto leaseState = static_cast<ELeaseState>(leaseResult.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
+            const auto leaseState = static_cast<ELeaseState>(
+                leaseResult.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
 
             switch (leaseState) {
                 case ELeaseState::ScriptRunning: {
@@ -1526,18 +1501,25 @@ private:
                 }
                 case ELeaseState::ScriptFinalizing: {
                     if (!operationStatus || !Response->FinalizationStatus) {
-                        Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Invalid operation state, status and finalization status should be specified for lease state " << static_cast<i32>(leaseState));
+                        Finish(Ydb::StatusIds::INTERNAL_ERROR,
+                            TStringBuilder() << "Invalid operation state, status and finalization status should be specified for lease state "
+                                             << static_cast<i32>(leaseState));
                         return;
                     }
                     break;
                 }
                 case ELeaseState::WaitRetry: {
                     if (!operationStatus || Response->FinalizationStatus) {
-                        Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Invalid operation state, status should be specified and finalization must be completed for lease state " << static_cast<i32>(leaseState));
+                        Finish(Ydb::StatusIds::INTERNAL_ERROR,
+                            TStringBuilder()
+                                << "Invalid operation state, status should be specified and finalization must be completed for lease state "
+                                << static_cast<i32>(leaseState));
                         return;
                     }
                     if (!Response->HasRetryPolicy) {
-                        Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Invalid operation state, retry policy must be specified for lease state " << static_cast<i32>(leaseState));
+                        Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
+                                                                   << "Invalid operation state, retry policy must be specified for lease state "
+                                                                   << static_cast<i32>(leaseState));
                         return;
                     }
                     Response->WaitRetry = true;
@@ -1576,12 +1558,12 @@ private:
 // In practice it is almost always correct, but in some cases this may lead to infinite TLI retries on finalization or double start of script execution operation.
 // If actor finished with SUCCESS when lease not expired now or TRunScriptActor still running.
 
-class TFinalizeScriptLeaseActor final : public TActorBootstrapped<TFinalizeScriptLeaseActor> {
+class TFinalizeScriptLeaseActor final: public TActorBootstrapped<TFinalizeScriptLeaseActor> {
     using TBase = TActorBootstrapped<TFinalizeScriptLeaseActor>;
     using TRetryPolicy = IRetryPolicy<bool>;
 
-    static constexpr TDuration CHECK_ALIVE_REQUEST_SOFT_TIMEOUT = TDuration::Seconds(30); // Advance on each retry of check alive
-    static constexpr TDuration CHECK_ALIVE_REQUEST_HARD_TIMEOUT = TDuration::Seconds(60); // Hard timeout for all retries
+    static constexpr TDuration CHECK_ALIVE_REQUEST_SOFT_TIMEOUT = TDuration::Seconds(30);   // Advance on each retry of check alive
+    static constexpr TDuration CHECK_ALIVE_REQUEST_HARD_TIMEOUT = TDuration::Seconds(60);   // Hard timeout for all retries
     static constexpr ui64 MAX_CHECK_ALIVE_RETRIES = 50;
 
     enum class EWakeup {
@@ -1616,7 +1598,8 @@ public:
     }
 
     void Bootstrap() {
-        const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{}));
+        const auto& checkerId =
+            Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{}));
         YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCheckLeaseStatusQueryActor",
             {"logPrefix", LogPrefix()},
             {"cookie", Settings.Cookie},
@@ -1688,7 +1671,8 @@ private:
 
         if (event.RetryRequired) {
             if (Settings.AllowRestart) {
-                const auto& restartActorId = Register(TRestartScriptOperationQuery::MakeRetry(SelfId(), Database, ExecutionId, event.LeaseGeneration, QueryServiceConfig, Counters));
+                const auto& restartActorId = Register(TRestartScriptOperationQuery::MakeRetry(
+                    SelfId(), Database, ExecutionId, event.LeaseGeneration, QueryServiceConfig, Counters));
                 YDB_LOG_NOTICE("[ScriptExecutions] Restarting script execution",
                     {"logPrefix", LogPrefix()},
                     {"restartActorId", restartActorId},
@@ -1703,7 +1687,8 @@ private:
 
         auto issues = event.OperationIssues;
         if (!issues) {
-            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired for current query execution runner. Execution runner node was lost.");
+            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete"
+                                                     : "Lease expired for current query execution runner. Execution runner node was lost.");
         }
 
         // Script execution lease is expired but TRunScriptActor may be still running, so we should check it availability first
@@ -1712,7 +1697,8 @@ private:
         const auto status = event.OperationStatus.GetOrElse(Ydb::StatusIds::UNAVAILABLE);
 
         auto execStatus = Ydb::Query::EXEC_STATUS_ABORTED;
-        if (event.ExecutionStatus && IsIn({Ydb::Query::EXEC_STATUS_ABORTED, Ydb::Query::EXEC_STATUS_CANCELLED, Ydb::Query::EXEC_STATUS_COMPLETED, Ydb::Query::EXEC_STATUS_FAILED}, *event.ExecutionStatus)) {
+        if (event.ExecutionStatus && IsIn({ Ydb::Query::EXEC_STATUS_ABORTED, Ydb::Query::EXEC_STATUS_CANCELLED,
+                                              Ydb::Query::EXEC_STATUS_COMPLETED, Ydb::Query::EXEC_STATUS_FAILED }, *event.ExecutionStatus)) {
             execStatus = *event.ExecutionStatus;
         }
 
@@ -1724,19 +1710,11 @@ private:
             {"issues", issues.ToOneLineString()},
             {"leaseGeneration", event.LeaseGeneration});
 
-        ScriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
-            finalizationStatus,
-            ExecutionId,
-            Database,
-            status,
-            execStatus,
-            std::move(issues),
-            std::nullopt,  // queryStats
-            std::nullopt,  // queryPlan
-            std::nullopt,  // queryAst
-            event.LeaseGeneration,
-            /* cancelledByUser */ false
-        );
+        ScriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(finalizationStatus, ExecutionId, Database, status, execStatus,
+            std::move(issues), std::nullopt,   // queryStats
+            std::nullopt,   // queryPlan
+            std::nullopt,   // queryAst
+            event.LeaseGeneration, /* cancelledByUser */ false);
 
         CheckAliveFlags = IEventHandle::FlagTrackDelivery;
         if (RunScriptActorId.NodeId() != SelfId().NodeId()) {
@@ -1891,12 +1869,8 @@ private:
             CheckAliveRetryState = TRetryPolicy::GetExponentialBackoffPolicy(
                 [](bool longDelay) {
                     return longDelay ? ERetryErrorClass::LongRetry : ERetryErrorClass::ShortRetry;
-                },
-                TDuration::MilliSeconds(100),
-                TDuration::MilliSeconds(300),
-                TDuration::Seconds(1),
-                MAX_CHECK_ALIVE_RETRIES
-            )->CreateRetryState();
+                }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(300), TDuration::Seconds(1), MAX_CHECK_ALIVE_RETRIES)
+                                       ->CreateRetryState();
         }
 
         if (const auto delay = CheckAliveRetryState->GetNextRetryDelay(longDelay)) {
@@ -1923,15 +1897,16 @@ private:
     void Reply() {
         YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
             {"logPrefix", LogPrefix()});
-        Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(Ydb::StatusIds::SUCCESS, {
-            .LeaseVerified = LeaseVerified,
-            .ExecutionEntryExists = EntryExists,
-        }), /* flags */ 0, Settings.Cookie);
+        Send(ReplyActorId,
+            new TEvPrivate::TEvFinalizeScriptLeaseResult(Ydb::StatusIds::SUCCESS, {
+                                                                                      .LeaseVerified = LeaseVerified,
+                                                                                      .ExecutionEntryExists = EntryExists,
+                                                                                  }), /* flags */ 0, Settings.Cookie);
         PassAway();
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, const TString& message) {
-        Reply(status, {NYql::TIssue(message)});
+        Reply(status, { NYql::TIssue(message) });
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
@@ -1946,15 +1921,18 @@ private:
                 {"issues", issues.ToOneLineString()});
         }
 
-        Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
-            .LeaseVerified = LeaseVerified,
-            .ExecutionEntryExists = EntryExists,
-        }, std::move(issues)), /* flags */ 0, Settings.Cookie);
+        Send(ReplyActorId,
+            new TEvPrivate::TEvFinalizeScriptLeaseResult(status,
+                {
+                    .LeaseVerified = LeaseVerified,
+                    .ExecutionEntryExists = EntryExists,
+                }, std::move(issues)), /* flags */ 0, Settings.Cookie);
         PassAway();
     }
 
     TString LogPrefix() const {
-        auto result = TStringBuilder() << "[TFinalizeScriptLeaseActor] OwnerId: " << ReplyActorId << " ActorId: " << SelfId() << " Database: " << Database << " ExecutionId: " << ExecutionId;
+        auto result = TStringBuilder() << "[TFinalizeScriptLeaseActor] OwnerId: " << ReplyActorId << " ActorId: " << SelfId()
+                                       << " Database: " << Database << " ExecutionId: " << ExecutionId;
         if (RunScriptActorId) {
             result << " RunScriptActorId: " << RunScriptActorId;
         }
@@ -1981,7 +1959,8 @@ private:
 
 // Cleanup all meta information and results corresponding to script execution operation. NOTE: results removed on best effort
 
-class TForgetScriptExecutionOperationQueryActor : public TQueryBase<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse> {
+class TForgetScriptExecutionOperationQueryActor
+    : public TQueryBase<TForgetScriptExecutionOperationQueryActor, TEvForgetScriptExecutionOperationResponse> {
     static constexpr i32 NUMBER_ROWS_IN_BATCH = 100'000;
 
     struct TResultSetInfo {
@@ -1991,17 +1970,15 @@ class TForgetScriptExecutionOperationQueryActor : public TQueryBase<TForgetScrip
     };
 
 public:
-    TForgetScriptExecutionOperationQueryActor(TString executionId, TString database, std::optional<std::vector<Ydb::Query::ResultSetMeta>> resultSetMetas)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId)})
+    TForgetScriptExecutionOperationQueryActor(
+        TString executionId, TString database, std::optional<std::vector<Ydb::Query::ResultSetMeta>> resultSetMetas)
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId) })
         , HasResultsInfo(resultSetMetas.has_value())
     {
         if (resultSetMetas) {
             ResultSets.reserve(resultSetMetas->size());
             for (ui64 i = 0; i < resultSetMetas->size(); ++i) {
-                ResultSets.push_back({
-                    .Id = static_cast<i32>(i),
-                    .MaxRowId = static_cast<i64>(resultSetMetas->at(i).number_rows())
-                });
+                ResultSets.push_back({ .Id = static_cast<i32>(i), .MaxRowId = static_cast<i64>(resultSetMetas->at(i).number_rows()) });
             }
         }
     }
@@ -2134,7 +2111,8 @@ private:
                 .Build();
         // clang-format on
 
-        SetQueryResultHandler(&TThis::OnResultsDeleted, TStringBuilder() << "Delete script results in range [" << minRowId << "; " << resultSet.MaxRowId << "]");
+        SetQueryResultHandler(
+            &TThis::OnResultsDeleted, TStringBuilder() << "Delete script results in range [" << minRowId << "; " << resultSet.MaxRowId << "]");
         RunDataQuery(sql, &params);
     }
 
@@ -2172,12 +2150,13 @@ private:
     bool ResponseSent = false;
 };
 
-class TForgetScriptExecutionOperationActor : public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
+class TForgetScriptExecutionOperationActor: public TActorBootstrapped<TForgetScriptExecutionOperationActor> {
 public:
     explicit TForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr&& ev)
         : Request(std::move(ev))
         , Database(Request->Get()->Database)
-    {}
+    {
+    }
 
     void Bootstrap() {
         auto userSID = Request->Get()->UserSID;
@@ -2194,7 +2173,8 @@ public:
 
         ExecutionId = std::move(*executionId);
 
-        const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{.UserSID = userSID}));
+        const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(
+            SelfId(), Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{ .UserSID = userSID }));
         YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCheckLeaseStatusQueryActor",
             {"logPrefix", LogPrefix()},
             {"checkerId", checkerId});
@@ -2229,10 +2209,12 @@ private:
                 YDB_LOG_WARN("[ScriptExecutions] Lease check finished, but operation is still running. Cancel it",
                     {"logPrefix", LogPrefix()},
                     {"sender", ev->Sender});
-                Send(MakeKqpProxyID(SelfId().NodeId()), new TEvCancelScriptExecutionOperation(Database, Request->Get()->OperationId, Request->Get()->UserSID, {
-                    .FailOnNotFound = false,
-                    .FailOnAlreadyStopped = false,
-                }));
+                Send(MakeKqpProxyID(SelfId().NodeId()),
+                    new TEvCancelScriptExecutionOperation(Database, Request->Get()->OperationId, Request->Get()->UserSID,
+                        {
+                            .FailOnNotFound = false,
+                            .FailOnAlreadyStopped = false,
+                        }));
             } else {
                 YDB_LOG_INFO("[ScriptExecutions] Lease check finished, but operation is still running",
                     {"logPrefix", LogPrefix()},
@@ -2280,7 +2262,8 @@ private:
     }
 
     void StartForgetOperation() {
-        const auto& forgetId = Register(TForgetScriptExecutionOperationQueryActor::MakeRetry(SelfId(), ExecutionId, Database, std::move(ResultSetMetas)));
+        const auto& forgetId =
+            Register(TForgetScriptExecutionOperationQueryActor::MakeRetry(SelfId(), ExecutionId, Database, std::move(ResultSetMetas)));
         YDB_LOG_DEBUG("[ScriptExecutions] Starting TForgetOperationRetryActor",
             {"logPrefix", LogPrefix()},
             {"forgetId", forgetId});
@@ -2309,11 +2292,12 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, const TString& message) {
-        Reply(status, {NYql::TIssue(message)});
+        Reply(status, { NYql::TIssue(message) });
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[TForgetScriptExecutionOperationActor] OwnerId: " << Request->Sender << " ActorId: " << SelfId() << " Database: " << Database << " ExecutionId: " << ExecutionId << ". ";
+        return TStringBuilder() << "[TForgetScriptExecutionOperationActor] OwnerId: " << Request->Sender << " ActorId: " << SelfId()
+                                << " Database: " << Database << " ExecutionId: " << ExecutionId << ". ";
     }
 
     const TEvForgetScriptExecutionOperation::TPtr Request;
@@ -2325,14 +2309,17 @@ private:
 
 // Fetch current state of script execution operation, used by gRPC API get-operation and streaming queries sys view
 
-class TGetScriptExecutionOperationQueryActor final : public TQueryWithAccessValidationBase<TGetScriptExecutionOperationQueryActor, TEvGetScriptExecutionOperationResponse> {
+class TGetScriptExecutionOperationQueryActor final
+    : public TQueryWithAccessValidationBase<TGetScriptExecutionOperationQueryActor, TEvGetScriptExecutionOperationResponse> {
 public:
-    TGetScriptExecutionOperationQueryActor(TString database, NOperationId::TOperationId operationId, std::optional<TString> userSID, const bool failOnNotFound, const ui64 cookie)
-        : TQueryWithAccessValidationBase(__func__, {.Database = std::move(database)}, std::move(userSID))
+    TGetScriptExecutionOperationQueryActor(
+        TString database, NOperationId::TOperationId operationId, std::optional<TString> userSID, const bool failOnNotFound, const ui64 cookie)
+        : TQueryWithAccessValidationBase(__func__, { .Database = std::move(database) }, std::move(userSID))
         , OperationId(std::move(operationId))
         , FailOnNotFound(failOnNotFound)
         , Cookie(cookie)
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -2460,7 +2447,8 @@ private:
             OperationIssues = ParseScriptExecutionIssues(result);
 
             if (auto resultSetMetas = ParseResultSetMetas(result)) {
-                Metadata.mutable_result_sets_meta()->Add(std::make_move_iterator(resultSetMetas->begin()), std::make_move_iterator(resultSetMetas->end()));
+                Metadata.mutable_result_sets_meta()->Add(
+                    std::make_move_iterator(resultSetMetas->begin()), std::make_move_iterator(resultSetMetas->end()));
             } else {
                 return;
             }
@@ -2494,11 +2482,12 @@ private:
                     return;
                 }
 
-                LeaseStatus = static_cast<ELeaseState>(result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
+                LeaseStatus = static_cast<ELeaseState>(
+                    result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
                 if (*LeaseStatus == ELeaseState::WaitRetry) {
                     SuspendedUntil = *leaseDeadline;
                 } else if (*LeaseStatus == ELeaseState::ScriptFinalizing) {
-                    Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_RUNNING); // Waiting for finalization
+                    Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_RUNNING);   // Waiting for finalization
                 }
             } else if (!OperationStatus) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state, lease not found for running query");
@@ -2518,7 +2507,8 @@ private:
         bool ready = !!OperationStatus;
         if (LeaseStatus && OperationStatus) {
             ready = false;
-            NYql::TIssue finalizationIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << (*LeaseStatus == ELeaseState::ScriptFinalizing ? "finalization" : "retry"));
+            NYql::TIssue finalizationIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait "
+                                                            << (*LeaseStatus == ELeaseState::ScriptFinalizing ? "finalization" : "retry"));
             finalizationIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             OperationIssues.AddIssue(finalizationIssue);
             OperationStatus = std::nullopt;
@@ -2537,18 +2527,20 @@ private:
         google::protobuf::Any metadata;
         metadata.PackFrom(Metadata);
 
-        Send(Owner, new TEvGetScriptExecutionOperationResponse(*OperationStatus, {
-            .Metadata = std::move(metadata),
-            .Ready = ready,
-            .StateSaved = StateSaved,
-            .ExecutionEntryExists = ExecutionEntryExists,
-            .RetryCount = RetryState.GetRetryCounter(),
-            .LastFailAt = NProtoInterop::CastFromProto(RetryState.GetRetryCounterUpdatedAt()),
-            .SuspendedUntil = SuspendedUntil,
-            .RequestStatus = status,
-            .SubmittedAt = SubmittedAt,
-            .FinishedAt = FinishedAt,
-        }, std::move(OperationIssues)), /* flags */ 0, Cookie);
+        Send(Owner,
+            new TEvGetScriptExecutionOperationResponse(*OperationStatus,
+                {
+                    .Metadata = std::move(metadata),
+                    .Ready = ready,
+                    .StateSaved = StateSaved,
+                    .ExecutionEntryExists = ExecutionEntryExists,
+                    .RetryCount = RetryState.GetRetryCounter(),
+                    .LastFailAt = NProtoInterop::CastFromProto(RetryState.GetRetryCounterUpdatedAt()),
+                    .SuspendedUntil = SuspendedUntil,
+                    .RequestStatus = status,
+                    .SubmittedAt = SubmittedAt,
+                    .FinishedAt = FinishedAt,
+                }, std::move(OperationIssues)), /* flags */ 0, Cookie);
     }
 
     const NOperationId::TOperationId OperationId;
@@ -2568,13 +2560,15 @@ private:
 
 // List all available script execution operations with paging, used by gRPC API list-operations
 
-class TListScriptExecutionOperationsQuery final : public TQueryWithAccessValidationBase<TListScriptExecutionOperationsQuery, TEvListScriptExecutionOperationsResponse> {
+class TListScriptExecutionOperationsQuery final
+    : public TQueryWithAccessValidationBase<TListScriptExecutionOperationsQuery, TEvListScriptExecutionOperationsResponse> {
 public:
     TListScriptExecutionOperationsQuery(TString database, std::optional<TString> userSID, TString pageToken, const ui64 pageSize)
-        : TQueryWithAccessValidationBase(__func__, {.Database = std::move(database)}, std::move(userSID))
+        : TQueryWithAccessValidationBase(__func__, { .Database = std::move(database) }, std::move(userSID))
         , PageToken(std::move(pageToken))
         , PageSize(ClampVal<ui64>(pageSize, 1, 100))
-    {}
+    {
+    }
 
 private:
     static std::optional<std::pair<TInstant, TString>> ParsePageToken(const TString& token) {
@@ -2663,13 +2657,7 @@ private:
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Invalid page token");
                 return;
             }
-            params
-                .AddParam("$ts")
-                    .Timestamp(pageTokenParts->first)
-                    .Build()
-                .AddParam("$execution_id")
-                    .Utf8(pageTokenParts->second)
-                    .Build();
+            params.AddParam("$ts").Timestamp(pageTokenParts->first).Build() .AddParam("$execution_id").Utf8(pageTokenParts->second).Build();
         }
 
         RunDataQuery(sql, &params, TTxControl::BeginAndCommitTx(/* snapshotRead */ true));
@@ -2753,11 +2741,13 @@ private:
 
 // To cancel script execution operation what currently waiting for retry we should just reset retry policy and update status
 
-class TResetScriptExecutionRetriesQueryActor final : public TQueryBase<TResetScriptExecutionRetriesQueryActor, TEvResetScriptExecutionRetriesResponse> {
+class TResetScriptExecutionRetriesQueryActor final
+    : public TQueryBase<TResetScriptExecutionRetriesQueryActor, TEvResetScriptExecutionRetriesResponse> {
 public:
     TResetScriptExecutionRetriesQueryActor(TString database, TString executionId)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId)})
-    {}
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId) })
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -2846,7 +2836,8 @@ private:
         if (!DropLease) {
             Y_VALIDATE(RetryState && executionStatus && operationStatus, "Unexpected operation info");
 
-            if (!hasRetries && static_cast<Ydb::Query::ExecStatus>(*executionStatus) == Ydb::Query::EXEC_STATUS_CANCELLED && static_cast<Ydb::StatusIds_StatusCode>(*operationStatus) == Ydb::StatusIds::CANCELLED) {
+            if (!hasRetries && static_cast<Ydb::Query::ExecStatus>(*executionStatus) == Ydb::Query::EXEC_STATUS_CANCELLED &&
+                static_cast<Ydb::StatusIds_StatusCode>(*operationStatus) == Ydb::StatusIds::CANCELLED) {
                 AlreadyStopped = true;
                 return Finish();
             }
@@ -2901,11 +2892,12 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvResetScriptExecutionRetriesResponse(status, {
-            .OperationStillRunning = OperationStillRunning,
-            .ExecutionEntryExists = ExecutionEntryExists,
-            .AlreadyStopped = AlreadyStopped,
-        }, std::move(issues)));
+        Send(Owner, new TEvResetScriptExecutionRetriesResponse(status,
+                        {
+                            .OperationStillRunning = OperationStillRunning,
+                            .ExecutionEntryExists = ExecutionEntryExists,
+                            .AlreadyStopped = AlreadyStopped,
+                        }, std::move(issues)));
     }
 
     std::optional<NKikimrKqp::TScriptExecutionRetryState> RetryState;
@@ -2920,18 +2912,20 @@ private:
 // 1. Retry backoff large enough to cancel script execution operation between retries
 // 2. System not under high load so data transaction cannot be executed during backoff period
 
-class TCancelScriptExecutionOperationActor final : public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
+class TCancelScriptExecutionOperationActor final: public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;
     using TRetryPolicy = IRetryPolicy<>;
 
     static constexpr ui64 MAX_CANCEL_RETRIES = 30;
 
 public:
-    TCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+    TCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig,
+        TIntrusivePtr<TKqpCounters> counters)
         : Request(std::move(ev))
         , QueryServiceConfig(std::move(queryServiceConfig))
         , Counters(std::move(counters))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
@@ -3064,7 +3058,8 @@ private:
         }
 
         // Race with script execution retry, retry immediately because we already know that state of script execution was changed
-        ScheduleRetryOrReply(status, AddRootIssue("Failed to cancel script execution, query execution is under retry", issues), /* immediate */ true);
+        ScheduleRetryOrReply(
+            status, AddRootIssue("Failed to cancel script execution, query execution is under retry", issues), /* immediate */ true);
     }
 
     void Handle(TEvPrivate::TEvFinalizeScriptLeaseResult::TPtr& ev) {
@@ -3103,7 +3098,8 @@ private:
             // State of script execution changed (most likely it was finalized), report retry attempt and continue cancel
         }
 
-        ScheduleRetryOrReply(status, AddRootIssue("Failed to cancel script execution, query execution finalization was not successful", issues), /* immediate */ true);
+        ScheduleRetryOrReply(status, AddRootIssue("Failed to cancel script execution, query execution finalization was not successful", issues),
+            /* immediate */ true);
     }
 
     void Handle(TEvKqp::TEvCancelScriptExecutionResponse::TPtr& ev) {
@@ -3149,7 +3145,8 @@ private:
             return Reply(Ydb::StatusIds::SUCCESS);
         }
 
-        ScheduleRetryOrReply(status, AddRootIssue("Failed to cancel script execution, query final status saving was not successful", issues), /* immediate */ true);
+        ScheduleRetryOrReply(status, AddRootIssue("Failed to cancel script execution, query final status saving was not successful", issues),
+            /* immediate */ true);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -3164,7 +3161,9 @@ private:
         }
         RunScriptActor = {};
 
-        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")", /* immediate */ false);
+        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE,
+            TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")",
+            /* immediate */ false);
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -3178,7 +3177,8 @@ private:
         }
         RunScriptActor = {};
 
-        ScheduleRetryOrReply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver cancel request to destination (node disconnected)", /* immediate */ false);
+        ScheduleRetryOrReply(
+            Ydb::StatusIds::UNAVAILABLE, "Failed to deliver cancel request to destination (node disconnected)", /* immediate */ false);
     }
 
     void ResetSessionSubscribe() {
@@ -3190,7 +3190,8 @@ private:
 
     void GetScriptExecutionOperationStatus() {
         WaitRetry = false;
-        const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(SelfId(), Request->Get()->Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{.UserSID = UserSID}));
+        const auto& checkerId = Register(TCheckLeaseStatusQueryActor::MakeRetry(
+            SelfId(), Request->Get()->Database, ExecutionId, TCheckLeaseStatusQueryActor::TSettings{ .UserSID = UserSID }));
         YDB_LOG_DEBUG("[ScriptExecutions] Starting TCheckLeaseStatusQueryActor",
             {"logPrefix", LogPrefix()},
             {"checkerId", checkerId});
@@ -3204,10 +3205,12 @@ private:
     }
 
     void FinalizeScriptLease() {
-        const auto& finalizeActorId = Register(new TFinalizeScriptLeaseActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, {
-            .AllowRestart = false,
-            .FailOnNotFound = false,
-        }));
+        const auto& finalizeActorId =
+            Register(new TFinalizeScriptLeaseActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters,
+                {
+                    .AllowRestart = false,
+                    .FailOnNotFound = false,
+                }));
         YDB_LOG_DEBUG("[ScriptExecutions] Starting TFinalizeScriptLeaseActor",
             {"logPrefix", LogPrefix()},
             {"finalizeActorId", finalizeActorId});
@@ -3230,7 +3233,9 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[TCancelScriptExecutionOperationActor] OwnerId: " << Request->Sender << " ActorId: " << SelfId() << " Database: " << Request->Get()->Database << " ExecutionId: " << ExecutionId << " RunScriptActor: " << RunScriptActor << ". ";
+        return TStringBuilder() << "[TCancelScriptExecutionOperationActor] OwnerId: " << Request->Sender << " ActorId: " << SelfId()
+                                << " Database: " << Request->Get()->Database << " ExecutionId: " << ExecutionId
+                                << " RunScriptActor: " << RunScriptActor << ". ";
     }
 
     void ScheduleRetryOrReply(const Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const bool immediate = false) {
@@ -3242,12 +3247,8 @@ private:
             RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
                 []() {
                     return ERetryErrorClass::ShortRetry;
-                },
-                TDuration::MilliSeconds(100),
-                TDuration::MilliSeconds(100),
-                TDuration::Seconds(1),
-                MAX_CANCEL_RETRIES
-            )->CreateRetryState();
+                }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(100), TDuration::Seconds(1), MAX_CANCEL_RETRIES)
+                             ->CreateRetryState();
         }
 
         if (auto delay = RetryState->GetNextRetryDelay()) {
@@ -3269,20 +3270,22 @@ private:
     }
 
     void ScheduleRetryOrReply(const Ydb::StatusIds::StatusCode status, const TString& message, const bool immediate = false) {
-        ScheduleRetryOrReply(status, {NYql::TIssue(message)}, immediate);
+        ScheduleRetryOrReply(status, { NYql::TIssue(message) }, immediate);
     }
 
     void ReplyNotFound() {
         YDB_LOG_WARN("[ScriptExecutions] Script execution operation not found",
             {"logPrefix", LogPrefix()});
         EntryExists = false;
-        return Reply(Request->Get()->Settings.FailOnNotFound ? Ydb::StatusIds::NOT_FOUND : Ydb::StatusIds::SUCCESS, "Script execution operation not found");
+        return Reply(Request->Get()->Settings.FailOnNotFound ? Ydb::StatusIds::NOT_FOUND : Ydb::StatusIds::SUCCESS,
+            "Script execution operation not found");
     }
 
     void ReplyAlreadyStopped() {
         YDB_LOG_WARN("[ScriptExecutions] Script execution operation is already finished",
             {"logPrefix", LogPrefix()});
-        return Reply(Request->Get()->Settings.FailOnAlreadyStopped ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::SUCCESS, "Script execution operation is already finished");
+        return Reply(Request->Get()->Settings.FailOnAlreadyStopped ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::SUCCESS,
+            "Script execution operation is already finished");
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
@@ -3304,7 +3307,7 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, const TString& message) {
-        Reply(status, {NYql::TIssue(message)});
+        Reply(status, { NYql::TIssue(message) });
     }
 
     const TEvCancelScriptExecutionOperation::TPtr Request;
@@ -3324,12 +3327,13 @@ private:
 
 // Save information about result sets and column types, started from TRunScriptActor on each new result set
 
-class TSaveScriptExecutionResultMetaQuery final : public TQueryBase<TSaveScriptExecutionResultMetaQuery, TEvSaveScriptResultMetaFinished> {
+class TSaveScriptExecutionResultMetaQuery final: public TQueryBase<TSaveScriptExecutionResultMetaQuery, TEvSaveScriptResultMetaFinished> {
 public:
     TSaveScriptExecutionResultMetaQuery(TString database, TString executionId, TString serializedMetas, const i64 leaseGeneration)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , SerializedMetas(std::move(serializedMetas))
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -3349,13 +3353,7 @@ private:
         )";
 
         auto params = CreateParams();
-        params
-            .AddParam("$result_set_metas")
-                .JsonDocument(SerializedMetas)
-                .Build()
-            .AddParam("$lease_generation")
-                .Int64(LeaseGeneration)
-                .Build();
+        params.AddParam("$result_set_metas").JsonDocument(SerializedMetas).Build() .AddParam("$lease_generation").Int64(LeaseGeneration).Build();
 
         RunDataQuery(sql, &params);
     }
@@ -3370,17 +3368,18 @@ private:
 // Save result data part from TRunScriptActor as it arrived from DQ
 // (NOTE: lease generation and status is not validated, so should not be used with retries and results may be written after finish)
 
-class TSaveScriptExecutionResultQuery final : public TQueryBase<TSaveScriptExecutionResultQuery, TEvSaveScriptResultPartFinished> {
+class TSaveScriptExecutionResultQuery final: public TQueryBase<TSaveScriptExecutionResultQuery, TEvSaveScriptResultPartFinished> {
 public:
-    TSaveScriptExecutionResultQuery(TString database, TString executionId, const i32 resultSetId,
-        const std::optional<TInstant> expireAt, const i64 firstRow, const i64 accumulatedSize, Ydb::ResultSet resultSet)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId)})
+    TSaveScriptExecutionResultQuery(TString database, TString executionId, const i32 resultSetId, const std::optional<TInstant> expireAt,
+        const i64 firstRow, const i64 accumulatedSize, Ydb::ResultSet resultSet)
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId) })
         , ResultSetId(resultSetId)
         , ExpireAt(expireAt)
         , FirstRow(firstRow)
         , AccumulatedSize(accumulatedSize)
         , ResultSet(std::move(resultSet))
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -3405,13 +3404,7 @@ private:
         )";
 
         auto params = CreateParams();
-        params
-            .AddParam("$result_set_id")
-                .Int32(ResultSetId)
-                .Build()
-            .AddParam("$expire_at")
-                .OptionalTimestamp(ExpireAt)
-                .Build();
+        params.AddParam("$result_set_id").Int32(ResultSetId).Build() .AddParam("$expire_at").OptionalTimestamp(ExpireAt).Build();
 
         auto& param = params.AddParam("$items");
         param.BeginList();
@@ -3433,9 +3426,7 @@ private:
                 .EndStruct();
             // clang-format on
         }
-        param
-            .EndList()
-            .Build();
+        param.EndList().Build();
 
         YDB_LOG_DEBUG("[ScriptExecutions] Saving result rows",
             {"logPrefix", LogPrefix()},
@@ -3460,10 +3451,10 @@ private:
     i64 SavedSize = 0;
 };
 
-class TSaveScriptExecutionResultActor final : public TActorBootstrapped<TSaveScriptExecutionResultActor> {
+class TSaveScriptExecutionResultActor final: public TActorBootstrapped<TSaveScriptExecutionResultActor> {
     static constexpr ui64 MAX_NUMBER_ROWS_IN_BATCH = 10000;
     static constexpr ui64 PROGRAM_SIZE_LIMIT = 10_MB;
-    static constexpr ui64 PROGRAM_BASE_SIZE = 1_MB;  // Depends on MAX_NUMBER_ROWS_IN_BATCH
+    static constexpr ui64 PROGRAM_BASE_SIZE = 1_MB;   // Depends on MAX_NUMBER_ROWS_IN_BATCH
 
 public:
     TSaveScriptExecutionResultActor(const TActorId& replyActorId, TString database, TString executionId, const i32 resultSetId,
@@ -3476,7 +3467,8 @@ public:
         , FirstRow(firstRow)
         , AccumulatedSize(accumulatedSize)
         , RowsSplitter(std::move(resultSet), PROGRAM_SIZE_LIMIT, PROGRAM_BASE_SIZE, MAX_NUMBER_ROWS_IN_BATCH)
-    {}
+    {
+    }
 
     void StartSaveResultQuery() {
         if (ResultSets.empty()) {
@@ -3485,7 +3477,8 @@ public:
         }
 
         i64 numberRows = ResultSets.back().rows_size();
-        const auto& saverId = Register(TSaveScriptExecutionResultQuery::MakeRetry(SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
+        const auto& saverId = Register(TSaveScriptExecutionResultQuery::MakeRetry(
+            SelfId(), Database, ExecutionId, ResultSetId, ExpireAt, FirstRow, AccumulatedSize, ResultSets.back()));
         YDB_LOG_DEBUG("[ScriptExecutions] Starting to save result rows batch",
             {"logPrefix", LogPrefix()},
             {"firstRow", FirstRow},
@@ -3540,7 +3533,8 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[TSaveScriptExecutionResultActor] OwnerId: " << ReplyActorId << " ActorId: " << SelfId() << " Database: " << Database << " ExecutionId: " << ExecutionId << " ResultSetId: " << ResultSetId << ". ";
+        return TStringBuilder() << "[TSaveScriptExecutionResultActor] OwnerId: " << ReplyActorId << " ActorId: " << SelfId()
+                                << " Database: " << Database << " ExecutionId: " << ExecutionId << " ResultSetId: " << ResultSetId << ". ";
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
@@ -3565,17 +3559,20 @@ private:
 
 // Fetch script execution result part, called from gRPC API fetch script execution results. Will read only fixed result part reported in result sets meta
 
-class TGetScriptExecutionResultQueryActor final : public TQueryWithAccessValidationBase<TGetScriptExecutionResultQueryActor, TEvFetchScriptResultsResponse> {
+class TGetScriptExecutionResultQueryActor final
+    : public TQueryWithAccessValidationBase<TGetScriptExecutionResultQueryActor, TEvFetchScriptResultsResponse> {
 public:
-    TGetScriptExecutionResultQueryActor(TString database, TString executionId, std::optional<TString> userSID,
-        const i32 resultSetIndex, const i64 offset, const i64 rowsLimit, const i64 sizeLimit, const TInstant deadline)
-        : TQueryWithAccessValidationBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId)}, std::move(userSID))
+    TGetScriptExecutionResultQueryActor(TString database, TString executionId, std::optional<TString> userSID, const i32 resultSetIndex,
+        const i64 offset, const i64 rowsLimit, const i64 sizeLimit, const TInstant deadline)
+        : TQueryWithAccessValidationBase(
+              __func__, { .Database = std::move(database), .ExecutionId = std::move(executionId) }, std::move(userSID))
         , ResultSetIndex(resultSetIndex)
         , Offset(offset)
         , RowsLimit(rowsLimit)
         , SizeLimit(sizeLimit)
         , Deadline(rowsLimit ? TInstant::Max() : deadline)
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -3655,7 +3652,7 @@ private:
             }
 
             const auto resultsTtl = GetDuration(meta.GetResultsTtl());
-            if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
+            if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()) {
                 Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
                 return;
             }
@@ -3855,13 +3852,14 @@ private:
 
 // Save information about query effects like S3 writes in order to commit / rollback after operation finish, saved after query compilation in DataExecuter
 
-class TSaveScriptExternalEffectActor final : public TQueryBase<TSaveScriptExternalEffectActor, TEvSaveScriptExternalEffectResponse> {
+class TSaveScriptExternalEffectActor final: public TQueryBase<TSaveScriptExternalEffectActor, TEvSaveScriptExternalEffectResponse> {
 public:
-    TSaveScriptExternalEffectActor(TString database, TString executionId,
-        TEvSaveScriptExternalEffectRequest::TDescription request, const i64 leaseGeneration)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+    TSaveScriptExternalEffectActor(
+        TString database, TString executionId, TEvSaveScriptExternalEffectRequest::TDescription request, const i64 leaseGeneration)
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , Request(std::move(request))
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -3910,12 +3908,15 @@ private:
         }
 
         if (LeaseGeneration != *leaseGenerationInDatabase) {
-            Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Lease was lost, expected generation: " << LeaseGeneration << ", got: " << *leaseGenerationInDatabase);
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED,
+                TStringBuilder() << "Lease was lost, expected generation: " << LeaseGeneration << ", got: " << *leaseGenerationInDatabase);
             return;
         }
 
-        if (const auto& customerSuppliedId = result.ColumnParser("customer_supplied_id").GetOptionalUtf8(); customerSuppliedId && *customerSuppliedId != Request.CustomerSuppliedId) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Customer supplied id mismatch, expected: " << Request.CustomerSuppliedId << ", got: " << *customerSuppliedId);
+        if (const auto& customerSuppliedId = result.ColumnParser("customer_supplied_id").GetOptionalUtf8();
+            customerSuppliedId && *customerSuppliedId != Request.CustomerSuppliedId) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Customer supplied id mismatch, expected: " << Request.CustomerSuppliedId
+                                                                    << ", got: " << *customerSuppliedId);
             return;
         }
 
@@ -3995,8 +3996,8 @@ private:
 // Finalization will continue only if script execution has external effects, otherwise it will be finished on the first phase.
 // Finalization should be idempotent, because it may run multiple times during script execution runtime.
 
-template<typename TDerived, typename TResponse>
-class TScriptFinalizationActorBase : public TQueryBase<TDerived, TResponse> {
+template <typename TDerived, typename TResponse>
+class TScriptFinalizationActorBase: public TQueryBase<TDerived, TResponse> {
     using TBase = TQueryBase<TDerived, TResponse>;
 
     struct TLeaseFinalizationInfo {
@@ -4030,13 +4031,12 @@ protected:
         retryLimiter.SaveToProto(RetryState);
 
         if (retry) {
-            issues = AddRootIssue(TStringBuilder()
-                << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status)
-                << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ", Backoff: " << retryLimiter.Backoff << ")"
-                << " at " << now, issues);
+            issues = AddRootIssue(TStringBuilder() << "Script execution operation failed with code " << Ydb::StatusIds::StatusCode_Name(status)
+                                                   << " and will be restarted (RetryCount: " << retryLimiter.RetryCount
+                                                   << ", Backoff: " << retryLimiter.Backoff << ")"
+                                                   << " at " << now, issues);
 
-            return {
-                .Sql = R"(
+            return { .Sql = R"(
                     UPSERT INTO `.metadata/script_execution_leases` (
                         database, execution_id, lease_deadline, lease_state
                     ) VALUES (
@@ -4044,8 +4044,7 @@ protected:
                     );
                 )",
                 .Backoff = retryLimiter.Backoff,
-                .NewLeaseState = ELeaseState::WaitRetry
-            };
+                .NewLeaseState = ELeaseState::WaitRetry };
         } else {
             if (policy) {
                 TStringBuilder finalIssue;
@@ -4056,12 +4055,10 @@ protected:
                 issues = AddRootIssue(finalIssue << " at " << now, issues);
             }
 
-            return {
-                .Sql = R"(
+            return { .Sql = R"(
                     DELETE FROM `.metadata/script_execution_leases`
                     WHERE database = $database AND execution_id = $execution_id;
-                )"
-            };
+                )" };
         }
     }
 
@@ -4073,12 +4070,14 @@ protected:
         }
 
         if (TBase::LeaseGeneration != *leaseGenerationInDatabase) {
-            TBase::Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Lease was lost, expected generation: " << TBase::LeaseGeneration << ", got: " << *leaseGenerationInDatabase);
+            TBase::Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder()
+                                                                   << "Lease was lost, expected generation: " << TBase::LeaseGeneration
+                                                                   << ", got: " << *leaseGenerationInDatabase);
             return false;
         }
 
         const auto leaseState = result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning));
-        if (!IsIn({ELeaseState::ScriptRunning, ELeaseState::ScriptFinalizing}, static_cast<ELeaseState>(leaseState))) {
+        if (!IsIn({ ELeaseState::ScriptRunning, ELeaseState::ScriptFinalizing }, static_cast<ELeaseState>(leaseState))) {
             TBase::Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Lease is not in expected state: " << leaseState);
             return false;
         }
@@ -4090,13 +4089,15 @@ protected:
     TInstant StartedAt;
 };
 
-class TSaveScriptFinalStatusActor final : public TScriptFinalizationActorBase<TSaveScriptFinalStatusActor, TEvSaveScriptFinalStatusResponse> {
+class TSaveScriptFinalStatusActor final: public TScriptFinalizationActorBase<TSaveScriptFinalStatusActor, TEvSaveScriptFinalStatusResponse> {
 public:
     explicit TSaveScriptFinalStatusActor(TEvScriptFinalizeRequest::TDescription request)
-        : TScriptFinalizationActorBase(__func__, {.Database = request.Database, .ExecutionId = request.ExecutionId, .LeaseGeneration = request.LeaseGeneration})
+        : TScriptFinalizationActorBase(
+              __func__, { .Database = request.Database, .ExecutionId = request.ExecutionId, .LeaseGeneration = request.LeaseGeneration })
         , Request(std::move(request))
         , Response(std::make_unique<TEvSaveScriptFinalStatusResponse>())
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -4218,8 +4219,8 @@ private:
                 }
                 if (!*stateSaved) {
                     DisableRetries(result.ColumnParser("graph_compressed").GetOptionalString()
-                        ? "Zero checkpoint is not saved while checkpointing is enabled"
-                        : "Query physical graph is not saved");
+                                       ? "Zero checkpoint is not saved while checkpointing is enabled"
+                                       : "Query physical graph is not saved");
                 }
             }
 
@@ -4233,7 +4234,8 @@ private:
         {   // Lease info
             NYdb::TResultSetParser result(ResultSets[1]);
             if (!result.TryNextRow()) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state, expected existing lease before finalization (maybe already finalized)");
+                Finish(Ydb::StatusIds::INTERNAL_ERROR,
+                    "Unexpected operation state, expected existing lease before finalization (maybe already finalized)");
                 return;
             }
 
@@ -4303,7 +4305,7 @@ private:
             leaseState = leaseInfo.NewLeaseState;
         } else {
             retryDeadline += LeaseDuration;
-            sql <<  R"(
+            sql << R"(
                 UPSERT INTO `.metadata/script_execution_leases` (
                     database, execution_id, lease_deadline, lease_state
                 ) VALUES (
@@ -4319,12 +4321,13 @@ private:
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
             TStringStream statsStream;
-            NJson::WriteJson(&statsStream, &statsJson, {
-                .DoubleNDigits = 17,
-                .FloatToStringMode = PREC_NDIGITS,
-                .ValidateUtf8 = false,
-                .WriteNanAsString = true,
-            });
+            NJson::WriteJson(&statsStream, &statsJson,
+                {
+                    .DoubleNDigits = 17,
+                    .FloatToStringMode = PREC_NDIGITS,
+                    .ValidateUtf8 = false,
+                    .WriteNanAsString = true,
+                });
             serializedStats = statsStream.Str();
         }
 
@@ -4427,14 +4430,16 @@ private:
 
 // Script execution finalization second phase: after commit / rollback of external effects remove finalization status and lease
 
-class TScriptFinalizationFinisherActor final : public TScriptFinalizationActorBase<TScriptFinalizationFinisherActor, TEvScriptExecutionFinished>  {
+class TScriptFinalizationFinisherActor final: public TScriptFinalizationActorBase<TScriptFinalizationFinisherActor, TEvScriptExecutionFinished> {
 public:
     TScriptFinalizationFinisherActor(TString database, TString executionId, const std::optional<Ydb::StatusIds::StatusCode> operationStatus,
         NYql::TIssues operationIssues, const i64 leaseGeneration)
-        : TScriptFinalizationActorBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+        : TScriptFinalizationActorBase(
+              __func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , OperationStatus(operationStatus)
         , OperationIssues(AddRootIssue("Script finalization failed", operationIssues, /* addEmptyRoot */ false))
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -4552,8 +4557,8 @@ private:
                 }
                 if (!*stateSaved) {
                     DisableRetries(result.ColumnParser("graph_compressed").GetOptionalString()
-                        ? "Zero checkpoint is not saved while checkpointing is enabled"
-                        : "Query physical graph is not saved");
+                                       ? "Zero checkpoint is not saved while checkpointing is enabled"
+                                       : "Query physical graph is not saved");
                 }
             }
 
@@ -4633,10 +4638,11 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvScriptExecutionFinished(status, {
-            .ExecutionEntryExists = ExecutionEntryExists,
-            .AlreadyStopped = AlreadyFinalized,
-        }, std::move(issues)));
+        Send(Owner, new TEvScriptExecutionFinished(status,
+                        {
+                            .ExecutionEntryExists = ExecutionEntryExists,
+                            .AlreadyStopped = AlreadyFinalized,
+                        }, std::move(issues)));
     }
 
     std::optional<Ydb::StatusIds::StatusCode> OperationStatus;
@@ -4648,15 +4654,16 @@ private:
 
 // Update runtime statistics of script execution, started from TRunScriptActor
 
-class TScriptProgressActor final : public TQueryBase<TScriptProgressActor, TEvSaveScriptProgressResponse> {
+class TScriptProgressActor final: public TQueryBase<TScriptProgressActor, TEvSaveScriptProgressResponse> {
 public:
     TScriptProgressActor(TString database, TString executionId, std::optional<TString> queryPlan, std::optional<TString> ast,
         const i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , QueryPlan(std::move(queryPlan))
         , QueryAst(std::move(ast))
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -4757,13 +4764,14 @@ private:
 
 // Find all script executions with expired lease in any status and finalize or retry them
 
-class TListExpiredLeasesQueryActor final : public TQueryBase<TListExpiredLeasesQueryActor, TEvListExpiredLeasesResponse> {
+class TListExpiredLeasesQueryActor final: public TQueryBase<TListExpiredLeasesQueryActor, TEvListExpiredLeasesResponse> {
     static constexpr ui64 MAX_LISTED_LEASES = 100;
 
 public:
     TListExpiredLeasesQueryActor()
         : TQueryBase(__func__, {})
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -4823,7 +4831,7 @@ private:
                 continue;
             }
 
-            Leases.emplace_back(TEvListExpiredLeasesResponse::TLeaseInfo{std::move(*database), std::move(*executionId)});
+            Leases.emplace_back(TEvListExpiredLeasesResponse::TLeaseInfo{ std::move(*database), std::move(*executionId) });
         }
 
         YDB_LOG_DEBUG("[ScriptExecutions] Found expired script execution leases",
@@ -4841,13 +4849,15 @@ private:
     std::vector<TEvListExpiredLeasesResponse::TLeaseInfo> Leases;
 };
 
-class TRefreshScriptExecutionLeasesActor final : public TActorBootstrapped<TRefreshScriptExecutionLeasesActor> {
+class TRefreshScriptExecutionLeasesActor final: public TActorBootstrapped<TRefreshScriptExecutionLeasesActor> {
 public:
-    TRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
+    TRefreshScriptExecutionLeasesActor(
+        const TActorId& replyActorId, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
         : ReplyActorId(replyActorId)
         , QueryServiceConfig(std::move(queryServiceConfig))
         , Counters(std::move(counters))
-    {}
+    {
+    }
 
     void Bootstrap() {
         const auto& listerId = Register(new TListExpiredLeasesQueryActor());
@@ -4873,7 +4883,8 @@ private:
             {"expiredLeasesCount", ExpiredLeasesCount});
 
         for (const auto& lease : leases) {
-            const auto& checkerId = Register(new TFinalizeScriptLeaseActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, {.Cookie = CookieId++}));
+            const auto& checkerId = Register(new TFinalizeScriptLeaseActor(
+                SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, { .Cookie = CookieId++ }));
             YDB_LOG_DEBUG("[ScriptExecutions] Starting TFinalizeScriptLeaseActor",
                 {"logPrefix", LogPrefix()},
                 {"database", lease.Database},
@@ -4916,7 +4927,8 @@ private:
                 {"operationsToCheck", OperationsToCheck});
 
             Success = false;
-            Issues.AddIssues(AddRootIssue(TStringBuilder() << "Lease finalization failed #" << ev->Cookie << " (" << status << ")", issues, true));
+            Issues.AddIssues(
+                AddRootIssue(TStringBuilder() << "Lease finalization failed #" << ev->Cookie << " (" << status << ")", issues, true));
         } else {
             YDB_LOG_DEBUG("[ScriptExecutions] Lease finalization successfully completed",
                 {"logPrefix", LogPrefix()},
@@ -4957,14 +4969,16 @@ private:
 
 // Fetch / save script execution compilation and planning results, used when enabled checkpoints
 
-class TSaveScriptExecutionPhysicalGraphActor final : public TQueryBase<TSaveScriptExecutionPhysicalGraphActor, TEvSaveScriptPhysicalGraphResponse> {
+class TSaveScriptExecutionPhysicalGraphActor final
+    : public TQueryBase<TSaveScriptExecutionPhysicalGraphActor, TEvSaveScriptPhysicalGraphResponse> {
 public:
-    TSaveScriptExecutionPhysicalGraphActor(TString database, TString executionId, NKikimrKqp::TQueryPhysicalGraph physicalGraph, const i64 leaseGeneration,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
+    TSaveScriptExecutionPhysicalGraphActor(TString database, TString executionId, NKikimrKqp::TQueryPhysicalGraph physicalGraph,
+        const i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration })
         , PhysicalGraph(std::move(physicalGraph))
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
-    {}
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -5022,11 +5036,12 @@ private:
     const TCompressor Compressor;
 };
 
-class TGetScriptExecutionPhysicalGraphActor final : public TQueryBase<TGetScriptExecutionPhysicalGraphActor, TEvGetScriptPhysicalGraphResponse> {
+class TGetScriptExecutionPhysicalGraphActor final: public TQueryBase<TGetScriptExecutionPhysicalGraphActor, TEvGetScriptPhysicalGraphResponse> {
 public:
     TGetScriptExecutionPhysicalGraphActor(TString database, TString executionId)
-        : TQueryBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId)})
-    {}
+        : TQueryBase(__func__, { .Database = std::move(database), .ExecutionId = std::move(executionId) })
+    {
+    }
 
 private:
     void OnRunQuery() override {
@@ -5085,7 +5100,8 @@ private:
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvGetScriptPhysicalGraphResponse(status, std::move(PhysicalGraph), LeaseGeneration, ExecutionEntryExists, std::move(issues)));
+        Send(Owner,
+            new TEvGetScriptPhysicalGraphResponse(status, std::move(PhysicalGraph), LeaseGeneration, ExecutionEntryExists, std::move(issues)));
     }
 
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
@@ -5093,9 +5109,10 @@ private:
     bool ExecutionEntryExists = true;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, const TDuration maxRunTime) {
+IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig,
+    TIntrusivePtr<TKqpCounters> counters, const TDuration maxRunTime) {
     TDuration leaseDuration = LEASE_DURATION;
 
     if (ui64 seconds = 0; TryFromString<ui64>(GetEnv("YDB_TEST_LEASE_DURATION_SEC"), seconds) && seconds) {
@@ -5114,66 +5131,77 @@ IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperat
 }
 
 IActor* CreateGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr&& ev) {
-    return TGetScriptExecutionOperationQueryActor::MakeRetry(ev->Sender, std::move(ev->Get()->Database), std::move(ev->Get()->OperationId), std::move(ev->Get()->UserSID), ev->Get()->FailOnNotFound, ev->Cookie);
+    return TGetScriptExecutionOperationQueryActor::MakeRetry(ev->Sender, std::move(ev->Get()->Database), std::move(ev->Get()->OperationId),
+        std::move(ev->Get()->UserSID), ev->Get()->FailOnNotFound, ev->Cookie);
 }
 
 IActor* CreateListScriptExecutionOperationsActor(TEvListScriptExecutionOperations::TPtr&& ev) {
-    return TListScriptExecutionOperationsQuery::MakeRetry(ev->Sender, std::move(ev->Get()->Database), std::move(ev->Get()->UserSID), std::move(ev->Get()->PageToken), ev->Get()->PageSize);
+    return TListScriptExecutionOperationsQuery::MakeRetry(
+        ev->Sender, std::move(ev->Get()->Database), std::move(ev->Get()->UserSID), std::move(ev->Get()->PageToken), ev->Get()->PageSize);
 }
 
-IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
+IActor* CreateCancelScriptExecutionOperationActor(
+    TEvCancelScriptExecutionOperation::TPtr&& ev, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
     return new TCancelScriptExecutionOperationActor(std::move(ev), std::move(queryServiceConfig), std::move(counters));
 }
 
-IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, TString database, TString executionId, const TDuration leaseDuration, const i64 leaseGeneration) {
-    return TScriptLeaseUpdaterQuery::MakeRetry(
-        runScriptActorId,
-        TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
-            TQueryRetryActorBase::Retryable,
-            TDuration::MilliSeconds(10),
-            TDuration::MilliSeconds(200),
-            TDuration::Seconds(1),
-            std::numeric_limits<size_t>::max(),
-            leaseDuration / 2
-        ),
-        std::move(database), std::move(executionId), leaseDuration, leaseGeneration
-    );
+IActor* CreateScriptLeaseUpdateActor(
+    const TActorId& runScriptActorId, TString database, TString executionId, const TDuration leaseDuration, const i64 leaseGeneration) {
+    return TScriptLeaseUpdaterQuery::MakeRetry(runScriptActorId,
+        TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
+            TDuration::MilliSeconds(200), TDuration::Seconds(1), std::numeric_limits<size_t>::max(), leaseDuration / 2), std::move(database),
+        std::move(executionId), leaseDuration, leaseGeneration);
 }
 
-IActor* CreateSaveScriptExecutionResultMetaActor(const TActorId& runScriptActorId, TString database, TString executionId, TString serializedMeta, const i64 leaseGeneration) {
-    return TSaveScriptExecutionResultMetaQuery::MakeRetry(runScriptActorId, std::move(database), std::move(executionId), std::move(serializedMeta), leaseGeneration);
+IActor* CreateSaveScriptExecutionResultMetaActor(
+    const TActorId& runScriptActorId, TString database, TString executionId, TString serializedMeta, const i64 leaseGeneration) {
+    return TSaveScriptExecutionResultMetaQuery::MakeRetry(
+        runScriptActorId, std::move(database), std::move(executionId), std::move(serializedMeta), leaseGeneration);
 }
 
-IActor* CreateSaveScriptExecutionResultActor(const TActorId& runScriptActorId, TString database, TString executionId, const i32 resultSetId, const std::optional<TInstant> expireAt, const i64 firstRow, const i64 accumulatedSize, Ydb::ResultSet&& resultSet) {
-    return new TSaveScriptExecutionResultActor(runScriptActorId, std::move(database), std::move(executionId), resultSetId, expireAt, firstRow, accumulatedSize, std::move(resultSet));
+IActor* CreateSaveScriptExecutionResultActor(const TActorId& runScriptActorId, TString database, TString executionId, const i32 resultSetId,
+    const std::optional<TInstant> expireAt, const i64 firstRow, const i64 accumulatedSize, Ydb::ResultSet&& resultSet) {
+    return new TSaveScriptExecutionResultActor(
+        runScriptActorId, std::move(database), std::move(executionId), resultSetId, expireAt, firstRow, accumulatedSize, std::move(resultSet));
 }
 
-IActor* CreateGetScriptExecutionResultActor(const TActorId& replyActorId, TString database, TString executionId, std::optional<TString> userSID, const i32 resultSetIndex, const i64 offset, const i64 rowsLimit, const i64 sizeLimit, const TInstant operationDeadline) {
-    return TGetScriptExecutionResultQueryActor::MakeRetry(replyActorId, std::move(database), std::move(executionId), std::move(userSID), resultSetIndex, offset, rowsLimit, sizeLimit, operationDeadline);
+IActor* CreateGetScriptExecutionResultActor(const TActorId& replyActorId, TString database, TString executionId, std::optional<TString> userSID,
+    const i32 resultSetIndex, const i64 offset, const i64 rowsLimit, const i64 sizeLimit, const TInstant operationDeadline) {
+    return TGetScriptExecutionResultQueryActor::MakeRetry(replyActorId, std::move(database), std::move(executionId), std::move(userSID),
+        resultSetIndex, offset, rowsLimit, sizeLimit, operationDeadline);
 }
 
-IActor* CreateSaveScriptExternalEffectActor(const TActorId& replyActorId, TString database, TString executionId, TEvSaveScriptExternalEffectRequest::TDescription&& info, const i64 leaseGeneration) {
-    return TSaveScriptExternalEffectActor::MakeRetry(replyActorId, std::move(database), std::move(executionId), std::move(info), leaseGeneration);
+IActor* CreateSaveScriptExternalEffectActor(const TActorId& replyActorId, TString database, TString executionId,
+    TEvSaveScriptExternalEffectRequest::TDescription&& info, const i64 leaseGeneration) {
+    return TSaveScriptExternalEffectActor::MakeRetry(
+        replyActorId, std::move(database), std::move(executionId), std::move(info), leaseGeneration);
 }
 
 IActor* CreateSaveScriptFinalStatusActor(const TActorId& finalizationActorId, TEvScriptFinalizeRequest::TPtr&& ev) {
     return TSaveScriptFinalStatusActor::MakeRetry(finalizationActorId, std::move(ev->Get()->Description));
 }
 
-IActor* CreateScriptFinalizationFinisherActor(const TActorId& finalizationActorId, TString database, TString executionId, const std::optional<Ydb::StatusIds::StatusCode> operationStatus, NYql::TIssues operationIssues, const i64 leaseGeneration) {
-    return TScriptFinalizationFinisherActor::MakeRetry(finalizationActorId, std::move(database), std::move(executionId), operationStatus, std::move(operationIssues), leaseGeneration);
+IActor* CreateScriptFinalizationFinisherActor(const TActorId& finalizationActorId, TString database, TString executionId,
+    const std::optional<Ydb::StatusIds::StatusCode> operationStatus, NYql::TIssues operationIssues, const i64 leaseGeneration) {
+    return TScriptFinalizationFinisherActor::MakeRetry(
+        finalizationActorId, std::move(database), std::move(executionId), operationStatus, std::move(operationIssues), leaseGeneration);
 }
 
-IActor* CreateScriptProgressActor(TString database, TString executionId, std::optional<TString> queryPlan, std::optional<TString> ast, const i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
-    return new TScriptProgressActor(std::move(database), std::move(executionId), std::move(queryPlan), std::move(ast), leaseGeneration, queryServiceConfig);
+IActor* CreateScriptProgressActor(TString database, TString executionId, std::optional<TString> queryPlan, std::optional<TString> ast,
+    const i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+    return new TScriptProgressActor(
+        std::move(database), std::move(executionId), std::move(queryPlan), std::move(ast), leaseGeneration, queryServiceConfig);
 }
 
-IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
+IActor* CreateRefreshScriptExecutionLeasesActor(
+    const TActorId& replyActorId, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
     return new TRefreshScriptExecutionLeasesActor(replyActorId, std::move(queryServiceConfig), std::move(counters));
 }
 
-IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, TString database, TString executionId, NKikimrKqp::TQueryPhysicalGraph physicalGraph, const i64 leaseGeneration, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
-    return TSaveScriptExecutionPhysicalGraphActor::MakeRetry(replyActorId, std::move(database), std::move(executionId), std::move(physicalGraph), leaseGeneration, std::move(queryServiceConfig));
+IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, TString database, TString executionId,
+    NKikimrKqp::TQueryPhysicalGraph physicalGraph, const i64 leaseGeneration, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return TSaveScriptExecutionPhysicalGraphActor::MakeRetry(
+        replyActorId, std::move(database), std::move(executionId), std::move(physicalGraph), leaseGeneration, std::move(queryServiceConfig));
 }
 
 IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, TString database, TString executionId) {
@@ -5182,8 +5210,10 @@ IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId,
 
 namespace NPrivate {
 
-IActor* CreateCreateScriptOperationQueryActor(TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest record, NKikimrKqp::TScriptExecutionOperationMeta meta) {
-    return new TCreateScriptOperationQuery(std::move(executionId), runScriptActorId, std::move(record), std::move(meta), TDuration::Max(), {}, std::nullopt, {}, nullptr, 1, "", "");
+IActor* CreateCreateScriptOperationQueryActor(
+    TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest record, NKikimrKqp::TScriptExecutionOperationMeta meta) {
+    return new TCreateScriptOperationQuery(std::move(executionId), runScriptActorId, std::move(record), std::move(meta), TDuration::Max(), {},
+        std::nullopt, {}, nullptr, 1, "", "");
 }
 
 IActor* CreateCheckLeaseStatusActor(TString database, TString executionId) {
@@ -5194,6 +5224,6 @@ IActor* CreateFinalizeScriptLeaseActor(const TActorId& replyActorId, TString dat
     return new TFinalizeScriptLeaseActor(replyActorId, std::move(database), std::move(executionId), {}, nullptr, {});
 }
 
-} // namespace NPrivate
+}   // namespace NPrivate
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

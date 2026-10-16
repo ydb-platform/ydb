@@ -1,9 +1,10 @@
 #include "dq_pq_meta_extractor.h"
 
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
 namespace NYql::NDq {
 
@@ -83,12 +84,10 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
 };
 // clang-format on
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
-    const TString& columnName,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
+    const TString& columnName, const NKikimr::NMiniKQL::THolderFactory& holderFactory, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
 {
     auto key = SkipPqSystemPrefix(columnName);
     if (!key) {
@@ -122,9 +121,7 @@ TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
     if (*key == "cluster") {
         return [](const NFq::TMessageStreamRecord& /*message*/, const TString& cluster) {
             return std::make_pair(
-                NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(cluster.data(), cluster.size())),
-                static_cast<i64>(cluster.size())
-            );
+                NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(cluster.data(), cluster.size())), static_cast<i64>(cluster.size()));
         };
     }
 
@@ -134,4 +131,4 @@ TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
     return iter->second;
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

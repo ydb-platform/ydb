@@ -7,12 +7,11 @@ namespace NKikimr::NKqp::NLocalTopicTests {
 namespace {
 
 NFederatedTopic::TFederatedTopicClientSettings FederatedClientSettings() {
-    return NFederatedTopic::TFederatedTopicClientSettings()
-        .Database("/Root")
-        .AuthToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString());
+    return NFederatedTopic::TFederatedTopicClientSettings().Database("/Root").AuthToken(
+        NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString());
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TLocalFederatedTopicClient) {
     Y_UNIT_TEST_F(WriteMessages, TLocalTopicClientFixture) {
@@ -22,7 +21,7 @@ Y_UNIT_TEST_SUITE(TLocalFederatedTopicClient) {
         AssertAck(writer.Write(TWriteMessage("first")), 1, 0);
         AssertAck(writer.Write(TWriteMessage("second")), 2, 1);
         CloseSession(*session);
-        AssertTopicMessages({"first", "second"});
+        AssertTopicMessages({ "first", "second" });
     }
 
     Y_UNIT_TEST_F(ResumeProducerSequenceNumber, TLocalTopicClientFixture) {
@@ -40,7 +39,7 @@ Y_UNIT_TEST_SUITE(TLocalFederatedTopicClient) {
         UNIT_ASSERT_VALUES_EQUAL(session->GetInitSeqNo().GetValue(TEST_TIMEOUT), 42);
         WaitForContinuationToken(*session);
         CloseSession(*session);
-        AssertTopicMessages({"persisted"});
+        AssertTopicMessages({ "persisted" });
     }
 
     Y_UNIT_TEST_F(MissingTopicClosesWriteSession, TLocalTopicClientFixture) {
@@ -50,4 +49,4 @@ Y_UNIT_TEST_SUITE(TLocalFederatedTopicClient) {
     }
 }
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

@@ -1,23 +1,22 @@
 #include "yql_solomon_ytflow_optimize.h"
 
-#include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
-
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
+
+#include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
-class TSolomonYtflowOptimization : public TEmptyYtflowOptimization {
+class TSolomonYtflowOptimization: public TEmptyYtflowOptimization {
 public:
     TSolomonYtflowOptimization(const TSolomonState::TPtr& state)
         : State_(state.Get())
     {
     }
 
-    TExprNode::TPtr ApplyExtractMembers(
-        const TExprNode::TPtr& /*read*/, const TExprNode::TPtr& /*members*/, TExprContext& /*ctx*/
-    ) override {
+    TExprNode::TPtr ApplyExtractMembers(const TExprNode::TPtr& /*read*/, const TExprNode::TPtr& /*members*/, TExprContext& /*ctx*/
+        ) override {
         YQL_ENSURE(false, "Method " << __FUNCTION__ << " is not implemented");
     }
 
@@ -54,4 +53,4 @@ THolder<IYtflowOptimization> CreateSolomonYtflowOptimization(const TSolomonState
     return MakeHolder<TSolomonYtflowOptimization>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

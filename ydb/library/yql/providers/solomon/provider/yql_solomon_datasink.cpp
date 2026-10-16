@@ -1,22 +1,21 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
-class TSolomonDataSink : public TDataProviderBase {
+class TSolomonDataSink: public TDataProviderBase {
 public:
     TSolomonDataSink(TSolomonState::TPtr state)
-        : State_ {state}
+        : State_{ state }
         , TypeAnnotationTransformer_(CreateSolomonDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateSolomonDataSinkExecTransformer(State_))
         , PhysicalOptProposalTransformer_(CreateSoPhysicalOptProposalTransformer(State_))
@@ -35,9 +34,7 @@ public:
         }
 
         TPositionHandle pos;
-        return Build<TCoAtom>(ctx, pos)
-            .Value(config->GetCluster())
-            .Done().Ptr();
+        return Build<TCoAtom>(ctx, pos).Value(config->GetCluster()).Done().Ptr();
     }
 
     const THashMap<TString, TString>* GetClusterTokens() override {
@@ -86,9 +83,7 @@ public:
             if (node.Child(0)->Content() == SolomonProviderName) {
                 auto clusterName = node.Child(1)->Content();
                 if (!State_->Gateway->HasCluster(clusterName)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() <<
-                        "Unknown cluster name: " << clusterName
-                    ));
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster name: " << clusterName));
                     return false;
                 }
                 cluster = clusterName;
@@ -118,8 +113,7 @@ public:
 
         auto tagName = key.Child(0)->Child(0)->Content();
         if (tagName != TStringBuf("table")) {
-            ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()),
-                TStringBuilder() << "Unexpected tag: " << tagName));
+            ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), TStringBuilder() << "Unexpected tag: " << tagName));
             return {};
         }
 
@@ -165,11 +159,8 @@ public:
         if (auto maybeWrite = TMaybeNode<TSoWriteToShard>(&node)) {
             auto write = maybeWrite.Cast();
             outputs.push_back(TPinInfo(
-                /*dataSource*/ nullptr,
-                write.DataSink().Raw(),
-                write.Shard().Raw(),
-                write.DataSink().Cluster().StringValue() + '.' + write.Shard().StringValue(),
-                /*hideInBasicPlan*/ false));
+                /*dataSource*/ nullptr, write.DataSink().Raw(), write.Shard().Raw(),
+                write.DataSink().Cluster().StringValue() + '.' + write.Shard().StringValue(), /*hideInBasicPlan*/ false));
             return 1;
         }
         return 0;
@@ -219,9 +210,8 @@ private:
     THolder<IGraphTransformer> LogicalOptProposalTransformer_;
 };
 
-
 TIntrusivePtr<IDataProvider> CreateSolomonDataSink(TSolomonState::TPtr state) {
     return new TSolomonDataSink(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

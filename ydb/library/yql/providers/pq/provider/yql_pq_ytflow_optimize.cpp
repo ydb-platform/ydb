@@ -1,7 +1,6 @@
 #include "yql_pq_ytflow_optimize.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
-
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 
 namespace NYql {
@@ -10,16 +9,14 @@ using namespace NNodes;
 
 namespace {
 
-class TPqYtflowOptimization : public TEmptyYtflowOptimization {
+class TPqYtflowOptimization: public TEmptyYtflowOptimization {
 public:
     explicit TPqYtflowOptimization(const TPqState::TPtr& state)
         : State_(state.Get())
     {
     }
 
-    TExprNode::TPtr ApplyExtractMembers(
-        const TExprNode::TPtr& read, const TExprNode::TPtr& members, TExprContext& ctx
-    ) override {
+    TExprNode::TPtr ApplyExtractMembers(const TExprNode::TPtr& read, const TExprNode::TPtr& members, TExprContext& ctx) override {
         auto maybeReadTopic = TMaybeNode<TPqReadTopic>(read);
         if (!maybeReadTopic) {
             return read;
@@ -35,9 +32,7 @@ public:
         TVector<const TItemExprType*> extractedMemberTypes;
         for (auto* memberType : rowSpecType->Cast<TStructExprType>()->GetItems()) {
             if (membersSet.contains(memberType->GetName())) {
-                columns.push_back(Build<TCoAtom>(ctx, read->Pos())
-                    .Value(memberType->GetName())
-                    .Done());
+                columns.push_back(Build<TCoAtom>(ctx, read->Pos()).Value(memberType->GetName()).Done());
                 extractedMemberTypes.push_back(memberType);
             }
         }
@@ -75,9 +70,7 @@ public:
             return read;
         }
 
-        return Build<TPqReadTopic>(ctx, read->Pos())
-            .InitFrom(maybeReadTopic.Cast())
-            .Done().Ptr();
+        return Build<TPqReadTopic>(ctx, read->Pos()).InitFrom(maybeReadTopic.Cast()).Done().Ptr();
     }
 
     TExprNode::TPtr TrimWriteContent(const TExprNode::TPtr& write, TExprContext& ctx) override {
@@ -104,11 +97,11 @@ private:
     TPqState* State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IYtflowOptimization> CreatePqYtflowOptimization(const TPqState::TPtr& state) {
     YQL_ENSURE(state);
     return MakeHolder<TPqYtflowOptimization>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

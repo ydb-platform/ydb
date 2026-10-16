@@ -1,15 +1,14 @@
 #include "yql_ydb_external_provider_impl.h"
 
-#include <yql/essentials/core/sql_types/block.h>
-
-#include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
 #include <ydb/library/yql/providers/native/operation_context.h>
+#include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <util/generic/guid.h>
+#include <yql/essentials/core/sql_types/block.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <chrono>
 #include <list>
@@ -22,7 +21,7 @@ namespace {
 // The baseline SDK keeps STOP callbacks until their database state is destroyed.
 // Give each cache entry its own state: evicting and recreating a client must not
 // append callbacks to a state held alive by another client or a query stream.
-class TMetadataCredentialsFactory final : public NYdb::ICredentialsProviderFactory {
+class TMetadataCredentialsFactory final: public NYdb::ICredentialsProviderFactory {
 public:
     explicit TMetadataCredentialsFactory(std::shared_ptr<NYdb::ICredentialsProviderFactory> inner)
         : Inner_(std::move(inner))
@@ -47,10 +46,9 @@ private:
     const std::string Identity_;
 };
 
-class TMetadataClientCache final : public IYdbExternalMetadataClientCache {
+class TMetadataClientCache final: public IYdbExternalMetadataClientCache {
 public:
-    TMetadataClientCache(const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver,
-                        size_t maxEntries, TDuration idleTimeout)
+    TMetadataClientCache(const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, size_t maxEntries, TDuration idleTimeout)
         : Driver_(driver)
         , TlsDriver_(tlsDriver)
         , MaxEntries_(maxEntries)
@@ -58,13 +56,12 @@ public:
     {
     }
 
-    std::shared_ptr<NYdb::NTable::TTableClient> GetClient(
-        const TString& endpoint, const TString& database, bool useTls,
+    std::shared_ptr<NYdb::NTable::TTableClient> GetClient(const TString& endpoint, const TString& database, bool useTls,
         const TString& structuredToken, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) override {
         Y_ENSURE(credentialsFactory, "YdbExternal metadata credentials factory is missing");
         // Exact token equality isolates rotated secrets, including a new value
         // behind the same secret reference. Keys never leave this bounded cache.
-        const TKey key{endpoint, database, structuredToken, useTls, std::move(credentialsFactory)};
+        const TKey key{ endpoint, database, structuredToken, useTls, std::move(credentialsFactory) };
         std::list<TEntry> retired;
         {
             std::lock_guard lock(Mutex_);
@@ -100,7 +97,7 @@ public:
             while (!Entries_.empty() && (Entries_.size() >= MaxEntries_ || KeyBytes_ + keyBytes > MaxKeyBytes)) {
                 Retire(Entries_.begin(), retired);
             }
-            Entries_.push_back({key, client, std::chrono::steady_clock::now()});
+            Entries_.push_back({ key, client, std::chrono::steady_clock::now() });
             KeyBytes_ += keyBytes;
         }
         return client;
@@ -146,8 +143,9 @@ private:
 
     void Expire(std::list<TEntry>& retired) {
         const auto now = std::chrono::steady_clock::now();
-        while (!Entries_.empty() && static_cast<ui64>(std::chrono::duration_cast<std::chrono::microseconds>(
-                now - Entries_.front().LastUsed).count()) >= IdleTimeout_.MicroSeconds()) {
+        while (!Entries_.empty() &&
+               static_cast<ui64>(std::chrono::duration_cast<std::chrono::microseconds>(now - Entries_.front().LastUsed).count()) >=
+                   IdleTimeout_.MicroSeconds()) {
             Retire(Entries_.begin(), retired);
         }
     }
@@ -162,14 +160,14 @@ private:
     size_t KeyBytes_ = 0;
 };
 
-} // namespace
+}   // namespace
 
 std::shared_ptr<IYdbExternalMetadataClientCache> CreateYdbExternalMetadataClientCache(
     const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, size_t maxEntries, TDuration idleTimeout) {
     return std::make_shared<TMetadataClientCache>(driver, tlsDriver, maxEntries, idleTimeout);
 }
 
-} // namespace NYql
+}   // namespace NYql
 
 namespace NYql::NYdbExternal {
 namespace {
@@ -199,8 +197,8 @@ TString ColumnTypeName(const Ydb::Type& type) {
 }
 
 TString UnsupportedColumn(const TString& name, const Ydb::Type& type) {
-    return TStringBuilder() << "YdbExternal does not support column '" << name << "' of type "
-        << ColumnTypeName(type) << "; all table columns must have supported types";
+    return TStringBuilder() << "YdbExternal does not support column '" << name << "' of type " << ColumnTypeName(type)
+                            << "; all table columns must have supported types";
 }
 
 bool ParseRead(const TYdbExternalRead& read, TString& table, TExprContext& ctx) {
@@ -219,11 +217,11 @@ bool ParseRead(const TYdbExternalRead& read, TString& table, TExprContext& ctx) 
         }
         key = key->Child(0);
     }
-    if (!key->IsCallable("Key") || key->ChildrenSize() != 1 ||
-        !key->Head().IsList() || key->Head().ChildrenSize() != 2 ||
-        !key->Head().Head().IsAtom("table") || !key->Head().Tail().IsCallable("String") ||
-        key->Head().Tail().ChildrenSize() != 1 || !key->Head().Tail().Head().IsAtom()) {
-        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "YdbExternal requires a literal table path; ranges and table functions are unsupported"));
+    if (!key->IsCallable("Key") || key->ChildrenSize() != 1 || !key->Head().IsList() || key->Head().ChildrenSize() != 2 ||
+        !key->Head().Head().IsAtom("table") || !key->Head().Tail().IsCallable("String") || key->Head().Tail().ChildrenSize() != 1 ||
+        !key->Head().Tail().Head().IsAtom()) {
+        ctx.AddError(
+            TIssue(ctx.GetPosition(read.Pos()), "YdbExternal requires a literal table path; ranges and table functions are unsupported"));
         return false;
     }
     if (node.ChildrenSize() > 4 && (!node.Child(4)->IsList() || node.Child(4)->ChildrenSize())) {
@@ -245,11 +243,11 @@ struct TMetadataRequest {
 
 // Requests are sequential and schemas are size checked. SDK response buffers
 // and the cached schemas have no resource-manager reservation in this stage.
-class TMetadataBatch final : public std::enable_shared_from_this<TMetadataBatch> {
+class TMetadataBatch final: public std::enable_shared_from_this<TMetadataBatch> {
 public:
     TMetadataBatch(TState::TPtr state, TVector<TMetadataRequest> requests)
         : State_(std::move(state))
-        , Context_{State_->MetadataDeadline, Cancellation_.Token()}
+        , Context_{ State_->MetadataDeadline, Cancellation_.Token() }
         , Requests(std::move(requests))
     {
     }
@@ -312,15 +310,14 @@ private:
             const auto& cluster = State_->Clusters.at(Requests[Index_].Key.first);
             const auto cache = State_->MetadataClientCacheFactory();
             Y_ENSURE(cache, "YdbExternal metadata client cache is missing");
-            Client_ = cache->GetClient(cluster.Endpoint, cluster.Database, cluster.UseTls,
-                State_->Tokens.at(Requests[Index_].Key.first), State_->CredentialsFactory);
+            Client_ = cache->GetClient(
+                cluster.Endpoint, cluster.Database, cluster.UseTls, State_->Tokens.at(Requests[Index_].Key.first), State_->CredentialsFactory);
             const auto remaining = RemainingTimeout();
             if (!remaining) {
                 FinishTable();
                 return;
             }
-            Client_->CreateSession(NYdb::NTable::TCreateSessionSettings()
-                .ClientTimeout(remaining).OperationTimeout(remaining))
+            Client_->CreateSession(NYdb::NTable::TCreateSessionSettings().ClientTimeout(remaining).OperationTimeout(remaining))
                 .Subscribe([self](const NYdb::NTable::TAsyncCreateSessionResult& future) {
                     try {
                         const auto& result = future.GetValue();
@@ -355,13 +352,11 @@ private:
                 FinishTable();
                 return;
             }
-            Session_->DescribeTable(tablePath, NYdb::NTable::TDescribeTableSettings()
-                .ClientTimeout(remaining).OperationTimeout(remaining))
+            Session_->DescribeTable(tablePath, NYdb::NTable::TDescribeTableSettings().ClientTimeout(remaining).OperationTimeout(remaining))
                 .Subscribe([self](const NYdb::NTable::TAsyncDescribeTableResult& future) {
                     try {
                         const auto& result = future.GetValue();
-                        if (!self->Context_.Cancellation.IsCancellationRequested() &&
-                            TInstant::Now() < self->Context_.Deadline) {
+                        if (!self->Context_.Cancellation.IsCancellationRequested() && TInstant::Now() < self->Context_.Deadline) {
                             if (result.IsSuccess()) {
                                 ExtractMetadataSchema(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()),
                                     self->Requests[self->Index_].Schema, self->Error);
@@ -413,7 +408,7 @@ public:
     TString Error;
 };
 
-class TLoadMetadataTransformer final : public TGraphTransformerBase {
+class TLoadMetadataTransformer final: public TGraphTransformerBase {
 public:
     explicit TLoadMetadataTransformer(TState::TPtr state)
         : State_(std::move(state))
@@ -445,7 +440,7 @@ public:
                 ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "YdbExternal metadata table limit exceeded"));
                 return TStatus::Error;
             }
-            requests.push_back({std::move(key), {}});
+            requests.push_back({ std::move(key), {} });
         }
         if (requests.empty()) {
             return Rewrite(input, output, ctx);
@@ -510,8 +505,7 @@ public:
 private:
     static TExprNode::TListType FindReads(const TExprNode::TPtr& input) {
         return FindNodes(input, [](const TExprNode::TPtr& node) {
-            return TYdbExternalRead::Match(node.Get()) && node->ChildrenSize() > 1 &&
-                TYdbExternalDataSource::Match(node->Child(1));
+            return TYdbExternalRead::Match(node.Get()) && node->ChildrenSize() > 1 && TYdbExternalDataSource::Match(node->Child(1));
         });
     }
 
@@ -540,12 +534,10 @@ private:
     NThreading::TFuture<void> AsyncFuture_;
 };
 
-} // namespace
+}   // namespace
 
-bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description,
-                           TMetadataSchema& schema, TString& error) {
-    if (description.store_type() != Ydb::Table::STORE_TYPE_UNSPECIFIED &&
-        description.store_type() != Ydb::Table::STORE_TYPE_ROW) {
+bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description, TMetadataSchema& schema, TString& error) {
+    if (description.store_type() != Ydb::Table::STORE_TYPE_UNSPECIFIED && description.store_type() != Ydb::Table::STORE_TYPE_ROW) {
         error = "YdbExternal currently supports only row tables";
         return false;
     }
@@ -575,8 +567,7 @@ bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description,
     schema.Columns.reserve(description.columns_size());
     for (const auto& column : description.columns()) {
         const auto& type = column.type();
-        schema.Columns.emplace_back(column.name(),
-            column.not_null() && type.has_optional_type() ? type.optional_type().item() : type);
+        schema.Columns.emplace_back(column.name(), column.not_null() && type.has_optional_type() ? type.optional_type().item() : type);
     }
     return true;
 }
@@ -585,4 +576,4 @@ THolder<IGraphTransformer> CreateLoadMetadataTransformer(TState::TPtr state) {
     return MakeHolder<TLoadMetadataTransformer>(std::move(state));
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

@@ -78,12 +78,15 @@ TS3Result::TS3Result(const TString& body)
 
 TSourceErrorHandler::TSourceErrorHandler(ui64 inputIndex)
     : InputIndex(inputIndex)
-{}
+{
+}
 
-void TSourceErrorHandler::CanonizeFatalError(TIssues& issues, NYql::NDqProto::StatusIds::StatusCode& fatalCode, const std::source_location& location) {
+void TSourceErrorHandler::CanonizeFatalError(
+    TIssues& issues, NYql::NDqProto::StatusIds::StatusCode& fatalCode, const std::source_location& location) {
     if (fatalCode == NDqProto::StatusIds::UNSPECIFIED) {
         fatalCode = NDqProto::StatusIds::INTERNAL_ERROR;
-        issues.AddIssue(TStringBuilder() << "Got fatal error with unspecified error code from " << location.file_name() << ":" << location.line() << ":" << location.column() << ", please contact internal support.");
+        issues.AddIssue(TStringBuilder() << "Got fatal error with unspecified error code from " << location.file_name() << ":" << location.line()
+                                         << ":" << location.column() << ", please contact internal support.");
     }
 }
 
@@ -96,4 +99,4 @@ void TSourceErrorHandler::OnFatalError(TIssues issues, NYql::NDqProto::StatusIds
     SendError(std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(InputIndex, issues, fatalCode));
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

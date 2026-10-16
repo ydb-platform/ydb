@@ -5,12 +5,12 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/services/metadata/service.h>
 
-#include <yql/essentials/core/sql_types/hopping.h>
-
 #include <library/cpp/protobuf/interop/cast.h>
+#include <yql/essentials/core/sql_types/hopping.h>
 
 namespace NKikimr::NKqp {
 
@@ -22,7 +22,7 @@ using TAsyncStatus = TStreamingQueryManager::TAsyncStatus;
 template <typename TValue>
 using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
 
-struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
+struct TFeatureFlagExtractor: public IFeatureFlagExtractor {
     bool IsEnabled(const NKikimrConfig::TFeatureFlags& flags) const override {
         return flags.GetEnableStreamingQueries();
     }
@@ -55,7 +55,8 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
         } else if (str == "from_checkpoint_force") {
             result.mutable_from_last_checkpoint()->set_force(true);
         } else {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: '" << str << "'");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: '" << str << "'");
         }
 
         return result;
@@ -66,35 +67,43 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     const auto& fromTime = streamingDispositionExtractor.Extract(TStreamingQueryConfig::TProperties::StreamingDispositionFromTime);
     const auto& timeAgo = streamingDispositionExtractor.Extract(TStreamingQueryConfig::TProperties::StreamingDispositionTimeAgo);
     if (fromTime && timeAgo) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Invalid value for streaming_disposition: properties 'from_time' and 'time_ago' are mutually exclusive");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            "Invalid value for streaming_disposition: properties 'from_time' and 'time_ago' are mutually exclusive");
     }
 
     if (fromTime) {
         TInstant timestamp;
         if (!TInstant::TryParseIso8601(*fromTime, timestamp)) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'from_time' is not a valid ISO 8601 timestamp: '" << *fromTime << "'");
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "Invalid value for streaming_disposition: property 'from_time' is not a valid ISO 8601 timestamp: '"
+                                 << *fromTime << "'");
         }
 
         *result.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(timestamp);
     } else if (timeAgo) {
         auto duration = NMiniKQL::ValueFromString(NYql::NUdf::EDataSlot::Interval, *timeAgo);
         if (!duration) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: '" << *timeAgo << "'");
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: '"
+                                 << *timeAgo << "'");
         }
 
         const i64 signedDuration = duration.Get<i64>();
         if (signedDuration < 0) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is negative: '" << *timeAgo << "'");
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is negative: '" << *timeAgo << "'");
         }
 
         *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(signedDuration));
     }
 
     if (!streamingDispositionExtractor.IsFinished()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown streaming_disposition property: " << streamingDispositionExtractor.GetRemainedParamsString());
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            TStringBuilder() << "Unknown streaming_disposition property: " << streamingDispositionExtractor.GetRemainedParamsString());
     }
 
-    Y_VALIDATE(result.GetDispositionCase() != NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET, "Failed to parse streaming disposition");
+    Y_VALIDATE(
+        result.GetDispositionCase() != NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET, "Failed to parse streaming disposition");
 
     return result;
 }
@@ -109,9 +118,7 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
 
     if (!TryFromString<NYql::NHoppingWindow::EPolicy>(policy)) {
         return TYqlConclusionStatus::Fail(
-            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-            TStringBuilder() << "Invalid value for watermark_late_events_policy: '" << *value << "'"
-        );
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for watermark_late_events_policy: '" << *value << "'");
     }
 
     return std::optional<TString>(policy);
@@ -127,7 +134,8 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
     } else {
         ui64 timestamp;
         if (!TryFromString(value, timestamp)) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp");
         }
 
         *result.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(TInstant::MicroSeconds(timestamp));
@@ -136,9 +144,11 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
     return result;
 }
 
-[[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
+[[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name,
+    const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
     if (!actorSystem) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
     }
 
     streamingQueryDesc.SetName(name);
@@ -150,15 +160,14 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
 
     // Validation of features values will be performed on execution step
     for (const auto& property : {
-        TStreamingQueryConfig::TSqlSettings::QUERY_TEXT_FEATURE,
-        TStreamingQueryConfig::TProperties::Run,
-        TStreamingQueryConfig::TProperties::ResourcePool,
-        TStreamingQueryConfig::TProperties::Force,
-        TStreamingQueryConfig::TProperties::CheckpointInterval,
-    }) {
+             TStreamingQueryConfig::TSqlSettings::QUERY_TEXT_FEATURE, TStreamingQueryConfig::TProperties::Run,
+             TStreamingQueryConfig::TProperties::ResourcePool, TStreamingQueryConfig::TProperties::Force,
+             TStreamingQueryConfig::TProperties::CheckpointInterval,
+         }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Duplicate property '" << property << "'");
+                return TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Duplicate property '" << property << "'");
             }
         }
     }
@@ -171,19 +180,22 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
     auto streamingDisposition = streamingDispositionStatus.DetachResult();
     if (streamingDisposition) {
         if (readFrom) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM and STREAMING_DISPOSITION are mutually exclusive");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM and STREAMING_DISPOSITION are mutually exclusive");
         }
         if (outputFrom) {
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "OUTPUT_FROM cannot be combined with STREAMING_DISPOSITION");
         }
         if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryDisposition()) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                "Streaming query disposition is disabled. Please contact your system administrator to enable it");
         }
     }
 
     if (readFrom) {
         if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryReadFrom()) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query READ_FROM is disabled. Please contact your system administrator to enable it");
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                "Streaming query READ_FROM is disabled. Please contact your system administrator to enable it");
         }
 
         auto disposition = ParseReadFrom(*readFrom);
@@ -196,7 +208,8 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
 
     if (outputFrom) {
         if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryStateRecompute()) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query OUTPUT_FROM is disabled. Please contact your system administrator to enable state recomputation");
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                "Streaming query OUTPUT_FROM is disabled. Please contact your system administrator to enable state recomputation");
         }
 
         ui64 timestamp;
@@ -222,17 +235,19 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
     }
 
     if (!featuresExtractor.IsFinished()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
     }
 
     return TYqlConclusionStatus::Success();
 }
 
-class TObjectOperationController : public IStreamingQueryOperationController {
+class TObjectOperationController: public IStreamingQueryOperationController {
 public:
     explicit TObjectOperationController(NThreading::TPromise<TYqlConclusionStatus> promise)
         : Promise(std::move(promise))
-    {}
+    {
+    }
 
     void OnAlteringProblem(const TString& errorMessage) override {
         Promise.SetValue(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, errorMessage));
@@ -250,15 +265,18 @@ private:
     NThreading::TPromise<TYqlConclusionStatus> Promise;
 };
 
-class TObjectOperationCommand : public NMetadata::NModifications::IObjectModificationCommand {
+class TObjectOperationCommand: public NMetadata::NModifications::IObjectModificationCommand {
     using TBase = NMetadata::NModifications::IObjectModificationCommand;
 
 public:
-    TObjectOperationCommand(const NKqpProto::TKqpSchemeOperation& schemeOperation, NMetadata::IClassBehaviour::TPtr behaviour, IStreamingQueryOperationController::TPtr controller, const TStreamingQueryManager::TExternalModificationContext& context)
-        : TBase(std::vector<NMetadata::NInternal::TTableRecord>{}, std::move(behaviour), controller, TStreamingQueryManager::TInternalModificationContext(context))
+    TObjectOperationCommand(const NKqpProto::TKqpSchemeOperation& schemeOperation, NMetadata::IClassBehaviour::TPtr behaviour,
+        IStreamingQueryOperationController::TPtr controller, const TStreamingQueryManager::TExternalModificationContext& context)
+        : TBase(std::vector<NMetadata::NInternal::TTableRecord>{}, std::move(behaviour), controller,
+              TStreamingQueryManager::TInternalModificationContext(context))
         , SchemeOperation(schemeOperation)
         , Controller(std::move(controller))
-    {}
+    {
+    }
 
     void DoExecute() const override {
         try {
@@ -273,11 +291,15 @@ public:
                     DoDropStreamingQuery(SchemeOperation.GetDropStreamingQuery(), Controller, GetContext().GetExternalData());
                     break;
                 default:
-                    Controller->OnAlteringProblem(TStringBuilder() << "Internal error. Execution of prepared operation for STREAMING_QUERY object: unsupported operation: " << static_cast<i32>(SchemeOperation.GetOperationCase()));
+                    Controller->OnAlteringProblem(
+                        TStringBuilder() << "Internal error. Execution of prepared operation for STREAMING_QUERY object: unsupported operation: "
+                                         << static_cast<i32>(SchemeOperation.GetOperationCase()));
                     break;
             }
         } catch (...) {
-            Controller->OnAlteringProblem(TStringBuilder() << "Internal error. Got unexpected exception during execution of STREAMING_QUERY modification operation: " << CurrentExceptionMessage());
+            Controller->OnAlteringProblem(
+                TStringBuilder() << "Internal error. Got unexpected exception during execution of STREAMING_QUERY modification operation: "
+                                 << CurrentExceptionMessage());
         }
     }
 
@@ -286,9 +308,10 @@ private:
     const IStreamingQueryOperationController::TPtr Controller;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-TYqlConclusion<std::pair<TString, TString>> TStreamingQueryManager::SplitPath(const TString& queryName, const TString& database, const bool createDir) {
+TYqlConclusion<std::pair<TString, TString>> TStreamingQueryManager::SplitPath(
+    const TString& queryName, const TString& database, const bool createDir) {
     if (!queryName) {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Streaming query name should not be empty");
     }
@@ -301,7 +324,8 @@ TYqlConclusion<std::pair<TString, TString>> TStreamingQueryManager::SplitPath(co
     return pathPair;
 }
 
-TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId,
+    const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (const auto& status = DoPrepare(schemeOperation, settings, manager, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
@@ -310,7 +334,8 @@ TAsyncStatus TStreamingQueryManager::DoModify(const NYql::TObjectSettingsImpl& s
     return ExecutePrepared(schemeOperation, nodeId, manager, context.GetExternalData());
 }
 
-TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation,
+    const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     Y_UNUSED(manager);
 
     try {
@@ -322,18 +347,24 @@ TYqlConclusionStatus TStreamingQueryManager::DoPrepare(NKqpProto::TKqpSchemeOper
             case EActivityType::Drop:
                 return PrepareDropStreamingQuery(schemeOperation, settings, context);
             case EActivityType::Undefined:
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for STREAMING_QUERY object");
+                return TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for STREAMING_QUERY object");
             case EActivityType::Upsert:
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for STREAMING_QUERY objects is not implemented");
+                return TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for STREAMING_QUERY objects is not implemented");
         }
     } catch (...) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of STREAMING_QUERY modification operation: " << CurrentExceptionMessage());
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during preparation of STREAMING_QUERY modification operation: "
+                             << CurrentExceptionMessage());
     }
 }
 
-TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
+TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
     if (settings.GetExistingOk() && settings.GetReplaceIfExists()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Options 'OR REPLACE' and 'IF NOT EXISTS' cannot be used together for STREAMING_QUERY objects");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            "Options 'OR REPLACE' and 'IF NOT EXISTS' cannot be used together for STREAMING_QUERY objects");
     }
 
     const auto& externalContext = context.GetExternalData();
@@ -352,7 +383,8 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareCreateStreamingQuery(NKqpPro
     return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings, externalContext.GetActorSystem());
 }
 
-TYqlConclusionStatus TStreamingQueryManager::PrepareAlterStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
+TYqlConclusionStatus TStreamingQueryManager::PrepareAlterStreamingQuery(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
     const auto& externalContext = context.GetExternalData();
     auto pathPairStatus = SplitPath(settings.GetObjectId(), externalContext.GetDatabase(), /* createDir */ false);
     if (pathPairStatus.IsFail()) {
@@ -368,7 +400,8 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareAlterStreamingQuery(NKqpProt
     return FillStreamingQueryDesc(*schemeTx.MutableCreateStreamingQuery(), name, settings, externalContext.GetActorSystem());
 }
 
-TYqlConclusionStatus TStreamingQueryManager::PrepareDropStreamingQuery(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
+TYqlConclusionStatus TStreamingQueryManager::PrepareDropStreamingQuery(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const TInternalModificationContext& context) {
     auto pathPairStatus = SplitPath(settings.GetObjectId(), context.GetExternalData().GetDatabase(), /* createDir */ false);
     if (pathPairStatus.IsFail()) {
         return pathPairStatus;
@@ -385,13 +418,16 @@ TYqlConclusionStatus TStreamingQueryManager::PrepareDropStreamingQuery(NKqpProto
     return TYqlConclusionStatus::Success();
 }
 
-TAsyncStatus TStreamingQueryManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
+TAsyncStatus TStreamingQueryManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, const ui32 nodeId,
+    const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     if (!context.GetDatabaseId()) {
-        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Missing DatabaseId for STREAMING_QUERY object operation"));
+        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Missing DatabaseId for STREAMING_QUERY object operation"));
     }
 
     if (!context.GetActorSystem()) {
-        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. STREAMING_QUERY object operation needs an actor system. Please contact internal support"));
+        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            "Internal error. STREAMING_QUERY object operation needs an actor system. Please contact internal support"));
     }
 
     TAsyncStatus validationFeature = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
@@ -401,9 +437,9 @@ TAsyncStatus TStreamingQueryManager::ExecutePrepared(const NKqpProto::TKqpScheme
 
     return ChainFeatures(validationFeature, [schemeOperation, nodeId, manager, context]() {
         auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
-        context.GetActorSystem()->Send(NMetadata::NProvider::MakeServiceId(nodeId), new NMetadata::NProvider::TEvObjectsOperation(
-            std::make_shared<TObjectOperationCommand>(schemeOperation, manager, std::make_shared<TObjectOperationController>(promise), context)
-        ));
+        context.GetActorSystem()->Send(NMetadata::NProvider::MakeServiceId(nodeId),
+            new NMetadata::NProvider::TEvObjectsOperation(std::make_shared<TObjectOperationCommand>(
+                schemeOperation, manager, std::make_shared<TObjectOperationController>(promise), context)));
         return promise.GetFuture();
     });
 }
@@ -414,4 +450,4 @@ TAsyncStatus TStreamingQueryManager::TrackObjectOperation(const TString& objectI
     return promise.GetFuture();
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

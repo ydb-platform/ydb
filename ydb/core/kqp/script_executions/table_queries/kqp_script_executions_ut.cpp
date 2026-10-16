@@ -9,15 +9,15 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/util/proto_duration.h>
+
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/yql/providers/common/http_gateway/ut_helpers/http_gateway_holder.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <library/cpp/protobuf/interop/cast.h>
-
 #include <fmt/format.h>
+#include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
 
@@ -25,7 +25,7 @@ using namespace Tests;
 using namespace NSchemeShard;
 using namespace fmt::literals;
 
-namespace  {
+namespace {
 
 constexpr TDuration TestLeaseDuration = TDuration::Seconds(1);
 constexpr TDuration TestTimeout = TDuration::Seconds(10);
@@ -55,23 +55,16 @@ NKikimrSchemeOp::TColumnDescription Col(const TString& columnName, NScheme::TTyp
     return settings;
 }
 
-const TVector<NKikimrSchemeOp::TColumnDescription> DEFAULT_COLUMNS = {
-    Col("col1", NScheme::NTypeIds::Int32),
-    Col("col2", NScheme::NTypeIds::Int32),
-    Col("col3", NScheme::NTypeIds::String)
-};
+const TVector<NKikimrSchemeOp::TColumnDescription> DEFAULT_COLUMNS = { Col("col1", NScheme::NTypeIds::Int32),
+    Col("col2", NScheme::NTypeIds::Int32), Col("col3", NScheme::NTypeIds::String) };
 
-const TVector<NKikimrSchemeOp::TColumnDescription> EXTENDED_COLUMNS = {
-    Col("col1", NScheme::NTypeIds::Int32),
-    Col("col2", NScheme::NTypeIds::Int32),
-    Col("col3", NScheme::NTypeIds::String),
-    Col("col4", NScheme::NTypeIds::JsonDocument),
-    Col("col5", NScheme::NTypeIds::Interval)
-};
+const TVector<NKikimrSchemeOp::TColumnDescription> EXTENDED_COLUMNS = { Col("col1", NScheme::NTypeIds::Int32),
+    Col("col2", NScheme::NTypeIds::Int32), Col("col3", NScheme::NTypeIds::String), Col("col4", NScheme::NTypeIds::JsonDocument),
+    Col("col5", NScheme::NTypeIds::Interval) };
 
 const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 
-const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
+const TVector<TString> TEST_KEY_COLUMNS = { "col1" };
 
 struct TScriptExecutionsYdbSetup {
     explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false, bool secureScriptExecutions = false) {
@@ -90,7 +83,7 @@ struct TScriptExecutionsYdbSetup {
 
     void Init(bool enableScriptExecutionBackgroundChecks, bool secureScriptExecutions) {
         EnableYDBBacktraceFormat();
-        for (auto sig : {SIGILL, SIGSEGV}) {
+        for (auto sig : { SIGILL, SIGSEGV }) {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
         }
 
@@ -122,20 +115,18 @@ struct TScriptExecutionsYdbSetup {
 
         // Init sdk
         NYdb::TDriverConfig driverCfg;
-        driverCfg
-            .SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort)
-            .SetDatabase(Tests::TestDomainName)
-            .SetAuthToken(BUILTIN_ACL_ROOT);
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort).SetDatabase(Tests::TestDomainName).SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();
         UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
         TableClientSession = MakeHolder<NYdb::NTable::TSession>(createSessionResult.GetSession());
 
-        const auto result = TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
+        const auto result = TableClientSession
+                                ->ExecuteSchemeQuery(fmt::format(R"(
                 GRANT ALL ON `/dc-1` TO `{user}`;
-            )", "user"_a = BUILTIN_ACL_ROOT
-        )).ExtractValueSync();
+            )", "user"_a = BUILTIN_ACL_ROOT))
+                                .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
@@ -165,7 +156,8 @@ struct TScriptExecutionsYdbSetup {
         return true;
     }
 
-    TEvKqp::TEvScriptResponse::TPtr RunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl, const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
+    TEvKqp::TEvScriptResponse::TPtr RunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl,
+        const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
         auto ev = MakeHolder<TEvKqp::TEvScriptRequest>();
         ev->Record = GetQueryRequest(query);
         ev->ResultsTtl = resultsTtl;
@@ -180,7 +172,8 @@ struct TScriptExecutionsYdbSetup {
         return reply;
     }
 
-    TString CheckRunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl, const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
+    TString CheckRunQueryInDb(const TString& query = "SELECT 42", TDuration resultsTtl = TestResultsTtl,
+        const std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> retryMapping = {}) {
         const auto result = RunQueryInDb(query, resultsTtl, retryMapping);
         UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, Ydb::StatusIds::SUCCESS, result->Get()->Issues.ToString());
         UNIT_ASSERT(result->Get()->ExecutionId);
@@ -189,7 +182,8 @@ struct TScriptExecutionsYdbSetup {
     }
 
     // Creates query in db. Returns execution id
-    TString CreateQueryInDb(const TString& query = "SELECT 42", TDuration leaseDuration = TestLeaseDuration, TDuration operationTtl = TestOperationTtl, TDuration resultsTtl = TestResultsTtl) {
+    TString CreateQueryInDb(const TString& query = "SELECT 42", TDuration leaseDuration = TestLeaseDuration,
+        TDuration operationTtl = TestOperationTtl, TDuration resultsTtl = TestResultsTtl) {
         const TString executionId = CreateGuidAsString();
 
         NKikimrKqp::TScriptExecutionOperationMeta meta;
@@ -198,7 +192,8 @@ struct TScriptExecutionsYdbSetup {
         SetDuration(resultsTtl, *meta.MutableResultsTtl());
 
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), GetQueryRequest(query), meta), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(NPrivate::CreateCreateScriptOperationQueryActor(executionId, NActors::TActorId(), GetQueryRequest(query), meta),
+            0, 0, TMailboxType::Simple, 0, edgeActor);
 
         const auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvCreateScriptOperationResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, Ydb::StatusIds::SUCCESS);
@@ -206,8 +201,10 @@ struct TScriptExecutionsYdbSetup {
         return reply->Get()->ExecutionId;
     }
 
-    void CreateTableInDbSync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, i32 numberOfRequests = 1, TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
-        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(), bool isSystemUser = false, TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
+    void CreateTableInDbSync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, i32 numberOfRequests = 1,
+        TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(), bool isSystemUser = false,
+        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
     {
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < numberOfRequests; ++i) {
@@ -216,21 +213,15 @@ struct TScriptExecutionsYdbSetup {
         WaitTableCreation(std::move(edgeActors));
     }
 
-    TActorId CreateTableInDbAsync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
-        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(), bool isSystemUser = false, TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
+    TActorId CreateTableInDbAsync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS,
+        TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(), bool isSystemUser = false,
+        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
     {
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(CreateTableCreator(
-            std::move(pathComponents),
-            std::move(columns),
-            std::move(keyColumns),
-            NKikimrServices::KQP_PROXY,
-            std::move(ttlSettings),
-            {},
-            isSystemUser,
-            {},
-            std::move(tableAclDiff)
-        ), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(
+            CreateTableCreator(std::move(pathComponents), std::move(columns), std::move(keyColumns), NKikimrServices::KQP_PROXY,
+                std::move(ttlSettings), {}, isSystemUser, {}, std::move(tableAclDiff)), 0, 0, TMailboxType::Simple, 0, edgeActor);
         return edgeActor;
     }
 
@@ -242,13 +233,14 @@ struct TScriptExecutionsYdbSetup {
         }
     }
 
-    void VerifyColumnsList(TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS,
-        bool isSystemUser = false, const std::optional<std::vector<NYdb::NScheme::TPermissions>>& effectivePermissions = std::nullopt)
+    void VerifyColumnsList(TVector<TString> pathComponents = TEST_TABLE_PATH,
+        TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, bool isSystemUser = false,
+        const std::optional<std::vector<NYdb::NScheme::TPermissions>>& effectivePermissions = std::nullopt)
     {
         NYdb::NTable::TTableClient client(*YdbDriver, NYdb::NTable::TClientSettings().AuthToken(""));
         const auto sessionResult = client.CreateSession().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS, sessionResult.GetIssues().ToOneLineString());
-        const auto result = sessionResult.GetSession().DescribeTable(JoinPath({"dc-1", JoinPath(pathComponents)})).ExtractValueSync();
+        const auto result = sessionResult.GetSession().DescribeTable(JoinPath({ "dc-1", JoinPath(pathComponents) })).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         const auto& tableDesc = result.GetTableDescription();
@@ -262,7 +254,7 @@ struct TScriptExecutionsYdbSetup {
         }
 
         for (const auto& col : columns) {
-            UNIT_ASSERT_C(existingNames.contains(col.GetName()), "Column \"" << col.GetName() << "\" is not present" );
+            UNIT_ASSERT_C(existingNames.contains(col.GetName()), "Column \"" << col.GetName() << "\" is not present");
         }
 
         if (effectivePermissions) {
@@ -297,14 +289,16 @@ struct TScriptExecutionsYdbSetup {
 
         constexpr ui32 node = 0;
         const auto& edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(TestDatabase, std::move(executionId)), node, 0, TMailboxType::Simple, 0, edgeActor);
+        GetRuntime()->Register(
+            NPrivate::CreateCheckLeaseStatusActor(TestDatabase, std::move(executionId)), node, 0, TMailboxType::Simple, 0, edgeActor);
 
         auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvLeaseCheckResult>(edgeActor, TestTimeout);
         UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, Ydb::StatusIds::SUCCESS, reply->Get()->Issues.ToOneLineString());
         return reply;
     }
 
-    void CheckLeaseExistence(const TString& executionId, bool expectedExistence, std::optional<i32> expectedOperationStatus, i64 leaseGeneration = 1, NPrivate::ELeaseState leaseStatus = NPrivate::ELeaseState::ScriptRunning) {
+    void CheckLeaseExistence(const TString& executionId, bool expectedExistence, std::optional<i32> expectedOperationStatus,
+        i64 leaseGeneration = 1, NPrivate::ELeaseState leaseStatus = NPrivate::ELeaseState::ScriptRunning) {
         const TString sql = R"(
             DECLARE $database As Utf8;
             DECLARE $execution_id As Utf8;
@@ -323,15 +317,10 @@ struct TScriptExecutionsYdbSetup {
         )";
 
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database")
-                .Utf8(TestDatabase)
-                .Build()
-            .AddParam("$execution_id")
-                .Utf8(executionId)
-                .Build();
+        params.AddParam("$database").Utf8(TestDatabase).Build() .AddParam("$execution_id").Utf8(executionId).Build();
 
-        const auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        const auto result =
+            TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         {   // Lease info
@@ -374,15 +363,9 @@ struct TScriptExecutionsYdbSetup {
         FinalizeScriptLease(executionId);
 
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Send(
-            MakeKqpProxyID(GetRuntime()->GetFirstNodeId()),
-            edgeActor,
+        GetRuntime()->Send(MakeKqpProxyID(GetRuntime()->GetFirstNodeId()), edgeActor,
             new TEvGetScriptExecutionOperation(
-                TestDatabase,
-                NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId)),
-                BUILTIN_ACL_ROOT
-            )
-        );
+                TestDatabase, NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId)), BUILTIN_ACL_ROOT));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvGetScriptExecutionOperationResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_C(reply, "GetScriptExecutionOperation response is empty");
@@ -392,7 +375,8 @@ struct TScriptExecutionsYdbSetup {
 
     TEvFetchScriptResultsResponse::TPtr FetchScriptResults(const TString& executionId, i32 resultSetId) {
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, TestDatabase, executionId, BUILTIN_ACL_ROOT, resultSetId, 0, 0, 0, TInstant::Max()));
+        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(
+            edgeActor, TestDatabase, executionId, BUILTIN_ACL_ROOT, resultSetId, 0, 0, 0, TInstant::Max()));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_C(reply, "FetchScriptResults response is empty");
@@ -412,7 +396,8 @@ struct TScriptExecutionsYdbSetup {
             Ydb::Query::ExecuteScriptMetadata deserializedMeta;
             ev.Metadata->UnpackTo(&deserializedMeta);
             UNIT_ASSERT_VALUES_EQUAL(deserializedMeta.execution_id(), executionId);
-            UNIT_ASSERT_C(deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
+            UNIT_ASSERT_C(
+                deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
 
             const auto execStatus = deserializedMeta.exec_status();
             if (ev.Ready) {
@@ -420,7 +405,8 @@ struct TScriptExecutionsYdbSetup {
                 break;
             }
 
-            UNIT_ASSERT_C(IsIn({Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_STATUS_RUNNING}, execStatus), Ydb::Query::ExecStatus_Name(execStatus));
+            UNIT_ASSERT_C(IsIn({ Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_STATUS_RUNNING }, execStatus),
+                Ydb::Query::ExecStatus_Name(execStatus));
 
             if (TInstant::Now() > timeout) {
                 UNIT_FAIL("Failed to wait for query to finish: " << executionId);
@@ -445,15 +431,10 @@ struct TScriptExecutionsYdbSetup {
             )";
 
             NYdb::TParamsBuilder params;
-            params
-                .AddParam("$database")
-                    .Utf8(TestDatabase)
-                    .Build()
-                .AddParam("$execution_id")
-                    .Utf8(executionId)
-                    .Build();
+            params.AddParam("$database").Utf8(TestDatabase).Build() .AddParam("$execution_id").Utf8(executionId).Build();
 
-            const auto result = TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+            const auto result =
+                TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             NYdb::TResultSetParser rs = result.GetResultSetParser(0);
@@ -539,8 +520,8 @@ struct TScriptExecutionsYdbSetup {
                 .Build();
         // clang-format on
 
-        const auto result = TableClientSession->ExecuteDataQuery(
-            sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        const auto result =
+            TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
@@ -555,16 +536,10 @@ struct TScriptExecutionsYdbSetup {
         )";
 
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database")
-                .Utf8(TestDatabase)
-                .Build()
-            .AddParam("$execution_id")
-                .Utf8(executionId)
-                .Build();
+        params.AddParam("$database").Utf8(TestDatabase).Build() .AddParam("$execution_id").Utf8(executionId).Build();
 
-        const auto result = TableClientSession->ExecuteDataQuery(
-            sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
+        const auto result =
+            TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx(), params.Build()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         NYdb::TResultSetParser parser(result.GetResultSet(0));
@@ -575,7 +550,8 @@ struct TScriptExecutionsYdbSetup {
 private:
     NKikimrKqp::TEvQueryRequest GetQueryRequest(const TString& query) {
         NKikimrKqp::TEvQueryRequest queryProto;
-        queryProto.SetUserToken(NACLib::TUserToken(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{GetRuntime()->GetAppData().AllAuthenticatedUsers}).SerializeAsString());
+        queryProto.SetUserToken(
+            NACLib::TUserToken(BUILTIN_ACL_ROOT, TVector<NACLib::TSID>{ GetRuntime()->GetAppData().AllAuthenticatedUsers }).SerializeAsString());
 
         auto& req = *queryProto.MutableRequest();
         req.SetDatabase(TestDatabase);
@@ -598,7 +574,7 @@ public:
     THolder<NYdb::NTable::TSession> TableClientSession;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
     Y_UNIT_TEST(RunCheckLeaseStatus) {
@@ -663,7 +639,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         UNIT_ASSERT(!updateResponse->Get()->ExecutionEntryExists);
     }
 
-    TString ExecuteQueryToRetry(TScriptExecutionsYdbSetup& ydb, TDuration backoffDuration) {
+    TString ExecuteQueryToRetry(TScriptExecutionsYdbSetup & ydb, TDuration backoffDuration) {
         NKikimrKqp::TScriptExecutionRetryState::TMapping retryMapping;
         retryMapping.AddStatusCode(Ydb::StatusIds::SCHEME_ERROR);
         auto& policy = *retryMapping.MutableExponentialDelayPolicy();
@@ -672,11 +648,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         *policy.MutableMaxBackoff() = NProtoInterop::CastToProto(backoffDuration);
 
         constexpr char TABLE_NAME[] = "test_table";
-        const auto executionId = ydb.CheckRunQueryInDb(
-            TStringBuilder() << "SELECT * FROM " << TABLE_NAME,
-            TestResultsTtl,
-            {retryMapping}
-        );
+        const auto executionId = ydb.CheckRunQueryInDb(TStringBuilder() << "SELECT * FROM " << TABLE_NAME, TestResultsTtl, { retryMapping });
 
         const auto timeout = TInstant::Now() + TestTimeout;
         while (true) {
@@ -690,16 +662,19 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
             Ydb::Query::ExecuteScriptMetadata deserializedMeta;
             ev.Metadata->UnpackTo(&deserializedMeta);
             UNIT_ASSERT_VALUES_EQUAL(deserializedMeta.execution_id(), executionId);
-            UNIT_ASSERT_C(deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
+            UNIT_ASSERT_C(
+                deserializedMeta.exec_mode() == Ydb::Query::EXEC_MODE_EXECUTE, Ydb::Query::ExecMode_Name(deserializedMeta.exec_mode()));
 
             const auto execStatus = deserializedMeta.exec_status();
             if (execStatus == Ydb::Query::EXEC_STATUS_FAILED) {
-                UNIT_ASSERT_STRING_CONTAINS(ev.Issues.ToString(), "Script execution operation failed with code SCHEME_ERROR and will be restarted");
+                UNIT_ASSERT_STRING_CONTAINS(
+                    ev.Issues.ToString(), "Script execution operation failed with code SCHEME_ERROR and will be restarted");
                 ydb.CheckLeaseExistence(executionId, true, Ydb::StatusIds::SCHEME_ERROR, 1, NPrivate::ELeaseState::WaitRetry);
                 break;
             }
 
-            UNIT_ASSERT_C(IsIn({Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_STATUS_RUNNING}, execStatus), Ydb::Query::ExecStatus_Name(execStatus));
+            UNIT_ASSERT_C(IsIn({ Ydb::Query::EXEC_STATUS_STARTING, Ydb::Query::EXEC_STATUS_RUNNING }, execStatus),
+                Ydb::Query::ExecStatus_Name(execStatus));
 
             if (TInstant::Now() > timeout) {
                 UNIT_FAIL("Failed to wait for query to finish (before retry)");
@@ -718,7 +693,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         return executionId;
     }
 
-    void CheckQueryResults(TScriptExecutionsYdbSetup& ydb, const TString& executionId) {
+    void CheckQueryResults(TScriptExecutionsYdbSetup & ydb, const TString& executionId) {
         const auto scriptResults = ydb.FetchScriptResults(executionId, 0);
         const auto& ev = *scriptResults->Get();
         UNIT_ASSERT_VALUES_EQUAL_C(ev.Status, Ydb::StatusIds::SUCCESS, ev.Issues.ToString());
@@ -795,14 +770,10 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
             Ydb::Query::ExecuteScriptMetadata metadata;
             ev.Metadata->UnpackTo(&metadata);
-            UNIT_ASSERT_C(
-                metadata.exec_status() == Ydb::Query::EXEC_STATUS_RUNNING,
-                Ydb::Query::ExecStatus_Name(metadata.exec_status()));
+            UNIT_ASSERT_C(metadata.exec_status() == Ydb::Query::EXEC_STATUS_RUNNING, Ydb::Query::ExecStatus_Name(metadata.exec_status()));
             UNIT_ASSERT_STRING_CONTAINS(ev.Issues.ToString(), "wait finalization");
             UNIT_ASSERT_STRING_CONTAINS(ev.Issues.ToString(), "Info:");
-            UNIT_ASSERT_C(
-                !ev.Issues.ToString().Contains("Finalization is not complete"),
-                ev.Issues.ToString());
+            UNIT_ASSERT_C(!ev.Issues.ToString().Contains("Finalization is not complete"), ev.Issues.ToString());
         }
 
         UNIT_ASSERT(ydb.GetFinalizationStatus(executionId));
@@ -813,9 +784,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         UNIT_ASSERT(leaseCheck->Get()->OperationStatus);
         UNIT_ASSERT_VALUES_EQUAL(*leaseCheck->Get()->OperationStatus, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(leaseCheck->Get()->ExecutionStatus);
-        UNIT_ASSERT_VALUES_EQUAL(
-            static_cast<i32>(*leaseCheck->Get()->ExecutionStatus),
-            static_cast<i32>(Ydb::Query::EXEC_STATUS_COMPLETED));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(*leaseCheck->Get()->ExecutionStatus), static_cast<i32>(Ydb::Query::EXEC_STATUS_COMPLETED));
 
         UNIT_ASSERT(ydb.GetFinalizationStatus(executionId));
     }
@@ -831,7 +800,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         // Wait background finalization
         Sleep(TestLeaseDuration);
         TKqpFederatedQuerySetup setup;
-        setup.ScriptExecutionSettings = {.EnableBackgroundLeaseChecks = true, .LeaseCheckStartupTimeout = TDuration::Zero()};
+        setup.ScriptExecutionSettings = { .EnableBackgroundLeaseChecks = true, .LeaseCheckStartupTimeout = TDuration::Zero() };
         ydb.GetRuntime()->Register(CreateKqpFinalizeScriptService({}, setup, nullptr));
         ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
 
@@ -842,13 +811,14 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
         ydb.CreateQueryInDb();
 
-        const auto result = ydb.TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
+        const auto result = ydb.TableClientSession
+                                ->ExecuteSchemeQuery(fmt::format(R"(
                 GRANT ALL ON `/dc-1/.metadata` TO `{user}`;
-            )", "user"_a = BUILTIN_ACL_ROOT
-        )).ExtractValueSync();
+            )", "user"_a = BUILTIN_ACL_ROOT))
+                                .ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
-        const std::vector<TString> tables = {"script_executions", "script_execution_leases", "result_sets"};
+        const std::vector<TString> tables = { "script_executions", "script_execution_leases", "result_sets" };
         const auto testNoAccess = [&]() {
             for (const auto& table : tables) {
                 const TString sql = fmt::format(R"(
@@ -857,7 +827,8 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
                     FROM `.metadata/{table}`
                 )", "table"_a = table);
 
-                const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                const auto result =
+                    ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 const auto& issues = result.GetIssues().ToString();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
                 UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot find table");
@@ -871,7 +842,8 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
                     FROM `.metadata/{table}`
                 )", "table"_a = table);
 
-                const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                const auto result =
+                    ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             }
         };
@@ -950,10 +922,12 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
                 now += RETRY_PERIOD / (2 * RETRY_COUNT);
                 if (i + 1 < 2 * RETRY_COUNT) {
                     UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now), i << ": " << limiter.RetryRate << ", error=" << limiter.LastError);
-                    UNIT_ASSERT_DOUBLES_EQUAL_C(limiter.Backoff.SecondsFloat(), (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1, i << ": " << limiter.RetryRate);
+                    UNIT_ASSERT_DOUBLES_EQUAL_C(limiter.Backoff.SecondsFloat(),
+                        (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1, i << ": " << limiter.RetryRate);
                 } else {
                     UNIT_ASSERT_C(!limiter.UpdateOnRetry(now, policy, now), limiter.RetryRate);
-                    UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "failure rate " << limiter.RetryRate << " exceeds limit of "  << RETRY_COUNT);
+                    UNIT_ASSERT_STRING_CONTAINS(
+                        limiter.LastError, TStringBuilder() << "failure rate " << limiter.RetryRate << " exceeds limit of " << RETRY_COUNT);
                 }
             }
         }
@@ -963,7 +937,8 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
 
             for (ui64 i = 0; i <= RETRY_COUNT + 1; ++i) {
                 if (i <= RETRY_COUNT) {
-                    UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now), i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now),
+                        i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
                 } else {
                     UNIT_ASSERT_C(!limiter.UpdateOnRetry(now, policy, now), limiter.RetryCount);
                     UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "retry count reached limit of " << 4 * RETRY_COUNT);
@@ -1027,7 +1002,8 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         TScriptExecutionsYdbSetup ydb;
 
         ydb.CreateTableInDbSync();
-        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false,
+            std::vector<NYdb::NScheme::TPermissions>{ NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, { "ydb.generic.full" }) });
     }
 
     Y_UNIT_TEST(TableCreationWithAcl) {
@@ -1064,7 +1040,7 @@ Y_UNIT_TEST_SUITE(TableCreation) {
 
         ydb.WaitTableCreation(std::move(edgeActors));
 
-        for(i32 i = 0; i < requests; i++) {
+        for (i32 i = 0; i < requests; i++) {
             uniqueTablePath.back() = TEST_TABLE_PATH.back() + ToString(i);
             ydb.VerifyColumnsList(uniqueTablePath);
         }
@@ -1087,7 +1063,7 @@ Y_UNIT_TEST_SUITE(TableCreation) {
 
         ydb.WaitTableCreation(std::move(edgeActors));
 
-        for(i32 i = 0; i < tables; i++) {
+        for (i32 i = 0; i < tables; i++) {
             uniqueTablePath.back() = TEST_TABLE_PATH.back() + ToString(i);
             ydb.VerifyColumnsList(uniqueTablePath);
         }
@@ -1101,7 +1077,6 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < requests; ++i) {
             edgeActors.push_back(ydb.CreateTableInDbAsync(i % 2 ? EXTENDED_COLUMNS : DEFAULT_COLUMNS));
-
         }
 
         ydb.WaitTableCreation(edgeActors);
@@ -1120,7 +1095,8 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         TScriptExecutionsYdbSetup ydb;
 
         ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
-        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false,
+            std::vector<NYdb::NScheme::TPermissions>{ NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, { "ydb.generic.full" }) });
 
         NACLib::TDiffACL acl;
         acl.ClearAccess();
@@ -1145,14 +1121,16 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         aclRollback.SetInterruptInheritance(false);
 
         ydb.CreateTableInDbSync(EXTENDED_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, false, aclRollback);
-        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS, true,
+            std::vector<NYdb::NScheme::TPermissions>{ NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, { "ydb.generic.full" }) });
     }
 
     Y_UNIT_TEST(UpdateTableAcl) {
         TScriptExecutionsYdbSetup ydb;
 
         ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
-        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false,
+            std::vector<NYdb::NScheme::TPermissions>{ NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, { "ydb.generic.full" }) });
 
         NACLib::TDiffACL acl;
         acl.ClearAccess();
@@ -1177,7 +1155,8 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         aclRollback.SetInterruptInheritance(false);
 
         ydb.CreateTableInDbSync(DEFAULT_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, false, aclRollback);
-        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true,
+            std::vector<NYdb::NScheme::TPermissions>{ NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, { "ydb.generic.full" }) });
     }
 
     Y_UNIT_TEST(ConcurrentUpdateTable) {
@@ -1200,4 +1179,4 @@ Y_UNIT_TEST_SUITE(TableCreation) {
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

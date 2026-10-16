@@ -1,15 +1,15 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
-#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider_impl.h>
-#include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb_external/proto/source.pb.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
+#include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
+#include <ydb/library/yql/providers/ydb_external/proto/source.pb.h>
+#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider_impl.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/sql_types/block.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/json/json_value.h>
 
 #include <tuple>
 
@@ -21,27 +21,25 @@ using namespace NNodes;
 struct TFixture {
     TExprContext Ctx;
     TIntrusivePtr<TTypeAnnotationContext> Types = MakeIntrusive<TTypeAnnotationContext>();
-    NYdb::TDriver Driver{NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1)};
-    NYdb::TDriver TlsDriver{NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1)};
+    NYdb::TDriver Driver{ NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1) };
+    NYdb::TDriver TlsDriver{ NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1) };
     TState::TPtr State;
 
     explicit TFixture(TInstant deadline = TInstant::Max())
         : State(MakeIntrusive<TState>(Types.Get(),
-            [cache = CreateYdbExternalMetadataClientCache(Driver, TlsDriver)] { return cache; },
-            CreateStructuredTokenCredentialsFactory(), deadline))
+              [cache = CreateYdbExternalMetadataClientCache(Driver, TlsDriver)] {
+                  return cache;
+              }, CreateStructuredTokenCredentialsFactory(), deadline))
     {
-        AddCluster(*State, "remote", {
-            {"location", "localhost:2135"}, {"database_name", "/Remote/"},
-            {"authMethod", "TOKEN"}, {"tokenReference", "secret-name"}, {"token", "private-token-value"},
-            {"use_tls", "true"}
-        });
+        AddCluster(*State, "remote", { { "location", "localhost:2135" }, { "database_name", "/Remote/" }, { "authMethod", "TOKEN" },
+                                         { "tokenReference", "secret-name" }, { "token", "private-token-value" }, { "use_tls", "true" } });
         TTable table;
         table.ColumnTypes["key"].set_type_id(Ydb::Type::UINT64);
         table.ColumnTypes["value"].mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UTF8);
-        table.RowType = Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
-            Ctx.MakeType<TItemExprType>("value", ParseColumnType(table.ColumnTypes.at("value"), Ctx)),
-            Ctx.MakeType<TItemExprType>("key", ParseColumnType(table.ColumnTypes.at("key"), Ctx))});
-        table.ColumnOrder = {"key", "value"};
+        table.RowType = Ctx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{ Ctx.MakeType<TItemExprType>("value", ParseColumnType(table.ColumnTypes.at("value"), Ctx)),
+                Ctx.MakeType<TItemExprType>("key", ParseColumnType(table.ColumnTypes.at("key"), Ctx)) });
+        table.ColumnOrder = { "key", "value" };
         State->Tables.emplace(TState::TTableKey("remote", "items"), std::move(table));
     }
 
@@ -68,23 +66,21 @@ struct TFixture {
         // The core DataSource annotator runs before the provider in a real pipeline.
         read.DataSource().Ptr()->SetTypeAnn(Ctx.MakeType<TUnitExprType>());
         const auto* row = State->Tables.at(TState::TTableKey("remote", "items")).RowType;
-        read.Ptr()->SetTypeAnn(Ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            world->GetTypeAnn(), Ctx.MakeType<TListExprType>(row)}));
+        read.Ptr()->SetTypeAnn(
+            Ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ world->GetTypeAnn(), Ctx.MakeType<TListExprType>(row) }));
         return read;
     }
 
     TExprNode::TPtr MakeRawRead(bool wrapKey, ui32 tableCount = 1, TStringBuf table = "items") {
         const auto typedRead = MakeRead();
         const auto pos = typedRead.Pos();
-        auto key = Ctx.NewCallable(pos, "Key", {
-            Ctx.NewList(pos, {Ctx.NewAtom(pos, "table"),
-                Ctx.NewCallable(pos, "String", {Ctx.NewAtom(pos, table)})})});
+        auto key = Ctx.NewCallable(
+            pos, "Key", { Ctx.NewList(pos, { Ctx.NewAtom(pos, "table"), Ctx.NewCallable(pos, "String", { Ctx.NewAtom(pos, table) }) }) });
         if (wrapKey) {
             key = Ctx.NewCallable(pos, "MrTableConcat", TExprNode::TListType(tableCount, key));
         }
-        return Ctx.NewCallable(pos, "Read!", {
-            typedRead.World().Ptr(), typedRead.DataSource().Ptr(), std::move(key),
-            Ctx.NewCallable(pos, "Void", {}), Ctx.NewList(pos, {})});
+        return Ctx.NewCallable(pos, "Read!",
+            { typedRead.World().Ptr(), typedRead.DataSource().Ptr(), std::move(key), Ctx.NewCallable(pos, "Void", {}), Ctx.NewList(pos, {}) });
     }
 
     TCoExtractMembers MakeProjection(TExprNode::TPtr input, const TVector<TString>& names) {
@@ -95,17 +91,13 @@ struct TFixture {
             members.emplace_back(Ctx.NewAtom(input->Pos(), name));
             items.push_back(tableRow->GetItems()[*tableRow->FindItem(name)]);
         }
-        auto projection = Build<TCoExtractMembers>(Ctx, input->Pos())
-            .Input(input)
-            .Members(Ctx.NewList(input->Pos(), std::move(members)))
-            .Done();
+        auto projection = Build<TCoExtractMembers>(Ctx, input->Pos()).Input(input).Members(Ctx.NewList(input->Pos(), std::move(members))).Done();
         projection.Ptr()->SetTypeAnn(Ctx.MakeType<TListExprType>(Ctx.MakeType<TStructExprType>(items)));
         return projection;
     }
 
     TSource SerializeSource(const TDqSourceWrap& wrap) {
-        const auto source = Build<TDqSource>(Ctx, wrap.Pos())
-            .DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
+        const auto source = Build<TDqSource>(Ctx, wrap.Pos()).DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
         google::protobuf::Any packed;
         TString sourceType;
         CreateDqIntegration(State)->FillSourceSettings(source.Ref(), packed, sourceType, 1, Ctx);
@@ -115,24 +107,23 @@ struct TFixture {
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
     Y_UNIT_TEST(MetadataResourcesAreLazyAndFactoryFailuresAreSanitized) {
-        for (const bool throws : {false, true}) {
+        for (const bool throws : { false, true }) {
             TExprContext ctx;
             auto types = MakeIntrusive<TTypeAnnotationContext>();
             ui32 requests = 0;
-            auto providers = CreateYdbExternalDataProviders(types.Get(),
-                [&]() -> std::shared_ptr<IYdbExternalMetadataClientCache> {
-                    ++requests;
-                    if (throws) {
-                        throw yexception() << "private-factory-credentials";
-                    }
-                    return {};
-                });
-            providers.Source->AddCluster("remote", {
-                {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "NONE"}});
+            auto providers = CreateYdbExternalDataProviders(types.Get(), [&]() -> std::shared_ptr<IYdbExternalMetadataClientCache> {
+                ++requests;
+                if (throws) {
+                    throw yexception() << "private-factory-credentials";
+                }
+                return {};
+            });
+            providers.Source->AddCluster(
+                "remote", { { "location", "localhost:2135" }, { "database_name", "/Remote" }, { "authMethod", "NONE" } });
             UNIT_ASSERT_VALUES_EQUAL(requests, 0);
             const auto pos = ctx.AppendPosition({});
             const auto makeRead = [&](TStringBuf category) {
@@ -163,7 +154,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
     }
 
     Y_UNIT_TEST(MetadataAcceptsLiteralKeyWithOrWithoutConcat) {
-        for (const bool wrapKey : {false, true}) {
+        for (const bool wrapKey : { false, true }) {
             TFixture f;
             auto transformer = CreateLoadMetadataTransformer(f.State);
             const auto input = f.MakeRawRead(wrapKey);
@@ -185,15 +176,14 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         const auto nativeRead = f.MakeRawRead(false);
         const auto pos = nativeRead->Pos();
         auto foreignChildren = nativeRead->ChildrenList();
-        foreignChildren[1] = f.Ctx.NewCallable(pos, "DataSource", {
-            f.Ctx.NewAtom(pos, "kikimr"), f.Ctx.NewAtom(pos, "local")});
+        foreignChildren[1] = f.Ctx.NewCallable(pos, "DataSource", { f.Ctx.NewAtom(pos, "kikimr"), f.Ctx.NewAtom(pos, "local") });
         const auto foreignRead = f.Ctx.ChangeChildren(*nativeRead, std::move(foreignChildren));
         TExprNode::TPtr output;
         UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(foreignRead, output, f.Ctx).Level, IGraphTransformer::TStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(output.Get(), foreignRead.Get());
 
         // The graph can contain both native and local reads in a federated join.
-        const auto mixed = f.Ctx.NewList(pos, {foreignRead, nativeRead});
+        const auto mixed = f.Ctx.NewList(pos, { foreignRead, nativeRead });
         const auto status = transformer->Transform(mixed, output, f.Ctx);
         UNIT_ASSERT(status.Level != IGraphTransformer::TStatus::Error);
         UNIT_ASSERT(status.Level != IGraphTransformer::TStatus::Async);
@@ -207,19 +197,17 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         const auto nativeRead = f.MakeRawRead(false);
         const auto pos = nativeRead->Pos();
         auto foreignChildren = nativeRead->ChildrenList();
-        foreignChildren[1] = f.Ctx.NewCallable(pos, "DataSource", {
-            f.Ctx.NewAtom(pos, "kikimr"), f.Ctx.NewAtom(pos, "local")});
+        foreignChildren[1] = f.Ctx.NewCallable(pos, "DataSource", { f.Ctx.NewAtom(pos, "kikimr"), f.Ctx.NewAtom(pos, "local") });
         const auto foreignRead = f.Ctx.ChangeChildren(*nativeRead, std::move(foreignChildren));
         UNIT_ASSERT(providers.Source->CanParse(*nativeRead));
         UNIT_ASSERT(!providers.Source->CanParse(*foreignRead));
-        for (const TStringBuf callable : {TStringBuf("Write!"), TStringBuf("Commit!")}) {
-            for (const TStringBuf category : {YdbExternalProviderName, TStringBuf("kikimr")}) {
-                const auto operation = f.Ctx.NewCallable(pos, callable, {
-                    nativeRead->ChildPtr(0), f.Ctx.NewCallable(pos, "DataSink", {
-                        f.Ctx.NewAtom(pos, category), f.Ctx.NewAtom(pos, "remote")})});
+        for (const TStringBuf callable : { TStringBuf("Write!"), TStringBuf("Commit!") }) {
+            for (const TStringBuf category : { YdbExternalProviderName, TStringBuf("kikimr") }) {
+                const auto operation = f.Ctx.NewCallable(
+                    pos, callable, { nativeRead->ChildPtr(0),
+                                       f.Ctx.NewCallable(pos, "DataSink", { f.Ctx.NewAtom(pos, category), f.Ctx.NewAtom(pos, "remote") }) });
                 UNIT_ASSERT_VALUES_EQUAL(providers.Sink->CanParse(*operation), category == YdbExternalProviderName);
-                UNIT_ASSERT_VALUES_EQUAL(providers.Sink->CanExecute(*operation),
-                    category == YdbExternalProviderName && callable == "Commit!");
+                UNIT_ASSERT_VALUES_EQUAL(providers.Sink->CanExecute(*operation), category == YdbExternalProviderName && callable == "Commit!");
             }
         }
     }
@@ -250,8 +238,8 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         }
         auto transformer = CreateLoadMetadataTransformer(f.State);
         TExprNode::TPtr output;
-        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(f.Ctx.NewList(f.Ctx.AppendPosition({}), std::move(reads)),
-            output, f.Ctx).Level, IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(f.Ctx.NewList(f.Ctx.AppendPosition({}), std::move(reads)), output, f.Ctx).Level,
+            IGraphTransformer::TStatus::Error);
         UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().ToString().Contains("metadata table limit exceeded"));
     }
 
@@ -303,9 +291,9 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
 
     Y_UNIT_TEST(PrimitiveNullability) {
         TExprContext ctx;
-        for (const auto id : {Ydb::Type::BOOL, Ydb::Type::INT8, Ydb::Type::INT16, Ydb::Type::INT32, Ydb::Type::INT64,
-                             Ydb::Type::UINT8, Ydb::Type::UINT16, Ydb::Type::UINT32, Ydb::Type::UINT64,
-                             Ydb::Type::FLOAT, Ydb::Type::DOUBLE, Ydb::Type::STRING, Ydb::Type::UTF8}) {
+        for (const auto id :
+            { Ydb::Type::BOOL, Ydb::Type::INT8, Ydb::Type::INT16, Ydb::Type::INT32, Ydb::Type::INT64, Ydb::Type::UINT8, Ydb::Type::UINT16,
+                Ydb::Type::UINT32, Ydb::Type::UINT64, Ydb::Type::FLOAT, Ydb::Type::DOUBLE, Ydb::Type::STRING, Ydb::Type::UTF8 }) {
             Ydb::Type primitive;
             primitive.set_type_id(id);
             const auto* required = ParseColumnType(primitive, ctx);
@@ -339,10 +327,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         auto integration = CreateDqIntegration(f.State);
         auto read = f.MakeRead();
         const TDqSourceWrap wrap(integration->WrapRead(read.Ptr(), f.Ctx, {}));
-        const auto source = Build<TDqSource>(f.Ctx, read.Pos())
-            .DataSource(wrap.DataSource())
-            .Settings(wrap.Input())
-            .Done();
+        const auto source = Build<TDqSource>(f.Ctx, read.Pos()).DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
         google::protobuf::Any packed;
         TString sourceType;
         integration->FillSourceSettings(source.Ref(), packed, sourceType, 1, f.Ctx);
@@ -372,14 +357,13 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         auto integration = CreateDqIntegration(f.State);
         auto read = f.MakeRead();
         const auto* empty = f.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{});
-        read.Ptr()->SetTypeAnn(f.Ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            read.World().Ref().GetTypeAnn(), f.Ctx.MakeType<TListExprType>(empty)}));
+        read.Ptr()->SetTypeAnn(f.Ctx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{ read.World().Ref().GetTypeAnn(), f.Ctx.MakeType<TListExprType>(empty) }));
         const TDqSourceWrap wrap(integration->WrapRead(read.Ptr(), f.Ctx, {}));
         const auto settings = wrap.Input().Cast<TYdbExternalSourceSettings>();
         UNIT_ASSERT_VALUES_EQUAL(settings.Columns().Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.Columns().Item(0).Value(), "key");
-        const auto source = Build<TDqSource>(f.Ctx, read.Pos())
-            .DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
+        const auto source = Build<TDqSource>(f.Ctx, read.Pos()).DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
         google::protobuf::Any packed;
         TString sourceType;
         integration->FillSourceSettings(source.Ref(), packed, sourceType, 1, f.Ctx);
@@ -389,13 +373,18 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
     }
 
     Y_UNIT_TEST(ProjectionPrunesRightAndReadWrapBeforeSerialization) {
-        for (const bool readWrap : {false, true}) {
-            for (const TVector<TString>& columns : {TVector<TString>{"key"}, TVector<TString>{"value"}, TVector<TString>{}}) {
+        for (const bool readWrap : { false, true }) {
+            for (const TVector<TString>& columns : { TVector<TString>{ "key" }, TVector<TString>{ "value" }, TVector<TString>{} }) {
                 TFixture f;
                 const auto read = f.MakeRead();
-                TExprNode::TPtr wrapper = readWrap
-                    ? Build<TDqReadWrap>(f.Ctx, read.Pos()).Input(read).Flags().Build().Done().Ptr()
-                    : Build<TCoRight>(f.Ctx, read.Pos()).Input(read).Done().Ptr();
+                TExprNode::TPtr wrapper = readWrap ? Build<TDqReadWrap>(f.Ctx, read.Pos())
+                                                         .Input(read)
+                                                         .Flags()
+                                                         .Build().Done().Ptr()
+                                                   : Build<TCoRight>(f.Ctx, read.Pos())
+                                                         .Input(read)
+                                                         .Done()
+                                                         .Ptr();
                 const auto projection = f.MakeProjection(wrapper, columns);
                 auto optimizer = CreateLogicalOptimizer(f.State);
                 TExprNode::TPtr output;
@@ -406,7 +395,14 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
                 auto annotation = CreateTypeAnnotationTransformer(f.State);
                 TExprNode::TPtr annotated;
                 UNIT_ASSERT_VALUES_EQUAL(annotation->Transform(pruned.Ptr(), annotated, f.Ctx).Level, IGraphTransformer::TStatus::Ok);
-                const auto* row = pruned.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                const auto* row = pruned.Ref()
+                                      .GetTypeAnn()
+                                      ->Cast<TTupleExprType>()
+                                      ->GetItems()
+                                      .back()
+                                      ->Cast<TListExprType>()
+                                      ->GetItemType()
+                                      ->Cast<TStructExprType>();
                 UNIT_ASSERT_VALUES_EQUAL(row->GetSize(), columns.size());
                 if (!columns.empty()) {
                     UNIT_ASSERT_VALUES_EQUAL(row->GetItems().front()->GetItemType()->GetKind(),
@@ -421,7 +417,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
     }
 
     Y_UNIT_TEST(ProjectionPrunesSourceAndRetainsCountCarrier) {
-        for (const TVector<TString>& columns : {TVector<TString>{"value"}, TVector<TString>{}}) {
+        for (const TVector<TString>& columns : { TVector<TString>{ "value" }, TVector<TString>{} }) {
             TFixture f;
             const auto read = f.MakeRead();
             const auto wrap = CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {});
@@ -463,7 +459,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
             .Build()
             .Done();
         // clang-format on
-        const auto projection = f.MakeProjection(filter.Ptr(), {"key"});
+        const auto projection = f.MakeProjection(filter.Ptr(), { "key" });
         auto optimizer = CreateLogicalOptimizer(f.State);
         TExprNode::TPtr output;
         UNIT_ASSERT_VALUES_EQUAL(optimizer->Transform(projection.Ptr(), output, f.Ctx).Level, IGraphTransformer::TStatus::Ok);
@@ -475,16 +471,16 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         TFixture f;
         const auto read = f.MakeRead();
         const TDqSourceWrap wrap(CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {}));
-        const auto lookup = Build<TDqLookupSourceWrap>(f.Ctx, read.Pos())
-            .Input(wrap.Input()).DataSource(wrap.DataSource()).RowType(wrap.RowType()).Done();
+        const auto lookup =
+            Build<TDqLookupSourceWrap>(f.Ctx, read.Pos()).Input(wrap.Input()).DataSource(wrap.DataSource()).RowType(wrap.RowType()).Done();
         auto optimizer = CreateLogicalOptimizer(f.State);
         TExprNode::TPtr output;
         UNIT_ASSERT_VALUES_EQUAL(optimizer->Transform(lookup.Ptr(), output, f.Ctx).Level, IGraphTransformer::TStatus::Error);
         UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().ToString().Contains("YdbExternal streamlookup joins are not supported"));
         google::protobuf::Any packed;
         TString sourceType;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateDqIntegration(f.State)->FillLookupSourceSettings(lookup.Ref(), packed, sourceType),
-            yexception, "YdbExternal streamlookup joins are not supported");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateDqIntegration(f.State)->FillLookupSourceSettings(lookup.Ref(), packed, sourceType), yexception,
+            "YdbExternal streamlookup joins are not supported");
     }
 
     Y_UNIT_TEST(InternalReadTimeoutMatchesSourceAndPlan) {
@@ -500,8 +496,7 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
         UNIT_ASSERT(payload.HasReadTimeoutMs());
         UNIT_ASSERT_VALUES_EQUAL(payload.GetReadTimeoutMs(), defaults.GetReadTimeoutMs());
 
-        const auto source = Build<TDqSource>(f.Ctx, read.Pos())
-            .DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
+        const auto source = Build<TDqSource>(f.Ctx, read.Pos()).DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
         TMap<TString, NJson::TJsonValue> properties;
         UNIT_ASSERT(integration->FillSourcePlanProperties(source, properties));
         UNIT_ASSERT_VALUES_EQUAL(properties.at("SourceType").GetStringSafe(), "YdbExternal");
@@ -510,16 +505,17 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
 
     Y_UNIT_TEST(ClusterErrorsDoNotContainSourcePathsOrCredentials) {
         TFixture f;
-        const THashMap<TString, TString> valid{
-            {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "NONE"}};
+        const THashMap<TString, TString> valid{ { "location", "localhost:2135" }, { "database_name", "/Remote" }, { "authMethod", "NONE" } };
         const TVector<std::tuple<TString, TString, TString>> cases{
-            {"database_id", "private-managed-id", "YdbExternal currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported"},
-            {"shared_reading_group", "private-topic-group", "YdbExternal does not support topic settings"},
-            {"database_name", "relative-db", "YdbExternal requires an absolute DATABASE_NAME without empty, '.' or '..' path components"},
-            {"location", "grpc://secret@host:2135", "YdbExternal requires LOCATION in host:port format"},
-            {"use_tls", "private-invalid-value", "YdbExternal USE_TLS must be true or false"},
-            {"authMethod", "TOKEN", "YdbExternal TOKEN credentials are missing"},
-            {"authMethod", "BASIC", "YdbExternal currently supports only TOKEN and NONE authentication"}};
+            { "database_id", "private-managed-id",
+                "YdbExternal currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported" },
+            { "shared_reading_group", "private-topic-group", "YdbExternal does not support topic settings" },
+            { "database_name", "relative-db", "YdbExternal requires an absolute DATABASE_NAME without empty, '.' or '..' path components" },
+            { "location", "grpc://secret@host:2135", "YdbExternal requires LOCATION in host:port format" },
+            { "use_tls", "private-invalid-value", "YdbExternal USE_TLS must be true or false" },
+            { "authMethod", "TOKEN", "YdbExternal TOKEN credentials are missing" },
+            { "authMethod", "BASIC", "YdbExternal currently supports only TOKEN and NONE authentication" }
+        };
         for (const auto& [property, value, expected] : cases) {
             auto properties = valid;
             properties[property] = value;
@@ -549,10 +545,10 @@ Y_UNIT_TEST_SUITE(TYdbExternalProvider) {
 
     Y_UNIT_TEST(UnsupportedAuthAndDatabaseIdRejected) {
         TFixture f;
-        UNIT_ASSERT_EXCEPTION(AddCluster(*f.State, "bad", {{"database_id", "managed-id"}}), yexception);
-        UNIT_ASSERT_EXCEPTION(AddCluster(*f.State, "bad", {
-            {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "BASIC"}}), yexception);
+        UNIT_ASSERT_EXCEPTION(AddCluster(*f.State, "bad", { { "database_id", "managed-id" } }), yexception);
+        UNIT_ASSERT_EXCEPTION(AddCluster(*f.State, "bad",
+                                  { { "location", "localhost:2135" }, { "database_name", "/Remote" }, { "authMethod", "BASIC" } }), yexception);
     }
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

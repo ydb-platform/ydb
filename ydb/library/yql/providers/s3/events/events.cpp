@@ -6,7 +6,8 @@
 
 namespace NYql::NDq {
 
-TEvS3Provider::TEvNextBlock::TEvNextBlock(NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta)
+TEvS3Provider::TEvNextBlock::TEvNextBlock(
+    NDB::Block& block, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta, ui64 ingressDecompressedDelta)
     : Block(std::make_unique<NDB::Block>())
     , PathIndex(pathInd)
     , IngressDelta(ingressDelta)
@@ -16,4 +17,4 @@ TEvS3Provider::TEvNextBlock::TEvNextBlock(NDB::Block& block, size_t pathInd, ui6
     Block->swap(block);
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

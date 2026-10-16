@@ -1,10 +1,9 @@
 #include "bridge_node_table.h"
 
-#include <yql/essentials/public/udf/udf_data_type.h>
-#include <yql/essentials/public/udf/udf_type_inspection.h>
-
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_type_inspection.h>
 
 namespace NKikimr::NUdfStore::NWasm {
 
@@ -16,14 +15,14 @@ TBridgeIdentity BridgeIdentityKey(const TUnboxedValuePod& value) {
         return {};
     }
     if (value.IsBoxed()) {
-        return {value.AsRawBoxed(), nullptr, 0};
+        return { value.AsRawBoxed(), nullptr, 0 };
     }
     if (value.IsString()) {
         // Large MiniKQL strings are EMarkers::String (TStringValue), not Boxed.
         // A substring shares the buffer and only moves the view, so the view
         // itself is the identity.
         const TStringRef bytes = value.AsStringRef();
-        return {value.AsRawStringValue(), bytes.Data(), bytes.Size()};
+        return { value.AsRawStringValue(), bytes.Data(), bytes.Size() };
     }
     return {};
 }
@@ -33,69 +32,69 @@ namespace {
 TBridgeKinds KindsFromDataSlot(EDataSlot slot) {
     switch (slot) {
         case EDataSlot::Bool:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Boolean};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Boolean };
         case EDataSlot::Int8:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Int8};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Int8 };
         case EDataSlot::Uint8:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Uint8};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Uint8 };
         case EDataSlot::Int16:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Int16};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Int16 };
         case EDataSlot::Uint16:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Uint16};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Uint16 };
         case EDataSlot::Int32:
         case EDataSlot::Date32:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Int32};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Int32 };
         case EDataSlot::Uint32:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Uint32};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Uint32 };
         case EDataSlot::Int64:
         case EDataSlot::Datetime64:
         case EDataSlot::Timestamp64:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Int64};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Int64 };
         case EDataSlot::Uint64:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Uint64};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Uint64 };
         case EDataSlot::Float:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Float};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Float };
         case EDataSlot::Double:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Double};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Double };
         case EDataSlot::Date:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Date};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Date };
         case EDataSlot::Datetime:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Datetime};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Datetime };
         case EDataSlot::Timestamp:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Timestamp};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Timestamp };
         case EDataSlot::Interval:
         case EDataSlot::Interval64:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Interval};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Interval };
         case EDataSlot::Decimal:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Decimal};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Decimal };
         case EDataSlot::Utf8:
-            return {EBridgeNodeKind::String, EBridgeValueKind::Utf8};
+            return { EBridgeNodeKind::String, EBridgeValueKind::Utf8 };
         case EDataSlot::Yson:
-            return {EBridgeNodeKind::String, EBridgeValueKind::Yson};
+            return { EBridgeNodeKind::String, EBridgeValueKind::Yson };
         case EDataSlot::Json:
-            return {EBridgeNodeKind::String, EBridgeValueKind::Json};
+            return { EBridgeNodeKind::String, EBridgeValueKind::Json };
         default:
             // String, Uuid, DyNumber, JsonDocument and the Tz* family are all
             // byte buffers as far as the guest is concerned.
-            return {EBridgeNodeKind::String, EBridgeValueKind::String};
+            return { EBridgeNodeKind::String, EBridgeValueKind::String };
     }
 }
 
-} // namespace
+}   // namespace
 
 TBridgeKinds BridgeKindsFromValue(const TUnboxedValuePod& value) {
     if (!value) {
-        return {EBridgeNodeKind::Scalar, EBridgeValueKind::Null};
+        return { EBridgeNodeKind::Scalar, EBridgeValueKind::Null };
     }
     if (value.IsString()) {
-        return {EBridgeNodeKind::String, EBridgeValueKind::String};
+        return { EBridgeNodeKind::String, EBridgeValueKind::String };
     }
     if (value.IsBoxed()) {
         // Could be a list, a dict, a resource or a callable: without a type
         // there is nothing better than the most permissive of them.
-        return {EBridgeNodeKind::Callable, EBridgeValueKind::Callable};
+        return { EBridgeNodeKind::Callable, EBridgeValueKind::Callable };
     }
-    return {EBridgeNodeKind::Scalar, EBridgeValueKind::Int64};
+    return { EBridgeNodeKind::Scalar, EBridgeValueKind::Int64 };
 }
 
 TBridgeKinds BridgeKindsFromType(const TType* type, const ITypeInfoHelper* helper) {
@@ -106,7 +105,7 @@ TBridgeKinds BridgeKindsFromType(const TType* type, const ITypeInfoHelper* helpe
         case ETypeKind::Data: {
             const TDataTypeInspector data(*helper, type);
             if (!data) {
-                return {EBridgeNodeKind::Scalar, EBridgeValueKind::Null};
+                return { EBridgeNodeKind::Scalar, EBridgeValueKind::Null };
             }
             return KindsFromDataSlot(GetDataSlot(data.GetTypeId()));
         }
@@ -116,13 +115,13 @@ TBridgeKinds BridgeKindsFromType(const TType* type, const ITypeInfoHelper* helpe
             // optionality, as the historical leaf arguments did.
             const TOptionalTypeInspector optional(*helper, type);
             if (helper->GetTypeKind(optional.GetItemType()) != ETypeKind::Data) {
-                return {EBridgeNodeKind::Optional, EBridgeValueKind::Optional};
+                return { EBridgeNodeKind::Optional, EBridgeValueKind::Optional };
             }
             const auto inner = BridgeKindsFromType(optional.GetItemType(), helper);
             if (inner.Node == EBridgeNodeKind::Scalar || inner.Node == EBridgeNodeKind::String) {
                 return inner;
             }
-            return {EBridgeNodeKind::Optional, EBridgeValueKind::Optional};
+            return { EBridgeNodeKind::Optional, EBridgeValueKind::Optional };
         }
         case ETypeKind::Tagged: {
             const TTaggedTypeInspector tagged(*helper, type);
@@ -131,23 +130,23 @@ TBridgeKinds BridgeKindsFromType(const TType* type, const ITypeInfoHelper* helpe
         case ETypeKind::List:
         case ETypeKind::EmptyList:
         case ETypeKind::Stream:
-            return {EBridgeNodeKind::List, EBridgeValueKind::List};
+            return { EBridgeNodeKind::List, EBridgeValueKind::List };
         case ETypeKind::Dict:
         case ETypeKind::EmptyDict:
-            return {EBridgeNodeKind::Dict, EBridgeValueKind::Dict};
+            return { EBridgeNodeKind::Dict, EBridgeValueKind::Dict };
         case ETypeKind::Tuple:
-            return {EBridgeNodeKind::Tuple, EBridgeValueKind::Tuple};
+            return { EBridgeNodeKind::Tuple, EBridgeValueKind::Tuple };
         case ETypeKind::Struct:
-            return {EBridgeNodeKind::Struct, EBridgeValueKind::Struct};
+            return { EBridgeNodeKind::Struct, EBridgeValueKind::Struct };
         case ETypeKind::Variant:
-            return {EBridgeNodeKind::Variant, EBridgeValueKind::Variant};
+            return { EBridgeNodeKind::Variant, EBridgeValueKind::Variant };
         case ETypeKind::Resource:
-            return {EBridgeNodeKind::Resource, EBridgeValueKind::Resource};
+            return { EBridgeNodeKind::Resource, EBridgeValueKind::Resource };
         case ETypeKind::Callable:
-            return {EBridgeNodeKind::Callable, EBridgeValueKind::Callable};
+            return { EBridgeNodeKind::Callable, EBridgeValueKind::Callable };
         case ETypeKind::Null:
         case ETypeKind::Void:
-            return {EBridgeNodeKind::Scalar, EBridgeValueKind::Null};
+            return { EBridgeNodeKind::Scalar, EBridgeValueKind::Null };
         default:
             return {};
     }
@@ -167,9 +166,7 @@ const TType* BridgePeelOptional(const TType* type, const ITypeInfoHelper* helper
     return type;
 }
 
-std::optional<EBridgeValueKind> BridgeNodeValueKind(
-    const TWasmBridgeNodeTable::TNode& node,
-    const ITypeInfoHelper* helper)
+std::optional<EBridgeValueKind> BridgeNodeValueKind(const TWasmBridgeNodeTable::TNode& node, const ITypeInfoHelper* helper)
 {
     if (BridgeKindFamily(node.ValueKind) != EBridgeKindFamily::Optional) {
         return node.ValueKind;
@@ -186,9 +183,7 @@ std::optional<EBridgeValueKind> BridgeNodeValueKind(
     return std::nullopt;
 }
 
-std::optional<EBridgeKindFamily> BridgeNodeValueFamily(
-    const TWasmBridgeNodeTable::TNode& node,
-    const ITypeInfoHelper* helper)
+std::optional<EBridgeKindFamily> BridgeNodeValueFamily(const TWasmBridgeNodeTable::TNode& node, const ITypeInfoHelper* helper)
 {
     const auto kind = BridgeNodeValueKind(node, helper);
     if (!kind) {
@@ -217,9 +212,7 @@ void TWasmBridgeNodeTable::EnsureHandle(ui64 handle) const {
         ythrow yexception() << "Bridge: null handle";
     }
     if (BridgeHandleGeneration(handle) != Generation_) {
-        ythrow yexception()
-            << "Bridge: stale handle generation=" << BridgeHandleGeneration(handle)
-            << " (current=" << Generation_ << ")";
+        ythrow yexception() << "Bridge: stale handle generation=" << BridgeHandleGeneration(handle) << " (current=" << Generation_ << ")";
     }
 }
 
@@ -240,11 +233,7 @@ const TWasmBridgeNodeTable::TNode& TWasmBridgeNodeTable::ResolveIndex(ui64 index
 }
 
 ui64 TWasmBridgeNodeTable::RegisterUntracked(
-    EBridgeNodeKind kind,
-    EBridgeValueKind valueKind,
-    const TType* type,
-    TUnboxedValue&& value,
-    const TType* auxType)
+    EBridgeNodeKind kind, EBridgeValueKind valueKind, const TType* type, TUnboxedValue&& value, const TType* auxType)
 {
     const ui64 index = AllocateIndex();
     TNode node;
@@ -266,36 +255,25 @@ ui64 TWasmBridgeNodeTable::RegisterUntracked(
 }
 
 ui64 TWasmBridgeNodeTable::Register(
-    EBridgeNodeKind kind,
-    EBridgeValueKind valueKind,
-    const TType* type,
-    TUnboxedValue&& value,
-    const TType* auxType)
+    EBridgeNodeKind kind, EBridgeValueKind valueKind, const TType* type, TUnboxedValue&& value, const TType* auxType)
 {
-    return TrackInRunScope(
-        RegisterUntracked(kind, valueKind, type, std::move(value), auxType));
+    return TrackInRunScope(RegisterUntracked(kind, valueKind, type, std::move(value), auxType));
 }
 
 ui64 TWasmBridgeNodeTable::RegisterOrReuse(
-    EBridgeNodeKind kind,
-    EBridgeValueKind valueKind,
-    const TType* type,
-    const TUnboxedValuePod& value,
-    const TType* auxType)
+    EBridgeNodeKind kind, EBridgeValueKind valueKind, const TType* type, const TUnboxedValuePod& value, const TType* auxType)
 {
     if (const ui64 existing = TryReuse(value); existing != NullBridgeHandle) {
         const auto& node = Resolve(existing);
         // Optional<Boxed> shares the payload's identity, but its handle has
         // a different declared type and cannot serve as the unwrapped value.
-        if (node.Kind == kind && node.ValueKind == valueKind
-            && node.Type == type && node.AuxType == auxType)
+        if (node.Kind == kind && node.ValueKind == valueKind && node.Type == type && node.AuxType == auxType)
         {
             Ref(existing);
             return TrackInRunScope(existing);
         }
     }
-    return TrackInRunScope(
-        RegisterUntracked(kind, valueKind, type, TUnboxedValue(value), auxType));
+    return TrackInRunScope(RegisterUntracked(kind, valueKind, type, TUnboxedValue(value), auxType));
 }
 
 ui64 TWasmBridgeNodeTable::TryReuse(const TUnboxedValuePod& value) const {
@@ -325,8 +303,7 @@ void TWasmBridgeNodeTable::Ref(ui64 handle) {
     // A guest looping on BridgeRef would otherwise wrap the counter and turn
     // the next Unref into a use-after-free of the TUnboxedValue.
     if (node.Refs == Max<ui32>()) {
-        ythrow yexception()
-            << "Bridge: refcount overflow on node index " << BridgeHandleIndex(handle);
+        ythrow yexception() << "Bridge: refcount overflow on node index " << BridgeHandleIndex(handle);
     }
     ++node.Refs;
 }
@@ -388,14 +365,10 @@ void TWasmBridgeNodeTable::ReleaseTracked(ui64 handle) noexcept {
     }
 }
 
-ui64 EnsureBridgeStringResident(
-    const TWasmBridgeNodeTable::TNode& node,
-    TCompartmentResidentCache& cache)
+ui64 EnsureBridgeStringResident(const TWasmBridgeNodeTable::TNode& node, TCompartmentResidentCache& cache)
 {
     if (!IsBridgeStringKind(node.ValueKind)) {
-        ythrow yexception()
-            << "Bridge: EnsureBridgeStringResident on non-string node, kind "
-            << static_cast<int>(node.ValueKind);
+        ythrow yexception() << "Bridge: EnsureBridgeStringResident on non-string node, kind " << static_cast<int>(node.ValueKind);
     }
     const TStringRef bytes = node.Value.AsStringRef();
     if (const TBridgeIdentity key = BridgeIdentityKey(node.Value)) {
@@ -406,4 +379,4 @@ ui64 EnsureBridgeStringResident(
     return cache.PinScratch(bytes);
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

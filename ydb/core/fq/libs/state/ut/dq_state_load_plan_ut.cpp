@@ -5,6 +5,7 @@
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/fq/libs/state/dq_stage_state_recovery_info.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
+
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
@@ -17,14 +18,12 @@
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/hash_set.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <util/generic/hash_set.h>
 
 #include <utility>
 
@@ -82,11 +81,11 @@ struct TTaskBuilder {
     NYql::NDqProto::TDqTask* Task;
 
     TTaskInputBuilder Input() {
-        return TTaskInputBuilder{this, Task->AddInputs()};
+        return TTaskInputBuilder{ this, Task->AddInputs() };
     }
 
     TTaskOutputBuilder Output() {
-        return TTaskOutputBuilder{this, Task->AddOutputs()};
+        return TTaskOutputBuilder{ this, Task->AddOutputs() };
     }
 
     TGraphBuilder& Build() {
@@ -100,7 +99,7 @@ struct TGraphBuilder {
     TTaskBuilder Task(ui64 id = 0) {
         auto* task = Graph.Add();
         task->SetId(id ? id : Graph.size());
-        return TTaskBuilder{this, task};
+        return TTaskBuilder{ this, task };
     }
 
     google::protobuf::RepeatedPtrField<NYql::NDqProto::TDqTask> Build() {
@@ -155,7 +154,7 @@ ui64 SinksCount(const NYql::NDqProto::TDqTask& task) {
     return cnt;
 }
 
-struct TTestCase : public NUnitTest::TBaseTestCase {
+struct TTestCase: public NUnitTest::TBaseTestCase {
     TGraphBuilder SrcGraph;
     TGraphBuilder DstGraph;
     THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> Plan;
@@ -186,27 +185,36 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
             const auto taskPlanIt = Plan.find(task.GetId());
             UNIT_ASSERT_C(taskPlanIt != Plan.end(), "Task " << task.GetId() << " was not found in plan");
             const auto& taskPlan = taskPlanIt->second;
-            UNIT_ASSERT_C(taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED, "Task " << task.GetId() << " plan: " << taskPlan);
+            UNIT_ASSERT_C(taskPlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED,
+                "Task " << task.GetId() << " plan: " << taskPlan);
 
             if (taskPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY) {
                 UNIT_ASSERT_C(!taskPlan.HasProgram(), "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SourcesSize(), 0, "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SinksSize(), 0, "Task " << task.GetId() << " plan: " << taskPlan);
             } else {
-                UNIT_ASSERT_C(taskPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Task " << task.GetId() << " plan: " << taskPlan);
+                UNIT_ASSERT_C(taskPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN,
+                    "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_C(taskPlan.HasProgram(), "Task " << task.GetId() << " plan: " << taskPlan);
-                UNIT_ASSERT_C(taskPlan.GetProgram().GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Task " << task.GetId() << " plan: " << taskPlan);
+                UNIT_ASSERT_C(taskPlan.GetProgram().GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY,
+                    "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SourcesSize(), SourcesCount(task), "Task " << task.GetId() << " plan: " << taskPlan);
                 UNIT_ASSERT_VALUES_EQUAL_C(taskPlan.SinksSize(), SinksCount(task), "Task " << task.GetId() << " plan: " << taskPlan);
 
                 for (const auto& sourcePlan : taskPlan.GetSources()) {
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED, "Task " << task.GetId() << " plan: " << taskPlan);
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY || sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_UNSPECIFIED,
+                        "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY ||
+                                      sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN,
+                        "Task " << task.GetId() << " plan: " << taskPlan);
                     UNIT_ASSERT_C(sourcePlan.GetInputIndex() < task.InputsSize(), "Task " << task.GetId() << " plan: " << taskPlan);
                     const auto& taskInput = task.GetInputs(sourcePlan.GetInputIndex());
-                    UNIT_ASSERT_C(taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(
+                        taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << task.GetId() << " plan: " << taskPlan);
                     // State type is foreign => source type is pq
-                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN || taskInput.GetSource().GetType() == NYql::PqSource, "Task " << task.GetId() << " plan: " << taskPlan << ". Task input: " << taskInput);
+                    UNIT_ASSERT_C(sourcePlan.GetStateType() != NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN ||
+                                      taskInput.GetSource().GetType() == NYql::PqSource,
+                        "Task " << task.GetId() << " plan: " << taskPlan << ". Task input: " << taskInput);
 
                     if (sourcePlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_FOREIGN) {
                         UNIT_ASSERT_C(sourcePlan.ForeignTasksSourcesSize() > 0, "Task " << task.GetId() << " plan: " << taskPlan);
@@ -214,11 +222,14 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
                         UNIT_ASSERT_C(partitionsSet, "Task " << task.GetId() << " plan: " << taskPlan);
 
                         for (const auto& taskSource : sourcePlan.GetForeignTasksSources()) {
-                            const auto& srcTask = FindSrcTask(taskSource.GetTaskId()); // with assertion
-                            UNIT_ASSERT_C(taskSource.GetInputIndex() < srcTask.InputsSize(), "Task " << srcTask.GetId() << " plan: " << taskPlan);
+                            const auto& srcTask = FindSrcTask(taskSource.GetTaskId());   // with assertion
+                            UNIT_ASSERT_C(
+                                taskSource.GetInputIndex() < srcTask.InputsSize(), "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             const auto& srcTaskInput = srcTask.GetInputs(taskSource.GetInputIndex());
-                            UNIT_ASSERT_C(srcTaskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
-                            UNIT_ASSERT_C(srcTaskInput.GetSource().GetType() == NYql::PqSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
+                            UNIT_ASSERT_C(srcTaskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource,
+                                "Task " << srcTask.GetId() << " plan: " << taskPlan);
+                            UNIT_ASSERT_C(
+                                srcTaskInput.GetSource().GetType() == NYql::PqSource, "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             const TMaybe<NYql::NPq::TTopicPartitionsSet> srcTaskPartitionsSet = NYql::NPq::GetTopicPartitionsSet(task.GetMeta());
                             UNIT_ASSERT_C(srcTaskPartitionsSet, "Task " << srcTask.GetId() << " plan: " << taskPlan);
                             UNIT_ASSERT_C(partitionsSet->Intersects(*srcTaskPartitionsSet), "Task " << srcTask.GetId() << " plan: " << taskPlan);
@@ -227,10 +238,12 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
                 }
 
                 for (const auto& sinkPlan : taskPlan.GetSinks()) {
-                    UNIT_ASSERT_C(sinkPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(sinkPlan.GetStateType() == NYql::NDqProto::NDqStateLoadPlan::STATE_TYPE_EMPTY,
+                        "Task " << task.GetId() << " plan: " << taskPlan);
                     UNIT_ASSERT_C(sinkPlan.GetOutputIndex() < task.OutputsSize(), "Task " << task.GetId() << " plan: " << taskPlan);
                     const auto& taskOutput = task.GetOutputs(sinkPlan.GetOutputIndex());
-                    UNIT_ASSERT_C(taskOutput.GetTypeCase() == NYql::NDqProto::TTaskOutput::kSink, "Task " << task.GetId() << " plan: " << taskPlan);
+                    UNIT_ASSERT_C(
+                        taskOutput.GetTypeCase() == NYql::NDqProto::TTaskOutput::kSink, "Task " << task.GetId() << " plan: " << taskPlan);
                 }
             }
         }
@@ -269,7 +282,7 @@ struct TTestCase : public NUnitTest::TBaseTestCase {
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     Y_UNIT_TEST(Empty) {
@@ -302,9 +315,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
                 .Input().Channel().Build()
                 .Input().TopicSource("t", 3, 3, 0).Build();
         // clang-format on
-        DstGraph
-            .Task()
-                .Input().TopicSource("t", 3, 3, 0).Build();
+        DstGraph.Task().Input().TopicSource("t", 3, 3, 0).Build();
 
         UNIT_ASSERT(MakePlan(false));
         UNIT_ASSERT_VALUES_EQUAL(Issues.Size(), 0);
@@ -321,16 +332,8 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(DifferentPartitioning) {
-        SrcGraph
-            .Task()
-                .Input().Channel().Build()
-                .Input().TopicSource("t", 4, 1, 0).Build();
-        DstGraph
-            .Task()
-                .Input().TopicSource("t", 4, 2, 0).Build()
-                .Build()
-            .Task()
-                .Input().TopicSource("t", 4, 2, 1).Build();
+        SrcGraph.Task().Input().Channel().Build() .Input().TopicSource("t", 4, 1, 0).Build();
+        DstGraph.Task().Input().TopicSource("t", 4, 2, 0).Build() .Build() .Task().Input().TopicSource("t", 4, 2, 1).Build();
 
         UNIT_ASSERT(MakePlan(false));
         UNIT_ASSERT_VALUES_EQUAL(Issues.Size(), 0);
@@ -349,21 +352,9 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(MultipleTopics) {
-        SrcGraph
-            .Task()
-                .Input().TopicSource("t", 1, 1, 0).Build()
-                .Build()
-            .Task()
-                .Input().TopicSource("p", 1, 1, 0).Build()
-                .Build();
+        SrcGraph.Task().Input().TopicSource("t", 1, 1, 0).Build() .Build() .Task().Input().TopicSource("p", 1, 1, 0).Build() .Build();
 
-        DstGraph
-            .Task()
-                .Input().TopicSource("p", 1, 1, 0).Build()
-                .Build()
-            .Task()
-                .Input().TopicSource("t", 1, 1, 0).Build()
-                .Build();
+        DstGraph.Task().Input().TopicSource("p", 1, 1, 0).Build() .Build() .Task().Input().TopicSource("t", 1, 1, 0).Build() .Build();
 
         UNIT_ASSERT(MakePlan(false));
         UNIT_ASSERT_VALUES_EQUAL(Issues.Size(), 0);
@@ -380,18 +371,9 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(AllTopicsMustBeUsedInNonForceMode) {
-        SrcGraph
-            .Task()
-                .Input().TopicSource("t", 1, 1, 0).Build()
-                .Build()
-            .Task()
-                .Input().TopicSource("p", 1, 1, 0).Build()
-                .Build();
+        SrcGraph.Task().Input().TopicSource("t", 1, 1, 0).Build() .Build() .Task().Input().TopicSource("p", 1, 1, 0).Build() .Build();
 
-        DstGraph
-            .Task()
-                .Input().TopicSource("t", 1, 1, 0).Build()
-                .Build();
+        DstGraph.Task().Input().TopicSource("t", 1, 1, 0).Build() .Build();
 
         UNIT_ASSERT(!MakePlan(false));
         UNIT_ASSERT(MakePlan(true));
@@ -403,18 +385,9 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(NotMappedAllPartitions) {
-        SrcGraph
-            .Task()
-                .Input().TopicSource("t", 5, 1, 0).Build()
-                .Build();
+        SrcGraph.Task().Input().TopicSource("t", 5, 1, 0).Build() .Build();
 
-        DstGraph
-            .Task()
-                .Input().TopicSource("t", 10, 2, 0).Build()
-                .Build()
-            .Task()
-                .Input().TopicSource("t", 10, 2, 1).Build()
-                .Build();
+        DstGraph.Task().Input().TopicSource("t", 10, 2, 0).Build() .Build() .Task().Input().TopicSource("t", 10, 2, 1).Build() .Build();
 
         UNIT_ASSERT(!MakePlan(false));
         UNIT_ASSERT_UNEQUAL(Issues.Size(), 0);
@@ -431,10 +404,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(ReadPartitionInSeveralPlacesIsOk) {
-        SrcGraph
-            .Task()
-                .Input().TopicSource("t", 5, 1, 0).Build()
-                .Build();
+        SrcGraph.Task().Input().TopicSource("t", 5, 1, 0).Build() .Build();
 
         // clang-format off
         DstGraph
@@ -463,13 +433,7 @@ Y_UNIT_TEST_SUITE_F(TContinueFromStreamingOffsetsPlanTest, TTestCase) {
     }
 
     Y_UNIT_TEST(MapSeveralReadingsToOneIsAllowedOnlyInForceMode) {
-        SrcGraph
-            .Task()
-                .Input().TopicSource("t", 5, 1, 0).Build()
-                .Build()
-            .Task()
-                .Input().TopicSource("t", 5, 1, 0).Build()
-                .Build();
+        SrcGraph.Task().Input().TopicSource("t", 5, 1, 0).Build() .Build() .Task().Input().TopicSource("t", 5, 1, 0).Build() .Build();
 
         // clang-format off
         DstGraph
@@ -494,7 +458,9 @@ namespace {
 
 // These callables exercise program inspection; execution and save/load of the
 // actual hopping graph are covered by TDqMultiHoppingSaveLoadTest.
-void SetReplayProgram(NYql::NDqProto::TDqTask& task, ui64 hopUs = 0, ui64 windowUs = 0, TStringBuf otherOperator = {}, bool streamOperator = false, TMaybe<bool> checkMinWindowStart = true, bool watermarkGenerator = true, ui32 earlyPolicy = 0, ui32 latePolicy = 0) {
+void SetReplayProgram(NYql::NDqProto::TDqTask& task, ui64 hopUs = 0, ui64 windowUs = 0, TStringBuf otherOperator = {},
+    bool streamOperator = false, TMaybe<bool> checkMinWindowStart = true, bool watermarkGenerator = true, ui32 earlyPolicy = 0,
+    ui32 latePolicy = 0) {
     using namespace NKikimr::NMiniKQL;
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
@@ -516,13 +482,16 @@ void SetReplayProgram(NYql::NDqProto::TDqTask& task, ui64 hopUs = 0, ui64 window
                 hopping.Add(root);
             } else if (i == 20 || i == 25) {
                 const auto boolType = TDataType::Create(NYql::NUdf::TDataType<bool>::Id, env);
-                hopping.Add(TRuntimeNode(TDataLiteral::Create(NYql::NUdf::TUnboxedValuePod(i == 20 || *checkMinWindowStart), boolType, env), true));
+                hopping.Add(
+                    TRuntimeNode(TDataLiteral::Create(NYql::NUdf::TUnboxedValuePod(i == 20 || *checkMinWindowStart), boolType, env), true));
             } else if (i == 16 || i == 17) {
                 const auto intervalType = TDataType::Create(NYql::NUdf::TDataType<NYql::NUdf::TInterval>::Id, env);
-                hopping.Add(TRuntimeNode(TDataLiteral::Create(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i == 16 ? hopUs : windowUs)), intervalType, env), true));
+                hopping.Add(TRuntimeNode(
+                    TDataLiteral::Create(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i == 16 ? hopUs : windowUs)), intervalType, env), true));
             } else if (i == 23 || i == 24) {
                 const auto policyType = TDataType::Create(NYql::NUdf::TDataType<ui32>::Id, env);
-                hopping.Add(TRuntimeNode(TDataLiteral::Create(NYql::NUdf::TUnboxedValuePod(i == 23 ? earlyPolicy : latePolicy), policyType, env), true));
+                hopping.Add(
+                    TRuntimeNode(TDataLiteral::Create(NYql::NUdf::TUnboxedValuePod(i == 23 ? earlyPolicy : latePolicy), policyType, env), true));
             } else {
                 hopping.Add(literal(0));
             }
@@ -555,7 +524,7 @@ bool TTestCase::MakePlan(bool force) {
     *src.MutableTasks() = SrcGraph.Graph;
     *dst.MutableTasks() = DstGraph.Graph;
 
-    for (auto* graph : {&src, &dst}) {
+    for (auto* graph : { &src, &dst }) {
         for (auto& task : *graph->MutableTasks()) {
             SetReplayProgram(task);
         }
@@ -598,9 +567,8 @@ void MakeHoppingIntervalOptional(NYql::NDqProto::TDqTask& task, ui32 index, EOpt
             }
 
             const auto optionalType = TOptionalType::Create(input.GetStaticType(), env);
-            input = TRuntimeNode(kind == EOptionalInterval::Empty
-                ? TOptionalLiteral::Create(optionalType, env)
-                : TOptionalLiteral::Create(input, optionalType, env), true);
+            input = TRuntimeNode(kind == EOptionalInterval::Empty ? TOptionalLiteral::Create(optionalType, env)
+                                                                  : TOptionalLiteral::Create(input, optionalType, env), true);
         }
 
         hopping.Add(input);
@@ -676,7 +644,7 @@ struct TReplayTestGraph {
         state.AddTopics()->SetTopicPath(topicPath);
         state.SetStartingMessageTimestampMs(1000);
 
-        for (const TString& name : {TString("east"), TString("west")}) {
+        for (const TString& name : { TString("east"), TString("west") }) {
             auto& cluster = *source.AddFederatedClusters();
             cluster.SetName(name);
             cluster.SetEndpoint(name + ":2135");
@@ -752,14 +720,14 @@ void CheckFederatedReplayPartitions(const TStateLoadPlan& plan) {
     UNIT_ASSERT(state.GetPartitions().empty());
 }
 
-} // namespace
+}   // namespace
 
 namespace {
 
 using TRecoveryTypeFactory = std::function<NKikimr::NMiniKQL::TType*(const NKikimr::NMiniKQL::TTypeEnvironment&)>;
 
-void SetAggregationProgram(NYql::NDqProto::TDqTask& task, const TString& table = "/Root/output",
-        TRecoveryTypeFactory keyType = {}, TRecoveryTypeFactory savedType = {}, bool tied = true) {
+void SetAggregationProgram(NYql::NDqProto::TDqTask& task, const TString& table = "/Root/output", TRecoveryTypeFactory keyType = {},
+    TRecoveryTypeFactory savedType = {}, bool tied = true) {
     using namespace NKikimr::NMiniKQL;
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
@@ -787,8 +755,8 @@ void SetAggregationProgram(NYql::NDqProto::TDqTask& task, const TString& table =
     task.MutableProgram()->SetRaw(SerializeRuntimeNode(TRuntimeNode(aggregation.Build(), false), env));
 }
 
-bool OffsetPlan(const NProto::TGraphParams& old, const NProto::TGraphParams& next, bool force,
-        TStateLoadPlan& plan, NYql::TIssues& issues, TSourceRecoverySet* changed = nullptr) {
+bool OffsetPlan(const NProto::TGraphParams& old, const NProto::TGraphParams& next, bool force, TStateLoadPlan& plan, NYql::TIssues& issues,
+    TSourceRecoverySet* changed = nullptr) {
     const TGraphStateContext context;
     const TGraphStateInfo previous(old, context), target(next, context);
     TSourceRecoverySet prepared;
@@ -809,7 +777,7 @@ void SetConsumer(NYql::NDqProto::TDqTask& task, const TString& consumer) {
     settings->PackFrom(source);
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
     Y_UNIT_TEST(ReplayFailureAndOffsetFallbackReuseDecodedPrograms) {
@@ -837,7 +805,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
         old.Source();
         SetReplayProgram(*old.Builder.Graph.Mutable(0), 0, 0, "TimeOrderRecover");
 
-        for (bool ambiguousBinding : {false, true}) {
+        for (bool ambiguousBinding : { false, true }) {
             auto next = old.Params(false);
 
             if (ambiguousBinding) {
@@ -848,7 +816,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 *next.AddTasks() = duplicate;
             }
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue("Previous replay failure"));
@@ -923,10 +891,10 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
         duplicate.SetStageId(2);
         *next.AddTasks() = duplicate;
         const TGraphStateContext context;
-        const TGraphStateInfo discovery(next, context); // Discovery does not validate binding uniqueness.
+        const TGraphStateInfo discovery(next, context);   // Discovery does not validate binding uniqueness.
         UNIT_ASSERT_VALUES_EQUAL(discovery.GetStages().size(), 2);
 
-        for (bool force : {false, true}) {
+        for (bool force : { false, true }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT(!OffsetPlan(old.Params(), next, force, plan, issues));
@@ -957,7 +925,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
         next.Source(10);
         SetConsumer(*next.Builder.Graph.Mutable(0), "new");
 
-        for (bool reverseTasks : {false, true}) {
+        for (bool reverseTasks : { false, true }) {
             auto previous = old.Params();
 
             if (reverseTasks) {
@@ -969,7 +937,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
             TSourceRecoverySet changed;
             UNIT_ASSERT_C(OffsetPlan(previous, next.Params(), true, plan, issues, &changed), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(plan.at(10).GetSources(0).ForeignTasksSourcesSize(), 2);
-            UNIT_ASSERT(changed.contains(std::pair<ui64, ui64>{10, 0}));
+            UNIT_ASSERT(changed.contains(std::pair<ui64, ui64>{ 10, 0 }));
         }
     }
 
@@ -983,14 +951,14 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
         SetConsumer(*old.Builder.Graph.Mutable(1), "b");
         SetConsumer(*next.Builder.Graph.Mutable(1), "b");
 
-        for (bool reverseTasks : {false, true}) {
+        for (bool reverseTasks : { false, true }) {
             auto previous = old.Params();
 
             if (reverseTasks) {
                 previous.MutableTasks()->SwapElements(0, 1);
             }
 
-            for (bool changeConsumer : {false, true}) {
+            for (bool changeConsumer : { false, true }) {
                 SetConsumer(*next.Builder.Graph.Mutable(0), changeConsumer ? "b" : "a");
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
@@ -999,14 +967,14 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 UNIT_ASSERT_VALUES_EQUAL(plan.at(10).GetSources(0).GetForeignTasksSources(0).GetTaskId(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(plan.at(20).GetSources(0).GetForeignTasksSources(0).GetTaskId(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(changed.size(), changeConsumer ? 1 : 0);
-                UNIT_ASSERT_VALUES_EQUAL(changed.contains(std::pair<ui64, ui64>{10, 0}), changeConsumer);
-                UNIT_ASSERT(!changed.contains(std::pair<ui64, ui64>{20, 0}));
+                UNIT_ASSERT_VALUES_EQUAL(changed.contains(std::pair<ui64, ui64>{ 10, 0 }), changeConsumer);
+                UNIT_ASSERT(!changed.contains(std::pair<ui64, ui64>{ 20, 0 }));
             }
         }
     }
 
     Y_UNIT_TEST(DiscoverySharesStageProgramsAndDefersOperatorValidation) {
-        for (bool packed : {false, true}) {
+        for (bool packed : { false, true }) {
             TReplayTestGraph graph;
             graph.Source();
             SetReplayProgram(*graph.Builder.Graph.Mutable(0), 0, 0, "TimeOrderRecover");
@@ -1024,7 +992,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
             UNIT_ASSERT_VALUES_EQUAL(stage.StatefulOperators.size(), 1);
             UNIT_ASSERT(!info.HasHopping());
             auto guard = info.BindAllocator();
-            UNIT_ASSERT_EXCEPTION_CONTAINS(TStageStateRecoveryInfo{stage}, yexception, "Unsupported checkpointed operator");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TStageStateRecoveryInfo{ stage }, yexception, "Unsupported checkpointed operator");
         }
     }
 
@@ -1050,7 +1018,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
     }
 
     Y_UNIT_TEST(RemovedAggregationAndChangedTaskCountRequireForce) {
-        for (bool removed : {false, true}) {
+        for (bool removed : { false, true }) {
             TReplayTestGraph old;
             old.Source();
             SetAggregationProgram(*old.Builder.Graph.Mutable(0));
@@ -1064,13 +1032,13 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 *next.AddTasks() = replica;
             }
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), next, force, plan, issues), force);
-                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), removed
-                    ? "Streaming aggregation output table is missing in the new query: /Root/output, available output tables: none"
-                    : "Streaming aggregation task count changed for output table /Root/output: 1 -> 2 on stage 1");
+                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                    removed ? "Streaming aggregation output table is missing in the new query: /Root/output, available output tables: none"
+                            : "Streaming aggregation task count changed for output table /Root/output: 1 -> 2 on stage 1");
 
                 if (force) {
                     UNIT_ASSERT(!plan.at(1).GetProgram().HasForeignTaskId());
@@ -1087,19 +1055,19 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
         old.Source();
         SetAggregationProgram(*old.Builder.Graph.Mutable(/* index */ 0));
         TReplayTestGraph next;
-        for (const TString table : {"/Root/zeta", "/Root/alpha", "/Root/middle"}) {
+        for (const TString table : { "/Root/zeta", "/Root/alpha", "/Root/middle" }) {
             next.Source(next.Builder.Graph.size() + 1);
             SetAggregationProgram(*next.Builder.Graph.rbegin(), table);
         }
 
-        for (bool force : {false, true}) {
+        for (bool force : { false, true }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), next.Params(), force, plan, issues), force);
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), TStringBuilder()
-                << "Streaming aggregation output table is missing in the new query: /Root/output"
-                << ", available output tables: /Root/alpha, /Root/middle, /Root/zeta"
-                << (force ? ", FORCE=true discards this state" : ""));
+                                                               << "Streaming aggregation output table is missing in the new query: /Root/output"
+                                                               << ", available output tables: /Root/alpha, /Root/middle, /Root/zeta"
+                                                               << (force ? ", FORCE=true discards this state" : ""));
         }
     }
 
@@ -1111,16 +1079,33 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 auto* u32 = TDataType::Create(NYql::NUdf::TDataType<ui32>::Id, env);
                 TType* item = u64;
                 switch (variant) {
-                    case 2: item = u32; break;
-                    case 3: item = TOptionalType::Create(u64, env); break;
-                    case 4: item = TListType::Create(TOptionalType::Create(u64, env), env); break;
-                    case 5: item = TListType::Create(u64, env); break;
-                    case 6: item = TDataDecimalType::Create(20, 2, env); break;
-                    case 7: item = TDataDecimalType::Create(20, 3, env); break;
-                    case 8: item = TTaggedType::Create(u64, "a", env); break;
-                    case 9: item = TTaggedType::Create(u64, "b", env); break;
-                    case 10: case 11: {
-                        TType* elements[] = {variant == 10 ? u64 : u32, variant == 10 ? u32 : u64};
+                    case 2:
+                        item = u32;
+                        break;
+                    case 3:
+                        item = TOptionalType::Create(u64, env);
+                        break;
+                    case 4:
+                        item = TListType::Create(TOptionalType::Create(u64, env), env);
+                        break;
+                    case 5:
+                        item = TListType::Create(u64, env);
+                        break;
+                    case 6:
+                        item = TDataDecimalType::Create(20, 2, env);
+                        break;
+                    case 7:
+                        item = TDataDecimalType::Create(20, 3, env);
+                        break;
+                    case 8:
+                        item = TTaggedType::Create(u64, "a", env);
+                        break;
+                    case 9:
+                        item = TTaggedType::Create(u64, "b", env);
+                        break;
+                    case 10:
+                    case 11: {
+                        TType* elements[] = { variant == 10 ? u64 : u32, variant == 10 ? u32 : u64 };
                         item = TTupleType::Create(2, elements, env);
                         break;
                     }
@@ -1136,18 +1121,22 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
             };
         };
 
-        for (bool key : {false, true}) {
-            for (const auto [before, after] : {std::pair{0, 0}, {0, 1}, {0, 2}, {0, 3}, {4, 5}, {6, 7}, {8, 9}, {10, 11}, {0, 12}, {12, 0}}) {
+        for (bool key : { false, true }) {
+            for (const auto [before, after] :
+                { std::pair{ 0, 0 }, { 0, 1 }, { 0, 2 }, { 0, 3 }, { 4, 5 }, { 6, 7 }, { 8, 9 }, { 10, 11 }, { 0, 12 }, { 12, 0 } }) {
                 TReplayTestGraph old, next;
                 old.Source();
                 next.Source();
-                SetAggregationProgram(*old.Builder.Graph.Mutable(0), "/Root/output", key ? makeType(before) : TRecoveryTypeFactory{}, key ? TRecoveryTypeFactory{} : makeType(before));
-                SetAggregationProgram(*next.Builder.Graph.Mutable(0), "/Root/output", key ? makeType(after) : TRecoveryTypeFactory{}, key ? TRecoveryTypeFactory{} : makeType(after));
+                SetAggregationProgram(*old.Builder.Graph.Mutable(0), "/Root/output", key ? makeType(before) : TRecoveryTypeFactory{},
+                    key ? TRecoveryTypeFactory{} : makeType(before));
+                SetAggregationProgram(*next.Builder.Graph.Mutable(0), "/Root/output", key ? makeType(after) : TRecoveryTypeFactory{},
+                    key ? TRecoveryTypeFactory{} : makeType(after));
 
-                for (bool force : {false, true}) {
+                for (bool force : { false, true }) {
                     TStateLoadPlan plan;
                     NYql::TIssues issues;
-                    UNIT_ASSERT_VALUES_EQUAL_C(OffsetPlan(old.Params(), next.Params(), force, plan, issues), force || before == after, issues.ToString());
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        OffsetPlan(old.Params(), next.Params(), force, plan, issues), force || before == after, issues.ToString());
 
                     if (before == after) {
                         UNIT_ASSERT(plan.at(1).GetProgram().HasForeignTaskId());
@@ -1181,24 +1170,24 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 SetAggregationProgram(task, kind == 2 ? "" : "/Root/state", {}, {}, false);
             }
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), old.Params(), force, plan, issues), force);
-                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), kind < 2
-                    ? "Unsupported checkpointed operator" : "Unsupported checkpointed streaming aggregation setup");
+                UNIT_ASSERT_STRING_CONTAINS(
+                    issues.ToString(), kind < 2 ? "Unsupported checkpointed operator" : "Unsupported checkpointed streaming aggregation setup");
                 UNIT_ASSERT(force ? !plan.at(1).GetProgram().HasForeignTaskId() : plan.empty());
             }
         }
     }
 
     Y_UNIT_TEST(PreviousSinkStateRequiresForce) {
-        for (bool dedup : {false, true}) {
+        for (bool dedup : { false, true }) {
             TReplayTestGraph old;
             old.Source();
             SetPqSink(*old.Builder.Graph.Mutable(0)->AddOutputs(), dedup, !dedup);
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), old.Params(), force, plan, issues), force);
@@ -1214,7 +1203,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
     }
 
     Y_UNIT_TEST(StatelessSinksStartFresh) {
-        for (const TString type : {"PqSink", "KqpTableSink", "SolomonSink", "OtherSink"}) {
+        for (const TString type : { "PqSink", "KqpTableSink", "SolomonSink", "OtherSink" }) {
             TReplayTestGraph old;
             old.Source();
             auto& output = *old.Builder.Graph.Mutable(0)->AddOutputs();
@@ -1225,7 +1214,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
                 output.MutableSink()->SetType(type);
             }
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_C(OffsetPlan(old.Params(), old.Params(), force, plan, issues), issues.ToString());
@@ -1237,7 +1226,7 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryPlan) {
     }
 
     Y_UNIT_TEST(PhysicalSourceIdentityIncludesFederationAndEndpoint) {
-        for (bool federated : {false, true}) {
+        for (bool federated : { false, true }) {
             TReplayTestGraph old;
 
             if (federated) {
@@ -1275,7 +1264,7 @@ void SetShuffleProgram(NYql::NDqProto::TDqTask& task, bool block = false, bool n
     TTypeEnvironment env(alloc);
     auto* u64 = TDataType::Create(NYql::NUdf::TDataType<ui64>::Id, env);
     TType* first = narrowKey ? TDataType::Create(NYql::NUdf::TDataType<ui32>::Id, env) : u64;
-    TType* items[] = {first, u64};
+    TType* items[] = { first, u64 };
 
     if (block) {
         for (ui32 i = 0; i < 2; ++i) {
@@ -1352,7 +1341,7 @@ TReplayTestGraph MakeShuffleAggregation(ui32 producers = 1, bool map = false, bo
     return graph;
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
     Y_UNIT_TEST(MatchesTablesAndSortedTasksAcrossStageAndTaskIds) {
@@ -1386,21 +1375,21 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
         old.Builder.Graph.SwapElements(0, 3);
         next.Builder.Graph.SwapElements(1, 2);
 
-        for (bool packed : {false, true}) {
+        for (bool packed : { false, true }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             TSourceRecoverySet changed;
             UNIT_ASSERT_C(OffsetPlan(old.Params(packed), next.Params(packed), false, plan, issues, &changed), issues.ToString());
             UNIT_ASSERT(changed.empty());
 
-            for (const auto previous : {100, 101}) {
+            for (const auto previous : { 100, 101 }) {
                 const auto& taskPlan = plan.at(previous + 1000);
                 UNIT_ASSERT(taskPlan.GetProgram().GetStateType() == STATE_TYPE_FOREIGN);
                 UNIT_ASSERT_VALUES_EQUAL(taskPlan.GetProgram().GetForeignTaskId(), previous);
                 UNIT_ASSERT(taskPlan.GetSources().empty());
             }
 
-            for (const auto previous : {1, 2}) {
+            for (const auto previous : { 1, 2 }) {
                 UNIT_ASSERT_VALUES_EQUAL(plan.at(previous + 1000).GetSources(0).GetForeignTasksSources(0).GetTaskId(), previous);
             }
         }
@@ -1408,9 +1397,9 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
 
     Y_UNIT_TEST(KeylessUnionAllAggregationRestoresProgram) {
         auto old = MakeShuffleAggregation(2);
-        old.Builder.Graph.RemoveLast(); // One aggregation task receives both producer streams.
-        SetAggregationProgram(*old.Builder.Graph.Mutable(2), "/Root/output",
-            [](const NKikimr::NMiniKQL::TTypeEnvironment& env) -> NKikimr::NMiniKQL::TType* {
+        old.Builder.Graph.RemoveLast();   // One aggregation task receives both producer streams.
+        SetAggregationProgram(
+            *old.Builder.Graph.Mutable(2), "/Root/output", [](const NKikimr::NMiniKQL::TTypeEnvironment& env) -> NKikimr::NMiniKQL::TType* {
                 return NKikimr::NMiniKQL::TStructTypeBuilder(env).Build();
             });
 
@@ -1451,7 +1440,7 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
         auto old = MakeShuffleAggregation(2);
         old.Builder.Graph.Mutable(1)->MutableOutputs(0)->MutableChannels()->SwapElements(0, 1);
 
-        for (bool force : {false, true}) {
+        for (bool force : { false, true }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), old.Params(), force, plan, issues), force);
@@ -1503,14 +1492,24 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
             auto& output = *next.MutableTasks(0)->MutableOutputs(0);
             auto& hash = *output.MutableHashPartition();
             switch (change) {
-                case 0: hash.MutableHashV2(); break;
-                case 1: hash.MutableKeyColumns()->SwapElements(0, 1); break;
-                case 2: output.MutableChannels()->SwapElements(0, 1); break;
-                case 3: SetShuffleProgram(*next.MutableTasks(0), true); break;
-                case 4: SetShuffleProgram(*next.MutableTasks(0), false, true); break;
+                case 0:
+                    hash.MutableHashV2();
+                    break;
+                case 1:
+                    hash.MutableKeyColumns()->SwapElements(0, 1);
+                    break;
+                case 2:
+                    output.MutableChannels()->SwapElements(0, 1);
+                    break;
+                case 3:
+                    SetShuffleProgram(*next.MutableTasks(0), true);
+                    break;
+                case 4:
+                    SetShuffleProgram(*next.MutableTasks(0), false, true);
+                    break;
             }
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_VALUES_EQUAL_C(OffsetPlan(old.Params(), next, force, plan, issues), force, issues.ToString());
@@ -1539,7 +1538,8 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
         TStateLoadPlan plan;
         NYql::TIssues issues;
         UNIT_ASSERT_C(OffsetPlan(old.Params(), next, false, plan, issues), issues.ToString());
-        next.MutableTasks(0)->MutableOutputs(0)->MutableHashPartition()->MutableColumnShardHashV1()->MutableTaskIndexByHash()->SwapElements(0, 1);
+        next.MutableTasks(0)->MutableOutputs(0)->MutableHashPartition()->MutableColumnShardHashV1()->MutableTaskIndexByHash()->SwapElements(
+            0, 1);
         UNIT_ASSERT(!OffsetPlan(old.Params(), next, false, plan, issues));
         UNIT_ASSERT(plan.empty());
         UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "shuffle routing");
@@ -1555,11 +1555,11 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
     }
 
     Y_UNIT_TEST(MapBetweenShuffleAndAggregationRequiresForce) {
-        for (bool previousHasMap : {false, true}) {
+        for (bool previousHasMap : { false, true }) {
             auto old = MakeShuffleAggregation(1, previousHasMap);
             auto next = MakeShuffleAggregation(1, !previousHasMap);
 
-            for (bool force : {false, true}) {
+            for (bool force : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), next.Params(), force, plan, issues), force);
@@ -1581,7 +1581,7 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
         auto next = old.Params();
         next.MutableTasks(0)->MutableOutputs(0)->MutableBroadcast();
 
-        for (bool force : {false, true}) {
+        for (bool force : { false, true }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT_VALUES_EQUAL(OffsetPlan(old.Params(), next, force, plan, issues), force);
@@ -1592,8 +1592,8 @@ Y_UNIT_TEST_SUITE(TAggregationShuffleRecovery) {
 
 namespace {
 
-bool HistoryReplayPlan(const NProto::TGraphParams& src, const NProto::TGraphParams& dst,
-    const TCheckpointTaskStates& states, TStateLoadPlan& plan, NYql::TIssues& issues)
+bool HistoryReplayPlan(const NProto::TGraphParams& src, const NProto::TGraphParams& dst, const TCheckpointTaskStates& states,
+    TStateLoadPlan& plan, NYql::TIssues& issues)
 {
     try {
         const TGraphStateContext context;
@@ -1605,8 +1605,8 @@ bool HistoryReplayPlan(const NProto::TGraphParams& src, const NProto::TGraphPara
     }
 }
 
-bool OutputStartTimeReplayPlan(const NProto::TGraphParams& graph, ui64 outputStartTimeUs,
-    bool useSourceDisposition, TStateLoadPlan& plan, NYql::TIssues& issues)
+bool OutputStartTimeReplayPlan(
+    const NProto::TGraphParams& graph, ui64 outputStartTimeUs, bool useSourceDisposition, TStateLoadPlan& plan, NYql::TIssues& issues)
 {
     try {
         const TGraphStateContext context;
@@ -1618,8 +1618,8 @@ bool OutputStartTimeReplayPlan(const NProto::TGraphParams& graph, ui64 outputSta
     }
 }
 
-TStageStateRecoveryInfo GetStageStateRecoveryInfo(const NYql::NDqProto::TDqTask& task,
-    TStageStateRecoveryInfo::EMode mode = TStageStateRecoveryInfo::EMode::Analyze)
+TStageStateRecoveryInfo GetStageStateRecoveryInfo(
+    const NYql::NDqProto::TDqTask& task, TStageStateRecoveryInfo::EMode mode = TStageStateRecoveryInfo::EMode::Analyze)
 {
     NProto::TGraphParams graph;
     auto& checkpointedTask = *graph.AddTasks();
@@ -1632,18 +1632,14 @@ TStageStateRecoveryInfo GetStageStateRecoveryInfo(const NYql::NDqProto::TDqTask&
     return TStageStateRecoveryInfo(discovered.GetStages().front(), mode);
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     Y_UNIT_TEST(DetectsStatefulCallables) {
-        for (const TStringBuf name : {
-            "CombineCore", "GroupingCore", "Condense", "Condense1",
-            "WideCombiner", "WideLastCombiner", "WideLastCombinerWithSpilling", "WideCondense1",
-            "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed",
-            "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation",
-            "Fold", "Fold1", "Squeeze", "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map", "Chopper", "WideChopper",
-            "MatchRecognizeCore", "TimeOrderRecover"
-        }) {
+        for (const TStringBuf name : { "CombineCore", "GroupingCore", "Condense", "Condense1", "WideCombiner", "WideLastCombiner",
+                 "WideLastCombinerWithSpilling", "WideCondense1", "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed",
+                 "BlockMergeManyFinalizeHashed", "HoppingCore", "MultiHoppingCore", "KqpStreamingAggregation", "Fold", "Fold1", "Squeeze",
+                 "Squeeze1", "ChainMap", "Chain1Map", "WideChain1Map", "Chopper", "WideChopper", "MatchRecognizeCore", "TimeOrderRecover" }) {
             NYql::NDqProto::TDqTask task;
             SetReplayProgram(task, 0, 0, name);
             const TStageStateRecoveryInfo info = GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::Analyze);
@@ -1652,10 +1648,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(DoesNotConfuseStatelessCallablesOrSubstringsWithState) {
-        for (const TStringBuf name : {
-            "Map", "WideMap", "DqWatermarkGenerator", "NotCombineCore", "CombineCoreSuffix",
-            "NotMatchRecognizeCore", "MatchRecognizeCoreSuffix", "NotTimeOrderRecover", "TimeOrderRecoverSuffix"
-        }) {
+        for (const TStringBuf name : { "Map", "WideMap", "DqWatermarkGenerator", "NotCombineCore", "CombineCoreSuffix", "NotMatchRecognizeCore",
+                 "MatchRecognizeCoreSuffix", "NotTimeOrderRecover", "TimeOrderRecoverSuffix" }) {
             NYql::NDqProto::TDqTask task;
             SetReplayProgram(task, 0, 0, name);
             const TStageStateRecoveryInfo info = GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::Analyze);
@@ -1668,21 +1662,19 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         NYql::NDqProto::TDqTask task;
         SetReplayProgram(task, 10, 20, "Map", false, false);
         UNIT_ASSERT(GetStageStateRecoveryInfo(task).HasState);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::HistoryReplay),
-            yexception, "minimum window start checking is not enabled");
-        for (const TStringBuf name : {"MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation"}) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::HistoryReplay), yexception,
+            "minimum window start checking is not enabled");
+        for (const TStringBuf name : { "MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation" }) {
             SetReplayProgram(task, 0, 0, name);
             UNIT_ASSERT_C(GetStageStateRecoveryInfo(task).HasState, name);
             UNIT_ASSERT_EXCEPTION_CONTAINS(
-                GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::HistoryReplay),
-                yexception, "Unsupported checkpointed operator");
+                GetStageStateRecoveryInfo(task, TStageStateRecoveryInfo::EMode::HistoryReplay), yexception, "Unsupported checkpointed operator");
         }
     }
 
     Y_UNIT_TEST(RejectsAdjustWatermarkPolicy) {
-        for (ui32 index : {23, 24}) {
-            for (bool optional : {false, true}) {
+        for (ui32 index : { 23, 24 }) {
+            for (bool optional : { false, true }) {
                 TReplayTestGraph graph;
                 graph.Source();
                 graph.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
@@ -1733,7 +1725,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         UNIT_ASSERT(plan.empty());
         UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "requires a watermark generator before each hopping operator");
 
-        for (bool useSourceDisposition : {false, true}) {
+        for (bool useSourceDisposition : { false, true }) {
             issues.Clear();
             UNIT_ASSERT(!OutputStartTimeReplayPlan(graph.Params(), 600 * Second, useSourceDisposition, plan, issues));
             UNIT_ASSERT(plan.empty());
@@ -1761,7 +1753,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         UNIT_ASSERT(plan.at(1).GetProgram().GetStateType() == STATE_TYPE_EMPTY);
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), Second);
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 4), 57);
-        UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+        UNIT_ASSERT_C(
+            OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
         UNIT_ASSERT(plan.at(1).GetProgram().GetStateType() == STATE_TYPE_EMPTY);
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 600 * Second);
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 4), 57);
@@ -1783,8 +1776,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
             UNIT_ASSERT(task.GetProgram().GetRaw().empty());
         }
 
-        for (bool packOld : {false, true}) {
-            for (bool packNext : {false, true}) {
+        for (bool packOld : { false, true }) {
+            for (bool packNext : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT_C(HistoryReplayPlan(graph.Params(packOld), graph.Params(packNext), graph.States, plan, issues), issues.ToString());
@@ -1860,19 +1853,29 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
             UNIT_ASSERT(settings->UnpackTo(&source));
             auto* cluster = source.MutableFederatedClusters(0);
             switch (change) {
-                case 0: cluster->SetName("other"); break;
-                case 1: cluster->SetEndpoint("other:2135"); break;
-                case 2: cluster->SetDatabase("/other"); break;
-                case 3: cluster->SetPartitionsCount(3); break;
-                case 4: cluster->SetPartitionsCount(1); break;
+                case 0:
+                    cluster->SetName("other");
+                    break;
+                case 1:
+                    cluster->SetEndpoint("other:2135");
+                    break;
+                case 2:
+                    cluster->SetDatabase("/other");
+                    break;
+                case 3:
+                    cluster->SetPartitionsCount(3);
+                    break;
+                case 4:
+                    cluster->SetPartitionsCount(1);
+                    break;
             }
             settings->PackFrom(source);
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT(!HistoryReplayPlan(old.Params(), next, old.States, plan, issues));
             UNIT_ASSERT(plan.empty());
-            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), change == 4
-                ? "requires the same input partitions" : "Input partition is absent from the previous query");
+            UNIT_ASSERT_STRING_CONTAINS(
+                issues.ToString(), change == 4 ? "requires the same input partitions" : "Input partition is absent from the previous query");
         }
     }
 
@@ -1883,7 +1886,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         auto& blob = graph.States[1].Sources.front().Data.front().Blob;
         NYql::NPq::NProto::TDqPqTopicSourceState state;
         UNIT_ASSERT(state.ParseFromString(blob));
-        state.MutablePartitions()->DeleteSubrange(0, 1); // east:0 is absent, west:0 remains.
+        state.MutablePartitions()->DeleteSubrange(0, 1);   // east:0 is absent, west:0 remains.
         blob = state.SerializeAsString();
         TStateLoadPlan plan;
         NYql::TIssues issues;
@@ -1903,7 +1906,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         settings->PackFrom(source);
         TStateLoadPlan plan;
         NYql::TIssues issues;
-        UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+        UNIT_ASSERT_C(
+            OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
         CheckFederatedReplayPartitions(plan);
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 270 * Second);
@@ -1914,11 +1918,12 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Source();
         graph.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
 
-        for (const ui32 index : {16U, 17U}) {
+        for (const ui32 index : { 16U, 17U }) {
             MakeHoppingIntervalOptional(*graph.Builder.Graph.Mutable(1), index);
             TStateLoadPlan plan;
             NYql::TIssues issues;
-            UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+            UNIT_ASSERT_C(
+                OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
             UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 270 * Second);
             UNIT_ASSERT_C(HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues), issues.ToString());
@@ -1927,8 +1932,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(RejectsEmptyOrComputedOptionalHoppingIntervals) {
-        for (const auto kind : {EOptionalInterval::Empty, EOptionalInterval::Computed}) {
-            for (const ui32 index : {16U, 17U}) {
+        for (const auto kind : { EOptionalInterval::Empty, EOptionalInterval::Computed }) {
+            for (const ui32 index : { 16U, 17U }) {
                 TReplayTestGraph graph;
                 graph.Source();
                 graph.Hop(2, 1, 10 * Second, 30 * Second, 0);
@@ -1937,14 +1942,14 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
                 NYql::TIssues issues;
                 UNIT_ASSERT(!OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues));
                 UNIT_ASSERT(plan.empty());
-                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), kind == EOptionalInterval::Empty
-                    ? "Hopping interval cannot be empty" : "requires constant hopping intervals");
+                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                    kind == EOptionalInterval::Empty ? "Hopping interval cannot be empty" : "requires constant hopping intervals");
             }
         }
     }
 
     Y_UNIT_TEST(RejectsHoppingWithoutReplayCapability) {
-        for (const auto enabled : {TMaybe<bool>{}, TMaybe<bool>{false}}) {
+        for (const auto enabled : { TMaybe<bool>{}, TMaybe<bool>{ false } }) {
             TReplayTestGraph old;
             old.Source();
             old.Hop(2, 1, 10 * Second, 60 * Second, 600 * Second);
@@ -1968,7 +1973,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     Y_UNIT_TEST(RejectsLegacyCheckpointsEvenWithReplayCapability) {
         using namespace NKikimr::NMiniKQL;
 
-        for (ui32 version : {1U, 2U}) {
+        for (ui32 version : { 1U, 2U }) {
             TReplayTestGraph graph;
             graph.Source();
             graph.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
@@ -2008,7 +2013,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Source();
         graph.Hop(2, 1, 10 * Second, 30 * Second, 0);
 
-        for (const auto time : {600 * Second, 600 * Second + 1}) {
+        for (const auto time : { 600 * Second, 600 * Second + 1 }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), time, /* useSourceDisposition */ false, plan, issues), issues.ToString());
@@ -2036,8 +2041,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Source();
         graph.Hop(2, 1, 10 * Second, 30 * Second, 0);
 
-        for (const bool useSourceDisposition : {false, true}) {
-            for (const auto time : {ui64{0}, 20 * Second}) {
+        for (const bool useSourceDisposition : { false, true }) {
+            for (const auto time : { ui64{ 0 }, 20 * Second }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
                 UNIT_ASSERT(!OutputStartTimeReplayPlan(graph.Params(), time, useSourceDisposition, plan, issues));
@@ -2053,7 +2058,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Source();
         graph.Hop(2, 1, 10 * Second, 30 * Second, 0);
 
-        for (const auto time : {20 * Second + 1, 30 * Second}) {
+        for (const auto time : { 20 * Second + 1, 30 * Second }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), time, /* useSourceDisposition */ true, plan, issues), issues.ToString());
@@ -2063,18 +2068,18 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(ReplayRequiresFullEarlyEventAllowance) {
-        for (const auto inputStart : {ui64{0}, 300 * Second - 1, 300 * Second, 300 * Second + 1000}) {
+        for (const auto inputStart : { ui64{ 0 }, 300 * Second - 1, 300 * Second, 300 * Second + 1000 }) {
             const auto outputStart = inputStart + 30 * Second;
             TReplayTestGraph graph;
             graph.Source();
             graph.Hop(2, 1, 1, 30 * Second, outputStart);
 
-            for (const bool automaticReplay : {false, true}) {
+            for (const bool automaticReplay : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
-                const bool success = automaticReplay
-                    ? HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues)
-                    : OutputStartTimeReplayPlan(graph.Params(), outputStart, /* useSourceDisposition */ false, plan, issues);
+                const bool success =
+                    automaticReplay ? HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues)
+                                    : OutputStartTimeReplayPlan(graph.Params(), outputStart, /* useSourceDisposition */ false, plan, issues);
                 UNIT_ASSERT_VALUES_EQUAL_C(success, inputStart >= 300 * Second, issues.ToString());
 
                 if (success) {
@@ -2113,20 +2118,22 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Hop(3, 2, 10 * Second, 30 * Second, 0);
         TStateLoadPlan plan;
         NYql::TIssues issues;
-        UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 601 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+        UNIT_ASSERT_C(
+            OutputStartTimeReplayPlan(graph.Params(), 601 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 3), 58);
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 80);
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 260 * Second);
     }
 
     Y_UNIT_TEST(ExplicitOutputStartTimeForStatelessQueryRoundsReadTimeDown) {
-        for (const bool watermarkGenerator : {false, true}) {
+        for (const bool watermarkGenerator : { false, true }) {
             TReplayTestGraph graph;
             graph.Source(1, 0, 1, watermarkGenerator);
             SetPqSink(*graph.Builder.Graph.Mutable(0)->AddOutputs());
             TStateLoadPlan plan;
             NYql::TIssues issues;
-            UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second + 123, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+            UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second + 123, /* useSourceDisposition */ false, plan, issues),
+                issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), (watermarkGenerator ? 300 : 600) * Second);
         }
     }
@@ -2155,7 +2162,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         SetPqSink(*graph.Builder.Graph.Mutable(0)->AddOutputs());
         TStateLoadPlan plan;
         NYql::TIssues issues;
-        UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+        UNIT_ASSERT_C(
+            OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 600 * Second);
 
         issues.Clear();
@@ -2187,7 +2195,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
         UNIT_ASSERT(plan.at(4).GetProgram().GetStateType() == STATE_TYPE_EMPTY);
 
-        for (const auto sourceId : {1, 3}) {
+        for (const auto sourceId : { 1, 3 }) {
             const auto& source = plan.at(sourceId).GetSources(0);
             UNIT_ASSERT(source.GetStateType() == STATE_TYPE_EMPTY);
             UNIT_ASSERT(!source.HasState());
@@ -2199,7 +2207,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Source(1, 0, 1, /* watermarkGenerator */ false);
         graph.Hop(2, 1, 10 * Second, 30 * Second, 0);
 
-        for (const bool useSourceDisposition : {false, true}) {
+        for (const bool useSourceDisposition : { false, true }) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT(!OutputStartTimeReplayPlan(graph.Params(), 600 * Second, useSourceDisposition, plan, issues));
@@ -2209,7 +2217,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(ExplicitOutputStartTimeRejectsOtherCheckpointedOperators) {
-        for (const TStringBuf operation : {"MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation"}) {
+        for (const TStringBuf operation : { "MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation" }) {
             TReplayTestGraph graph;
             graph.Source();
             graph.Hop(2, 1, 10 * Second, 30 * Second, 0);
@@ -2224,16 +2232,17 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(AcceptsOperatorsWithoutCheckpointState) {
-        for (const TStringBuf operation : {"Condense1", "Chain1Map", "WideChain1Map", "MapNext", "Enumerate", "Take", "WideSkipWhileInclusive",
-                "WideTakeBlocks", "WideTopSortBlocks", "WideSortWithSpilling", "Collect", "Reduce", "WideLastCombiner", "GraceJoin",
-                "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed"}) {
+        for (const TStringBuf operation : { "Condense1", "Chain1Map", "WideChain1Map", "MapNext", "Enumerate", "Take", "WideSkipWhileInclusive",
+                 "WideTakeBlocks", "WideTopSortBlocks", "WideSortWithSpilling", "Collect", "Reduce", "WideLastCombiner", "GraceJoin",
+                 "BlockCombineAll", "BlockCombineHashed", "BlockMergeFinalizeHashed", "BlockMergeManyFinalizeHashed" }) {
             TReplayTestGraph graph;
             graph.Source();
             graph.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
             SetReplayProgram(*graph.Builder.Graph.Mutable(1), 10 * Second, 30 * Second, operation, true);
             TStateLoadPlan plan;
             NYql::TIssues issues;
-            UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+            UNIT_ASSERT_C(
+                OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
             UNIT_ASSERT_C(HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
@@ -2251,7 +2260,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         graph.Hop(3, 2, 10 * Second, 30 * Second, 0);
         TStateLoadPlan plan;
         NYql::TIssues issues;
-        UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+        UNIT_ASSERT_C(
+            OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(plan.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 270 * Second);
         UNIT_ASSERT(plan.at(2).GetProgram().GetStateType() == STATE_TYPE_EMPTY);
@@ -2263,7 +2273,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         old.Source();
         old.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
 
-        for (const bool watermarkGenerator : {false, true}) {
+        for (const bool watermarkGenerator : { false, true }) {
             TReplayTestGraph next;
             next.Source(1, 0, 1, watermarkGenerator);
             next.Builder.Graph.Mutable(0)->AddOutputs()->MutableSink()->SetType("SolomonSink");
@@ -2289,7 +2299,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(AutomaticReplayUsesInclusiveOutputBoundary) {
-        for (const auto time : {600 * Second, 601 * Second}) {
+        for (const auto time : { 600 * Second, 601 * Second }) {
             TReplayTestGraph old;
             old.Source();
             old.Hop(2, 1, Second, 3 * Second, time);
@@ -2334,7 +2344,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(MergedBranchesPropagateBoundariesAndWatermarks) {
-        for (bool watermarkGenerator : {true, false}) {
+        for (bool watermarkGenerator : { true, false }) {
             TReplayTestGraph graph;
             // One input arrives directly; another passes through an extra stage.
             graph.Hop(4, 2, 10 * Second, 30 * Second, 600 * Second);
@@ -2348,12 +2358,12 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
             graph.Source(3, 1, 2, watermarkGenerator);
             graph.Source(1, 0, 2);
 
-            for (bool automaticReplay : {false, true}) {
+            for (bool automaticReplay : { false, true }) {
                 TStateLoadPlan plan;
                 NYql::TIssues issues;
-                const bool success = automaticReplay
-                    ? HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues)
-                    : OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues);
+                const bool success =
+                    automaticReplay ? HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues)
+                                    : OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues);
                 UNIT_ASSERT_VALUES_EQUAL_C(success, watermarkGenerator, issues.ToString());
 
                 if (success) {
@@ -2440,7 +2450,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
 
         TStateLoadPlan plan;
         NYql::TIssues issues;
-        UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+        UNIT_ASSERT_C(
+            OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(plan.size(), last);
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 300 * Second);
     }
@@ -2490,7 +2501,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 270 * Second);
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
 
-        for (const bool useSourceDisposition : {false, true}) {
+        for (const bool useSourceDisposition : { false, true }) {
             UNIT_ASSERT_C(OutputStartTimeReplayPlan(next.Params(), 600 * Second, useSourceDisposition, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(plan.at(1).SourcesSize(), 1);
             const auto& source = plan.at(1).GetSources(0);
@@ -2529,7 +2540,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 270 * Second);
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
 
-        for (const bool useSourceDisposition : {false, true}) {
+        for (const bool useSourceDisposition : { false, true }) {
             UNIT_ASSERT_C(OutputStartTimeReplayPlan(next.Params(), 600 * Second, useSourceDisposition, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(plan.size(), 2);
             UNIT_ASSERT(!plan.contains(4));
@@ -2561,7 +2572,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         old.Source();
         old.Builder.Graph.Mutable(0)->AddOutputs()->MutableSink()->SetType("SolomonSink");
 
-        for (const bool nested : {false, true}) {
+        for (const bool nested : { false, true }) {
             TReplayTestGraph next;
             next.Source();
             next.Hop(2, 1, 10 * Second, 30 * Second, 0, !nested);
@@ -2587,7 +2598,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(StatelessOutputTransformsAndEffectsAllowReplay) {
-        for (bool effects : {false, true}) {
+        for (bool effects : { false, true }) {
             TReplayTestGraph graph;
             graph.Source();
             graph.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
@@ -2604,7 +2615,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
             NYql::TIssues issues;
             UNIT_ASSERT_C(HistoryReplayPlan(graph.Params(), graph.Params(), graph.States, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
-            UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+            UNIT_ASSERT_C(
+                OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 2), 57);
         }
     }
@@ -2636,7 +2648,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
     }
 
     Y_UNIT_TEST(PqSinkReplayRestrictionsApplyOnlyToPreviousCheckpoint) {
-        for (bool exactlyOnce : {false, true}) {
+        for (bool exactlyOnce : { false, true }) {
             TReplayTestGraph graph;
             graph.Source();
             SetPqSink(*graph.Builder.Graph.Mutable(0)->AddOutputs(), !exactlyOnce, exactlyOnce);
@@ -2666,7 +2678,8 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
             UNIT_ASSERT_VALUES_EQUAL(plan.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), Second);
             issues.Clear();
-            UNIT_ASSERT_C(OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
+            UNIT_ASSERT_C(
+                OutputStartTimeReplayPlan(graph.Params(), 600 * Second, /* useSourceDisposition */ false, plan, issues), issues.ToString());
             UNIT_ASSERT_VALUES_EQUAL(plan.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 300 * Second);
         }
@@ -2689,7 +2702,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         supported.Source();
         supported.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
 
-        for (const TStringBuf operation : {"MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation"}) {
+        for (const TStringBuf operation : { "MatchRecognizeCore", "TimeOrderRecover", "KqpStreamingAggregation" }) {
             TReplayTestGraph unsupported;
             unsupported.Source();
             unsupported.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
@@ -2728,7 +2741,8 @@ public:
     std::shared_ptr<NYdb::TDriver> Driver;
     NTestUtils::IMockPqGateway::TPtr Gateway;
 
-    NThreading::TFuture<TMessageStreamResult<TMessageStreamPartitionDescription>> DescribePartition(const TString& topicPath, TMessageStreamPartitionId partitionId) {
+    NThreading::TFuture<TMessageStreamResult<TMessageStreamPartitionDescription>> DescribePartition(
+        const TString& topicPath, TMessageStreamPartitionId partitionId) {
         ++Describes;
         DescribedPartitions.emplace_back(topicPath, partitionId.Value);
         TMessageStreamPartitionDescription description;
@@ -2737,9 +2751,11 @@ public:
         description.EndOffset = EndOffset;
         return NThreading::MakeFuture(TMessageStreamResult<TMessageStreamPartitionDescription>::Success(description));
     }
+
     NThreading::TFuture<TMessageStreamResult<TMessageStreamDescription>> DescribeStream(const TString&) {
         ythrow yexception() << "Unexpected DescribeTopic";
     }
+
     NThreading::TFuture<TMessageStreamResult<TMessageStreamConsumerDescription>> DescribeConsumer(
         const TString&, const TString& consumer, const TMessageStreamDescribeConsumerSettings&)
     {
@@ -2749,7 +2765,7 @@ public:
         TMessageStreamConsumerDescription description;
         for (ui64 id = 0; id < PartitionCount; ++id) {
             TMessageStreamConsumerPartition partition;
-            partition.PartitionId = {id};
+            partition.PartitionId = { id };
             partition.StartOffset = GetStartOffset();
             partition.EndOffset = EndOffset;
             partition.CommittedOffset = CommittedOffset;
@@ -2758,6 +2774,7 @@ public:
 
         return NThreading::MakeFuture(TMessageStreamResult<TMessageStreamConsumerDescription>::Success(std::move(description)));
     }
+
     std::shared_ptr<IMessageStreamReadSession> CreateReadSession(const TString& stream, const TMessageStreamReadSessionSettings& settings) {
         UNIT_ASSERT(FirstRetainedWriteTimeUs);
         UNIT_ASSERT_VALUES_EQUAL(!settings.Consumer, Consumer.empty());
@@ -2770,6 +2787,7 @@ public:
             GetStartOffset(), "unused", TInstant::MicroSeconds(FirstRetainedWriteTimeUs.GetOrElse(600 * Second)));
         return session;
     }
+
     NThreading::TFuture<TMessageStreamResult<TMessageStreamConsumerPosition>> CommitPosition(
         const TString&, TMessageStreamPartitionId partitionId, const TString& consumer, ui64 offset)
     {
@@ -2781,22 +2799,25 @@ public:
             CommittedOffset = offset;
         }
 
-        return NThreading::MakeFuture(FailCommit
-            ? TMessageStreamResult<TMessageStreamConsumerPosition>::Failure(EMessageStreamStatus::Unauthorized)
-            : TMessageStreamResult<TMessageStreamConsumerPosition>::Success({.PartitionId = partitionId, .NextOffset = offset}));
+        return NThreading::MakeFuture(
+            FailCommit ? TMessageStreamResult<TMessageStreamConsumerPosition>::Failure(EMessageStreamStatus::Unauthorized)
+                       : TMessageStreamResult<TMessageStreamConsumerPosition>::Success({ .PartitionId = partitionId, .NextOffset = offset }));
     }
 
 private:
-    ui64 GetStartOffset() const { return StartOffset.GetOrElse(FirstRetainedWriteTimeUs ? 10 : (Expired ? 100 : 0)); }
+    ui64 GetStartOffset() const {
+        return StartOffset.GetOrElse(FirstRetainedWriteTimeUs ? 10 : (Expired ? 100 : 0));
+    }
 };
 
 // Each facade is bound to one stream; test counters/promises can be shared.
-class TBoundHistoryTestClient final : public IMessageStreamClient {
+class TBoundHistoryTestClient final: public IMessageStreamClient {
 public:
     TBoundHistoryTestClient(TString stream, std::shared_ptr<THistoryTestClient> state)
         : Stream(std::move(stream))
         , State(std::move(state))
-    {}
+    {
+    }
 
     const TString& GetStream() const override {
         return Stream;
@@ -2805,20 +2826,22 @@ public:
     NThreading::TFuture<TMessageStreamResult<TMessageStreamDescription>> DescribeStream() override {
         return State->DescribeStream(Stream);
     }
+
     NThreading::TFuture<TMessageStreamResult<TMessageStreamConsumerDescription>> DescribeConsumer(
-        const TString& consumer, const TMessageStreamDescribeConsumerSettings& settings) override
-    {
+        const TString& consumer, const TMessageStreamDescribeConsumerSettings& settings) override {
         return State->DescribeConsumer(Stream, consumer, settings);
     }
+
     NThreading::TFuture<TMessageStreamResult<TMessageStreamPartitionDescription>> DescribePartition(TMessageStreamPartitionId id) override {
         return State->DescribePartition(Stream, id);
     }
+
     std::shared_ptr<IMessageStreamReadSession> CreateReadSession(const TMessageStreamReadSessionSettings& settings) override {
         return State->CreateReadSession(Stream, settings);
     }
+
     NThreading::TFuture<TMessageStreamResult<TMessageStreamConsumerPosition>> CommitPosition(
-        TMessageStreamPartitionId id, const TString& consumer, ui64 offset) override
-    {
+        TMessageStreamPartitionId id, const TString& consumer, ui64 offset) override {
         return State->CommitPosition(Stream, id, consumer, offset);
     }
 
@@ -2827,23 +2850,40 @@ private:
     const std::shared_ptr<THistoryTestClient> State;
 };
 
-class THistoryTestGateway final : public NYql::IPqStaticGateway {
+class THistoryTestGateway final: public NYql::IPqStaticGateway {
 public:
     std::function<std::shared_ptr<THistoryTestClient>(const NYdb::NTopic::TTopicClientSettings&)> Factory;
 
-    NYql::IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver&, const NYdb::TCommonClientSettings&) override { return {}; }
-    std::shared_ptr<IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings& settings) override { return std::make_shared<TBoundHistoryTestClient>(stream, Factory(settings)); }
-    NYql::IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings&) override { return {}; }
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override { return {}; }
-    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override { return {}; }
+    NYql::IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver&, const NYdb::TCommonClientSettings&) override {
+        return {};
+    }
+
+    std::shared_ptr<IMessageStreamClient> GetTopicClient(
+        const TString& stream, const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings& settings) override {
+        return std::make_shared<TBoundHistoryTestClient>(stream, Factory(settings));
+    }
+
+    NYql::IFederatedTopicClient::TPtr GetFederatedTopicClient(
+        const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings&) override {
+        return {};
+    }
+
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override {
+        return {};
+    }
+
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override {
+        return {};
+    }
 };
 
-void SetRecoveryProvider(TStateLoadPlanResolverSettings& settings, NActors::TTestActorRuntimeBase& runtime, TIntrusivePtr<THistoryTestGateway> gateway) {
+void SetRecoveryProvider(
+    TStateLoadPlanResolverSettings& settings, NActors::TTestActorRuntimeBase& runtime, TIntrusivePtr<THistoryTestGateway> gateway) {
     settings.ProviderIntegrations["pq"] = NKikimr::NKqp::CreatePqCheckpointProviderIntegration(
         runtime.GetActorSystem(0), std::move(gateway), NYdb::TDriver(NYdb::TDriverConfig{}), NYql::CreateStructuredTokenCredentialsFactory());
 }
 
-struct THistoryTestRuntime : NActors::TTestActorRuntimeBase {
+struct THistoryTestRuntime: NActors::TTestActorRuntimeBase {
     explicit THistoryTestRuntime(bool enabled = true)
         : Enabled(enabled)
     {
@@ -2862,7 +2902,8 @@ struct THistoryTestRuntime : NActors::TTestActorRuntimeBase {
     const bool Enabled;
 };
 
-void CheckResolver(bool force, bool expired, bool enabled = true, TMaybe<ui64> firstRetainedWriteTimeUs = {}, bool explicitOutputStartTime = false) {
+void CheckResolver(
+    bool force, bool expired, bool enabled = true, TMaybe<ui64> firstRetainedWriteTimeUs = {}, bool explicitOutputStartTime = false) {
     using namespace NYql::NDq;
     using namespace NYql::NDqProto::NDqStateLoadPlan;
     THistoryTestRuntime runtime(enabled);
@@ -2892,16 +2933,16 @@ void CheckResolver(bool force, bool expired, bool enabled = true, TMaybe<ui64> f
 
     settings.Force = force;
     auto gateway = MakeIntrusive<THistoryTestGateway>();
-    gateway->Factory = [client](const auto&) { return client; };
+    gateway->Factory = [client](const auto&) {
+        return client;
+    };
     SetRecoveryProvider(settings, runtime, gateway);
     auto noCheckpointReads = runtime.AddObserver<TEvDqCompute::TEvGetTaskState>([&](auto&) {
         UNIT_ASSERT_C(enabled && !explicitOutputStartTime, "Only history replay must read checkpoints");
     });
     constexpr ui64 cookie = 42;
-    const auto resolver = runtime.Register(CreateStateLoadPlanResolver(
-        explicitOutputStartTime ? NProto::TGraphParams{} : old.Params(),
-        next.Params(), settings, cookie),
-        0, 0, NActors::TMailboxType::Simple, 0, owner);
+    const auto resolver = runtime.Register(CreateStateLoadPlanResolver(explicitOutputStartTime ? NProto::TGraphParams{} : old.Params(),
+                                               next.Params(), settings, cookie), 0, 0, NActors::TMailboxType::Simple, 0, owner);
 
     if (enabled && !explicitOutputStartTime) {
         const auto request = runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(storage);
@@ -2960,8 +3001,8 @@ void CheckResolver(bool force, bool expired, bool enabled = true, TMaybe<ui64> f
     }
 }
 
-void CheckFederatedResolver(TStateLoadPlanResolverSettings settings = {}, bool expired = false,
-        bool readFirstRetained = false, const TString& topicPath = "topic") {
+void CheckFederatedResolver(
+    TStateLoadPlanResolverSettings settings = {}, bool expired = false, bool readFirstRetained = false, const TString& topicPath = "topic") {
     using namespace NYql::NDq;
     using namespace NYql::NDqProto::NDqStateLoadPlan;
     THistoryTestRuntime runtime;
@@ -3000,9 +3041,8 @@ void CheckFederatedResolver(TStateLoadPlanResolverSettings settings = {}, bool e
     auto noCheckpointReads = runtime.AddObserver<TEvDqCompute::TEvGetTaskState>([&](auto&) {
         UNIT_ASSERT_C(!settings.OutputStartTimeUs, "Explicit OUTPUT_FROM must not read checkpoints");
     });
-    const auto resolver = runtime.Register(CreateStateLoadPlanResolver(
-        settings.OutputStartTimeUs ? NProto::TGraphParams{} : old.Params(),
-        next.Params(), settings, 0), 0, 0, NActors::TMailboxType::Simple, 0, owner);
+    const auto resolver = runtime.Register(CreateStateLoadPlanResolver(settings.OutputStartTimeUs ? NProto::TGraphParams{} : old.Params(),
+                                               next.Params(), settings, 0), 0, 0, NActors::TMailboxType::Simple, 0, owner);
 
     if (!settings.OutputStartTimeUs) {
         const auto request = runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(storage);
@@ -3027,7 +3067,7 @@ void CheckFederatedResolver(TStateLoadPlanResolverSettings settings = {}, bool e
 
     UNIT_ASSERT_VALUES_EQUAL(clientsCreated, 2);
 
-    for (const auto& client : {east, west}) {
+    for (const auto& client : { east, west }) {
         const TString database = client == east ? "/east" : "/west";
         const ui64 partitions = readFirstRetained ? 1 : (client == east ? 2 : 3);
         UNIT_ASSERT_VALUES_EQUAL(client->Describes, partitions);
@@ -3064,21 +3104,28 @@ void CheckFederatedResolver(TStateLoadPlanResolverSettings settings = {}, bool e
     }
 }
 
-} // namespace
+}   // namespace
 
 namespace {
 
-struct TRecordingRecoveryProvider : ICheckpointProviderIntegration {
+struct TRecordingRecoveryProvider: ICheckpointProviderIntegration {
     TVector<TPrepareSource> Prepared;
     ui32 Failure = 0;
     bool Hold = false;
     NThreading::TPromise<NYql::TIssues> Pending = NThreading::NewPromise<NYql::TIssues>();
 
-    TStringBuf GetSourceName() const override { return NYql::PqSource; }
-    TStringBuf GetSinkName() const override { return "PqSink"; }
+    TStringBuf GetSourceName() const override {
+        return NYql::PqSource;
+    }
+
+    TStringBuf GetSinkName() const override {
+        return "PqSink";
+    }
+
     NThreading::TFuture<NYql::TIssues> CleanupGraphSinks(TVector<TCleanupGraphSink>&&, std::optional<ui64>) override {
         return NThreading::MakeFuture(NYql::TIssues{});
     }
+
     NThreading::TFuture<NYql::TIssues> PrepareSourceRecovery(TVector<TPrepareSource>&& sources) override {
         UNIT_ASSERT(Prepared.empty());
         Prepared = std::move(sources);
@@ -3096,9 +3143,8 @@ struct TRecordingRecoveryProvider : ICheckpointProviderIntegration {
             return Pending.GetFuture();
         }
 
-        return NThreading::MakeFuture(Failure == 1
-            ? NYql::TIssues{NYql::TIssue("Required checkpoint offset has expired by TTL")}
-            : NYql::TIssues{});
+        return NThreading::MakeFuture(
+            Failure == 1 ? NYql::TIssues{ NYql::TIssue("Required checkpoint offset has expired by TTL") } : NYql::TIssues{});
     }
 };
 
@@ -3129,9 +3175,15 @@ void CheckOffsetPreparationWithPqProvider(bool force, ui32 failure, bool fallbac
     }
 
     switch (failure) {
-        case 3: old.States[1].Sources.front().Data.clear(); break;
-        case 4: old.States[1].Sources.front().Data.front().Blob = "corrupt protobuf"; break;
-        case 5: old.States[1].Sources.front().Data.front().Version = 0; break;
+        case 3:
+            old.States[1].Sources.front().Data.clear();
+            break;
+        case 4:
+            old.States[1].Sources.front().Data.front().Blob = "corrupt protobuf";
+            break;
+        case 5:
+            old.States[1].Sources.front().Data.front().Version = 0;
+            break;
     }
 
     TVector<std::shared_ptr<THistoryTestClient>> clients;
@@ -3142,7 +3194,7 @@ void CheckOffsetPreparationWithPqProvider(bool force, ui32 failure, bool fallbac
         client->StartOffset = failure == 1 ? 101 : 10;
         client->EndOffset = 200;
         client->CommittedOffset = federated ? 100 : 150;
-        client->FirstRetainedWriteTimeUs = 300 * Second; // Too late for replay, but checkpoint offset 100 may remain.
+        client->FirstRetainedWriteTimeUs = 300 * Second;   // Too late for replay, but checkpoint offset 100 may remain.
         client->FailCommit = failure == 2;
 
         if (federated) {
@@ -3164,12 +3216,12 @@ void CheckOffsetPreparationWithPqProvider(bool force, ui32 failure, bool fallbac
     THashSet<ui64> requests;
     auto observer = runtime.AddObserver<TEvDqCompute::TEvGetTaskState>([&](auto& ev) {
         requests.insert(ev->Cookie);
-        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1); // Fallback reuses the checkpoint read.
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);   // Fallback reuses the checkpoint read.
     });
-    const auto resolver = runtime.Register(CreateStateLoadPlanResolver(old.Params(), next.Params(), settings, 45),
-        0, 0, NActors::TMailboxType::Simple, 0, owner);
+    const auto resolver =
+        runtime.Register(CreateStateLoadPlanResolver(old.Params(), next.Params(), settings, 45), 0, 0, NActors::TMailboxType::Simple, 0, owner);
     const auto request = runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(storage);
-    UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, (fallback ? std::vector<ui64>{1, 2} : std::vector<ui64>{1}));
+    UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, (fallback ? std::vector<ui64>{ 1, 2 } : std::vector<ui64>{ 1 }));
     auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(settings.Checkpoint, NYql::TIssues{}, 2);
     for (auto id : request->Get()->TaskIds) {
         response->States.push_back(old.States.at(id));
@@ -3204,8 +3256,8 @@ void CheckOffsetPreparationWithPqProvider(bool force, ui32 failure, bool fallbac
     } else if (failure == 2) {
         UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "Cannot rewind consumer");
     } else if (failure >= 3) {
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), failure == 3
-            ? "Missing PQ source checkpoint data" : "Invalid PQ source checkpoint for recovery");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result->Get()->Issues.ToString(), failure == 3 ? "Missing PQ source checkpoint data" : "Invalid PQ source checkpoint for recovery");
     }
 
     if (fallback && failure != 2) {
@@ -3221,8 +3273,8 @@ void CheckOffsetPreparationWithPqProvider(bool force, ui32 failure, bool fallbac
     }
 }
 
-void CheckOffsetResolver(const TString& previousConsumer, const TString& targetConsumer,
-        bool force = false, ui32 failure = 0, bool fallback = false, bool cancel = false, ui32 corrupt = 0, bool enabled = true) {
+void CheckOffsetResolver(const TString& previousConsumer, const TString& targetConsumer, bool force = false, ui32 failure = 0,
+    bool fallback = false, bool cancel = false, ui32 corrupt = 0, bool enabled = true) {
     using namespace NYql::NDq;
     using namespace NYql::NDqProto::NDqStateLoadPlan;
     THistoryTestRuntime runtime(enabled);
@@ -3234,7 +3286,7 @@ void CheckOffsetResolver(const TString& previousConsumer, const TString& targetC
     next.Source(10, 0, 2);
     next.Source(20, 1, 2);
 
-    for (auto* graph : {&old, &next}) {
+    for (auto* graph : { &old, &next }) {
         SetAggregationProgram(*graph->Builder.Graph.Mutable(0));
         SetAggregationProgram(*graph->Builder.Graph.Mutable(1), "/Root/second");
     }
@@ -3267,7 +3319,7 @@ void CheckOffsetResolver(const TString& previousConsumer, const TString& targetC
         UNIT_ASSERT(changed || fallback);
         readCookies.insert(ev->Cookie);
         // Edge events can be observed repeatedly before GrabEdgeEvent removes them.
-        UNIT_ASSERT_VALUES_EQUAL(readCookies.size(), 1); // Fallback must reuse the replay read.
+        UNIT_ASSERT_VALUES_EQUAL(readCookies.size(), 1);   // Fallback must reuse the replay read.
     });
     THashSet<const NActors::IEventHandle*> replies;
     auto replyObserver = runtime.AddObserver<TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult>([&](auto& ev) {
@@ -3275,12 +3327,12 @@ void CheckOffsetResolver(const TString& previousConsumer, const TString& targetC
         replies.insert(ev.Get());
         UNIT_ASSERT_VALUES_EQUAL(replies.size(), 1);
     });
-    const auto resolver = runtime.Register(CreateStateLoadPlanResolver(old.Params(), next.Params(), settings, 123),
-        0, 0, NActors::TMailboxType::Simple, 0, owner);
+    const auto resolver =
+        runtime.Register(CreateStateLoadPlanResolver(old.Params(), next.Params(), settings, 123), 0, 0, NActors::TMailboxType::Simple, 0, owner);
 
     if (changed || fallback) {
         auto request = runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(storage);
-        const std::vector<ui64> expected = fallback ? std::vector<ui64>{1, 2, 3} : std::vector<ui64>{1};
+        const std::vector<ui64> expected = fallback ? std::vector<ui64>{ 1, 2, 3 } : std::vector<ui64>{ 1 };
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, expected);
         auto checkpoint = settings.Checkpoint;
 
@@ -3288,8 +3340,8 @@ void CheckOffsetResolver(const TString& previousConsumer, const TString& targetC
             checkpoint.SetId(6);
         }
 
-        auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(checkpoint,
-            corrupt == 11 ? NYql::TIssues{NYql::TIssue("Checkpoint storage read failed")} : NYql::TIssues{}, corrupt == 9 ? 3 : 2);
+        auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(
+            checkpoint, corrupt == 11 ? NYql::TIssues{ NYql::TIssue("Checkpoint storage read failed") } : NYql::TIssues{}, corrupt == 9 ? 3 : 2);
         for (auto id : request->Get()->TaskIds) {
             response->States.push_back(old.States.at(id));
         }
@@ -3303,14 +3355,16 @@ void CheckOffsetResolver(const TString& previousConsumer, const TString& targetC
 
     if (cancel) {
         NActors::TDispatchOptions options;
-        options.CustomFinalCondition = [&] { return !provider->Prepared.empty(); };
+        options.CustomFinalCondition = [&] {
+            return !provider->Prepared.empty();
+        };
         runtime.DispatchEvents(options);
         // Repeated poison must not call PassAway twice during coroutine cancellation.
         runtime.Send(new NActors::IEventHandle(resolver, owner, new NActors::TEvents::TEvPoison));
         runtime.Send(new NActors::IEventHandle(resolver, owner, new NActors::TEvents::TEvPoison));
         runtime.Send(new NActors::IEventHandle(owner, owner, new NActors::TEvents::TEvWakeup));
         runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(owner);
-        provider->Pending.SetValue(NYql::TIssues{}); // Late callback after cancellation is harmless.
+        provider->Pending.SetValue(NYql::TIssues{});   // Late callback after cancellation is harmless.
         runtime.Send(new NActors::IEventHandle(owner, owner, new NActors::TEvents::TEvWakeup));
         runtime.GrabEdgeEvent<NActors::TEvents::TEvWakeup>(owner);
         return;
@@ -3360,11 +3414,11 @@ void CheckOffsetResolver(const TString& previousConsumer, const TString& targetC
     }
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryResolver) {
     Y_UNIT_TEST(DisabledReplayFlagUsesCommonOffsetRecovery) {
-        for (bool force : {false, true}) {
+        for (bool force : { false, true }) {
             CheckOffsetResolver("consumer", "consumer", force, 0, false, false, 0, /* enabled */ false);
             CheckOffsetResolver("old", "new", force, 0, false, false, 0, /* enabled */ false);
             CheckOffsetResolver("old", "new", force, 1, false, false, 0, /* enabled */ false);
@@ -3391,10 +3445,10 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryResolver) {
         settings.StorageProxy = storage;
         settings.CoordinatorGeneration = 2;
         settings.ProviderIntegrations["pq"] = provider;
-        const auto resolver = runtime.Register(CreateStateLoadPlanResolver(old.Params(), next.Params(), settings, 77),
-            0, 0, NActors::TMailboxType::Simple, 0, owner);
+        const auto resolver = runtime.Register(
+            CreateStateLoadPlanResolver(old.Params(), next.Params(), settings, 77), 0, 0, NActors::TMailboxType::Simple, 0, owner);
         const auto request = runtime.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(storage);
-        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, (std::vector<ui64>{1}));
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds, (std::vector<ui64>{ 1 }));
         auto response = std::make_unique<TEvDqCompute::TEvGetTaskStateResult>(settings.Checkpoint, NYql::TIssues{}, 2);
         response->States.push_back(old.States.at(1));
         runtime.Send(new NActors::IEventHandle(resolver, storage, response.release(), 0, request->Cookie));
@@ -3411,31 +3465,31 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryResolver) {
     }
 
     Y_UNIT_TEST(ChangedConsumerUsesPqRetentionAndRewindValidation) {
-        for (bool force : {false, true}) {
-            for (ui32 failure : {0, 1, 2}) {
+        for (bool force : { false, true }) {
+            for (ui32 failure : { 0, 1, 2 }) {
                 CheckOffsetPreparationWithPqProvider(force, failure, false);
             }
         }
     }
     Y_UNIT_TEST(ExpiredReplayFallsBackToCheckpointOffsetsForChangedConsumer) {
-        for (bool force : {false, true}) {
-            for (ui32 failure : {0, 1, 2}) {
+        for (bool force : { false, true }) {
+            for (ui32 failure : { 0, 1, 2 }) {
                 CheckOffsetPreparationWithPqProvider(force, failure, true);
             }
         }
     }
     Y_UNIT_TEST(FederatedChangedOrRemovedConsumerValidatesEveryCluster) {
-        for (bool consumer : {false, true}) {
-            for (bool force : {false, true}) {
-                for (ui32 failure : {0, 1}) {
+        for (bool consumer : { false, true }) {
+            for (bool force : { false, true }) {
+                for (ui32 failure : { 0, 1 }) {
                     CheckOffsetPreparationWithPqProvider(force, failure, false, true, consumer);
                 }
             }
         }
     }
     Y_UNIT_TEST(CheckpointReadErrorsRemainFatalWithForce) {
-        for (bool force : {false, true}) {
-            for (ui32 failure : {1, 8, 9, 10, 11}) {
+        for (bool force : { false, true }) {
+            for (ui32 failure : { 1, 8, 9, 10, 11 }) {
                 CheckOffsetResolver("old", "new", force, 0, false, false, failure);
             }
         }
@@ -3449,8 +3503,8 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryResolver) {
         CheckOffsetResolver("old", "");
     }
     Y_UNIT_TEST(PreparationFailuresRequireForceAndKeepCompatiblePrograms) {
-        for (ui32 failure : {1, 2, 3}) {
-            for (bool force : {false, true}) {
+        for (ui32 failure : { 1, 2, 3 }) {
+            for (bool force : { false, true }) {
                 CheckOffsetResolver("old", "new", force, failure);
             }
         }
@@ -3458,13 +3512,13 @@ Y_UNIT_TEST_SUITE(TStreamingOffsetRecoveryResolver) {
     Y_UNIT_TEST(ReplayFallbackReusesStatesAndPreparesOnlyChangedConsumers) {
         CheckOffsetResolver("old", "old", true, 0, true);
 
-        for (ui32 failure : {0, 1, 2, 3}) {
+        for (ui32 failure : { 0, 1, 2, 3 }) {
             CheckOffsetResolver("old", "new", true, failure, true);
         }
     }
     Y_UNIT_TEST(CorruptSourceCheckpointPreparationRequiresForce) {
-        for (bool force : {false, true}) {
-            for (ui32 failure : {3, 4, 5}) {
+        for (bool force : { false, true }) {
+            for (ui32 failure : { 3, 4, 5 }) {
                 CheckOffsetPreparationWithPqProvider(force, failure, /* fallback */ false);
             }
         }
@@ -3483,17 +3537,24 @@ Y_UNIT_TEST_SUITE(THistoryReplayResolver) {
         });
         TReplayTestGraph graph;
         graph.Source();
-        runtime.Register(CreateStateLoadPlanResolver(graph.Params(), graph.Params(), {}, 0),
-            0, 0, NActors::TMailboxType::Simple, 0, owner);
+        runtime.Register(CreateStateLoadPlanResolver(graph.Params(), graph.Params(), {}, 0), 0, 0, NActors::TMailboxType::Simple, 0, owner);
         const auto result = runtime.GrabEdgeEvent<TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult>(owner);
         UNIT_ASSERT_C(result->Get()->Result, result->Get()->Issues.ToString());
         UNIT_ASSERT(!result->Get()->Plan.at(1).GetSources(0).GetForeignTasksSources().empty());
     }
 
-    Y_UNIT_TEST(FederatedHistoryUsesClusterEndpointsAndPartitionCounts) { CheckFederatedResolver(); }
-    Y_UNIT_TEST(FederatedHistoryPreservesAbsoluteTopicPaths) { CheckFederatedResolver({}, false, false, "/absolute/topic"); }
-    Y_UNIT_TEST(FederatedHistoryReadsFirstRetainedMessageInEachCluster) { CheckFederatedResolver({}, false, true); }
-    Y_UNIT_TEST(FederatedHistoryExpiresInOneCluster) { CheckFederatedResolver({}, true, true); }
+    Y_UNIT_TEST(FederatedHistoryUsesClusterEndpointsAndPartitionCounts) {
+        CheckFederatedResolver();
+    }
+    Y_UNIT_TEST(FederatedHistoryPreservesAbsoluteTopicPaths) {
+        CheckFederatedResolver({}, false, false, "/absolute/topic");
+    }
+    Y_UNIT_TEST(FederatedHistoryReadsFirstRetainedMessageInEachCluster) {
+        CheckFederatedResolver({}, false, true);
+    }
+    Y_UNIT_TEST(FederatedHistoryExpiresInOneCluster) {
+        CheckFederatedResolver({}, true, true);
+    }
     Y_UNIT_TEST(FederatedHistoryFallsBackOnExpiredCluster) {
         TStateLoadPlanResolverSettings settings;
         settings.Force = true;
@@ -3520,9 +3581,13 @@ Y_UNIT_TEST_SUITE(THistoryReplayResolver) {
     Y_UNIT_TEST(ExplicitReadFromDoesNotReadCheckpointsOrValidateCalculatedHistory) {
         using namespace NYql::NDq;
         using namespace NYql::NDqProto::NDqStateLoadPlan;
-        struct TRuntime : NActors::TTestActorRuntimeBase {
-            TRuntime() { InitNodes(); }
+
+        struct TRuntime: NActors::TTestActorRuntimeBase {
+            TRuntime() {
+                InitNodes();
+            }
         } runtime;
+
         const auto owner = runtime.AllocateEdgeActor();
         auto noCheckpointReads = runtime.AddObserver<TEvDqCompute::TEvGetTaskState>([](auto&) {
             UNIT_FAIL("Explicit input and output start times must not read checkpoint state");
@@ -3534,25 +3599,46 @@ Y_UNIT_TEST_SUITE(THistoryReplayResolver) {
         settings.OutputStartTimeUs = 590 * Second;
         settings.UseSourceDisposition = true;
         // No topic client: explicit READ_FROM must not probe the calculated history range.
-        runtime.Register(CreateStateLoadPlanResolver({}, graph.Params(), settings, 0),
-            0, 0, NActors::TMailboxType::Simple, 0, owner);
+        runtime.Register(CreateStateLoadPlanResolver({}, graph.Params(), settings, 0), 0, 0, NActors::TMailboxType::Simple, 0, owner);
         const auto result = runtime.GrabEdgeEvent<TEvCheckpointCoordinator::TEvPrepareStateLoadPlanResult>(owner);
         UNIT_ASSERT_C(result->Get()->Result, result->Get()->Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(result->Get()->Plan, 2), 56);
         UNIT_ASSERT(result->Get()->Plan.at(1).GetSources(0).GetStateType() == STATE_TYPE_EMPTY);
     }
 
-    Y_UNIT_TEST(ExplicitOutputStartTimeDoesNotReadCheckpoints) { CheckResolver(false, false, false, {}, true); }
-    Y_UNIT_TEST(ExplicitOutputStartTimeValidatesRetainedHistory) { CheckResolver(false, false, false, 250 * Second, true); }
-    Y_UNIT_TEST(ExplicitOutputStartTimeDoesNotFallBackOnExpiredHistory) { CheckResolver(true, true, false, {}, true); }
-    Y_UNIT_TEST(DisabledReplayRejectsHoppingWithoutForce) { CheckResolver(false, true, false); }
-    Y_UNIT_TEST(DisabledReplayDiscardsHoppingWithForce) { CheckResolver(true, true, false); }
-    Y_UNIT_TEST(ForceStillAttemptsReplay) { CheckResolver(true, false); }
-    Y_UNIT_TEST(RequiredHistoryRetainedAfterOlderDataExpired) { CheckResolver(false, false, true, 250 * Second); }
-    Y_UNIT_TEST(RequiredHistoryIsOlderThanFirstRetainedMessage) { CheckResolver(false, true, true, 280 * Second); }
-    Y_UNIT_TEST(FirstRetainedMessageAtReplayBoundIsAvailable) { CheckResolver(false, false, true, 270 * Second); }
-    Y_UNIT_TEST(ExpiredHistoryFailsWithoutForce) { CheckResolver(false, true); }
-    Y_UNIT_TEST(ExpiredHistoryFallsBackToOffsets) { CheckResolver(true, true); }
+    Y_UNIT_TEST(ExplicitOutputStartTimeDoesNotReadCheckpoints) {
+        CheckResolver(false, false, false, {}, true);
+    }
+    Y_UNIT_TEST(ExplicitOutputStartTimeValidatesRetainedHistory) {
+        CheckResolver(false, false, false, 250 * Second, true);
+    }
+    Y_UNIT_TEST(ExplicitOutputStartTimeDoesNotFallBackOnExpiredHistory) {
+        CheckResolver(true, true, false, {}, true);
+    }
+    Y_UNIT_TEST(DisabledReplayRejectsHoppingWithoutForce) {
+        CheckResolver(false, true, false);
+    }
+    Y_UNIT_TEST(DisabledReplayDiscardsHoppingWithForce) {
+        CheckResolver(true, true, false);
+    }
+    Y_UNIT_TEST(ForceStillAttemptsReplay) {
+        CheckResolver(true, false);
+    }
+    Y_UNIT_TEST(RequiredHistoryRetainedAfterOlderDataExpired) {
+        CheckResolver(false, false, true, 250 * Second);
+    }
+    Y_UNIT_TEST(RequiredHistoryIsOlderThanFirstRetainedMessage) {
+        CheckResolver(false, true, true, 280 * Second);
+    }
+    Y_UNIT_TEST(FirstRetainedMessageAtReplayBoundIsAvailable) {
+        CheckResolver(false, false, true, 270 * Second);
+    }
+    Y_UNIT_TEST(ExpiredHistoryFailsWithoutForce) {
+        CheckResolver(false, true);
+    }
+    Y_UNIT_TEST(ExpiredHistoryFallsBackToOffsets) {
+        CheckResolver(true, true);
+    }
 }
 
-} // namespace NFq
+}   // namespace NFq

@@ -1,6 +1,6 @@
-#include "registry_helpers.h"
 #include "call_stack.h"
 #include "compile.h"
+#include "registry_helpers.h"
 
 #include <ydb/library/wasm/api/bytecode.h>
 #include <ydb/library/wasm/api/function.h>
@@ -71,25 +71,17 @@ constexpr TStringBuf DefaultRegistrySdkWast = R"WAST(
 NYdb::NWasm::TModuleBytecode MakeDefaultRegistrySdkBytecode() {
     using namespace NKikimr::NUdfStore::NWasm;
     using namespace NYdb::NWasm;
-    const auto objectCode = CompileModuleObjectCode(
-        DefaultRegistrySdkWast,
-        EBytecodeFormat::HumanReadable);
-    return MakeModuleBytecode(
-        DefaultRegistrySdkWast,
-        objectCode,
-        EBytecodeFormat::HumanReadable);
+    const auto objectCode = CompileModuleObjectCode(DefaultRegistrySdkWast, EBytecodeFormat::HumanReadable);
+    return MakeModuleBytecode(DefaultRegistrySdkWast, objectCode, EBytecodeFormat::HumanReadable);
 }
 
-} // namespace
+}   // namespace
 
 namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYdb::NWasm;
 
-NYdb::NWasm::TModuleBytecode MakeModuleBytecode(
-    TStringBuf wasmData,
-    TStringBuf objectCode,
-    NYdb::NWasm::EBytecodeFormat format)
+NYdb::NWasm::TModuleBytecode MakeModuleBytecode(TStringBuf wasmData, TStringBuf objectCode, NYdb::NWasm::EBytecodeFormat format)
 {
     TModuleBytecode bytecode;
     bytecode.Format = format;
@@ -100,10 +92,7 @@ NYdb::NWasm::TModuleBytecode MakeModuleBytecode(
     return bytecode;
 }
 
-void AddPrecompiledModule(
-    IWebAssemblyCompartment* compartment,
-    const TModuleBytecode& bytecode,
-    TStringBuf name)
+void AddPrecompiledModule(IWebAssemblyCompartment* compartment, const TModuleBytecode& bytecode, TStringBuf name)
 {
     if (!bytecode.ObjectCode) {
         ythrow yexception() << "Precompiled module object code is required for '" << name << "'";
@@ -111,8 +100,7 @@ void AddPrecompiledModule(
     compartment->AddPrecompiledModule(bytecode, name);
 }
 
-std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
-    const TVector<TNamedModuleBytecode>& libraries)
+std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(const TVector<TNamedModuleBytecode>& libraries)
 {
     // CreateImageFromSdk clones from a process-wide cache (first call is slow,
     // later Acquires are cheap). MinimalRuntime must not be used — it lacks
@@ -128,8 +116,7 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
     } else {
         for (const auto& library : libraries) {
             if (!library.Bytecode.ObjectCode) {
-                ythrow yexception()
-                    << "Precompiled object code is required for library '" << library.Name << "'";
+                ythrow yexception() << "Precompiled object code is required for library '" << library.Name << "'";
             }
         }
         sdkBytecode = &libraries.front().Bytecode;
@@ -137,19 +124,14 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
 
     auto compartment = CreateImageFromSdk(*sdkBytecode);
     for (size_t i = 1; i < libraries.size(); ++i) {
-        AddPrecompiledModule(
-            compartment.get(),
-            libraries[i].Bytecode,
-            libraries[i].Name);
+        AddPrecompiledModule(compartment.get(), libraries[i].Bytecode, libraries[i].Name);
     }
     return compartment;
 }
 
 ui32 CheckedAbiLength(size_t size, TStringBuf what) {
     if (size > std::numeric_limits<ui32>::max()) {
-        ythrow yexception()
-            << what << " length " << size
-            << " exceeds ABI ui32 limit (" << std::numeric_limits<ui32>::max() << ")";
+        ythrow yexception() << what << " length " << size << " exceeds ABI ui32 limit (" << std::numeric_limits<ui32>::max() << ")";
     }
     return static_cast<ui32>(size);
 }
@@ -166,10 +148,7 @@ TCurrentCompartmentGuard::~TCurrentCompartmentGuard() {
 
 namespace {
 
-std::string ReadGuestExceptionMessage(
-    IWebAssemblyCompartment* compartment,
-    void* runtimeFunction,
-    const WAVM::Runtime::Exception* exception)
+std::string ReadGuestExceptionMessage(IWebAssemblyCompartment* compartment, void* runtimeFunction, const WAVM::Runtime::Exception* exception)
 {
     if (WAVM::Runtime::describeExceptionType(WAVM::Runtime::getExceptionType(exception)) != "__cpp_exception") {
         return {};
@@ -177,26 +156,18 @@ std::string ReadGuestExceptionMessage(
 
     // An opt-in export in the throwing module decodes the C++ ABI's unwind
     // pointer. The host cannot interpret arbitrary guest C++ object layouts.
-    void* messageFunction = compartment->GetFunctionInSameModule(
-        runtimeFunction, "__ydb_wasm_exception_message");
+    void* messageFunction = compartment->GetFunctionInSameModule(runtimeFunction, "__ydb_wasm_exception_message");
     if (!messageFunction) {
         return {};
     }
 
-    const std::array<EWebAssemblyValueType, 1> argumentTypes = {EWebAssemblyValueType::UintPtr};
+    const std::array<EWebAssemblyValueType, 1> argumentTypes = { EWebAssemblyValueType::UintPtr };
     const auto runtimeType = GetTypeId(
-        /*intrinsic*/ false,
-        EWebAssemblyValueType::UintPtr,
-        TRange(argumentTypes.data(), argumentTypes.size()));
+        /*intrinsic*/ false, EWebAssemblyValueType::UintPtr, TRange(argumentTypes.data(), argumentTypes.size()));
     TWavmPodValue argument{};
     TWavmPodValue result{};
     argument.Data = WAVM::Runtime::getExceptionArgument(exception, 0).u64;
-    NYdb::NWasm::NDetail::WavmInvoke(
-        compartment,
-        runtimeType,
-        messageFunction,
-        &result,
-        TRange(&argument, 1));
+    NYdb::NWasm::NDetail::WavmInvoke(compartment, runtimeType, messageFunction, &result, TRange(&argument, 1));
 
     if (!result.Data) {
         return {};
@@ -208,8 +179,7 @@ std::string ReadGuestExceptionMessage(
         if (result.Data > std::numeric_limits<ui64>::max() - i) {
             return {};
         }
-        const auto* character = static_cast<const char*>(
-            compartment->GetHostPointer(result.Data + i, 1));
+        const auto* character = static_cast<const char*>(compartment->GetHostPointer(result.Data + i, 1));
         if (!*character) {
             return message;
         }
@@ -218,15 +188,10 @@ std::string ReadGuestExceptionMessage(
     return message + "...";
 }
 
-} // namespace
+}   // namespace
 
-void InvokeUdfExport(
-    IWebAssemblyCompartment* compartment,
-    void* runtimeFunction,
-    const TString& functionNameForErrors,
-    uintptr_t context,
-    uintptr_t result,
-    const TVector<uintptr_t>& args)
+void InvokeUdfExport(IWebAssemblyCompartment* compartment, void* runtimeFunction, const TString& functionNameForErrors, uintptr_t context,
+    uintptr_t result, const TVector<uintptr_t>& args)
 {
     if (runtimeFunction == nullptr) {
         ythrow yexception() << "Unknown wasm export: " << functionNameForErrors;
@@ -243,9 +208,7 @@ void InvokeUdfExport(
         argumentTypes[i] = EWebAssemblyValueType::UintPtr;
     }
     const auto runtimeType = GetTypeId(
-        /*intrinsic*/ false,
-        EWebAssemblyValueType::Void,
-        TRange(argumentTypes.data(), totalArgs));
+        /*intrinsic*/ false, EWebAssemblyValueType::Void, TRange(argumentTypes.data(), totalArgs));
 
     std::array<TWavmPodValue, kMaxArgs> wavmArgs{};
     wavmArgs[0].Data = context;
@@ -255,12 +218,7 @@ void InvokeUdfExport(
     }
 
     try {
-        NYdb::NWasm::NDetail::WavmInvoke(
-            compartment,
-            runtimeType,
-            runtimeFunction,
-            /*result*/ nullptr,
-            TRange(wavmArgs.data(), totalArgs));
+        NYdb::NWasm::NDetail::WavmInvoke(compartment, runtimeType, runtimeFunction, /*result*/ nullptr, TRange(wavmArgs.data(), totalArgs));
     } catch (WAVM::Runtime::Exception* exception) {
         // Type/args from WAVM, but only user wasm frames in the stack (like ThrowException).
         std::string message = WAVM::Runtime::describeException(exception);
@@ -289,27 +247,14 @@ void InvokeUdfExport(
         WAVM::Runtime::destroyException(exception);
 
         // Plain throw: do not prefix with registry_helpers.cpp:line for users.
-        throw yexception()
-            << "WAVM runtime exception while calling \""
-            << functionNameForErrors << "\": " << message
-            << "\n\n" << stack;
+        throw yexception() << "WAVM runtime exception while calling \"" << functionNameForErrors << "\": " << message << "\n\n" << stack;
     }
 }
 
 void InvokeUdfExport(
-    IWebAssemblyCompartment* compartment,
-    const TString& functionName,
-    uintptr_t context,
-    uintptr_t result,
-    const TVector<uintptr_t>& args)
+    IWebAssemblyCompartment* compartment, const TString& functionName, uintptr_t context, uintptr_t result, const TVector<uintptr_t>& args)
 {
-    InvokeUdfExport(
-        compartment,
-        compartment->GetFunction(std::string(functionName)),
-        functionName,
-        context,
-        result,
-        args);
+    InvokeUdfExport(compartment, compartment->GetFunction(std::string(functionName)), functionName, context, result, args);
 }
 
 namespace {
@@ -329,9 +274,7 @@ EWasmExportValueType ConvertExportValueType(WAVM::IR::ValueType type) {
     }
 }
 
-void CollectFunctionExports(
-    const WAVM::IR::Module& module,
-    THashMap<TString, TWasmExportSignature>& exports)
+void CollectFunctionExports(const WAVM::IR::Module& module, THashMap<TString, TWasmExportSignature>& exports)
 {
     for (const auto& exportItem : module.exports) {
         if (exportItem.kind != WAVM::IR::ExternKind::function) {
@@ -352,7 +295,7 @@ void CollectFunctionExports(
     }
 }
 
-} // namespace
+}   // namespace
 
 const char* WasmExportValueTypeAsStr(EWasmExportValueType type) {
     switch (type) {
@@ -370,9 +313,7 @@ const char* WasmExportValueTypeAsStr(EWasmExportValueType type) {
     return "<unsupported>";
 }
 
-THashMap<TString, TWasmExportSignature> CollectWasmExports(
-    TStringBuf bytes,
-    EBytecodeFormat format)
+THashMap<TString, TWasmExportSignature> CollectWasmExports(TStringBuf bytes, EBytecodeFormat format)
 {
     THashMap<TString, TWasmExportSignature> exports;
 
@@ -398,12 +339,7 @@ THashMap<TString, TWasmExportSignature> CollectWasmExports(
     featureSpec.exceptionHandling = true;
     auto loadError = WASM::LoadError();
     Runtime::ModuleRef wasmModule;
-    if (!Runtime::loadBinaryModule(
-            std::bit_cast<const U8*>(bytes.data()),
-            bytes.size(),
-            wasmModule,
-            featureSpec,
-            &loadError))
+    if (!Runtime::loadBinaryModule(std::bit_cast<const U8*>(bytes.data()), bytes.size(), wasmModule, featureSpec, &loadError))
     {
         ythrow yexception() << "Failed to load wasm binary module: " << loadError.message;
     }
@@ -411,4 +347,4 @@ THashMap<TString, TWasmExportSignature> CollectWasmExports(
     return exports;
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

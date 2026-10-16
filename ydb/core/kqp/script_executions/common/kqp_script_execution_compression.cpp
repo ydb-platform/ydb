@@ -3,7 +3,6 @@
 #include <ydb/core/tx/datashard/const.h>
 
 #include <library/cpp/blockcodecs/codecs.h>
-
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NKqp {
@@ -23,13 +22,14 @@ TString TruncateString(const TString& str, size_t size) {
     return str.substr(0, std::min(str.size(), size)) + "...\n(TRUNCATED)";
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 TCompressor::TCompressor(const TString& compressionMethod, ui64 minCompressionSize)
     : CompressionMethod(compressionMethod)
     , MinCompressionSize(minCompressionSize)
     , Codec(compressionMethod ? ProvideCodec(compressionMethod) : nullptr)
-{}
+{
+}
 
 bool TCompressor::IsEnabled() const {
     return Codec != nullptr;
@@ -37,10 +37,10 @@ bool TCompressor::IsEnabled() const {
 
 std::pair<TString, TString> TCompressor::Compress(const TString& data) const {
     if (!IsEnabled() || data.size() < MinCompressionSize) {
-        return {"", data};
+        return { "", data };
     }
 
-    return {CompressionMethod, Codec->Encode(data)};
+    return { CompressionMethod, Codec->Encode(data) };
 }
 
 TString TCompressor::Decompress(const TString& data) const {
@@ -54,17 +54,18 @@ TString TCompressor::Decompress(const TString& data) const {
 TScriptArtifacts CompressScriptArtifacts(const std::optional<TString>& ast, const std::optional<TString>& plan, const TCompressor& compressor) {
     TScriptArtifacts result;
 
-    const auto saveValue = [&](const std::optional<TString>& value, std::optional<TString>& resultValue, std::optional<TString>& resultCompressionMethod, const TString& name) {
+    const auto saveValue = [&](const std::optional<TString>& value, std::optional<TString>& resultValue,
+                               std::optional<TString>& resultCompressionMethod, const TString& name) {
         if (!value) {
             return;
         }
 
         std::tie(resultCompressionMethod, resultValue) = compressor.Compress(*value);
         if (resultValue->size() > NDataShard::NLimits::MaxWriteValueSize) {
-            result.Issues.AddIssue(
-                NYql::TIssue(TStringBuilder() << "Query " << name << " size is " << resultValue->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, " << name << " was truncated")
-                    .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)
-            );
+            result.Issues.AddIssue(NYql::TIssue(
+                TStringBuilder() << "Query " << name << " size is " << resultValue->size() << " bytes, that is larger than allowed limit "
+                                 << NDataShard::NLimits::MaxWriteValueSize << " bytes, " << name << " was truncated")
+                                       .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO));
             resultValue = TruncateString(*value, NDataShard::NLimits::MaxWriteValueSize - 1_KB);
             resultCompressionMethod = std::nullopt;
         }
@@ -76,4 +77,4 @@ TScriptArtifacts CompressScriptArtifacts(const std::optional<TString>& ast, cons
     return result;
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

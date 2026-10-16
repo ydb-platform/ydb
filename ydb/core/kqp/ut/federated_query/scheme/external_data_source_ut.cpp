@@ -1,9 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
-#include <util/string/printf.h>
-
 #include <fmt/format.h>
+#include <util/string/printf.h>
 
 namespace NKikimr::NKqp {
 
@@ -12,7 +12,7 @@ using namespace fmt::literals;
 
 namespace {
 
-template<bool UseSchemaSecrets>
+template <bool UseSchemaSecrets>
 void CreateSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session) {
     TString query;
 
@@ -26,18 +26,20 @@ void CreateSecret(const TString& secretName, const TString& secretValue, NYdb::N
     UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
     Y_UNIT_TEST(DisableExternalDataSourcesOnServerless) {
         auto ydb = NWorkloadManager::TYdbSetupSettings()
-            .CreateSampleTenants(/* value */ true)
-            .EnableExternalDataSourcesOnServerless(/* value */ false)
-            .Create();
+                       .CreateSampleTenants(/* value */ true)
+                       .EnableExternalDataSourcesOnServerless(/* value */ false)
+                       .Create();
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "External data sources are disabled for serverless domains. Please contact your system administrator to enable it",
+                result.GetIssues().ToString());
         };
 
         auto checkNotFound = [](const auto& result, const TString& path, const TString& error) {
@@ -87,8 +89,10 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSourceSql, settings));
         checkDisabled(ydb->ExecuteQuery(createTableSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalTable", "Executing ESchemeOpDropExternalTable");
-        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalDataSource", "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalTable",
+            "Executing ESchemeOpDropExternalTable");
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalDataSource",
+            "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
     }
 
     Y_UNIT_TEST(CreateExternalDataSource) {
@@ -103,7 +107,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
@@ -114,7 +119,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         {
-            auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalDataSourceDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -128,7 +134,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto queryClient = kikimr.GetQueryClient();
         {
             auto query = TStringBuilder() << R"(
-                CREATE OR REPLACE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="other-bucket",
                     AUTH_METHOD="NONE"
@@ -138,20 +145,21 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         }
 
         {
-            auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalDataSourceDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetLocation(), "other-bucket");
         }
 
         {
-            const auto result = queryClient.ExecuteQuery(fmt::format(R"(
+            const auto result = queryClient
+                                    .ExecuteQuery(fmt::format(R"(
                 CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
                     SOURCE_TYPE="YT",
                     LOCATION="other-bucket",
                     AUTH_METHOD="NONE"
-                );)",
-                "external_source"_a = externalDataSourceName
-            ), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                );)", "external_source"_a = externalDataSourceName), NYdb::NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing external data source type is not allowed");
         }
@@ -175,7 +183,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         const TString secretValue = "mysasignaturevalue";
         CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
         auto query = TStringBuilder() << Sprintf(
-            R"(
+                         R"(
                 CREATE EXTERNAL DATA SOURCE `%s` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
@@ -183,16 +191,14 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
                     SERVICE_ACCOUNT_ID="mysa",
                     %s="%s"
                 );
-            )",
-            externalDataSourceName.c_str(),
-            UseSchemaSecrets ? "SERVICE_ACCOUNT_SECRET_PATH" : "SERVICE_ACCOUNT_SECRET_NAME",
-            secretId.c_str()
-        );
+            )", externalDataSourceName.c_str(), UseSchemaSecrets ? "SERVICE_ACCOUNT_SECRET_PATH" : "SERVICE_ACCOUNT_SECRET_NAME",
+                         secretId.c_str());
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        auto externalDataSourceDesc =
+            Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(/* pos */ 0);
         UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
         UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -202,10 +208,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetName(), SplitPath(externalDataSourceName).back());
         UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().HasServiceAccount());
         UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetId(), "mysa");
-        UNIT_ASSERT_VALUES_EQUAL(
-            externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetSecretName(),
-            UseSchemaSecrets ? "/Root/" + secretId : secretId
-        );
+        UNIT_ASSERT_VALUES_EQUAL(externalDataSource.ExternalDataSourceInfo->Description.GetAuth().GetServiceAccount().GetSecretName(),
+            UseSchemaSecrets ? "/Root/" + secretId : secretId);
     }
 
     Y_UNIT_TEST(DisableCreateExternalDataSource) {
@@ -217,14 +221,16 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DisableCreateExternalDataSourceByAvailableFlag) {
@@ -237,14 +243,17 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it",
+            result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_TWIN(DisableS3ExternalDataSource, UseSchemaSecrets) {
@@ -278,31 +287,37 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
             );
         )sql";
 
-        { // with table client
+        {   // with table client
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             TString externalDataSourceName = "/Root/ExternalDataSource2";
             const auto failQuery = Sprintf(failQueryTemplate, externalDataSourceName.c_str());
             auto result = session.ExecuteSchemeQuery(failQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it",
+                result.GetIssues().ToString());
 
             CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
 
-            const auto okQuery = Sprintf(okQueryTemplate, externalDataSourceName.c_str(), UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME", secretId.c_str());
+            const auto okQuery = Sprintf(okQueryTemplate, externalDataSourceName.c_str(),
+                UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME", secretId.c_str());
             result = session.ExecuteSchemeQuery(okQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        { // with query client
+        {   // with query client
             auto client = kikimr.GetQueryClient();
             auto session = client.GetSession().GetValueSync().GetSession();
             TString externalDataSourceName = "/Root/ExternalDataSource";
             const auto failQuery = Sprintf(failQueryTemplate, externalDataSourceName.c_str());
             auto result = session.ExecuteQuery(failQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it",
+                result.GetIssues().ToString());
 
-            const auto okQuery = Sprintf(okQueryTemplate, externalDataSourceName.c_str(), UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME", secretId.c_str());
+            const auto okQuery = Sprintf(okQueryTemplate, externalDataSourceName.c_str(),
+                UseSchemaSecrets ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME", secretId.c_str());
             result = session.ExecuteQuery(okQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -315,7 +330,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="UNKNOWN"
@@ -332,7 +348,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="UnknownSourceType",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
@@ -352,14 +369,16 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "It is not allowed to access hostname 'my-bucket'", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(), "It is not allowed to access hostname 'my-bucket'", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DropExternalDataSource) {
@@ -374,7 +393,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
@@ -390,7 +410,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         }
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        auto externalDataSourceDesc =
+            Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
         const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(/* pos */ 0);
         UNIT_ASSERT_EQUAL(externalDataSourceDesc->ErrorCount, 1);
         UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
@@ -406,7 +427,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DoubleCreateExternalDataSource) {
@@ -421,7 +443,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
@@ -430,7 +453,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto externalDataSourceDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalDataSourceDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalDataSourceName, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalDataSource = externalDataSourceDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalDataSource.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource);
             UNIT_ASSERT(externalDataSource.ExternalDataSourceInfo);
@@ -443,14 +467,16 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
 
         {
             auto query = TStringBuilder() << R"(
-                CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                CREATE EXTERNAL DATA SOURCE `)"
+                                          << externalDataSourceName << R"(` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket",
                     AUTH_METHOD="NONE"
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path exist", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path exist",
+                result.GetIssues().ToString());
         }
     }
 
@@ -467,16 +493,19 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         TString externalDataSourceName = "/Root/ExternalDataSource";
         TString externalTableName = "/Root/ExternalTable";
         auto query = TStringBuilder() << R"(
-            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)"
+                                      << externalDataSourceName << R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="my-bucket",
                 AUTH_METHOD="NONE"
             );
-            CREATE EXTERNAL TABLE `)" << externalTableName << R"(` (
+            CREATE EXTERNAL TABLE `)" << externalTableName
+                                      << R"(` (
                 Key Uint64,
                 Value String
             ) WITH (
-                DATA_SOURCE=")" << externalDataSourceName << R"(",
+                DATA_SOURCE=")" << externalDataSourceName
+                                      << R"(",
                 LOCATION="/"
             );)";
         {
@@ -484,7 +513,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
             UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto& runtime = *kikimr.GetTestServer().GetRuntime();
-            auto externalTableDesc = Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+            auto externalTableDesc =
+                Navigate(runtime, runtime.AllocateEdgeActor(), externalTableName, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
             const auto& externalTable = externalTableDesc->ResultSet.at(/* pos */ 0);
             UNIT_ASSERT_EQUAL(externalTable.Kind, NKikimr::NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalTable);
             UNIT_ASSERT(externalTable.ExternalTableInfo);
@@ -497,29 +527,32 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         {
             auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable",
+                result.GetIssues().ToString());
         }
 
         auto queryClient = kikimr.GetQueryClient();
         {
-            const auto result = queryClient.ExecuteQuery(fmt::format(R"(
+            const auto result = queryClient
+                                    .ExecuteQuery(fmt::format(R"(
                 CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="other-bucket",
                     AUTH_METHOD="NONE"
-                );)",
-                "external_source"_a = externalDataSourceName
-            ), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                );)", "external_source"_a = externalDataSourceName), NYdb::NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 
         {
-            const auto result = session.ExecuteSchemeQuery(fmt::format(
-                "DROP EXTERNAL DATA SOURCE `{external_source}`",
-                "external_source"_a = externalDataSourceName
-            )).ExtractValueSync();
+            const auto result = session
+                                    .ExecuteSchemeQuery(fmt::format(
+                                        "DROP EXTERNAL DATA SOURCE `{external_source}`", "external_source"_a = externalDataSourceName))
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable");
         }
     }
 
@@ -529,7 +562,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto resultSuccess = session.ExecuteSchemeQuery("DROP EXTERNAL DATA SOURCE test").GetValueSync();
-        UNIT_ASSERT_C(resultSuccess.GetStatus() == EStatus::SCHEME_ERROR, TStringBuilder{} << resultSuccess.GetStatus() << " " << resultSuccess.GetIssues().ToString());
+        UNIT_ASSERT_C(resultSuccess.GetStatus() == EStatus::SCHEME_ERROR,
+            TStringBuilder{} << resultSuccess.GetStatus() << " " << resultSuccess.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithOldSecretDisabled) {
@@ -557,11 +591,9 @@ Y_UNIT_TEST_SUITE(KqpSchemeExternalDataSource) {
         )sql";
         const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(
-            result.GetIssues().ToString(),
-            "Old secrets are disabled for creating new objects. Please use new secrets",
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Old secrets are disabled for creating new objects. Please use new secrets",
             result.GetIssues().ToString());
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -2,7 +2,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 namespace {
@@ -13,8 +12,8 @@ constexpr ui64 CPU_NUMBER = 8;
 constexpr TDuration LONG_QUERY = TDuration::Seconds(30);
 
 TCpuQuotaManager MakeManager() {
-    return TCpuQuotaManager(TDuration::Seconds(1), TDuration::Seconds(10), TDuration::Seconds(60),
-        DEFAULT_QUERY_LOAD, true, CPU_NUMBER, MakeIntrusive<NMonitoring::TDynamicCounters>());
+    return TCpuQuotaManager(TDuration::Seconds(1), TDuration::Seconds(10), TDuration::Seconds(60), DEFAULT_QUERY_LOAD, true, CPU_NUMBER,
+        MakeIntrusive<NMonitoring::TDynamicCounters>());
 }
 
 bool StartQuery(TCpuQuotaManager& manager) {
@@ -27,7 +26,7 @@ void FinishZeroCpuQuery(TCpuQuotaManager& manager) {
     manager.AdjustCpuQuota(0.0, LONG_QUERY, 0.0);
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(CpuQuotaManager) {
     // A query longer than AverageLoadInterval / 2 used to be refused the refund entirely
@@ -62,4 +61,4 @@ Y_UNIT_TEST_SUITE(CpuQuotaManager) {
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

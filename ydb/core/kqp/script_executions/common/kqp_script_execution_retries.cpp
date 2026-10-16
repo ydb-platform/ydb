@@ -2,10 +2,8 @@
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#include <library/cpp/protobuf/interop/cast.h>
-
 #include <google/protobuf/timestamp.pb.h>
-
+#include <library/cpp/protobuf/interop/cast.h>
 #include <util/random/random.h>
 #include <util/string/builder.h>
 
@@ -13,7 +11,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-class TLinearBackoffPolicy final : public TRetryPolicyItem::IPolicy {
+class TLinearBackoffPolicy final: public TRetryPolicyItem::IPolicy {
     using TResult = TRetryPolicyItem::TRetryResult;
 
 public:
@@ -24,14 +22,16 @@ public:
         , BackoffPeriod(TDuration::MilliSeconds(config.GetBackoffPeriodMs()))
         , RetryRateLimit(config.GetRetryRateLimit())
         , RetryCountLimit(config.GetRetryCountLimit())
-    {}
+    {
+    }
 
     TLinearBackoffPolicy(ui64 retryCount, ui64 retryLimit, TDuration retryPeriod, TDuration backoffPeriod)
         : RetryPeriod(retryPeriod)
         , BackoffPeriod(backoffPeriod)
         , RetryRateLimit(retryCount)
         , RetryCountLimit(retryLimit)
-    {}
+    {
+    }
 
     TResult Update(TInstant startedAt, TInstant lastSeenAt, TInstant now, TRetryPolicyState& state) const final {
         Y_UNUSED(startedAt);
@@ -76,7 +76,7 @@ private:
     const ui64 RetryCountLimit = 0;
 };
 
-class TExponentialBackoffPolicy final : public TRetryPolicyItem::IPolicy {
+class TExponentialBackoffPolicy final: public TRetryPolicyItem::IPolicy {
     using TResult = TRetryPolicyItem::TRetryResult;
 
 public:
@@ -93,7 +93,8 @@ public:
         Y_VALIDATE(JitterFactor >= 0.0 && JitterFactor <= 1.0, "Jitter factor should be in range [0.0, 1.0]");
 
         if (QueryUptimeThreshold && ResetBackoffThreshold) {
-            Y_VALIDATE(QueryUptimeThreshold <= ResetBackoffThreshold, "Immediate retry duration should be not greater than reset retry state threshold");
+            Y_VALIDATE(QueryUptimeThreshold <= ResetBackoffThreshold,
+                "Immediate retry duration should be not greater than reset retry state threshold");
         }
     }
 
@@ -106,7 +107,7 @@ public:
 
         state.RetryCounterUpdatedAt = now;
         state.RetryCount++;
-        TResult result = {.Retry = true};
+        TResult result = { .Retry = true };
 
         if (QueryUptimeThreshold && uptime >= QueryUptimeThreshold) {
             // Immediate retry after uptime threshold
@@ -141,19 +142,21 @@ private:
     const double JitterFactor = 0.0;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TRetryPolicyState::TRetryPolicyState(ui64 retryCount, TInstant retryCounterUpdatedAt, double retryRate)
     : RetryCount(retryCount)
     , RetryCounterUpdatedAt(retryCounterUpdatedAt)
     , RetryRate(retryRate)
-{}
+{
+}
 
 TRetryPolicyState::TRetryPolicyState(const NKikimrKqp::TScriptExecutionRetryState& retryState)
     : RetryCount(retryState.GetRetryCounter())
     , RetryCounterUpdatedAt(NProtoInterop::CastFromProto(retryState.GetRetryCounterUpdatedAt()))
     , RetryRate(retryState.GetRetryRate())
-{}
+{
+}
 
 void TRetryPolicyState::SaveToProto(NKikimrKqp::TScriptExecutionRetryState& retryState) const {
     retryState.SetRetryCounter(RetryCount);
@@ -163,19 +166,23 @@ void TRetryPolicyState::SaveToProto(NKikimrKqp::TScriptExecutionRetryState& retr
 
 TRetryPolicyItem::TRetryPolicyItem()
     : Policy(std::make_shared<TLinearBackoffPolicy>())
-{}
+{
+}
 
 TRetryPolicyItem::TRetryPolicyItem(ui64 retryCount, ui64 retryLimit, TDuration retryPeriod, TDuration backoffPeriod)
     : Policy(std::make_shared<TLinearBackoffPolicy>(retryCount, retryLimit, retryPeriod, backoffPeriod))
     , PolicyInitialized(Policy->IsInitialized())
-{}
+{
+}
 
 TRetryPolicyItem::TRetryPolicyItem(IPolicy::TPtr policy)
     : Policy(std::move(policy))
     , PolicyInitialized(Policy && Policy->IsInitialized())
-{}
+{
+}
 
-std::optional<TRetryPolicyItem> TRetryPolicyItem::FromProto(Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& retryState) {
+std::optional<TRetryPolicyItem> TRetryPolicyItem::FromProto(
+    Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& retryState) {
     for (const auto& mapping : retryState.GetRetryPolicyMapping()) {
         for (const auto mappingStatus : mapping.GetStatusCode()) {
             if (mappingStatus != status) {
@@ -226,4 +233,4 @@ bool TRetryLimiter::UpdateOnRetry(TInstant startedAt, TInstant lastSeenAt, const
     return result.Retry;
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -1,14 +1,13 @@
-#include "yql_s3_provider_impl.h"
 #include "yql_s3_datasink_constraints.h"
 #include "yql_s3_dq_integration.h"
+#include "yql_s3_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -28,7 +27,7 @@ void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& ch
     });
 }
 
-class TS3DataSinkProvider : public TDataProviderBase {
+class TS3DataSinkProvider: public TDataProviderBase {
 public:
     explicit TS3DataSinkProvider(TS3State::TPtr state)
         : State_(std::move(state))
@@ -38,7 +37,8 @@ public:
         , PhysicalOptProposalTransformer_(CreateS3PhysicalOptProposalTransformer(State_))
         , DqIntegration_(CreateS3DqIntegration(State_))
         , ConstraintsTransformer_(CreateS3DataSinkConstraintTransformer(State_))
-    {}
+    {
+    }
 
 private:
     TStringBuf GetName() const override {
@@ -123,7 +123,8 @@ private:
         Y_UNUSED(withLimits);
         if (const auto& maybeOp = TMaybeNode<TS3WriteObject>(&node)) {
             const auto& op = maybeOp.Cast();
-            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Target().Raw(), op.DataSink().Cluster().StringValue() + '.' + op.Target().Path().StringValue(), false));
+            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Target().Raw(),
+                op.DataSink().Cluster().StringValue() + '.' + op.Target().Path().StringValue(), false));
             return 1;
         }
         return 0;
@@ -156,10 +157,10 @@ private:
     const TAutoPtr<IGraphTransformer> ConstraintsTransformer_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state) {
     return new TS3DataSinkProvider(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

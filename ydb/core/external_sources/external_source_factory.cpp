@@ -1,15 +1,15 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
-#include "external_source_factory.h"
-#include "object_storage.h"
 #include "external_data_source.h"
-#include "iceberg_fields.h"
 #include "external_source_builder.h"
+#include "external_source_factory.h"
+#include "iceberg_fields.h"
+#include "object_storage.h"
+
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 
 #include <util/generic/map.h>
 #include <util/string/cast.h>
-
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -20,16 +20,14 @@ namespace {
 // true synonyms (cannot be enabled/disabled independently from the canonical type).
 NYql::EDatabaseType ResolveExternalSourceTypeAlias(NYql::EDatabaseType type) {
     static const TMap<NYql::EDatabaseType, NYql::EDatabaseType> aliases = {
-        {NYql::EDatabaseType::MoniumMetrics, NYql::EDatabaseType::Solomon},
+        { NYql::EDatabaseType::MoniumMetrics, NYql::EDatabaseType::Solomon },
     };
     auto it = aliases.find(type);
     return it == aliases.end() ? type : it->second;
 }
 
-struct TExternalSourceFactory : public IExternalSourceFactory {
-    TExternalSourceFactory(
-        const TMap<TString, IExternalSource::TPtr>& sources,
-        bool allExternalDataSourcesAreAvailable,
+struct TExternalSourceFactory: public IExternalSourceFactory {
+    TExternalSourceFactory(const TMap<TString, IExternalSource::TPtr>& sources, bool allExternalDataSourcesAreAvailable,
         const std::set<NYql::EDatabaseType>& availableExternalDataSources)
         : Sources(sources)
         , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
@@ -53,7 +51,6 @@ private:
     }
 
 public:
-
     IExternalSource::TPtr GetOrCreate(const NYql::EDatabaseType& type) const override {
         const TString typeStr = ToString(type);
         const auto canonicalType = ResolveExternalSourceTypeAlias(type);
@@ -63,7 +60,8 @@ public:
             throw TExternalSourceException() << "External source with type " << typeStr << " was not found";
         }
         if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(canonicalType)) {
-            throw TExternalSourceException() << "External source with type " << typeStr << " is disabled. Please contact your system administrator to enable it";
+            throw TExternalSourceException() << "External source with type " << typeStr
+                                             << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;
     }
@@ -82,60 +80,34 @@ private:
     std::set<TString> AvailableProviders;
 };
 
-}
-
+}   // namespace
 
 IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnamePatternsRegEx) {
     using namespace NKikimr::NExternalSource::NIceberg;
 
-    return TExternalSourceBuilder(TString{NYql::GenericProviderName})
+    return TExternalSourceBuilder(TString{ NYql::GenericProviderName })
         // Basic, Token and SA Auth are available only if warehouse type is set to s3
-        .Auth(
-            {"BASIC", "TOKEN", "SERVICE_ACCOUNT"},
-            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
-        )
+        .Auth({ "BASIC", "TOKEN", "SERVICE_ACCOUNT" }, GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3))
         // DataBase is a required field
         .Property(WAREHOUSE_DB, GetRequiredValidator())
         // Tls is an optional field
         .Property(WAREHOUSE_TLS)
         // Warehouse type is a required field and can be equal only to "s3"
-        .Property(
-            WAREHOUSE_TYPE,
-            GetIsInListValidator({VALUE_S3}, true)
-        )
+        .Property(WAREHOUSE_TYPE, GetIsInListValidator({ VALUE_S3 }, true))
         // If a warehouse type is equal to "s3", fields "s3_endpoint", "s3_region" and "s3_uri" are required
-        .Properties(
-            {
-                WAREHOUSE_S3_ENDPOINT,
-                WAREHOUSE_S3_REGION,
-                WAREHOUSE_S3_URI
-            },
-            GetRequiredValidator(),
-            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
-        )
+        .Properties({ WAREHOUSE_S3_ENDPOINT, WAREHOUSE_S3_REGION, WAREHOUSE_S3_URI }, GetRequiredValidator(),
+            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3))
         // Catalog type is a required field and can be equal only to "hive_metastore" or "hadoop"
-        .Property(
-            CATALOG_TYPE,
-            GetIsInListValidator({VALUE_HIVE_METASTORE, VALUE_HADOOP}, true)
-        )
+        .Property(CATALOG_TYPE, GetIsInListValidator({ VALUE_HIVE_METASTORE, VALUE_HADOOP }, true))
         // If catalog type is equal to "hive_metastore" the field "catalog_hive_metastore_uri" is required
-        .Property(
-            CATALOG_HIVE_METASTORE_URI,
-            GetRequiredValidator(),
-            GetHasSettingCondition(CATALOG_TYPE, VALUE_HIVE_METASTORE)
-        )
+        .Property(CATALOG_HIVE_METASTORE_URI, GetRequiredValidator(), GetHasSettingCondition(CATALOG_TYPE, VALUE_HIVE_METASTORE))
         .HostnamePatterns(hostnamePatternsRegEx)
         .Build();
 }
 
-IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
-                                                         NActors::TActorSystem* actorSystem,
-                                                         size_t pathsLimit,
-                                                         std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
-                                                         bool enableInfer,
-                                                         bool allowLocalFiles,
-                                                         bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<NYql::EDatabaseType>& availableExternalDataSources) {
+IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns, NActors::TActorSystem* actorSystem,
+    size_t pathsLimit, std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory, bool enableInfer, bool allowLocalFiles,
+    bool allExternalDataSourcesAreAvailable, const std::set<NYql::EDatabaseType>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     // clang-format off
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
@@ -209,8 +181,8 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
     },
     allExternalDataSourcesAreAvailable,
-    availableExternalDataSources); 
+    availableExternalDataSources);
     // clang-format on
 }
 
-}
+}   // namespace NKikimr::NExternalSource

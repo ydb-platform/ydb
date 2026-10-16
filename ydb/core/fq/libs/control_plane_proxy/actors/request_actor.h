@@ -6,8 +6,8 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
-#include <ydb/core/fq/libs/control_plane_proxy/utils/config.h>
 #include <ydb/core/fq/libs/control_plane_proxy/events/events.h>
+#include <ydb/core/fq/libs/control_plane_proxy/utils/config.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/rate_limiter/events/control_plane_events.h>
 
@@ -15,23 +15,21 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 
-#include <yql/essentials/public/issue/yql_issue.h>
-
-#include <util/generic/maybe.h>
-
 #include <contrib/libs/fmt/include/fmt/format.h>
+#include <util/generic/maybe.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq::NPrivate {
 
 template <class TRequest, class TResponse, class TRequestProxy, class TResponseProxy>
-class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequest, TResponse, TRequestProxy, TResponseProxy>> {
+class TRequestActor: public NActors::TActorBootstrapped<TRequestActor<TRequest, TResponse, TRequestProxy, TResponseProxy>> {
 protected:
     using TBase = NActors::TActorBootstrapped<TRequestActor>;
+    using TBase::Become;
+    using TBase::PassAway;
+    using TBase::Schedule;
     using TBase::SelfId;
     using TBase::Send;
-    using TBase::PassAway;
-    using TBase::Become;
-    using TBase::Schedule;
 
     typename TRequestProxy::TPtr RequestProxy;
     TControlPlaneProxyConfig Config;
@@ -46,13 +44,9 @@ protected:
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
-    TRequestActor(typename TRequestProxy::TPtr requestProxy,
-                  const TControlPlaneProxyConfig& config,
-                  const TActorId& serviceId,
-                  const TRequestCounters& counters,
-                  const std::function<void(const TDuration&, bool, bool)>& probe,
-                  const TPermissions& availablePermissions,
-                  bool replyWithResponseOnSuccess = true)
+    TRequestActor(typename TRequestProxy::TPtr requestProxy, const TControlPlaneProxyConfig& config, const TActorId& serviceId,
+        const TRequestCounters& counters, const std::function<void(const TDuration&, bool, bool)>& probe,
+        const TPermissions& availablePermissions, bool replyWithResponseOnSuccess = true)
         : RequestProxy(requestProxy)
         , Config(config)
         , ServiceId(serviceId)
@@ -60,7 +54,8 @@ public:
         , StartTime(TInstant::Now())
         , Probe(probe)
         , Permissions(ExtractPermissions(RequestProxy, availablePermissions))
-        , ReplyWithResponseOnSuccess(replyWithResponseOnSuccess) {
+        , ReplyWithResponseOnSuccess(replyWithResponseOnSuccess)
+    {
         Counters.IncInFly();
     }
 
@@ -68,15 +63,13 @@ public:
     void Bootstrap() {
         YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Request actor. Actor",
             {"id", SelfId()});
-        Become(&TRequestActor::StateFunc,
-               Config.RequestTimeout,
-               new NActors::TEvents::TEvWakeup());
-        Send(ControlPlaneConfigActorId(),
-             new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
+        Become(&TRequestActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
+        Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
         OnBootstrap();
     }
 
-    virtual void OnBootstrap() {}
+    virtual void OnBootstrap() {
+    }
 
     STRICT_STFUNC(StateFunc, cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
                   hFunc(TResponse, Handle);
@@ -84,8 +77,7 @@ public:
                   hFunc(TEvControlPlaneConfig::TEvGetTenantInfoResponse, Handle);)
 
     void HandleRetry() {
-        Send(ControlPlaneConfigActorId(),
-             new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
+        Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
 
     void Handle(TEvControlPlaneConfig::TEvGetTenantInfoResponse::TPtr& ev) {
@@ -94,8 +86,7 @@ public:
             SendRequestIfCan();
         } else {
             RetryCount++;
-            Schedule(Now() + Config.ConfigRetryPeriod * (1 << RetryCount),
-                     new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
+            Schedule(Now() + Config.ConfigRetryPeriod * (1 << RetryCount), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
         }
     }
 
@@ -103,9 +94,7 @@ public:
         YDB_LOG_DEBUG_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Request timeout",
             {"request", NKikimr::SecureDebugString(RequestProxy->Get()->Request)});
         NYql::TIssues issues;
-        NYql::TIssue issue =
-            MakeErrorIssue(TIssuesIds::TIMEOUT,
-                           "Request timeout. Try repeating the request later");
+        NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Request timeout. Try repeating the request later");
         issues.AddIssue(issue);
         Counters.IncTimeout();
         ReplyWithError(issues, true);
@@ -116,7 +105,7 @@ public:
         ProcessResponse(response);
     }
 
-    template<typename T>
+    template <typename T>
     void ProcessResponse(const T& response) {
         if (response.Issues) {
             ReplyWithError(response.Issues);
@@ -125,7 +114,7 @@ public:
         }
     }
 
-    template<typename T>
+    template <typename T>
         requires requires(T t) { t.AuditDetails; }
     void ProcessResponse(const T& response) {
         if (response.Issues) {
@@ -143,41 +132,31 @@ public:
         PassAway();
     }
 
-    template<class... TArgs>
+    template <class... TArgs>
     void ReplyWithSuccess(TArgs&&... args) {
         const TDuration delta = TInstant::Now() - StartTime;
         Counters.IncOk();
         Probe(delta, true, false);
         if (ReplyWithResponseOnSuccess) {
-            Send(RequestProxy->Sender,
-                 new TResponseProxy(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType),
-                 0,
-                 RequestProxy->Cookie);
+            Send(RequestProxy->Sender, new TResponseProxy(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType), 0,
+                RequestProxy->Cookie);
         } else {
-            RequestProxy->Get()->Response =
-                std::make_unique<TResponseProxy>(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType);
+            RequestProxy->Get()->Response = std::make_unique<TResponseProxy>(std::forward<TArgs>(args)..., RequestProxy->Get()->SubjectType);
             RequestProxy->Get()->ControlPlaneYDBOperationWasPerformed = true;
             Send(RequestProxy->Forward(ControlPlaneProxyActorId()));
         }
         PassAway();
     }
 
-    virtual bool CanSendRequest() const { return bool(RequestProxy->Get()->TenantInfo); }
+    virtual bool CanSendRequest() const {
+        return bool(RequestProxy->Get()->TenantInfo);
+    }
 
     void SendRequestIfCan() {
         if (CanSendRequest()) {
-            Send(ServiceId,
-                 new TRequest(RequestProxy->Get()->Scope,
-                              RequestProxy->Get()->Request,
-                              RequestProxy->Get()->User,
-                              RequestProxy->Get()->Token,
-                              RequestProxy->Get()->CloudId,
-                              Permissions,
-                              RequestProxy->Get()->Quotas,
-                              RequestProxy->Get()->TenantInfo,
-                              RequestProxy->Get()->ComputeDatabase.GetOrElse({})),
-                 0,
-                 RequestProxy->Cookie);
+            Send(ServiceId, new TRequest(RequestProxy->Get()->Scope, RequestProxy->Get()->Request, RequestProxy->Get()->User,
+                                RequestProxy->Get()->Token, RequestProxy->Get()->CloudId, Permissions, RequestProxy->Get()->Quotas,
+                                RequestProxy->Get()->TenantInfo, RequestProxy->Get()->ComputeDatabase.GetOrElse({})), 0, RequestProxy->Cookie);
         }
     }
 
@@ -187,30 +166,22 @@ public:
     }
 };
 
-class TCreateQueryRequestActor :
-    public TRequestActor<TEvControlPlaneStorage::TEvCreateQueryRequest,
-                         TEvControlPlaneStorage::TEvCreateQueryResponse,
-                         TEvControlPlaneProxy::TEvCreateQueryRequest,
-                         TEvControlPlaneProxy::TEvCreateQueryResponse> {
-
+class TCreateQueryRequestActor
+    : public TRequestActor<TEvControlPlaneStorage::TEvCreateQueryRequest, TEvControlPlaneStorage::TEvCreateQueryResponse,
+          TEvControlPlaneProxy::TEvCreateQueryRequest, TEvControlPlaneProxy::TEvCreateQueryResponse> {
     bool QuoterResourceCreated = false;
 
 public:
-    using TBaseRequestActor = TRequestActor<TEvControlPlaneStorage::TEvCreateQueryRequest,
-                                            TEvControlPlaneStorage::TEvCreateQueryResponse,
-                                            TEvControlPlaneProxy::TEvCreateQueryRequest,
-                                            TEvControlPlaneProxy::TEvCreateQueryResponse>;
+    using TBaseRequestActor = TRequestActor<TEvControlPlaneStorage::TEvCreateQueryRequest, TEvControlPlaneStorage::TEvCreateQueryResponse,
+        TEvControlPlaneProxy::TEvCreateQueryRequest, TEvControlPlaneProxy::TEvCreateQueryResponse>;
 
-    TCreateQueryRequestActor(typename TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr requestProxy,
-                            const TControlPlaneProxyConfig& config,
-                            const TActorId& serviceId,
-                            const TRequestCounters& counters,
-                            const TRequestCommonCountersPtr& rateLimiterCounters,
-                            const std::function<void(const TDuration&, bool, bool)>& probe,
-                            const TPermissions& availablePermissions,
-                            bool replyWithResponseOnSuccess = true)
+    TCreateQueryRequestActor(typename TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr requestProxy, const TControlPlaneProxyConfig& config,
+        const TActorId& serviceId, const TRequestCounters& counters, const TRequestCommonCountersPtr& rateLimiterCounters,
+        const std::function<void(const TDuration&, bool, bool)>& probe, const TPermissions& availablePermissions,
+        bool replyWithResponseOnSuccess = true)
         : TBaseRequestActor(requestProxy, config, serviceId, counters, probe, availablePermissions, replyWithResponseOnSuccess)
-        , RateLimiterCounters(rateLimiterCounters) {
+        , RateLimiterCounters(rateLimiterCounters)
+    {
     }
 
     STFUNC(StateFunc) {
@@ -223,9 +194,8 @@ public:
     }
 
     bool ShouldCreateRateLimiter() const {
-        return RequestProxy->Get()->Quotas
-                && (RequestProxy->Get()->Request.content().type() == FederatedQuery::QueryContent::STREAMING
-                    || !Config.ComputeConfig.YdbComputeControlPlaneEnabled(RequestProxy->Get()->Scope));
+        return RequestProxy->Get()->Quotas && (RequestProxy->Get()->Request.content().type() == FederatedQuery::QueryContent::STREAMING ||
+                                                  !Config.ComputeConfig.YdbComputeControlPlaneEnabled(RequestProxy->Get()->Scope));
     }
 
     void HandleTimeout() {
@@ -249,22 +219,18 @@ public:
 
     void SendCreateRateLimiterResourceRequest() {
         if (auto quotaIt = RequestProxy->Get()->Quotas->find(QUOTA_CPU_PERCENT_LIMIT); quotaIt != RequestProxy->Get()->Quotas->end()) {
-            const double cloudLimit = static_cast<double>(quotaIt->second.Limit.Value *
-                                                          10); // percent -> milliseconds
+            const double cloudLimit = static_cast<double>(quotaIt->second.Limit.Value * 10);   // percent -> milliseconds
             YDB_LOG_TRACE_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Create rate limiter resource for cloud with limit ms",
                 {"cloudLimit", cloudLimit});
             RateLimiterCreationInProgress = true;
             RateLimiterCounters->InFly->Inc();
             StartRateLimiterCreation = TInstant::Now();
-            Send(RateLimiterControlPlaneServiceId(),
-                 new TEvRateLimiter::TEvCreateResource(RequestProxy->Get()->CloudId, cloudLimit));
+            Send(RateLimiterControlPlaneServiceId(), new TEvRateLimiter::TEvCreateResource(RequestProxy->Get()->CloudId, cloudLimit));
         } else {
             RateLimiterCounters->Error->Inc();
             NYql::TIssues issues;
-            NYql::TIssue issue =
-                MakeErrorIssue(TIssuesIds::INTERNAL_ERROR,
-                               TStringBuilder() << "CPU quota for cloud \"" << RequestProxy->Get()->CloudId
-                                                << "\" was not found");
+            NYql::TIssue issue = MakeErrorIssue(
+                TIssuesIds::INTERNAL_ERROR, TStringBuilder() << "CPU quota for cloud \"" << RequestProxy->Get()->CloudId << "\" was not found");
             issues.AddIssue(issue);
             YDB_LOG_WARN_COMP(::NKikimrServices::YQ_CONTROL_PLANE_PROXY, "Failed to get cpu quota for cloud",
                 {"cloudId", RequestProxy->Get()->CloudId});
@@ -304,4 +270,4 @@ private:
     TRequestCommonCountersPtr RateLimiterCounters;
 };
 
-} // namespace NFq::NPrivate
+}   // namespace NFq::NPrivate

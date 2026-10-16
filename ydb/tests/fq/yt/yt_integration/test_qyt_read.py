@@ -10,7 +10,6 @@ import ydb
 from .yt_in_docker.yt_client import YtClient
 from ydb.tests.fq.streaming_common.common import Kikimr, get_ydb_config, set_test_env
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -64,14 +63,20 @@ def entity_name():
     return wrapper
 
 
-@pytest.mark.parametrize("kikimr,partition_count,row_count,streaming", [
-    ({"enable_qyt": True}, 1, 0, False),
-    ({"enable_qyt": True}, 1, 5, False),
-    ({"enable_qyt": True}, 3, 5, False),
-    ({"enable_qyt": True}, 1, 0, True),
-    ({"enable_qyt": False}, 1, 0, False),
-], indirect=["kikimr"])
-def test_read_queue_via_federated_sql(yt: YtClient, kikimr: Kikimr, entity_name, partition_count, row_count, streaming) -> None:
+@pytest.mark.parametrize(
+    "kikimr,partition_count,row_count,streaming",
+    [
+        ({"enable_qyt": True}, 1, 0, False),
+        ({"enable_qyt": True}, 1, 5, False),
+        ({"enable_qyt": True}, 3, 5, False),
+        ({"enable_qyt": True}, 1, 0, True),
+        ({"enable_qyt": False}, 1, 0, False),
+    ],
+    indirect=["kikimr"],
+)
+def test_read_queue_via_federated_sql(
+    yt: YtClient, kikimr: Kikimr, entity_name, partition_count, row_count, streaming
+) -> None:
     """Read every retained row, including empty queues and multiple partitions."""
     logger.info("=== TEST START ===")
     queue_name = entity_name("queue")
@@ -154,7 +159,10 @@ def test_read_queue_via_federated_sql(yt: YtClient, kikimr: Kikimr, entity_name,
             query_name = entity_name("streaming_query")
             kikimr.ydb_client.query(f"CREATE TOPIC `{output_topic}`")
             try:
-                with pytest.raises(ydb.issues.GenericError, match="Reading from data source yt is not supported now for streaming queries"):
+                with pytest.raises(
+                    ydb.issues.GenericError,
+                    match="Reading from data source yt is not supported now for streaming queries",
+                ):
                     kikimr.ydb_client.query(f"""
                         CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                             INSERT INTO `{output_topic}`
@@ -184,18 +192,20 @@ def test_read_queue_via_federated_sql(yt: YtClient, kikimr: Kikimr, entity_name,
         else:
             all_rows = result.rows
 
-        actual_data = sorted([
-            row["Data"].decode('utf-8') if isinstance(row, dict) and "Data" in row
-            else row.get("data", "") if isinstance(row, dict)
-            else str(row.items[0].text_value, 'utf-8')
-            for row in all_rows
-        ])
+        actual_data = sorted(
+            [
+                (
+                    row["Data"].decode('utf-8')
+                    if isinstance(row, dict) and "Data" in row
+                    else row.get("data", "") if isinstance(row, dict) else str(row.items[0].text_value, 'utf-8')
+                )
+                for row in all_rows
+            ]
+        )
         expected_data = sorted([row["data"] for row in test_rows])
         logger.info(f"STEP 7: Actual data: {actual_data}")
         logger.info(f"STEP 7: Expected data: {expected_data}")
-        assert actual_data == expected_data, (
-            f"Federated SQL returned {actual_data}, expected {expected_data}"
-        )
+        assert actual_data == expected_data, f"Federated SQL returned {actual_data}, expected {expected_data}"
         logger.info("=== TEST PASSED ===")
 
     finally:

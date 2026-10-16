@@ -50,17 +50,22 @@ class TestS3(TestYdsBase):
             if not nullable:
                 input_filename = f'large_timestamp_to_{target_type}_not_null.parquet'
                 non_null_table = table.set_column(
-                    1, pa.field('ts', pa.timestamp('us'), nullable=False),
+                    1,
+                    pa.field('ts', pa.timestamp('us'), nullable=False),
                     pa.array([1712059260000000 + i for i in range(row_count)], type=pa.timestamp('us')),
                 )
                 pq.write_table(non_null_table, yatest.common.work_path(input_filename), row_group_size=row_count)
-                s3_helpers.create_bucket_and_upload_file(input_filename, s3.s3_url, "fbucket", yatest.common.work_path())
+                s3_helpers.create_bucket_and_upload_file(
+                    input_filename, s3.s3_url, "fbucket", yatest.common.work_path()
+                )
             sql = f'''
                 SELECT COUNT(*), COUNT(ts), MIN(ts), MAX(ts), SUM(id), SUM(LENGTH(ts))
                 FROM `{storage_connection_name}`.`/{input_filename}`
                 WITH (FORMAT="parquet", SCHEMA=(id Int64 NOT NULL, ts {target_type}{not_null}));
             '''
-            query_id = client.create_query("large_timestamp", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+            query_id = client.create_query(
+                "large_timestamp", sql, type=fq.QueryContent.QueryType.ANALYTICS
+            ).result.query_id
             client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
             rows = client.get_result_data(query_id, limit=1).result.result_set.rows
             assert len(rows) == 1
@@ -400,9 +405,7 @@ Pear;15;33'''
         )
         return storage_binding_name
 
-    def create_source_date_binding(
-        self, unique_prefix, client, connection_id, filename, type_format, format
-    ):
+    def create_source_date_binding(self, unique_prefix, client, connection_id, filename, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -420,9 +423,7 @@ Pear;15;33'''
         )
         return storage_binding_name
 
-    def create_sink_date_binding(
-        self, unique_prefix, client, connection_id, prefix, type_format, format
-    ):
+    def create_sink_date_binding(self, unique_prefix, client, connection_id, prefix, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -1013,13 +1014,9 @@ Pear;15;33'''
                     id
                 FROM bindings.{}
             )
-            '''.format(
-            binding_for_names_name, binding_for_ids_name
-        )
+            '''.format(binding_for_names_name, binding_for_ids_name)
 
-        query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)

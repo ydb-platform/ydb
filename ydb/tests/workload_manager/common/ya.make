@@ -1,5 +1,9 @@
 PY3_LIBRARY()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(__init__.py)
+
     PY_SRCS (
         workload_manager.py
 

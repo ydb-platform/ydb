@@ -1,7 +1,7 @@
 name: Collect-analytics-fast-run
 on:
   schedule:
-    - cron: "*/30 * * * *"  # Every 30 min
+    - cron: "0 * * * *"  # Once an hour
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -11,6 +11,10 @@ on:
         description: "GitHub job metrics: all or a comma-separated workflow file list"
         type: string
         default: "all"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 defaults:
   run:

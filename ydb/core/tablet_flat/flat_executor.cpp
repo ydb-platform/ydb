@@ -2950,7 +2950,7 @@ void TExecutor::MakeLogSnapshot() {
         version->SetHead(ui32(NTable::ECompatibility::Edge));
     }
 
-    LogicAlter->SnapToLog(snap);
+    LogicAlter->SnapToLog(snap, *commit);
     LogicRedo->SnapToLog(snap);
 
     bool haveTxStatus = false;
@@ -4028,6 +4028,12 @@ void TExecutor::UpdateUsedTabletMemory() {
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
+    if (GcLogic && Counters) {
+        if (const ui64 dropped = GcLogic->TakeSentinelDroppedMarks()) {
+            Counters->Cumulative()[TExecutorCounters::GC_SENTINEL_DROPPED_MARKS].Increment(dropped);
+        }
+    }
+
     TAutoPtr<TTabletCountersBase> executorCounters;
     TAutoPtr<TTabletCountersBase> externalTabletCounters;
 

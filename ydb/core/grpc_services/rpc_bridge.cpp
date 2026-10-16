@@ -24,6 +24,10 @@ using namespace NActors;
 using namespace Ydb;
 
 namespace {
+    // cluster got converted into bridged one while this node was running without BridgeConfig
+    const TString NoBridgeConfigError = "Bridge cluster state is available, but this node runs without BridgeConfig;"
+        " send the request to another node or restart this one with BridgeConfig";
+
     Ydb::Bridge::PileState::State GetPublicState(const NKikimrBridge::TClusterState& from, TBridgePileId pileId) {
         if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
             return Ydb::Bridge::PileState::PRIMARY;
@@ -154,8 +158,14 @@ private:
             return;
         }
 
-        THashMap<TString, TBridgePileId> nameToId;
         const auto& bridgeInfo = ev->Get()->BridgeInfo;
+        if (!bridgeInfo) {
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, NoBridgeConfigError, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                self->ActorContext());
+            return;
+        }
+
+        THashMap<TString, TBridgePileId> nameToId;
         for (const auto& pile : bridgeInfo->Piles) {
             nameToId.emplace(pile.Name, pile.BridgePileId);
         }
@@ -358,7 +368,10 @@ private:
             return;
         }
 
-        if (config->HasClusterState()) {
+        if (config->HasClusterState() && !bridgeInfo) {
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, NoBridgeConfigError, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                self->ActorContext());
+        } else if (config->HasClusterState()) {
             Ydb::Bridge::GetClusterStateResult result;
             CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, result);
             CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), result);

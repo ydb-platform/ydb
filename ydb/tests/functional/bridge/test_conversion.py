@@ -50,6 +50,13 @@ class TestBridgeConversion(object):
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
 
+        # dynamic node starts with the initial configuration and is never restarted, so it keeps running without
+        # bridge config
+        cls.database_name = '/Root/dynamic'
+        cls.cluster.create_database(cls.database_name, storage_pool_units_count={'rot': 1})
+        cls.slots = cls.cluster.register_and_start_slots(cls.database_name, count=1)
+        cls.cluster.wait_tenant_up(cls.database_name)
+
         node = cls.cluster.nodes[1]
         cls.swagger_client = SwaggerClient(node.host, node.mon_port)
         cls.bridge_client = BridgeClient(node.host, node.port)
@@ -158,8 +165,16 @@ class TestBridgeConversion(object):
         for node_id in node_ids[half:]:
             self.restart_node(node_id, table_path, tablet_ids)
 
+        # running dynamic node without bridge config blocks the conversion too
         operation = self.convert()
-        assert_that(operation.status == StatusIds.SUCCESS)
+        assert_that(operation.status != StatusIds.SUCCESS)
+        assert_that("without BridgeConfig" in str(operation.issues))
+        self.cluster.unregister_and_stop_slots(self.slots)
+
+        def converted():
+            operation = self.convert()
+            return operation.status == StatusIds.SUCCESS
+        assert_that(wait_for(converted, timeout_seconds=60))
 
         def conversion_finished():
             status, result = self.get_cluster_state()

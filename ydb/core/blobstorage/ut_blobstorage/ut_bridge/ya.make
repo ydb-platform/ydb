@@ -5,6 +5,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
     FORK_SUBTESTS()
 
     SRCS(
+        bridge_assimilation.cpp
         bridge_data_kind.cpp
         bridge_failover.cpp
         bridge_get.cpp

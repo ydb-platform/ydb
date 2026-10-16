@@ -4163,6 +4163,12 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
             TKikimrRunner kikimr(settings);
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+            // The default wakeup is 60s and is scheduled when the shard starts. Set it before CREATE,
+            // or a 30s wait ends before the first compaction check.
+            csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+            csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
             ExecQuery(kikimr, true, R"(
                 CREATE TABLE `/Root/complexLike` (
@@ -4186,10 +4192,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             };
             // Inserted portions have no ngram blobs until compaction rebuilds them.
             if (hintsEnabled) {
-                csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-                csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-                csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-                csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+                const auto compactionsBefore = csController->GetCompactionStartedCounter().Val();
                 for (int pass = 0; pass < 2; ++pass) {
                     runDml(TStringBuilder() << R"(
                         $rows = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
@@ -4199,7 +4202,11 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                         FROM AS_TABLE($rows);
                     )");
                 }
-                UNIT_ASSERT_C(csController->WaitCompactions(TDuration::Seconds(30)), "ngram portions were not compacted");
+                // WaitCompactions only counts compactions that start during the wait. A 1.5M upsert
+                // can finish compaction before that wait begins.
+                if (csController->GetCompactionStartedCounter().Val() == compactionsBefore) {
+                    UNIT_ASSERT_C(csController->WaitCompactions(TDuration::Seconds(30)), "ngram portions were not compacted");
+                }
             }
             runDml(R"(
                 UPSERT INTO `/Root/complexLike` (key, value) VALUES

@@ -3240,26 +3240,13 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%aaa%bbb%')", scanSettings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto result = CollectStreamResult(it);
-        NJson::TJsonValue plan;
-        UNIT_ASSERT(NJson::ReadJsonTree(*result.PlanJson, &plan, true));
-        TString ssa;
-        std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
-            if (node.IsMap()) {
-                for (const auto& [key, value] : node.GetMapSafe()) {
-                    if (key == "SsaProgram") {
-                        ssa += value.GetStringRobust();
-                    }
-                    walk(value);
-                }
-            } else if (node.IsArray()) {
-                for (const auto& value : node.GetArraySafe()) {
-                    walk(value);
-                }
-            }
-        };
-        walk(plan);
-        UNIT_ASSERT_C(ssa.Contains("PatternHint"), ssa);
-        UNIT_ASSERT_C(ssa.Contains("\"CaseSensitive\":false") || ssa.Contains("\"CaseSensitive\": false"), ssa);
+        // The new optimizer explain plan has no SsaProgram key. The hint is a binary atom on
+        // KqpOlapApply. "%aaa%bbb%" encodes as that hex; a plain String literal does not.
+        const TString ast(result.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.Contains("KqpOlapApply"), ast);
+        UNIT_ASSERT_C(ast.Contains("x\"256161612562626225\""), ast);
+        // CaseSensitive false is a quoted atom. A bare 'false is not how this printer emits it.
+        UNIT_ASSERT_C(ast.Contains("'\"false\""), ast);
     }
 
 }

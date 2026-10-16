@@ -1578,8 +1578,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_C(ilike.Contains("\"CaseSensitive\":false") || ilike.Contains("\"CaseSensitive\": false"), ilike);
         const auto negated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%')");
         UNIT_ASSERT_C(!negated.Contains("PatternHint"), negated);
+        // OR is one KqpOlapApply. A hint on that kernel would be wrong: true does not
+        // imply either pattern. Each branch would need its own apply before it can carry a hint.
         const auto disjunction = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' OR message LIKE '%ccc%ddd%')");
-        UNIT_ASSERT_C(disjunction.Contains("PatternHint"), disjunction);
+        UNIT_ASSERT_C(!disjunction.Contains("PatternHint"), disjunction);
         const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%x#_%y%' ESCAPE '#')");
         UNIT_ASSERT_C(escaped.Contains("PatternHint"), escaped);
         const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();

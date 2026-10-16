@@ -82,38 +82,24 @@ jobs:
 
         # 30s of the ydb archive on both paths at once. Speed is the last 5s that still received bytes.
         measure() {
-          local url out pid i now n last back start end bps
-          url=$1
+          local url=$1 out pid i now n last back
           out=$(mktemp /tmp/gh-probe.XXXXXX)
-          local -a samples=(0)
+          local -a s=(0)
           curl -L --http1.1 --max-time 30 -o "$out" -fsS "$url" >/dev/null &
           pid=$!
           for i in $(seq 1 30); do
             sleep 1
             now=$(wc -c < "$out" | tr -d ' ' || true)
-            samples+=("${now:-0}")
+            s+=("${now:-0}")
           done
           kill "$pid" 2>/dev/null || true
           wait "$pid" 2>/dev/null || true
           rm -f "$out"
-          n=${#samples[@]}
-          last=$((n - 1))
-          while [ "$last" -gt 0 ] && [ "${samples[$last]}" -eq "${samples[$((last - 1))]}" ]; do
-            last=$((last - 1))
-          done
-          if [ "$last" -lt 1 ]; then
-            end=${samples[0]:-0}
-            bps=0
-          else
-            back=5
-            if [ "$last" -lt 5 ]; then
-              back=$last
-            fi
-            end=${samples[$last]:-0}
-            start=${samples[$((last - back))]:-0}
-            bps=$(( (end - start) / back ))
-          fi
-          echo "$end $bps"
+          n=${#s[@]}; last=$((n - 1))
+          while [ "$last" -gt 0 ] && [ "${s[$last]}" -eq "${s[$((last - 1))]}" ]; do last=$((last - 1)); done
+          if [ "$last" -lt 1 ]; then echo "0 0"; return; fi
+          back=5; [ "$last" -lt 5 ] && back=$last
+          echo "${s[$last]} $(( (${s[$last]} - ${s[$((last - back))]}) / back ))"
         }
 
         megabytes() {

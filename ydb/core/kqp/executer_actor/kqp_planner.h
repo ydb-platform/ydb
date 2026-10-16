@@ -91,6 +91,7 @@ public:
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
     bool CompletedCA(ui64 taskId, TActorId computeActor);
     void TaskNotStarted(ui64 taskId);
+    void RequestNotStarted(ui32 requestId);
     TProgressStat::TEntry CalculateConsumptionUpdate();
     void ShiftConsumption();
     void Submit();

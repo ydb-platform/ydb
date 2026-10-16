@@ -6000,6 +6000,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NBackground::TEvListRequest, Handle);
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
+        HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);

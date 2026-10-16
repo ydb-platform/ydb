@@ -104,6 +104,11 @@ namespace NKikimr {
         }
 
         auto prevInfo = std::exchange(Info, std::move(info));
+        IsBlobDepotProxy = IsBlobDepotProxy || (Info && Info->BlobDepotId);
+        if (IsBlobDepotProxy && IsDormant) {
+            SetDormant(false);
+            ScheduleDeadlineCheck();
+        }
         if (Info) {
             if (Topology) {
                 Y_DEBUG_ABORT_UNLESS(Topology->EqualityCheck(Info->GetTopology()));
@@ -279,6 +284,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::Bootstrap() {
+        LastRequestActivity = TActivationContext::Monotonic();
         if (IsEjected) {
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId
                     << " HasInvalidGroupId# " << HasInvalidGroupId() << " Bootstrap -> StateEjected Marker# DSP42");
@@ -295,7 +301,7 @@ namespace NKikimr {
             StopGetBatchingEvent = static_cast<TEventHandle<TEvStopBatchingGetRequests>*>(
                     new IEventHandle(SelfId(), SelfId(), new TEvStopBatchingGetRequests));
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(NodeLayoutInfo, {}), std::exchange(StoragePoolCounters, {}));
-            CheckDeadlines();
+            ScheduleDeadlineCheck();
         }
     }
 
@@ -356,14 +362,22 @@ namespace NKikimr {
 
             Mon.Reset(new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, NodeMon, limited));
             BSProxyCtx.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
-            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId()));
+            MonActor = RegisterWithSameMailbox(CreateBlobStorageGroupProxyMon(Mon, GroupId.GetRawId(), Info, SelfId(),
+                    IsDormant));
         }
     }
 
     void TBlobStorageGroupProxy::Handle(TEvRequestProxySessionsState::TPtr &ev) {
+<<<<<<< HEAD
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "RequestProxySessionsState Group# " << GroupId
                 << " Marker# DSP59");
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
+=======
+        YDB_LOG_DEBUG("RequestProxySessionsState",
+            {"group", GroupId},
+            {"marker", "DSP59"});
+        Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr, IsDormant));
+>>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
     }
 
 #define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info) \

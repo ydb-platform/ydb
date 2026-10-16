@@ -1059,8 +1059,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = kikimr.RunCall([&] {
                 return tableClient.BulkUpsert("/Root/AddNonColumnDoesnotReturnInternalError", rowsBuilder.Build()).GetValueSync();
             });
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         runtime.WaitFuture(alterFuture);
@@ -1744,8 +1743,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -2862,8 +2860,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/SetDropDefaultBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: DefaultCol");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -5781,6 +5778,216 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
         validateMain(R"([[[1];["idx2"];["default_value"]];[[2];["idx3"];#]])");
         validateIndex("idx3", R"([[[2];#]])");
+    }
+
+    // Scenario_1: New row + column omitted → DEFAULT applied
+    Y_UNIT_TEST(BulkUpsertNullableDefault_Scenario1_NewRow_ColumnOmitted) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/TestScenario1` (
+                    Key Utf8,
+                    Value Utf8 DEFAULT "default_value"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(UPSERT INTO `/Root/TestScenario1` (Key) VALUES ("sql_row"))";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem().BeginStruct()
+                .AddMember("Key").Utf8("bulk_row")
+                .EndStruct();
+            rows.EndList();
+            auto result = tableClient.BulkUpsert("/Root/TestScenario1", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // Verify both have DEFAULT
+        {
+            auto query = R"(SELECT Key, Value FROM `/Root/TestScenario1` ORDER BY Key)";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[["bulk_row"];["default_value"]];[["sql_row"];["default_value"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Scenario_2: New row + column = NULL → NULL written
+    Y_UNIT_TEST(BulkUpsertNullableDefault_Scenario2_NewRow_ColumnNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/TestScenario2` (
+                    Key Utf8,
+                    Value Utf8 DEFAULT "default_value"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(UPSERT INTO `/Root/TestScenario2` (Key, Value) VALUES ("sql_row", NULL))";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem().BeginStruct()
+                .AddMember("Key").Utf8("bulk_row")
+                .AddMember("Value").OptionalUtf8(std::nullopt)
+                .EndStruct();
+            rows.EndList();
+            auto result = tableClient.BulkUpsert("/Root/TestScenario2", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // Verify both have NULL
+        {
+            auto query = R"(SELECT Key, Value FROM `/Root/TestScenario2` ORDER BY Key)";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[["bulk_row"];#];[["sql_row"];#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Scenario_3: Existing row + column omitted → preserve existing value
+    Y_UNIT_TEST(BulkUpsertNullableDefault_Scenario3_ExistingRow_ColumnOmitted) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/TestScenario3` (
+                    Key Utf8,
+                    Value Utf8 DEFAULT "default_value"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(UPSERT INTO `/Root/TestScenario3` (Key, Value) VALUES ("sql_row", "existing_sql"), ("bulk_row", "existing_bulk"))";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(UPSERT INTO `/Root/TestScenario3` (Key) VALUES ("sql_row"))";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem().BeginStruct()
+                .AddMember("Key").Utf8("bulk_row")
+                .EndStruct();
+            rows.EndList();
+            auto result = tableClient.BulkUpsert("/Root/TestScenario3", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // Verify: both preserve existing values
+        {
+            auto query = R"(SELECT Key, Value FROM `/Root/TestScenario3` ORDER BY Key)";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // Both should preserve existing values (full agreement between SQL UPSERT and BulkUpsert)
+            CompareYson(R"([[["bulk_row"];["existing_bulk"]];[["sql_row"];["existing_sql"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    // Scenario_4: Existing row + column = NULL → NULL written
+    Y_UNIT_TEST(BulkUpsertNullableDefault_Scenario4_ExistingRow_ColumnNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
+            .SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/TestScenario4` (
+                    Key Utf8,
+                    Value Utf8 DEFAULT "default_value"u,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(UPSERT INTO `/Root/TestScenario4` (Key, Value) VALUES ("sql_row", "existing_sql"), ("bulk_row", "existing_bulk"))";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(UPSERT INTO `/Root/TestScenario4` (Key, Value) VALUES ("sql_row", NULL))";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem().BeginStruct()
+                .AddMember("Key").Utf8("bulk_row")
+                .AddMember("Value").OptionalUtf8(std::nullopt)
+                .EndStruct();
+            rows.EndList();
+            auto result = tableClient.BulkUpsert("/Root/TestScenario4", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        // Verify both have NULL
+        {
+            auto query = R"(SELECT Key, Value FROM `/Root/TestScenario4` ORDER BY Key)";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[["bulk_row"];#];[["sql_row"];#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 

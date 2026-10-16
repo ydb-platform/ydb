@@ -86,6 +86,8 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     // Prepare (id, Type) vector for value columns
     TVector<NTable::TTag> tagsForSelect;
     TVector<std::pair<ui32, NScheme::TTypeInfo>> valueCols;
+    const ui32 defaultColumnCount = record.GetDefaultColumnCount();
+    
     for (const auto& colId : record.GetRowScheme().GetValueColumnIds()) {
         auto* col = tableInfo.Columns.FindPtr(colId);
         if (!col) {
@@ -141,7 +143,10 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             return true;
         }
 
-        if (upsertIfExists) {
+        const bool needRowLookup = upsertIfExists || defaultColumnCount;
+        bool rowExists = false;
+
+        if (needRowLookup) {
             rowState.Init(tagsForSelect.size());
             auto ready = userDb.SelectRow(fullTableId, key, tagsForSelect, rowState);
             if (ready == NTable::EReady::Page) {
@@ -152,15 +157,27 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 continue;
             }
 
-            if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Absent) {
+            rowExists = (rowState != NTable::ERowOp::Erase && rowState != NTable::ERowOp::Absent);
+
+            if (upsertIfExists && !rowExists) {
                 // in upsert if exists mode we must be sure that we insert only existing rows.
                 continue;
             }
         }
 
         value.clear();
-        size_t vi = 0;
-        for (const auto& vt : valueCols) {
+        size_t valueColsEnd = valueCols.size();
+        if (rowExists && defaultColumnCount) {
+            if (defaultColumnCount > valueCols.size()) {
+                SetError(NKikimrTxDataShard::TError::SCHEME_ERROR,
+                    Sprintf("Default column count (%" PRIu32 ") exceeds value column count (%" PRISZT ")",
+                        defaultColumnCount, valueCols.size()));
+                return true;
+            }
+            valueColsEnd = valueCols.size() - defaultColumnCount;
+        }
+        for (size_t vi = 0; vi < valueColsEnd; ++vi) {
+            const auto& vt = valueCols[vi];
             if (valueCells.GetCells()[vi].Size() > NLimits::MaxWriteValueSize) {
                 SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
                          Sprintf("Row cell size of %" PRISZT " bytes is larger than the allowed threshold %" PRIu64,
@@ -169,7 +186,6 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second.GetTypeId())));
-            ++vi;
         }
 
         if (!writeToTableShadow) {

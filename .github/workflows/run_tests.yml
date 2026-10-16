@@ -309,7 +309,7 @@ jobs:
           fi
 
       - name: Probe GitHub speed
-        if: inputs.git_github_proxy && vars.GH_PROXY_URL != ''
+        if: vars.GH_PROXY_URL != '' && (github.event_name == 'workflow_dispatch' || inputs.git_github_proxy)
         env:
           GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
         shell: bash
@@ -391,7 +391,7 @@ jobs:
           ref: ${{ matrix.branch }}
 
       - name: Drop GitHub proxy
-        if: inputs.git_github_proxy && vars.GH_PROXY_URL != ''
+        if: vars.GH_PROXY_URL != '' && (github.event_name == 'workflow_dispatch' || inputs.git_github_proxy)
         shell: bash
         run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
 

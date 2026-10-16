@@ -35,23 +35,45 @@ jobs:
           exit 0
         fi
 
-        archive=https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        archive=https://github.com/ydb-platform/ydb/archive/refs/heads/main.tar.gz
 
-        # Bytes, bytes/sec, seconds. The archive is about 1 GB, so 30s does not finish it.
+        # Total bytes, and bytes/sec over the last 5s. The average from the start hides the slow tail.
         measure() {
-          curl -L --http2 --max-time 30 -o /dev/null -s \
-            -w '%{size_download} %{speed_download} %{time_total}' \
-            "$1" 2>/dev/null || true
+          local out pid i now n end start back bps
+          out=$(mktemp)
+          curl -L --http2 --max-time 30 -o "$out" -s "$1" &
+          pid=$!
+          local -a samples=()
+          for i in $(seq 1 30); do
+            sleep 1
+            now=$(wc -c < "$out" | tr -d ' ')
+            samples+=("${now:-0}")
+          done
+          kill "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+          rm -f "$out"
+          n=${#samples[@]}
+          end=${samples[$((n - 1))]:-0}
+          back=5
+          if [ "$n" -le 5 ]; then
+            back=$((n - 1))
+          fi
+          if [ "$back" -lt 1 ]; then
+            back=1
+          fi
+          start=${samples[$((n - 1 - back))]:-0}
+          bps=$(( (end - start) / back ))
+          echo "$end $bps"
         }
 
         megabytes() {
-          awk -v bytes="${1:-0}" -v digits="$2" 'BEGIN { printf "%.*f", digits, (bytes + 0) / 1000000 }'
+          awk -v bytes="${1:-0}" 'BEGIN { printf "%.2f", (bytes + 0) / 1000000 }'
         }
 
-        read -r direct_bytes direct_bps direct_seconds <<< "$(measure "$archive")" || true
-        read -r proxy_bytes proxy_bps proxy_seconds <<< "$(measure "${proxy_url}/${archive}")" || true
+        read -r direct_bytes direct_tail <<< "$(measure "$archive")" || true
+        read -r proxy_bytes proxy_tail <<< "$(measure "${proxy_url}/${archive}")" || true
 
-        faster=$(awk -v direct="${direct_bps:-0}" -v proxy="${proxy_bps:-0}" 'BEGIN {
+        faster=$(awk -v direct="${direct_tail:-0}" -v proxy="${proxy_tail:-0}" 'BEGIN {
           print (proxy + 0 > direct + 0) ? "proxy" : "github"
         }')
         use_proxy=false
@@ -59,7 +81,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "GitHub $(megabytes "${direct_bytes:-0}" 1) MB in ${direct_seconds:-0}s, $(megabytes "${direct_bps:-0}" 2) MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}" 1) MB in ${proxy_seconds:-0}s, $(megabytes "${proxy_bps:-0}" 2) MB/s; use_proxy=${use_proxy}"
+        echo "GitHub $(megabytes "${direct_bytes:-0}") MB, last 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
 
         if [ "$use_proxy" = true ]; then
           {
@@ -203,23 +225,45 @@ jobs:
           exit 0
         fi
 
-        archive=https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+        archive=https://github.com/ydb-platform/ydb/archive/refs/heads/main.tar.gz
 
-        # Bytes, bytes/sec, seconds. The archive is about 1 GB, so 30s does not finish it.
+        # Total bytes, and bytes/sec over the last 5s. The average from the start hides the slow tail.
         measure() {
-          curl -L --http2 --max-time 30 -o /dev/null -s \
-            -w '%{size_download} %{speed_download} %{time_total}' \
-            "$1" 2>/dev/null || true
+          local out pid i now n end start back bps
+          out=$(mktemp)
+          curl -L --http2 --max-time 30 -o "$out" -s "$1" &
+          pid=$!
+          local -a samples=()
+          for i in $(seq 1 30); do
+            sleep 1
+            now=$(wc -c < "$out" | tr -d ' ')
+            samples+=("${now:-0}")
+          done
+          kill "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+          rm -f "$out"
+          n=${#samples[@]}
+          end=${samples[$((n - 1))]:-0}
+          back=5
+          if [ "$n" -le 5 ]; then
+            back=$((n - 1))
+          fi
+          if [ "$back" -lt 1 ]; then
+            back=1
+          fi
+          start=${samples[$((n - 1 - back))]:-0}
+          bps=$(( (end - start) / back ))
+          echo "$end $bps"
         }
 
         megabytes() {
-          awk -v bytes="${1:-0}" -v digits="$2" 'BEGIN { printf "%.*f", digits, (bytes + 0) / 1000000 }'
+          awk -v bytes="${1:-0}" 'BEGIN { printf "%.2f", (bytes + 0) / 1000000 }'
         }
 
-        read -r direct_bytes direct_bps direct_seconds <<< "$(measure "$archive")" || true
-        read -r proxy_bytes proxy_bps proxy_seconds <<< "$(measure "${proxy_url}/${archive}")" || true
+        read -r direct_bytes direct_tail <<< "$(measure "$archive")" || true
+        read -r proxy_bytes proxy_tail <<< "$(measure "${proxy_url}/${archive}")" || true
 
-        faster=$(awk -v direct="${direct_bps:-0}" -v proxy="${proxy_bps:-0}" 'BEGIN {
+        faster=$(awk -v direct="${direct_tail:-0}" -v proxy="${proxy_tail:-0}" 'BEGIN {
           print (proxy + 0 > direct + 0) ? "proxy" : "github"
         }')
         use_proxy=false
@@ -227,7 +271,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "GitHub $(megabytes "${direct_bytes:-0}" 1) MB in ${direct_seconds:-0}s, $(megabytes "${direct_bps:-0}" 2) MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}" 1) MB in ${proxy_seconds:-0}s, $(megabytes "${proxy_bps:-0}" 2) MB/s; use_proxy=${use_proxy}"
+        echo "GitHub $(megabytes "${direct_bytes:-0}") MB, last 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
 
         if [ "$use_proxy" = true ]; then
           {

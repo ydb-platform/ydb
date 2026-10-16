@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "ydb/core/protos/blobstorage_ddisk.proto";
+
+package NYdb.NBS.PartitionDirect.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.partition_direct.proto";
+
+enum EDeletedDDiskStatus {
+    DELETED_DDISK_STATUS_REGISTERED = 0; // Registered in the history.
+    DELETED_DDISK_STATUS_IN_PROGRESS = 1; // Taken into work by a tablet.
+    DELETED_DDISK_STATUS_EXECUTED = 2; // Processing completed.
+}
+
+// One DDisk released by a persisted vchunk config update.
+message TDeletedDDiskRecord {
+    uint64 RecordId = 1;
+    uint32 VChunkIndex = 2;
+    uint32 TabletGeneration = 3;
+    uint64 TimestampUs = 4;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 5;
+    EDeletedDDiskStatus Status = 6;
+    // Generation of the tablet that took this record into work.
+    uint32 ProcessingTabletGeneration = 7;
+}

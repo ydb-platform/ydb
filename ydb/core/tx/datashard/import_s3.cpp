@@ -470,7 +470,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                     return status;
                 }
             }
-            bool lastEmptyBlock = false; // The case of empty file
+            bool lastEmptyBlock = false;
             if (NewData) {
                 try {
                     NewData = false;
@@ -479,16 +479,16 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                     const ui64 processedAfter = Deserializer.GetProcessedInputBytes();
                     Y_ENSURE(processedAfter - processedBefore <= FeedUnprocessedBytes);
                     ReadyInputBytes += processedAfter - processedBefore;
-                    if (block) {
-                        if (block->Size()) {
-                            // Data is read by blocks from encrypted file.
-                            // Each block contains at least one row of data with '\n',
-                            // so we will always get some data from DataController.
-                            DataController->Feed(TString(block->Data(), block->Size()), Last);
-                            BytesFedToChild += block->Size();
-                        } else {
-                            lastEmptyBlock = Last;
-                        }
+                    if (block && block->Size()) {
+                        // Data is read by blocks from encrypted file.
+                        // Each block contains at least one row of data with '\n',
+                        // so we will always get some data from DataController.
+                        DataController->Feed(TString(block->Data(), block->Size()), Last);
+                        BytesFedToChild += block->Size();
+                    } else {
+                        // A separately read end marker is authenticated and consumed,
+                        // but GetNextBlock() returns Nothing() for a nonempty file.
+                        lastEmptyBlock = Last && processedAfter > processedBefore;
                     }
                 } catch (const std::exception& ex) {
                     error = ex.what();

@@ -754,6 +754,7 @@ public:
             TTabletId TabletId;
             TString Key;
             TMonotonic StartTime;
+            bool Cancelled = false;
         };
 
         std::unordered_map<TTabletId, TTabletState> TabletStates;
@@ -793,6 +794,15 @@ public:
                 RequestsInFlight.erase(itRequest);
             }
             return tabletId;
+        }
+
+        bool CancelRequest(ui64 requestId) {
+            auto itRequest = RequestsInFlight.find(requestId);
+            if (itRequest == RequestsInFlight.end() || itRequest->second.Cancelled) {
+                return false;
+            }
+            itRequest->second.Cancelled = true;
+            return true;
         }
     };
 
@@ -1478,8 +1488,9 @@ public:
                 GetPartitionStatsResult[tabletId].Error(error);
             }
             TabletRequests.TabletStates[tabletId].IsUnresponsive = true;
-            for (const auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
-                if (requestState.TabletId == tabletId) {
+            for (auto& [requestId, requestState] : TabletRequests.RequestsInFlight) {
+                if (requestState.TabletId == tabletId && !requestState.Cancelled) {
+                    requestState.Cancelled = true;
                     RequestDone("unsuccessful TEvClientConnected");
                 }
             }
@@ -1497,16 +1508,16 @@ public:
                         }
                     }
                     TString error = "Timeout";
-                    if (StoragePools && StoragePools->Error(error)) {
+                    if (StoragePools && StoragePools->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestStoragePools)) {
                         RequestDone("TEvGetStoragePoolsRequest");
                     }
-                    if (Groups && Groups->Error(error)) {
+                    if (Groups && Groups->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestGroups)) {
                         RequestDone("TEvGetGroupsRequest");
                     }
-                    if (VSlots && VSlots->Error(error)) {
+                    if (VSlots && VSlots->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestVSlots)) {
                         RequestDone("TEvGetVSlotsRequest");
                     }
-                    if (PDisks && PDisks->Error(error)) {
+                    if (PDisks && PDisks->Error(error) && TabletRequests.CancelRequest(TTabletRequestsState::RequestPDisks)) {
                         RequestDone("TEvGetPDisksRequest");
                     }
                 }

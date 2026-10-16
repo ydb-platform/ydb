@@ -9,7 +9,7 @@ SIZE(LARGE)
 
 TAG(ya:fat)
 
-REQUIREMENTS(cpu:4 ram:8)
+REQUIREMENTS(cpu:1 ram:8)
 
 PEERDIR(
     ydb/core/blobstorage/ddisk

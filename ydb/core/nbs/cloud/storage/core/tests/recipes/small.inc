@@ -13,6 +13,6 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(15)
 
 REQUIREMENTS(
-    cpu:2
+    cpu:1
     ram:8
 )

@@ -23,7 +23,7 @@ enum class EProtocol {
 };
 
 // Trusted, already resolved binding supplied by the owner, never by guest code.
-// Metadata/ACL resolution belongs to FQ; TVM ticket refresh belongs to the provider.
+// Metadata/ACL resolution belongs to the query engine; TVM ticket refresh belongs to the provider.
 struct TBinding {
     EProtocol Protocol = EProtocol::Http;
     TString Endpoint;

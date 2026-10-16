@@ -253,6 +253,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob, IsStripe,
                 Item->FreshRefuseAtColor);
             logHuge->FreshAdmission = std::exchange(Item->FreshAdmission, {});
+            logHuge->AdmittedGroupGeneration = Item->AdmittedGroupGeneration;
             ctx.Send(HugeKeeperCtx->SkeletonId, logHuge.release(), 0, 0, Span.GetTraceId());
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
@@ -767,6 +768,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     std::move(msg.Result), &msg.ExtraBlockChecks, msg.WriteSource, msg.RewriteBlob, false,
                     msg.FreshRefuseAtColor);
                 logHuge->FreshAdmission = std::exchange(msg.FreshAdmission, {});
+                logHuge->AdmittedGroupGeneration = msg.AdmittedGroupGeneration;
                 ctx.Send(HugeKeeperCtx->SkeletonId, logHuge.release(), 0, 0, std::move(traceId));
                 return true;
             } else if (AllocatingChunkPerSlotSize.emplace(slotSize, TAllocation{bound, msg.AllocationPurpose}).second) {

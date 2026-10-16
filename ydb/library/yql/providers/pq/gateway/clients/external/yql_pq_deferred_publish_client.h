@@ -6,4 +6,4 @@ namespace NYql {
 
 IDeferredPublishClient::TPtr CreateExternalDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings);
 
-} // namespace NYql
+}   // namespace NYql

@@ -407,7 +407,7 @@ private:
             if (!name.empty()) {
                 clustersList->Balancers[name] = ParseFnxClusterCsv(csv);
             }
-            clustersList->BalancerVersion = std::max(
+            clustersList->BalancerVersion = std::max<i64>(
                 clustersList->BalancerVersion,
                 parser.ColumnParser(2).GetOptionalInt64().value_or(0));
         }

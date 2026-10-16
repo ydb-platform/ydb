@@ -2,21 +2,20 @@
 
 #include "settings.h"
 
-#include <library/cpp/colorizer/colors.h>
-#include <library/cpp/getopt/modchooser.h>
-
-#include <util/stream/file.h>
-#include <util/system/env.h>
-
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <library/cpp/colorizer/colors.h>
+#include <library/cpp/getopt/modchooser.h>
+#include <util/stream/file.h>
+#include <util/system/env.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimrRun {
 
-class TMainBase : public TMainClassArgs {
+class TMainBase: public TMainClassArgs {
 public:
     TMainBase();
 
@@ -62,4 +61,4 @@ private:
     std::optional<ui64> UserPoolSize;
 };
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

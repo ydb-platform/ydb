@@ -1,25 +1,24 @@
-#include <ydb/core/fq/libs/row_dispatcher/local_leader_election.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/testlib/basics/helpers.h>
+#include <ydb/core/fq/libs/row_dispatcher/local_leader_election.h>
 #include <ydb/core/testlib/actor_helpers.h>
-#include <library/cpp/testing/unittest/registar.h>
-
+#include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/test_client.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
 
-#include <thread>
 #include <chrono>
+#include <thread>
 
 namespace {
 
 using namespace NKikimr;
 using namespace NFq;
 
-class TFixture : public NUnitTest::TBaseFixture {
-
+class TFixture: public NUnitTest::TBaseFixture {
 public:
-    TFixture() {}
+    TFixture() {
+    }
 
     void SetUp(NUnitTest::TTestContext&) override {
         MsgBusPort = PortManager.GetPort(2134);
@@ -28,8 +27,7 @@ public:
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->NodeCount = 1;
         auto* rule = ServerSettings->AppConfig->MutableResourcePathPrefixMapping()->AddRules();
-        rule->SetSrc(TStringBuilder() << "/" << ServerSettings->DomainName
-            << "/.metadata/streaming/coordination_node");
+        rule->SetSrc(TStringBuilder() << "/" << ServerSettings->DomainName << "/.metadata/streaming/coordination_node");
         rule->SetDst("/Root/missing-coordination-node");
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
@@ -44,32 +42,22 @@ public:
     }
 
     void Init() {
-               
-        LeaderElection1 = Server->GetRuntime()->Register(NewLocalLeaderElection(
-            RowDispatcher,
-            Coordinator1,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
-            ).release());
+        LeaderElection1 = Server->GetRuntime()->Register(
+            NewLocalLeaderElection(RowDispatcher, Coordinator1, MakeIntrusive<NMonitoring::TDynamicCounters>()).release());
 
-        LeaderElection2 = Server->GetRuntime()->Register(NewLocalLeaderElection(
-            RowDispatcher,
-            Coordinator2,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
-            ).release());
+        LeaderElection2 = Server->GetRuntime()->Register(
+            NewLocalLeaderElection(RowDispatcher, Coordinator2, MakeIntrusive<NMonitoring::TDynamicCounters>()).release());
 
-        LeaderElection3 = Server->GetRuntime()->Register(NewLocalLeaderElection(
-            RowDispatcher,
-            Coordinator3,
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
-            ).release());
+        LeaderElection3 = Server->GetRuntime()->Register(
+            NewLocalLeaderElection(RowDispatcher, Coordinator3, MakeIntrusive<NMonitoring::TDynamicCounters>()).release());
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
     NActors::TActorId ExpectCoordinatorChanged() {
-        auto eventHolder = Server->GetRuntime()->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(
-            RowDispatcher, TDuration::Seconds(30));
+        auto eventHolder =
+            Server->GetRuntime()->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher, TDuration::Seconds(30));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         return eventHolder.Get()->Get()->CoordinatorActorId;
     }
@@ -133,4 +121,4 @@ Y_UNIT_TEST_SUITE(LocalLeaderElectionTests) {
     }
 }
 
-}
+}   // namespace

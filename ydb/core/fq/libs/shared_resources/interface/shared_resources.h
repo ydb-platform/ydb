@@ -1,11 +1,12 @@
 #pragma once
 
-#include <util/generic/ptr.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
+
+#include <util/generic/ptr.h>
 
 namespace NFq {
 
-struct IYqSharedResources : public TThrRefBase {
+struct IYqSharedResources: public TThrRefBase {
     using TPtr = TIntrusivePtr<IYqSharedResources>;
 
     virtual void Init(NActors::TActorSystem* actorSystem) = 0;
@@ -18,4 +19,4 @@ enum class EDbPoolId {
     MAIN = 0
 };
 
-} // NFq
+}   // namespace NFq

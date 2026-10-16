@@ -1,4 +1,5 @@
 #include "yql_ydb_external_provider_impl.h"
+
 #include <ydb/library/yql/providers/ydb_external/common/settings.h>
 
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -33,9 +34,8 @@ void AddCluster(TState& state, const TString& name, const THashMap<TString, TStr
             throw yexception() << "YdbExternal TOKEN credentials are missing";
         }
         const auto reference = properties.Value("tokenReference", "");
-        token = reference.empty()
-            ? TStructuredTokenBuilder().SetIAMToken(properties.Value("token", "")).ToJson()
-            : ComposeStructuredTokenJsonForTokenAuthWithSecret(reference, properties.Value("token", ""));
+        token = reference.empty() ? TStructuredTokenBuilder().SetIAMToken(properties.Value("token", "")).ToJson()
+                                  : ComposeStructuredTokenJsonForTokenAuthWithSecret(reference, properties.Value("token", ""));
     } else if (auth == "NONE") {
         token = TStructuredTokenBuilder().SetNoAuth().ToJson();
     } else {
@@ -55,20 +55,47 @@ const TTypeAnnotationNode* ParseColumnType(const Ydb::Type& type, TExprContext& 
     }
     EDataSlot slot;
     switch (primitive.type_id()) {
-        case Ydb::Type::BOOL: slot = EDataSlot::Bool; break;
-        case Ydb::Type::INT8: slot = EDataSlot::Int8; break;
-        case Ydb::Type::INT16: slot = EDataSlot::Int16; break;
-        case Ydb::Type::INT32: slot = EDataSlot::Int32; break;
-        case Ydb::Type::INT64: slot = EDataSlot::Int64; break;
-        case Ydb::Type::UINT8: slot = EDataSlot::Uint8; break;
-        case Ydb::Type::UINT16: slot = EDataSlot::Uint16; break;
-        case Ydb::Type::UINT32: slot = EDataSlot::Uint32; break;
-        case Ydb::Type::UINT64: slot = EDataSlot::Uint64; break;
-        case Ydb::Type::FLOAT: slot = EDataSlot::Float; break;
-        case Ydb::Type::DOUBLE: slot = EDataSlot::Double; break;
-        case Ydb::Type::STRING: slot = EDataSlot::String; break;
-        case Ydb::Type::UTF8: slot = EDataSlot::Utf8; break;
-        default: return nullptr;
+        case Ydb::Type::BOOL:
+            slot = EDataSlot::Bool;
+            break;
+        case Ydb::Type::INT8:
+            slot = EDataSlot::Int8;
+            break;
+        case Ydb::Type::INT16:
+            slot = EDataSlot::Int16;
+            break;
+        case Ydb::Type::INT32:
+            slot = EDataSlot::Int32;
+            break;
+        case Ydb::Type::INT64:
+            slot = EDataSlot::Int64;
+            break;
+        case Ydb::Type::UINT8:
+            slot = EDataSlot::Uint8;
+            break;
+        case Ydb::Type::UINT16:
+            slot = EDataSlot::Uint16;
+            break;
+        case Ydb::Type::UINT32:
+            slot = EDataSlot::Uint32;
+            break;
+        case Ydb::Type::UINT64:
+            slot = EDataSlot::Uint64;
+            break;
+        case Ydb::Type::FLOAT:
+            slot = EDataSlot::Float;
+            break;
+        case Ydb::Type::DOUBLE:
+            slot = EDataSlot::Double;
+            break;
+        case Ydb::Type::STRING:
+            slot = EDataSlot::String;
+            break;
+        case Ydb::Type::UTF8:
+            slot = EDataSlot::Utf8;
+            break;
+        default:
+            return nullptr;
     }
     const TTypeAnnotationNode* result = ctx.MakeType<TDataExprType>(slot);
     if (optional) {
@@ -77,4 +104,4 @@ const TTypeAnnotationNode* ParseColumnType(const Ydb::Type& type, TExprContext& 
     return result;
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

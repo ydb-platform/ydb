@@ -207,37 +207,13 @@ struct TSegmentedArena
 };
 
 std::optional<size_t> EstimateUvPackSize(const TArrayRef<const TUnboxedValuePod> items, const TArrayRef<TType* const> types) {
-    constexpr const size_t uvSize = sizeof(TUnboxedValuePod);
-
     size_t sizeSum = 0;
-
-    auto currType = types.begin();
-    for (const auto& item : items) {
-        if (!item.HasValue() || item.IsEmbedded() || item.IsInvalid()) {
-            sizeSum += uvSize;
-        } else if (item.IsString()) {
-            sizeSum += uvSize + item.AsStringRef().Size();
-        } else if (!item.IsBoxed()) {
+    for (size_t i = 0; i < items.size(); ++i) {
+        const auto size = TDqHashCombineTupleLayout::EstimateValueMemorySize(items[i], types[i]);
+        if (!size) {
             return {};
-        } else {
-            auto ty = *currType;
-            while (ty->IsOptional()) {
-                ty = AS_TYPE(TOptionalType, ty)->GetItemType();
-            }
-            if (ty->IsTuple()) {
-                auto tupleType = AS_TYPE(TTupleType, ty);
-                auto elements = tupleType->GetElements();
-                auto tupleSize = EstimateUvPackSize(TArrayRef(item.GetElements(), elements.size()), elements);
-                if (!tupleSize.has_value()) {
-                    return {};
-                }
-                // Tuple contents are generally boxed into a TDirectArrayHolderInplace instance
-                sizeSum += uvSize + sizeof(TDirectArrayHolderInplace) + tupleSize.value();
-            } else {
-                return {};
-            }
         }
-        ++currType;
+        sizeSum += *size;
     }
 
     return sizeSum;
@@ -1601,6 +1577,7 @@ protected:
             .BypassActivated = BypassActivated,
             .FastFinalizeEnabled = bool(FastFinalizer),
             .SpillingBucketsRead = SpillingStack.empty() ? 0 : SpillingStack.back().CurrentBucket,
+            .InputRowMemoryUsageMultiplier = InputRowMemoryUsageMultiplier,
         });
     }
 
@@ -1662,9 +1639,7 @@ protected:
 
     void UpdateRowLimitFromSample()
     {
-        // Signal that the input isn't compressing well at all; no need to increase hashmap size
-        if (Map->GetSize() && (InputRows * IncompressibleThresholdRatio <= Map->GetSize())) {
-            Incompressible = true;
+        if (Incompressible) {
             return;
         }
 
@@ -1692,7 +1667,8 @@ protected:
         }
 
         if (!unbounded && totalMem > 0) {
-            MaxRowCount = GetStaticMaxRowCount(totalMem / Map->GetSize(), MemoryLimit);
+            const size_t averageMem = totalMem / Map->GetSize() + (totalMem % Map->GetSize() != 0);
+            MaxRowCount = GetStaticMaxRowCount(averageMem, MemoryLimit);
         }
         // If we can't guess the memory usage, we'll keep the same small table; it's 0.25MB for 16K 16-byte cells currently, no need to shrink it further
     }
@@ -1725,6 +1701,11 @@ protected:
     [[nodiscard]] bool OpenDrain() {
         // This can start an async task which gets completed after another call to ProcessInput()
         // So we must yield if OpenDrain() returns true
+        if (CanBypass && !CompressibilityChecked) {
+            CompressibilityChecked = true;
+            Incompressible = !SourceEmpty && Map->GetSize() &&
+                InputRows * IncompressibleThresholdRatio <= Map->GetSize();
+        }
         if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
             UpdateRowLimitFromSample();
         }
@@ -1796,6 +1777,7 @@ protected:
 
     bool BypassActivated = false;
     bool Incompressible = false;
+    bool CompressibilityChecked = false;
     bool IsEstimating = false;
 
     size_t EstimateBatchSize = 0;

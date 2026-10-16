@@ -15,14 +15,14 @@ namespace NActors {
     template<class TFrontend>
     class TLine;
 
-    template<class TValue = ui64>
+    template<class TValue = ui64, class TStoragePolicy = TUncompressedLineStorage>
     struct TOnChangeLineFrontend {
         using TValueType = TValue;
 
         struct TConfig {};
 
         static TValue DecodeValue(ui64 value) noexcept {
-            return NInMemoryMetricsPrivate::DecodeLineValue<TValue>(value);
+            return TRawLineFrontend<TValue, TStoragePolicy>::DecodeValue(value);
         }
 
         static void ReadRange(const TLineSnapshot& snapshot,
@@ -49,7 +49,7 @@ namespace NActors {
             TValue lastValue{};
             bool hasPointInsideRange = false;
 
-            TRawLineFrontend<TValue>::ForEachStoredRecord(snapshot, [&](TInstant timestamp, const TValue& value) {
+            TRawLineFrontend<TValue, TStoragePolicy>::ForEachStoredRecord(snapshot, [&](TInstant timestamp, const TValue& value) {
                 if (timestamp < beginTs) {
                     hasPreviousValue = true;
                     previousValue = value;
@@ -98,7 +98,7 @@ namespace NActors {
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "on_change",
-                .ReadRange = &TOnChangeLineFrontend<TValue>::ReadRange,
+                .ReadRange = &TOnChangeLineFrontend<TValue, TStoragePolicy>::ReadRange,
                 .ReadNumericRange = &ReadNumericRange,
             };
             return descriptor;
@@ -122,14 +122,21 @@ namespace NActors {
             });
         }
 
-        friend class TLine<TOnChangeLineFrontend<TValue>>;
+        friend class TLine<TOnChangeLineFrontend<TValue, TStoragePolicy>>;
 
         static bool Append(IMetricLine& line, const TValueType& value) noexcept;
     };
 
-    template<class TValue>
-    bool TOnChangeLineFrontend<TValue>::Append(IMetricLine& line, const TValue& value) noexcept {
-        const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
+    template<class TValue, class TStoragePolicy>
+    bool TOnChangeLineFrontend<TValue, TStoragePolicy>::Append(IMetricLine& line, const TValue& value) noexcept {
+        ui64 encoded;
+        if constexpr (TStoragePolicy::Enabled) {
+            if (!TStoragePolicy::template Encode<0>(value, &encoded)) {
+                return false;
+            }
+        } else {
+            encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
+        }
         const std::optional<ui64> lastMaterialized = line.GetLastMaterializedValue();
 
         if (lastMaterialized && *lastMaterialized == encoded) {
@@ -138,11 +145,11 @@ namespace NActors {
 
         const NHPTimer::STime nowTs = line.CurrentTimestampTs();
 
-        typename TRawLineFrontend<TValue>::TStorageRecord record{
+        typename TRawLineFrontend<TValue, TStoragePolicy>::TStorageRecord record{
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        if (!line.AccessChunkMemory(&record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
+        if (!line.AccessChunkMemory(&record, &TRawLineFrontend<TValue, TStoragePolicy>::WriteRecordToChunkMemory)) {
             return false;
         }
         line.MarkMaterialized(encoded);

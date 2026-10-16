@@ -287,16 +287,27 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto records = std::make_shared<TGeneralContainer>(recordsCount);
         records->AddField(stats.GetField(0), builder.Finish()).Validate();
 
-        auto iterator = TColumnsData(stats, records).BuildIterator(0);
-        for (const auto& [recordIndex, value] : expected) {
-            UNIT_ASSERT(iterator.IsValid());
-            UNIT_ASSERT_VALUES_EQUAL(iterator.GetCurrentRecordIndex(), recordIndex);
-            const auto actual = iterator.GetValue().GetScalarOptional();
+        const auto checkValue = [](const TColumnsData::TIterator& current, const ui32 recordIndex, const TStringBuf value) {
+            UNIT_ASSERT(current.IsValid());
+            UNIT_ASSERT_VALUES_EQUAL(current.GetCurrentRecordIndex(), recordIndex);
+            const auto actual = current.GetValue().GetScalarOptional();
             UNIT_ASSERT(actual);
             UNIT_ASSERT_VALUES_EQUAL(*actual, value);
+        };
+
+        auto iterator = TColumnsData(stats, records).BuildIterator(0);
+        for (const auto& [recordIndex, value] : expected) {
+            checkValue(iterator, recordIndex, value);
             iterator.Next();
         }
         UNIT_ASSERT(!iterator.IsValid());
+
+        auto skipped = TColumnsData(stats, records).BuildIterator(0);
+        for (const auto& [recordIndex, value] : expected) {
+            UNIT_ASSERT(skipped.SkipRecordTo(recordIndex));
+            checkValue(skipped, recordIndex, value);
+        }
+        UNIT_ASSERT(!skipped.SkipRecordTo(recordsCount));
     }
 
     Y_UNIT_TEST(DictionaryThenPlainCompositeUsesGlobalChunkAddress) {
@@ -305,6 +316,13 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         auto plain = std::make_shared<TTrivialArray>(StringVecToArray({"plain-a", "plain-b"}));
         CheckCompositeValues(std::make_shared<TDictionaryArray>(dictionary, positions), plain,
                              {{0, "dict-a"}, {1, "dict-b"}, {2, "plain-a"}, {3, "plain-b"}});
+    }
+
+    Y_UNIT_TEST(AllNullDictionaryThenPlainCompositeIteratesAndSkips) {
+        auto dictionary = std::make_shared<TDictionaryArray>(
+            StringVecToArray({std::nullopt}), UInt8VecToArray({std::nullopt, std::nullopt, std::nullopt}));
+        auto plain = std::make_shared<TTrivialArray>(StringVecToArray({"plain-a", "plain-b"}));
+        CheckCompositeValues(dictionary, plain, {{3, "plain-a"}, {4, "plain-b"}});
     }
 
     Y_UNIT_TEST(PlainThenSparseCompositeUsesGlobalChunkAddress) {

@@ -829,3 +829,142 @@ Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
         env.FetchMeta({{"meta.value","1"}, {"meta.value2","2"}});
     }
 }
+
+namespace {
+    void CheckRuntimeMessage(TFixture& env, EPriority priority, EComponent component,
+                             bool expected, ui64 key = 0) {
+        const auto before = env.ReceivedMessages.size();
+        LOG_LOG_SOURCELESS_SAMPLED_BY(env, priority, component, key, "runtime settings message");
+        UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.size(), before + expected);
+        if (expected) {
+            UNIT_ASSERT_VALUES_EQUAL(env.ReceivedMessages.back().Text, "FAKE: runtime settings message ");
+        }
+    }
+}
+
+Y_UNIT_TEST_SUITE(TLoggingRuntimeSettingsTest) {
+    Y_UNIT_TEST(LevelBoundariesAndValidation) {
+        TFixture env;
+        env.StartAccumulateMessages(TSettings::PLAIN_SHORT_FORMAT);
+        TString explanation;
+        for (int level = PRI_EMERG; level <= PRI_TRACE; ++level) {
+            const auto priority = static_cast<EPriority>(level);
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(priority, 0, explanation), 0);
+            UNIT_ASSERT(explanation.Contains("Priority for the component FAKE has been changed from "));
+            for (int message = PRI_EMERG; message <= PRI_TRACE; ++message) {
+                CheckRuntimeMessage(env, static_cast<EPriority>(message), 0, message <= level);
+                CheckRuntimeMessage(env, static_cast<EPriority>(message), 1, true);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(PRI_INFO, 0, explanation), 0);
+        for (int invalid : {-1, PRI_TRACE + 1, 255}) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(static_cast<EPriority>(invalid), 0, explanation), 1);
+            UNIT_ASSERT_VALUES_EQUAL(explanation, "Invalid priority");
+            CheckRuntimeMessage(env, PRI_INFO, 0, true);
+            CheckRuntimeMessage(env, PRI_DEBUG, 0, false);
+        }
+        // Includes a hole between appended component ranges and both bounds.
+        for (int component : {-2, 2, 999, 1003}) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(PRI_EMERG, component, explanation), 1);
+            UNIT_ASSERT_VALUES_EQUAL(explanation, "Invalid component");
+            CheckRuntimeMessage(env, PRI_INFO, 0, true);
+            CheckRuntimeMessage(env, PRI_DEBUG, 1, true);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(PRI_EMERG, 1002, explanation), 0);
+        UNIT_ASSERT(env.Settings->Satisfies(PRI_EMERG, 1002));
+        UNIT_ASSERT(!env.Settings->Satisfies(PRI_ALERT, 1002));
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(PRI_WARN, InvalidComponent, explanation), 0);
+        UNIT_ASSERT_VALUES_EQUAL(explanation, "Priority for all components has been changed to WARN");
+        for (int component : {0, 1, 1000, 1002}) {
+            UNIT_ASSERT(env.Settings->Satisfies(PRI_WARN, component));
+            UNIT_ASSERT(!env.Settings->Satisfies(PRI_NOTICE, component));
+        }
+        CheckRuntimeMessage(env, PRI_WARN, 0, true);
+        CheckRuntimeMessage(env, PRI_NOTICE, 1, false);
+    }
+
+    Y_UNIT_TEST(SamplingBoundariesAndValidation) {
+        TFixture env;
+        env.StartAccumulateMessages(TSettings::PLAIN_SHORT_FORMAT);
+        TString explanation;
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetLevel(PRI_EMERG, InvalidComponent, explanation), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingRate(1, 0, explanation), 0);
+        UNIT_ASSERT_VALUES_EQUAL(explanation, "Sampling rate for the component FAKE has been changed from 0 to 1");
+        for (int level = PRI_EMERG; level <= PRI_TRACE; ++level) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingLevel(static_cast<EPriority>(level), 0, explanation), 0);
+            for (int message = PRI_EMERG; message <= PRI_TRACE; ++message) {
+                CheckRuntimeMessage(env, static_cast<EPriority>(message), 0, message <= level, 42);
+                CheckRuntimeMessage(env, static_cast<EPriority>(message), 1, message == PRI_EMERG, 42);
+            }
+        }
+        for (int invalid : {-1, PRI_TRACE + 1, 255}) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingLevel(static_cast<EPriority>(invalid), 0, explanation), 1);
+            UNIT_ASSERT_VALUES_EQUAL(explanation, "Invalid sampling priority");
+            CheckRuntimeMessage(env, PRI_TRACE, 0, true, 42);
+        }
+        for (int component : {-2, 2, 999, 1003}) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingLevel(PRI_EMERG, component, explanation), 1);
+            UNIT_ASSERT_VALUES_EQUAL(explanation, "Invalid component");
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingRate(0, component, explanation), 1);
+            UNIT_ASSERT_VALUES_EQUAL(explanation, "Invalid component");
+            CheckRuntimeMessage(env, PRI_TRACE, 0, true, 42);
+            CheckRuntimeMessage(env, PRI_DEBUG, 1, false, 42);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingRate(0, 0, explanation), 0);
+        CheckRuntimeMessage(env, PRI_EMERG, 0, true, 42);
+        CheckRuntimeMessage(env, PRI_DEBUG, 0, false, 42);
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingRate(1, 0, explanation), 0);
+        CheckRuntimeMessage(env, PRI_TRACE, 0, true); // key zero is deterministic at rate one
+        // Explicit keys exercise both residues without random-number sampling.
+        for (ui32 rate : {2u, Max<ui32>()}) {
+            UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingRate(rate, 0, explanation), 0);
+            for (ui64 key = 1; key <= 32; ++key) {
+                const bool accepted = MurmurHash<ui32>((const char*)&key, sizeof(key)) % rate == 0;
+                CheckRuntimeMessage(env, PRI_DEBUG, 0, accepted, key);
+                CheckRuntimeMessage(env, PRI_EMERG, 0, true, key);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingLevel(PRI_DEBUG, InvalidComponent, explanation), 0);
+        UNIT_ASSERT_VALUES_EQUAL(explanation, "Sampling priority for all components has been changed to DEBUG");
+        UNIT_ASSERT_VALUES_EQUAL(env.Settings->SetSamplingRate(1, InvalidComponent, explanation), 0);
+        UNIT_ASSERT_VALUES_EQUAL(explanation, "Sampling rate for all components has been changed to 1");
+        for (int component : {0, 1, 1000, 1002}) {
+            UNIT_ASSERT(env.Settings->Satisfies(PRI_DEBUG, component, 42));
+            UNIT_ASSERT(!env.Settings->Satisfies(PRI_TRACE, component, 42));
+        }
+        CheckRuntimeMessage(env, PRI_DEBUG, 1, true, 42);
+        CheckRuntimeMessage(env, PRI_TRACE, 1, false, 42);
+    }
+
+    Y_UNIT_TEST(ActorLevelRequestChangesSubsequentFiltering) {
+        TFixture env;
+        env.StartAccumulateMessages(TSettings::PLAIN_SHORT_FORMAT);
+        const auto edge = env.Runtime.AllocateEdgeActor();
+        auto change = [&](EPriority priority, EComponent component, int code, const TString& explanation) {
+            env.Runtime.Send(new IEventHandle(env.LoggerActor, edge,
+                new TLogComponentLevelRequest(priority, component)));
+            auto response = env.Runtime.GrabEdgeEvent<TLogComponentLevelResponse>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(response);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->GetCode(), code);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->GetExplanation(), explanation);
+        };
+        CheckRuntimeMessage(env, PRI_DEBUG, 0, true);
+        change(PRI_INFO, 0, 0, "Priority for the component FAKE has been changed from TRACE to INFO");
+        // Send only after the reply confirms the logger completed the update.
+        CheckRuntimeMessage(env, PRI_INFO, 0, true);
+        CheckRuntimeMessage(env, PRI_DEBUG, 0, false);
+        CheckRuntimeMessage(env, PRI_DEBUG, 1, true);
+        change(static_cast<EPriority>(PRI_TRACE + 1), 0, 1, "Invalid priority");
+        CheckRuntimeMessage(env, PRI_INFO, 0, true);
+        CheckRuntimeMessage(env, PRI_DEBUG, 0, false);
+        change(PRI_EMERG, 2, 1, "Invalid component");
+        CheckRuntimeMessage(env, PRI_INFO, 0, true);
+        CheckRuntimeMessage(env, PRI_DEBUG, 0, false);
+        CheckRuntimeMessage(env, PRI_DEBUG, 1, true);
+        change(PRI_WARN, InvalidComponent, 0, "Priority for all components has been changed to WARN");
+        CheckRuntimeMessage(env, PRI_WARN, 0, true);
+        CheckRuntimeMessage(env, PRI_INFO, 0, false);
+        CheckRuntimeMessage(env, PRI_WARN, 1, true);
+        CheckRuntimeMessage(env, PRI_INFO, 1, false);
+    }
+}

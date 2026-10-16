@@ -234,15 +234,55 @@ A particularly problematic corner case arises when a vector index is created on 
 To prevent degradation:
 
 * Avoid creating a vector index on an empty table.
-* If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.
+* If a large volume of new data has been added, [rebuild the index](#rebuild) when search quality or performance has degraded.
 
-### Update inconsistency during index build
+To decide when to rebuild:
+
+1. Choose a representative set of query vectors. Measure search recall by comparing indexed results with exact results from a full scan of the same table. The [vector workload command](../reference/ydb-cli/workload-vector.md#run-select) demonstrates this with `--recall`.
+2. Record search latency for the same queries. Repeat the measurements with the same distance function and search settings, including [`KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
+3. Rebuild if recall falls or latency rises consistently after the data distribution changes. Row growth alone is a reason to measure, not a fixed rebuild threshold.
+
+### Update inconsistency during index build {#build-consistency}
 
 Vector indexes do not support consistent updates during build. That is, a vector index is not updated when data in the main table is modified until the index build is finished.
 
 This means that if you want a vector index to remain 100% consistent, you have to pause table updates while it is being built.
 
 Updates are not blocked automatically because vector index search is approximate by nature, and in many cases temporary inconsistency during the build is acceptable.
+
+This temporary limitation is planned to be removed in a future {{ ydb-short-name }} release.
+
+## Rebuilding a Vector Index {#rebuild}
+
+Rebuilding creates a new cluster tree and redistributes the table's vectors across it. Use [`ALTER TABLE ... REBUILD INDEX`](../yql/reference/syntax/alter_table/indexes.md#rebuild-index) when changes in the data distribution reduce search recall or performance:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`;
+```
+
+The command preserves the index name, indexed and covered columns, and vector index settings. To adjust the tree for a changed dataset size, explicitly set `clusters` and `levels`, which control the number of clusters and tree levels:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`
+WITH (clusters = 128, levels = 2);
+```
+
+The existing index continues to serve queries and receive table updates during the build. Once the replacement is ready, {{ ydb-short-name }} atomically replaces the old index. Applications continue to use the same index name. The operation temporarily requires storage for both index versions and resources to build the replacement.
+
+To limit the number of parallel partition handlers during the rebuild, set the [`parallel` parameter](../yql/reference/syntax/alter_table/indexes.md#rebuild-index). For example, to run no more than eight handlers at a time:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_index`
+WITH (parallel = 8);
+```
+
+The replacement is built from a snapshot, so the [consistency limitation during index building](#build-consistency) also applies to rebuilding. If you need a fully consistent index:
+
+1. Stop all application writers and ingestion jobs for the table, and wait for in-flight writes to finish. {{ ydb-short-name }} does not pause writes automatically.
+2. Start the rebuild. Find its ID with [`ydb operation list buildindex`](../reference/ydb-cli/operation-list.md), then check it with [`ydb operation get`](../reference/ydb-cli/operation-get.md).
+3. Resume writes when the operation reports `ready: true` and `status: SUCCESS`.
+
+Queries remain available during rebuilding, but may require a [retry](../recipes/ydb-sdk/retry.md) when the index is replaced.
 
 ## Recipes for Working with Vector Indexes {#vector-index-recipes}
 

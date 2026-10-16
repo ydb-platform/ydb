@@ -31,6 +31,7 @@ PEERDIR(
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/runtime/streaming
+    ydb/library/yql/providers/common/message_stream
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/pushdown
     ydb/library/yql/providers/dq/common

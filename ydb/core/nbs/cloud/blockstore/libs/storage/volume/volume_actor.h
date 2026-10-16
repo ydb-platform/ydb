@@ -1,16 +1,18 @@
 #pragma once
 
+#include "volume_counters.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/request_info.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/volume.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_load.h>
@@ -23,9 +25,14 @@ namespace NYdb::NBS::NStorage {
 using namespace NActors;
 using namespace NKikimr;
 
+class TVolumeActorTestAccessor;
+
+// NBS 2.0 volume tablet. It stores the single partition tablet id from
+// UpdateVolumeConfig in the local database, so a restart can still reach
+// that partition. Pipes open only after that id is loaded.
 class TVolumeActor
     : public TActorBootstrapped<TVolumeActor>
-    , NKikimr::NTabletFlatExecutor::TTabletExecutedFlat
+    , public NBlockStore::NStorage::TTabletBase<TVolumeActor>
 {
     enum EState
     {
@@ -53,16 +60,24 @@ class TVolumeActor
 
     THashMap<ui64, TUpdateVolumeConfigRequest>
         UpdateVolumeConfigRequests;   // txId -> request
-    // The volume has one partition. Every pending event shares this pipe.
+    // Tablet id of the single partition, as last received in
+    // UpdateVolumeConfig. 0 means not known yet: the volume has not
+    // received any UpdateVolumeConfig. Every pending event shares the
+    // pipe to this tablet.
     ui64 PartitionTabletId = 0;
     // Open while PendingEvents is not empty.
     TActorId PartitionPipeClient;
     TMap<ui64, TPendingEvent> PendingEvents;   // pendingEventId -> event
     ui64 NextPendingEventId = 1;
 
+    friend class TVolumeActorTestAccessor;
+
 public:
     TVolumeActor(const TActorId& tablet, NKikimr::TTabletStorageInfo* info);
     void Bootstrap(const TActorContext& ctx);
+
+    static constexpr ui32 LogComponent = NKikimrServices::NBS_VOLUME;
+    using TCounters = TVolumeCounters;
 
 private:
     STFUNC(StateWork);
@@ -121,6 +136,12 @@ private:
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // Sends UpdateVolumeConfig to its partition. Called once the
+    // partition tablet id is durable.
+    void ForwardUpdateVolumeConfig(
+        const NActors::TActorContext& ctx,
+        const NKikimrBlockStore::TUpdateVolumeConfig& record);
+
     void HandleUpdateVolumeConfigResponse(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -138,6 +159,8 @@ private:
         const NActors::TActorContext& ctx);
 
     void ReportTabletState(const TActorContext& ctx);
+
+    BLOCKSTORE_VOLUME_TRANSACTIONS(BLOCKSTORE_IMPLEMENT_TRANSACTION, TTxVolume)
 };
 
 }   // namespace NYdb::NBS::NStorage

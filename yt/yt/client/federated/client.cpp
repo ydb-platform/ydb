@@ -543,7 +543,7 @@ private:
     IClientPtr ActiveClient_;
     std::atomic<int> ActiveClientIndex_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, Lock_);
 };
 
 DECLARE_REFCOUNTED_TYPE(TTransaction)
@@ -694,7 +694,7 @@ void TClient::CheckClustersHealth()
     }
 
     if (ActiveClientIndex_ != betterClientIndex) {
-        auto guard = NThreading::WriterGuard(Lock_);
+        auto guard = WriterGuard(Lock_);
         ActiveClient_ = UnderlyingClients_[betterClientIndex]->Client;
         ActiveClientIndex_ = betterClientIndex;
     }
@@ -832,7 +832,7 @@ void TClient::UpdateActiveClient()
                 YT_TLOG_DEBUG("Active client was changed")
                     .With("PreviousClientIndex", ActiveClientIndex_.load())
                     .With("NewClientIndex", index);
-                auto guard = NThreading::WriterGuard(Lock_);
+                auto guard = WriterGuard(Lock_);
                 ActiveClientIndex_ = index;
                 ActiveClient_ = clientDescription->Client;
             }

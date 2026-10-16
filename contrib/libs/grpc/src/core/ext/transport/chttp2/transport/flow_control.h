@@ -41,7 +41,6 @@
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/resource_quota/memory_quota.h"
 #include "src/core/lib/transport/bdp_estimator.h"
-#include "src/core/lib/transport/pid_controller.h"
 
 extern grpc_core::TraceFlag grpc_flowctl_trace;
 
@@ -280,7 +279,7 @@ class TransportFlowControl final {
 
   void set_target_initial_window_size(uint32_t value) {
     target_initial_window_size_ =
-        std::min(value, grpc_chttp2_settings_parameters[GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE].max_value);
+        std::min(value, Http2Settings::max_initial_window_size());
   }
 
   // Getters
@@ -336,10 +335,8 @@ class TransportFlowControl final {
   }
 
  private:
-  double TargetLogBdp();
-  double SmoothLogBdp(double value);
   double TargetInitialWindowSizeBasedOnMemoryPressureAndBdp() const;
-  static void UpdateSetting(grpc_chttp2_setting_id id, int64_t* desired_value,
+  static void UpdateSetting(y_absl::string_view name, int64_t* desired_value,
                             uint32_t new_desired_value,
                             FlowControlAction* action,
                             FlowControlAction& (FlowControlAction::*set)(
@@ -364,10 +361,6 @@ class TransportFlowControl final {
 
   // bdp estimation
   BdpEstimator bdp_estimator_;
-
-  // pid controller
-  PidController pid_controller_;
-  Timestamp last_pid_update_;
 
   int64_t remote_window_ = kDefaultWindow;
   int64_t target_initial_window_size_ = kDefaultWindow;

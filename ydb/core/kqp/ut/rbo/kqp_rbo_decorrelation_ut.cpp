@@ -347,6 +347,74 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
         UNIT_ASSERT(HasFreeCorrelation(hub->GetInput(), {parameter}));
     }
 
+    Y_UNIT_TEST(CorrelatedReplicateRejectsUnsafeCopiesBeforeChangingInputs) {
+        enum class EBlocker { Average, Random, SubplanCall };
+        for (const auto blocker : {EBlocker::Average, EBlocker::Random, EBlocker::SubplanCall}) {
+            TPlan plan;
+            const auto parameter = plan.Id(), local = plan.Id(), value = plan.Id(), result = plan.Id();
+            TIntrusivePtr<IOperator> producer = plan.Producer(parameter, local, value);
+            if (blocker == EBlocker::Average) {
+                TAggregationIUs functions;
+                functions.Add(result, TOpAggregationTraits{value, "avg"});
+                producer = MakeIntrusive<TOpAggregate>(producer, std::move(functions), TOrderedIUs<>{},
+                    EOpPhase::Undefined, false, plan.Pos);
+            } else if (blocker == EBlocker::Random) {
+                producer = MakeIntrusive<TOpFilter>(producer, plan.Pos,
+                    MakeBinaryPredicate(">", MakeUnaryCallable("RandomNumber", plan.Column(value)), plan.Column(local)));
+            } else {
+                const auto call = plan.Id(), inner = plan.Id();
+                plan.Root.PlanProps.Subplans.Add(call, plan.Source({inner}), ESubplanType::EXPR, {}, inner);
+                TMapIUs definitions;
+                definitions.Add(result, plan.Column(call));
+                producer = MakeIntrusive<TOpMap>(producer, plan.Pos, std::move(definitions));
+            }
+            const auto originalInput = producer->GetChild(0);
+            auto hub = TReplicate::Create(producer, plan.Pos, plan.Root.PlanProps.InfoUnitRegistry);
+            auto inside = hub->AddOutput(), outside = hub->AddOutput();
+            auto dependent = plan.DependentJoin(inside, {parameter});
+            plan.Root.SetInput(MakeIntrusive<TOpJoin>(dependent, outside, plan.Pos, "Cross", TJoinIUs{}));
+            plan.Root.ComputeParents();
+            const auto previousSize = plan.Root.PlanProps.InfoUnitRegistry.Size();
+            TPushDependentJoinThroughReplicateRule rule;
+
+            auto rewritten = rule.SimpleMatchAndApply(dependent, plan.Test.RboCtx, plan.Root.PlanProps);
+
+            UNIT_ASSERT(rewritten == dependent);
+            UNIT_ASSERT(hub->GetInput() == producer);
+            UNIT_ASSERT(producer->GetChild(0) == originalInput);
+            UNIT_ASSERT_VALUES_EQUAL(plan.Root.PlanProps.InfoUnitRegistry.Size(), previousSize);
+            UNIT_ASSERT_VALUES_EQUAL(hub->GetOutputs().size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(CorrelatedReplicateCopiesSumWithoutTypes) {
+        TPlan plan;
+        const auto parameter = plan.Id(), local = plan.Id(), value = plan.Id(), result = plan.Id();
+        auto input = plan.Producer(parameter, local, value);
+        TAggregationIUs functions;
+        functions.Add(result, TOpAggregationTraits{value, "sum"});
+        auto producer = MakeIntrusive<TOpAggregate>(input, std::move(functions), TOrderedIUs<>{},
+            EOpPhase::Undefined, false, plan.Pos);
+        auto hub = TReplicate::Create(producer, plan.Pos, plan.Root.PlanProps.InfoUnitRegistry);
+        auto inside = hub->AddOutput(), outside = hub->AddOutput();
+        auto dependent = plan.DependentJoin(inside, {parameter});
+        plan.Root.SetInput(MakeIntrusive<TOpJoin>(dependent, outside, plan.Pos, "Cross", TJoinIUs{}));
+        plan.Root.ComputeParents();
+        UNIT_ASSERT(!input->Type);
+
+        auto rewritten = TPushDependentJoinThroughReplicateRule().SimpleMatchAndApply(
+            dependent, plan.Test.RboCtx, plan.Root.PlanProps);
+
+        UNIT_ASSERT(rewritten != dependent);
+        auto& copy = CastOperator<TOpAggregate>(*CastOperator<TOpDependentJoin>(*rewritten).GetInput());
+        UNIT_ASSERT(&copy != producer.Get());
+        UNIT_ASSERT(!copy.GetAggregationTraits().Keys().Contains(result));
+        auto& originalPort = CastOperator<TOpReplicate>(*producer->GetInput());
+        auto& copiedPort = CastOperator<TOpReplicate>(*copy.GetInput());
+        UNIT_ASSERT(&originalPort.GetReplicate() == &copiedPort.GetReplicate());
+        UNIT_ASSERT(originalPort.GetInput() == input);
+    }
+
     Y_UNIT_TEST(SimpleInLeavesRepeatedCallsForTheMarkJoinPath) {
         for (const bool repeated : {false, true}) {
             NTests::TIdTestContext f;

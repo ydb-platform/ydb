@@ -2748,7 +2748,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 bsControllerTablet = MakeBSControllerID();
         const ui64 testerTablet = MakeTabletID(false, 1);
 
-        THiveInitialEventsFilter initialEventsFilter;
+        THiveEveryEventFilter initialEventsFilter;
 
         TVector<ui64> tabletIds;
         tabletIds.push_back(hiveTablet);
@@ -2783,6 +2783,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 createTabletReply->Record.GetOwner() << " != " << testerTablet);
             tabletId = createTabletReply->Record.GetTabletID();
 
+            // Creation has already completed: a filter waiting for EvCreateTablet
+            // would suppress every event in this active zone.
             activeZone = true;
             {
                 bool allowIncompleteResult = (dispatchName != INITIAL_TEST_DISPATCH_NAME);
@@ -7678,7 +7680,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(confirmed->Record.GetStatus(), NKikimrProto::OK);
     }
 
-    Y_UNIT_TEST(TestBlockStorageErrorRestartsReassignAtActualGeneration) {
+    void TestBlockStorageStatusRestartsReassignAtActualGeneration(NKikimrProto::EReplyStatus status) {
         const ui64 hiveTablet = MakeDefaultHiveID();
 
         THiveInitialEventsFilter initialEventsFilter;
@@ -7700,17 +7702,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
 
             static constexpr ui32 actualGeneration = 100;
-            bool errorInjected = false;
+            bool statusInjected = false;
             bool sawNewGeneration = false;
             auto blockObserver = runtime.AddObserver<TEvBlobStorage::TEvBlock>([&](auto&& ev) {
-                if (errorInjected && ev->Get()->Generation > actualGeneration) {
+                if (statusInjected && ev->Get()->Generation > actualGeneration) {
                     sawNewGeneration = true;
                 }
             });
             auto resultObserver = runtime.AddObserver<TEvBlobStorage::TEvBlockResult>([&](auto&& ev) {
-                if (!errorInjected) {
-                    errorInjected = true;
-                    ev->Get()->Status = NKikimrProto::ERROR;
+                if (!statusInjected) {
+                    statusInjected = true;
+                    ev->Get()->Status = status;
                     ev->Get()->ActualGeneration = actualGeneration;
                     ev->Get()->ErrorReason = "injected generation race";
                 }
@@ -7815,6 +7817,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(channel.GetHistory(channel.HistorySize() - 1).GetFromGeneration(), *blockGeneration + 2,
                 channel.ShortDebugString());
         }
+    }
+
+    Y_UNIT_TEST(TestBlockStorageErrorRestartsReassignAtActualGeneration) {
+        TestBlockStorageStatusRestartsReassignAtActualGeneration(NKikimrProto::ERROR);
+    }
+
+    Y_UNIT_TEST(TestBlockStorageAlreadyRestartsReassignAtActualGeneration) {
+        TestBlockStorageStatusRestartsReassignAtActualGeneration(NKikimrProto::ALREADY);
     }
 
     Y_UNIT_TEST(TestGetStorageInfoDeleteTabletBeforeAssigned) {
@@ -10746,9 +10756,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 break;
             }
         }
-        TBlockEvents<TEvBlobStorage::TEvControllerSelectGroupsResult> block(runtime);
         {
             // test concurrently creating tablet
+            TBlockEvents<TEvBlobStorage::TEvControllerSelectGroupsResult> block(runtime);
             activeZone = false;
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100501, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
             SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
@@ -10899,7 +10909,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestShrinkStoragePoolWithReboots) {
         const ui64 hiveTablet = MakeDefaultHiveID();
 
-        TListEventFilter filter = {NHive::TEvPrivate::EvProcessIncomingEvent};
+        TListEventFilter filter = {NHive::TEvPrivate::EvProcessIncomingEvent, TEvTabletPipe::EvServerConnected};
         //THiveEveryEventFilter filter;
 
         RunTestWithReboots({hiveTablet}, [&]() {

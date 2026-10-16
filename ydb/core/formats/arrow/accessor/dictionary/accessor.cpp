@@ -61,15 +61,19 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         }
     }
     auto filtered = TColumnFilter(std::move(mask)).Apply(std::make_shared<TTrivialArray>(ArrayDictionary))->GetChunkedArray();
+    const bool addNullEntry = positionsNew->null_count() && (!filtered || !filtered->null_count());
     std::shared_ptr<arrow::Array> dictArray;
     if (!filtered || filtered->num_chunks() == 0) {
-        dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 0);
-    } else if (filtered->num_chunks() == 1) {
+        dictArray = TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), addNullEntry ? 1 : 0);
+    } else if (filtered->num_chunks() == 1 && !addNullEntry) {
         dictArray = filtered->chunk(0);
     } else {
         arrow::ArrayVector parts;
         for (int i = 0; i < filtered->num_chunks(); ++i) {
             parts.push_back(filtered->chunk(i));
+        }
+        if (addNullEntry) {
+            parts.emplace_back(TThreadSimpleArraysCache::GetNull(ArrayDictionary->type(), 1));
         }
         dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
     }

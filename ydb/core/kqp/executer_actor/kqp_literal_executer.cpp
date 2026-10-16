@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_scalar_hash_join.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -50,6 +51,10 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
 
         if (name == "DqHashAggregate"sv) {
             return WrapDqHashAggregate(callable, ctx);
+        }
+
+        if (name == "DqScalarHashJoin"sv) {
+            return WrapDqScalarHashJoin(callable, ctx);
         }
         return nullptr;
     };

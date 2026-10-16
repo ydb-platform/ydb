@@ -44,8 +44,7 @@ void TIamAuthFactory::Initialize(
     }
     NActors::IActor* actor = NKikimr::NHttpProxy::CreateAccessServiceActor(
         config,
-        "ydb-http_proxy-datastreams",
-        appData.FeatureFlags.GetEnableAccessServiceV2Interface());
+        "ydb-http_proxy-datastreams");
     localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             NKikimr::NHttpProxy::MakeAccessServiceID(),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));

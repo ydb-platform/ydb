@@ -1,6 +1,7 @@
 #include "dependent_join_pushdown.h"
 
 #include "../kqp_rules_include.h"
+#include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -100,52 +101,6 @@ TIntrusivePtr<TOpDependentJoin> PushIntoCopy(const TIntrusivePtr<IOperator>& pus
     return MakeIntrusive<TOpDependentJoin>(domain, newInput, dependentJoin->Dependencies, dependentJoin->Pos, std::move(domainColumns));
 }
 
-bool IsDeterministic(const TExpression& expression) {
-    static const THashSet<TStringBuf> nondeterministic = {
-        "Random", "RandomNumber", "RandomUuid", "Now",
-        "CurrentUtcDate", "CurrentUtcDatetime", "CurrentUtcTimestamp",
-        "CurrentTzDate", "CurrentTzDatetime", "CurrentTzTimestamp",
-        // Nothing says which UDFs are deterministic.
-        "Udf", "ScriptUdf", "SqlCall",
-    };
-    return !FindNode(expression.GetLambda(), [](const TExprNode::TPtr& node) {
-        return node->IsCallable() && nondeterministic.contains(node->Content());
-    });
-}
-
-bool IsDeterministicAggregation(const TString& function) {
-    static const THashSet<TStringBuf> deterministic = {"count", "sum", "min", "max", "avg", "distinct", "variance_1_1"};
-    return deterministic.contains(function);
-}
-
-// A Replicate gives every consumer the same rows, but a copy is evaluated on its own.
-// So only an operator that returns the same rows for the same input can be copied.
-bool CanCopyForConsumer(const IOperator& op) {
-    for (const auto& expression : op.GetExpressions()) {
-        if (!IsDeterministic(expression)) {
-            return false;
-        }
-    }
-
-    switch (op.Kind) {
-        case EOperator::Replicate:
-        case EOperator::AddDependencies:
-        case EOperator::Filter:
-        case EOperator::Map:
-        case EOperator::UnionAll:
-        case EOperator::Join:
-            return true;
-        case EOperator::Aggregate:
-            return std::ranges::all_of(CastOperator<TOpAggregate>(op).GetAggregationTraits().Items() | std::views::values,
-                                       [](const TOpAggregationTraits& traits) { return IsDeterministicAggregation(traits.AggFunction); });
-        // Without a total order a limit can take other rows in every copy.
-        case EOperator::Sort:
-            return !CastOperator<TOpSort>(op).LimitCond;
-        default:
-            return false;
-    }
-}
-
 TSortIUs SubstituteSortKeys(const TSortIUs& keys, const TSubstitutions& substitutions) {
     TSortIUs result;
     for (const auto& [iu, order] : keys.Items()) {
@@ -162,90 +117,16 @@ TIntrusivePtr<IOperator> CopyForConsumer(TOpReplicate& port, TSubstitutions& out
     const auto pos = producer->Pos;
     // Producer columns -> copy columns: shared inputs first, then definitions.
     TSubstitutions copied;
-    const auto define = [&](TInfoUnitId iu) {
-        const auto copy = props.InfoUnitRegistry.AddCopy(iu);
-        copied.Add(iu, copy);
-        return copy;
-    };
-    TVector<TIntrusivePtr<IOperator>> inputs;
-    if (producer->Kind != EOperator::Replicate) {
+    TIntrusivePtr<IOperator> copy;
+    if (producer->Kind == EOperator::Replicate) {
+        copy = ShareInput(producer, pos, props, copied);
+    } else {
+        TVector<TIntrusivePtr<IOperator>> inputs;
         for (ui32 i = 0; i < producer->GetChildCount(); ++i) {
             inputs.push_back(ShareInput(producer->MutableChild(i), pos, props, copied));
         }
-    }
-
-    TIntrusivePtr<IOperator> copy;
-    switch (producer->Kind) {
-        case EOperator::Replicate:
-            copy = ShareInput(producer, pos, props, copied);
-            break;
-        case EOperator::AddDependencies: {
-            TDependencyIUs dependencies;
-            for (const auto& [iu, capture] : CastOperator<TOpAddDependencies>(producer)->GetDependencies().Items()) {
-                dependencies.Add(define(iu), capture);
-            }
-            copy = MakeIntrusive<TOpAddDependencies>(inputs[0], pos, std::move(dependencies));
-            break;
-        }
-        case EOperator::Filter:
-            copy = MakeIntrusive<TOpFilter>(inputs[0], pos, CastOperator<TOpFilter>(producer)->GetFilterExpression().ApplyRenames(copied));
-            break;
-        case EOperator::Map: {
-            TMapIUs elements;
-            for (const auto& [iu, element] : CastOperator<TOpMap>(producer)->GetMapElements().Items()) {
-                auto expression = element.GetExpression().ApplyRenames(copied);
-                elements.Add(define(iu), std::move(expression));
-            }
-            copy = MakeIntrusive<TOpMap>(inputs[0], pos, std::move(elements));
-            break;
-        }
-        case EOperator::Aggregate: {
-            auto aggregate = CastOperator<TOpAggregate>(producer);
-            TOrderedIUs<> keys;
-            for (const auto iu : aggregate->GetKeyColumns().Items()) {
-                keys.Append(Substitute(iu, copied));
-            }
-            TAggregationIUs traits;
-            for (const auto& [iu, trait] : aggregate->GetAggregationTraits().Items()) {
-                auto rebound = trait;
-                rebound.Input = Substitute(trait.Input, copied);
-                traits.Add(define(iu), std::move(rebound));
-            }
-            copy = MakeIntrusive<TOpAggregate>(inputs[0], std::move(traits), std::move(keys), aggregate->GetAggregationPhase(),
-                aggregate->IsDistinctAll(), pos);
-            break;
-        }
-        case EOperator::UnionAll: {
-            auto unionAll = CastOperator<TOpUnionAll>(producer);
-            TUnionAllIUs columns(TUnionInputPolicy{unionAll->GetChildCount()});
-            for (const auto& [iu, row] : unionAll->GetColumns().Items()) {
-                auto rebound = row;
-                for (auto& input : rebound.Inputs) {
-                    input = Substitute(input, copied);
-                }
-                columns.Add(define(iu), std::move(rebound));
-            }
-            copy = MakeIntrusive<TOpUnionAll>(inputs, pos, std::move(columns), unionAll->Ordered);
-            break;
-        }
-        case EOperator::Join: {
-            auto join = CastOperator<TOpJoin>(producer);
-            TJoinIUs joinKeys;
-            for (const auto& [left, right, equalNulls] : join->JoinKeys.Items()) {
-                joinKeys.Add({Substitute(left, copied), Substitute(right, copied), equalNulls});
-            }
-            TVector<TExpression> joinFilters;
-            for (const auto& filter : join->JoinFilters) {
-                joinFilters.push_back(filter.ApplyRenames(copied));
-            }
-            copy = MakeIntrusive<TOpJoin>(inputs[0], inputs[1], pos, join->JoinKind, std::move(joinKeys), joinFilters);
-            break;
-        }
-        case EOperator::Sort:
-            copy = MakeIntrusive<TOpSort>(inputs[0], pos, SubstituteSortKeys(CastOperator<TOpSort>(producer)->GetSortElements(), copied));
-            break;
-        default:
-            Y_ENSURE(false, "Cannot copy " << producer->GetExplainName() << " for a correlated consumer");
+        copy = producer->CopyWithInputs(std::move(inputs), props.InfoUnitRegistry, copied);
+        Y_ENSURE(copy, "Cannot copy " << producer->GetExplainName() << " for a correlated consumer");
     }
 
     for (const auto source : producer->GetOutputIUs()) {
@@ -790,7 +671,10 @@ TIntrusivePtr<IOperator> TPushDependentJoinThroughReplicateRule::SimpleMatchAndA
     if (TOpReplicate::TryCollapse(body, ctx.ExprCtx, props)) {
         return PushInto(dependentJoin, body);
     }
-    if (!CanCopyForConsumer(*port->GetReplicate().GetInput())) {
+    const auto& producer = *port->GetReplicate().GetInput();
+    // CopyWithInputs does not clone subplan call bindings and their captures.
+    // Full subtree copying can handle them; this shallow-copy path cannot.
+    if (!producer.GetSubplanIUs(props.Subplans).Empty() || !CanDuplicateOperator(producer)) {
         return input;
     }
 

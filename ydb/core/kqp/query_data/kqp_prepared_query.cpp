@@ -45,8 +45,8 @@ public:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
 
-    TPreparedQueryAllocHolder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
-        : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
+    TPreparedQueryAllocHolder()
+        : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
     {
         Alloc.Release();
@@ -175,7 +175,7 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 {
 
     if (functionRegistry) {
-        Alloc = std::make_shared<TPreparedQueryAllocHolder>(functionRegistry);
+        Alloc = std::make_shared<TPreparedQueryAllocHolder>();
     }
 
     // In case of some compilation failures filling tables may produce new problems which may replace original error messages.

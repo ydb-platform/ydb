@@ -578,7 +578,7 @@ namespace NYql::NDqs {
 
         StagePrograms.clear();
 
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment typeEnv(alloc);
         TVector<NNodes::TExprBase> fakeReads;
         NCommon::TMkqlCommonCallableCompiler compiler;

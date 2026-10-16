@@ -1,34 +1,5 @@
-#include "dq_solomon_read_actor.h"
 #include "dq_solomon_actors_util.h"
-
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/protobuf/util/pb_io.h>
-#include <library/cpp/retry/retry.h>
-
-#include <util/string/join.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
-#include <ydb/library/yql/providers/solomon/events/events.h>
-#include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
-#include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
-
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/public/udf/udf_data_type.h>
-
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/url_builder.h>
-#include <yql/essentials/utils/yql_panic.h>
+#include "dq_solomon_read_actor.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -36,29 +7,43 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
+#include <ydb/library/yql/providers/solomon/events/events.h>
+#include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/yql/utils/actors/http_sender_actor.h>
 
-
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/util/pb_io.h>
+#include <library/cpp/retry/retry.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/size_literals.h>
+#include <util/string/join.h>
 #include <util/system/compiler.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/url_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#define SOURCE_LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SOURCE_LOG(prio, s) \
-    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_T(s) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_D(s) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_I(s) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_W(s) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_N(s) LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_E(s) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG_C(s) LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SOURCE_LOG(prio, s) LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 namespace NYql::NDq {
 
@@ -68,17 +53,18 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-class TDqSolomonReadActor : public NActors::TActorBootstrapped<TDqSolomonReadActor>, public IDqComputeActorAsyncInput {
+class TDqSolomonReadActor: public NActors::TActorBootstrapped<TDqSolomonReadActor>, public IDqComputeActorAsyncInput {
 private:
     struct TSizedTimeseries {
         NSo::TTimeseries Timeseries;
         ui64 TotalSize;
 
         explicit TSizedTimeseries(NSo::TTimeseries&& ts)
-            : Timeseries(std::move(ts)) {
+            : Timeseries(std::move(ts))
+        {
             TotalSize = Timeseries.Timestamps.size() * 8 + Timeseries.Values.size() * 8;
             TotalSize += Timeseries.Metric.Type.size();
-            for (const auto& [key, value]: Timeseries.Metric.Selectors) {
+            for (const auto& [key, value] : Timeseries.Metric.Selectors) {
                 TotalSize += key.size() + value.Value.size();
             }
         }
@@ -87,21 +73,11 @@ private:
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_READ_ACTOR";
 
-    TDqSolomonReadActor(
-        ui64 inputIndex,
-        TCollectStatsLevel statsLevel,
-        const TTxId& txId,
-        const NActors::TActorId& computeActorId,
-        const THolderFactory& holderFactory,
-        NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
-        TDqSolomonReadParams&& readParams,
-        ui64 metricsQueueConsumersCountDelta,
-        NActors::TActorId metricsQueueActor,
-        IMemoryQuotaManager::TPtr memoryQuotaManager,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-        const NSo::TSolomonReadActorConfig& cfg
-        )
+    TDqSolomonReadActor(ui64 inputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, const NActors::TActorId& computeActorId,
+        const THolderFactory& holderFactory, NKikimr::NMiniKQL::TProgramBuilder& programBuilder, TDqSolomonReadParams&& readParams,
+        ui64 metricsQueueConsumersCountDelta, NActors::TActorId metricsQueueActor, IMemoryQuotaManager::TPtr memoryQuotaManager,
+        const ::NMonitoring::TDynamicCounterPtr& counters, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
+        const NSo::TSolomonReadActorConfig& cfg)
         : InputIndex(inputIndex)
         , TxId(txId)
         , ComputeActorId(computeActorId)
@@ -127,19 +103,13 @@ public:
         SOURCE_LOG_D("Init");
         IngressStats.Level = statsLevel;
 
-        RetryPolicy = IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy(
-            [](const NSo::TGetDataResponse& response) {
-                if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-                    return ERetryErrorClass::ShortRetry;
-                }
-                return ERetryErrorClass::NoRetry;
-            },
-            cfg.RetryConfig.MinDelay,
-            cfg.RetryConfig.MinLongRetryDelay,
-            cfg.RetryConfig.MaxDelay,
-            cfg.RetryConfig.MaxRetries,
-            cfg.RetryConfig.MaxTime
-        );
+        RetryPolicy = IRetryPolicy<NSo::TGetDataResponse>::GetExponentialBackoffPolicy([](const NSo::TGetDataResponse& response) {
+            if (response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+                return ERetryErrorClass::ShortRetry;
+            }
+            return ERetryErrorClass::NoRetry;
+        }, cfg.RetryConfig.MinDelay, cfg.RetryConfig.MinLongRetryDelay, cfg.RetryConfig.MaxDelay, cfg.RetryConfig.MaxRetries,
+            cfg.RetryConfig.MaxTime);
 
         UseMetricsQueue = ReadParams.Source.HasSelectors();
 
@@ -168,14 +138,16 @@ public:
     void Bootstrap() {
         if (!MemoryQuotaManager->AllocateQuota(MaxDataInflightBytes + MaxMetadataInflightBytes, /* isOptional = */ false)) {
             TIssues issues;
-            issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << MaxDataInflightBytes + MaxMetadataInflightBytes << "b read buffer"});
+            issues.AddIssue(TIssue{
+                TStringBuilder() << "OutOfMemory - can't allocate " << MaxDataInflightBytes + MaxMetadataInflightBytes << "b read buffer" });
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return;
         }
 
         if (UseMetricsQueue) {
             Become(&TDqSolomonReadActor::LimitlessModeState);
-            MetricsQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
+            MetricsQueueEvents.Init(
+                TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ false, /* useConnect */ true, /* ordered */ false);
             MetricsQueueEvents.OnNewRecipientId(MetricsQueueActor);
 
             if (MetricsQueueConsumersCountDelta > 0) {
@@ -186,12 +158,8 @@ public:
         } else {
             Become(&TDqSolomonReadActor::LimitedModeState);
 
-            NSo::TMetricTimeRange metric {
-                {},
-                ReadParams.Source.GetProgram(),
-                TInstant::Seconds(ReadParams.Source.GetFrom()),
-                TInstant::Seconds(ReadParams.Source.GetTo())
-            };
+            NSo::TMetricTimeRange metric{ {}, ReadParams.Source.GetProgram(), TInstant::Seconds(ReadParams.Source.GetFrom()),
+                TInstant::Seconds(ReadParams.Source.GetTo()) };
 
             CurrentMetadataBytes += EstimateMetricTimeRangeBytes(metric);
             MetricsWithTimeRange.push_back(std::move(metric));
@@ -200,7 +168,7 @@ public:
 
         Bootstrapped = true;
     }
-    
+
     STRICT_STFUNC(LimitlessModeState,
         hFunc(TEvSolomonProvider::TEvMetricsBatch, HandleMetricsBatch);
         hFunc(TEvSolomonProvider::TEvMetricsReadError, HandleMetricsReadError);
@@ -209,7 +177,6 @@ public:
         hFunc(TEvSolomonProvider::TEvRetryDataRequest, HandleRetryDataRequest);
         hFunc(TEvSolomonProvider::TEvAck, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
@@ -247,13 +214,14 @@ public:
         for (const auto& metric : listedMetrics) {
             NSo::TSelectors selectors;
             NSo::ProtoToSelectors(metric.GetSelectors(), selectors);
-            NSo::TMetric m{std::move(selectors), metric.GetType()};
+            NSo::TMetric m{ std::move(selectors), metric.GetType() };
             CurrentMetadataBytes += EstimateMetricBytes(m);
             ListedMetrics.emplace_back(std::move(m));
         }
         ListedMetricsCount += listedMetrics.size();
 
-        while (TryRequestPointsCount()) {}
+        while (TryRequestPointsCount()) {
+        }
 
         if (LastMetricProcessed()) {
             NotifyComputeActorWithData();
@@ -272,7 +240,7 @@ public:
             IsConfirmedMetricsQueueFinish = true;
         }
 
-        TIssues issues { TIssue(metricsReadError->Get()->Record.GetIssues()) };
+        TIssues issues{ TIssue(metricsReadError->Get()->Record.GetIssues()) };
         SOURCE_LOG_W("Got " << "error list metrics response[" << metricsReadError->Cookie << "] from solomon: " << issues.ToOneLineString());
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
         return;
@@ -285,7 +253,7 @@ public:
         CurrentPointsCountBytesInflight -= std::min(CurrentPointsCountBytesInflight, metricBytes);
 
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
-            TIssues issues { TIssue(batch.Response.Error) };
+            TIssues issues{ TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error points count response[" << pointsCountBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return;
@@ -300,7 +268,8 @@ public:
         ParsePointsCount(metric, pointsCount);
         CompletedMetricsCount++;
 
-        while (TryRequestData()) {}
+        while (TryRequestData()) {
+        }
     }
 
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
@@ -319,7 +288,7 @@ public:
     void HandleRetryDataRequest(TEvSolomonProvider::TEvRetryDataRequest::TPtr& retryDataRequest) {
         auto& retryDataEvent = *retryDataRequest->Get();
         NThreading::TFuture<NSo::TGetDataResponse> dataRequestFuture;
-        
+
         auto request = std::move(retryDataEvent.Request);
         try {
             if (UseMetricsQueue) {
@@ -332,23 +301,13 @@ public:
         }
 
         dataRequestFuture.Subscribe([request = std::move(request), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
-            NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
-        {
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
-                response.ExtractValue(),
-                std::move(request)
-            ));
+                                        NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void {
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(response.ExtractValue(), std::move(request)));
         });
     }
 
     void Handle(TEvSolomonProvider::TEvAck::TPtr& ev) {
         MetricsQueueEvents.OnEventReceived(ev);
-    }
-
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
-        if (MetricsQueueEvents.Heartbeat()) {
-            MetricsQueueEvents.Send(new TEvSolomonProvider::TEvAck());
-        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
@@ -373,7 +332,7 @@ public:
         }
         MetricsQueueEvents.Unsubscribe();
         if (!(IsMetricsQueueEmpty && IsConfirmedMetricsQueueFinish && !IsWaitingMetricsQueueResponse)) {
-            TIssues issues{TIssue{TStringBuilder() << "MetricsQueue was lost"}};
+            TIssues issues{ TIssue{ TStringBuilder() << "MetricsQueue was lost" } };
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
     }
@@ -409,14 +368,15 @@ public:
             auto& values = data.Timeseries.Values;
             auto& type = data.Timeseries.Metric.Type;
 
-            for (size_t i = 0; i < timestamps.size(); ++i){
+            for (size_t i = 0; i < timestamps.size(); ++i) {
                 TInstant timestamp = TInstant::MilliSeconds(timestamps[i]);
                 if (timestamp < from || timestamp >= to) {
                     continue;
                 }
 
                 NUdf::TUnboxedValue* items = nullptr;
-                auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
+                auto value = HolderFactory.CreateDirectArrayHolder(
+                    ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
 
                 if (auto it = Index.find(SOLOMON_SCHEME_VALUE); it != Index.end()) {
                     items[it->second] = isnan(values[i]) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(values[i]).MakeOptional();
@@ -464,9 +424,14 @@ public:
 
     // Checkpointing is not supported for the Solomon source: it performs a
     // bounded, non-restartable scan of a fixed time range.
-    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {}
-    void LoadState(const TSourceState&) override {}
-    void CommitState(const NDqProto::TCheckpoint&) override {}
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {
+    }
+
+    void LoadState(const TSourceState&) override {
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) override {
+    }
 
     ui64 GetInputIndex() const override {
         return InputIndex;
@@ -478,7 +443,7 @@ public:
 
 private:
     // IActor & IDqComputeActorAsyncInput
-    void PassAway() override { // Is called from Compute Actor
+    void PassAway() override {   // Is called from Compute Actor
         SOURCE_LOG_I("PassAway, processed " << CompletedMetricsCount << " metrics, " << CompletedTimeRanges << " time ranges.");
         if (Bootstrapped) {
             if (UseMetricsQueue) {
@@ -505,7 +470,9 @@ private:
     }
 
 private:
-    TSourceState BuildState() { return {}; }
+    TSourceState BuildState() {
+        return {};
+    }
 
     void NotifyComputeActorWithData() const {
         SOURCE_LOG_D("NotifyComputeActorWithData");
@@ -557,12 +524,8 @@ private:
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         getPointsCountFuture.Subscribe([actorSystem, metric = std::move(requestMetric), selfId = SelfId()](
-            const NThreading::TFuture<NSo::TGetPointsCountResponse>& response) mutable -> void
-        {
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvPointsCountBatch(
-                std::move(metric),
-                response.GetValue())
-            );
+                                           const NThreading::TFuture<NSo::TGetPointsCountResponse>& response) mutable -> void {
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvPointsCountBatch(std::move(metric), response.GetValue()));
         });
     }
 
@@ -634,12 +597,8 @@ private:
         PendingDataRequests[request] = RetryPolicy->CreateRetryState();
 
         dataRequestFuture.Subscribe([request = std::move(request), actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
-        NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void
-        {
-            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(
-                response.ExtractValue(),
-                std::move(request)
-            ));
+                                        NThreading::TFuture<NSo::TGetDataResponse> response) mutable -> void {
+            actorSystem->Send(selfId, new TEvSolomonProvider::TEvNewDataBatch(response.ExtractValue(), std::move(request)));
         });
     }
 
@@ -647,7 +606,7 @@ private:
         auto ranges = SplitTimeIntervalIntoRanges(pointsCount);
 
         for (const auto& [fromRange, toRange] : ranges) {
-            NSo::TMetricTimeRange entry{metric.Selectors, "", fromRange, toRange};
+            NSo::TMetricTimeRange entry{ metric.Selectors, "", fromRange, toRange };
             CurrentMetadataBytes += EstimateMetricTimeRangeBytes(entry);
             MetricsWithTimeRange.emplace_back(std::move(entry));
         }
@@ -667,10 +626,7 @@ private:
         result.reserve(timeIntervals);
         auto rangeDuration = to - from;
         for (ui64 i = 0; i < timeIntervals; ++i) {
-            result.emplace_back(
-                from + rangeDuration * 1.0 / timeIntervals * i,
-                from + rangeDuration * 1.0 / timeIntervals * (i + 1)
-            );
+            result.emplace_back(from + rangeDuration * 1.0 / timeIntervals * i, from + rangeDuration * 1.0 / timeIntervals * (i + 1));
         }
 
         return result;
@@ -703,9 +659,9 @@ private:
             PendingDataRequests.erase(it);
         }
         CurrentDataInflight--;
-        
+
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
-            TIssues issues { TIssue(batch.Response.Error) };
+            TIssues issues{ TIssue(batch.Response.Error) };
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
             return false;
@@ -771,28 +727,19 @@ private:
     THashMap<TString, TString> AliasIndex;
 };
 
+}   // namespace
 
-} // namespace
-
-std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolomonReadActor(
-    NYql::NSo::NProto::TDqSolomonSource&& source,
-    ui64 inputIndex,
-    ui64 metricsQueueConsumersCountDelta,
-    TCollectStatsLevel statsLevel,
-    const TTxId& txId,
-    const NActors::TActorId& computeActorId,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
-    const THashMap<TString, TString>& secureParams,
-    IMemoryQuotaManager::TPtr memoryQuotaManager,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    const NSo::TSolomonReadActorConfig& cfg)
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolomonReadActor(NYql::NSo::NProto::TDqSolomonSource&& source,
+    ui64 inputIndex, ui64 metricsQueueConsumersCountDelta, TCollectStatsLevel statsLevel, const TTxId& txId,
+    const NActors::TActorId& computeActorId, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NKikimr::NMiniKQL::TProgramBuilder& programBuilder, const THashMap<TString, TString>& secureParams,
+    IMemoryQuotaManager::TPtr memoryQuotaManager, const ::NMonitoring::TDynamicCounterPtr& counters,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NSo::TSolomonReadActorConfig& cfg)
 {
     const TString& tokenName = source.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
 
-    TDqSolomonReadParams params {
+    TDqSolomonReadParams params{
         .Source = std::move(source),
     };
 
@@ -809,28 +756,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     auto credentialsProviderFactory = credentialsFactory->Create(token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
-    TDqSolomonReadActor* actor = new TDqSolomonReadActor(
-        inputIndex,
-        statsLevel,
-        txId,
-        computeActorId,
-        holderFactory,
-        programBuilder,
-        std::move(params),
-        metricsQueueConsumersCountDelta,
-        metricsQueueActor,
-        memoryQuotaManager,
-        counters,
-        credentialsProvider,
-        cfg);
-    return {actor, actor};
+    TDqSolomonReadActor* actor = new TDqSolomonReadActor(inputIndex, statsLevel, txId, computeActorId, holderFactory, programBuilder,
+        std::move(params), metricsQueueConsumersCountDelta, metricsQueueActor, memoryQuotaManager, counters, credentialsProvider, cfg);
+    return { actor, actor };
 }
 
 void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NSo::NProto::TDqSolomonSource>("SolomonSource",
-        [credentialsFactory](
-            NYql::NSo::NProto::TDqSolomonSource&& settings,
-            IDqAsyncIoFactory::TSourceArguments&& args)
+        [credentialsFactory](NYql::NSo::NProto::TDqSolomonSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args)
         {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
 
@@ -841,21 +774,10 @@ void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTo
 
             const NSo::TSolomonReadActorConfig cfg = NSo::ParseSolomonReadActorConfig(settings.settings());
 
-            return CreateDqSolomonReadActor(
-                std::move(settings),
-                args.InputIndex,
-                metricsQueueConsumersCountDelta,
-                args.StatsLevel,
-                args.TxId,
-                args.ComputeActorId,
-                args.HolderFactory,
-                args.ProgramBuilder,
-                args.SecureParams,
-                args.MemoryQuotaManager,
-                counters,
-                credentialsFactory,
-                cfg);
+            return CreateDqSolomonReadActor(std::move(settings), args.InputIndex, metricsQueueConsumersCountDelta, args.StatsLevel, args.TxId,
+                args.ComputeActorId, args.HolderFactory, args.ProgramBuilder, args.SecureParams, args.MemoryQuotaManager, counters,
+                credentialsFactory, cfg);
         });
 }
 
-}
+}   // namespace NYql::NDq

@@ -388,7 +388,13 @@ inline bool array_container_contains(const array_container_t *arr,
         uint16x8_t v1 = vld1q_u16(blk + 8);
         uint16x8_t hit =
             vorrq_u16(vceqq_u16(v0, needle), vceqq_u16(v1, needle));
+#ifdef __arm__
+        uint16x4_t hit8 = vmax_u16(vget_low_u16(hit), vget_high_u16(hit));
+        uint16x4_t hit4 = vpmax_u16(hit8, hit8);
+        return vget_lane_u32(hit4, 0) != 0;
+#else /* __aarch64__ */
         return vmaxvq_u16(hit) != 0;
+#endif
 #elif defined(CROARING_IS_X64)
         __m128i needle = _mm_set1_epi16((short)pos);
         __m128i v0 = _mm_loadu_si128((const __m128i *)blk);

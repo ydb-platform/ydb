@@ -450,7 +450,7 @@ IFileReaderPtr TClientBase::CreateFilePartitionReader(
     const TString& cookie,
     const TFilePartitionReaderOptions& options)
 {
-    return NDetail::CreateFilePartitionReader(RawClient_, ClientRetryPolicy_->CreatePolicyForReaderRequest(), cookie, options);
+    return NDetail::CreateFilePartitionReader(RawClient_, ClientRetryPolicy_, cookie, options);
 }
 
 IFileWriterPtr TClientBase::CreateFileWriter(

@@ -4,7 +4,11 @@ import logging
 import pytest
 import time
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+)
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -31,7 +35,8 @@ class ScalarTopicWriteTestBase:
                 'KQP_PROXY': LogLevels.DEBUG,
                 'KQP_COMPUTE': LogLevels.TRACE,
                 'YDB_SDK': LogLevels.TRACE,
-                'KQP_EXECUTER': LogLevels.DEBUG},
+                'KQP_EXECUTER': LogLevels.DEBUG,
+            },
         )
 
     def create_topics(self, with_external_data_source: bool):
@@ -72,7 +77,9 @@ class ScalarTopicWriteTestBase:
             for _ in range(0, 5):
                 try:
                     started_at = time.time()
-                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=50, get_session_client_timeout=30))
+                    session_pool.execute_with_retries(
+                        query, retry_settings=ydb.RetrySettings(max_retries=50, get_session_client_timeout=30)
+                    )
                     logger.debug(f"Write request finished in {time.time() - started_at} s")
                 except ydb.DeadlineExceed as e:
                     logger.warning(f"Failed to write to topic, deadline exceeded: {e}")
@@ -86,10 +93,11 @@ class ScalarTopicWriteTestBase:
             messages_count=1,
             consumer_name=self.consumer_name,
             database=self.database_path,
-            endpoint=f"localhost:{self.cluster.nodes[1].port}")
+            endpoint=f"localhost:{self.cluster.nodes[1].port}",
+        )
         assert read_data, f"No data read from stream {self.output_topic}"
         if len(read_data) > 1:
-            read_data = read_data[-1:]        # deduplication disabled
+            read_data = read_data[-1:]  # deduplication disabled
         assert read_data[0] == f"my_data{suffix}"
 
 

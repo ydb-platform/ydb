@@ -9,12 +9,12 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
+
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -25,7 +25,7 @@ using namespace NResourcePool;
 using TYqlConclusionStatus = TResourcePoolManager::TYqlConclusionStatus;
 using TAsyncStatus = TResourcePoolManager::TAsyncStatus;
 
-struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
+struct TFeatureFlagExtractor: public NKqp::IFeatureFlagExtractor {
     bool IsEnabled(const NKikimrConfig::TFeatureFlags& flags) const override {
         return flags.GetEnableResourcePools();
     }
@@ -49,7 +49,8 @@ struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
     return TYqlConclusionStatus::Success();
 }
 
-[[nodiscard]] TYqlConclusionStatus FillResourcePoolDescription(NKikimrSchemeOp::TResourcePoolDescription& resourcePoolDescription, const NYql::TCreateObjectSettings& settings) {
+[[nodiscard]] TYqlConclusionStatus FillResourcePoolDescription(
+    NKikimrSchemeOp::TResourcePoolDescription& resourcePoolDescription, const NYql::TCreateObjectSettings& settings) {
     resourcePoolDescription.SetName(settings.GetObjectId());
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
@@ -62,30 +63,30 @@ struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
     for (const auto& [property, setting] : resourcePoolSettings.GetPropertiesMap(true)) {
         if (std::optional<TString> value = featuresExtractor.Extract(property)) {
             try {
-                std::visit(TPoolSettings::TParser{*value}, setting);
+                std::visit(TPoolSettings::TParser{ *value }, setting);
             } catch (const yexception& error) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Failed to parse property " << property << ": " << error.what());
+                return TYqlConclusionStatus::Fail(
+                    NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Failed to parse property " << property << ": " << error.what());
             }
         } else if (!featuresExtractor.ExtractResetFeature(property)) {
             continue;
         }
 
         const TString value = std::visit(TPoolSettings::TExtractor(), setting);
-        properties.insert({property, value});
+        properties.insert({ property, value });
     }
 
     if (!featuresExtractor.IsFinished()) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
+        return TYqlConclusionStatus::Fail(
+            NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());
     }
 
     if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
-        std::vector<TString> forbiddenProperties = {
-            "concurrent_query_limit",
-            "database_load_cpu_threshold"
-        };
+        std::vector<TString> forbiddenProperties = { "concurrent_query_limit", "database_load_cpu_threshold" };
         for (const TString& property : forbiddenProperties) {
             if (properties.contains(property)) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() << "Cannot change property " << property << " for default pool");
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                    TStringBuilder() << "Cannot change property " << property << " for default pool");
             }
         }
     }
@@ -120,7 +121,8 @@ private:
     NYql::TIssues Issues;
 };
 
-TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nodeId, const TResourcePoolManager::TExternalModificationContext& context) {
+TAsyncStatus CheckPoolNotReferencedByClassifiers(
+    const TString& poolId, ui32 nodeId, const TResourcePoolManager::TExternalModificationContext& context) {
     // The default pool is recreated on demand, so a dangling classifier reference to it is not possible
     if (poolId == NResourcePool::DEFAULT_POOL_ID || !NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
@@ -149,12 +151,12 @@ TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nod
             if (!referencingClassifiers.empty()) {
                 Sort(referencingClassifiers);
                 result.SetStatus(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED);
-                result.AddIssue(NYql::TIssue(TStringBuilder() << "Cannot drop resource pool " << poolId
-                    << ", it is referenced by resource pool classifiers: " << JoinSeq(", ", referencingClassifiers)));
+                result.AddIssue(NYql::TIssue(TStringBuilder()
+                                             << "Cannot drop resource pool " << poolId
+                                             << ", it is referenced by resource pool classifiers: " << JoinSeq(", ", referencingClassifiers)));
             }
             promise.SetValue(std::move(result));
-        }
-    ));
+        }));
 
     return promise.GetFuture().Apply([](const NThreading::TFuture<TClassifiersCheckResult>& f) {
         return f.GetValue().ToConclusion();
@@ -166,19 +168,22 @@ TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nod
 
     switch (activityType) {
         case EActivityType::Undefined:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for RESOURCE_POOL object");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Undefined operation for RESOURCE_POOL object");
         case EActivityType::Upsert:
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for RESOURCE_POOL objects is not implemented");
+            return TYqlConclusionStatus::Fail(
+                NYql::TIssuesIds::KIKIMR_UNIMPLEMENTED, "Upsert operation for RESOURCE_POOL objects is not implemented");
         default:
             throw yexception() << "Unexpected status to fail: " << activityType;
     }
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 //// Immediate modification
 
-TAsyncStatus TResourcePoolManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+TAsyncStatus TResourcePoolManager::DoModify(const NYql::TObjectSettingsImpl& settings, ui32 nodeId,
+    const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     Y_UNUSED(manager);
 
     try {
@@ -193,37 +198,46 @@ TAsyncStatus TResourcePoolManager::DoModify(const NYql::TObjectSettingsImpl& set
                 return NThreading::MakeFuture<TYqlConclusionStatus>(ErrorFromActivityType(context.GetActivityType()));
         }
     } catch (...) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during RESOURCE_POOL modification operation: " << CurrentExceptionMessage()));
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during RESOURCE_POOL modification operation: "
+                             << CurrentExceptionMessage()));
     }
 }
 
-TAsyncStatus TResourcePoolManager::CreateResourcePool(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
+TAsyncStatus TResourcePoolManager::CreateResourcePool(
+    const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (auto status = PrepareCreateResourcePool(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetCreateResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kCreateResourcePool);
+    return ExecuteSchemeRequest(
+        schemeOperation.GetCreateResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kCreateResourcePool);
 }
 
-TAsyncStatus TResourcePoolManager::AlterResourcePool(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
+TAsyncStatus TResourcePoolManager::AlterResourcePool(
+    const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (auto status = PrepareAlterResourcePool(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetAlterResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kAlterResourcePool);
+    return ExecuteSchemeRequest(
+        schemeOperation.GetAlterResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kAlterResourcePool);
 }
 
-TAsyncStatus TResourcePoolManager::DropResourcePool(const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
+TAsyncStatus TResourcePoolManager::DropResourcePool(
+    const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context, ui32 nodeId) const {
     NKqpProto::TKqpSchemeOperation schemeOperation;
     if (auto status = PrepareDropResourcePool(schemeOperation, settings, context); status.IsFail()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(status);
     }
-    return ExecuteSchemeRequest(schemeOperation.GetDropResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kDropResourcePool);
+    return ExecuteSchemeRequest(
+        schemeOperation.GetDropResourcePool(), context.GetExternalData(), nodeId, NKqpProto::TKqpSchemeOperation::kDropResourcePool);
 }
 
 //// Deferred modification
 
-TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings, const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
+TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TObjectSettingsImpl& settings,
+    const NMetadata::IClassBehaviour::TPtr& manager, TInternalModificationContext& context) const {
     Y_UNUSED(manager);
 
     try {
@@ -238,36 +252,42 @@ TYqlConclusionStatus TResourcePoolManager::DoPrepare(NKqpProto::TKqpSchemeOperat
                 return ErrorFromActivityType(context.GetActivityType());
         }
     } catch (...) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during preparation of RESOURCE_POOL modification operation: " << CurrentExceptionMessage());
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during preparation of RESOURCE_POOL modification operation: "
+                             << CurrentExceptionMessage());
     }
 }
 
-TYqlConclusionStatus TResourcePoolManager::PrepareCreateResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
+TYqlConclusionStatus TResourcePoolManager::PrepareCreateResourcePool(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings, TInternalModificationContext& context) const {
     if (auto status = ValidateObjectId(settings.GetObjectId()); status.IsFail()) {
         return status;
     }
     if (settings.GetObjectId() == NResourcePool::DEFAULT_POOL_ID) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, "Cannot create default pool manually, pool will be created automatically during first request execution");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+            "Cannot create default pool manually, pool will be created automatically during first request execution");
     }
 
     auto& schemeTx = *schemeOperation.MutableCreateResourcePool();
-    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
+    schemeTx.SetWorkingDir(JoinPath({ context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/" }));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateResourcePool);
 
     return FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
 }
 
-TYqlConclusionStatus TResourcePoolManager::PrepareAlterResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
+TYqlConclusionStatus TResourcePoolManager::PrepareAlterResourcePool(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
     auto& schemeTx = *schemeOperation.MutableAlterResourcePool();
-    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
+    schemeTx.SetWorkingDir(JoinPath({ context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/" }));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterResourcePool);
 
     return FillResourcePoolDescription(*schemeTx.MutableCreateResourcePool(), settings);
 }
 
-TYqlConclusionStatus TResourcePoolManager::PrepareDropResourcePool(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
+TYqlConclusionStatus TResourcePoolManager::PrepareDropResourcePool(
+    NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {
     auto& schemeTx = *schemeOperation.MutableDropResourcePool();
-    schemeTx.SetWorkingDir(JoinPath({context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/"}));
+    schemeTx.SetWorkingDir(JoinPath({ context.GetExternalData().GetDatabase(), ".metadata/workload_manager/pools/" }));
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropResourcePool);
 
     schemeTx.MutableDrop()->SetName(settings.GetObjectId());
@@ -277,7 +297,8 @@ TYqlConclusionStatus TResourcePoolManager::PrepareDropResourcePool(NKqpProto::TK
 
 //// Apply deferred modification
 
-TAsyncStatus TResourcePoolManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, ui32 nodeId, const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
+TAsyncStatus TResourcePoolManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation, ui32 nodeId,
+    const NMetadata::IClassBehaviour::TPtr& manager, const TExternalModificationContext& context) const {
     Y_UNUSED(manager);
 
     try {
@@ -289,14 +310,19 @@ TAsyncStatus TResourcePoolManager::ExecutePrepared(const NKqpProto::TKqpSchemeOp
             case NKqpProto::TKqpSchemeOperation::kDropResourcePool:
                 return ExecuteSchemeRequest(schemeOperation.GetDropResourcePool(), context, nodeId, schemeOperation.GetOperationCase());
             default:
-                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Execution of prepared operation for RESOURCE_POOL object: unsupported operation: " << static_cast<i32>(schemeOperation.GetOperationCase())));
+                return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                    TStringBuilder() << "Internal error. Execution of prepared operation for RESOURCE_POOL object: unsupported operation: "
+                                     << static_cast<i32>(schemeOperation.GetOperationCase())));
         }
     } catch (...) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Got unexpected exception during execution of RESOURCE_POOL modification operation: " << CurrentExceptionMessage()));
+        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+            TStringBuilder() << "Internal error. Got unexpected exception during execution of RESOURCE_POOL modification operation: "
+                             << CurrentExceptionMessage()));
     }
 }
 
-TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, ui32 nodeId, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
+TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx,
+    const TExternalModificationContext& context, ui32 nodeId, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
     if (operationCase == NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
         validationFuture = NKqp::ChainFeatures(validationFuture, [poolId = schemeTx.GetDrop().GetName(), nodeId, context] {
@@ -312,4 +338,4 @@ TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::T
     });
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

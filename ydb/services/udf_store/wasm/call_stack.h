@@ -1,9 +1,8 @@
 #pragma once
 
-#include <util/generic/string.h>
-
-#include <WAVM/Platform/Diagnostics.h>
 #include <WAVM/Inline/BasicTypes.h>
+#include <WAVM/Platform/Diagnostics.h>
+#include <util/generic/string.h>
 
 namespace NKikimr::NUdfStore::NWasm {
 
@@ -15,4 +14,4 @@ TString FormatUserWasmCallStack(const WAVM::Platform::CallStack& callStack);
 //! Captures the current call stack and formats user wasm frames only.
 TString FormatUserWasmCallStackFromCurrent(WAVM::Uptr omitTopFrames = 1);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

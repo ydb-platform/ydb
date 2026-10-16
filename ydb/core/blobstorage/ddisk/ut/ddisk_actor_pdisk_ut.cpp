@@ -1,9 +1,23 @@
 #include "ddisk_actor_pdisk_common_ut.h"
 #include <ydb/library/pdisk_io/uring_test_support.h>
 
+#include <array>
+
 namespace NKikimr {
 
 namespace {
+
+void WaitNativeGate(TTestContext& ctx, size_t count = 1) {
+    const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+    for (;;) {
+        auto state = ctx.SendAndGrab<TEvGateState>(new TEvControlGate());
+        if (state->Get()->Held >= count) {
+            return;
+        }
+        UNIT_ASSERT_C(TInstant::Now() < deadline, "native completion did not reach event gate");
+        Sleep(TDuration::MilliSeconds(1));
+    }
+}
 
 enum class EPayloadLayout {
     Unaligned,
@@ -157,6 +171,215 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     Y_UNIT_TEST(DevNullVerifiesZeroWritesAndReadsWithChecksums_Uring) {
         if (!NPDisk::RequireUring()) { return; }
         TestDevNullWriteAndRead(true);
+    }
+
+    Y_UNIT_TEST(CoroutineParkedWriteSessionReplacement_Uring) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        for (bool generation : {false, true}) {
+            TTestContext ctx({}, NLog::PRI_ERROR, 1, std::nullopt, true);
+            auto creds = Connect(ctx, 994, 1);
+
+            auto write = [&](const auto& credentials, ui64 chunk, ui64 cookie, ui32 block = 2) {
+                auto request = std::make_unique<NDDisk::TEvWrite>(credentials,
+                    NDDisk::TBlockSelector(chunk, block * MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
+                request->AddPayloadThenChecksum(MakeAlignedRope(MakeData('A', MinBlockSize)));
+                ctx.Send(request.release(), cookie);
+            };
+            write(creds, 0, 500);
+            AssertStatus<NDDisk::TEvWriteResult>(ctx.Grab<NDDisk::TEvWriteResult>(), TReplyStatus::OK);
+            ctx.WaitForReservationsSettled();
+            auto initial = ctx.SendAndGrab<TEvGateState>(new TEvControlGate(NPDisk::TEvChunkReserveResult::EventType));
+            const auto reserved = initial->Get()->Reserved;
+            UNIT_ASSERT(reserved > 0);
+            for (size_t i = 0; i < reserved; ++i) {
+                write(creds, i + 1, 500);
+                AssertStatus<NDDisk::TEvWriteResult>(ctx.Grab<NDDisk::TEvWriteResult>(), TReplyStatus::OK);
+            }
+            WaitNativeGate(ctx);
+            auto empty = ctx.SendAndGrab<TEvGateState>(new TEvControlGate());
+            UNIT_ASSERT_VALUES_EQUAL(empty->Get()->Reserved, 0);
+            write(creds, 100, 501);
+            // The write parks until a reserve arrives; the read of its unpublished chunk
+            // answers zeroes without waiting for that allocation.
+            ctx.Send(new NDDisk::TEvRead(creds, {100, 0, MinBlockSize}, {true}), 502);
+            auto unpublished = ctx.Grab<NDDisk::TEvReadResult>();
+            AssertStatus<NDDisk::TEvReadResult>(unpublished, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(unpublished->Cookie, 502);
+            UNIT_ASSERT_VALUES_EQUAL(unpublished->Get()->GetPayload(0).ConvertToString(),
+                TString(MinBlockSize, '\0'));
+            auto fresh = NDDisk::TQueryCredentials::ToDDisk(994, generation ? 2 : 1,
+                generation ? 0 : 1, std::nullopt, 0);
+            auto connected = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(fresh));
+            AssertStatus<NDDisk::TEvConnectResult>(connected, TReplyStatus::OK);
+            fresh.DDiskInstanceGuid = connected->Get()->Record.GetDDiskInstanceGuid();
+            fresh.ConnectionToken.emplace(connected->Get()->Record.GetConnectionToken());
+            write(fresh, 100, 503, 3);
+            ctx.SendAndGrab<TEvGateState>(new TEvControlGate(0, true));
+            std::set<ui64> cookies;
+            for (ui32 i = 0; i < 2; ++i) {
+                auto result = ctx.Grab<NDDisk::TEvWriteResult>();
+                UNIT_ASSERT(cookies.insert(result->Cookie).second);
+                AssertStatus<NDDisk::TEvWriteResult>(result, result->Cookie == 501 ? TReplyStatus::SESSION_MISMATCH : TReplyStatus::OK);
+            }
+            auto completed = ctx.SendAndGrab<TEvGateState>(new TEvControlGate());
+            UNIT_ASSERT(completed->Get()->Router);
+            UNIT_ASSERT_VALUES_EQUAL(completed->Get()->Held, 0);
+            // Batches that complete inline emit no mailbox event. Verify the revoked
+            // write left its block untouched and the replacement wrote its own block.
+            AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+                new NDDisk::TEvRead(fresh, {100, 2 * MinBlockSize, MinBlockSize}, {true})),
+                TString(MinBlockSize, '\0'));
+            AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+                new NDDisk::TEvRead(fresh, {100, 3 * MinBlockSize, MinBlockSize}, {true})),
+                MakeData('A', MinBlockSize));
+            ctx.StopDDisk(0);
+        }
+    }
+
+    Y_UNIT_TEST(DisjointNativeWritesAcrossConnectionReplacement_Uring) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TTestContext ctx({}, NLog::PRI_ERROR, 1, std::nullopt, true);
+        auto creds = Connect(ctx, 991, 1);
+
+        auto write = [&](const auto& credentials, ui32 block, char value, ui64 cookie) {
+            auto request = std::make_unique<NDDisk::TEvWrite>(credentials,
+                NDDisk::TBlockSelector(0, block * MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
+            request->AddPayloadThenChecksum(MakeAlignedRope(MakeData(value, MinBlockSize)));
+            ctx.Send(request.release(), cookie);
+        };
+        write(creds, 0, 'I', 500);
+        AssertStatus<NDDisk::TEvWriteResult>(ctx.Grab<NDDisk::TEvWriteResult>(), TReplyStatus::OK);
+        ctx.WaitForReservationsSettled();
+        ctx.SendAndGrab<TEvGateState>(new TEvControlGate(TEvents::TEvResumeRunnable::EventType));
+        write(creds, 1, 'A', 501);
+        WaitNativeGate(ctx);
+        write(creds, 2, 'S', 502);
+        // The second writer waits for the first writer to release their shared metadata
+        // pair before admitting anything. The first writer is already accepted.
+        auto fresh = Connect(ctx, 991, 2);
+        write(fresh, 3, 'B', 503);
+        write(fresh, 4, 'C', 504);
+        const auto held = ctx.SendAndGrab<TEvGateState>(new TEvControlGate());
+        UNIT_ASSERT(held->Get()->Held >= 1);
+        UNIT_ASSERT(held->Get()->Router);
+        ctx.SendAndGrab<TEvGateState>(new TEvControlGate(0, true));
+        // The writer which was parked before admission sees the replaced session; the
+        // accepted writer and both writers on the fresh connection complete.
+        std::set<ui64> cookies;
+        for (ui32 i = 0; i < 4; ++i) {
+            auto result = ctx.Grab<NDDisk::TEvWriteResult>();
+            UNIT_ASSERT(cookies.insert(result->Cookie).second);
+            AssertStatus<NDDisk::TEvWriteResult>(result,
+                result->Cookie == 502 ? TReplyStatus::SESSION_MISMATCH : TReplyStatus::OK);
+        }
+        UNIT_ASSERT(cookies == (std::set<ui64>{501, 502, 503, 504}));
+        const auto state = ctx.SendAndGrab<TEvGateState>(new TEvControlGate());
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Held, 0);
+        UNIT_ASSERT(state->Get()->IoCompletions >= 4);
+        for (const auto& [block, value] : std::array<std::pair<ui32, char>, 4>{{
+                {1, 'A'}, {2, '\0'}, {3, 'B'}, {4, 'C'}}}) {
+            AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+                new NDDisk::TEvRead(fresh, {0, block * MinBlockSize, MinBlockSize}, {true})),
+                MakeData(value, MinBlockSize));
+        }
+        ctx.StopDDisk(0);
+    }
+
+    Y_UNIT_TEST(CoroutineDeletionInterruption_Uring) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        for (bool broken : {false, true}) for (ui32 phase : {0u, 1u, 2u}) {
+            TTestContext ctx({.EnableChecksums = phase != 0}, NLog::PRI_ERROR, 1, std::nullopt, true);
+            const auto creds = Connect(ctx, 992, 1);
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+                NDDisk::TBlockSelector(0, 0, MinBlockSize), NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(MakeAlignedRope(MakeData('A', MinBlockSize)));
+            AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+            ctx.WaitForReservationsSettled();
+            auto before = ctx.SendAndGrab<TEvGateState>(new TEvControlGate(NPDisk::TEvLogResult::EventType));
+            UNIT_ASSERT(before->Get()->Router && before->Get()->IoCompletions > 0);
+            ctx.Send(new NDDisk::TEvDeleteTabletChunks(creds), 501);
+            WaitNativeGate(ctx);
+            if (phase == 2) {
+                // Release phase one and arm phase two in the same activation.
+                ctx.SendAndGrab<TEvGateState>(new TEvControlGate(NPDisk::TEvLogResult::EventType, true));
+                WaitNativeGate(ctx);
+            }
+            if (broken) {
+                ctx.SendAndGrab<TEvGateState>(new TEvControlGate(0, false, true));
+            }
+            else {
+                ctx.Send(new NPDisk::TEvLogResult(NKikimrProto::INVALID_ROUND, 0, "native session loss", 0));
+            }
+            auto reply = ctx.Grab<NDDisk::TEvDeleteTabletChunksResult>();
+            AssertStatus<NDDisk::TEvDeleteTabletChunksResult>(reply, broken ? TReplyStatus::ERROR : TReplyStatus::SESSION_MISMATCH);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, 501);
+            ctx.SendAndGrab<TEvGateState>(new TEvControlGate(0, true));
+            // A same-type reply barrier catches a duplicate completion without a timed quiet window.
+            ctx.Send(new NDDisk::TEvDeleteTabletChunks(creds), 502);
+            auto barrier = ctx.Grab<NDDisk::TEvDeleteTabletChunksResult>();
+            UNIT_ASSERT_VALUES_EQUAL(barrier->Cookie, 502);
+            AssertStatus<NDDisk::TEvDeleteTabletChunksResult>(barrier, broken ? TReplyStatus::ERROR : TReplyStatus::SESSION_MISMATCH);
+            ctx.StopDDisk(0);
+        }
+    }
+
+    Y_UNIT_TEST(DisjointNativeSyncSourcesRetainCompletePayloads_Uring) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        for (bool checksums : {false, true}) for (bool partial : {false, true}) {
+            TTestContext ctx({.EnableChecksums = checksums}, NLog::PRI_ERROR, 1, std::nullopt, true);
+            ctx.AddDisk();
+            const auto creds = Connect(ctx, 993, 1);
+            const auto source = ConnectTo(ctx, 1, 993, 1);
+            const TString payload = MakeData('S', 3 * MinBlockSize);
+            auto write = std::make_unique<NDDisk::TEvWrite>(source,
+                NDDisk::TBlockSelector(0, 0, payload.size()), NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(MakeAlignedRope(payload));
+            AssertStatus<NDDisk::TEvWriteResult>(ctx.SendToAndGrab<NDDisk::TEvWriteResult>(1, write.release()), TReplyStatus::OK);
+            auto sourceState = ctx.SendToAndGrab<TEvGateState>(1, new TEvControlGate());
+            UNIT_ASSERT(sourceState->Get()->Router && sourceState->Get()->IoCompletions > 0);
+            ctx.SendAndGrab<TEvGateState>(new TEvControlGate(NDDisk::TEvReadResult::EventType));
+
+            auto sync = [&](ui32 offset, ui32 size, ui64 cookie) {
+                auto request = std::make_unique<NDDisk::TEvSync>(creds);
+                request->AddSegmentFromDDisk({ctx.NodeId, ctx.Disks[1].PDiskId, ctx.Disks[1].SlotId},
+                    *source.DDiskInstanceGuid, {0, offset, size});
+                ctx.Send(request.release(), cookie);
+            };
+            sync(0, payload.size(), 501);
+            WaitNativeGate(ctx);
+            const ui32 secondSize = partial ? MinBlockSize : 2 * MinBlockSize;
+            const TString newer = MakeData('N', secondSize);
+            auto overwrite = std::make_unique<NDDisk::TEvWrite>(source,
+                NDDisk::TBlockSelector(0, 3 * MinBlockSize, newer.size()), NDDisk::TWriteInstruction(0));
+            overwrite->AddPayloadThenChecksum(MakeAlignedRope(newer));
+            AssertStatus<NDDisk::TEvWriteResult>(ctx.SendToAndGrab<NDDisk::TEvWriteResult>(1, overwrite.release()), TReplyStatus::OK);
+            sync(3 * MinBlockSize, secondSize, 502);
+            WaitNativeGate(ctx, 2);
+            ctx.SendAndGrab<TEvGateState>(new TEvControlGate(0, true));
+            std::set<ui64> cookies;
+            for (ui32 i = 0; i < 2; ++i) {
+                auto result = ctx.Grab<NDDisk::TEvSyncResult>();
+                AssertStatus<NDDisk::TEvSyncResult>(result, TReplyStatus::OK);
+                UNIT_ASSERT(cookies.insert(result->Cookie).second);
+                UNIT_ASSERT(result->Get()->Record.GetSegmentResults(0).GetStatus() == TReplyStatus::OK);
+            }
+            AssertReadResult(ctx.SendAndGrab<NDDisk::TEvReadResult>(
+                new NDDisk::TEvRead(creds, {0, 0, static_cast<ui32>(payload.size() + newer.size())}, {true})),
+                payload + newer, checksums);
+            auto state = ctx.SendAndGrab<TEvGateState>(new TEvControlGate());
+            UNIT_ASSERT(state->Get()->Router && state->Get()->IoCompletions > 0);
+            UNIT_ASSERT_VALUES_EQUAL(state->Get()->Held, 0);
+            ctx.StopDDisk(0);
+            ctx.StopDDisk(1);
+        }
     }
 
     Y_UNIT_TEST(StartupRepairsAbandonedReservations_PDiskFallback) {

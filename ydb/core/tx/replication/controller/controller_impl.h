@@ -147,6 +147,8 @@ private:
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvRestoreSession::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvBootPersistedWorkers::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
@@ -326,6 +328,8 @@ private:
 
     bool ProcessQueuesScheduled = false;
     static constexpr ui32 ProcessBatchLimit = 100;
+    static constexpr TDuration RestoreSessionInterval = TDuration::Seconds(1);
+    static constexpr TDuration BootPersistedWorkersDelay = TDuration::Seconds(10);
 
     // create stream limiter
     TDeque<TActorId> RequestedCreateStream;

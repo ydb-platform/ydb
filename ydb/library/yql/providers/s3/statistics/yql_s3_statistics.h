@@ -1,13 +1,15 @@
 #pragma once
 
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+
 #include <yql/essentials/core/yql_statistics.h>
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+
 #include <map>
 
 namespace NYql {
 
-struct TS3ProviderStatistics : public IProviderStatistics {
+struct TS3ProviderStatistics: public IProviderStatistics {
     ui64 RawByteSize = 0;
     bool OverrideApplied = false;
     double FullRawRowAvgSize = 0.0;
@@ -21,4 +23,4 @@ struct TS3ProviderStatistics : public IProviderStatistics {
 
 double GetDqSourceWrapBaseCost(const NNodes::TDqSourceWrapBase& wrapBase, TTypeAnnotationContext& typeCtx);
 
-} // namespace NYql
+}   // namespace NYql

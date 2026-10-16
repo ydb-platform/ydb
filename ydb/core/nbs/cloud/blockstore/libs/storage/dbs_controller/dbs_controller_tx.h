@@ -146,6 +146,7 @@ struct TTxDbsController
         const NBS::NStorage::TRequestInfoPtr RequestInfo;
 
         TVector<ui32> NodeIds;
+        THashSet<ui32> LockedNodes;
 
         // Output
         bool Allowed = false;
@@ -153,9 +154,11 @@ struct TTxDbsController
 
         explicit TNodeMaintenancePermission(
             NBS::NStorage::TRequestInfoPtr requestInfo,
-            TVector<ui32> nodeIds)
+            TVector<ui32> nodeIds,
+            THashSet<ui32> lockedNodes)
             : RequestInfo(std::move(requestInfo))
             , NodeIds(std::move(nodeIds))
+            , LockedNodes(std::move(lockedNodes))
         {}
 
         void Clear()

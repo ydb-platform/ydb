@@ -44,7 +44,7 @@ namespace NActors::NHarmonizerMetrics {
         using TFields = std::tuple<TAvgUsedCpu, TAvgElapsedCpu, TPotentialMaxThreadCount>;
     };
 
-    using TGlobalFrontend = TGroupLineFrontend<TGlobal>;
-    using TPoolFrontend = TGroupLineFrontend<TPool>;
+    using TDecimalStorage = TCompressedLineStorage<100'000, TDecimalEncoding<2>>;
+    using TGlobalFrontend = TGroupLineFrontend<TGlobal, TDecimalStorage>;
 
 } // namespace NActors::NHarmonizerMetrics

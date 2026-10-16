@@ -125,6 +125,8 @@ struct TTranslationSettings {
     bool WarnOnV0;
     bool TestAntlr4; // TODO(YQL-19017): remove.
     TMaybe<size_t> MaxParseTreeDepth;
+    ui32 GroupByLimit = 64;
+    ui32 GroupByCubeLimit = 5;
     ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;

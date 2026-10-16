@@ -52,4 +52,4 @@ public:
 
 TString WasmArtifactKindToString(EWasmArtifactKind kind);
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

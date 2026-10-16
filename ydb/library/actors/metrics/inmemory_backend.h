@@ -12,9 +12,10 @@ namespace NActors {
     template<class TFrontend>
     class TLine;
 
-    template<class TValue>
+    struct TUncompressedLineStorage;
+    template<class TValue, class TStoragePolicy>
     struct TRawLineFrontend;
-    template<class TValue>
+    template<class TValue, class TStoragePolicy>
     struct TOnChangeLineFrontend;
 
     class TInMemoryMetricsBackend {
@@ -37,7 +38,7 @@ namespace NActors {
         ~TInMemoryMetricsBackend();
 
         // Owner-only registration convenience, never called by client threads.
-        template<class TFrontend = TRawLineFrontend<ui64>>
+        template<class TFrontend = TRawLineFrontend<ui64, TUncompressedLineStorage>>
         TLine<TFrontend> CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config = {});
 
         void SetCommonLabels(std::span<const TLabel> labels);

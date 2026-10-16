@@ -756,3 +756,7 @@ ids {
   code: FMR_UDF_TERMINATE
   severity: S_ERROR
 }
+ids {
+  code: SPARK_UNSUPPORTED_PROTO_ELEMENT
+  severity: S_ERROR
+}

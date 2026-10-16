@@ -3246,6 +3246,114 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         CheckShardBackgroundCompacted(runtime, mergedInfo.UserTable, mergedInfo.Shards.at(0), mergedInfo.OwnerId);
     }
 
+    // Regression test for RemoveNoStart in ProcessForcedCompactionOnSplitMerge:
+    // with the queue inflight limit at 1, merging shards while a forced
+    // compaction is in flight must not emit extra TEvCompactTable RPCs to the
+    // (now dead) source shards from the per-removal StartOperations() churn;
+    // the only new RPC must target the dst shard, arriving via the
+    // consolidated ScheduleForcedCompactionProgress.
+    Y_UNIT_TEST(ShouldNotStartExtraCompactionsOnMerge) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        // queue-level inflight limit of 1: exactly one src shard is running,
+        // the other two sit queued, so a per-removal StartOperations() has a
+        // queued src shard to (wrongly) dispatch during the merge
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetInflightLimit(1);
+        runtime.GetAppData().CompactionConfig.MutableForcedCompactionConfig()->SetTimeoutSeconds(1000); // avoid timeouts
+        Setup(runtime, env);
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender); // apply queue config
+
+        ui64 txId = 1000;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Simple"
+            Columns { Name: "key"  Type: "Uint64"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: 1
+                }
+            }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        WriteData(runtime, "Simple", 1, 99, TTestTxConfig::FakeHiveTablets);
+        WriteData(runtime, "Simple", 101, 199, TTestTxConfig::FakeHiveTablets + 1);
+        WriteData(runtime, "Simple", 201, 299, TTestTxConfig::FakeHiveTablets + 2);
+
+        auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(info.Shards.size(), 3UL);
+
+        // TEvCompactTable travels over a pipe, so its Recipient is the pipe
+        // server actor; map pipe servers back to tablet actors via
+        // TEvServerConnected (Recipient = tablet actor, Sender = pipe server)
+        THashMap<TActorId, TActorId> pipeToTablet;
+        auto pipeObserver = runtime.AddObserver<TEvTabletPipe::TEvServerConnected>(
+            [&](const TEvTabletPipe::TEvServerConnected::TPtr& ev) {
+                pipeToTablet[ev->Sender] = ev->Recipient;
+            });
+
+        // block all compaction results: the first shard stays running in the
+        // queue, the other two stay queued behind the inflight limit
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> blockResults(runtime);
+
+        // observe the compaction requests sent after the merge starts
+        TVector<TActorId> postMergeRecipients;
+        bool mergeStarted = false;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
+            [&](const TEvDataShard::TEvCompactTable::TPtr& ev) {
+                if (mergeStarted) {
+                    postMergeRecipients.push_back(ev->Recipient);
+                }
+            });
+
+        // allow all three shards in flight for the compaction itself, so all
+        // three sources enter the queue
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 3);
+        ui64 compactionId = txId;
+        runtime.WaitFor("EvCompactTableResult", [&]{ return blockResults.size() >= 1; });
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // merge three shards; one is running and two are queued in the compaction queue
+        mergeStarted = true;
+        TestSplitTable(runtime, ++txId, "/MyRoot/Simple", Sprintf(R"(
+            SourceTabletId: %lu
+            SourceTabletId: %lu
+            SourceTabletId: %lu
+        )", info.Shards.at(0), info.Shards.at(1), info.Shards.at(2)));
+        env.TestWaitNotification(runtime, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        observer.Remove();
+
+        auto mergedInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        UNIT_ASSERT_VALUES_EQUAL(mergedInfo.Shards.size(), 1UL);
+
+        // at least one new request, and every request must target the fresh
+        // dst shard; requests to the (now dead) src shards would be the
+        // per-removal StartOperations() churn that RemoveNoStart eliminates
+        UNIT_ASSERT(postMergeRecipients.size() >= 1);
+        const TActorId dstRecipient = ResolveTablet(runtime, mergedInfo.Shards.at(0));
+        for (const auto& recipient : postMergeRecipients) {
+            auto it = pipeToTablet.find(recipient);
+            UNIT_ASSERT(it != pipeToTablet.end());
+            UNIT_ASSERT_VALUES_EQUAL(it->second, dstRecipient);
+        }
+        pipeObserver.Remove();
+
+        blockResults.Stop().Unblock();
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        {
+            auto response = TestGetCompaction(runtime, compactionId, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetState(), Ydb::Table::CompactState::STATE_DONE);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsTotal(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetForcedCompaction().GetShardsDone(), 1);
+        }
+    }
+
     Y_UNIT_TEST(ShouldOnlyAddNewShardsFromUncompactedOnSplit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

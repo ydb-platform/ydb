@@ -141,10 +141,8 @@ TYqlConclusion<std::optional<TString>> ParseStatsCollectionMode(NYql::TFeaturesE
     auto parsed = Ydb::Table::QueryStatsCollection::Mode_Parse(str, &mode);
 
     if (!parsed || mode == Ydb::Table::QueryStatsCollection::STATS_COLLECTION_UNSPECIFIED) {
-        return TYqlConclusionStatus::Fail(
-            NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-            TStringBuilder() << "Invalid value for " << TStreamingQueryConfig::TProperties::StatsCollectionMode << ": '" << *value << "'"
-        );
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+            TStringBuilder() << "Invalid value for " << TStreamingQueryConfig::TProperties::StatsCollectionMode << ": '" << *value << "'");
     }
 
     return std::optional<TString>(std::move(str));

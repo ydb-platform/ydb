@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <yql/essentials/sql/v1/translation/node.h>
 
 namespace NKikimrSchemeOp {

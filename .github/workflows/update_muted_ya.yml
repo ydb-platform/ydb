@@ -116,6 +116,12 @@ jobs:
           fi
 
           echo "GitHub $(megabytes "${direct_bytes:-0}") MB, last 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+          {
+            echo "GH_PROXY_MEASURED=1"
+            echo "GH_PROXY_USED=$use_proxy"
+            echo "GH_PROXY_DIRECT_MBPS=$(megabytes "${direct_tail:-0}")"
+            echo "GH_PROXY_PROXY_MBPS=$(megabytes "${proxy_tail:-0}")"
+          } >> "$GITHUB_ENV"
 
           if [ "$use_proxy" = true ]; then
             {
@@ -230,6 +236,12 @@ jobs:
           fi
 
           echo "GitHub $(megabytes "${direct_bytes:-0}") MB, last 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+          {
+            echo "GH_PROXY_MEASURED=1"
+            echo "GH_PROXY_USED=$use_proxy"
+            echo "GH_PROXY_DIRECT_MBPS=$(megabytes "${direct_tail:-0}")"
+            echo "GH_PROXY_PROXY_MBPS=$(megabytes "${proxy_tail:-0}")"
+          } >> "$GITHUB_ENV"
 
           if [ "$use_proxy" = true ]; then
             {

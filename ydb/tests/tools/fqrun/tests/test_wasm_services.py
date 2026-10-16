@@ -96,6 +96,41 @@ def test_profile(service, tmp_path, protocol, batch_rows):
 
 
 @pytest.mark.parametrize('protocol', ['http', 'grpc'])
+@pytest.mark.parametrize('batch_rows', [1, 2])
+def test_profile_200_rows(service, tmp_path, protocol, batch_rows):
+    runner = Runner(tmp_path, service, batch_rows)
+    runner.config.write_text(runner.config.read_text().replace(
+        'WasmServices {', 'WasmServices { MaxBufferedRows: 2', 1))
+    ids = list(range(1000, 1200))
+    alias = 'profiles_' + protocol
+    sql = "PRAGMA dq.MaxTasksPerStage='1';" + profile_query(alias, ids)
+    assert runner.wait(runner.start(alias, sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert [int(row['id']) for row in rows] == ids
+    assert all(row['name'] == 'Ada' and int(row['score']) == 97 for row in rows)
+    requests = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(requests) == ids
+
+
+@pytest.mark.parametrize('batch_rows', [1, 2])
+@pytest.mark.parametrize('payload_size', [8, 1024])
+def test_echo_200_rows(service, tmp_path, batch_rows, payload_size):
+    runner = Runner(tmp_path, service, batch_rows)
+    runner.config.write_text(runner.config.read_text().replace(
+        'WasmServices {', 'WasmServices { MaxBufferedRows: 2', 1))
+    messages = ['%03d:' % i + 'x' * (payload_size - 4) for i in range(200)]
+    source = 'SELECT message FROM AS_TABLE(AsList(%s))' % ','.join(
+        'AsStruct(%s || $padding AS message)' % json.dumps('%03d:' % i) for i in range(200))
+    sql = (tmp_path / 'echo.sql').read_text().replace('SELECT "hello" AS message', source)
+    sql = "PRAGMA dq.MaxTasksPerStage='1';$padding=%s;" % json.dumps('x' * (payload_size - 4)) + sql
+    assert runner.wait(runner.start('echo_http', sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert sorted(row['value'] for row in rows) == messages
+    assert all(int(row['length']) == payload_size and row['empty'] is False for row in rows)
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
 def test_shared_transport_memory_limit(service, tmp_path, protocol):
     runner = Runner(tmp_path, service)
     runner.config.write_text(runner.config.read_text().replace(

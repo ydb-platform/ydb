@@ -69,12 +69,14 @@ public:
     }
 
     void SetOverload(const ui64 overload) {
+        // Add before subtracting: a reader on another shard must never see the critical bucket empty while this
+        // level stays overloaded.
+        OverloadHistogram->Add(overload, 1);
+        (*LevelNodeCounts)[LevelBucket(overload)].fetch_add(1);
         if (LastOverload) {
             OverloadHistogram->Sub(*LastOverload, 1);
             (*LevelNodeCounts)[LevelBucket(*LastOverload)].fetch_sub(1);
         }
-        OverloadHistogram->Add(overload, 1);
-        (*LevelNodeCounts)[LevelBucket(overload)].fetch_add(1);
         LastOverload = overload;
     }
 

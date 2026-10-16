@@ -205,11 +205,24 @@ void TMoveDataDriver::SetupMetadata() {
         return;
     }
     Self->StartMetadataRequests(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().CollectMoveDataMetadataRequests(), MetadataTaskSubscription,
-        MetadataRequestsInFlight, [](TColumnShard& tablet, const TActorContext& ctx) {
-            if (!!tablet.MoveDataDriverId) {
-                ctx.Send(tablet.MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
-            }
-        });
+        MetadataRequestsInFlight, SelfId());
+}
+
+void TMoveDataDriver::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
+    if (!IsOwnerAlive()) {
+        PassAway();
+        return;
+    }
+    if (!State.Active) {
+        return;
+    }
+    // The shared mailbox serializes application with tablet mutations. A late result
+    // targets this driver incarnation, never a replacement session on the tablet.
+    AFL_VERIFY(ev->Get()->GetGeneration() == Self->Generation())("ev", ev->Get()->GetGeneration())("tablet", Self->Generation());
+    ev->Get()->GetProcessor()->ApplyResult(
+        ev->Get()->ExtractResult(), Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+    Self->SetupMetadata();
+    StartAndCheckGate(ctx);
 }
 
 void TMoveDataDriver::SetupRewrites() {

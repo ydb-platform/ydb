@@ -56,6 +56,7 @@ private:
 
     void Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
 public:
     TMoveDataDriver(TColumnShard* self, const std::shared_ptr<TAtomicCounter>& tabletActivity);
@@ -74,6 +75,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvMoveDataWakeup, Handle);
             HFunc(TEvPrivate::TEvMoveDataPoke, Handle);
+            HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
                 break;

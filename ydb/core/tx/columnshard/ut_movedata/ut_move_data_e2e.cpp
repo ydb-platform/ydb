@@ -383,6 +383,51 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.AssertDrainedSuccess(response);
     }
 
+    Y_UNIT_TEST(MetadataResultQueuedDuringTabletShutdownDoesNotTouchTheDeadTablet) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        TActorId driver;
+        TAutoPtr<IEventHandle> metadata;
+        bool holdMetadata = true;
+        bool injected = false;
+        f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->HasEvent() && (dynamic_cast<const TEvPrivate::TEvMoveDataWakeup*>(ev->GetBase()) ||
+                                      dynamic_cast<const TEvPrivate::TEvMoveDataPoke*>(ev->GetBase()))) {
+                driver = ev->GetRecipientRewrite();
+            }
+            if (holdMetadata && ev->HasEvent() && dynamic_cast<const TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase())) {
+                UNIT_ASSERT(driver);
+                UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), driver);
+                UNIT_ASSERT(!metadata);
+                metadata.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            // Put the result behind tablet death, ahead of the driver's cleanup poison.
+            if (ev->GetTypeRewrite() == TEvTablet::EvTabletDead && metadata) {
+                holdMetadata = false;
+                injected = true;
+                f.Runtime.Send(metadata.Release());
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        f.StartMove();
+        UNIT_ASSERT_C(!f.DriveGate(10), "a move with held metadata must not report Success");
+        UNIT_ASSERT_C(metadata, "no MoveData metadata result was intercepted");
+
+        f.Restart();
+        f.Runtime.DispatchEvents({}, TDuration::Seconds(1));
+        UNIT_ASSERT(injected);
+        f.Runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        f.StartMove();
+        const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
+        UNIT_ASSERT_C(response, "the replacement incarnation must drain independently of the old metadata result");
+        f.AssertDrainedSuccess(response);
+    }
+
     // A second request naming a further historical group is merged on receipt, so the answer covers both groups.
     Y_UNIT_TEST(ExpandedRequestIsAnsweredOnlyAfterEveryNamedGroupIsDrained) {
         TMoveDataFixture f;

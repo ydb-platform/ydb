@@ -852,23 +852,21 @@ private:
     const ui64 Generation;
     // Per-tablet: TObjectCounter is process-wide, so one tablet's request closed every other's gate.
     const std::shared_ptr<TAtomicCounter> InFlight;
-    TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied OnApplied;
 
     virtual void DoOnRequestsFinished(
         NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
         NActors::TActivationContext::Send(
             TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
-                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard)), OnApplied));
+                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard))));
     }
 
 public:
     TCSMetadataSubscriber(const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor,
-        const ui64 gen, const std::shared_ptr<TAtomicCounter>& inFlight, TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied)
+        const ui64 gen, const std::shared_ptr<TAtomicCounter>& inFlight)
         : TabletActorId(tabletActorId)
         , Processor(processor)
         , Generation(gen)
         , InFlight(inFlight)
-        , OnApplied(onApplied)
     {
         InFlight->Inc();
     }
@@ -911,14 +909,14 @@ public:
 
 void TColumnShard::StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
-    TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied) {
+    const TActorId& recipient) {
     for (auto&& i : requests) {
         const ui64 accessorsMemory =
             i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
             ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i.GetRequest()->GetTaskId(), taskContext,
                                         std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()),
-                                        std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation(), inFlight, onApplied),
+                                        std::make_shared<TCSMetadataSubscriber>(recipient, i.GetProcessor(), Generation(), inFlight),
                                         DataAccessorsManager.GetObjectPtrVerified(), nullptr));
     }
 }
@@ -927,11 +925,11 @@ void TColumnShard::SetupMetadata() {
     if (MetadataRequestsInFlight->Val()) {
         return;
     }
-    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataRequestsInFlight);
+    StartMetadataRequests(TablesManager.MutablePrimaryIndex().CollectMetadataRequests(), TTLTaskSubscription, MetadataRequestsInFlight, SelfId());
 }
 
 void TColumnShard::SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request) {
-    StartMetadataRequests({ request }, TTLTaskSubscription, MetadataRequestsInFlight);
+    StartMetadataRequests({ request }, TTLTaskSubscription, MetadataRequestsInFlight, SelfId());
 }
 
 bool TColumnShard::SetupTtl() {
@@ -1320,13 +1318,11 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
     }
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
     SetupMetadata();
-    // Run completion on the tablet actor, after the result has updated its state.
-    ev->Get()->NotifyApplied(*this, ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

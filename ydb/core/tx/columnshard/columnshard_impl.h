@@ -627,7 +627,7 @@ private:
     void SetupMetadata();
     void StartMetadataRequests(std::vector<NOlap::TCSMetadataRequest>&& requests,
         const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const std::shared_ptr<TAtomicCounter>& inFlight,
-        TEvPrivate::TEvMetadataAccessorsInfo::TOnApplied onApplied = nullptr);
+        const TActorId& recipient);
     bool SetupTtl();
     void StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges);
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);

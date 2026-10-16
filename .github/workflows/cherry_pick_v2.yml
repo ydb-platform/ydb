@@ -142,16 +142,16 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
       - name: checkout
-        id: proxy_checkout
         uses: actions/checkout@v5
-        continue-on-error: ${{ vars.GH_PROXY_URL != '' }}
+        env:
+          GIT_TRACE: "1"
         with:
           fetch-depth: 1
-          ref: ${{ inputs.script_version_sha || github.sha }}
+          ref: ${{ inputs.script_version_sha }}
           sparse-checkout: |
             .github
       - name: Drop GitHub proxy
-        if: always() && vars.GH_PROXY_URL != ''
+        if: vars.GH_PROXY_URL != ''
         shell: bash
         run: |
           {
@@ -159,35 +159,6 @@ jobs:
             echo "GIT_CONFIG_KEY_0="
             echo "GIT_CONFIG_VALUE_0="
           } >> "$GITHUB_ENV"
-      - name: Clear failed proxy checkout
-        if: steps.proxy_checkout.outcome == 'failure'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${GITHUB_WORKSPACE:-}" ] || [ "$GITHUB_WORKSPACE" = "/" ]; then
-            echo "refusing to clean workspace"
-            exit 1
-          fi
-          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-          echo "GH_PROXY_USED=false" >> "$GITHUB_ENV"
-      - name: Checkout without proxy
-        if: steps.proxy_checkout.outcome == 'failure'
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 1
-          ref: ${{ inputs.script_version_sha || github.sha }}
-          sparse-checkout: |
-            .github
-      - name: Verify checkout commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected="${{ inputs.script_version_sha || github.sha }}"
-          actual="$(git rev-parse 'HEAD^{commit}')"
-          if [ "$actual" != "$expected" ] && { ! [[ "$expected" =~ ^[0-9a-fA-F]{7,39}$ ]] || [[ "$actual" != "$expected"* ]]; }; then
-            echo "HEAD $actual does not match GitHub commit $expected"
-            exit 1
-          fi
       - name: install packages
         shell: bash
         run: |

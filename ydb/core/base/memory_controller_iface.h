@@ -17,6 +17,9 @@ enum class EMemoryConsumerKind {
     ColumnTablesColumnDataCache,
     ColumnTablesDeduplicationGroupedMemory,
     ColumnTablesPortionsMetaDataCache,
+
+    Tablets, // the tablets' state, what they cannot give back
+    TabletsElastic, // the part of the tablets' memory they report as Reclaimable
 };
 
 // Node memory pressure as the tablets see it: Green admits, Yellow forbids growth, Red admits one at a time
@@ -78,19 +81,26 @@ struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsu
 };
 
 struct TEvConsumerRegistered : public TEventLocal<TEvConsumerRegistered, EvConsumerRegistered> {
+    const EMemoryConsumerKind Kind;
     TIntrusivePtr<IMemoryConsumer> Consumer;
 
-    TEvConsumerRegistered(TIntrusivePtr<IMemoryConsumer> consumer)
-        : Consumer(std::move(consumer))
+    TEvConsumerRegistered(EMemoryConsumerKind kind, TIntrusivePtr<IMemoryConsumer> consumer)
+        : Kind(kind)
+        , Consumer(std::move(consumer))
     {}
 };
 
 struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> {
-    ui64 LimitBytes;
+    const EMemoryConsumerKind Kind;
+    const ui64 LimitBytes;
+    // The node zone rides on every limit; registrants that do not care ignore it
+    const EMemoryZone Zone;
 
-    TEvConsumerLimit(ui64 limitBytes)
-        : LimitBytes(limitBytes) {
-    }
+    TEvConsumerLimit(EMemoryConsumerKind kind, ui64 limitBytes, EMemoryZone zone = EMemoryZone::Green)
+        : Kind(kind)
+        , LimitBytes(limitBytes)
+        , Zone(zone)
+    {}
 };
 
 // Sent to the executors of the tablets a Local runs

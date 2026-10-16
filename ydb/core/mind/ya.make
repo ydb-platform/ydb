@@ -30,6 +30,8 @@ SRCS(
     slot_indexes_pool.cpp
     slot_indexes_pool.h
     table_adapter.h
+    tablet_memory_host.cpp
+    tablet_memory_host.h
     tenant_node_enumeration.cpp
     tenant_node_enumeration.h
     tenant_pool.h

@@ -1,0 +1,45 @@
+{
+  "org_id": "bpfssp32nspchhs4df3c",
+  "workbook_id": "ev4an7f2ncmk2",
+  "dashboard_url": "https://datalens.ru/135ob2ntmr0ok-ci-metrics",
+  "ydb_table": "analytics/ci_metrics",
+  "ydb_config": ".github/config/ydb_qa_config.json",
+  "ydb_database_key": "main",
+  "objects": {
+    "dashboard": {
+      "kind": "dashboard",
+      "id": "135ob2ntmr0ok",
+      "title": "CI metrics"
+    },
+    "duration": {
+      "kind": "chart",
+      "id": "egg8s3g477lmx",
+      "title": "Duration"
+    },
+    "gantt": {
+      "kind": "chart",
+      "id": "466sto4vl396n",
+      "title": "Gantt"
+    },
+    "pdiff": {
+      "kind": "chart",
+      "id": "svm2b1l1s15yb",
+      "title": "p diff"
+    },
+    "duration-ds": {
+      "kind": "dataset",
+      "id": "z11tcvkyw21gi",
+      "title": "ci_metrics_checkout"
+    },
+    "gantt-ds": {
+      "kind": "dataset",
+      "id": "tvvegjgj046oc",
+      "title": "Gantt dataset"
+    },
+    "pickers-ds": {
+      "kind": "dataset",
+      "id": "nr9x5jtcy8xc6",
+      "title": "PR / Run pickers"
+    }
+  }
+}

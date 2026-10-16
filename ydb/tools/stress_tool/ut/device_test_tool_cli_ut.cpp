@@ -1,5 +1,6 @@
 #include "../device_test_tool_cli.h"
 
+#include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
@@ -211,12 +212,98 @@ Y_UNIT_TEST_SUITE(TStressToolCli) {
         UNIT_ASSERT_VALUES_EQUAL(LoadTests(client.Result, true).DDiskTestListSize(), 1);
     }
 
+    Y_UNIT_TEST(SectorMapOptionsAcceptDefaultsAndPDiskFlags) {
+        TParsed defaults({"tool"}, false);
+        UNIT_ASSERT(!defaults.Result.Has("num-server-devices"));
+        UNIT_ASSERT(defaults.Result.Has("num-server-devices", true));
+        ValidatePDiskSectorMapOptions(defaults.Result, false);
+
+        TParsed parsed({"tool", "--path", "SectorMap:one:64", "--path", "SectorMap:two:64",
+            "--cfg", "pdisk.txt", "--inflight", "4", "--run-count", "2", "--output-format", "human",
+            "--mon-port", "8080", "--disable-pdisk-encryption", "--log-level", "debug"}, false);
+        ValidatePDiskSectorMapOptions(parsed.Result, false);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Cli.Paths, (TVector<TString>{"SectorMap:one:64", "SectorMap:two:64"}));
+    }
+
+    Y_UNIT_TEST(SectorMapOptionsRejectDDiskAndNetworkFlags) {
+        TParsed ddisk({"tool ddisk"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ValidatePDiskSectorMapOptions(ddisk.Result, true), yexception,
+            "the ddisk command is not supported");
+        for (const char* flag : {"--disable-ddisk-checksums", "--force-ddisk-pdisk-fallback", "--ddisk-devnull"}) {
+            TParsed parsed({"tool", flag}, false);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ValidatePDiskSectorMapOptions(parsed.Result, false), yexception, flag);
+        }
+        for (const auto& [name, value] : TVector<std::pair<const char*, const char*>>{
+                {"--ddisk-checksums-cache-size", "0"}, {"--server", "0"}, {"--client", "0"},
+                {"--endpoint", "localhost:1"}, {"--ic-port", "0"}, {"--num-server-devices", "1"}}) {
+            TParsed parsed({"tool", name, value}, false);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ValidatePDiskSectorMapOptions(parsed.Result, false), yexception, name);
+        }
+    }
+
+    Y_UNIT_TEST(SectorMapConfigsAcceptOnlyPDiskLoads) {
+        NDevicePerfTest::TPerfTests tests;
+        auto* test = tests.AddPDiskTestList();
+        test->AddPDiskTestList()->MutablePDiskReadLoad();
+        test->AddPDiskTestList()->MutablePDiskWriteLoad();
+        test->AddPDiskTestList()->MutablePDiskLogLoad();
+        tests.AddPDiskTestList()->AddPDiskTestList()->MutablePDiskReadLoad();
+        ValidatePDiskSectorMapTests(tests);
+
+        for (const char* unsupported : {
+                "AioTestList {}", "TrimTestList {}", "DriveEstimatorTest {}", "DDiskTestList {}",
+                "UringRouterTestList {}", "PersistentBufferTestList {}", "InterconnectTestList {}"}) {
+            NDevicePerfTest::TPerfTests mixed;
+            UNIT_ASSERT(NProtoBuf::TextFormat::ParseFromString(unsupported, &mixed));
+            mixed.MergeFrom(tests);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ValidatePDiskSectorMapTests(mixed), yexception,
+                "only PDisk sector-map workloads");
+        }
+    }
+
+    Y_UNIT_TEST(SectorMapConfigsRejectEmptyAndUnrelatedCommands) {
+        for (const char* config : {
+                "", "PDiskTestList {}", "PDiskTestList { PDiskTestList {} }",
+                "PDiskTestList { PDiskTestList { Stop {} } }",
+                "PDiskTestList { PDiskTestList { DDiskLoad {} } }",
+                "PDiskTestList { PDiskTestList { PDiskReadLoad {} } PDiskTestList { StorageLoad {} } }",
+                "PDiskTestList { PDiskTestList { PDiskReadLoad {} } } PDiskTestList {}"}) {
+            NDevicePerfTest::TPerfTests tests;
+            UNIT_ASSERT(NProtoBuf::TextFormat::ParseFromString(config, &tests));
+            UNIT_ASSERT_EXCEPTION(ValidatePDiskSectorMapTests(tests), yexception);
+        }
+    }
+
+#ifdef _darwin_
+    Y_UNIT_TEST(SectorMapConfigFileErrors) {
+        TTempFileHandle file;
+        {
+            TFileOutput out(file.Name());
+            out << "PDiskTestList { unknown_field: 1 }";
+        }
+        TParsed malformed({"tool", "--cfg", file.Name().c_str()}, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(LoadTests(malformed.Result, false), yexception, "cannot parse PDisk config");
+        const TString missingName = file.Name() + ".missing";
+        TParsed missing({"tool", "--cfg", missingName.c_str()}, false);
+        UNIT_ASSERT_EXCEPTION(LoadTests(missing.Result, false), yexception);
+    }
+#endif
+
     Y_UNIT_TEST(HelpSectionsAndUnsupportedOptions) {
         for (bool ddisk : {false, true}) {
             TCommandLine cli(ddisk);
             TStringStream help;
             cli.Opts.PrintUsage("tool", help);
             const TString text = help.Str();
+#ifdef _darwin_
+            UNIT_ASSERT(text.Contains("--inflight"));
+            UNIT_ASSERT(text.Contains("SectorMap:<name>"));
+            UNIT_ASSERT(text.Contains("PDisk read, write, and log"));
+            for (const char* unsupported : {"DDisk", "ddisk", "UringRouter", "--areas", "--server", "--client",
+                    "--endpoint", "--ic-port", "--num-server-devices"}) {
+                UNIT_ASSERT_C(!text.Contains(unsupported), unsupported);
+            }
+#else
             const auto common = text.find("--inflight");
             const auto section = text.find("DDisk options");
             const auto checksum = text.find("--disable-ddisk-checksums");
@@ -224,6 +311,7 @@ Y_UNIT_TEST_SUITE(TStressToolCli) {
             UNIT_ASSERT_VALUES_EQUAL(text.Contains("--areas"), ddisk);
             UNIT_ASSERT_VALUES_EQUAL(text.Contains("ddisk <options>"), !ddisk);
             UNIT_ASSERT(text.Contains("--ddisk-devnull"));
+#endif
             UNIT_ASSERT(!text.Contains("DelayBeforeMeasurementsSeconds"));
         }
         UNIT_ASSERT_EXCEPTION((TParsed({"tool ddisk", "--delay-before-measurements", "1"})), yexception);

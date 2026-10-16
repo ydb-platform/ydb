@@ -1,4 +1,4 @@
-IF (SANITIZER_TYPE AND AUTOCHECK)
+IF (NOT OS_LINUX OR (SANITIZER_TYPE AND AUTOCHECK))
 
 ELSE()
 
@@ -9,7 +9,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     ../device_test_tool_ut.cpp
-    device_test_tool_cli_ut.cpp
 )
 
 PEERDIR(

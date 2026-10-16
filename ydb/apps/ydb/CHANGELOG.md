@@ -1,5 +1,4 @@
-* Added support for repeating `--pile` in `ydb admin bridge failover` to disconnect multiple failed piles in one operation.
-* Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
+* Added support for repeating `--pile` in `ydb admin cluster bridge failover` to disconnect multiple failed piles in one operation.
 
 * Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
 

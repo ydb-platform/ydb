@@ -245,8 +245,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId, new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress,
                 DiskAddr, Item->IgnoreBlock, Item->IssueKeepFlag, Item->SenderId, Item->Cookie, Item->HandleClass,
+<<<<<<< HEAD
                 std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob), 0, 0,
                 Span.GetTraceId());
+=======
+                std::move(Item->Result), &Item->ExtraBlockChecks, Item->WriteSource, Item->RewriteBlob, IsStripe,
+                Item->FreshRefuseAtColor);
+            logHuge->FreshAdmission = std::exchange(Item->FreshAdmission, {});
+            logHuge->AdmittedGroupGeneration = Item->AdmittedGroupGeneration;
+            ctx.Send(HugeKeeperCtx->SkeletonId, logHuge.release(), 0, 0, Span.GetTraceId());
+>>>>>>> a4a70734f34 (Bridge assimilation write fence (#55964))
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",
                             HugeSlot.ToString().data(), DiskAddr.ToString().data()));
@@ -720,10 +728,24 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                     std::unique_ptr<TEvHullWriteHugeBlob>(ev->Release().Release()), wId, std::move(traceId)));
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 return true;
+<<<<<<< HEAD
             } else if (reason == EProcessWriteReason::OUT_OF_SPACE) {
                 // cancel this item because we have no space left to allocate a chunk
                 msg.Result->UpdateStatus(NKikimrProto::ERROR, "out of space");
                 SendVDiskResponse(ctx, msg.SenderId, msg.Result.release(), msg.Cookie, HugeKeeperCtx->VCtx, msg.HandleClass);
+=======
+            } else if (reason == EProcessWriteReason::OUT_OF_SPACE && Covers(refused, bound, msg.AllocationPurpose)) {
+                msg.Result->UpdateStatus(NKikimrProto::OUT_OF_SPACE, "huge chunk reservation refused");
+                // Skeleton owns the Fresh accounting, including the index charge
+                // of a put whose data allocation has failed.
+                auto logHuge = std::make_unique<TEvHullLogHugeBlob>(0, msg.LogoBlobId, msg.Ingress, TDiskPart(),
+                    msg.IgnoreBlock, msg.IssueKeepFlag, msg.SenderId, msg.Cookie, msg.HandleClass,
+                    std::move(msg.Result), &msg.ExtraBlockChecks, msg.WriteSource, msg.RewriteBlob, false,
+                    msg.FreshRefuseAtColor);
+                logHuge->FreshAdmission = std::exchange(msg.FreshAdmission, {});
+                logHuge->AdmittedGroupGeneration = msg.AdmittedGroupGeneration;
+                ctx.Send(HugeKeeperCtx->SkeletonId, logHuge.release(), 0, 0, std::move(traceId));
+>>>>>>> a4a70734f34 (Bridge assimilation write fence (#55964))
                 return true;
             } else if (AllocatingChunkPerSlotSize.insert(slotSize).second) {
                 LWTRACK(HugeBlobChunkAllocatorStart, ev->Get()->Orbit);

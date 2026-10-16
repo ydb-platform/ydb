@@ -452,7 +452,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         dbChanges.Apply(Self, txc, ctx);
 
         if (Self->Operations.contains(txId)) {
-            Y_ABORT_UNLESS(Response->IsDone() || Response->IsAccepted() || Response->IsConditionalAccepted());
+            Y_ABORT_UNLESS(IsOperationIgnited(Response));
 
             // Check local tx commit redo size
             TString reason;

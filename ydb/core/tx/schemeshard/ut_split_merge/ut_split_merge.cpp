@@ -1242,6 +1242,16 @@ struct TLoadAndSplitSimulator {
     ESendDuplicateTableStatsStrategy SendDuplicateTableStats;
     std::map<ui64, std::unique_ptr<IEventHandle>> DuplicateTableStatsByDatashardId;
     ui32 SplitProtocolVersion = 0;
+    // When set, patches a foreign part owner into every periodic stats record for this
+    // table, which the schemeshard interprets as borrowed data (see BuildStats: a part
+    // owner different from the datashard id means borrowed parts).
+    bool ForceBorrowedPartOwner = false;
+    // When set, the EvGetTableStatsResult handler skips patching the key-access sample
+    // (and the split-point buckets). Used to drive a histogram response that carries no
+    // split evidence (NO_SPLIT), e.g. the Finding 26 stale-deferral expiry test. Without
+    // this knob an intentionally empty patch would trip the protobuf fatal in the
+    // split-point bucket patching below.
+    bool SuppressKeySamplePatch = false;
 
     TTestActorRuntime* TestRuntime;
     TActorId SenderActorId;
@@ -1458,6 +1468,10 @@ struct TLoadAndSplitSimulator {
                             << Endl;
                     }
 
+                    if (ForceBorrowedPartOwner) {
+                        msg->Record.AddUserTablePartOwners(msg->Record.GetDatashardId() + 1);
+                    }
+
                     ++PeriodicTableStatsCount;
                 }
                 break;
@@ -1534,57 +1548,65 @@ struct TLoadAndSplitSimulator {
                             << Endl;
                     }
 
-                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->CopyFrom(KeyAccessHistogramPatch);
+                    if (!SuppressKeySamplePatch) {
+                        msg->Record.MutableTableStats()->MutableKeyAccessSample()->CopyFrom(KeyAccessHistogramPatch);
 
-                    auto [start, end] = DatashardsKeyRanges[msg->Record.GetDatashardId()];
-                    // NOTE: zero end means infinity -- this is a final shard
-                    if (end == 0) {
-                        end = 1000000;
+                        auto [start, end] = DatashardsKeyRanges[msg->Record.GetDatashardId()];
+                        // NOTE: zero end means infinity -- this is a final shard
+                        if (end == 0) {
+                            end = 1000000;
+                        }
+                        const ui64 splitPoint = (end + start) / 2;
+
+                        // Emulate split protocol versions, see GetSplitBoundaryByLoad().
+                        switch (SplitProtocolVersion) {
+                            case 0: {  // unsorted array, no key
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint + 1));
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint - 1));
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint));
+                                }
+                                break;
+                            case 1: {  // sorted array, no key
+                                    msg->Record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                                }
+                                break;
+                            case 2: {  // sorted array, with key
+                                    msg->Record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
+                                    msg->Record.MutableTableStats()->SetSplitByLoadSuggestedKey(ToSerialized(splitPoint));
+                                }
+                                break;
+                            case 3: {  // no array, with key
+                                    msg->Record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
+                                    msg->Record.MutableTableStats()->MutableKeyAccessSample()->Clear();
+                                    msg->Record.MutableTableStats()->SetSplitByLoadSuggestedKey(ToSerialized(splitPoint));
+                                }
+                                break;
+                            default:
+                                UNIT_ASSERT_C(false, TStringBuilder() << "Unsupported protocol version " << SplitProtocolVersion << ". Consider to support it in a simulation?");
+                        };
+
+                        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                            << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()
+                            << ", from followerId " << msg->Record.GetFollowerId()
+                            << ", patch KeyAccessSample: split point " << splitPoint
+                            << " (start=" << start
+                            << ", end=" << end
+                            << ")"
+                            << " " << msg->Record.GetTableStats().DebugString()
+                            << Endl;
+                    } else {
+                        Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
+                            << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()
+                            << ", from followerId " << msg->Record.GetFollowerId()
+                            << ", SUPPRESSED KeyAccessSample patch (NO_SPLIT evidence)"
+                            << Endl;
                     }
-                    const ui64 splitPoint = (end + start) / 2;
-
-                    // Emulate split protocol versions, see GetSplitBoundaryByLoad().
-                    switch (SplitProtocolVersion) {
-                        case 0: {  // unsorted array, no key
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint + 1));
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint - 1));
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint));
-                            }
-                            break;
-                        case 1: {  // sorted array, no key
-                                msg->Record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
-                            }
-                            break;
-                        case 2: {  // sorted array, with key
-                                msg->Record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(0)->SetKey(ToSerialized(splitPoint - 1));
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(1)->SetKey(ToSerialized(splitPoint));
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->MutableBuckets(2)->SetKey(ToSerialized(splitPoint + 1));
-                                msg->Record.MutableTableStats()->SetSplitByLoadSuggestedKey(ToSerialized(splitPoint));
-                            }
-                            break;
-                        case 3: {  // no array, with key
-                                msg->Record.MutableTableStats()->SetSplitProtocolVersion(SplitProtocolVersion);
-                                msg->Record.MutableTableStats()->MutableKeyAccessSample()->Clear();
-                                msg->Record.MutableTableStats()->SetSplitByLoadSuggestedKey(ToSerialized(splitPoint));
-                            }
-                            break;
-                        default:
-                            UNIT_ASSERT_C(false, TStringBuilder() << "Unsupported protocol version " << SplitProtocolVersion << ". Consider to support it in a simulation?");
-                    };
-
-                    Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                        << ", intercept EvGetTableStatsResult, from datashard " << msg->Record.GetDatashardId()
-                        << ", from followerId " << msg->Record.GetFollowerId()
-                        << ", patch KeyAccessSample: split point " << splitPoint
-                        << " (start=" << start
-                        << ", end=" << end
-                        << ")"
-                        << " " << msg->Record.GetTableStats().DebugString()
-                        << Endl;
 
                     if (SendDuplicateTableStats != ESendDuplicateTableStatsStrategy::None) {
                         Y_ASSERT(!ev->Cookie);
@@ -3163,6 +3185,126 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeHistory) {
         splitBlocker.Stop().Unblock();
     }
 
+    // Finding 13: a deferral is not a life sentence. Once the demand itself subsides (a fresh
+    // stats cycle shows no split/merge want), the shard is dropped from the deferred set and
+    // both gauges return to zero.
+    Y_UNIT_TEST(DemandSubsides_DeferredShardIsDropped) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Start with several partitions so that, with one split slot busy, the rest defer.
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 100
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold split operations near completion so the single slot stays occupied and the other
+        // hot shards keep hitting the in-flight limit (the deferral recording site).
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Drive load until a deferral is recorded (or give up after a bounded wait).
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(deferredRecorded, "expected at least one deferred split to be recorded");
+
+        // The demand subsides: stop patching CPU, so fresh stats cycles report a cold shard.
+        simulator->MetricsPatchByFollowerIdPeriodic.clear();
+        simulator->MetricsPatchByFollowerIdStats.clear();
+
+        // Release the slot: the held split completes.
+        splitBlocker.Stop().Unblock();
+
+        // Fresh stats cycles show no demand -> the deferred shards are expired (the demand-expiry
+        // branch in PersistSingleStats drops them) and both gauges return to zero.
+        bool gaugesDrained = false;
+        for (ui32 i = 0; i < 60 && !gaugesDrained; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            gaugesDrained = (GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") == 0)
+                && (GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge") == 0);
+        }
+
+        UNIT_ASSERT_C(gaugesDrained,
+            "deferred gauges did not drain to zero after the demand subsided"
+            << ", partitions with deferred: "
+            << GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge")
+            << ", tables with deferred: "
+            << GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"));
+
+        // Finding 13 (full): the revisit queue drains too -- the shard is no longer serviced by
+        // the scheduler, so no further key-sample re-requests are issued. Pre-fix, the shard
+        // kept winning PickMostDeferredPartition and the wave kept re-requesting stats.
+        const ui64 keySampleRequestsAfterDrain = simulator->KeyAccessSampleReqCount;
+        for (ui32 i = 0; i < 15; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(simulator->KeyAccessSampleReqCount, keySampleRequestsAfterDrain);
+    }
+
+    // Finding 20: a shard deferred because it still has borrowed parts must not be re-driven by
+    // a key-sample stats request on every revisit wave -- a stats round trip cannot resolve
+    // borrowed data, so re-requesting would spin at RTT speed. The simulator patches a
+    // foreign part owner into every periodic stats record, so the hot shard reports borrowed
+    // data from the very first stats cycle: its split demand is deferred with reason Borrowed
+    // before any stats request is sent. Background compaction is disabled (SetupHistoryEnv),
+    // so the borrowed condition never clears: the reason gate must keep the shard parked --
+    // zero key-sample stats requests over the whole run -- instead of spinning at RTT speed.
+    Y_UNIT_TEST(BorrowedDeferral_DoesNotSpinOnStatsRequests) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Table", /* maxPartitions */ 10, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        simulator->ForceBorrowedPartOwner = true;
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Phase 1: the hot shard wants to split, but its stats report borrowed parts, so the
+        // demand is deferred with reason Borrowed (the deferral recording site).
+        bool borrowedDeferralRecorded = false;
+        for (ui32 i = 0; i < 60 && !borrowedDeferralRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            borrowedDeferralRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(borrowedDeferralRecorded, "expected a borrowed deferral to be recorded");
+
+        // Let any in-flight stats round trip land.
+        runtime.SimulateSleep(TDuration::Seconds(3));
+
+        // Phase 2: the deferral reason is Borrowed and the shard still reports borrowed parts
+        // (compaction is off), so the revisit waves must NOT send key-sample stats requests:
+        // the count stays flat. Pre-fix, every wave re-requested stats and spun at RTT speed.
+        const ui64 keySampleRequestsBefore = simulator->KeyAccessSampleReqCount;
+        for (ui32 i = 0; i < 15; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(simulator->KeyAccessSampleReqCount, keySampleRequestsBefore);
+
+        // The borrowed guard also holds: borrowed parts are never split...
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Table"), 1u);
+        // ... and the deferral is still recorded (the shard is parked, not expired).
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+    }
+
     // Fairness: two equally-hot tables, one split slot. With the fair scheduler on, neither table
     // is starved -- both eventually split (round-robin hands the freed slot across tables).
     Y_UNIT_TEST(FairScheduler_NoStarvationAcrossTables) {
@@ -3408,5 +3550,1027 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeHistory) {
 
         // The fix must not simply block merges: the wave still completes within the bounded wait.
         UNIT_ASSERT_C(mergeDrained, "MergeWave did not drain to 1 partition");
+    }
+
+    // Finding 12/24: with the flag OFF and the split slot saturated, the always-on demand
+    // counters must still observe split demand every stats cycle (the counter contract is
+    // flag-independent). The memory gauges stay at zero (flag off), and merge demand under
+    // saturation is a documented gap (the O(partitions) merge scan is skipped).
+    Y_UNIT_TEST(FlagOff_Saturated_CountersStillObserveDemand) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ false, /* enableFairScheduler */ false,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 100
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold the first split op in flight so the single slot stays busy and the sibling
+        // hot shards keep hitting the in-flight limit (the saturated counter site). Block
+        // both acks so the op is pinned regardless of which event completes it in this
+        // protocol version (mirrors RecordsDeferredSplit, which pins via ChangedAck).
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> changedAckBlocker(runtime);
+        TBlockEvents<TEvDataShard::TEvSplitAck> splitAckBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Drive load until the always-on split-demand counter observes demand under saturation.
+        bool demandObserved = false;
+        for (ui32 i = 0; i < 40 && !demandObserved; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            demandObserved = GetCumulativeCounter(runtime, "SchemeShard/SplitDemandDetected") > 0;
+        }
+
+        UNIT_ASSERT_C(demandObserved, "split demand was not observed under saturation with the flag off");
+        // Flag off: the memory gauges never move.
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"), 0u);
+        // Documented gap: merge demand under saturation is unobserved with the flag off
+        // (the demand-detection counters are flag-gated).
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected"), 0u);
+        // SplitMergeDeferrals is deliberately NOT asserted here: with the flag off the
+        // stats path returns early after NoteSplitDemandDetected (no deferral recorded),
+        // and the only flag-independent increment is the histogram-stage site
+        // (schemeshard__table_stats_histogram.cpp), which fires just when a histogram
+        // response happens to arrive while the slot is blocked -- a race, so the counter
+        // is non-deterministic in this configuration.
+
+        changedAckBlocker.Stop().Unblock();
+        splitAckBlocker.Stop().Unblock();
+    }
+
+    // Finding 21 (approximation): demand detected while the slot is saturated is not lost.
+    // Once the slot frees, the deferred shards are serviced and the table keeps splitting.
+    Y_UNIT_TEST(SaturatedDemand_NotLost_ServicedAfterSlotFrees) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 100
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Saturate: hold the first split in flight; the sibling hot shards defer.
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(deferredRecorded, "expected a deferred split to be recorded under saturation");
+
+        // Free the slot: the held split completes and the deferred shards are serviced.
+        splitBlocker.Stop().Unblock();
+
+        // The demand was not lost: the table keeps splitting well past the pre-block count.
+        bool grew = false;
+        for (ui32 i = 0; i < 90 && !grew; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            grew = PartitionCountOf(runtime, "/MyRoot/Table") > 5;
+        }
+        UNIT_ASSERT_C(grew, "the table did not keep splitting after the slot freed (demand was lost)");
+    }
+
+    // Finding 2: a persistently-unmergeable table (at MinPartitionsCount) produces no merge
+    // demand and no revisit turns -- the wave never burns turns on it. CheckCanMergePartitions
+    // rejects it before any demand is recorded.
+    Y_UNIT_TEST(MinPartitionsTable_ProducesNoRevisitTurns) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 4
+                        SizeToSplit: 1000000000
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write one tiny row into each shard so the shards have PartOwners (otherwise
+        // TryAddShardToMerge rejects them for a different reason).
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+            const auto& parts = desc.GetPathDescription().GetTablePartitions();
+            for (int i = 0; i < parts.size(); ++i) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('key (Uint64 '%lu)) ) )
+                        (let value '('('value (Uint64 '1)) ) )
+                        (return (AsList (UpdateRow '__user__Table key value) ))
+                    )
+                )", i * 125000 + 1);
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, parts.Get(i).GetDatashardId(), writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            }
+        }
+
+        // Cold simulator: drives the stats pipeline so the merge scan runs every cycle.
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const ui64 localId = desc.GetPathDescription().GetSelf().GetPathId();
+        const ui64 ownerId = desc.GetPathDescription().GetSelf().GetSchemeshardId();
+        const ui64 ds0 = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        auto simulator = MakeHolder<TLoadAndSplitSimulator>(
+            localId, ownerId, ds0,
+            false /* shouldSendReadRequests */,
+            ESendDuplicateTableStatsStrategy::None,
+            std::map<ui32, i32>{},  // cold periodic stats
+            std::map<ui32, i32>{},  // cold get-stats result
+            runtime);
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Let many stats cycles run: the merge scan must keep rejecting (at MinPartitionsCount)
+        // without recording any demand, deferral, or revisit turn.
+        for (ui32 i = 0; i < 30; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Table"), 4u);
+    }
+
+    // Finding 20 (PathLocked) + the TDropLock slot-free hook: a locked table's split demand is
+    // deferred with reason PathLocked and never re-requested (no stats churn -- the sender
+    // guards locked paths). Dropping the lock re-nudges the scheduler, which services the
+    // deferred shard promptly.
+    Y_UNIT_TEST(LockedTable_NoStatsChurn_UnlockServicesSplit) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Table", /* maxPartitions */ 4, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        // Lock the table before any load: the lock is the deferral reason.
+        const ui64 lockTxId = ++txId;
+        TestLock(runtime, lockTxId, "/MyRoot", "Table");
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // The hot shard wants to split, but the path is locked: the demand is deferred with
+        // reason PathLocked and NO histogram request is ever sent (the sender guards locks).
+        bool lockedDeferralRecorded = false;
+        for (ui32 i = 0; i < 40 && !lockedDeferralRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            lockedDeferralRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(lockedDeferralRecorded, "expected a PathLocked deferral to be recorded");
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Table"), 1u);
+
+        // No churn: while locked, the revisit waves must not re-request key samples (a stats
+        // round trip cannot resolve a path lock). The count stays flat.
+        const ui64 keySampleRequestsBefore = simulator->KeyAccessSampleReqCount;
+        for (ui32 i = 0; i < 15; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(simulator->KeyAccessSampleReqCount, keySampleRequestsBefore);
+
+        // Drop the lock: the TDropLock edge re-nudges the scheduler, which re-requests stats
+        // and services the deferred split.
+        TestUnlock(runtime, ++txId, lockTxId, "/MyRoot", "Table");
+
+        bool splitFired = false;
+        for (ui32 i = 0; i < 60 && !splitFired; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            splitFired = PartitionCountOf(runtime, "/MyRoot/Table") > 1;
+        }
+        UNIT_ASSERT_C(splitFired, "the locked table did not split after the lock was dropped");
+    }
+
+    // Borrowed-compaction completion (slot-free hook): a shard deferred because it has borrowed
+    // parts is not stranded. Once the borrowed condition clears (compaction done), the shard is
+    // serviced and splits; the deferral drains.
+    Y_UNIT_TEST(BorrowedCompactionCompletion_ServicesDeferredSplit) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Table", /* maxPartitions */ 4, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        simulator->ForceBorrowedPartOwner = true;
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // The hot shard reports borrowed parts: its split demand is deferred with reason Borrowed.
+        bool borrowedDeferralRecorded = false;
+        for (ui32 i = 0; i < 40 && !borrowedDeferralRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            borrowedDeferralRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(borrowedDeferralRecorded, "expected a Borrowed deferral to be recorded");
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Table"), 1u);
+
+        // The borrowed condition clears (compaction done): fresh stats report no borrowed parts.
+        simulator->ForceBorrowedPartOwner = false;
+
+        // The shard is serviced: it splits, and the deferral drains.
+        bool splitFired = false;
+        for (ui32 i = 0; i < 60 && !splitFired; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            splitFired = PartitionCountOf(runtime, "/MyRoot/Table") > 1;
+        }
+        UNIT_ASSERT_C(splitFired, "the borrowed-deferred shard did not split after the borrowed condition cleared");
+    }
+
+    // Finding 26: a stale split deferral expires when the histogram concludes NO_SPLIT with a
+    // free slot. The revisit re-request is answered by a cooled-down shard carrying no split
+    // evidence; the histogram path expires the deferral (the inline counter refresh is the only
+    // thing that runs when periodic stats are blocked and the revisit queue is drained).
+    Y_UNIT_TEST(HistogramNoSplitWithFreeSlot_ExpiresStaleDeferral) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 4
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold the first split op in flight so the sibling hot shard defers (InFlightLimit).
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChanged> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(deferredRecorded, "expected a split deferral to be recorded");
+
+        // Isolate the histogram path: block periodic stats so the demand-expiry branch in
+        // PersistSingleStats cannot drop the deferral -- only the revisit re-request can.
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const ui64 localId = desc.GetPathDescription().GetSelf().GetPathId();
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime,
+            [localId](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+                return ev->Get()->Record.GetTableLocalId() == localId;
+            });
+
+        // Cool the stats response and suppress the key-sample patch: the revisit re-request
+        // will be answered with no split evidence (NO_SPLIT).
+        simulator->MetricsPatchByFollowerIdStats.clear();
+        simulator->MetricsPatchByFollowerIdStats[0];  // entry with no CPU -> ClearCPU on the response
+        simulator->SuppressKeySamplePatch = true;
+
+        // Free the slot: the held split completes, the revisit wave re-requests stats for the
+        // deferred shard, and the NO_SPLIT response expires the stale deferral.
+        splitBlocker.Stop().Unblock();
+
+        bool gaugesDrained = false;
+        for (ui32 i = 0; i < 60 && !gaugesDrained; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            gaugesDrained = (GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") == 0)
+                && (GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge") == 0);
+        }
+
+        UNIT_ASSERT_C(gaugesDrained,
+            "the stale split deferral was not expired by the NO_SPLIT histogram response"
+            << ", partitions with deferred: "
+            << GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"));
+        // The expiry was driven by the revisit re-request (a key-sample request was issued).
+        UNIT_ASSERT_GT(simulator->KeyAccessSampleReqCount, 0u);
+    }
+
+    // Finding 17 (Critical): each merge proposal in a revisit wave is independent. A rejected
+    // sibling merge must not cancel an accepted merge's activation. Constructs a wave with one
+    // accepted merge (table A) followed by one rejected merge (table B, whose path is under an
+    // in-flight DropTable -> NotUnderOperation -> MultipleModifications), and asserts the
+    // accepted merge actually completes.
+    Y_UNIT_TEST(RevisitWave_AcceptedMergeSurvivesSiblingRejection) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 3);
+
+        ui64 txId = 100;
+
+        // C, D and E: hot single-shard tables whose load-splits hold all three slots
+        // (Ack blocked), saturating the in-flight limit so A's and B's merges defer.
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("TableC", /* maxPartitions */ 2, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("TableD", /* maxPartitions */ 2, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("TableE", /* maxPartitions */ 2, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        // A: 3 tiny mergeable shards (merge-by-size), no in-flight op. Its merge will be accepted.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "TableA"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 3
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 1000000000
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // B: 4 tiny mergeable shards. After its merge deferral is recorded, an in-flight
+        // DropTable puts the path under operation, so its merge propose is rejected
+        // (MultipleModifications) in the same wave.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "TableB"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 1000000000
+                        MaxPartitionsCount: 10
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write one tiny row into each shard of A and B (PartOwners must be non-empty).
+        auto writeRows = [&](const TString& path) {
+            auto desc = DescribePrivatePath(runtime, path, true, true);
+            const auto& parts = desc.GetPathDescription().GetTablePartitions();
+            for (int i = 0; i < parts.size(); ++i) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('key (Uint64 '%lu)) ) )
+                        (let value '('('value (Uint64 '1)) ) )
+                        (return (AsList (UpdateRow '__user__%s key value) ))
+                    )
+                )", i * 125000 + 1, path.substr(path.rfind('/') + 1).c_str());
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, parts.Get(i).GetDatashardId(), writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            }
+        };
+        writeRows("/MyRoot/TableA");
+        writeRows("/MyRoot/TableB");
+
+        // Hold split ops in flight by blocking TEvSplitAck (the op completes on the Ack, so
+        // blocking it keeps the in-flight slot occupied): C's, D's and E's load-splits each
+        // pin one slot.
+        TBlockEvents<TEvDataShard::TEvSplitAck> ackBlocker(runtime);
+
+        // Block A's and B's periodic stats until the slots are saturated, so their merge scans
+        // only run under saturation (recording deferrals instead of proposing merges directly).
+        auto aDesc = DescribePrivatePath(runtime, "/MyRoot/TableA", true, true);
+        const ui64 aLocalId = aDesc.GetPathDescription().GetSelf().GetPathId();
+        auto bDesc = DescribePrivatePath(runtime, "/MyRoot/TableB", true, true);
+        const ui64 bLocalId = bDesc.GetPathDescription().GetSelf().GetPathId();
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> aStatsBlocker(runtime,
+            [aLocalId](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+                return ev->Get()->Record.GetTableLocalId() == aLocalId;
+            });
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> bStatsBlocker(runtime,
+            [bLocalId](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+                return ev->Get()->Record.GetTableLocalId() == bLocalId;
+            });
+
+        // C's, D's and E's load-splits ignite and hold slots 1, 2 and 3 (Acks blocked).
+        auto simC = MakeHotSimulator(runtime, "/MyRoot/TableC");
+        auto obsC = runtime.AddObserver([&simC](IEventHandle::TPtr& ev) { simC->ChangeEvent(ev); });
+        for (ui32 i = 0; i < 60 && ackBlocker.size() < 1; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(ackBlocker.size() >= 1, "TableC's split did not ignite");
+        auto simD = MakeHotSimulator(runtime, "/MyRoot/TableD");
+        auto obsD = runtime.AddObserver([&simD](IEventHandle::TPtr& ev) { simD->ChangeEvent(ev); });
+        for (ui32 i = 0; i < 60 && ackBlocker.size() < 2; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(ackBlocker.size() >= 2, "TableD's split did not ignite");
+        auto simE = MakeHotSimulator(runtime, "/MyRoot/TableE");
+        auto obsE = runtime.AddObserver([&simE](IEventHandle::TPtr& ev) { simE->ChangeEvent(ev); });
+        for (ui32 i = 0; i < 60 && ackBlocker.size() < 3; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(ackBlocker.size() >= 3, "TableE's split did not ignite");
+
+        // Release A's stats: A's merge scan runs under saturation and records a merge deferral.
+        aStatsBlocker.Stop().Unblock();
+        bool aDeferred = false;
+        for (ui32 i = 0; i < 40 && !aDeferred; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            aDeferred = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(aDeferred, "TableA's merge deferral was not recorded");
+
+        // Release B's stats: B's merge scan records a merge deferral (queue order [A, B]).
+        const ui64 deferralsBeforeB = GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals");
+        bStatsBlocker.Stop().Unblock();
+        bool bDeferred = false;
+        for (ui32 i = 0; i < 40 && !bDeferred; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            bDeferred = GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals") > deferralsBeforeB;
+        }
+        UNIT_ASSERT_C(bDeferred, "TableB's merge deferral was not recorded");
+
+        // Put B's path under operation: start a DropTable and hold it in flight by blocking
+        // the datashards' proposal results. The path is in EPathStateDrop (under operation,
+        // not yet dropped: Dropped() is false, so the wave still picks B's deferred shard and
+        // proposes its merge), and the propose is rejected with MultipleModifications.
+        THashSet<ui64> bTablets;
+        {
+            auto bDesc = DescribePrivatePath(runtime, "/MyRoot/TableB", true, true);
+            for (const auto& part : bDesc.GetPathDescription().GetTablePartitions()) {
+                bTablets.insert(part.GetDatashardId());
+            }
+        }
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> dropBlocker(runtime,
+            [&bTablets](const TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
+                return bTablets.contains(ev->Get()->Record.GetOrigin());
+            });
+        AsyncDropTable(runtime, ++txId, "/MyRoot", "TableB");
+        bool dropInFlight = false;
+        for (ui32 i = 0; i < 60 && !dropInFlight; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            dropInFlight = dropBlocker.size() >= 1;
+        }
+        UNIT_ASSERT_C(dropInFlight, "TableB's drop did not reach DropParts");
+
+        // Free C's, D's and E's slots (release their Acks), then stop blocking so A's merge Ack flows.
+        ackBlocker.Unblock(3);
+        ackBlocker.Stop();
+
+        // The wave: A's merge ignites (accepted), B's merge is rejected (MultipleModifications).
+        // Post-fix, A's merge completes despite the sibling rejection.
+        bool aMerged = false;
+        for (ui32 i = 0; i < 90 && !aMerged; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            aMerged = PartitionCountOf(runtime, "/MyRoot/TableA") < 3;
+        }
+        UNIT_ASSERT_C(aMerged, "TableA's accepted merge did not survive the sibling rejection");
+
+        // B's merge was rejected: B's partition count is unchanged (its drop op is still in
+        // flight, and no merge fired), and B's deferral is kept.
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/TableB"), 4u);
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected"), 0u);
+
+        // Cleanup: release the blocked proposal results so B's drop finalizes.
+        dropBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    // Finding 18 (Critical): a delayed histogram response for a shard no longer in the
+    // partitioning must be ignored, not recorded (else VerifyConsistency aborts). The response
+    // is held past a user split that removes the source shard; releasing it must not recreate
+    // state for the dead shard.
+    Y_UNIT_TEST(DelayedHistogramResponseAfterReshape_IsIgnored) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Table", /* maxPartitions */ 4, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const ui64 localId = desc.GetPathDescription().GetSelf().GetPathId();
+        const ui64 shard0Tablet = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Block the histogram response for this table: the hot shard's split evidence is held.
+        TBlockEvents<TEvDataShard::TEvGetTableStatsResult> histBlocker(runtime,
+            [localId](const TEvDataShard::TEvGetTableStatsResult::TPtr& ev) {
+                return ev->Get()->Record.GetTableLocalId() == localId;
+            });
+        for (ui32 i = 0; i < 40 && histBlocker.size() < 1; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_C(histBlocker.size() >= 1, "no histogram response was produced for the hot shard");
+
+        // Cool the shard so no further demand is generated while the response is held.
+        simulator->MetricsPatchByFollowerIdPeriodic.clear();
+        simulator->MetricsPatchByFollowerIdStats.clear();
+
+        // User-split the table with an explicit boundary (no histogram needed): the source
+        // shard is removed from the partitioning.
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 500000 } } } }
+        )", shard0Tablet));
+        env.TestWaitNotification(runtime, txId);
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Table"), 2u);
+
+        // Release the stale response: it must be ignored (no VerifyConsistency abort, no state
+        // recreation for the removed shard).
+        histBlocker.Stop().Unblock();
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Table"), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"), 0u);
+    }
+
+    // Finding 1: the revisit transaction is retry-safe; in-memory scheduler state survives a
+    // reboot consistently. A reboot mid-deferral must not wedge the in-flight op or leave stale
+    // state: the op completes post-reboot and the gauges drain cleanly.
+    Y_UNIT_TEST(RebootMidDeferral_StateResetsAndSelfHeals) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 100
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Saturate: hold the first split in flight; the sibling hot shards defer.
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(deferredRecorded, "expected a deferred split to be recorded");
+
+        // Reboot the schemeshard mid-deferral (possibly mid-revisit-tx).
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Cool the shards and release the held split: the in-flight op resumes and completes
+        // post-reboot, and the fresh cool stats let any re-recorded deferrals expire.
+        simulator->MetricsPatchByFollowerIdPeriodic.clear();
+        simulator->MetricsPatchByFollowerIdStats.clear();
+        splitBlocker.Stop().Unblock();
+
+        // The held split completes post-reboot (self-healing), and the gauges drain to zero
+        // (no stale in-memory state survived the reboot).
+        bool healed = false;
+        for (ui32 i = 0; i < 60 && !healed; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            healed = (PartitionCountOf(runtime, "/MyRoot/Table") == 5)
+                && (GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") == 0)
+                && (GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge") == 0);
+        }
+        UNIT_ASSERT_C(healed,
+            "the schemeshard did not self-heal after the reboot"
+            << ", partitions: " << PartitionCountOf(runtime, "/MyRoot/Table")
+            << ", partitions with deferred: "
+            << GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"));
+    }
+
+    // Gap D2: intra-table merge-by-size vs split-by-load on the SAME table. Shards are
+    // simultaneously tiny (mergeable by size) and hot (wanting split-by-load). The model must
+    // arbitrate without wedging: both directions fire (the count both decreases and increases),
+    // and the table never gets stuck.
+    Y_UNIT_TEST(MergeBySizeVsSplitByLoad_InterleavesWithoutWedging) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 1000000000
+                        MaxPartitionsCount: 8
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 10 }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write one tiny row into each shard (PartOwners non-empty).
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+            const auto& parts = desc.GetPathDescription().GetTablePartitions();
+            for (int i = 0; i < parts.size(); ++i) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('key (Uint64 '%lu)) ) )
+                        (let value '('('value (Uint64 '1)) ) )
+                        (return (AsList (UpdateRow '__user__Table key value) ))
+                    )
+                )", i * 125000 + 1);
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, parts.Get(i).GetDatashardId(), writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            }
+        }
+
+        // Short historical-load window: TryAddShardToMerge load-gates ALL merges (including
+        // merge-by-size) on GetLatestMaxCpuUsagePercent over this window, so the cool phase
+        // must be able to forget the hot history quickly.
+        TControlBoard::SetValue(10, runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
+
+        // Hot simulator: all shards report 100% CPU (split-by-load demand) while being tiny
+        // (merge-by-size demand). While hot, the load gate correctly refuses merges -- the
+        // split direction must win.
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Phase 1 (hot): a split-by-load must fire (the count grows past the initial 4).
+        bool splitDemandSeen = false;
+        bool splitFired = false;
+        for (ui32 i = 0; i < 90 && !splitFired; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            splitDemandSeen = splitDemandSeen
+                || GetCumulativeCounter(runtime, "SchemeShard/SplitDemandDetected") > 0;
+            splitFired = PartitionCountOf(runtime, "/MyRoot/Table") > 4;
+        }
+        UNIT_ASSERT_C(splitDemandSeen, "no split-by-load demand was detected");
+        UNIT_ASSERT_C(splitFired, "no split-by-load fired on the hot tiny table");
+
+        // Phase 2 (cool): the load history ages out within the short window and the tiny
+        // shards become mergeable by size -- a merge must fire after the split (no wedge).
+        simulator->MetricsPatchByFollowerIdPeriodic.clear();
+        simulator->MetricsPatchByFollowerIdStats.clear();
+
+        bool mergeDemandSeen = false;
+        bool mergeFiredAfterSplit = false;
+        ui32 maxSeen = PartitionCountOf(runtime, "/MyRoot/Table");
+        for (ui32 i = 0; i < 120 && !mergeFiredAfterSplit; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            mergeDemandSeen = mergeDemandSeen
+                || GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected") > 0;
+            const ui32 count = PartitionCountOf(runtime, "/MyRoot/Table");
+            maxSeen = Max(maxSeen, count);
+            mergeFiredAfterSplit = count < maxSeen;
+        }
+        UNIT_ASSERT_C(mergeDemandSeen, "no merge-by-size demand was detected after cooling");
+        UNIT_ASSERT_C(mergeFiredAfterSplit, "no merge-by-size fired after the split (the table wedged)");
+    }
+
+    // Finding 27: toggling fair scheduling off->on does not orphan previously-deferred shards.
+    // The gate-off drain clears the queue membership guard; after re-enabling, the table is
+    // serviced again (the deferred shards split once the slot frees).
+    Y_UNIT_TEST(FairSchedulingToggle_RoundTrip) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 10
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Saturate: hold the first split in flight; the sibling hot shards defer (and are queued).
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(deferredRecorded, "expected a deferred split to be recorded");
+
+        // Toggle fair scheduling off (the gate-off wave drains the queue and clears the
+        // membership guard), then back on.
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+
+        // Free the slot: the held split completes and the deferred shards are serviced (not
+        // orphaned by the toggle).
+        splitBlocker.Stop().Unblock();
+
+        bool grew = false;
+        for (ui32 i = 0; i < 90 && !grew; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            grew = PartitionCountOf(runtime, "/MyRoot/Table") > 5;
+        }
+        UNIT_ASSERT_C(grew, "the table did not keep splitting after the fair-scheduling toggle");
+    }
+
+    // Finding 28: a locked table under saturation is churn-free -- it records a deferral (by
+    // design the memory must remember the demand) but never spins on stats requests and never
+    // proposes a split. The deferral set does not accumulate beyond one entry per shard.
+    Y_UNIT_TEST(LockedUnderSaturation_NoChurn_NoDeferralAccumulation) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Locked table: hot, but can never split while locked.
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Locked", /* maxPartitions */ 4, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+        const ui64 lockTxId = ++txId;
+        TestLock(runtime, lockTxId, "/MyRoot", "Locked");
+
+        // Saturation source: a second hot table whose split holds the single slot.
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Hot", /* maxPartitions */ 2, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> splitBlocker(runtime);
+
+        auto simLocked = MakeHotSimulator(runtime, "/MyRoot/Locked");
+        auto obsLocked = runtime.AddObserver([&simLocked](IEventHandle::TPtr& ev) { simLocked->ChangeEvent(ev); });
+        auto simHot = MakeHotSimulator(runtime, "/MyRoot/Hot");
+        auto obsHot = runtime.AddObserver([&simHot](IEventHandle::TPtr& ev) { simHot->ChangeEvent(ev); });
+
+        // The locked table's demand is deferred (the memory records it), and the slot is held
+        // by Hot's split.
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(deferredRecorded, "expected the locked table's demand to be deferred");
+
+        // Churn-free: the locked table never sends a histogram request (the sender guards
+        // locked paths), so the count stays flat.
+        const ui64 keySampleRequestsBefore = simLocked->KeyAccessSampleReqCount;
+        for (ui32 i = 0; i < 15; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(simLocked->KeyAccessSampleReqCount, keySampleRequestsBefore);
+
+        // No split fired on the locked table, and the deferral set did not accumulate beyond
+        // the single shard (the gauge equals the shard count, not growing unboundedly).
+        UNIT_ASSERT_VALUES_EQUAL(PartitionCountOf(runtime, "/MyRoot/Locked"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 1u);
+
+        splitBlocker.Stop().Unblock();
+    }
+
+    // Finding 31: every deferral increments the cumulative SplitMergeDeferrals counter,
+    // including the borrowed branch. A borrowed deferral (recorded by the periodic path) must
+    // be counted.
+    Y_UNIT_TEST(BorrowedDeferral_IncrementsSplitMergeDeferrals) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Table", /* maxPartitions */ 4, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        simulator->ForceBorrowedPartOwner = true;
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // The hot shard reports borrowed parts: its split demand is deferred with reason Borrowed.
+        bool borrowedDeferralRecorded = false;
+        for (ui32 i = 0; i < 40 && !borrowedDeferralRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            borrowedDeferralRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(borrowedDeferralRecorded, "expected a Borrowed deferral to be recorded");
+
+        // The borrowed deferral was counted in the cumulative deferrals counter.
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals"), 0u);
+    }
+
+    // Direction-correction on re-deferral: a shard deferred as split (hot + saturated) is
+    // re-deferred as merge once the demand direction flips (cool + tiny + mergeable). The
+    // aggregate counts move and the merge-wanting deferral is serviced.
+    Y_UNIT_TEST(DeferralDirectionCorrectedOnReDeferral) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Table with BOTH split-by-load (hot) and merge-by-size (tiny) demand enabled.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 1000000000
+                        MaxPartitionsCount: 8
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 10 }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write one tiny row into each shard (PartOwners non-empty).
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+            const auto& parts = desc.GetPathDescription().GetTablePartitions();
+            for (int i = 0; i < parts.size(); ++i) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('key (Uint64 '%lu)) ) )
+                        (let value '('('value (Uint64 '1)) ) )
+                        (return (AsList (UpdateRow '__user__Table key value) ))
+                    )
+                )", i * 125000 + 1);
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, parts.Get(i).GetDatashardId(), writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            }
+        }
+
+        // Short historical-load window: the merge scan load-gates ALL merges on
+        // GetLatestMaxCpuUsagePercent over this window, so the cool phase must be able to
+        // forget the hot history quickly.
+        TControlBoard::SetValue(10, runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
+
+        // Hold the first split op in flight by blocking its TEvSplitAck (the op completes on
+        // the Ack): the single slot stays occupied and the sibling hot shards defer as SPLIT.
+        TBlockEvents<TEvDataShard::TEvSplitAck> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Phase 1: hot + saturated -> the sibling shards defer as SPLIT (InFlightLimit).
+        bool splitDemandSeen = false;
+        bool splitDeferralSeen = false;
+        for (ui32 i = 0; i < 40 && !splitDeferralSeen; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            splitDemandSeen = splitDemandSeen
+                || GetCumulativeCounter(runtime, "SchemeShard/SplitDemandDetected") > 0;
+            splitDeferralSeen = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+        UNIT_ASSERT_C(splitDemandSeen, "no split demand was detected in phase 1");
+        UNIT_ASSERT_C(splitDeferralSeen, "no split deferral was recorded in phase 1");
+
+        // Phase 2: cool the shards AND free the slot (release the held Ack). Once the hot
+        // load history ages out, the merge scan re-evaluates the deferred shards: the
+        // direction is corrected to merge (MergeDemandDetected fires) and the merge is
+        // serviced -- the table merges (the count decreases). Under persistent saturation
+        // the already-deferred short-circuit would keep re-noting the stored split
+        // direction, so the correction requires the freed slot.
+        simulator->MetricsPatchByFollowerIdPeriodic.clear();
+        simulator->MetricsPatchByFollowerIdStats.clear();
+        splitBlocker.Stop().Unblock();
+
+        bool mergeDemandSeen = false;
+        bool merged = false;
+        for (ui32 i = 0; i < 90 && !merged; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            mergeDemandSeen = mergeDemandSeen
+                || GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected") > 0;
+            merged = PartitionCountOf(runtime, "/MyRoot/Table") < 4;
+        }
+        UNIT_ASSERT_C(mergeDemandSeen, "no merge demand was detected after cooling (direction did not flip)");
+        UNIT_ASSERT_C(merged, "the table did not merge after the direction flipped to merge");
+    }
+
+    // Finding 5: RecordMergeApplied on never-deferred (stateless) shards works cleanly -- a
+    // merge cascade on shards that were never deferred completes with zero deferrals recorded.
+    Y_UNIT_TEST(MergeOnStatelessShards_NoDeferrals) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true);
+
+        ui64 txId = 100;
+        // 8 tiny mergeable shards, no in-flight limit: the merge cascade fires directly.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 8
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 1000000000
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write one tiny row into each shard (PartOwners non-empty).
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+            const auto& parts = desc.GetPathDescription().GetTablePartitions();
+            for (int i = 0; i < parts.size(); ++i) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('key (Uint64 '%lu)) ) )
+                        (let value '('('value (Uint64 '1)) ) )
+                        (return (AsList (UpdateRow '__user__Table key value) ))
+                    )
+                )", i * 125000 + 1);
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, parts.Get(i).GetDatashardId(), writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            }
+        }
+
+        // Cold simulator: drives the stats pipeline so the merge scan proposes the cascade.
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const ui64 localId = desc.GetPathDescription().GetSelf().GetPathId();
+        const ui64 ownerId = desc.GetPathDescription().GetSelf().GetSchemeshardId();
+        const ui64 ds0 = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        auto simulator = MakeHolder<TLoadAndSplitSimulator>(
+            localId, ownerId, ds0,
+            false /* shouldSendReadRequests */,
+            ESendDuplicateTableStatsStrategy::None,
+            std::map<ui32, i32>{},  // cold periodic stats
+            std::map<ui32, i32>{},  // cold get-stats result
+            runtime);
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // The merge cascade drains the table to MinPartitionsCount=1.
+        bool drained = false;
+        for (ui32 i = 0; i < 120 && !drained; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            drained = PartitionCountOf(runtime, "/MyRoot/Table") <= 1;
+        }
+        UNIT_ASSERT_C(drained, "the merge cascade did not drain to 1 partition");
+
+        // Merge demand was detected, but no deferral was ever recorded (the shards were never
+        // deferred -- RecordMergeApplied ran on stateless shards).
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"), 0u);
     }
 }

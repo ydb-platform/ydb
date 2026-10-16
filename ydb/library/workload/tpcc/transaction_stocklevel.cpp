@@ -55,7 +55,7 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
 
 TAsyncExecuteQueryResult GetStockCount(
     TSession& session, const TTransaction& tx, TTransactionContext& context,
-    int warehouseID, int districtID, int orderID, int threshold)
+    int warehouseID, int districtID, int orderID, int threshold, bool commit = false)
 {
     auto& Log = context.Log;
     static std::string query = std::format(R"(
@@ -89,7 +89,7 @@ TAsyncExecuteQueryResult GetStockCount(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::Tx(tx),
+        TxControl(tx, commit),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for stock count result");
@@ -148,7 +148,7 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     int nextOrderID = *districtParser.ColumnParser("D_NEXT_O_ID").GetOptionalInt32();
 
     // Get stock count
-    auto stockCountFuture = GetStockCount(session, tx, context, warehouseID, districtID, nextOrderID, threshold);
+    auto stockCountFuture = GetStockCount(session, tx, context, warehouseID, districtID, nextOrderID, threshold, /*commit=*/true);
     auto stockCountResult = co_await TSuspendWithFuture(stockCountFuture, context.TaskQueue, context.TerminalID);
     if (!stockCountResult.IsSuccess()) {
         if (ShouldExit(stockCountResult)) {
@@ -162,15 +162,10 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
         co_return stockCountResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing StockLevel transaction, session: " << session.GetId());
-
-    auto commitFuture = tx.Commit();
-    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
-
     TMonotonic endTs = TMonotonic::Now();
     latency = endTs - startTs;
 
-    co_return commitResult;
+    co_return stockCountResult;
 }
 
 } // namespace NYdb::NTPCC

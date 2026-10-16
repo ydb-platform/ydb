@@ -256,7 +256,7 @@ jobs:
 
         repo_url=https://github.com/ydb-platform/ydb.git
 
-        # Depth-1 clone, same transfer as checkout. Speed is 5s of tmp_pack once objects are actually arriving.
+        # Depth-1 clone, same transfer as checkout. Speed is the 15th second after tmp_pack passes 1 MB.
         pack_size() {
           local f
           f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
@@ -281,7 +281,9 @@ jobs:
           done
           s2=$s1
           if [ "$s1" -gt 0 ]; then
-            sleep 5
+            sleep 14
+            s1=$(pack_size "$dest")
+            sleep 1
             s2=$(pack_size "$dest")
             if [ "$s2" -lt "$s1" ]; then s2=$s1; fi
           fi
@@ -294,7 +296,7 @@ jobs:
           fi
           rm -rf "$dest"
           rm -f "$log"
-          echo "$s2 $(( (s2 - s1) / 5 ))"
+          echo "$s2 $(( s2 - s1 ))"
         }
 
         megabytes() {
@@ -321,7 +323,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+        echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last 1s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 1s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
         {
           echo "GH_PROXY_MEASURED=1"
           echo "GH_PROXY_USED=$use_proxy"
@@ -411,7 +413,7 @@ jobs:
 
         repo_url=https://github.com/ydb-platform/ydb.git
 
-        # Depth-1 clone, same transfer as checkout. Speed is 5s of tmp_pack once objects are actually arriving.
+        # Depth-1 clone, same transfer as checkout. Speed is the 15th second after tmp_pack passes 1 MB.
         pack_size() {
           local f
           f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
@@ -436,7 +438,9 @@ jobs:
           done
           s2=$s1
           if [ "$s1" -gt 0 ]; then
-            sleep 5
+            sleep 14
+            s1=$(pack_size "$dest")
+            sleep 1
             s2=$(pack_size "$dest")
             if [ "$s2" -lt "$s1" ]; then s2=$s1; fi
           fi
@@ -449,7 +453,7 @@ jobs:
           fi
           rm -rf "$dest"
           rm -f "$log"
-          echo "$s2 $(( (s2 - s1) / 5 ))"
+          echo "$s2 $(( s2 - s1 ))"
         }
 
         megabytes() {
@@ -476,7 +480,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+        echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last 1s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 1s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
         {
           echo "GH_PROXY_MEASURED=1"
           echo "GH_PROXY_USED=$use_proxy"

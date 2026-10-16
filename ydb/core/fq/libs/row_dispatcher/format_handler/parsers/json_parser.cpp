@@ -175,7 +175,7 @@ public:
 
     bool IsNullableType(const NKikimr::NMiniKQL::TType* type, NYql::NUdf::TUnboxedValue& resultValue) const {
         Y_DEBUG_ABORT_UNLESS(!resultValue);
-        switch(type->GetKind()) {
+        switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional:
                 return true;
             case NKikimr::NMiniKQL::TTypeBase::EKind::Variant: {
@@ -195,8 +195,9 @@ public:
         }
     }
 
-    static bool ValidateJsonType(const NKikimr::NMiniKQL::TType* type, simdjson::builtin::ondemand::json_type cellType, simdjson::builtin::ondemand::value& jsonValue) {
-        switch(type->GetKind()) {
+    static bool ValidateJsonType(
+        const NKikimr::NMiniKQL::TType* type, simdjson::builtin::ondemand::json_type cellType, simdjson::builtin::ondemand::value& jsonValue) {
+        switch (type->GetKind()) {
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional:
                 // null are handled separately
                 return ValidateJsonType(AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), cellType, jsonValue);
@@ -268,7 +269,8 @@ public:
         }
     }
 
-    bool ParseVariantValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
+    bool ParseVariantValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
         auto variantType = AS_TYPE(NKikimr::NMiniKQL::TVariantType, type);
         const auto alternativesCount = variantType->GetAlternativesCount();
         simdjson::ondemand::parser parser;
@@ -302,7 +304,8 @@ public:
                     SetParsingError(error, jsonValue, "reparse as json", status, isQuiet);
                     return false;
                 }
-                doc = parser.iterate(simdjson::padded_string_view(rawJson, rawJson.size() + simdjson::SIMDJSON_PADDING)); // as rawJson points to original document, we *know* padding is present
+                doc = parser.iterate(simdjson::padded_string_view(rawJson,
+                    rawJson.size() + simdjson::SIMDJSON_PADDING));   // as rawJson points to original document, we *know* padding is present
             }
             if (doc.error() != simdjson::error_code::UNINITIALIZED) {
                 CHECK_JSON_ERROR(doc.get(innerJsonValue)) {
@@ -326,16 +329,23 @@ public:
         }
         if (status.IsSuccess()) {
             // Note: we try to keep error from last alternative, but this won't work if tail is rejected by early json type mismatch check. So, just ensure some error is reported
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse as Variant type" << ", json type: " << JsonTypeToString(cellType) << ", current token: '" << TruncateString(jsonValue.raw_json_token()) << "'");
+            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                isQuiet ? TString()
+                        : TStringBuilder() << "Failed to parse as Variant type" << ", json type: " << JsonTypeToString(cellType)
+                                           << ", current token: '" << TruncateString(jsonValue.raw_json_token()) << "'");
         } else if (!isQuiet) {
             status.AddParentIssue(TStringBuilder() << "Failed to parse as Variant type");
         }
         return false;
     }
 
-    bool ParseListValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
+    bool ParseListValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
         if (cellType != simdjson::builtin::ondemand::json_type::array) {
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected array, but got " << JsonTypeToString(cellType));
+            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString()
+                                                                           : TStringBuilder()
+                                                                                 << "Failed to parse nested json value (" << type->GetKindAsStr()
+                                                                                 << "), expected array, but got " << JsonTypeToString(cellType));
             return false;
         }
         simdjson::ondemand::array array;
@@ -365,9 +375,13 @@ public:
         return true;
     }
 
-    bool ParseTupleValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
+    bool ParseTupleValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
         if (cellType != simdjson::builtin::ondemand::json_type::array) {
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected array, but got " << JsonTypeToString(cellType));
+            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString()
+                                                                           : TStringBuilder()
+                                                                                 << "Failed to parse nested json value (" << type->GetKindAsStr()
+                                                                                 << "), expected array, but got " << JsonTypeToString(cellType));
             return false;
         }
         simdjson::ondemand::array array;
@@ -379,7 +393,7 @@ public:
         }
         auto tupleType = AS_TYPE(NKikimr::NMiniKQL::TTupleType, type);
         auto elementsCount = tupleType->GetElementsCount();
-        NYql::NUdf::TUnboxedValue *resultValues;
+        NYql::NUdf::TUnboxedValue* resultValues;
         NYql::NUdf::TUnboxedValue tuple = HolderFactory->CreateDirectArrayHolder(elementsCount, resultValues);
         size_t idx = 0;
         array.reset();
@@ -400,7 +414,9 @@ public:
         for (; idx != elementsCount; ++idx) {
             // tail must be optional
             if (tupleType->GetElementType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), short json array at index " << idx << ", expected non optional type " << GetTypeName(tupleType->GetElementType(idx)));
+                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                    TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), short json array at index " << idx
+                                     << ", expected non optional type " << GetTypeName(tupleType->GetElementType(idx)));
                 return false;
             }
         }
@@ -408,9 +424,13 @@ public:
         return true;
     }
 
-    bool ParseStructValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
+    bool ParseStructValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
         if (cellType != simdjson::builtin::ondemand::json_type::object) {
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected object, but got " << JsonTypeToString(cellType));
+            status = TStatus::Fail(
+                EStatusId::PRECONDITION_FAILED, isQuiet ? TString()
+                                                        : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr()
+                                                                           << "), expected object, but got " << JsonTypeToString(cellType));
             return false;
         }
         simdjson::ondemand::object object;
@@ -428,7 +448,7 @@ public:
         const auto& memberNames = it->second;
         Y_ENSURE(memberNames.size() == membersCount);
 
-        NYql::NUdf::TUnboxedValue *resultValues;
+        NYql::NUdf::TUnboxedValue* resultValues;
         NYql::NUdf::TUnboxedValue structValue = HolderFactory->CreateDirectArrayHolder(membersCount, resultValues);
         object.reset();
         for (auto elt : object) {
@@ -458,7 +478,10 @@ public:
 
         for (ui32 idx = 0; idx != membersCount; ++idx) {
             if (!resultValues[idx] && structType->GetMemberType(idx)->GetKind() != NKikimr::NMiniKQL::TTypeBase::EKind::Optional) {
-                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected non-optional field " << structType->GetMemberName(idx));
+                status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                    isQuiet ? TString()
+                            : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr()
+                                               << "), expected non-optional field " << structType->GetMemberName(idx));
                 return false;
             }
         }
@@ -466,9 +489,13 @@ public:
         return true;
     }
 
-    bool ParseDictValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
+    bool ParseDictValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isQuiet, simdjson::builtin::ondemand::json_type cellType) const {
         if (cellType != simdjson::builtin::ondemand::json_type::object) {
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr() << "), expected object, but got " << JsonTypeToString(cellType));
+            status = TStatus::Fail(
+                EStatusId::PRECONDITION_FAILED, isQuiet ? TString()
+                                                        : TStringBuilder() << "Failed to parse nested json value (" << type->GetKindAsStr()
+                                                                           << "), expected object, but got " << JsonTypeToString(cellType));
             return false;
         }
         simdjson::ondemand::object object;
@@ -493,9 +520,9 @@ public:
         object.reset();
         auto dictType = AS_TYPE(NKikimr::NMiniKQL::TDictType, type);
         auto keyType = dictType->GetKeyType();
-        Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data); // should be already verified, not user-data-error
+        Y_ENSURE(keyType->GetKind() == NKikimr::NMiniKQL::TTypeBase::EKind::Data);   // should be already verified, not user-data-error
         auto keyDataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, keyType)->GetDataSlot();
-        Y_ENSURE(keyDataSlot); // should be already verified, not user-data-error
+        Y_ENSURE(keyDataSlot);   // should be already verified, not user-data-error
         auto payloadType = dictType->GetPayloadType();
         NKikimr::NMiniKQL::TKeyTypes keyTypes;
         bool isTuple;
@@ -504,29 +531,27 @@ public:
         GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded, useIHash);
         Y_ENSURE(!(isTuple || encoded || useIHash));
         status = TStatus::Success();
-        NYql::NUdf::TUnboxedValue dictValue = HolderFactory->CreateDirectHashedDictHolder(
-            [&, this](auto& map) {
-                for (auto elt : object) {
-                    std::string_view name;
-                    {
-                        CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
-                            SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
-                            return;
-                        }
-                    }
-                    simdjson::builtin::ondemand::value eltValue;
-                    CHECK_JSON_ERROR(elt.value().get(eltValue)) {
+        NYql::NUdf::TUnboxedValue dictValue = HolderFactory->CreateDirectHashedDictHolder([&, this](auto& map) {
+            for (auto elt : object) {
+                std::string_view name;
+                {
+                    CHECK_JSON_ERROR(elt.escaped_key().get(name)) {
                         SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
                         return;
                     }
-                    NYql::NUdf::TUnboxedValue payload;
-                    if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false, isQuiet)) {
-                        return;
-                    }
-                    map.emplace(NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name), std::move(payload));
                 }
-            },
-            keyTypes, false, true, nullptr, nullptr, nullptr);
+                simdjson::builtin::ondemand::value eltValue;
+                CHECK_JSON_ERROR(elt.value().get(eltValue)) {
+                    SetParsingError(error, jsonValue, "parse as object", status, isQuiet);
+                    return;
+                }
+                NYql::NUdf::TUnboxedValue payload;
+                if (!ParseNestedValue(std::move(eltValue), payload, status, payloadType, false, isQuiet)) {
+                    return;
+                }
+                map.emplace(NKikimr::NMiniKQL::ValueFromString(*keyDataSlot, name), std::move(payload));
+            }
+        }, keyTypes, false, true, nullptr, nullptr, nullptr);
         if (status.IsSuccess()) {
             resultValue = std::move(dictValue);
             return true;
@@ -534,7 +559,8 @@ public:
         return false;
     }
 
-    bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, const NKikimr::NMiniKQL::TType* type, bool isOptional, bool isQuiet = false) const {
+    bool ParseNestedValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status,
+        const NKikimr::NMiniKQL::TType* type, bool isOptional, bool isQuiet = false) const {
         Y_ENSURE(HolderFactory);   // should be already verified by ParseNestedType
         simdjson::builtin::ondemand::json_type cellType;
         CHECK_JSON_ERROR(jsonValue.type().get(cellType)) {
@@ -555,7 +581,8 @@ public:
             if (IsNullableType(type, resultValue)) {
                 return true;
             }
-            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
+            status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                isQuiet ? TString() : TStringBuilder() << "Found unexpected null value, expected non optional type " << GetTypeName(type));
             return false;
         }
 
@@ -568,7 +595,8 @@ public:
                 Y_ENSURE(maybeDataSlot);
                 auto dataSlot = *maybeDataSlot;
                 if (dataSlot != NYql::NUdf::EDataSlot::Json) {
-                    return ParseDataType(std::move(jsonValue), resultValue, status, dataSlot, isOptional, NYql::NUdf::GetDataTypeInfo(dataSlot).Name, isQuiet);
+                    return ParseDataType(
+                        std::move(jsonValue), resultValue, status, dataSlot, isOptional, NYql::NUdf::GetDataTypeInfo(dataSlot).Name, isQuiet);
                 } else {
                     return ParseJsonType(std::move(jsonValue), resultValue, status, isQuiet);
                 }
@@ -576,7 +604,8 @@ public:
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {
                 Y_ENSURE(!isOptional);
-                return ParseNestedValue(std::move(jsonValue), resultValue, status, AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true, isQuiet);
+                return ParseNestedValue(
+                    std::move(jsonValue), resultValue, status, AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType(), true, isQuiet);
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::List:
@@ -593,7 +622,8 @@ public:
 
             default:
                 // should've been handled in ParseNestedType
-                status = TStatus::Fail(EStatusId::UNSUPPORTED, isQuiet ? TString() : TStringBuilder() << "Unsupported type kind: " << type->GetKindAsStr());
+                status = TStatus::Fail(
+                    EStatusId::UNSUPPORTED, isQuiet ? TString() : TStringBuilder() << "Unsupported type kind: " << type->GetKindAsStr());
                 return false;
         }
         return true;
@@ -734,7 +764,7 @@ public:
                 auto itemType = listType->GetItemType();
                 auto listIterator = value.GetListIterator();
 
-                for(NYql::NUdf::TUnboxedValue itemValue; listIterator.Next(itemValue); ) {
+                for (NYql::NUdf::TUnboxedValue itemValue; listIterator.Next(itemValue);) {
                     if (!ValidateObjectRefs(itemType, itemValue.Release())) {
                         Y_DEBUG_ABORT();
                         return false;
@@ -760,7 +790,7 @@ public:
                 auto valueType = dictType->GetPayloadType();
                 auto dictIterator = value.GetDictIterator();
 
-                for(NYql::NUdf::TUnboxedValue keyValue, payload; dictIterator.NextPair(keyValue, payload); ) {
+                for (NYql::NUdf::TUnboxedValue keyValue, payload; dictIterator.NextPair(keyValue, payload);) {
                     if (!ValidateObjectRefs(keyType, keyValue.Release())) {
                         Y_DEBUG_ABORT();
                         return false;
@@ -978,14 +1008,13 @@ public:
                         break;
 
                     default:
-                        status = TStatus::Fail(
-                            EStatusId::PRECONDITION_FAILED, isQuiet ? TString() : TStringBuilder() << "Number value is not expected for data type " << dataTypeName);
+                        status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                            isQuiet ? TString() : TStringBuilder() << "Number value is not expected for data type " << dataTypeName);
                         break;
                 }
                 if (Y_UNLIKELY(status.IsFail()) && !isQuiet) {
-                    status.AddParentIssue(
-                        TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json number (raw: '"
-                                         << TruncateString(jsonValue.raw_json_token()) << "')");
+                    status.AddParentIssue(TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json number (raw: '"
+                                                           << TruncateString(jsonValue.raw_json_token()) << "')");
                 }
                 return resultValue.HasValue();
             }
@@ -999,9 +1028,10 @@ public:
 
                 resultValue = NKikimr::NMiniKQL::ValueFromString(dataSlot, rawString);
                 if (Y_UNLIKELY(!resultValue)) {
-                    status =
-                        TStatus::Fail(EStatusId::BAD_REQUEST,
-                            isQuiet ? TString() : TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json string: '" << TruncateString(rawString) << "'");
+                    status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString()
+                                                                           : TStringBuilder()
+                                                                                 << "Failed to parse data type " << dataTypeName
+                                                                                 << " from json string: '" << TruncateString(rawString) << "'");
                 }
                 return resultValue.HasValue();
             }
@@ -1014,7 +1044,9 @@ public:
                     return false;
                 }
                 status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
-                    isQuiet ? TString() : TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " << dataTypeName << ", please use Json type for nested values");
+                    isQuiet ? TString()
+                            : TStringBuilder() << "Found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type "
+                                               << dataTypeName << ", please use Json type for nested values");
                 return false;
             }
 
@@ -1042,8 +1074,9 @@ public:
                     return false;
                 }
                 if (Y_UNLIKELY(!isOptional)) {
-                    status =  TStatus::Fail(EStatusId::PRECONDITION_FAILED,
-                        isQuiet ? TString() : TStringBuilder() << "Found unexpected null value, expected non optional data type " << dataTypeName);
+                    status = TStatus::Fail(EStatusId::PRECONDITION_FAILED,
+                        isQuiet ? TString()
+                                : TStringBuilder() << "Found unexpected null value, expected non optional data type " << dataTypeName);
                     return false;
                 }
 
@@ -1056,8 +1089,10 @@ public:
                     SetParsingError(error, jsonValue, "extract json string", status, isQuiet);
                     return false;
                 }
-                status = TStatus::Fail(EStatusId::BAD_REQUEST,
-                    isQuiet ? TString() : TStringBuilder() << "Failed to parse data type " << dataTypeName << " from json string: '" << TruncateString(rawString) << "'");
+                status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString()
+                                                                       : TStringBuilder()
+                                                                             << "Failed to parse data type " << dataTypeName
+                                                                             << " from json string: '" << TruncateString(rawString) << "'");
                 return false;
             }
         }
@@ -1072,7 +1107,8 @@ public:
         }
 
         if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {
-            status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString() : TStringBuilder() << "Found bad json value: '" << TruncateString(rawJson) << "'");
+            status = TStatus::Fail(
+                EStatusId::BAD_REQUEST, isQuiet ? TString() : TStringBuilder() << "Found bad json value: '" << TruncateString(rawJson) << "'");
             return false;
         }
 
@@ -1091,8 +1127,10 @@ public:
 
         TJsonNumber number = jsonNumber.value();
         if (Y_UNLIKELY(number < std::numeric_limits<TResult>::min() || std::numeric_limits<TResult>::max() < number)) {
-            status = TStatus::Fail(EStatusId::BAD_REQUEST,
-                isQuiet ? TString() : TStringBuilder() << "Number is out of range [" << ToString(std::numeric_limits<TResult>::min()) << ", " << ToString(std::numeric_limits<TResult>::max()) << "]");
+            status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString()
+                                                                   : TStringBuilder() << "Number is out of range ["
+                                                                                      << ToString(std::numeric_limits<TResult>::min()) << ", "
+                                                                                      << ToString(std::numeric_limits<TResult>::max()) << "]");
             return;
         }
 
@@ -1103,7 +1141,8 @@ public:
     Y_FORCE_INLINE static void ParseJsonDouble(
         simdjson::simdjson_result<double> jsonNumber, NYql::NUdf::TUnboxedValue& resultValue, TStatus& status, bool isQuiet = false) {
         CHECK_JSON_ERROR(jsonNumber.error()) {
-            status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString() : TStringBuilder() << "Failed to extract json float number, error: " << simdjson::error_message(error));
+            status = TStatus::Fail(EStatusId::BAD_REQUEST,
+                isQuiet ? TString() : TStringBuilder() << "Failed to extract json float number, error: " << simdjson::error_message(error));
             return;
         }
 
@@ -1116,10 +1155,12 @@ public:
         resultValue = NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(number));
     }
 
-    static void SetParsingError(
-        simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description, TStatus& status, bool isQuiet = false) {
-        status = TStatus::Fail(EStatusId::BAD_REQUEST,
-            isQuiet ? TString() : TStringBuilder() << "Failed to " << description << ", current token: '" << TruncateString(jsonValue.raw_json_token()) << "', error: " << simdjson::error_message(error));
+    static void SetParsingError(simdjson::error_code error, simdjson::builtin::ondemand::value jsonValue, const TString& description,
+        TStatus& status, bool isQuiet = false) {
+        status = TStatus::Fail(EStatusId::BAD_REQUEST, isQuiet ? TString()
+                                                               : TStringBuilder() << "Failed to " << description << ", current token: '"
+                                                                                  << TruncateString(jsonValue.raw_json_token())
+                                                                                  << "', error: " << simdjson::error_message(error));
     }
 
 private:

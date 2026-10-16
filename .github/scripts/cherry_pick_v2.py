@@ -80,33 +80,19 @@ def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.Co
         raise
 
 
-def github_authorization_header(token: str) -> str:
-    """Basic auth header that git keeps sending after a URL redirect.
+def configure_push_auth(repo_path: str, token: str, logger) -> None:
+    """Authenticate later git calls without putting the token in the remote URL.
 
-    A token embedded in the clone URL is dropped when GitHub redirects push
-    to the same repo with a trailing slash. http.extraheader is applied to
-    every request for that host, including the redirected one.
+    GitHub redirects push to the same repo with a trailing slash, and git drops
+    credentials that were embedded in the clone URL. http.extraheader is sent
+    on the redirected request as well.
     """
     basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-    return f"AUTHORIZATION: basic {basic}"
-
-
-def configure_push_auth(repo_path: str, token: str, logger) -> None:
-    header = github_authorization_header(token)
-    result = subprocess.run(
-        ['git', 'config', 'http.https://github.com/.extraheader', header],
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
+    run_git(
+        repo_path,
+        ['config', 'http.https://github.com/.extraheader', f'AUTHORIZATION: basic {basic}'],
+        logger,
     )
-    if result.returncode != 0:
-        logger.error("Failed to configure GitHub push auth, stderr: %s", (result.stderr or "").strip())
-        raise subprocess.CalledProcessError(
-            result.returncode,
-            ['git', 'config', 'http.https://github.com/.extraheader'],
-            result.stdout,
-            result.stderr,
-        )
 
 
 def expand_sha(repo, ref: str, logger) -> str:

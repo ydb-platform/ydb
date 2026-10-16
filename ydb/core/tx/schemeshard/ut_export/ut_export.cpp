@@ -47,6 +47,7 @@ using namespace NKikimr::Tests;
 namespace {
 
     using NKikimr::EBackupTestDataFormat;
+    using NKikimr::EBackupTestTableType;
 
     const char* ExportDataFormatSettings(EBackupTestDataFormat format) {
         switch (format) {
@@ -1325,6 +1326,166 @@ namespace {
             return rows;
         }
 
+        void ExportWithColumnChangeAfterCopy(bool isColumnTable, bool addColumn, EBackupTestDataFormat format) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+            EnableParquetFormats(Runtime());
+            ui64 txId = 100;
+
+            const TString tableName = isColumnTable ? "ColumnTable" : "RowTable";
+            const TString sourcePath = "/MyRoot/" + tableName;
+            const TString importedName = tableName + "Imported";
+            const TString importedPath = "/MyRoot/" + importedName;
+            const TString keyName = isColumnTable ? "timestamp" : "key";
+
+            if (isColumnTable) {
+                CreateColumnTableWithData(txId, tableName);
+            } else {
+                TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                    Name: "RowTable"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+                Env().TestWaitNotification(Runtime(), txId);
+                const auto shards = GetTableShards(Runtime(), TTestTxConfig::SchemeShard, sourcePath);
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+                UpdateRow(Runtime(), tableName, 1, "value1", shards.front());
+                UpdateRow(Runtime(), tableName, 2, "value2", shards.front());
+            }
+
+            auto readColumnTableKeys = [&](const TString& path) {
+                const auto describe = DescribePrivatePath(Runtime(), path);
+                const auto& shards = describe.GetPathDescription().GetColumnTableDescription().GetSharding().GetColumnShards();
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+                NTxUT::TShardReader reader(Runtime(), shards[0], describe.GetPathId(), NOlap::TSnapshot(0, 0));
+                reader.SetReplyColumnIds({1});
+                const auto batch = reader.ReadAll();
+                UNIT_ASSERT(reader.IsCorrectlyFinished());
+                UNIT_ASSERT(batch);
+                UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
+                return batch->column(0);
+            };
+            std::shared_ptr<arrow::Array> expectedColumnKeys;
+            if (isColumnTable && !addColumn) {
+                expectedColumnKeys = readColumnTableKeys(sourcePath);
+            }
+
+            auto checkColumns = [&](const TString& path, const TSet<TString>& expected) {
+                const auto describe = DescribePrivatePath(Runtime(), path);
+                TestDescribeResult(describe, {NLs::PathExist, NLs::Finished});
+                const auto& description = describe.GetPathDescription();
+                UNIT_ASSERT_VALUES_EQUAL(description.GetSelf().GetPathState(), NKikimrSchemeOp::EPathStateNoChanges);
+                UNIT_ASSERT_VALUES_EQUAL(description.GetSelf().GetPathType(), isColumnTable
+                    ? NKikimrSchemeOp::EPathTypeColumnTable
+                    : NKikimrSchemeOp::EPathTypeTable);
+
+                TSet<TString> columns;
+                if (isColumnTable) {
+                    for (const auto& column : description.GetColumnTableDescription().GetSchema().GetColumns()) {
+                        columns.insert(column.GetName());
+                    }
+                } else {
+                    for (const auto& column : description.GetTable().GetColumns()) {
+                        columns.insert(column.GetName());
+                    }
+                }
+                UNIT_ASSERT_C(columns == expected, describe.DebugString());
+            };
+
+            ui64 copyTxId = 0;
+            auto copyObserver = Runtime().AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+                const auto& record = ev->Get()->Record;
+                if (record.TransactionSize() && record.GetTransaction(0).GetOperationType()
+                    == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables)
+                {
+                    copyTxId = record.GetTxId();
+                }
+            });
+            NActors::TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copyCompleted(Runtime(), [&](const auto& ev) {
+                return copyTxId != 0 && ev->Get()->Record.GetTxId() == copyTxId;
+            });
+
+            const ui64 exportId = ++txId;
+            TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    %s
+                    items {
+                        source_path: "%s"
+                        destination_prefix: "%s"
+                    }
+                }
+            )", S3Port(), ExportDataFormatSettings(format), sourcePath.c_str(), tableName.c_str()));
+
+            Runtime().WaitFor("table copy completion before backup", [&] { return !copyCompleted.empty(); });
+            copyObserver.Remove();
+
+            // The copy is complete, but export must not propose Backup until ALTER finishes.
+            const TString copyPath = Sprintf("/MyRoot/export-%" PRIu64 "/0", exportId);
+            checkColumns(sourcePath, {keyName, "value"});
+            checkColumns(copyPath, {keyName, "value"});
+
+            if (isColumnTable) {
+                TestAlterColumnTable(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                    Name: "%s"
+                    AlterSchema { %s }
+                )", tableName.c_str(), addColumn
+                    ? R"(AddColumns { Name: "extra" Type: "Utf8" })"
+                    : R"(DropColumns { Name: "value" })"));
+            } else {
+                TestAlterTable(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                    Name: "%s"
+                    %s
+                )", tableName.c_str(), addColumn
+                    ? R"(Columns { Name: "extra" Type: "Utf8" })"
+                    : R"(DropColumns { Name: "value" })"));
+            }
+
+            Env().TestWaitNotification(Runtime(), txId);
+            checkColumns(sourcePath, addColumn ? TSet<TString>{keyName, "value", "extra"} : TSet<TString>{keyName});
+            checkColumns(copyPath, {keyName, "value"});
+
+            copyCompleted.Stop().Unblock();
+            Env().TestWaitNotification(Runtime(), exportId);
+            TestGetExport(Runtime(), exportId, "/MyRoot", addColumn ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+            if (addColumn) {
+                return;
+            }
+
+            VerifyS3ExportHasData(tableName, format);
+
+            const ui64 importId = ++txId;
+            TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_prefix: "%s"
+                        destination_path: "%s"
+                    }
+                }
+            )", S3Port(), tableName.c_str(), importedPath.c_str()));
+            Env().TestWaitNotification(Runtime(), importId);
+            TestGetImport(Runtime(), importId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            checkColumns(importedPath, {keyName});
+            if (isColumnTable) {
+                const auto actualKeys = readColumnTableKeys(importedPath);
+                UNIT_ASSERT_VALUES_EQUAL(actualKeys->length(), 100);
+                UNIT_ASSERT_C(actualKeys->Equals(*expectedColumnKeys), "Restored timestamp values differ from the source");
+            } else {
+                const auto shards = GetTableShards(Runtime(), TTestTxConfig::SchemeShard, importedPath);
+                UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+                const auto content = ReadTable(Runtime(), shards.front(), importedName, {keyName}, {keyName});
+                const auto rows = NClient::TValue::Create(content)["Result"]["List"];
+                UNIT_ASSERT_VALUES_EQUAL(rows.Size(), 2u);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rows[0][keyName]), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rows[1][keyName]), 2u);
+            }
+        }
+
         ui64 StartColumnTableS3Export(ui64& txId, const TString& tableName, const TString& destinationPrefix) {
             const ui64 exportTxId = ++txId;
             TestExport(Runtime(), exportTxId, "/MyRoot", Sprintf(R"(
@@ -1988,6 +2149,14 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), exportId);
 
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(AddColumnBetweenCopyAndBackupCancelsExport, EBackupTestDataFormat, EBackupTestTableType) {
+        ExportWithColumnChangeAfterCopy(Arg<1>() == EBackupTestTableType::Column, /* addColumn */ true, Arg<0>());
+    }
+
+    Y_UNIT_TEST(DropColumnBetweenCopyAndBackupRestoresTable, EBackupTestDataFormat, EBackupTestTableType) {
+        ExportWithColumnChangeAfterCopy(Arg<1>() == EBackupTestTableType::Column, /* addColumn */ false, Arg<0>());
     }
 
     Y_UNIT_TEST(DropCopiesBeforeTransferring1) {

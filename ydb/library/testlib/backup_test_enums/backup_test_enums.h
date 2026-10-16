@@ -12,6 +12,11 @@ enum class EBackupTestDataFormat {
     Parquet /* "parquet" */,
 };
 
+enum class EBackupTestTableType {
+    Row /* "row" */,
+    Column /* "column" */,
+};
+
 inline NDataShard::NBackupRestoreTraits::EDataFormat ToDataFormat(EBackupTestDataFormat format) {
     switch (format) {
         case EBackupTestDataFormat::Csv:

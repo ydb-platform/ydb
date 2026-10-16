@@ -1300,6 +1300,7 @@ struct Schema : NIceDb::Schema {
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
         struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
+        struct EnableTableBackupAsSql : Column<22, NScheme::NTypeIds::Bool> {};
 
         struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
 
@@ -1325,7 +1326,8 @@ struct Schema : NIceDb::Schema {
             EnablePermissions,
             ExportMetadata,
             SanitizedToken,
-            IncludeIndexData
+            IncludeIndexData,
+            EnableTableBackupAsSql
         >;
     };
 
@@ -2726,6 +2728,23 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct BackupSchemeSnapshots : Table<141> {
+        struct OwnerPathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct TableName : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct TableDescription : Column<4, NScheme::NTypeIds::String> {};
+        struct ChangefeedUnderlyingTopics : Column<5, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<
+            OwnerPathId,
+            LocalPathId,
+            TableName,
+            TableDescription,
+            ChangefeedUnderlyingTopics
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2864,7 +2883,8 @@ struct Schema : NIceDb::Schema {
         FullBackupItems,
         SetColumnConstraint,
         SetColumnConstraintShardStatus,
-        TestShardSet
+        TestShardSet,
+        BackupSchemeSnapshots
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

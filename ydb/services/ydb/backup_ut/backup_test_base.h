@@ -14,6 +14,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/is_in.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/vector.h>
 #include <util/system/sanitizers.h>
 
 #define YDB_SDK_CLIENT(type, funcName)                               \
@@ -45,6 +48,36 @@ public:
             UNIT_ASSERT_C(IsIn(status, op->Status().GetStatus()), comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }
+    }
+
+    void AddExpectedTableBackupAsSqlFiles(TSet<TString>& paths) {
+        if (!Server().GetRuntime()->GetAppData().FeatureFlags.GetEnableTableBackupAsSql()) {
+            return;
+        }
+
+        TVector<TString> tableBackupAsSqlFiles;
+        for (const auto& path : paths) {
+            TStringBuf schemeSuffix;
+            TStringBuf createTableSuffix;
+            if (path.EndsWith("scheme.pb.enc")) {
+                schemeSuffix = "scheme.pb.enc";
+                createTableSuffix = "create_table.sql.enc";
+            } else if (path.EndsWith("scheme.pb")) {
+                schemeSuffix = "scheme.pb";
+                createTableSuffix = "create_table.sql";
+            } else {
+                continue;
+            }
+
+            const TString prefix = path.substr(0, path.size() - schemeSuffix.size());
+            tableBackupAsSqlFiles.emplace_back(TStringBuilder() << prefix << createTableSuffix);
+            const TString schemeChecksum = TStringBuilder() << prefix << "scheme.pb.sha256";
+            if (paths.contains(schemeChecksum)) {
+                tableBackupAsSqlFiles.emplace_back(TStringBuilder() << prefix << "create_table.sql.sha256");
+            }
+        }
+
+        paths.insert(tableBackupAsSqlFiles.begin(), tableBackupAsSqlFiles.end());
     }
 
 protected:

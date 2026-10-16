@@ -306,15 +306,23 @@ Y_UNIT_TEST_SUITE(Backup)
 
         auto ob = NTestUtils::GetObjectKeys(bucketName);
         std::sort(ob.begin(), ob.end());
-        UNIT_ASSERT_VALUES_EQUAL(ob.size(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(ob[0], "ProducerUuidValueBackup/data_00.csv");
-        UNIT_ASSERT_VALUES_EQUAL(ob[1], "ProducerUuidValueBackup/data_00.csv.sha256");
-        UNIT_ASSERT_VALUES_EQUAL(ob[2], "ProducerUuidValueBackup/metadata.json");
-        UNIT_ASSERT_VALUES_EQUAL(ob[3], "ProducerUuidValueBackup/metadata.json.sha256");
-        UNIT_ASSERT_VALUES_EQUAL(ob[4], "ProducerUuidValueBackup/permissions.pb");
-        UNIT_ASSERT_VALUES_EQUAL(ob[5], "ProducerUuidValueBackup/permissions.pb.sha256");
-        UNIT_ASSERT_VALUES_EQUAL(ob[6], "ProducerUuidValueBackup/scheme.pb");
-        UNIT_ASSERT_VALUES_EQUAL(ob[7], "ProducerUuidValueBackup/scheme.pb.sha256");
+        const bool tableBackupAsSqlEnabled = GetEnv("YDB_FEATURE_FLAGS").Contains("enable_table_backup_as_sql");
+        if (tableBackupAsSqlEnabled) {
+            UNIT_ASSERT_VALUES_EQUAL(ob.size(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(ob[0], "ProducerUuidValueBackup/create_table.sql");
+            UNIT_ASSERT_VALUES_EQUAL(ob[1], "ProducerUuidValueBackup/create_table.sql.sha256");
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(ob.size(), 8);
+        }
+        const size_t offset = tableBackupAsSqlEnabled ? 2 : 0;
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset], "ProducerUuidValueBackup/data_00.csv");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 1], "ProducerUuidValueBackup/data_00.csv.sha256");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 2], "ProducerUuidValueBackup/metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 3], "ProducerUuidValueBackup/metadata.json.sha256");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 4], "ProducerUuidValueBackup/permissions.pb");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 5], "ProducerUuidValueBackup/permissions.pb.sha256");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 6], "ProducerUuidValueBackup/scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(ob[offset + 7], "ProducerUuidValueBackup/scheme.pb.sha256");
 
         {
             NImport::TImportFromS3Settings settings;

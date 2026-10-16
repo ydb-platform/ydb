@@ -74,6 +74,20 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 }
 
 template <typename TSettings>
+IActor* CreateTableSchemeUploader(
+    TActorId schemeShard,
+    ui64 exportId,
+    ui32 itemIdx,
+    const TSettings& settings,
+    TExportTableSchemeContext&& context,
+    bool enableChecksums,
+    const TMaybe<NBackup::TEncryptionIV>& iv
+) {
+    Y_UNUSED(settings, context, enableChecksums, iv);
+    return new TSchemeUploaderFallback<TSettings>(schemeShard, exportId, itemIdx);
+}
+
+template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums
@@ -92,6 +106,18 @@ template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToS3Settings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToS3Settings& settings, TExportTableSchemeContext&& context,
+    bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
+);
+
+template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToFsSettings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToFsSettings& settings, TExportTableSchemeContext&& context,
+    bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template NActors::IActor* CreateExportMetadataUploader<Ydb::Export::ExportToS3Settings>(

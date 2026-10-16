@@ -1102,9 +1102,12 @@ protected:
             ForgetOp(res);
         };
 
-        // Check that if we remove any key, import will fail,
-        // if we modify the file, import will fail,
-        // if we rewrite the file with another IV, import will fail.
+        auto checkImportSucceeds = [&](const TString& comments) {
+            auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+            WaitOpSuccess(res, comments);
+            ForgetOp(res);
+        };
+
         for (const TString& key : allKeyNames) {
             const auto fileIt = S3Mock().GetData().find(key);
             UNIT_ASSERT_C(fileIt != S3Mock().GetData().end(), "No file: " << key);
@@ -1115,16 +1118,25 @@ protected:
                 S3Mock().GetData()[key] = sourceValue;
             };
 
+            const bool isOptionalCreateTable = key.EndsWith("/create_table.sql.enc");
+            const auto checkImport = [&](const TString& comments) {
+                if (isOptionalCreateTable) {
+                    checkImportSucceeds(comments);
+                } else {
+                    checkImportFails(comments);
+                }
+            };
+
             // Remove one file from export.
             // In case of encrypted backup it must cause error,
             // because no one should be able not modify export files,
             // in particular, remove an export part (==file).
             S3Mock().GetData().erase(key);
-            checkImportFails(TStringBuilder() << "Remove key " << key);
+            checkImport(TStringBuilder() << "Remove key " << key);
 
             // Change IV (reencrypt with different, not expected, IV)
             S3Mock().GetData()[key] = ReencryptWithDifferentIV(sourceValue, encryptionKey, NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM);
-            checkImportFails(TStringBuilder() << "Change IV of " << key);
+            checkImport(TStringBuilder() << "Change IV of " << key);
         }
     }
 };

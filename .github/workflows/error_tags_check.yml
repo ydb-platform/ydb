@@ -174,15 +174,11 @@ jobs:
         with:
           ref: ${{ needs.check-running-allowed.outputs.commit_sha || github.ref }}
           fetch-depth: 0
-      - name: Drop GitHub proxy
-        if: vars.GH_PROXY_URL != ''
-        shell: bash
-        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
-
       - name: Determine changed files
         id: changed
         if: github.event_name == 'pull_request_target'
         env:
+          GIT_TRACE: "1"
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
@@ -190,6 +186,11 @@ jobs:
           git diff --name-only --diff-filter=ACMRT "origin/$BASE_REF...HEAD" > changed_files.txt
           echo "Changed files:"
           cat changed_files.txt
+
+      - name: Drop GitHub proxy
+        if: vars.GH_PROXY_URL != ''
+        shell: bash
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
 
       - name: Validate YDBE-XXXXX error tags
         run: |

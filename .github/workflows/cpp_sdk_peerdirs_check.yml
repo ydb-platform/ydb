@@ -118,13 +118,9 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha || 'main' }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Drop GitHub proxy
-        if: vars.GH_PROXY_URL != ''
-        shell: bash
-        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
-
       - name: Check PEERDIRs with the trusted main script
         env:
+          GIT_TRACE: "1"
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -156,3 +152,7 @@ jobs:
           else
             python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py
           fi
+      - name: Drop GitHub proxy
+        if: vars.GH_PROXY_URL != ''
+        shell: bash
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"

@@ -1,3 +1,5 @@
+// Unsafe truncate is a temporary feature. Planned replacement: full-table DELETE using shard-local truncation where deletion semantics allow it.
+
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 
@@ -34,7 +36,6 @@ constexpr ui32 MaxResolveAttempts = 8;
  * a commit-capable request, or after a definitive refusal/non-delivery. Once an immediate write
  * or coordinator proposal may have been accepted, a lost outcome is UNDETERMINED.
  */
-// Unsafe truncate is a temporary feature. Planned replacement: full-table DELETE using shard-local truncation where deletion semantics allow it.
 class TKqpUnsafeTruncateExecuter: public TActorBootstrapped<TKqpUnsafeTruncateExecuter> {
     struct TTableToTruncate {
         TString Path;

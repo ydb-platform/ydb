@@ -172,8 +172,8 @@ class TestBlobSan:
             ('no local parts with all disks captured', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (), 'indexes': tuple(range(9)),
             },
-             'When all nine VDisks contain metadata for a kept blob at the soft barrier but none has local data,\n'
-             'then both modes exclude the blob through the phantom filter because no local part is available.'),
+                'When all nine VDisks contain metadata for a kept blob at the soft barrier but none has local data,\n'
+                'then both modes exclude the blob through the phantom filter because no local part is available.'),
             ('no local parts with missing DC', {'keep': 1, 'barrier': 'soft', 'local_realms': ()},
              'When captured VDisks have no local data for a kept blob but ingress claims parts in an uncaptured DC,\n'
              'then both modes report a candidate using the inferred parts for the phantom check; write2x2 mode also appends FULL.'),
@@ -186,24 +186,24 @@ class TestBlobSan:
             ('full local data in three DCs', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (0, 1, 2), 'indexes': tuple(range(9)),
             },
-             'When all nine VDisks are captured and every DC has all three local replicas,\n'
-             'then both modes recognize a full layout and report no candidate.'),
+                'When all nine VDisks are captured and every DC has all three local replicas,\n'
+                'then both modes recognize a full layout and report no candidate.'),
             ('one replica in each DC', {
                 'keep': 1, 'barrier': 'soft', 'indexes': tuple(range(9)),
                 'local_realms': (), 'local_parts': {7: (0,), 1: (1,), 4: (2,)},
             },
-             'When exactly one local replica is present in each of the three DCs,\n'
-             'then the mirror-3-dc layout is full and both modes report no candidate.'),
+                'When exactly one local replica is present in each of the three DCs,\n'
+                'then the mirror-3-dc layout is full and both modes report no candidate.'),
             ('two replicas in each of two DCs', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (), 'local_parts': {7: (0,), 8: (0,), 1: (1,), 2: (1,)},
             },
-             'When exactly two local replicas are present in each of two captured DCs,\n'
-             'then the two-by-two layout is full and both modes report no candidate.'),
+                'When exactly two local replicas are present in each of two captured DCs,\n'
+                'then the two-by-two layout is full and both modes report no candidate.'),
             ('one replica missing from two-by-two layout', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (), 'local_parts': {7: (0,), 8: (0,), 1: (1,)},
             },
-             'When two local replicas exist in one captured DC and only one exists in the other,\n'
-             'then default mode accepts the layout after inferring the missing DC; write2x2 mode reports a candidate with FULL.'),
+                'When two local replicas exist in one captured DC and only one exists in the other,\n'
+                'then default mode accepts the layout after inferring the missing DC; write2x2 mode reports a candidate with FULL.'),
             ('misplaced local part', {'keep': 1, 'barrier': 'soft', 'local_parts': {7: (1,)}},
              'When one local part belongs to the wrong DC and the remaining local copies are incomplete,\n'
              'then both modes report TrashSize# 100 for the misplaced part; only write2x2 mode also reports a candidate with FULL.'),
@@ -231,16 +231,16 @@ class TestBlobSan:
             ('some disks have incomplete ingress', {
                 'keep': 1, 'barrier': 'soft', 'indexes': tuple(range(9)), 'known_per_disk': {7: (0,), 8: (0,), 6: (0,)},
             },
-             'When the DC with local data has incomplete ingress while the other captured VDisks provide full ingress,\n'
-             'then ingress merges into a full layout but local data remains incomplete, so both modes report a candidate.'),
+                'When the DC with local data has incomplete ingress while the other captured VDisks provide full ingress,\n'
+                'then ingress merges into a full layout but local data remains incomplete, so both modes report a candidate.'),
             ('full local data without reflected parts', {
                 'keep': 1, 'barrier': 'soft', 'local_realms': (0, 1), 'indexes': tuple(range(9)), 'known_per_disk': {
                     index: tuple(node for node in range(9) if node != own_node)
                     for own_node, index in enumerate(SUBGROUP_ORDER)
                 },
             },
-             'When local data forms a full layout but no VDisk ingress reflects its own part,\n'
-             'then default mode reports the missing reflection information; write2x2 mode reports no candidate because local data is full.'),
+                'When local data forms a full layout but no VDisk ingress reflects its own part,\n'
+                'then default mode reports the missing reflection information; write2x2 mode reports no candidate because local data is full.'),
             ('blob above soft barrier step', {'barriers': [{'collect': (1, 0)}]},
              'When the blob generation matches the soft barrier but its step is greater than the collect step,\n'
              'then default mode skips the blob above the barrier; write2x2 mode checks it and reports a candidate with FULL.'),
@@ -262,8 +262,8 @@ class TestBlobSan:
             ('blob covered by soft barrier but above hard barrier', {'keep': 1, 'barriers': [
                 {'kind': 'soft'}, {'kind': 'hard', 'record': (3, 1), 'collect': (1, 0)},
             ]},
-             'When a kept blob is covered by the soft barrier but lies above the hard barrier collect step,\n'
-             'then the hard barrier does not collect it; default mode accepts inferred completeness and write2x2 mode reports a candidate with FULL.'),
+                'When a kept blob is covered by the soft barrier but lies above the hard barrier collect step,\n'
+                'then the hard barrier does not collect it; default mode accepts inferred completeness and write2x2 mode reports a candidate with FULL.'),
         ]
         results = [self._testcase(name, snapshot(**parameters), description)
                    for name, parameters, description in cases]
@@ -280,33 +280,33 @@ class TestBlobSan:
             ('barrier ingress fragments form quorum', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {'ingress': 0x007}, {'ingress': 0x038},
             ]},
-             'When two records for the same barrier carry ingress 0x007 and 0x038,\n'
-             'then their merged ingress 0x03f forms quorum, so both modes accept the barrier and report the kept candidate.'),
+                'When two records for the same barrier carry ingress 0x007 and 0x038,\n'
+                'then their merged ingress 0x03f forms quorum, so both modes accept the barrier and report the kept candidate.'),
             ('duplicate barrier ingress still has no quorum', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {'ingress': 0x007}, {'ingress': 0x007},
             ]},
-             'When two records for the same barrier both carry ingress 0x007,\n'
-             'then merging leaves 0x007 without quorum; default mode skips the blob and write2x2 mode reports the kept candidate.'),
+                'When two records for the same barrier both carry ingress 0x007,\n'
+                'then merging leaves 0x007 without quorum; default mode skips the blob and write2x2 mode reports the kept candidate.'),
             ('newer barrier lacks quorum', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {}, {'record': (3, 1), 'collect': (1, 2), 'ingress': 0},
             ]},
-             'When confirmed barrier record (2, 1) is followed by unconfirmed record (3, 1),\n'
-             'then default mode selects (2, 1) collecting through (1, 1); write2x2 mode selects (3, 1) collecting through (1, 2); both report a candidate.'),
+                'When confirmed barrier record (2, 1) is followed by unconfirmed record (3, 1),\n'
+                'then default mode selects (2, 1) collecting through (1, 1); write2x2 mode selects (3, 1) collecting through (1, 2); both report a candidate.'),
             ('older barrier arrives after newer barrier', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {'record': (3, 1), 'collect': (1, 2)}, {},
             ]},
-             'When confirmed record (3, 1) arrives before older confirmed record (2, 1),\n'
-             'then both modes retain (3, 1) collecting through (1, 2) and report the kept candidate.'),
+                'When confirmed record (3, 1) arrives before older confirmed record (2, 1),\n'
+                'then both modes retain (3, 1) collecting through (1, 2) and report the kept candidate.'),
             ('barrier counters order records within generation', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {'record': (2, 2), 'collect': (1, 2)}, {},
             ]},
-             'When confirmed records share generation 2 and arrive with counters 2 then 1,\n'
-             'then both modes retain record (2, 2) collecting through (1, 2) and report the kept candidate.'),
+                'When confirmed records share generation 2 and arrive with counters 2 then 1,\n'
+                'then both modes retain record (2, 2) collecting through (1, 2) and report the kept candidate.'),
             ('hard barrier without quorum supersedes soft barrier', {'keep': 1, 'indexes': tuple(range(9)), 'barriers': [
                 {}, {'kind': 'hard', 'record': (3, 1), 'ingress': 0},
             ]},
-             'When a confirmed soft barrier and an unconfirmed hard barrier both cover a kept blob,\n'
-             'then default mode ignores the hard barrier and reports a soft-barrier candidate; write2x2 mode accepts the hard barrier and excludes the blob.'),
+                'When a confirmed soft barrier and an unconfirmed hard barrier both cover a kept blob,\n'
+                'then default mode ignores the hard barrier and reports a soft-barrier candidate; write2x2 mode accepts the hard barrier and excludes the blob.'),
         ]
         results = [self._testcase(name, snapshot(**parameters), description)
                    for name, parameters, description in cases]

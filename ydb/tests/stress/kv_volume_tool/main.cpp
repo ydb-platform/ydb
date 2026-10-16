@@ -256,21 +256,17 @@ struct TNodeSession {
     }
 
     template <typename TFn>
-    bool Call(TFn&& fn, TString* errorOut) {
+    bool Call(TFn&& fn, TString& errorOut) {
         if (!Ready || Nodes->empty()) {
-            if (errorOut) {
-                *errorOut = "discovery returned no endpoints";
-            }
+            errorOut = "discovery returned no endpoints";
             return false;
         }
         const int code = Retry([&] {
-            if (errorOut) {
-                errorOut->clear();
-            }
+            errorOut.clear();
             return fn(*KvStub);
         }, false);
-        if (code == TryNextNode && errorOut && errorOut->empty()) {
-            *errorOut = "all discovered endpoints are unavailable";
+        if (code == TryNextNode && errorOut.empty()) {
+            errorOut = "all discovered endpoints are unavailable";
         }
         return code == 0;
     }
@@ -1427,7 +1423,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
                     return (ctx.Options.BatchSize == 1)
                         ? DoWriteValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0], ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent)
                         : DoWriteBatch(stub, ctx.Options.Database, ctx.Path, partitionId, keys, ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent);
-                }, &error);
+                }, error);
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1445,10 +1441,11 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
             }
 
             if (ok && ctx.InlineReadPercent > 0 && static_cast<ui32>(percent(rng)) <= ctx.InlineReadPercent) {
+                TString readError;
                 TScopedTimer readTimer([&] {
                     return session.Call([&](auto& stub) {
                         return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0]);
-                    }, nullptr);
+                    }, readError);
                 });
                 ctx.Record(readTimer.GetResult(), readTimer.GetDuration().count(), false);
             }
@@ -1481,7 +1478,7 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             TScopedTimer timer([&] {
                 return session.Call([&](auto& stub) {
                     return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, key, &error, trace.Traceparent);
-                }, &error);
+                }, error);
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1811,7 +1808,7 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
                 TScopedTimer writeTimer([&] {
                     return worker.Call([&](auto& stub) {
                         return DoWriteValue(stub, options.Database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
-                    }, config.IsS3 ? &error : nullptr);
+                    }, error);
                 });
                 const bool writeOk = writeTimer.GetResult();
                 const ui64 latencyMs = writeTimer.GetDuration().count();
@@ -1825,7 +1822,7 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
                     TScopedTimer readTimer([&] {
                         return worker.Call([&](auto& stub) {
                             return DoReadValue(stub, options.Database, path, partitionId, key, config.IsS3 ? &error : nullptr);
-                        }, config.IsS3 ? &error : nullptr);
+                        }, error);
                     });
                     const bool readOk = readTimer.GetResult();
                     const ui64 readLatencyMs = readTimer.GetDuration().count();

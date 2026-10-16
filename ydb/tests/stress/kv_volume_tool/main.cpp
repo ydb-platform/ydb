@@ -249,10 +249,10 @@ struct TNodeSession {
             if (code != TryNextNode) {
                 return code;
             }
-            NoteUnavailable(node);
             if (attempt + 1 == Nodes->size()) {
                 break;
             }
+            NoteUnavailable(node, true);
             Index = (Index + 1) % Nodes->size();
             Reopen();
         }
@@ -265,6 +265,11 @@ struct TNodeSession {
 
     template <typename TFn>
     bool Call(TFn&& fn, TString* errorOut) {
+        return Call(std::forward<TFn>(fn), errorOut, [] { return false; });
+    }
+
+    template <typename TFn, typename TStop>
+    bool Call(TFn&& fn, TString* errorOut, TStop&& shouldStop) {
         if (!Ready || Nodes->empty()) {
             if (errorOut) {
                 *errorOut = "discovery returned no endpoints";
@@ -272,6 +277,9 @@ struct TNodeSession {
             return false;
         }
         for (size_t attempt = 0; attempt < Nodes->size(); ++attempt) {
+            if (attempt > 0 && shouldStop()) {
+                break;
+            }
             if (errorOut) {
                 errorOut->clear();
             }
@@ -279,10 +287,10 @@ struct TNodeSession {
             if (result != EOpResult::Unavailable) {
                 return result == EOpResult::Ok;
             }
-            NoteUnavailable((*Nodes)[Index]);
-            if (attempt + 1 == Nodes->size()) {
+            if (attempt + 1 == Nodes->size() || shouldStop()) {
                 break;
             }
+            NoteUnavailable((*Nodes)[Index], false);
             Index = (Index + 1) % Nodes->size();
             Reopen();
         }
@@ -293,7 +301,10 @@ struct TNodeSession {
     }
 
 private:
-    static void NoteUnavailable(const TNodeEndpoint& node) {
+    static void NoteUnavailable(const TNodeEndpoint& node, bool logAlways) {
+        if (!logAlways && !VerboseMode) {
+            return;
+        }
         Cerr << "Endpoint " << node.HostPort << " is unavailable, trying the next one" << Endl;
     }
 
@@ -309,6 +320,16 @@ private:
             }
             return left.LoadFactor < right.LoadFactor;
         });
+    }
+
+    template <typename TRepeatedString>
+    static TString FirstAddress(const TRepeatedString& addresses) {
+        for (const auto& address : addresses) {
+            if (!address.empty()) {
+                return address;
+            }
+        }
+        return {};
     }
 
     bool LoadEndpoints(const TString& endpoint, bool useTls, const TString& database) {
@@ -366,11 +387,14 @@ private:
 
         const TString selfLocation = result.self_location();
         for (const auto& info : result.endpoints()) {
-            TString host = info.address();
-            if (host.empty() && info.ip_v4_size() > 0) {
-                host = info.ip_v4(0);
-            } else if (host.empty() && info.ip_v6_size() > 0) {
-                host = info.ip_v6(0);
+            // An advertised hostname can be unresolvable while ip_v4/ip_v6 is reachable.
+            // The SDK connects to an IP in that case and keeps address only as a TLS name.
+            TString host = FirstAddress(info.ip_v4());
+            if (host.empty()) {
+                host = FirstAddress(info.ip_v6());
+            }
+            if (host.empty()) {
+                host = info.address();
             }
             if (host.empty() || info.port() == 0) {
                 continue;
@@ -1415,7 +1439,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
                     return (ctx.Options.BatchSize == 1)
                         ? DoWriteValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0], ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent)
                         : DoWriteBatch(stub, ctx.Options.Database, ctx.Path, partitionId, keys, ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent);
-                }, &error);
+                }, &error, [&] { return !ctx.StillRunning(); });
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1436,7 +1460,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
                 TScopedTimer readTimer([&] {
                     return session.Call([&](auto& stub) {
                         return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0]);
-                    }, nullptr);
+                    }, nullptr, [&] { return !ctx.StillRunning(); });
                 });
                 ctx.Record(readTimer.GetResult(), readTimer.GetDuration().count(), false);
             }
@@ -1469,7 +1493,7 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             TScopedTimer timer([&] {
                 return session.Call([&](auto& stub) {
                     return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, key, &error, trace.Traceparent);
-                }, &error);
+                }, &error, [&] { return !ctx.StillRunning(); });
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1799,7 +1823,9 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
                 TScopedTimer writeTimer([&] {
                     return worker.Call([&](auto& stub) {
                         return DoWriteValue(stub, options.Database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
-                    }, config.IsS3 ? &error : nullptr);
+                    }, config.IsS3 ? &error : nullptr, [&] {
+                        return stop.load(std::memory_order_relaxed) || std::chrono::steady_clock::now() >= deadline;
+                    });
                 });
                 const bool writeOk = writeTimer.GetResult();
                 const ui64 latencyMs = writeTimer.GetDuration().count();
@@ -1813,7 +1839,9 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
                     TScopedTimer readTimer([&] {
                         return worker.Call([&](auto& stub) {
                             return DoReadValue(stub, options.Database, path, partitionId, key, config.IsS3 ? &error : nullptr);
-                        }, config.IsS3 ? &error : nullptr);
+                        }, config.IsS3 ? &error : nullptr, [&] {
+                            return stop.load(std::memory_order_relaxed) || std::chrono::steady_clock::now() >= deadline;
+                        });
                     });
                     const bool readOk = readTimer.GetResult();
                     const ui64 readLatencyMs = readTimer.GetDuration().count();
@@ -2132,13 +2160,8 @@ int main(int argc, char** argv) {
 
         VerboseMode = options.Verbose;
 
-        TString bootstrap = options.Endpoint;
-        const size_t comma = bootstrap.find(',');
-        if (comma != TString::npos) {
-            bootstrap = bootstrap.substr(0, comma);
-        }
-        const bool useTls = IsSecureEndpoint(bootstrap);
-        const TString hostPort = ParseHostPort(bootstrap);
+        const bool useTls = IsSecureEndpoint(options.Endpoint);
+        const TString hostPort = ParseHostPort(options.Endpoint);
         const TString volumePath = MakeVolumePath(options.Database, options.Path);
 
         if (VerboseMode) {

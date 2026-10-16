@@ -168,7 +168,7 @@ enum class EOpResult {
 
 bool IsNodeUnavailable(const grpc::Status& status) {
     const grpc::StatusCode code = status.error_code();
-    return code == grpc::StatusCode::UNAVAILABLE || code == grpc::StatusCode::DEADLINE_EXCEEDED;
+    return code == grpc::StatusCode::UNAVAILABLE || code == grpc::StatusCode::DEADLINE_EXCEEDED || code == grpc::StatusCode::UNIMPLEMENTED;
 }
 
 int FailGrpc(const grpc::Status& status) {
@@ -643,7 +643,7 @@ int AlterVolume(TKvStub& stub, const TString& database, const TString& path, ui3
 
     Ydb::KeyValue::AlterVolumeRequest request;
     request.set_path(path);
-    
+
     if (partitionCount > 0) {
         request.set_alter_partition_count(partitionCount);
     }
@@ -1954,8 +1954,8 @@ TOptions ParseOptions(int argc, char** argv) {
         .StoreResult(&options.Endpoint);
 
     opts.AddLongOption('d', "database", "Database path")
-        .StoreResult(&options.Database)
-        .DefaultValue("");
+        .Required()
+        .StoreResult(&options.Database);
 
     opts.AddLongOption('p', "path", "Volume path (relative to database)")
         .Required()

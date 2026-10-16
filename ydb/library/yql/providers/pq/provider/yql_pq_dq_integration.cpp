@@ -294,7 +294,7 @@ public:
                 // __ydb_ name when system columns are forbidden, and under the legacy _yql_sys_ name otherwise.
                 const auto partitionIdDescriptor = GetPqMetaFieldDescriptorByKey(
                     "partition_id",
-                    State_->AddTransparentPrefixToTransparentSystemColumns,
+                    State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                     State_->EnableUserAttributesInTopicQuery,
                     State_->ForbidYqlSysColumnsAndSystemMetadata
                 );
@@ -304,7 +304,7 @@ public:
                 }
                 const auto clusterDescriptor = GetPqMetaFieldDescriptorByKey(
                     "cluster",
-                    State_->AddTransparentPrefixToTransparentSystemColumns,
+                    State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                     State_->EnableUserAttributesInTopicQuery,
                     State_->ForbidYqlSysColumnsAndSystemMetadata
                 );
@@ -314,7 +314,7 @@ public:
                 }
                 const auto writeTimeDescriptor = GetPqMetaFieldDescriptorByKey(
                     "write_time",
-                    State_->AddTransparentPrefixToTransparentSystemColumns,
+                    State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                     State_->EnableUserAttributesInTopicQuery,
                     State_->ForbidYqlSysColumnsAndSystemMetadata
                 );
@@ -569,7 +569,7 @@ public:
                     }
                     // For __ydb_-prefixed columns, map to the corresponding _yql_sys_ name
                     // so the read actor can find the right extractor
-                    if (auto oldName = YdbSysColumnToOldSysColumn(sysColumnName, State_->AddTransparentPrefixToTransparentSystemColumns)) {
+                    if (auto oldName = YdbSysColumnToOldSysColumn(sysColumnName, State_->ShouldAddTransparentPrefixToTransparentSystemColumns())) {
                         // Only add the _yql_sys_ version if it's not already present
                         bool alreadyPresent = false;
                         for (size_t i = 0; i < static_cast<size_t>(srcDesc.MetadataFieldsSize()); ++i) {
@@ -969,7 +969,7 @@ public:
         TExprNode::TListType metadataFieldsList;
         if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
             for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
-                     State_->AddTransparentPrefixToTransparentSystemColumns,
+                     State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                      State_->EnableUserAttributesInTopicQuery))
             {
                 metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));

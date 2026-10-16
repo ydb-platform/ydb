@@ -117,7 +117,7 @@ public:
         TVector<TCoNameValueTuple> sourceMetadata;
         if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
             for (auto sysColumn : GetAllowedPqMetaSysColumns(
-                     State_->AddTransparentPrefixToTransparentSystemColumns,
+                     State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
                      State_->EnableUserAttributesInTopicQuery))
             {
                 sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())

@@ -75,7 +75,7 @@ void GetUsedWatermarkGeneratorColumnNames(
     for (const auto& key : RequiredKeys) {
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             TString(key),
-            state.AddTransparentPrefixToTransparentSystemColumns,
+            state.ShouldAddTransparentPrefixToTransparentSystemColumns(),
             state.EnableUserAttributesInTopicQuery,
             state.ForbidYqlSysColumnsAndSystemMetadata
         );

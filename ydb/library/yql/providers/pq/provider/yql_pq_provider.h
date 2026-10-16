@@ -42,6 +42,8 @@ public:
     }
 
     bool IsRtmrMode() const;
+    bool IsYtflowEngine() const;
+    bool ShouldAddTransparentPrefixToTransparentSystemColumns() const;
 
 public:
     bool SupportRtmrMode = false;
@@ -49,7 +51,7 @@ public:
     bool AddTransparentPrefixToTransparentSystemColumns = true;
     bool EnableUserAttributesInTopicQuery = false;
     bool StreamingTopicsReadByDefault = true;
-    bool UseYtflowEngine = false;
+    bool AllowYtflowEngine = false;
     bool EnableTopicsPredicatePushdown = false;
     bool EnablePqConstraintsTransformer = false;
     bool ForbidYqlSysColumnsAndSystemMetadata = false;
@@ -86,7 +88,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const std::vector<std::pair<TString, TString>>& taskSensorLabels = {},
     const std::vector<ui64>& nodeIds = {},
     bool useActorSystemThreadsInTopicClient = true,
-    bool useYtflowEngine = false,
+    bool allowYtflowEngine = false,
     bool addTransparentPrefixToTransparentSystemColumns = true
 );
 

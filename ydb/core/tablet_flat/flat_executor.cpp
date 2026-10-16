@@ -234,6 +234,11 @@ void TExecutor::PassAway() {
     }
 
     Scans->Drop();
+    if (BackupSnapshotWriter) {
+        // Scans cancelled before starting do not call Finish() to notify the writer.
+        Send(BackupSnapshotWriter, new NBackup::TEvStop);
+        BackupSnapshotWriter = {};
+    }
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
@@ -5607,7 +5612,7 @@ void TExecutor::StartNewBackup() {
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
-    Y_ENSURE(!BackupSnapshotInProgress);
+    Y_ENSURE(!BackupSnapshotWriter);
 
     // Stop the old backup changelog
     CommitManager->BackupLogic.Stop(true);
@@ -5622,7 +5627,7 @@ void TExecutor::StartNewBackup() {
             {"type", tabletType},
             {"gen", Generation0},
             {"step", Step0});
-        auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        BackupSnapshotWriter = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         const ui32 workBudgetPercent = std::clamp<ui32>(backupConfig.GetSnapshotWorkBudgetPercent(), 1, 100);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
@@ -5630,9 +5635,8 @@ void TExecutor::StartNewBackup() {
             }
 
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion, workBudgetPercent), 0, opts);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(BackupSnapshotWriter, tableId, table.Columns, exclusion, workBudgetPercent), 0, opts);
         }
-        BackupSnapshotInProgress = true;
         Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(1);
 
         auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->SystemPoolId);
@@ -5644,7 +5648,7 @@ void TExecutor::StartNewBackup() {
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    BackupSnapshotInProgress = false;
+    BackupSnapshotWriter = {};
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
         YDB_LOG_NOTICE("Snapshot completed",
@@ -5686,7 +5690,7 @@ void TExecutor::FailBackup(const TString& error) {
 }
 
 void TExecutor::ScheduleRetryBackup() {
-    if (!BackupSnapshotInProgress) {
+    if (!BackupSnapshotWriter) {
         if (!BackupRetry) {
             const auto& backupConfig = AppData()->SystemTabletBackupConfig;
             auto initialDelay = TDuration::Seconds(Max<ui64>(backupConfig.GetRetryBackupTimeoutSeconds(), 1));

@@ -101,7 +101,7 @@ namespace NKikimr::NStorage {
                         const auto& item = details->GetPileSyncState(i);
                         const auto bridgePileId = TBridgePileId::FromProto(&item, &std::decay_t<decltype(item)>::GetBridgePileId);
                         if (bridgePileId.GetPileIndex() != changedPileIndex) {
-                            break;
+                            continue;
                         }
                         details->MutablePileSyncState()->DeleteSubrange(i, 1);
                         break;

@@ -703,10 +703,14 @@ namespace NKikimr::NStorage {
         }
 
         void HandleWakeup() {
-            Y_DEBUG_ABORT("Event# %s took too long to process", EventType);
-            YDB_LOG_CRIT("TPDiskMetadataInteractionActor::Wakeup",
+            YDB_LOG_WARN("Still waiting for PDisk metadata request",
                 {"marker", "NW61"},
+                {"PDiskId", PDiskKey.PDiskId},
                 {"eventType", EventType});
+            // Keep the request and its PDisk reference alive: timing out is not
+            // evidence that metadata is absent, or that startup cannot finish.
+            // Releasing the last reference here would restart a slow disk's scan.
+            Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup);
         }
 
         STRICT_STFUNC(StateFunc,

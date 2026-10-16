@@ -594,12 +594,12 @@ THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
 };
 
 void ZeroSharedCache(TMyEnvBase &env) {
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, 0));
 }
 
 void SetSharedCacheSize(TMyEnvBase &env, ui64 memoryLimit) {
     TWaitForFirstEvent<NMemory::TEvConsumerLimit> wait(*env);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(memoryLimit));
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, memoryLimit));
     wait.Wait();
 }
 

@@ -153,31 +153,48 @@ using TLimitBytesGetter = ui64 (*)(const NKikimrConfig::TMemoryControllerConfig&
 // A stats writer adds one consumer's report to its fields of TMemoryStats
 using TStatsWriter = void (*)(NKikimrMemory::TMemoryStats& stats, const TConsumerState& consumer, bool summed, bool withLimit, ui64 limitBytes);
 
-#define MEMORY_STATS_WRITER(name) \
-    void Write##name##Stats(NKikimrMemory::TMemoryStats& stats, const TConsumerState& consumer, bool summed, bool withLimit, ui64 limitBytes) { \
+#define MEMORY_STATS_WRITER_SUMS(name) \
         if (!summed) { \
             Y_ASSERT(!stats.Has##name##Consumption()); \
-        } \
-        if (withLimit) { \
-            Y_ASSERT(!stats.Has##name##Limit()); \
         } \
         const ui64 base = summed ? stats.Get##name##Consumption() : 0; \
         const ui64 baseDemand = summed ? stats.Get##name##Demand() : 0; \
         const ui64 baseReclaimable = summed ? stats.Get##name##Reclaimable() : 0; \
         stats.Set##name##Consumption(base + consumer.Consumption); \
         stats.Set##name##Demand(baseDemand + consumer.Demand); \
-        stats.Set##name##Reclaimable(baseReclaimable + consumer.Reclaimable); \
+        stats.Set##name##Reclaimable(baseReclaimable + consumer.Reclaimable);
+
+#define MEMORY_STATS_WRITER(name) \
+    void Write##name##Stats(NKikimrMemory::TMemoryStats& stats, const TConsumerState& consumer, bool summed, bool withLimit, ui64 limitBytes) { \
+        MEMORY_STATS_WRITER_SUMS(name) \
         if (withLimit) { \
+            Y_ASSERT(!stats.Has##name##Limit()); \
             stats.Set##name##Limit(limitBytes); \
         } \
+    }
+
+// For a kind with no limit field of its own in TMemoryStats
+#define MEMORY_STATS_WRITER_NO_LIMIT(name) \
+    void Write##name##Stats(NKikimrMemory::TMemoryStats& stats, const TConsumerState& consumer, bool summed, bool withLimit, ui64) { \
+        Y_ASSERT(!withLimit); \
+        MEMORY_STATS_WRITER_SUMS(name) \
     }
 
 MEMORY_STATS_WRITER(MemTable)
 MEMORY_STATS_WRITER(SharedCache)
 MEMORY_STATS_WRITER(Compaction)
 MEMORY_STATS_WRITER(QueryExecution)
+MEMORY_STATS_WRITER_NO_LIMIT(Tablets)
+MEMORY_STATS_WRITER(TabletsElastic)
 
+#undef MEMORY_STATS_WRITER_NO_LIMIT
 #undef MEMORY_STATS_WRITER
+#undef MEMORY_STATS_WRITER_SUMS
+
+// The tablets carry no budget of their own: their bytes are attributed, the node zone is what they get back
+ui64 GetZeroLimitBytes(const NKikimrConfig::TMemoryControllerConfig&, ui64) {
+    return 0;
+}
 
 enum class ELimitDelivery {
     MemTableCompaction, // MC selects memtables and asks them to compact
@@ -195,6 +212,8 @@ struct TConsumerTraits {
     TStatsWriter WriteStats;
     bool StatsSummed; // several kinds add up into the same fields
     bool StatsWithLimit; // the kind writes the limit field
+    // The bounds come from what the registrants report, not from the config: Min = 0, Max = summed demand
+    bool BoundsFromRegistrants = false;
 };
 
 // One row per EMemoryConsumerKind, in the enum order
@@ -297,6 +316,29 @@ constexpr TConsumerTraits ConsumerTraits[] = {
         .WriteStats = &WriteSharedCacheStats,
         .StatsSummed = true,
         .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::Tablets,
+        .ElasticLimit = false,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetZeroLimitBytes,
+        .GetMaxBytes = &GetZeroLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteTabletsStats,
+        .StatsSummed = false,
+        .StatsWithLimit = false,
+    },
+    {
+        .Kind = EMemoryConsumerKind::TabletsElastic,
+        .ElasticLimit = true,
+        .CanZeroLimit = false,
+        .GetMinBytes = &GetZeroLimitBytes,
+        .GetMaxBytes = &GetZeroLimitBytes,
+        .LimitDelivery = ELimitDelivery::LimitShares,
+        .WriteStats = &WriteTabletsElasticStats,
+        .StatsSummed = false,
+        .StatsWithLimit = true,
+        .BoundsFromRegistrants = true,
     },
 };
 
@@ -437,6 +479,11 @@ private:
             resultingConsumersConsumption += GetResultingConsumption(consumer, coefficient);
         }
 
+        // The zone every registrant is told: Green up to the target utilization, Yellow up to the soft limit, Red above it
+        NodeZone = processMemoryInfo.AllocatedMemory > softLimitBytes ? EMemoryZone::Red
+            : processMemoryInfo.AllocatedMemory > targetUtilizationBytes ? EMemoryZone::Yellow
+            : EMemoryZone::Green;
+
         YDB_LOG_INFO_CTX(ctx, "Periodic memory stats",
             {"anonRss", HumanReadableBytes(processMemoryInfo.AnonRss)},
             {"CGroupLimit", HumanReadableBytes(processMemoryInfo.CGroupLimit)},
@@ -453,7 +500,8 @@ private:
             {"externalConsumption", HumanReadableBytes(externalConsumption)},
             {"targetConsumersConsumption", HumanReadableBytes(targetConsumersConsumption)},
             {"resultingConsumersConsumption", HumanReadableBytes(resultingConsumersConsumption)},
-            {"coefficient", coefficient});
+            {"coefficient", coefficient},
+            {"tabletMemoryZone", ToString(NodeZone)});
 
         Counters->GetCounter("Stats/AnonRss")->Set(processMemoryInfo.AnonRss.value_or(0));
         Counters->GetCounter("Stats/CGroupLimit")->Set(processMemoryInfo.CGroupLimit.value_or(0));
@@ -472,6 +520,7 @@ private:
         Counters->GetCounter("Stats/TargetConsumersConsumption")->Set(targetConsumersConsumption);
         Counters->GetCounter("Stats/ResultingConsumersConsumption")->Set(resultingConsumersConsumption);
         Counters->GetCounter("Stats/Coefficient")->Set(coefficient * 1e9);
+        Counters->GetCounter("Stats/TabletMemoryZone")->Set(static_cast<std::underlying_type_t<EMemoryZone>>(NodeZone));
         Counters->GetCounter("Stats/ArrowAllocatedMemory")->Set(arrow::default_memory_pool()->bytes_allocated());
         Counters->GetCounter("Stats/ArrowYqlAllocatedMemory")->Set(NYql::NUdf::GetYqlMemoryPool()->bytes_allocated());
 
@@ -534,7 +583,7 @@ private:
         YDB_LOG_INFO_CTX(ctx, "Consumer registered",
             {"msgKind", msg->Kind},
             {"sender", ev->Sender});
-        Send(ev->Sender, new TEvConsumerRegistered(std::move(consumer)));
+        Send(ev->Sender, new TEvConsumerRegistered(msg->Kind, std::move(consumer)));
     }
 
     void Handle(TEvConsumerUnregister::TPtr &ev, const TActorContext& ctx) {
@@ -676,7 +725,7 @@ private:
         }
         for (const auto& share : collection->ComputeLimitShares(limitBytes)) {
             // Delivery tracking turns a send to a dead registrant into TEvUndelivered, which drops its entry
-            Send(share.Registrant, new TEvConsumerLimit(share.Bytes), IEventHandle::FlagTrackDelivery);
+            Send(share.Registrant, new TEvConsumerLimit(kind, share.Bytes, NodeZone), IEventHandle::FlagTrackDelivery);
         }
     }
 
@@ -776,8 +825,16 @@ private:
     }
 
     TConsumerState BuildConsumerState(EMemoryConsumerKind kind, const TConsumerCollection& collection, ui64 hardLimitBytes) const {
-        TConsumerState result(kind, collection.GetTotal());
-        SetLimitBounds(result, hardLimitBytes);
+        TConsumerReport total = collection.GetTotal();
+        TConsumerState result(kind, total);
+        const auto& traits = GetConsumerTraits(kind);
+        if (traits.BoundsFromRegistrants) {
+            result.MinBytes = 0;
+            result.MaxBytes = total.Demand;
+            result.CanZeroLimit = traits.CanZeroLimit;
+        } else {
+            SetLimitBounds(result, hardLimitBytes);
+        }
         return result;
     }
 
@@ -805,6 +862,7 @@ private:
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
     std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
+    EMemoryZone NodeZone = EMemoryZone::Green;
 };
 
 }

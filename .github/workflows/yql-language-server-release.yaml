@@ -85,15 +85,20 @@ jobs:
         include:
           - platform: linux-x86_64
             runner: ubuntu-latest
+            suffix: ''
           - platform: linux-aarch64
             runner: ubuntu-latest
+            suffix: ''
           - platform: darwin-arm64
             runner: macos-latest
+            suffix: '-unsigned'
           - platform: darwin-x86_64
             runner: macos-26-intel
+            suffix: '-unsigned'
     name: Build (${{ matrix.platform }})
     env:
       PLATFORM: ${{ matrix.platform }}
+      SUFFIX: ${{ matrix.suffix }}
       VERSION: ${{ needs.prepare.outputs.version }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 200
@@ -130,14 +135,14 @@ jobs:
 
           cd "$RUNNER_TEMP"
           tar \
-            -czf "yql-language-server-$VERSION-$PLATFORM.tar.gz" \
+            -czf "yql-language-server-$VERSION-$PLATFORM$SUFFIX.tar.gz" \
             yql-language-server
 
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          name: yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}
-          path: ${{ runner.temp }}/yql-language-server-*.tar.gz
+          name: yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}
+          path: ${{ runner.temp }}/yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}.tar.gz
           if-no-files-found: error
           retention-days: 1
 
@@ -146,13 +151,16 @@ jobs:
       - prepare
     strategy:
       matrix:
-        platform:
-          - win-x86_64
+        include:
+          - platform: win-x86_64
+            runner: windows-latest
+            suffix: '-unsigned'
     name: Build (${{ matrix.platform }})
     env:
       PLATFORM: ${{ matrix.platform }}
+      SUFFIX: ${{ matrix.suffix }}
       VERSION: ${{ needs.prepare.outputs.version }}
-    runs-on: windows-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
       - name: Checkout
@@ -220,7 +228,7 @@ jobs:
           & $staged --help
           if ($LASTEXITCODE -ne 0) { throw 'The packaged executable did not start' }
 
-          $archive = Join-Path $env:RUNNER_TEMP "yql-language-server-$env:VERSION-$env:PLATFORM.tar.gz"
+          $archive = Join-Path $env:RUNNER_TEMP "yql-language-server-$env:VERSION-$env:PLATFORM$env:SUFFIX.tar.gz"
           tar -C $env:RUNNER_TEMP -czf $archive yql-language-server.exe
           if ($LASTEXITCODE -ne 0) { throw 'Could not create archive' }
 
@@ -232,8 +240,8 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v7
         with:
-          name: yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}
-          path: ${{ runner.temp }}/yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}.tar.gz
+          name: yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}
+          path: ${{ runner.temp }}/yql-language-server-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}${{ matrix.suffix }}.tar.gz
           if-no-files-found: error
           retention-days: 1
 

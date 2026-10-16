@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import base64
 import datetime
 import logging
 import sys
@@ -18,6 +19,7 @@ from cherry_pick_v2 import (
     create_commit_source,
     create_pr_source,
     get_merged_commit_shas,
+    github_authorization_header,
     pick_linked_pr,
     sort_sources,
     to_utc,
@@ -446,6 +448,15 @@ class CollectSourcesTest(unittest.TestCase):
         repo.get_commit.side_effect = lambda sha: by_sha[sha]
         sources = collect_sources(repo, ['123', 'abc123'], False, LOGGER)
         self.assertEqual([s.type for s in sources], ['pr', 'commit'])
+
+
+class GithubAuthorizationHeaderTest(unittest.TestCase):
+    def test_token_is_not_placed_in_a_url(self):
+        header = github_authorization_header('test-token')
+        self.assertTrue(header.startswith('AUTHORIZATION: basic '))
+        decoded = base64.b64decode(header.split(' ', 2)[2]).decode()
+        self.assertEqual(decoded, 'x-access-token:test-token')
+        self.assertNotIn('://', header)
 
 
 if __name__ == '__main__':

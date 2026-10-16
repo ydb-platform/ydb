@@ -8,6 +8,7 @@
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/map.h>
 
 using namespace NActors;

@@ -1,6 +1,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/index_events_processor.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <util/stream/file.h>
 #include <library/cpp/json/json_reader.h>
 #include "test_events_writer.h"

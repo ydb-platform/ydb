@@ -7,6 +7,7 @@
 #include <util/generic/maybe.h>
 
 #include <atomic>
+#include <library/cpp/testing/common/network.h>
 
 namespace NKikimr {
 
@@ -44,7 +45,7 @@ private:
 
 private:
     const TOptions &Opts;
-    TPortManager PortManager;
+    NTesting::TPortManager PortManager;
     const ui16 MsgBusPort;
     Tests::TServerSettings::TPtr ServerSettings;
 

@@ -3,6 +3,7 @@ PROGRAM()
 PEERDIR(
     library/cpp/colorizer
     library/cpp/getopt
+    library/cpp/testing/common
     ydb/core/base
     ydb/core/kesus/tablet
     ydb/core/quoter

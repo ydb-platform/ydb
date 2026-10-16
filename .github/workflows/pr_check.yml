@@ -244,30 +244,12 @@ jobs:
       shell: bash
       run: |
         set +e
-        url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
-        measure() {
-          local target="$1"
-          local deadline=$((SECONDS + 20))
-          local cap=300000000
-          local bytes=0
-          local started=$SECONDS
-          while [ "$SECONDS" -lt "$deadline" ] && [ "$bytes" -lt "$cap" ]; do
-            local left=$((deadline - SECONDS))
-            [ "$left" -lt 1 ] && left=1
-            local n
-            n=$(curl -L --http2 --max-time "$left" -o /dev/null -s -w '%{size_download}' "$target" 2>/dev/null || true)
-            n=${n%%.*}
-            bytes=$((bytes + ${n:-0}))
-          done
-          local elapsed=$((SECONDS - started))
-          [ "$elapsed" -lt 1 ] && elapsed=1
-          echo "$bytes $elapsed"
-        }
-        read -r speed_bytes speed_elapsed <<< "$(measure "$url")"
-        read -r proxy_bytes proxy_elapsed <<< "$(measure "https://gh-proxy.com/$url")"
+        url='https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz'
+        direct=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "$url" 2>/dev/null || true)
+        proxy=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "https://gh-proxy.com/$url" 2>/dev/null || true)
         set -euo pipefail
-        speed=$((speed_bytes / speed_elapsed))
-        proxy_speed=$((proxy_bytes / proxy_elapsed))
+        read -r speed_bytes speed speed_elapsed <<< "${direct:-0 0 0}"
+        read -r proxy_bytes proxy_speed proxy_elapsed <<< "${proxy:-0 0 0}"
         threshold=3000000
         use_proxy=false
         if awk -v s="${speed:-0}" -v t="$threshold" 'BEGIN { exit !(s+0 < t) }'; then
@@ -345,30 +327,12 @@ jobs:
       shell: bash
       run: |
         set +e
-        url=https://github.com/git/git/archive/refs/tags/v2.46.0.tar.gz
-        measure() {
-          local target="$1"
-          local deadline=$((SECONDS + 20))
-          local cap=300000000
-          local bytes=0
-          local started=$SECONDS
-          while [ "$SECONDS" -lt "$deadline" ] && [ "$bytes" -lt "$cap" ]; do
-            local left=$((deadline - SECONDS))
-            [ "$left" -lt 1 ] && left=1
-            local n
-            n=$(curl -L --http2 --max-time "$left" -o /dev/null -s -w '%{size_download}' "$target" 2>/dev/null || true)
-            n=${n%%.*}
-            bytes=$((bytes + ${n:-0}))
-          done
-          local elapsed=$((SECONDS - started))
-          [ "$elapsed" -lt 1 ] && elapsed=1
-          echo "$bytes $elapsed"
-        }
-        read -r speed_bytes speed_elapsed <<< "$(measure "$url")"
-        read -r proxy_bytes proxy_elapsed <<< "$(measure "https://gh-proxy.com/$url")"
+        url='https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz'
+        direct=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "$url" 2>/dev/null || true)
+        proxy=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "https://gh-proxy.com/$url" 2>/dev/null || true)
         set -euo pipefail
-        speed=$((speed_bytes / speed_elapsed))
-        proxy_speed=$((proxy_bytes / proxy_elapsed))
+        read -r speed_bytes speed speed_elapsed <<< "${direct:-0 0 0}"
+        read -r proxy_bytes proxy_speed proxy_elapsed <<< "${proxy:-0 0 0}"
         threshold=3000000
         use_proxy=false
         if awk -v s="${speed:-0}" -v t="$threshold" 'BEGIN { exit !(s+0 < t) }'; then

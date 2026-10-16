@@ -12,6 +12,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_runtime_settings.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
@@ -97,7 +98,9 @@ bool ContainOnlyLiteralStages(NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest& 
     return true;
 }
 
-void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui32 langVer, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType) {
+void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, const TKqpRuntimeSettings& runtimeSettings,
+    ui32 langVer, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType)
+{
     literalRequest.NeedTxId = false;
     literalRequest.MaxAffectedShards = 0;
     literalRequest.TotalReadSizeLimitBytes = 0;
@@ -112,6 +115,7 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui
     stageProgram.SetRaw(program);
     YQL_ENSURE(langVer > 0);
     stageProgram.SetLangVer(langVer);
+    runtimeSettings.ApplyTo(*stageProgram.MutableRuntimeSettings());
     stage.SetOutputsCount(1);
 
     auto& taskResult = *transaction.AddResults();
@@ -1915,7 +1919,7 @@ public:
         auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
         NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest request(txAlloc);
-        PrepareLiteralRequest(request, langVer, phyQuery, program, resultType);
+        PrepareLiteralRequest(request, KqpRuntimeSettings, langVer, phyQuery, program, resultType);
         request.TraceId = NWilson::TTraceId(WilsonTraceId);
 
         NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
@@ -2423,6 +2427,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientAddress;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
+    TKqpRuntimeSettings KqpRuntimeSettings;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NWilson::TTraceId WilsonTraceId;
 };

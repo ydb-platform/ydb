@@ -13,6 +13,7 @@ SRCS(
     kqp_resolve.cpp
     kqp_resolve.h
     kqp_row_builder.cpp
+    kqp_runtime_settings.cpp
     kqp_ru_calc.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
@@ -56,6 +57,7 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/core/services
     yql/essentials/minikql
+    yql/essentials/minikql/runtime_settings
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
 )

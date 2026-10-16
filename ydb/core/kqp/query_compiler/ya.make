@@ -24,6 +24,7 @@ PEERDIR(
     yql/essentials/core/arrow_kernels/request
     yql/essentials/core/dq_integration
     yql/essentials/minikql
+    yql/essentials/minikql/runtime_settings
     yql/essentials/providers/common/mkql
 )
 

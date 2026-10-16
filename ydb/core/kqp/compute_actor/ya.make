@@ -38,6 +38,7 @@ PEERDIR(
     ydb/library/yql/providers/solomon/actors
     ydb/library/yql/providers/yt/async_io
     ydb/services/udf_store/wasm
+    yql/essentials/minikql/runtime_settings
     yql/essentials/public/issue
 )
 

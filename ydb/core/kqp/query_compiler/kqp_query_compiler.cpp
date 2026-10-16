@@ -1,6 +1,7 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_runtime_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -25,6 +26,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -750,6 +752,9 @@ public:
     {
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
+        YQL_ENSURE(TypesCtx.RuntimeSettings && KqpRuntimeSettings.HasRequiredSettings(*TypesCtx.RuntimeSettings),
+            "KQP runtime settings must be initialized before type annotation");
+
         auto querySettings = TKqpPhyQuerySettings::Parse(query);
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
@@ -1181,6 +1186,9 @@ private:
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
         programProto.SetLangVer(Config->GetDefaultLangVer());
+        if (TypesCtx.RuntimeSettings) {
+            *programProto.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*TypesCtx.RuntimeSettings);
+        }
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
         for (const auto& module : stagePredictor.GetWasmUdfModules()) {
@@ -3405,6 +3413,7 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    TKqpRuntimeSettings KqpRuntimeSettings;
     NOpt::TKqpOptimizeContext& OptimizeCtx;
     TKikimrConfiguration::TPtr Config;
     TSet<TString> SecretNames;

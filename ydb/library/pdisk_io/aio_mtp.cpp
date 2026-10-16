@@ -1,7 +1,7 @@
 #include "aio.h"
 #include "aio_completion.h"
 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_countedqueueoneone.h>
+#include "counted_queue_one_one.h"
 #include <ydb/core/debug/valgrind_check.h>
 
 #include <util/system/file.h>

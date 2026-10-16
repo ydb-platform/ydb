@@ -7,6 +7,7 @@
 #include "blobstorage_pdisk_internal_interface.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
+#include <ydb/library/pdisk_io/request_id.h>
 #include "blobstorage_pdisk_impl_metadata.h"
 
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>

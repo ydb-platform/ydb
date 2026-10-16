@@ -11,7 +11,7 @@
 #include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_tools.h"
-#include "blobstorage_pdisk_util_countedqueueoneone.h"
+#include <ydb/library/pdisk_io/counted_queue_one_one.h>
 #include "blobstorage_pdisk_writer.h"
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>

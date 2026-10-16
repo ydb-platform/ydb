@@ -14,7 +14,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/base
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/blobstorage/vdisk/common
     ydb/core/control/lib
     ydb/core/jaeger_tracing

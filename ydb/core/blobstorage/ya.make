@@ -15,7 +15,7 @@ PEERDIR(
     ydb/core/blobstorage/lwtrace_probes
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/other
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/blobstorage/storagepoolmon
     ydb/core/blobstorage/vdisk
 )

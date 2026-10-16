@@ -65,14 +65,18 @@ class ChangesAlreadyAppliedError(Exception):
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
     """Run git command"""
-    result = subprocess.run(
-        ['git'] + cmd,
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-        check=check
-    )
-    return result
+    try:
+        result = subprocess.run(
+            ['git'] + cmd,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=check
+        )
+        return result
+    except subprocess.CalledProcessError as e:
+        logger.error(f'Non-zero return code {e.returncode} of command {e.cmd}, stdout: {e.stdout}, stderr: {e.stderr}')
+        raise
 
 
 def expand_sha(repo, ref: str, logger) -> str:

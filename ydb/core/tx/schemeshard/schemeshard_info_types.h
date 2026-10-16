@@ -641,13 +641,26 @@ struct TTableSplitMergeState {
     TInstant LastSplitMergeTime;        // when this table last got a slot
     // Timestamp of the oldest candidate among *currently* deferred shards; reset when the
     // deferred set drains, so it never reflects candidates that are no longer waiting.
+    // Maintained incrementally on the insert path; removals only mark it dirty (they can
+    // only increase the true minimum) and the exact value is recomputed lazily by
+    // TTableInfo::GetOldestPendingCandidateAt -- draining N deferred shards must stay
+    // O(N), not O(N^2) (Finding 22).
     TInstant OldestPendingCandidateAt;
+    bool OldestPendingCandidateAtDirty = false;
     ui32 SplitDemandCount = 0;
     ui32 MergeDemandCount = 0;
     // Currently-stuck partitions only -> inner weighted pick is O(stuck-in-table), not O(all).
-    // Value = direction (true = split, false = merge) of the deferral that inserted the shard;
-    // removal paths decrement exactly the count that was incremented on insert.
-    THashMap<TShardIdx, bool> DeferredShards;
+    // Value carries the direction (true = split, false = merge) of the deferral that inserted
+    // the shard (removal paths decrement exactly the count that was incremented on insert)
+    // and the last deferral reason. The reason drives the revisit path: only slot-related
+    // deferrals (InFlightLimit) are re-driven by a fresh stats request; reasons with their
+    // own recovery edge (Borrowed -> compaction-done, PathLocked -> drop-lock, ShardLimit* ->
+    // quota change) wait for that edge instead of re-requesting stats in a spin loop.
+    struct TDeferredShardInfo {
+        bool WantsSplit = true;
+        TPartitionSplitMergeState::EDeferralReason Reason = TPartitionSplitMergeState::EDeferralReason::InFlightLimit;
+    };
+    THashMap<TShardIdx, TDeferredShardInfo> DeferredShards;
     bool QueuedForRevisit = false;         // membership guard: table appears once in the RR queue
 
     // Re-deferral with a changed direction: move the aggregate count from the opposite
@@ -678,6 +691,11 @@ struct TTableSplitMergeState {
     TShardIdx CachedPickShardIdx = InvalidShardIdx;
     ui32 CachedPickWeight = 0;
     TInstant CachedPickCandidate;
+    // Distinguishes "no winner was ever cached" (a fresh deferral may install itself
+    // outright) from "the cached winner was removed while other candidates may remain
+    // deferred" (only a full rescan may install the next winner; otherwise a light newly
+    // deferred shard would shadow heavier existing candidates -- Finding 23).
+    bool CachedPickNeedsRescan = false;
 };
 
 struct TStoragePoolStatsDelta {
@@ -1138,9 +1156,14 @@ public:
     void DropFromSplitMergeState(const TShardIdx& shardIdx);
 
     // Recompute OldestPendingCandidateAt as the min over the remaining deferred shards.
-    // Call after a removal from DeferredShards so the timestamp never reflects a shard
-    // that is no longer waiting (O(deferred), removal paths only -- not the hot path).
+    // Runs lazily from GetOldestPendingCandidateAt after removals marked the incrementally
+    // maintained value dirty (removals only ever increase the true minimum, so the stored
+    // value stays a valid lower bound until then). O(deferred), off the hot path.
     void RecomputeOldestPendingCandidateAt();
+
+    // Exact oldest pending candidate timestamp: recomputes lazily when removals marked
+    // the stored value dirty. The value never reflects a shard that is no longer waiting.
+    TInstant GetOldestPendingCandidateAt();
 
     explicit TTableInfo(TAlterTableInfo&& alterData)
         : NextColumnId(alterData.NextColumnId)
@@ -1326,6 +1349,12 @@ public:
     // pick when the cache validates; otherwise O(deferred-in-table) rescan that refreshes it.
     // Non-const: prunes stale entries (deferred shard without per-shard state) while picking.
     TShardIdx PickMostDeferredPartition();
+    // Update the saved deferral reason for a shard that is currently deferred. No-op when the
+    // shard is not deferred (e.g. a user-initiated propose that happens to be rejected). Used
+    // by the split/merge propose to record why a fair-scheduler-initiated propose was rejected,
+    // so the revisit path stops re-requesting stats for reasons that fresh stats cannot resolve.
+    void UpdateDeferredShardReason(const TShardIdx& shardIdx,
+        TPartitionSplitMergeState::EDeferralReason reason);
 
     // Fast-path cache maintenance for PickMostDeferredPartition: call after a deferral was
     // recorded for shardIdx (weight only grows while deferred, so the cache stays exact).

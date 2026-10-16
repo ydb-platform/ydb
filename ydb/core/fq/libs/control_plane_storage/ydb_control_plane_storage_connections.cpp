@@ -1,14 +1,13 @@
 #include "validators.h"
 #include "ydb_control_plane_storage_impl.h"
 
-#include <util/string/join.h>
-
-#include <ydb/public/api/protos/draft/fq.pb.h>
-
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
+
+#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
 
@@ -23,58 +22,55 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
 
     auto& setting = *connection.mutable_content()->mutable_setting();
     switch (setting.connection_case()) {
-    case FederatedQuery::ConnectionSetting::kObjectStorage:
-        break;
-    case FederatedQuery::ConnectionSetting::kYdbDatabase:
-        break;
-    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-        setting.mutable_clickhouse_cluster()->clear_password();
-        break;
-    case FederatedQuery::ConnectionSetting::kDataStreams:
-        break;
-    case FederatedQuery::ConnectionSetting::kMonitoring:
-        break;
-    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-        setting.mutable_postgresql_cluster()->clear_password();
-        break;
-    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
-        setting.mutable_greenplum_cluster()->clear_password();
-        break;
-    case FederatedQuery::ConnectionSetting::kMysqlCluster:
-        setting.mutable_mysql_cluster()->clear_password();
-        break;
-    case FederatedQuery::ConnectionSetting::kLogging:
-        break;
-    case FederatedQuery::ConnectionSetting::kIceberg:
-        break;
-    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
-        break;
+        case FederatedQuery::ConnectionSetting::kObjectStorage:
+            break;
+        case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            break;
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+            setting.mutable_clickhouse_cluster()->clear_password();
+            break;
+        case FederatedQuery::ConnectionSetting::kDataStreams:
+            break;
+        case FederatedQuery::ConnectionSetting::kMonitoring:
+            break;
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            setting.mutable_postgresql_cluster()->clear_password();
+            break;
+        case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+            setting.mutable_greenplum_cluster()->clear_password();
+            break;
+        case FederatedQuery::ConnectionSetting::kMysqlCluster:
+            setting.mutable_mysql_cluster()->clear_password();
+            break;
+        case FederatedQuery::ConnectionSetting::kLogging:
+            break;
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            break;
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+            break;
     }
     if (auto auth = GetMutableAuth(setting); auth && auth->has_token()) {
         auth->mutable_token()->clear_token();
     }
 }
 
-}
+}   // namespace
 
-NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev) const
-{
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev) const {
     NYql::TIssues issues = ValidateConnection(ev);
 
     const auto& event = *ev->Get();
     const auto& permissions = GetCreateConnectionPerimssions(event);
     if (event.Request.content().acl().visibility() == FederatedQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a connection with these parameters. Please receive a permission yq.resources.managePublic"));
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED,
+            "Permission denied to create a connection with these parameters. Please receive a permission yq.resources.managePublic"));
     }
 
     return issues;
 }
 
-TPermissions TControlPlaneStorageBase::GetCreateConnectionPerimssions(const TEvControlPlaneStorage::TEvCreateConnectionRequest& event) const
-{
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                            ? event.Permissions
-                            : TPermissions{TPermissions::MANAGE_PUBLIC};
+TPermissions TControlPlaneStorageBase::GetCreateConnectionPerimssions(const TEvControlPlaneStorage::TEvCreateConnectionRequest& event) const {
+    TPermissions permissions = Config->Proto.GetEnablePermissions() ? event.Permissions : TPermissions{ TPermissions::MANAGE_PUBLIC };
     if (IsSuperUser(event.User)) {
         permissions.SetAll();
     }
@@ -82,8 +78,7 @@ TPermissions TControlPlaneStorageBase::GetCreateConnectionPerimssions(const TEvC
 }
 
 std::pair<FederatedQuery::Connection, FederatedQuery::Internal::ConnectionInternal> TControlPlaneStorageBase::GetCreateConnectionProtos(
-    const FederatedQuery::CreateConnectionRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const
-{
+    const FederatedQuery::CreateConnectionRequest& request, const TString& cloudId, const TString& user, TInstant startTime) const {
     const TString& connectionId = GetEntityIdAsString(Config->IdsPrefix, EEntityType::CONNECTION);
 
     FederatedQuery::Connection connection;
@@ -94,7 +89,7 @@ std::pair<FederatedQuery::Connection, FederatedQuery::Internal::ConnectionIntern
     FederatedQuery::Internal::ConnectionInternal connectionInternal;
     connectionInternal.set_cloud_id(cloudId);
 
-    return {connection, connectionInternal};
+    return { connection, connectionInternal };
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev)
@@ -133,7 +128,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
         return;
     }
 
-    std::shared_ptr<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
+    std::shared_ptr<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response =
+        std::make_shared<std::pair<FederatedQuery::CreateConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
     response->first.set_connection_id(connectionId);
     response->second.After.ConstructInPlace().CopyFrom(connection);
     response->second.CloudId = cloudId;
@@ -151,39 +147,26 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
 
     InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
 
-    queryBuilder.AddText(
-        "INSERT INTO `" CONNECTIONS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" USER_COLUMN_NAME "`, `" VISIBILITY_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" CONNECTION_TYPE_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "`, `" REVISION_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "`) VALUES\n"
-        "    ($scope, $connection_id, $user, $visibility, $name, $connection_type, $connection, $revision, $internal);"
-    );
+    queryBuilder.AddText("INSERT INTO `" CONNECTIONS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" USER_COLUMN_NAME
+                         "`, `" VISIBILITY_COLUMN_NAME "`, `" NAME_COLUMN_NAME "`, `" CONNECTION_TYPE_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME
+                         "`, `" REVISION_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME
+                         "`) VALUES\n"
+                         "    ($scope, $connection_id, $user, $visibility, $name, $connection_type, $connection, $revision, $internal);");
 
-    auto connectionNameUniqueValidator = CreateUniqueNameValidator(
-        CONNECTIONS_TABLE_NAME,
-        content.acl().visibility(),
-        scope,
-        content.name(),
-        user,
-        "Connection with the same name already exists. Please choose another name",
-        YdbConnection->TablePathPrefix);
+    auto connectionNameUniqueValidator = CreateUniqueNameValidator(CONNECTIONS_TABLE_NAME, content.acl().visibility(), scope, content.name(),
+        user, "Connection with the same name already exists. Please choose another name", YdbConnection->TablePathPrefix);
 
-    auto bindingNameUniqueValidator = CreateUniqueNameValidator(
-        BINDINGS_TABLE_NAME,
-        content.acl().visibility(),
-        scope,
-        content.name(),
-        user,
-        "Binding with the same name already exists. Please choose another name",
-        YdbConnection->TablePathPrefix);
+    auto bindingNameUniqueValidator = CreateUniqueNameValidator(BINDINGS_TABLE_NAME, content.acl().visibility(), scope, content.name(), user,
+        "Binding with the same name already exists. Please choose another name", YdbConnection->TablePathPrefix);
 
-    auto validatorCountConnections = CreateCountEntitiesValidator(
-        scope,
-        CONNECTIONS_TABLE_NAME,
-        Config->Proto.GetMaxCountConnections(),
+    auto validatorCountConnections = CreateCountEntitiesValidator(scope, CONNECTIONS_TABLE_NAME, Config->Proto.GetMaxCountConnections(),
         "Too many connections in folder: " + ToString(Config->Proto.GetMaxCountConnections()) + ". Please remove unused connections",
         YdbConnection->TablePathPrefix);
 
     TVector<TValidationQuery> validators;
     if (idempotencyKey) {
-        validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
+        validators.push_back(CreateIdempotencyKeyValidator(
+            scope, idempotencyKey, response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
     }
     validators.push_back(connectionNameUniqueValidator);
     validators.push_back(bindingNameUniqueValidator);
@@ -191,11 +174,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
 
     if (content.acl().visibility() == FederatedQuery::Acl::PRIVATE) {
         auto overridBindingValidator = CreateConnectionOverrideBindingValidator(
-            scope,
-            content.name(),
-            GetCreateConnectionPerimssions(event),
-            user,
-            YdbConnection->TablePathPrefix);
+            scope, content.name(), GetCreateConnectionPerimssions(event), user, YdbConnection->TablePathPrefix);
         validators.push_back(overridBindingValidator);
     }
 
@@ -203,22 +182,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
 
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
-    auto prepare = [response] { return *response; };
+    auto prepare = [response] {
+        return *response;
+    };
     auto success = SendResponse<TEvControlPlaneStorage::TEvCreateConnectionResponse, FederatedQuery::CreateConnectionResult>(
-        MakeLogPrefix(scope, user, connectionId) + "CreateConnectionRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, user, connectionId) + "CreateConnectionRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(),
+        std::move(ev), startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, future.GetValue());
+    });
 }
 
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev) const {
@@ -241,9 +215,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
     const TString token = event.Token;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                        ? event.Permissions
-                        : TPermissions{TPermissions::VIEW_PUBLIC};
+    TPermissions permissions = Config->Proto.GetEnablePermissions() ? event.Permissions : TPermissions{ TPermissions::VIEW_PUBLIC };
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
@@ -271,9 +243,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     queryBuilder.AddUint64("limit", limit + 1);
 
     queryBuilder.AddText(
-        "SELECT `" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` >= $last_connection\n"
-    );
+        "SELECT `" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`, `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
+        "`\n"
+        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` >= $last_connection\n");
 
     TString filter;
     if (request.has_filter()) {
@@ -311,17 +283,17 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         queryBuilder.AddText(" AND (" + filter + ")\n");
     }
 
-    queryBuilder.AddText(
-        "ORDER BY `" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME "`\n"
-        "LIMIT $limit;"
-    );
+    queryBuilder.AddText("ORDER BY `" SCOPE_COLUMN_NAME "`, `" CONNECTION_ID_COLUMN_NAME
+                         "`\n"
+                         "LIMIT $limit;");
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [resultSets=resultSets, limit, extractSensitiveFields, commonCounters=requestCounters.Common] {
+    auto prepare = [resultSets = resultSets, limit, extractSensitiveFields, commonCounters = requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::ListConnectionsResult result;
@@ -330,7 +302,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             auto& connection = *result.add_connection();
             if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
                 commonCounters->ParseProtobufError->Inc();
-                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+                ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                    << "Error parsing proto message for connection. Please contact internal support";
             }
             PrepareSensitiveFields(connection, extractSensitiveFields);
         }
@@ -343,20 +316,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     };
 
     auto success = SendResponse<TEvControlPlaneStorage::TEvListConnectionsResponse, FederatedQuery::ListConnectionsResult>(
-        MakeLogPrefix(scope, user) + "ListConnectionsRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, user) + "ListConnectionsRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(), std::move(ev),
+        startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, future.GetValue());
+    });
 }
 
 NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev) const {
@@ -377,9 +343,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     const TString connectionId = request.connection_id();
     const TString token = event.Token;
     const bool extractSensitiveFields = event.ExtractSensitiveFields;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                    ? event.Permissions
-                    : TPermissions{TPermissions::VIEW_PUBLIC};
+    TPermissions permissions = Config->Proto.GetEnablePermissions() ? event.Permissions : TPermissions{ TPermissions::VIEW_PUBLIC };
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
@@ -406,33 +370,37 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
 
-    queryBuilder.AddText(
-        "SELECT `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
-    );
+    queryBuilder.AddText("SELECT `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
+                         "`\n"
+                         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [permissions, user, extractSensitiveFields, resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [permissions, user, extractSensitiveFields, resultSets = resultSets, commonCounters = requestCounters.Common] {
         if (resultSets->size() != 1) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
 
         FederatedQuery::DescribeConnectionResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
+                << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         if (!result.mutable_connection()->ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error parsing proto message for connection. Please contact internal support";
         }
 
-        bool hasViewAccess = HasViewAccess(permissions, result.connection().content().acl().visibility(), result.connection().meta().created_by(), user);
+        bool hasViewAccess =
+            HasViewAccess(permissions, result.connection().content().acl().visibility(), result.connection().meta().created_by(), user);
         if (!hasViewAccess) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
+                << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         PrepareSensitiveFields(*result.mutable_connection(), extractSensitiveFields);
@@ -440,20 +408,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     };
 
     auto success = SendResponse<TEvControlPlaneStorage::TEvDescribeConnectionResponse, FederatedQuery::DescribeConnectionResult>(
-        MakeLogPrefix(scope, user, connectionId) + "DescribeConnectionRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, user, connectionId) + "DescribeConnectionRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(),
+        std::move(ev), startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(DescribeConnectionRequest, scope, connectionId, user, delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(DescribeConnectionRequest, scope, connectionId, user, delta, byteSize, future.GetValue());
+    });
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr& ev)
@@ -467,9 +428,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                    ? event.Permissions
-                    : TPermissions{TPermissions::MANAGE_PUBLIC};
+    TPermissions permissions = Config->Proto.GetEnablePermissions() ? event.Permissions : TPermissions{ TPermissions::MANAGE_PUBLIC };
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
@@ -499,26 +458,30 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(read)");
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("connection_id", connectionId);
-    readQueryBuilder.AddText(
-        "SELECT `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
-    );
+    readQueryBuilder.AddText("SELECT `" CONNECTION_COLUMN_NAME "` FROM `" CONNECTIONS_TABLE_NAME
+                             "`\n"
+                             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
 
-    std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
+    std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response =
+        std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
+    auto prepareParams = [config = Config, commonCounters = requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey,
+                             tablePathPrefix = YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
 
         TResultSetParser parser(resultSets.front());
         if (!parser.TryNextRow()) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::ACCESS_DENIED)
+                << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
 
         FederatedQuery::Connection connection;
         if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
             commonCounters->ParseProtobufError->Inc();
-            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR)
+                << "Error parsing proto message for connection. Please contact internal support";
         }
 
         auto& meta = *connection.mutable_meta();
@@ -531,11 +494,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         bool validateType = content.setting().connection_case() == request.content().setting().connection_case();
 
         if (!validateType) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Connection type cannot be changed. Please specify the same connection type";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
+                << "Connection type cannot be changed. Please specify the same connection type";
         }
 
         if (content.acl().visibility() == FederatedQuery::Acl::SCOPE && request.content().acl().visibility() == FederatedQuery::Acl::PRIVATE) {
-            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
+            ythrow NKikimr::TCodeLineException(TIssuesIds::BAD_REQUEST)
+                << "Changing visibility from SCOPE to PRIVATE is forbidden. Please create a new connection with visibility PRIVATE";
         }
 
         // FIXME: this code needs better generalization
@@ -569,87 +534,62 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", connectionInternal.SerializeAsString());
         writeQueryBuilder.AddString("connection", connection.SerializeAsString());
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(
+            writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
-            "UPDATE `" CONNECTIONS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" CONNECTION_COLUMN_NAME "` = $connection\n"
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
-        );
+            "UPDATE `" CONNECTIONS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME
+            "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" CONNECTION_COLUMN_NAME
+            "` = $connection\n"
+            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
         const auto writeQuery = writeQueryBuilder.Build();
         return make_pair(writeQuery.Sql, writeQuery.Params);
     };
 
     TVector<TValidationQuery> validators;
     if (idempotencyKey) {
-        validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
+        validators.push_back(CreateIdempotencyKeyValidator(
+            scope, idempotencyKey, response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
     }
 
-    auto accessValidator = CreateManageAccessValidator(
-        CONNECTIONS_TABLE_NAME,
-        CONNECTION_ID_COLUMN_NAME,
-        scope,
-        connectionId,
-        user,
-        "Connection does not exist or permission denied. Please check the id connection or your access rights",
-        permissions,
+    auto accessValidator = CreateManageAccessValidator(CONNECTIONS_TABLE_NAME, CONNECTION_ID_COLUMN_NAME, scope, connectionId, user,
+        "Connection does not exist or permission denied. Please check the id connection or your access rights", permissions,
         YdbConnection->TablePathPrefix);
     validators.push_back(accessValidator);
 
     if (previousRevision > 0) {
-        auto revisionValidator = CreateRevisionValidator(
-            CONNECTIONS_TABLE_NAME,
-            CONNECTION_ID_COLUMN_NAME,
-            scope,
-            connectionId,
-            previousRevision,
-            "Revision of the connection has been changed already. Please restart the request with a new revision",
+        auto revisionValidator = CreateRevisionValidator(CONNECTIONS_TABLE_NAME, CONNECTION_ID_COLUMN_NAME, scope, connectionId,
+            previousRevision, "Revision of the connection has been changed already. Please restart the request with a new revision",
             YdbConnection->TablePathPrefix);
         validators.push_back(revisionValidator);
     }
 
     {
-        auto connectionNameUniqueValidator = CreateModifyUniqueNameValidator(
-            CONNECTIONS_TABLE_NAME,
-            CONNECTION_ID_COLUMN_NAME,
-            request.content().acl().visibility(),
-            scope,
-            request.content().name(),
-            user,
-            connectionId,
-            "Connection with the same name already exists. Please choose another name",
-            YdbConnection->TablePathPrefix);
+        auto connectionNameUniqueValidator = CreateModifyUniqueNameValidator(CONNECTIONS_TABLE_NAME, CONNECTION_ID_COLUMN_NAME,
+            request.content().acl().visibility(), scope, request.content().name(), user, connectionId,
+            "Connection with the same name already exists. Please choose another name", YdbConnection->TablePathPrefix);
         validators.push_back(connectionNameUniqueValidator);
     }
     {
-        auto bindingNameUniqueValidator = CreateUniqueNameValidator(
-            BINDINGS_TABLE_NAME,
-            request.content().acl().visibility(),
-            scope,
-            request.content().name(),
-            user,
-            "Binding with the same name already exists. Please choose another name",
-            YdbConnection->TablePathPrefix);
+        auto bindingNameUniqueValidator =
+            CreateUniqueNameValidator(BINDINGS_TABLE_NAME, request.content().acl().visibility(), scope, request.content().name(), user,
+                "Binding with the same name already exists. Please choose another name", YdbConnection->TablePathPrefix);
         validators.push_back(bindingNameUniqueValidator);
     }
 
     const auto readQuery = readQueryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo, validators);
-    auto prepare = [response] { return *response; };
+    auto prepare = [response] {
+        return *response;
+    };
     auto success = SendResponse<TEvControlPlaneStorage::TEvModifyConnectionResponse, FederatedQuery::ModifyConnectionResult>(
-        MakeLogPrefix(scope, user, connectionId) + "ModifyConnectionRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, user, connectionId) + "ModifyConnectionRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(),
+        std::move(ev), startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(ModifyConnectionRequest, scope, user, connectionId, delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(ModifyConnectionRequest, scope, user, connectionId, delta, byteSize, future.GetValue());
+    });
 }
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr& ev)
@@ -665,9 +605,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
 
     const TString user = event.User;
     const TString token = event.Token;
-    TPermissions permissions = Config->Proto.GetEnablePermissions()
-                    ? event.Permissions
-                    : TPermissions{TPermissions::MANAGE_PUBLIC};
+    TPermissions permissions = Config->Proto.GetEnablePermissions() ? event.Permissions : TPermissions{ TPermissions::MANAGE_PUBLIC };
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
@@ -693,83 +631,59 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
         return;
     }
 
-    std::shared_ptr<std::pair<FederatedQuery::DeleteConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::DeleteConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
+    std::shared_ptr<std::pair<FederatedQuery::DeleteConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response =
+        std::make_shared<std::pair<FederatedQuery::DeleteConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteConnection");
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("connection_id", connectionId);
 
     InsertIdempotencyKey(queryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
-    queryBuilder.AddText(
-        "DELETE FROM `" CONNECTIONS_TABLE_NAME "`\n"
-        "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
-    );
+    queryBuilder.AddText("DELETE FROM `" CONNECTIONS_TABLE_NAME
+                         "`\n"
+                         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;");
 
     TVector<TValidationQuery> validators;
     if (idempotencyKey) {
-        validators.push_back(CreateIdempotencyKeyValidator(scope, idempotencyKey, response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
+        validators.push_back(CreateIdempotencyKeyValidator(
+            scope, idempotencyKey, response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
     }
 
-    auto accessValidator = CreateManageAccessValidator(
-        CONNECTIONS_TABLE_NAME,
-        CONNECTION_ID_COLUMN_NAME,
-        scope,
-        connectionId,
-        user,
-        "Connection does not exist or permission denied. Please check the id connection or your access rights",
-        permissions,
+    auto accessValidator = CreateManageAccessValidator(CONNECTIONS_TABLE_NAME, CONNECTION_ID_COLUMN_NAME, scope, connectionId, user,
+        "Connection does not exist or permission denied. Please check the id connection or your access rights", permissions,
         YdbConnection->TablePathPrefix);
     validators.push_back(accessValidator);
 
     if (previousRevision > 0) {
-        auto revisionValidator = CreateRevisionValidator(
-            CONNECTIONS_TABLE_NAME,
-            CONNECTION_ID_COLUMN_NAME,
-            scope,
-            connectionId,
-            previousRevision,
-            "Revision of the connection has been changed already. Please restart the request with a new revision",
+        auto revisionValidator = CreateRevisionValidator(CONNECTIONS_TABLE_NAME, CONNECTION_ID_COLUMN_NAME, scope, connectionId,
+            previousRevision, "Revision of the connection has been changed already. Please restart the request with a new revision",
             YdbConnection->TablePathPrefix);
         validators.push_back(revisionValidator);
     }
 
     {
-        auto relatedBindingsValidator = CreateRelatedBindingsValidator(scope,
-            connectionId,
-            "There are bindings related with connection. Please remove them at the beginning",
-            YdbConnection->TablePathPrefix);
+        auto relatedBindingsValidator = CreateRelatedBindingsValidator(scope, connectionId,
+            "There are bindings related with connection. Please remove them at the beginning", YdbConnection->TablePathPrefix);
         validators.push_back(relatedBindingsValidator);
     }
 
-    validators.push_back(CreateEntityExtractor(
-        scope,
-        connectionId,
-        CONNECTION_COLUMN_NAME,
-        CONNECTION_ID_COLUMN_NAME,
-        CONNECTIONS_TABLE_NAME,
-        response,
-        YdbConnection->TablePathPrefix,
-        requestCounters.Common->ParseProtobufError));
+    validators.push_back(CreateEntityExtractor(scope, connectionId, CONNECTION_COLUMN_NAME, CONNECTION_ID_COLUMN_NAME, CONNECTIONS_TABLE_NAME,
+        response, YdbConnection->TablePathPrefix, requestCounters.Common->ParseProtobufError));
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = Write(query.Sql, query.Params, requestCounters, debugInfo, validators);
-    auto prepare = [response] { return *response; };
+    auto prepare = [response] {
+        return *response;
+    };
     auto success = SendResponse<TEvControlPlaneStorage::TEvDeleteConnectionResponse, FederatedQuery::DeleteConnectionResult>(
-        MakeLogPrefix(scope, user, connectionId) + "DeleteConnectionRequest",
-        NActors::TActivationContext::ActorSystem(),
-        result,
-        SelfId(),
-        std::move(ev),
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
+        MakeLogPrefix(scope, user, connectionId) + "DeleteConnectionRequest", NActors::TActivationContext::ActorSystem(), result, SelfId(),
+        std::move(ev), startTime, requestCounters, prepare, debugInfo);
 
     success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(DeleteConnectionRequest, scope, user, connectionId, delta, byteSize, future.GetValue());
-        });
+        TDuration delta = TInstant::Now() - startTime;
+        LWPROBE(DeleteConnectionRequest, scope, user, connectionId, delta, byteSize, future.GetValue());
+    });
 }
 
-} // NFq
+}   // namespace NFq

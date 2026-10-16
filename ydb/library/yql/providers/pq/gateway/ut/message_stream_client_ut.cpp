@@ -1,5 +1,5 @@
-#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
@@ -8,19 +8,26 @@
 namespace NYql {
 namespace {
 
-struct TObservedPartition final : NYdb::NTopic::TPartitionSessionControl {
+struct TObservedPartition final: NYdb::NTopic::TPartitionSessionControl {
     TObservedPartition() {
         PartitionId = 7;
         PartitionSessionId = 42;
     }
 
-    void RequestStatus() override {}
-    void Commit(ui64, ui64) override {}
+    void RequestStatus() override {
+    }
+
+    void Commit(ui64, ui64) override {
+    }
+
     void ConfirmCreate(std::optional<ui64> offset, std::optional<ui64>, std::optional<ui64>) override {
         ++Starts;
         StartOffset = offset;
     }
-    void ConfirmDestroy() override {}
+
+    void ConfirmDestroy() override {
+    }
+
     void ConfirmEnd(std::span<const ui32> children) override {
         ++Ends;
         Children.assign(children.begin(), children.end());
@@ -33,40 +40,40 @@ struct TObservedPartition final : NYdb::NTopic::TPartitionSessionControl {
 };
 
 struct TStreamFixture {
-    NYdb::TDriver Driver{NYdb::TDriverConfig().SetEndpoint("localhost:1")};
+    NYdb::TDriver Driver{ NYdb::TDriverConfig().SetEndpoint("localhost:1") };
     NTestUtils::IMockPqGateway::TPtr Gateway = NTestUtils::CreateMockPqGateway();
     std::shared_ptr<NFq::IMessageStreamClient> Client = Gateway->GetTopicClient("topic", Driver, Gateway->GetTopicClientSettings());
-    std::shared_ptr<NFq::IMessageStreamReadSession> Session = Client->CreateReadSession({
-        .PartitionIds = {NFq::TMessageStreamPartitionId{7}}});
+    std::shared_ptr<NFq::IMessageStreamReadSession> Session =
+        Client->CreateReadSession({ .PartitionIds = { NFq::TMessageStreamPartitionId{ 7 } } });
     NTestUtils::IMockPqReadSession::TPtr Mock = Gateway->ExtractReadSession("topic");
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     Y_UNIT_TEST(ValidateReadSettings) {
         NFq::TMessageStreamReadSessionSettings settings;
         UNIT_ASSERT_EXCEPTION(settings.Validate(), NFq::TMessageStreamException);
         settings.Consumer = "consumer";
-        settings.Validate(); // Managed assignment with a consumer.
+        settings.Validate();   // Managed assignment with a consumer.
         settings.Consumer = "";
         UNIT_ASSERT_EXCEPTION(settings.Validate(), NFq::TMessageStreamException);
         settings.Consumer.reset();
-        settings.PartitionIds = {NFq::TMessageStreamPartitionId{7}};
-        settings.Validate(); // Explicit assignment without a consumer.
-        settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{7});
+        settings.PartitionIds = { NFq::TMessageStreamPartitionId{ 7 } };
+        settings.Validate();   // Explicit assignment without a consumer.
+        settings.PartitionIds.push_back(NFq::TMessageStreamPartitionId{ 7 });
         UNIT_ASSERT_EXCEPTION(settings.Validate(), NFq::TMessageStreamException);
     }
 
     Y_UNIT_TEST(ClientsAreBoundToDifferentStreams) {
-        NYdb::TDriver driver{NYdb::TDriverConfig().SetEndpoint("localhost:1")};
+        NYdb::TDriver driver{ NYdb::TDriverConfig().SetEndpoint("localhost:1") };
         auto gateway = NTestUtils::CreateMockPqGateway();
         UNIT_ASSERT_EXCEPTION(gateway->GetTopicClient("", driver, {}), NFq::TMessageStreamException);
         auto first = gateway->GetTopicClient("first", driver, {});
         auto second = gateway->GetTopicClient("second", driver, {});
         UNIT_ASSERT_VALUES_EQUAL(first->GetStream(), "first");
         UNIT_ASSERT_VALUES_EQUAL(second->GetStream(), "second");
-        const NFq::TMessageStreamReadSessionSettings settings{.PartitionIds = {{0}}};
+        const NFq::TMessageStreamReadSessionSettings settings{ .PartitionIds = { { 0 } } };
         auto firstSession = first->CreateReadSession(settings);
         auto secondSession = second->CreateReadSession(settings);
         auto firstMock = gateway->ExtractReadSession("first");
@@ -82,7 +89,7 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     }
 
     Y_UNIT_TEST(MockClientRetainsGatewayAndBoundMetadata) {
-        NYdb::TDriver driver{NYdb::TDriverConfig().SetEndpoint("localhost:1")};
+        NYdb::TDriver driver{ NYdb::TDriverConfig().SetEndpoint("localhost:1") };
         NTestUtils::TMockPqGatewaySettings config;
         config.Topics["first"].PartitionCount = 2;
         config.Topics["second"].PartitionCount = 3;
@@ -92,21 +99,21 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
         gateway.Reset();
         UNIT_ASSERT_VALUES_EQUAL(first->DescribeStream().GetValueSync().Value.Partitions.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(second->DescribeStream().GetValueSync().Value.Partitions.size(), 3);
-        auto session = first->CreateReadSession({.PartitionIds = {{1}}});
+        auto session = first->CreateReadSession({ .PartitionIds = { { 1 } } });
         session->Close().GetValueSync();
     }
 
     Y_UNIT_TEST(MockRejectsUnsupportedOperations) {
-        NYdb::TDriver driver{NYdb::TDriverConfig().SetEndpoint("localhost:1")};
+        NYdb::TDriver driver{ NYdb::TDriverConfig().SetEndpoint("localhost:1") };
         auto gateway = NTestUtils::CreateMockPqGateway();
         auto client = gateway->GetTopicClient("topic", driver, {});
         UNIT_ASSERT(client->DescribeConsumer("consumer").GetValueSync().Status == NFq::EMessageStreamStatus::Unsupported);
-        UNIT_ASSERT(client->DescribePartition({0}).GetValueSync().Status == NFq::EMessageStreamStatus::Unsupported);
-        UNIT_ASSERT(client->CommitPosition({0}, "consumer", 1).GetValueSync().Status == NFq::EMessageStreamStatus::Unsupported);
+        UNIT_ASSERT(client->DescribePartition({ 0 }).GetValueSync().Status == NFq::EMessageStreamStatus::Unsupported);
+        UNIT_ASSERT(client->CommitPosition({ 0 }, "consumer", 1).GetValueSync().Status == NFq::EMessageStreamStatus::Unsupported);
         for (const NFq::TMessageStreamReadSessionSettings& settings : {
-            NFq::TMessageStreamReadSessionSettings{.Consumer = "consumer"},
-            NFq::TMessageStreamReadSessionSettings{.PartitionIds = {{0}, {1}}},
-        }) {
+                 NFq::TMessageStreamReadSessionSettings{ .Consumer = "consumer" },
+                 NFq::TMessageStreamReadSessionSettings{ .PartitionIds = { { 0 }, { 1 } } },
+             }) {
             try {
                 client->CreateReadSession(settings);
                 UNIT_FAIL("Unsupported assignment must fail before creating a session");
@@ -120,7 +127,7 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     Y_UNIT_TEST(ResultRequiresExplicitSuccess) {
         using TResult = NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>;
         UNIT_ASSERT(!TResult{}.IsSuccess());
-        const auto result = TResult::Success({.PartitionId = {7}, .StartOffset = 2, .EndOffset = 5});
+        const auto result = TResult::Success({ .PartitionId = { 7 }, .StartOffset = 2, .EndOffset = 5 });
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(result.Value.PartitionId.Value, 7);
         UNIT_ASSERT(!TResult::Failure(NFq::EMessageStreamStatus::Unsupported).IsSuccess());
@@ -129,7 +136,7 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
 
     Y_UNIT_TEST(NullableAttributesPreserveOrderAndDuplicates) {
         NFq::TMessageStreamRecord record;
-        record.Attributes = {{"key", std::nullopt}, {"key", TString()}, {"key", TString("value")}};
+        record.Attributes = { { "key", std::nullopt }, { "key", TString() }, { "key", TString("value") } };
         UNIT_ASSERT(!record.Attributes[0].Value);
         UNIT_ASSERT(record.Attributes[1].Value && record.Attributes[1].Value->empty());
         UNIT_ASSERT_VALUES_EQUAL(*record.Attributes[2].Value, "value");
@@ -139,10 +146,10 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     }
 
     Y_UNIT_TEST(OffsetResetPolicyIsExplicit) {
-        NFq::TMessageStreamReadSessionSettings settings{.PartitionIds = {{7}}};
+        NFq::TMessageStreamReadSessionSettings settings{ .PartitionIds = { { 7 } } };
         UNIT_ASSERT(settings.OffsetResetPolicy == NFq::EMessageStreamOffsetResetPolicy::Earliest);
         ToSdkReadSettings("topic", settings);
-        for (const auto policy : {NFq::EMessageStreamOffsetResetPolicy::Error, NFq::EMessageStreamOffsetResetPolicy::Latest}) {
+        for (const auto policy : { NFq::EMessageStreamOffsetResetPolicy::Error, NFq::EMessageStreamOffsetResetPolicy::Latest }) {
             settings.OffsetResetPolicy = policy;
             try {
                 ToSdkReadSettings("topic", settings);
@@ -156,7 +163,7 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     Y_UNIT_TEST(ExhaustionConfirmationReachesSdkAfterProcessing) {
         TStreamFixture fixture;
         auto native = MakeIntrusive<TObservedPartition>();
-        fixture.Mock->AddEvent(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent(native, {}, {8, 9}));
+        fixture.Mock->AddEvent(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent(native, {}, { 8, 9 }));
         auto events = fixture.Session->GetEvents({});
         auto control = std::get<NFq::TMessageStreamPartitionExhaustedEvent>(events.at(0)).PartitionControl;
         UNIT_ASSERT_VALUES_EQUAL(native->Ends, 0);
@@ -199,7 +206,7 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
         UNIT_ASSERT(!topic.Consumers);
         topic.Consumers.emplace();
         UNIT_ASSERT(topic.Consumers->empty());
-        topic.Partitions = {{.PartitionId = {7}}, {.PartitionId = {42}, .Active = false}};
+        topic.Partitions = { { .PartitionId = { 7 } }, { .PartitionId = { 42 }, .Active = false } };
         UNIT_ASSERT_VALUES_EQUAL(topic.Partitions[1].PartitionId.Value, 42);
 
         NFq::TMessageStreamPartitionStartRequestedEvent started;
@@ -214,10 +221,10 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     Y_UNIT_TEST(ZeroLimitsDoNotConsumeEvents) {
         TStreamFixture fixture;
         fixture.Mock->AddDataReceivedEvent(0, "payload");
-        UNIT_ASSERT(fixture.Session->GetEvents({.MaxEventsCount = 0}).empty());
-        UNIT_ASSERT(fixture.Session->GetEvents({.MaxByteSize = 0}).empty());
+        UNIT_ASSERT(fixture.Session->GetEvents({ .MaxEventsCount = 0 }).empty());
+        UNIT_ASSERT(fixture.Session->GetEvents({ .MaxByteSize = 0 }).empty());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Mock->GetInflightEventsCount(), 1);
-        const auto events = fixture.Session->GetEvents({.MaxEventsCount = 1, .MaxByteSize = 1});
+        const auto events = fixture.Session->GetEvents({ .MaxEventsCount = 1, .MaxByteSize = 1 });
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
         const auto& data = std::get<NFq::TMessageStreamDataEvent>(events.front());
         UNIT_ASSERT_VALUES_EQUAL(data.Records.front().Data.value(), "payload");
@@ -235,7 +242,7 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
         fixture.Session->Close().GetValueSync();
         UNIT_ASSERT(ready.IsReady());
         UNIT_ASSERT(!control->AcknowledgeRange(0, 1));
-        control->ConfirmStart({}, {}); // Late confirmations are harmless.
+        control->ConfirmStart({}, {});   // Late confirmations are harmless.
         control->ConfirmStop();
         fixture.Session->Close().GetValueSync();
         UNIT_ASSERT(fixture.Session->GetEvents({}).empty());
@@ -254,4 +261,4 @@ Y_UNIT_TEST_SUITE(TMessageStreamContract) {
     }
 }
 
-} // namespace NYql
+}   // namespace NYql

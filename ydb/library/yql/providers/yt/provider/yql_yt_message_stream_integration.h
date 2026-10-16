@@ -1,7 +1,7 @@
 #pragma once
 
-#include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_data_provider.h>
 
 namespace NYql {
 
@@ -20,4 +20,4 @@ public:
     virtual TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
 };
 
-} // namespace NYql
+}   // namespace NYql

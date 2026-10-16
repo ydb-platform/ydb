@@ -13,9 +13,10 @@ using namespace NActors;
 
 constexpr ui64 PING_PERIOD_SECONDS = 2;
 
-} // anonymous namespace
+}   // anonymous namespace
 
-void TRetryEventsQueue::Init(const TTxId& txId, const TActorId& senderId, const TActorId& selfId, ui64 eventQueueId, bool keepAlive, bool useConnect, bool ordered) {
+void TRetryEventsQueue::Init(
+    const TTxId& txId, const TActorId& senderId, const TActorId& selfId, ui64 eventQueueId, bool keepAlive, bool useConnect, bool ordered) {
     SenderId = senderId;
     SelfId = selfId;
     Y_VALIDATE(SelfId.NodeId() == SenderId.NodeId(), "Sender must be on the same node as self id");
@@ -106,15 +107,14 @@ bool TRetryEventsQueue::Heartbeat() {
 
     ScheduleHeartbeat();
     auto now = TInstant::Now();
-    return (now - LastReceivedDataTime >= TDuration::Seconds(PING_PERIOD_SECONDS)
-        || (now - LastSentDataTime >= TDuration::Seconds(PING_PERIOD_SECONDS)));
+    return (now - LastReceivedDataTime >= TDuration::Seconds(PING_PERIOD_SECONDS) ||
+            (now - LastSentDataTime >= TDuration::Seconds(PING_PERIOD_SECONDS)));
 }
 
 void TRetryEventsQueue::Connect() {
     auto connectEvent = MakeHolder<TEvInterconnect::TEvConnectNode>();
     auto proxyId = TActivationContext::InterconnectProxy(RecipientId.NodeId());
-    TActivationContext::Send(
-        new IEventHandle(proxyId, SenderId, connectEvent.Release(), 0, 0));
+    TActivationContext::Send(new IEventHandle(proxyId, SenderId, connectEvent.Release(), 0, 0));
 }
 
 void TRetryEventsQueue::Unsubscribe() {
@@ -132,11 +132,9 @@ void TRetryEventsQueue::RemoveConfirmedEvents(ui64 confirmedSeqNo) {
     }
 
     if (Events.size() > TEvRetryQueuePrivate::UNCONFIRMED_EVENTS_COUNT_LIMIT) {
-        throw yexception()
-            << "Too many unconfirmed events: " << Events.size()
-            << ". Confirmed SeqNo: " << confirmedSeqNo
-            << ". Unconfirmed SeqNos: " << Events.front()->GetSeqNo() << "-" << Events.back()->GetSeqNo()
-            << ". TxId: \"" << TxId << "\". EventQueueId: " << EventQueueId;
+        throw yexception() << "Too many unconfirmed events: " << Events.size() << ". Confirmed SeqNo: " << confirmedSeqNo
+                           << ". Unconfirmed SeqNos: " << Events.front()->GetSeqNo() << "-" << Events.back()->GetSeqNo() << ". TxId: \"" << TxId
+                           << "\". EventQueueId: " << EventQueueId;
     }
 }
 
@@ -172,8 +170,8 @@ void TRetryEventsQueue::ScheduleHeartbeat() {
 
 TDuration TRetryEventsQueue::TRetryState::GetNextDelay() {
     constexpr TDuration MaxDelay = TDuration::Seconds(10);
-    constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
-    TDuration ret = Delay; // The first delay is zero
+    constexpr TDuration MinDelay = TDuration::MilliSeconds(100);   // from second retry
+    TDuration ret = Delay;   // The first delay is zero
     Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
     return ret ? RandomizeDelay(ret) : ret;
 }
@@ -189,11 +187,9 @@ void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
         stream << ", LocalRecipient\n";
         return;
     }
-    stream << ", NextSeqNo "
-        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", events size "
-        << Events.size() << ", ordered " << Ordered << ", received out of order " << ReceivedEventsSeqNos.size()
-        << ", connected " << Connected  << ", heartbeat shed " << HeartbeatScheduled
-        << ", last received " << LastReceivedDataTime << ", last sent " << LastSentDataTime << "\n";
+    stream << ", NextSeqNo " << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", events size " << Events.size() << ", ordered " << Ordered
+           << ", received out of order " << ReceivedEventsSeqNos.size() << ", connected " << Connected << ", heartbeat shed "
+           << HeartbeatScheduled << ", last received " << LastReceivedDataTime << ", last sent " << LastSentDataTime << "\n";
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

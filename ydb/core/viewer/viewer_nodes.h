@@ -78,6 +78,11 @@ class TJsonNodes : public TViewerPipeClient {
         EBoardInfoRequestResource,
     };
 
+    enum class EPDisksSort {
+        Path,
+        PDiskId,
+    };
+
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
@@ -906,6 +911,8 @@ class TJsonNodes : public TViewerPipeClient {
 
     ENodeFields SortBy = ENodeFields::NodeId;
     bool ReverseSort = false;
+    EPDisksSort PDisksSort = EPDisksSort::Path;
+    bool ReversePDisksSort = false;
     ENodeFields GroupBy = ENodeFields::NodeId;
     ENodeFields FilterGroupBy = ENodeFields::NodeId;
     TString FilterGroup;
@@ -1006,6 +1013,14 @@ class TJsonNodes : public TViewerPipeClient {
             result = ENodeFields::MaxNormalizedOccupancy;
         } else if (field == "CapacityAlert") {
             result = ENodeFields::CapacityAlert;
+        }
+        return result;
+    }
+
+    static EPDisksSort ParseEPDisksSort(TStringBuf sort) {
+        EPDisksSort result = EPDisksSort::Path;
+        if (sort == "PDiskId") {
+            result = EPDisksSort::PDiskId;
         }
         return result;
     }
@@ -1291,6 +1306,16 @@ public:
             }
             NeedGroup = true;
             ResetSortParams();
+        }
+        TStringBuf pdisksSort = Params.Get("pdisks_sort");
+        if (pdisksSort) {
+            bool reversePDisksSort = false;
+            if (pdisksSort.StartsWith("-") || pdisksSort.StartsWith("+")) {
+                reversePDisksSort = (pdisksSort[0] == '-');
+                pdisksSort.Skip(1);
+            }
+            PDisksSort = ParseEPDisksSort(pdisksSort);
+            ReversePDisksSort = reversePDisksSort;
         }
         TString fieldsRequired = Params.Get("fields_required");
         if (!fieldsRequired.empty()) {
@@ -3685,8 +3710,11 @@ public:
                     for (const auto& entry : node->SysViewPDisks) {
                         sysViewPDisks.emplace(entry.GetKey().GetPDiskId(), &entry.GetInfo());
                     }
-                    std::sort(node->PDisks.begin(), node->PDisks.end(), [](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
-                        return a.path() < b.path();
+                    std::sort(node->PDisks.begin(), node->PDisks.end(), [this](const NKikimrWhiteboard::TPDiskStateInfo& a, const NKikimrWhiteboard::TPDiskStateInfo& b) {
+                        if (PDisksSort == EPDisksSort::PDiskId) {
+                            return ReversePDisksSort ? a.GetPDiskId() > b.GetPDiskId() : a.GetPDiskId() < b.GetPDiskId();
+                        }
+                        return ReversePDisksSort ? a.path() > b.path() : a.path() < b.path();
                     });
                     for (NKikimrWhiteboard::TPDiskStateInfo& pDisk : node->PDisks) {
                         auto& jsonPDisk = *jsonNode.AddPDisks();
@@ -3909,6 +3937,15 @@ public:
                         When `group` is set, sorting is disabled and fields needed only for sorting
                         are not fetched. `sort` is still validated; unknown fields return HTTP 400.
                         Database-level tokens must not use cluster-level fields for active sorting (403).
+                    required: false
+                    type: string
+                  - name: pdisks_sort
+                    in: query
+                    description: >
+                        sort PDisks by:
+                          * `Path`
+                          * `PDiskId`
+                        A `+` or `-` prefix selects ascending or descending order respectively.
                     required: false
                     type: string
                   - name: group

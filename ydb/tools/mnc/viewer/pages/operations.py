@@ -29,12 +29,14 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
         on_run: Callable[[OperationRequest], None],
         operation_id: str,
         operation_title: str,
+        bin_path_placeholder: Callable[[], str],
     ) -> None:
         super().__init__()
         self._state = state
         self._on_run = on_run
         self._operation_id = operation_id
         self._operation_title = operation_title
+        self._bin_path_placeholder = bin_path_placeholder
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -47,7 +49,7 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
                 Label("waiting", classes="operations-label"),
                 OperationFormInput(value="15", placeholder="15", id="operations-waiting", classes="operations-input"),
                 Label("bin_path", classes="operations-label"),
-                OperationFormInput(value="", placeholder="optional path to ydb binary", id="operations-bin-path", classes="operations-input"),
+                OperationFormInput(value="", id="operations-bin-path", classes="operations-input"),
                 OperationFormCheckbox("do_not_init", value=False, id="operations-do-not-init", classes="operations-checkbox"),
                 id="operations-install-arguments",
             ),
@@ -96,6 +98,7 @@ class OperationsPane(VerticalScroll, inherit_bindings=False):
             selected.candidate.path if selected is not None else "-"
         )
         self.query_one("#operations-hosts .operations-value", Label).update(self._hosts_text())
+        self.query_one("#operations-bin-path", Input).placeholder = self._bin_path_placeholder()
 
         started = self._operation_started()
         self.query_one("#operations-form", Vertical).display = not started

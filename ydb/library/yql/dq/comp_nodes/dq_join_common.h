@@ -1246,7 +1246,8 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
     using enum EJoinKind;
     switch (kind) {
     case Inner:
-        return new Wrapper<TPhysicalJoin{Inner}>(std::forward<Args>(args)...);
+        return DispatchHashJoinByMode<Wrapper, TResult, Inner>(preservedSide, isGrid,
+                                                               std::forward<Args>(args)...);
     case LeftOnly:
         return DispatchHashJoinByMode<Wrapper, TResult, LeftOnly>(preservedSide, isGrid,
                                                                   std::forward<Args>(args)...);
@@ -1257,12 +1258,57 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
         return DispatchHashJoinByMode<Wrapper, TResult, Left>(preservedSide, isGrid,
                                                               std::forward<Args>(args)...);
     case Cross:
-        return new Wrapper<TPhysicalJoin{Cross}>(std::forward<Args>(args)...);
+        return DispatchHashJoinByMode<Wrapper, TResult, Cross>(preservedSide, isGrid,
+                                                               std::forward<Args>(args)...);
     default:
         break;
     }
     MKQL_ENSURE(false, unsupportedMessage);
     Y_UNREACHABLE();
+}
+
+template <typename TInputTypes, typename TKeyCols>
+void ApplyLeftBuildSwap(bool leftIsBuild, TSides<TInputTypes>& inputTypes, TSides<TKeyCols>& keyColumns,
+                        TDqRenames<ESide>& renames) {
+    if (!leftIsBuild) {
+        return;
+    }
+    std::swap(inputTypes.Build, inputTypes.Probe);
+    std::swap(keyColumns.Build, keyColumns.Probe);
+    for (auto& rename : renames) {
+        rename.Side = OtherSide(rename.Side);
+    }
+}
+
+inline ESide PreservedSideForLeftBuild(bool leftIsBuild) {
+    return leftIsBuild ? ESide::Build : ESide::Probe;
+}
+
+template <typename T>
+TSides<T> SidesForLeftBuild(bool leftIsBuild, T left, T right) {
+    if (leftIsBuild) {
+        return {.Build = std::move(left), .Probe = std::move(right)};
+    }
+    return {.Build = std::move(right), .Probe = std::move(left)};
+}
+
+inline TJoinFilters ParseJoinFiltersForBuildSide(const TComputationNodeFactoryContext& ctx, TCallable& callable,
+                                                 ui32 firstInput, bool leftIsBuild) {
+    TJoinFilters filters = ParseJoinFilters(ctx, callable, firstInput);
+    if (leftIsBuild) {
+        filters.SwapSides();
+    }
+    return filters;
+}
+
+inline TVector<ui32> EqualNullsInputColumns(const TVector<ui32>& equalNullsKeys, const TVector<ui32>& keyColumns) {
+    TVector<ui32> columns;
+    columns.reserve(equalNullsKeys.size());
+    for (ui32 joinKeyIdx : equalNullsKeys) {
+        MKQL_ENSURE(joinKeyIdx < keyColumns.size(), "EqualNulls key index is out of range");
+        columns.push_back(keyColumns[joinKeyIdx]);
+    }
+    return columns;
 }
 
 template <typename TKeyCols, typename TInputTypes>

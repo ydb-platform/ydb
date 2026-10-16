@@ -4736,7 +4736,7 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::ScanComplete(NTable::EStatus,
+void TDataShard::ScanComplete(NTable::EStatus status,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
                                      const TActorContext &ctx)
@@ -4773,7 +4773,12 @@ void TDataShard::ScanComplete(NTable::EStatus,
                     {"cookie", cookie},
                     {"tabletId", TabletID()});
 
-                CdcStreamScanManager.Complete(cookie);
+                if (status == NTable::EStatus::Done) {
+                    CdcStreamScanManager.Complete(cookie);
+                } else {
+                    // keep the progress, so the retry resumes from the last key
+                    CdcStreamScanManager.Fail(cookie);
+                }
             } else if (!Pipeline.FinishStreamingTx(cookie)) {
                 YDB_LOG_ERROR_CTX(ctx, "Scan complete for unknown tx",
                     {"tabletId", TabletID()},

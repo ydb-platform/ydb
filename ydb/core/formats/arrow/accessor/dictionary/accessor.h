@@ -54,14 +54,27 @@ protected:
         // Outside the single-null case, positions do not reference null entries.
         return HasOnlyNullValue() ? GetRecordsCount() : ArrayPositions->null_count();
     }
+    virtual std::optional<bool> DoHasNulls() const override {
+        if ((HasOnlyNullValue() && GetRecordsCount()) || ArrayPositions->null_count()) {
+            return true;
+        }
+        if (ArrayDictionary->null_count()) {
+            return std::nullopt;
+        }
+        return false;
+    }
 
     virtual ui32 DoGetValueRawBytes() const override {
         return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);
     }
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
-        if (ArrayDictionary->length() == 1) {
+        if (ArrayDictionary->length() == 1 && (ArrayDictionary->IsNull(0) || !ArrayPositions->null_count())) {
             value = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(0));
+            return true;
+        }
+        if (ArrayPositions->length() && ArrayPositions->null_count() == ArrayPositions->length()) {
+            value = arrow::MakeNullScalar(ArrayDictionary->type());
             return true;
         }
         return false;

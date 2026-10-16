@@ -1,5 +1,3 @@
 #include "initialization.h"
 
-namespace NKikimr::NMetadata::NInitializer {
-
-}
+namespace NKikimr::NMetadata::NInitializer {}

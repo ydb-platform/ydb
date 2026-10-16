@@ -8,13 +8,9 @@ namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EBytecodeFormat,
-    (HumanReadable)
-    (Binary)
-);
+DEFINE_ENUM(EBytecodeFormat, (HumanReadable)(Binary));
 
-struct TModuleBytecode
-{
+struct TModuleBytecode {
     EBytecodeFormat Format;
     TSharedRef Data;
     TSharedRef ObjectCode;
@@ -26,8 +22,7 @@ struct TModuleBytecode
 
 //! Compact cache/map key: hashes + sizes (O(1) compare). Use with a full
 //! TModuleBytecode equality check on hit to rule out hash collisions.
-struct TModuleBytecodeKey
-{
+struct TModuleBytecodeKey {
     EBytecodeFormat Format = EBytecodeFormat::Binary;
     ui64 DataHash = 0;
     ui64 ObjectCodeHash = 0;
@@ -42,12 +37,10 @@ struct TModuleBytecodeKey
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TModuleBytecodeHashSet final
-    : public THashSet<TModuleBytecode>
-{ };
+class TModuleBytecodeHashSet final: public THashSet<TModuleBytecode> {};
 
 DEFINE_REFCOUNTED_TYPE(TModuleBytecodeHashSet)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

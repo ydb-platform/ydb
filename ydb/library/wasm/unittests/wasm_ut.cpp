@@ -3,14 +3,11 @@
 #include <ydb/library/wasm/api/function.h>
 #include <ydb/library/wasm/api/memory_pool.h>
 #include <ydb/library/wasm/api/pointer.h>
-
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
 #include <WAVM/IR/Module.h>
 #include <WAVM/WASM/WASM.h>
-
 #include <library/cpp/testing/gtest/gtest.h>
-
 #include <util/generic/scope.h>
 
 using NYT::Format;
@@ -23,9 +20,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TWebAssemblyTest
-    : public ::testing::Test
-{ };
+class TWebAssemblyTest: public ::testing::Test {};
 
 TEST_F(TWebAssemblyTest, Create)
 {
@@ -39,31 +34,54 @@ TEST_F(TWebAssemblyTest, StandardTagSection)
 {
     // Type 1 is the tag signature. Type 0 makes an accidentally hardcoded index visible.
     const std::vector<WAVM::U8> binary = {
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-        0x01, 0x08, 0x02, 0x60, 0x00, 0x00, 0x60, 0x01, 0x7f, 0x00,
-        0x02, 0x08, 0x01, 0x01, 'm', 0x01, 't', 0x04, 0x00, 0x01,
-        0x0d, 0x03, 0x01, 0x00, 0x01,
+        0x00,
+        0x61,
+        0x73,
+        0x6d,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x08,
+        0x02,
+        0x60,
+        0x00,
+        0x00,
+        0x60,
+        0x01,
+        0x7f,
+        0x00,
+        0x02,
+        0x08,
+        0x01,
+        0x01,
+        'm',
+        0x01,
+        't',
+        0x04,
+        0x00,
+        0x01,
+        0x0d,
+        0x03,
+        0x01,
+        0x00,
+        0x01,
     };
 
     WAVM::IR::Module module;
     WAVM::WASM::LoadError error;
-    ASSERT_TRUE(WAVM::WASM::loadBinaryModule(binary.data(), binary.size(), module, &error))
-        << error.message;
+    ASSERT_TRUE(WAVM::WASM::loadBinaryModule(binary.data(), binary.size(), module, &error)) << error.message;
     ASSERT_EQ(module.exceptionTypes.imports.size(), 1);
     ASSERT_EQ(module.exceptionTypes.defs.size(), 1);
-    EXPECT_EQ(module.exceptionTypes.imports[0].type.params,
-              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
-    EXPECT_EQ(module.exceptionTypes.defs[0].type.params,
-              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
+    EXPECT_EQ(module.exceptionTypes.imports[0].type.params, WAVM::IR::TypeTuple({ WAVM::IR::ValueType::i32 }));
+    EXPECT_EQ(module.exceptionTypes.defs[0].type.params, WAVM::IR::TypeTuple({ WAVM::IR::ValueType::i32 }));
 
     const auto saved = WAVM::WASM::saveBinaryModule(module);
     WAVM::IR::Module reloaded;
-    ASSERT_TRUE(WAVM::WASM::loadBinaryModule(saved.data(), saved.size(), reloaded, &error))
-        << error.message;
-    EXPECT_EQ(reloaded.exceptionTypes.imports[0].type.params,
-              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
-    EXPECT_EQ(reloaded.exceptionTypes.defs[0].type.params,
-              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
+    ASSERT_TRUE(WAVM::WASM::loadBinaryModule(saved.data(), saved.size(), reloaded, &error)) << error.message;
+    EXPECT_EQ(reloaded.exceptionTypes.imports[0].type.params, WAVM::IR::TypeTuple({ WAVM::IR::ValueType::i32 }));
+    EXPECT_EQ(reloaded.exceptionTypes.defs[0].type.params, WAVM::IR::TypeTuple({ WAVM::IR::ValueType::i32 }));
 }
 
 TEST_F(TWebAssemblyTest, ThrowAndCatch)
@@ -649,10 +667,10 @@ TEST_F(TWebAssemblyTest, DynamicLinkingWeakSymbols2)
     };
 
     auto parameters = std::vector<std::pair<std::string, int>>{
-        {"Foo", 0},
-        {"Bar", 1},
-        {"Baz", 2},
-        {"Qux", 3},
+        { "Foo", 0 },
+        { "Bar", 1 },
+        { "Baz", 2 },
+        { "Qux", 3 },
     };
 
     for (auto& [name, value] : parameters) {
@@ -1765,5 +1783,5 @@ TEST_F(TWebAssemblyTest, SpinlockDeadlock)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace
-} // namespace NYdb::NWasm
+}   // namespace
+}   // namespace NYdb::NWasm

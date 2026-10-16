@@ -3,20 +3,17 @@
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 
+#include <google/protobuf/any.pb.h>
+#include <library/cpp/monlib/metrics/metric_type.h>
+#include <util/string/split.h>
 #include <yt/yql/providers/ytflow/expr_nodes/yql_ytflow_expr_nodes.h>
 #include <yt/yql/providers/ytflow/integration/proto/solomon.pb.h>
-
-#include <library/cpp/monlib/metrics/metric_type.h>
-
-#include <google/protobuf/any.pb.h>
-
-#include <util/string/split.h>
 
 namespace NYql {
 
 using namespace NNodes;
 
-class TSolomonYtflowIntegration : public TEmptyYtflowIntegration {
+class TSolomonYtflowIntegration: public TEmptyYtflowIntegration {
 public:
     TSolomonYtflowIntegration(const TSolomonState::TPtr& state)
         : State_(state.Get())
@@ -46,12 +43,14 @@ public:
         auto writeToShard = maybeWriteToShard.Cast();
         const auto tokenName = "cluster:default_" + writeToShard.DataSink().Cluster().StringValue();
 
+        // clang-format off
         return Build<TYtflowWriteWrap>(ctx, write->Pos())
             .Input(writeToShard)
             .Token<TCoSecureParam>()
                 .Name().Build(tokenName)
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr GetReadWorld(const TExprNode& /*read*/, TExprContext& /*ctx*/) override {
@@ -67,10 +66,7 @@ public:
     TExprNode::TPtr UpdateWriteWorld(const TExprNode::TPtr& write, const TExprNode::TPtr& world, TExprContext& ctx) override {
         auto maybeWriteToShard = TMaybeNode<TSoWriteToShard>(write);
         YQL_ENSURE(maybeWriteToShard);
-        return Build<TSoWriteToShard>(ctx, write->Pos())
-            .InitFrom(maybeWriteToShard.Cast())
-            .World(world)
-            .Done().Ptr();
+        return Build<TSoWriteToShard>(ctx, write->Pos()).InitFrom(maybeWriteToShard.Cast()).World(world).Done().Ptr();
     }
 
     TExprNode::TPtr GetWriteContent(const TExprNode& write, TExprContext& /*ctx*/) override {
@@ -79,28 +75,19 @@ public:
         return maybeWriteToShard.Cast().Input().Ptr();
     }
 
-    TExprNode::TPtr UpdateWriteContent(
-        const TExprNode::TPtr& write,
-        const TExprNode::TPtr& content,
-        TExprContext& ctx
-    ) override {
+    TExprNode::TPtr UpdateWriteContent(const TExprNode::TPtr& write, const TExprNode::TPtr& content, TExprContext& ctx) override {
         auto maybeWriteToShard = TMaybeNode<TSoWriteToShard>(write);
         YQL_ENSURE(maybeWriteToShard);
-        return Build<TSoWriteToShard>(ctx, write->Pos())
-            .InitFrom(maybeWriteToShard.Cast())
-            .Input(content)
-            .Done().Ptr();
+        return Build<TSoWriteToShard>(ctx, write->Pos()).InitFrom(maybeWriteToShard.Cast()).Input(content).Done().Ptr();
     }
 
-    void FillSourceSettings(
-        const TExprNode& /*source*/, ::google::protobuf::Any& /*settings*/, TExprContext& /*ctx*/
-    ) override {
+    void FillSourceSettings(const TExprNode& /*source*/, ::google::protobuf::Any& /*settings*/, TExprContext& /*ctx*/
+        ) override {
         YQL_ENSURE(false, "Method " << __FUNCTION__ << " is not implemented");
     }
 
-    void FillSinkSettings(
-        const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
-    ) override {
+    void FillSinkSettings(const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
+        ) override {
         auto maybeWriteToShard = TMaybeNode<TSoWriteToShard>(&sink);
         YQL_ENSURE(maybeWriteToShard);
 
@@ -133,8 +120,7 @@ public:
                 case NUdf::TDataType<ui64>::Id: {
                     auto* metric = sinkSettings.AddMetrics();
                     metric->SetMetricValueColumn(itemName);
-                    metric->SetMetricType(TString(
-                        NMonitoring::MetricTypeToStr(NMonitoring::EMetricType::COUNTER)));
+                    metric->SetMetricType(TString(NMonitoring::MetricTypeToStr(NMonitoring::EMetricType::COUNTER)));
                     break;
                 }
                 case NUdf::TDataType<i8>::Id:
@@ -143,16 +129,14 @@ public:
                 case NUdf::TDataType<i64>::Id: {
                     auto* metric = sinkSettings.AddMetrics();
                     metric->SetMetricValueColumn(itemName);
-                    metric->SetMetricType(TString(
-                        NMonitoring::MetricTypeToStr(NMonitoring::EMetricType::IGAUGE)));
+                    metric->SetMetricType(TString(NMonitoring::MetricTypeToStr(NMonitoring::EMetricType::IGAUGE)));
                     break;
                 }
                 case NUdf::TDataType<float>::Id:
                 case NUdf::TDataType<double>::Id: {
                     auto* metric = sinkSettings.AddMetrics();
                     metric->SetMetricValueColumn(itemName);
-                    metric->SetMetricType(TString(
-                        NMonitoring::MetricTypeToStr(NMonitoring::EMetricType::GAUGE)));
+                    metric->SetMetricType(TString(NMonitoring::MetricTypeToStr(NMonitoring::EMetricType::GAUGE)));
                     break;
                 }
             }
@@ -164,14 +148,10 @@ public:
         // TSolomonSinkMessage carries neither a cluster type nor an auth mode, so this
         // path cannot select the native endpoint and Bearer authentication a Monium
         // project needs. Refuse instead of writing somewhere else.
-        YQL_ENSURE(!NSo::IsMoniumProject(*clusterSettings),
-            "Writing into a Monium project is not supported in ytflow mode");
+        YQL_ENSURE(!NSo::IsMoniumProject(*clusterSettings), "Writing into a Monium project is not supported in ytflow mode");
         TString endpoint = (clusterSettings->GetUseSsl() ? "https://" : "http://") + clusterSettings->GetCluster();
         sinkSettings.SetEndpoint(std::move(endpoint));
-        auto shardPath = StringSplitter(writeToShard.Shard().StringValue())
-            .Split('/')
-            .SkipEmpty()
-            .ToList<TString>();
+        auto shardPath = StringSplitter(writeToShard.Shard().StringValue()).Split('/').SkipEmpty().ToList<TString>();
         YQL_ENSURE(shardPath.size() == 3);
         sinkSettings.SetProject(shardPath[0]);
         sinkSettings.SetCluster(shardPath[1]);
@@ -189,4 +169,4 @@ THolder<IYtflowIntegration> CreateSolomonYtflowIntegration(const TSolomonState::
     return MakeHolder<TSolomonYtflowIntegration>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

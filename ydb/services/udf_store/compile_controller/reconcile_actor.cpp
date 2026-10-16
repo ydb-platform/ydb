@@ -1,8 +1,5 @@
-#include "reconcile_actor.h"
-
 #include "private_events.h"
-
-#include <ydb/services/udf_store/table_query.h>
+#include "reconcile_actor.h"
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -11,6 +8,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/request/common.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
+#include <ydb/services/udf_store/table_query.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
@@ -24,31 +22,26 @@ namespace {
 //! never replies would freeze that platform's artifact view until the leader moves.
 constexpr TDuration ReconcileTimeout = TDuration::Minutes(5);
 
-class TReconcileActor : public NActors::TActorBootstrapped<TReconcileActor> {
+class TReconcileActor: public NActors::TActorBootstrapped<TReconcileActor> {
 public:
-    TReconcileActor(
-        const NActors::TActorId& replyTo,
-        const TString& cpuSpec,
-        const TString& artifactTablePath)
+    TReconcileActor(const NActors::TActorId& replyTo, const TString& cpuSpec, const TString& artifactTablePath)
         : ReplyTo_(replyTo)
         , CpuSpec_(cpuSpec)
         , ArtifactTablePath_(artifactTablePath)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TReconcileActor::StateMain);
         Schedule(ReconcileTimeout, new NActors::TEvents::TEvWakeup());
 
         auto request = NMetadata::NRequest::TDialogYQLRequest::TRequest();
-        request.mutable_query()->set_yql_text(
-            NTableQuery::BuildSelectArtifactKeysQuery(ArtifactTablePath_));
+        request.mutable_query()->set_yql_text(NTableQuery::BuildSelectArtifactKeysQuery(ArtifactTablePath_));
         request.mutable_query_cache_policy()->set_keep_in_cache(true);
         request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
 
-        auto controller = std::make_shared<
-            NMetadata::NRequest::TNaiveExternalController<NMetadata::NRequest::TDialogYQLRequest>>(SelfId());
-        NMetadata::NRequest::TYQLRequestExecutor::Execute(
-            std::move(request), NACLib::TUserToken("metadata@system", {}), controller);
+        auto controller = std::make_shared<NMetadata::NRequest::TNaiveExternalController<NMetadata::NRequest::TDialogYQLRequest>>(SelfId());
+        NMetadata::NRequest::TYQLRequestExecutor::Execute(std::move(request), NACLib::TUserToken("metadata@system", {}), controller);
     }
 
     STATEFN(StateMain) {
@@ -71,8 +64,7 @@ private:
         Reply(false, {});
     }
 
-    void HandleResult(
-        NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev)
+    void HandleResult(NMetadata::NRequest::TEvRequestResult<NMetadata::NRequest::TDialogYQLRequest>::TPtr& ev)
     {
         TVector<NTableQuery::TArtifactKeyRow> rows;
         if (!NTableQuery::ParseArtifactKeysResponse(ev->Get()->GetResult(), rows)) {
@@ -111,14 +103,11 @@ private:
     const TString ArtifactTablePath_;
 };
 
-} // namespace
+}   // namespace
 
-NActors::IActor* CreateReconcileActor(
-    const NActors::TActorId& replyTo,
-    const TString& cpuSpec,
-    const TString& artifactTablePath)
+NActors::IActor* CreateReconcileActor(const NActors::TActorId& replyTo, const TString& cpuSpec, const TString& artifactTablePath)
 {
     return new TReconcileActor(replyTo, cpuSpec, artifactTablePath);
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

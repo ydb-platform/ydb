@@ -1246,7 +1246,8 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
     using enum EJoinKind;
     switch (kind) {
     case Inner:
-        return new Wrapper<TPhysicalJoin{Inner}>(std::forward<Args>(args)...);
+        return DispatchHashJoinByMode<Wrapper, TResult, Inner>(preservedSide, isGrid,
+                                                               std::forward<Args>(args)...);
     case LeftOnly:
         return DispatchHashJoinByMode<Wrapper, TResult, LeftOnly>(preservedSide, isGrid,
                                                                   std::forward<Args>(args)...);
@@ -1257,7 +1258,8 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
         return DispatchHashJoinByMode<Wrapper, TResult, Left>(preservedSide, isGrid,
                                                               std::forward<Args>(args)...);
     case Cross:
-        return new Wrapper<TPhysicalJoin{Cross}>(std::forward<Args>(args)...);
+        return DispatchHashJoinByMode<Wrapper, TResult, Cross>(preservedSide, isGrid,
+                                                               std::forward<Args>(args)...);
     default:
         break;
     }

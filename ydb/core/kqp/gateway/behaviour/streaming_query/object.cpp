@@ -1,5 +1,5 @@
-#include "object.h"
 #include "behaviour.h"
+#include "object.h"
 
 namespace NKikimr::NKqp {
 
@@ -11,4 +11,4 @@ TString TStreamingQueryConfig::GetTypeId() {
     return "STREAMING_QUERY";
 }
 
-}  // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

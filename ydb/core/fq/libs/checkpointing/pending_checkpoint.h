@@ -2,7 +2,6 @@
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 
 #include <ydb/library/actors/core/actor.h>
-
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
 namespace NFq {
@@ -19,9 +18,7 @@ class TPendingCheckpoint {
     TPendingCheckpointStats Stats;
 
 public:
-    explicit TPendingCheckpoint(
-        THashSet<NActors::TActorId> toBeAcknowledged,
-        NYql::NDqProto::ECheckpointType type,
+    explicit TPendingCheckpoint(THashSet<NActors::TActorId> toBeAcknowledged, NYql::NDqProto::ECheckpointType type,
         TPendingCheckpointStats stats = TPendingCheckpointStats());
 
     void Acknowledge(const NActors::TActorId& actorId);
@@ -84,4 +81,4 @@ public:
     TMaybe<TCheckpointId> CheckpointId;
 };
 
-} // namespace NFq
+}   // namespace NFq

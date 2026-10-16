@@ -98,7 +98,7 @@ def test_read_queue_via_federated_sql(
 
         # --- 1. Create YT queue ---
         logger.info(f"STEP 1: Creating YT queue at {queue_path}...")
-        yt.create_queue(queue_path, data_column="data", tablet_count=partition_count)
+        yt.create_queue(queue_path, schema_columns=["{name=data;type_v3=utf8}"], tablet_count=partition_count)
         assert yt.exists(queue_path), f"Queue {queue_path} should exist after creation"
         logger.info("STEP 1: DONE - Queue created")
 
@@ -150,7 +150,7 @@ def test_read_queue_via_federated_sql(
             with pytest.raises(ydb.issues.GenericError, match=r'Unknown setting.*consumer'):
                 kikimr.ydb_client.query(f"""
                     SELECT * FROM `{eds_name}`.`{queue_path}`
-                    WITH (CONSUMER='{consumer_path}', FORMAT='raw')
+                    WITH (CONSUMER='{consumer_path}')
                 """)
             return
 
@@ -166,8 +166,8 @@ def test_read_queue_via_federated_sql(
                     kikimr.ydb_client.query(f"""
                         CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
                             INSERT INTO `{output_topic}`
-                            SELECT Data FROM `{eds_name}`.`{queue_path}`
-                            WITH (CONSUMER='{consumer_path}', FORMAT='raw');
+                            SELECT CAST(Unwrap(data) AS String) FROM `{eds_name}`.`{queue_path}`
+                            WITH (CONSUMER='{consumer_path}');
                         END DO;
                     """)
             finally:
@@ -176,7 +176,7 @@ def test_read_queue_via_federated_sql(
 
         result = kikimr.ydb_client.query(f"""
             SELECT * FROM `{eds_name}`.`{queue_path}`
-            WITH (CONSUMER='{consumer_path}', FORMAT='raw')
+            WITH (CONSUMER='{consumer_path}')
         """)
         logger.info("STEP 6: DONE - Query executed")
 
@@ -192,16 +192,7 @@ def test_read_queue_via_federated_sql(
         else:
             all_rows = result.rows
 
-        actual_data = sorted(
-            [
-                (
-                    row["Data"].decode('utf-8')
-                    if isinstance(row, dict) and "Data" in row
-                    else row.get("data", "") if isinstance(row, dict) else str(row.items[0].text_value, 'utf-8')
-                )
-                for row in all_rows
-            ]
-        )
+        actual_data = sorted(row["data"] for row in all_rows)
         expected_data = sorted([row["data"] for row in test_rows])
         logger.info(f"STEP 7: Actual data: {actual_data}")
         logger.info(f"STEP 7: Expected data: {expected_data}")
@@ -218,3 +209,100 @@ def test_read_queue_via_federated_sql(
             yt.remove(queue_path)
         except Exception:
             logger.warning("Failed to cleanup queue %s", queue_path, exc_info=True)
+
+
+@pytest.mark.parametrize("required_payload", [True, False])
+def test_read_queue_with_nullable_and_required_columns(
+    yt: YtClient,
+    kikimr: Kikimr,
+    entity_name,
+    required_payload: bool,
+) -> None:
+    """Check the raw YT rows and the SQL reader with a mixed queue schema."""
+    queue_path = f"//tmp/{entity_name('mixed_schema_queue')}"
+    consumer_path = f"//tmp/{entity_name('consumer')}"
+    eds_name = entity_name("eds")
+    payload_type = "utf8" if required_payload else "{type_name=optional;item=utf8}"
+    marker_type = "{type_name=optional;item=utf8}" if required_payload else "utf8"
+
+    try:
+        yt.create_queue(
+            queue_path,
+            schema_columns=[
+                f"{{name=payload;type_v3={payload_type}}}",
+                f"{{name=marker;type_v3={marker_type}}}",
+                "{name=id;type=int64;required=%true}",
+                "{name=count;type_v3={type_name=optional;item=uint32}}",
+            ],
+        )
+        rows = [
+            {"payload": "first", "marker": "present", "id": 1, "count": 7},
+            {"payload": "second", "id": 2} if required_payload else {"marker": "present", "id": 2},
+        ]
+        rows.append(dict(rows[0]))
+        yt.insert_rows(queue_path, rows)
+        yt.create_queue_consumer(consumer_path)
+        yt.register_consumer(queue_path, consumer_path, vital=True)
+        yt.mount_table(consumer_path, sync=True)
+
+        pulled = []
+        while len(pulled) < len(rows):
+            batch = yt.pull_queue_consumer(
+                consumer_path,
+                queue_path,
+                offset=len(pulled),
+                max_row_count=len(rows) - len(pulled),
+            )
+            assert batch, "YT queue returned no rows before all inserted rows were read"
+            pulled.extend(batch)
+        assert len(pulled) == len(rows)
+        assert pulled[0]["payload"] == "first"
+        if required_payload:
+            assert pulled[1]["payload"] == "second"
+            assert pulled[1].get("marker") is None
+        else:
+            assert pulled[1]["marker"] == "present"
+            assert pulled[1].get("payload") is None
+
+        kikimr.ydb_client.query(f"""
+            CREATE EXTERNAL DATA SOURCE `{eds_name}` WITH (
+                SOURCE_TYPE = 'YT',
+                LOCATION = '{yt.rpc_proxy_address}',
+                AUTH_METHOD = 'NONE'
+            );
+        """)
+        structured = kikimr.ydb_client.query(f"""
+            SELECT * FROM `{eds_name}`.`{queue_path}`
+            WITH (CONSUMER='{consumer_path}')
+        """)
+        structured_sets = structured if isinstance(structured, list) else [structured]
+        actual_rows = [
+            (row["payload"], row["marker"], row["id"], row["count"])
+            for result_set in structured_sets
+            for row in result_set.rows
+        ]
+        expected_rows = (
+            [("first", "present", 1, 7), ("second", None, 2, None)]
+            if required_payload
+            else [("first", "present", 1, 7), (None, "present", 2, None)]
+        )
+        expected_rows.append(expected_rows[0])
+        assert actual_rows == expected_rows
+
+        column_positions = {name: index for index, name in enumerate(("payload", "marker", "id", "count"))}
+        for projection, columns in [
+            ("payload, marker, id, count", ("payload", "marker", "id", "count")),
+            ("id, payload", ("id", "payload")),
+        ]:
+            projected = kikimr.ydb_client.query(f"""
+                SELECT {projection} FROM `{eds_name}`.`{queue_path}`
+                WITH (CONSUMER='{consumer_path}')
+            """)
+            projected_sets = projected if isinstance(projected, list) else [projected]
+            assert all(tuple(column.name for column in result_set.columns) == columns for result_set in projected_sets)
+            assert [
+                tuple(row[column] for column in columns) for result_set in projected_sets for row in result_set.rows
+            ] == [tuple(row[column_positions[column]] for column in columns) for row in expected_rows]
+    finally:
+        yt.remove(consumer_path)
+        yt.remove(queue_path)

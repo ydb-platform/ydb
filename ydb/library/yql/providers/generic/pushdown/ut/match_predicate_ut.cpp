@@ -1,78 +1,71 @@
 #include <ydb/library/yql/providers/generic/pushdown/yql_generic_match_predicate.h>
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <google/protobuf/text_format.h>
-
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
 
 namespace {
 
-    NYql::NConnector::NApi::TPredicate BuildPredicate(const TString& text) {
-        NYql::NConnector::NApi::TPredicate predicate;
-        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(text, &predicate));
-        return predicate;
-    }
+NYql::NConnector::NApi::TPredicate BuildPredicate(const TString& text) {
+    NYql::NConnector::NApi::TPredicate predicate;
+    UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(text, &predicate));
+    return predicate;
+}
 
-    NYql::NGenericPushDown::TColumnStatistics BuildTimestampStats(const TInstant& from, const TInstant& to) {
-        NYql::NGenericPushDown::TColumnStatistics statistics;
-        statistics.ColumnType.set_type_id(::Ydb::Type::TIMESTAMP);
-        statistics.Timestamp.ConstructInPlace();
-        statistics.Timestamp->lowValue = from;
-        statistics.Timestamp->highValue = to;
-        return statistics;
-    }
+NYql::NGenericPushDown::TColumnStatistics BuildTimestampStats(const TInstant& from, const TInstant& to) {
+    NYql::NGenericPushDown::TColumnStatistics statistics;
+    statistics.ColumnType.set_type_id(::Ydb::Type::TIMESTAMP);
+    statistics.Timestamp.ConstructInPlace();
+    statistics.Timestamp->lowValue = from;
+    statistics.Timestamp->highValue = to;
+    return statistics;
+}
 
-    TString UuidBytesFromHalves(ui64 low, ui64 high) {
-        TString bytes;
-        bytes.resize(16);
-        WriteUnaligned<ui64>(bytes.begin(), HostToLittle(low));
-        WriteUnaligned<ui64>(bytes.begin() + sizeof(ui64), HostToLittle(high));
-        return bytes;
-    }
+TString UuidBytesFromHalves(ui64 low, ui64 high) {
+    TString bytes;
+    bytes.resize(16);
+    WriteUnaligned<ui64>(bytes.begin(), HostToLittle(low));
+    WriteUnaligned<ui64>(bytes.begin() + sizeof(ui64), HostToLittle(high));
+    return bytes;
+}
 
-    NYql::NGenericPushDown::TColumnStatistics BuildUuidStats(const TString& from, const TString& to) {
-        NYql::NGenericPushDown::TColumnStatistics statistics;
-        statistics.ColumnType.set_type_id(::Ydb::Type::UUID);
-        statistics.UuidStats.ConstructInPlace();
-        statistics.UuidStats->lowValue = from;
-        statistics.UuidStats->highValue = to;
-        return statistics;
-    }
+NYql::NGenericPushDown::TColumnStatistics BuildUuidStats(const TString& from, const TString& to) {
+    NYql::NGenericPushDown::TColumnStatistics statistics;
+    statistics.ColumnType.set_type_id(::Ydb::Type::UUID);
+    statistics.UuidStats.ConstructInPlace();
+    statistics.UuidStats->lowValue = from;
+    statistics.UuidStats->highValue = to;
+    return statistics;
+}
 
-    TString ComparisonPredicate(const TString& column, const TString& operation, const TString& typeId, const TString& valueField) {
-        return TStringBuilder()
-            << "comparison {\n"
-            << "    operation: " << operation << "\n"
-            << "    left_value { column: \"" << column << "\" }\n"
-            << "    right_value {\n"
-            << "        typed_value {\n"
-            << "            type { type_id: " << typeId << " }\n"
-            << "            value { " << valueField << " }\n"
-            << "        }\n"
-            << "    }\n"
-            << "}\n";
-    }
+TString ComparisonPredicate(const TString& column, const TString& operation, const TString& typeId, const TString& valueField) {
+    return TStringBuilder() << "comparison {\n"
+                            << "    operation: " << operation << "\n"
+                            << "    left_value { column: \"" << column << "\" }\n"
+                            << "    right_value {\n"
+                            << "        typed_value {\n"
+                            << "            type { type_id: " << typeId << " }\n"
+                            << "            value { " << valueField << " }\n"
+                            << "        }\n"
+                            << "    }\n"
+                            << "}\n";
+}
 
-    std::pair<ui64, ui64> UuidHalves(const TString& bytes) {
-        const ui64 low = LittleToHost(ReadUnaligned<ui64>(bytes.data()));
-        const ui64 high = LittleToHost(ReadUnaligned<ui64>(bytes.data() + sizeof(ui64)));
-        return {low, high};
-    }
+std::pair<ui64, ui64> UuidHalves(const TString& bytes) {
+    const ui64 low = LittleToHost(ReadUnaligned<ui64>(bytes.data()));
+    const ui64 high = LittleToHost(ReadUnaligned<ui64>(bytes.data() + sizeof(ui64)));
+    return { low, high };
+}
 
-    bool MatchUuid(const TString& lo, const TString& hi, const TString& operation, const TString& constant) {
-        const auto halves = UuidHalves(constant);
-        return MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildUuidStats(lo, hi)}}},
-            BuildPredicate(ComparisonPredicate(
-                "col1",
-                operation,
-                "UUID",
-                TStringBuilder() << "low_128: " << halves.first << " high_128: " << halves.second)));
-    }
+bool MatchUuid(const TString& lo, const TString& hi, const TString& operation, const TString& constant) {
+    const auto halves = UuidHalves(constant);
+    return MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1", BuildUuidStats(lo, hi) } } },
+        BuildPredicate(
+            ComparisonPredicate("col1", operation, "UUID", TStringBuilder() << "low_128: " << halves.first << " high_128: " << halves.second)));
+}
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(MatchPredicate) {
     Y_UNIT_TEST(EmptyMatch) {
@@ -80,174 +73,155 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
     }
 
     Y_UNIT_TEST(EmptyWhere) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", NYql::NGenericPushDown::TColumnStatistics{}},
-                                                                                             {"col2", NYql::NGenericPushDown::TColumnStatistics{}}}},
-                                   NYql::NConnector::NApi::TPredicate{}));
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{
+                { { "col1", NYql::NGenericPushDown::TColumnStatistics{} }, { "col2", NYql::NGenericPushDown::TColumnStatistics{} } } },
+            NYql::NConnector::NApi::TPredicate{}));
     }
 
     Y_UNIT_TEST(Between) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
-                                   BuildPredicate(
-                                       R"proto(
-                                between {
-                                    value {
-                                        column: "col1"
-                                    }
-                                    least {
-                                        typed_value {
-                                            type {
-                                                type_id: TIMESTAMP
-                                            }
-                                            value {
-                                                int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
-                                            }
-                                        }
-                                    }
-                                    greatest {
-                                        typed_value {
-                                            type {
-                                                type_id: TIMESTAMP
-                                            }
-                                            value {
-                                                int64_value: 1709294401000000 # 2024-03-01T12:00:01.000Z
-                                            }
-                                        }
-                                    }
-                                }
-                            )proto")));
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1",
+                BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z")) } } },
+            BuildPredicate(
+                R"pb(
+                    between {
+                      value { column: "col1" }
+                      least {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709290801000000  # 2024-03-01T11:00:01.000Z
+                          }
+                        }
+                      }
+                      greatest {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709294401000000  # 2024-03-01T12:00:01.000Z
+                          }
+                        }
+                      }
+                    }
+                )pb")));
     }
 
     Y_UNIT_TEST(BetweenReversed) {
-        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
-                                    BuildPredicate(
-                                        R"proto(
-                                 between {
-                                     value {
-                                         column: "col1"
-                                     }
-                                     least {
-                                         typed_value {
-                                             type {
-                                                 type_id: TIMESTAMP
-                                             }
-                                             value {
-                                                 int64_value: 1709294401000000 # 2024-03-01T12:00:01.000Z
-                                             }
-                                         }
-                                     }
-                                     greatest {
-                                         typed_value {
-                                             type {
-                                                 type_id: TIMESTAMP
-                                             }
-                                             value {
-                                                 int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
-                                             }
-                                         }
-                                     }
-                                 }
-                             )proto")));
+        UNIT_ASSERT(!MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1",
+                BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z")) } } },
+            BuildPredicate(
+                R"pb(
+                    between {
+                      value { column: "col1" }
+                      least {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709294401000000  # 2024-03-01T12:00:01.000Z
+                          }
+                        }
+                      }
+                      greatest {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709290801000000  # 2024-03-01T11:00:01.000Z
+                          }
+                        }
+                      }
+                    }
+                )pb")));
     }
 
     Y_UNIT_TEST(BetweenReversedNoStatistics) {
-        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{},
-                                    BuildPredicate(
-                                        R"proto(
-                                 between {
-                                     value {
-                                         column: "col1"
-                                     }
-                                     least {
-                                         typed_value {
-                                             type {
-                                                 type_id: TIMESTAMP
-                                             }
-                                             value {
-                                                 int64_value: 1709294401000000 # 2024-03-01T12:00:01.000Z
-                                             }
-                                         }
-                                     }
-                                     greatest {
-                                         typed_value {
-                                             type {
-                                                 type_id: TIMESTAMP
-                                             }
-                                             value {
-                                                 int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
-                                             }
-                                         }
-                                     }
-                                 }
-                             )proto")));
+        UNIT_ASSERT(!MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{}, BuildPredicate(
+                                                                            R"pb(
+                                                                                between {
+                                                                                  value { column: "col1" }
+                                                                                  least {
+                                                                                    typed_value {
+                                                                                      type { type_id: TIMESTAMP }
+                                                                                      value {
+                                                                                        int64_value: 1709294401000000  # 2024-03-01T12:00:01.000Z
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                  greatest {
+                                                                                    typed_value {
+                                                                                      type { type_id: TIMESTAMP }
+                                                                                      value {
+                                                                                        int64_value: 1709290801000000  # 2024-03-01T11:00:01.000Z
+                                                                                      }
+                                                                                    }
+                                                                                  }
+                                                                                }
+                                                                            )pb")));
     }
 
     Y_UNIT_TEST(Less) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
-                                   BuildPredicate(
-                                       R"proto(
-                                comparison {
-                                    operation: L
-                                    left_value {
-                                        column: "col1"
-                                    }
-                                    right_value {
-                                        typed_value {
-                                            type {
-                                                type_id: TIMESTAMP
-                                            }
-                                            value {
-                                                int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
-                                            }
-                                        }
-                                    }
-                                }
-                            )proto")));
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1",
+                BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z")) } } },
+            BuildPredicate(
+                R"pb(
+                    comparison {
+                      operation: L
+                      left_value { column: "col1" }
+                      right_value {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709290801000000  # 2024-03-01T11:00:01.000Z
+                          }
+                        }
+                      }
+                    }
+                )pb")));
     }
 
     Y_UNIT_TEST(NotLess) {
-        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-02T00:00:00Z"), TInstant::ParseIso8601("2024-03-02T23:59:59Z"))}}},
-                                    BuildPredicate(
-                                        R"proto(
-                                    comparison {
-                                        operation: L
-                                        left_value {
-                                            column: "col1"
-                                        }
-                                        right_value {
-                                            typed_value {
-                                                type {
-                                                    type_id: TIMESTAMP
-                                                }
-                                                value {
-                                                    int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
-                                                }
-                                            }
-                                        }
-                                    }
-                                )proto")));
+        UNIT_ASSERT(!MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1",
+                BuildTimestampStats(TInstant::ParseIso8601("2024-03-02T00:00:00Z"), TInstant::ParseIso8601("2024-03-02T23:59:59Z")) } } },
+            BuildPredicate(
+                R"pb(
+                    comparison {
+                      operation: L
+                      left_value { column: "col1" }
+                      right_value {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709290801000000  # 2024-03-01T11:00:01.000Z
+                          }
+                        }
+                      }
+                    }
+                )pb")));
     }
 
     Y_UNIT_TEST(RightColumn) {
-        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
-                                   BuildPredicate(
-                                       R"proto(
-                                comparison {
-                                    operation: G
-                                    left_value {
-                                        typed_value {
-                                            type {
-                                                type_id: TIMESTAMP
-                                            }
-                                            value {
-                                                int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
-                                            }
-                                        }
-                                    }
-                                    right_value {
-                                        column: "col1"
-                                    }
-                                }
-                            )proto")));
+        UNIT_ASSERT(MatchPredicate(
+            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1",
+                BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z")) } } },
+            BuildPredicate(
+                R"pb(
+                    comparison {
+                      operation: G
+                      left_value {
+                        typed_value {
+                          type { type_id: TIMESTAMP }
+                          value {
+                            int64_value: 1709290801000000  # 2024-03-01T11:00:01.000Z
+                          }
+                        }
+                      }
+                      right_value { column: "col1" }
+                    }
+                )pb")));
     }
 
     Y_UNIT_TEST(UuidStatsComparators) {
@@ -275,56 +249,48 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
         const auto belowH = UuidHalves(below);
         const auto missHiH = UuidHalves(TString(16, '\x05'));
         const auto aboveH = UuidHalves(above);
-        UNIT_ASSERT(!MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildUuidStats(lo, hi)}}},
-            BuildPredicate(
-                TStringBuilder() << "between {\n"
-                                 << "    value { column: \"col1\" }\n"
-                                 << "    least { typed_value { type { type_id: UUID } value { low_128: " << belowH.first
-                                 << " high_128: " << belowH.second << " } } }\n"
-                                 << "    greatest { typed_value { type { type_id: UUID } value { low_128: " << missHiH.first
-                                 << " high_128: " << missHiH.second << " } } }\n"
-                                 << "}\n")));
-        UNIT_ASSERT(MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildUuidStats(lo, hi)}}},
-            BuildPredicate(
-                TStringBuilder() << "between {\n"
-                                 << "    value { column: \"col1\" }\n"
-                                 << "    least { typed_value { type { type_id: UUID } value { low_128: " << insideH.first
-                                 << " high_128: " << insideH.second << " } } }\n"
-                                 << "    greatest { typed_value { type { type_id: UUID } value { low_128: " << aboveH.first
-                                 << " high_128: " << aboveH.second << " } } }\n"
-                                 << "}\n")));
+        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1", BuildUuidStats(lo, hi) } } },
+            BuildPredicate(TStringBuilder() << "between {\n"
+                                            << "    value { column: \"col1\" }\n"
+                                            << "    least { typed_value { type { type_id: UUID } value { low_128: " << belowH.first
+                                            << " high_128: " << belowH.second << " } } }\n"
+                                            << "    greatest { typed_value { type { type_id: UUID } value { low_128: " << missHiH.first
+                                            << " high_128: " << missHiH.second << " } } }\n"
+                                            << "}\n")));
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1", BuildUuidStats(lo, hi) } } },
+            BuildPredicate(TStringBuilder() << "between {\n"
+                                            << "    value { column: \"col1\" }\n"
+                                            << "    least { typed_value { type { type_id: UUID } value { low_128: " << insideH.first
+                                            << " high_128: " << insideH.second << " } } }\n"
+                                            << "    greatest { typed_value { type { type_id: UUID } value { low_128: " << aboveH.first
+                                            << " high_128: " << aboveH.second << " } } }\n"
+                                            << "}\n")));
 
-        UNIT_ASSERT(MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildUuidStats(lo, hi)}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1", BuildUuidStats(lo, hi) } } },
             BuildPredicate(ComparisonPredicate("col1", "EQ", "INT64", "int64_value: 1"))));
     }
 
     Y_UNIT_TEST(UuidBetweenInvalidStatsKeepsGroup) {
         const auto bound = UuidHalves(TString(16, '\x30'));
-        const auto predicate = BuildPredicate(TStringBuilder()
-            << "between { value { column: \"col1\" }"
-            << " least { typed_value { type { type_id: UUID } value { low_128: " << bound.first
-            << " high_128: " << bound.second << " } } }"
-            << " greatest { typed_value { type { type_id: UUID } value { low_128: " << bound.first
-            << " high_128: " << bound.second << " } } } }");
-        for (const size_t lowSize : {0, 8, 16, 32}) {
-            for (const size_t highSize : {0, 8, 16, 32}) {
+        const auto predicate =
+            BuildPredicate(TStringBuilder() << "between { value { column: \"col1\" }"
+                                            << " least { typed_value { type { type_id: UUID } value { low_128: " << bound.first
+                                            << " high_128: " << bound.second << " } } }"
+                                            << " greatest { typed_value { type { type_id: UUID } value { low_128: " << bound.first
+                                            << " high_128: " << bound.second << " } } } }");
+        for (const size_t lowSize : { 0, 8, 16, 32 }) {
+            for (const size_t highSize : { 0, 8, 16, 32 }) {
                 const auto stats = BuildUuidStats(TString(lowSize, '\x10'), TString(highSize, '\x20'));
-                const bool matched = MatchPredicate(
-                    TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate);
+                const bool matched = MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { "col1", stats } }, predicate);
                 UNIT_ASSERT_VALUES_EQUAL(matched, lowSize != 16 || highSize != 16);
             }
         }
         auto stats = BuildUuidStats(TString(16, '\x10'), TString(16, '\x20'));
         stats.UuidStats->lowValue.Clear();
-        UNIT_ASSERT(MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate));
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { "col1", stats } }, predicate));
         stats.UuidStats->lowValue = TString(16, '\x10');
         stats.UuidStats->highValue.Clear();
-        UNIT_ASSERT(MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{"col1", stats}}, predicate));
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { "col1", stats } }, predicate));
     }
 
     Y_UNIT_TEST(UuidStatsWrongLengthKeepsGroup) {
@@ -334,13 +300,9 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
         const TString inside(16, '\x15');
         const auto insideH = UuidHalves(inside);
 
-        UNIT_ASSERT(MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildUuidStats(shortLo, shortHi)}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1", BuildUuidStats(shortLo, shortHi) } } },
             BuildPredicate(ComparisonPredicate(
-                "col1",
-                "EQ",
-                "UUID",
-                TStringBuilder() << "low_128: " << insideH.first << " high_128: " << insideH.second))));
+                "col1", "EQ", "UUID", TStringBuilder() << "low_128: " << insideH.first << " high_128: " << insideH.second))));
     }
 
     Y_UNIT_TEST(UuidStatsMissingMinMaxKeepsGroup) {
@@ -352,12 +314,8 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
 
         const TString inside(16, '\x15');
         const auto insideH = UuidHalves(inside);
-        UNIT_ASSERT(MatchPredicate(
-            TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", stats}}},
+        UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{ { { "col1", stats } } },
             BuildPredicate(ComparisonPredicate(
-                "col1",
-                "EQ",
-                "UUID",
-                TStringBuilder() << "low_128: " << insideH.first << " high_128: " << insideH.second))));
+                "col1", "EQ", "UUID", TStringBuilder() << "low_128: " << insideH.first << " high_128: " << insideH.second))));
     }
-} // Y_UNIT_TEST_SUITE(MatchPredicate)
+}   // Y_UNIT_TEST_SUITE(MatchPredicate)

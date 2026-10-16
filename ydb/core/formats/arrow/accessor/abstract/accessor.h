@@ -262,6 +262,9 @@ private:
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
         return std::nullopt;
     }
+    virtual std::optional<bool> DoHasNulls() const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -363,6 +366,11 @@ public:
             AFL_VERIFY(value);
         }
         return result;
+    }
+
+    // nullopt: cannot cheaply determine, unknown; false: no null values; true: at least one null
+    std::optional<bool> HasNulls() const {
+        return DoHasNulls();
     }
 
     virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {

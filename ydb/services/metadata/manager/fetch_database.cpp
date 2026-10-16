@@ -1,24 +1,24 @@
 #include "fetch_database.h"
 
-#include <library/cpp/retry/retry_policy.h>
-
 #include <ydb/core/base/appdata_fwd.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 
+#include <library/cpp/retry/retry_policy.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
 namespace {
 
-class TDatabaseFetcherActor : public TActorBootstrapped<TDatabaseFetcherActor> {
+class TDatabaseFetcherActor: public TActorBootstrapped<TDatabaseFetcherActor> {
     using TBase = TActorBootstrapped<TDatabaseFetcherActor>;
     using TRetryPolicy = IRetryPolicy<>;
 
 public:
     explicit TDatabaseFetcherActor(const TString& database)
         : Database(database)
-    {}
+    {
+    }
 
     void Registered(TActorSystem* sys, const TActorId& owner) override {
         TBase::Registered(sys, owner);
@@ -64,11 +64,8 @@ public:
 
 private:
     void StartRequest() {
-        auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
-            {{}},
-            Database ? Database : AppData()->TenantName,
-            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})
-        );
+        auto event = NTableCreator::BuildSchemeCacheNavigateRequest({ {} }, Database ? Database : AppData()->TenantName,
+            MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}));
         event->ResultSet[0].Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(event.Release()), IEventHandle::FlagTrackDelivery);
     }
@@ -76,11 +73,11 @@ private:
     bool ScheduleRetry() {
         if (!RetryState) {
             RetryState = TRetryPolicy::GetFixedIntervalPolicy(
-                  [](){return ERetryErrorClass::ShortRetry;}
-                , TDuration::MilliSeconds(100)
-                , TDuration::MilliSeconds(500)
-                , 100
-            )->CreateRetryState();;
+                []() {
+                    return ERetryErrorClass::ShortRetry;
+                }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(500), 100)
+                             ->CreateRetryState();
+            ;
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay()) {
@@ -103,10 +100,10 @@ private:
     bool Serverless = false;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 IActor* CreateDatabaseFetcherActor(const TString& database) {
     return new TDatabaseFetcherActor(database);
 }
 
-}  // NKikimr::NMetadata::NModifications
+}   // namespace NKikimr::NMetadata::NModifications

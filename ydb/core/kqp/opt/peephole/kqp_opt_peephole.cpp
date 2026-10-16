@@ -458,12 +458,12 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                     isBlockChannel = alreadyBlock || canPropagateBlock;
                 }
                 if (isBlockChannel) {
-                    TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
-                        .Callable("WideFromBlocks")
-                            .Add(0, newArg.Ptr())
-                        .Seal()
-                        .Build();
-
+                    auto newArgNode = newArg.Ptr();
+                    if (!IsWideSequenceBlockType(*oldArg.Ref().GetTypeAnn())) {
+                        newArgNode = Build<TCoWideFromBlocks>(ctx, oldArg.Pos())
+                            .Input(newArg)
+                            .Done().Ptr();
+                    }
                     argsMap.emplace(oldArg.Raw(), newArgNode);
 
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();

@@ -458,13 +458,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                     isBlockChannel = alreadyBlock || canPropagateBlock;
                 }
                 if (isBlockChannel) {
-                    auto newArgNode = newArg.Ptr();
-                    if (!IsWideSequenceBlockType(*oldArg.Ref().GetTypeAnn())) {
-                        newArgNode = Build<TCoWideFromBlocks>(ctx, oldArg.Pos())
-                            .Input(newArg)
-                            .Done().Ptr();
-                    }
-                    argsMap.emplace(oldArg.Raw(), newArgNode);
+                    argsMap.emplace(oldArg.Raw(), KqpRebuildBlockInput(oldArg, newArg, ctx).Ptr());
 
                     auto stageUid = connection.Cast().Output().Stage().Ref().UniqueId();
 
@@ -716,6 +710,13 @@ private:
 };
 
 } // anonymous namespace
+
+TExprBase KqpRebuildBlockInput(const TCoArgument& oldArg, const TCoArgument& newArg, TExprContext& ctx) {
+    if (IsWideSequenceBlockType(*oldArg.Ref().GetTypeAnn())) {
+        return newArg;
+    }
+    return Build<TCoWideFromBlocks>(ctx, oldArg.Pos()).Input(newArg).Done();
+}
 
 TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, TExprContext& ctx,
     TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config,

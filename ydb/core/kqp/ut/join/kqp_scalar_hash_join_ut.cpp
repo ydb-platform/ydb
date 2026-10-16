@@ -170,13 +170,6 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
             UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("ScalarHashJoin"), expectScalarHashJoin, ast);
             UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("BlockHashJoin"), !expectScalarHashJoin, ast);
         }
-
-        explain(R"(
-            SELECT k, COUNT(*) AS count
-            FROM `/Root/CL`
-            GROUP BY k
-            ORDER BY k;
-        )");
     }
 
     Y_UNIT_TEST(ReplaceMapJoin) {

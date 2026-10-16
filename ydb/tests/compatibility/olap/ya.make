@@ -13,6 +13,7 @@ TEST_SRCS(
     test_compression.py
     test_encoding.py
     test_tiering.py
+    test_ttl_types.py
 )
 
 SIZE(LARGE)

@@ -10,6 +10,8 @@ extern "C" {
 #include <Python.h>
 #include <stdbool.h>
 
+#include "atomic_helpers.h"
+
 /* Implementation note.
 identity always has exact PyUnicode_Type type, not a subclass.
 It guarantees that identity hashing and comparison never calls
@@ -36,6 +38,22 @@ typedef struct entry {
 #define HT_MINSIZE 8
 #define HT_PERTURB_SHIFT 5
 
+#define HT_LOG_RESUME_SLOTS_MINSIZE 10
+/* Probe steps after perturb is 0 before resume slots are allocated */
+#define HT_RESUME_SLOTS_MIN_STEPS 32
+
+/* Py_NO_INLINE is 3.11+ */
+#if defined(__GNUC__) || defined(__clang__)
+#define HT_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define HT_COLD __attribute__((cold, noinline))
+#elif defined(_MSC_VER)
+#define HT_UNLIKELY(x) (x)
+#define HT_COLD __declspec(noinline)
+#else
+#define HT_UNLIKELY(x) (x)
+#define HT_COLD
+#endif
+
 typedef struct _htkeys {
     /* Size of the hash table (indices). It must be a power of 2. */
     uint8_t log2_size;
@@ -48,6 +66,15 @@ typedef struct _htkeys {
 
     /* Number of used entries in dk_entries. */
     Py_ssize_t nentries;
+
+    /* Allocated on the first long probe, see htkeys_resume_slots_bytes(). */
+    void* resume_slots;
+
+#ifdef Py_GIL_DISABLED
+    Py_ssize_t num_readers;
+
+    struct _htkeys* retired_next;
+#endif
 
     /* Actual hash table of dk_size entries. It holds indices in dk_entries,
        or DKIX_EMPTY(-1) or DKIX_DUMMY(-2).
@@ -94,10 +121,19 @@ htkeys_entries(const htkeys_t* dk)
     return (entry_t*)(&indices[index]);
 }
 
+#ifdef Py_GIL_DISABLED
+#define LOAD_INDEX(keys, size, idx)  \
+    atomic_load_int##size##_relaxed( \
+        &((const int##size##_t*)(keys->indices))[idx])
+#define STORE_INDEX(keys, size, idx, value)                                   \
+    atomic_store_int##size##_relaxed(&((int##size##_t*)(keys->indices))[idx], \
+                                     (int##size##_t)value)
+#else
 #define LOAD_INDEX(keys, size, idx) \
     ((const int##size##_t*)(keys->indices))[idx]
 #define STORE_INDEX(keys, size, idx, value) \
     ((int##size##_t*)(keys->indices))[idx] = (int##size##_t)value
+#endif
 
 /* lookup indices.  returns DKIX_EMPTY, DKIX_DUMMY, or ix >=0 */
 static inline Py_ssize_t
@@ -241,19 +277,41 @@ estimate_log2_keysize(Py_ssize_t n)
  * for the rationale of using log2_index_bytes=3 instead of 0.
  */
 static const htkeys_t empty_htkeys = {
-    0, /* log2_size */
-    3, /* log2_index_bytes */
-    0, /* usable (immutable) */
-    0, /* nentries */
-    {DKIX_EMPTY,
-     DKIX_EMPTY,
-     DKIX_EMPTY,
-     DKIX_EMPTY,
-     DKIX_EMPTY,
-     DKIX_EMPTY,
-     DKIX_EMPTY,
-     DKIX_EMPTY}, /* indices */
+    .log2_size = 0,
+    .log2_index_bytes = 3,
+    .usable = 0, /* immutable */
+    .nentries = 0,
+    .resume_slots = NULL,
+#ifdef Py_GIL_DISABLED
+    .num_readers = 0,
+    .retired_next = NULL,
+#endif
+    .indices = {DKIX_EMPTY,
+                DKIX_EMPTY,
+                DKIX_EMPTY,
+                DKIX_EMPTY,
+                DKIX_EMPTY,
+                DKIX_EMPTY,
+                DKIX_EMPTY,
+                DKIX_EMPTY},
 };
+
+/* resume_slots[i] is 0 or 1 + the last slot used by a probe that reached slot
+   i with perturb == 0. From there the probe sequence only depends on the slot
+   and slots never become empty again, so probing can resume. Stored like the
+   indices, uint16_t below 2**16 slots and uint32_t below 2**32, slot + 1 must
+   fit. */
+static inline size_t
+htkeys_resume_slots_bytes(uint8_t log2_size)
+{
+    if (log2_size < HT_LOG_RESUME_SLOTS_MINSIZE || log2_size >= 32) {
+        return 0;
+    }
+    if (log2_size < 16) {
+        return sizeof(uint16_t) << log2_size;
+    }
+    return sizeof(uint32_t) << log2_size;
+}
 
 static inline Py_ssize_t
 htkeys_sizeof(htkeys_t* keys)
@@ -297,8 +355,13 @@ htkeys_new(uint8_t log2_size)
 
     keys->log2_size = log2_size;
     keys->log2_index_bytes = log2_bytes;
+    keys->resume_slots = NULL;
     keys->nentries = 0;
     keys->usable = usable;
+#ifdef Py_GIL_DISABLED
+    keys->num_readers = 0;
+    keys->retired_next = NULL;
+#endif
     memset(&keys->indices[0], 0xff, ((size_t)1 << log2_bytes));
     memset(
         &keys->indices[(size_t)1 << log2_bytes], 0, sizeof(entry_t) * usable);
@@ -310,6 +373,9 @@ htkeys_free(htkeys_t* dk)
 {
     /* TODO: CPython uses freelist of key objects with unicode type
        and log2_size == PyDict_LOG_MINSIZE */
+    if (dk->resume_slots != NULL) {
+        PyMem_Free(dk->resume_slots);
+    }
     PyMem_Free(dk);
 }
 
@@ -323,7 +389,7 @@ _unicode_hash(PyObject* o)
 {
     assert(PyUnicode_CheckExact(o));
     PyASCIIObject* ascii = (PyASCIIObject*)o;
-    Py_hash_t hash = ascii->hash;
+    Py_hash_t hash = atomic_load_ssize_relaxed(&ascii->hash);
     if (hash == -1) {
         hash = PyUnicode_Type.tp_hash(o);
         if (hash == -1) {
@@ -333,6 +399,49 @@ _unicode_hash(PyObject* o)
     return hash & PY_SSIZE_T_MAX;
 }
 
+/* Values for the same key share a probe sequence, so without resume slots the
+   n-th one walks past the n - 1 before it. Called once perturb is 0 and
+   slot i is next to probe. Resume slots are only allocated once a probe here
+   is long, so tables without long chains don't pay for them. */
+HT_COLD static Py_ssize_t
+_htkeys_find_empty_slot_resume(htkeys_t* keys, size_t i)
+{
+    const size_t mask = htkeys_mask(keys);
+    const size_t start = i;
+    const bool small = keys->log2_size < 16;
+    void* resume_slots = keys->resume_slots;
+    if (resume_slots != NULL) {
+        size_t resume = small ? ((uint16_t*)resume_slots)[start]
+                              : ((uint32_t*)resume_slots)[start];
+        if (resume != 0) {
+            /* the resume slot is used, start after it */
+            i = ((resume - 1) * 5 + 1) & mask;
+        }
+    }
+    size_t steps = 0;
+    while (htkeys_get_index(keys, i) != DKIX_EMPTY) {
+        i = (i * 5 + 1) & mask;
+        steps++;
+    }
+    if (resume_slots == NULL) {
+        size_t nbytes = htkeys_resume_slots_bytes(keys->log2_size);
+        if (steps < HT_RESUME_SLOTS_MIN_STEPS || nbytes == 0) {
+            return (Py_ssize_t)i;
+        }
+        resume_slots = keys->resume_slots = PyMem_Malloc(nbytes);
+        if (resume_slots == NULL) {
+            return (Py_ssize_t)i;
+        }
+        memset(resume_slots, 0, nbytes);
+    }
+    if (small) {
+        ((uint16_t*)resume_slots)[start] = (uint16_t)(i + 1);
+    } else {
+        ((uint32_t*)resume_slots)[start] = (uint32_t)(i + 1);
+    }
+    return (Py_ssize_t)i;
+}
+
 /*
 Internal routine used by ht_resize() to build a hashtable of entries.
 */
@@ -340,37 +449,88 @@ static inline int
 htkeys_build_indices(htkeys_t* keys, entry_t* ep, Py_ssize_t n, bool update)
 {
     size_t mask = htkeys_mask(keys);
+    if (keys->resume_slots != NULL) {
+        memset(
+            keys->resume_slots, 0, htkeys_resume_slots_bytes(keys->log2_size));
+    }
     for (Py_ssize_t ix = 0; ix != n; ix++, ep++) {
         Py_hash_t hash = ep->hash;
+#ifdef Py_GIL_DISABLED
+        /* Unconditionally, not just when update: under free threading
+           a marked entry copied in here can belong to an entirely
+           different, concurrently-suspended _md_replace()/_md_update()
+           call (on some other key) that this resize's own update flag
+           knows nothing about -- see the comment in
+           _md_check_consistency(). Indexing it by its temporary marked
+           hash would place it somewhere its real hash's probe sequence
+           never looks, making it permanently unfindable once the
+           owning call unmarks it back. */
+        if (hash < 0) {
+            hash &= PY_SSIZE_T_MAX;
+        }
+#else
         if (update && hash < 0) {
             hash &= PY_SSIZE_T_MAX;
         }
+#endif
         size_t i = hash & mask;
         for (size_t perturb = hash; htkeys_get_index(keys, i) != DKIX_EMPTY;) {
             perturb >>= HT_PERTURB_SHIFT;
             i = mask & (i * 5 + perturb + 1);
+            if (HT_UNLIKELY(perturb == 0)) {
+                i = (size_t)_htkeys_find_empty_slot_resume(keys, i);
+                break;
+            }
         }
         htkeys_set_index(keys, i, ix);
     }
     return 0;
 }
 
+/* Uses keys, mask, i and perturb from the caller and returns. */
+#define _HT_FIND_EMPTY_SLOT(size)                           \
+    while (LOAD_INDEX(keys, size, i) != DKIX_EMPTY) {       \
+        perturb >>= HT_PERTURB_SHIFT;                       \
+        i = (i * 5 + perturb + 1) & mask;                   \
+        if (HT_UNLIKELY(perturb == 0)) {                    \
+            return _htkeys_find_empty_slot_resume(keys, i); \
+        }                                                   \
+    }                                                       \
+    return (Py_ssize_t)i;
+
 /* Internal function to find slot for an item from its hash
    when it is known that the key is not present in the dict.
+   The caller must fill the returned slot, resume slots skip past it.
+
+   Unswitched by index size by hand so the perturb check stays cheap.
  */
 static inline Py_ssize_t
 htkeys_find_empty_slot(htkeys_t* keys, Py_hash_t hash)
 {
     const size_t mask = htkeys_mask(keys);
     size_t i = hash & mask;
-    Py_ssize_t ix = htkeys_get_index(keys, i);
-    for (size_t perturb = hash; ix >= 0 || ix == DKIX_DUMMY;) {
-        perturb >>= HT_PERTURB_SHIFT;
-        i = (i * 5 + perturb + 1) & mask;
-        ix = htkeys_get_index(keys, i);
+    size_t perturb = (size_t)hash;
+    uint8_t log2size = keys->log2_size;
+    if (log2size < 8) {
+        while (LOAD_INDEX(keys, 8, i) != DKIX_EMPTY) {
+            perturb >>= HT_PERTURB_SHIFT;
+            i = (i * 5 + perturb + 1) & mask;
+        }
+        return (Py_ssize_t)i;
+    } else if (log2size < 16) {
+        _HT_FIND_EMPTY_SLOT(16)
     }
-    return i;
+#if SIZEOF_VOID_P > 4
+    else if (log2size >= 32) {
+        _HT_FIND_EMPTY_SLOT(64)
+    }
+#endif
+    else {
+        _HT_FIND_EMPTY_SLOT(32)
+    }
 }
+
+#undef _HT_FIND_EMPTY_SLOT
 
 /* Iterator over slots/indexes for given hash.
    N.B. The iterator MIGHT return the same slot

@@ -23,7 +23,7 @@
 
 #include <library/cpp/yt/misc/property.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 #include <optional>
@@ -260,7 +260,7 @@ private:
     std::atomic<bool> Serialized_ = false;
 
     std::atomic<bool> HeaderPrepared_ = false;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, HeaderPreparationLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, HeaderPreparationLock_);
     NProto::TRequestHeader Header_;
 
     mutable TSharedRefArray SerializedHeaderlessMessage_;

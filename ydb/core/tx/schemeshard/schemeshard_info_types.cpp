@@ -2268,6 +2268,14 @@ void TTableInfo::CopyPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Y_ABORT_UNLESS(Stats.Aggregated.RowCount == 0 && Stats.Aggregated.DataSize == 0);
     Stats.PartitionStats.clear();
     Stats.UpdatedStats.clear();
+    // New physical shard IDs: any history copied from the source table is keyed by stale
+    // shard idxs and must be dropped to keep PartitionSplitMergeStates keys subset of PartitionStats keys.
+    // NOTE: the corresponding pathId may still sit in TSchemeShard::TablesWithDeferredSplitMerge
+    // and in SplitMergeRevisitQueue with QueuedForRevisit=true. That cross-object cleanup is
+    // intentionally deferred and self-healing: UpdateSplitMergeCounters prunes stale membership
+    // entries, and the revisit wave clears QueuedForRevisit when DeferredShards is empty.
+    PartitionSplitMergeStates.clear();
+    TableSplitMergeState = TTableSplitMergeState{};
     Stats.Aggregated.PartCount = newPartitioning.size();
     Y_ABORT_UNLESS(SplitOpsInFlight.empty());
     ExpectedPartitionCount = newPartitioning.size();
@@ -2306,7 +2314,9 @@ void TTableInfo::ApplySplitMerge(
     TVector<TTableShardInfo>&& dstPartitions,
     const TVector<TShardIdx>& removedShards,
     ui64 splitFirstIdx,
-    TInstant now
+    TInstant now,
+    bool trackSplitMergeDemand,
+    bool loadSplitLineage
 ) {
     const ui64 kRemoved = removedShards.size();
     const ui64 kAdded = dstPartitions.size();
@@ -2364,11 +2374,201 @@ void TTableInfo::ApplySplitMerge(
         Partitions[i]->Position = i;
     }
 
+    // Split/merge history: subdivide/merge along the partition lineage. The history is kept
+    // in a SEPARATE map (not folded into TPartitionStats) precisely so it survives this
+    // transition -- Stats.PartitionStats was just zeroed for the dst shards above, which would
+    // otherwise wipe the lineage / hysteresis / fairness signal here. Children inherit the
+    // parent range's history. The empty() guard skips the O(removed+added) lookups entirely
+    // when no state was ever recorded -- except for a by-load split, where the persisted
+    // op signal (loadSplitLineage) must seed child state even with an empty map (restart
+    // case). Cleanup of removed shards' entries is deliberately NOT
+    // gated by trackSplitMergeDemand: after a flag toggle-off the map stays populated, and
+    // skipping cleanup would break the keys-subset-of-PartitionStats invariant. Only the
+    // parent-scan propagation is flag-gated.
+    if (!PartitionSplitMergeStates.empty() || loadSplitLineage) {
+        if (trackSplitMergeDemand) {
+            TInstant parentLastSplitTime;
+            TInstant parentLastMergeTime;
+            ui32 parentMaxLoadSplitLineageDepth = 0;
+            bool anyParentHistory = false;
+            for (const TShardIdx& s : removedShards) {
+                if (const auto* h = PartitionSplitMergeStates.FindPtr(s)) {
+                    anyParentHistory = true;
+                    parentLastSplitTime = Max(parentLastSplitTime, h->LastSplitTime);
+                    parentLastMergeTime = Max(parentLastMergeTime, h->LastMergeTime);
+                    parentMaxLoadSplitLineageDepth = Max(parentMaxLoadSplitLineageDepth, h->LoadSplitLineageDepth);
+                }
+            }
+
+            const bool isSplit = kAdded > kRemoved;
+            const bool isMerge = kAdded < kRemoved;
+            // After a SchemeShard restart PartitionSplitMergeStates is empty (in-memory
+            // only), so anyParentHistory is false even when the persisted op carries
+            // LoadSplitLineage == true (TxInFlightV2). Fire the propagation in that case
+            // too, treating the missing parent history as depth 0 -- otherwise the
+            // persisted by-load signal is dead on its intended restart path.
+            if (anyParentHistory || (isSplit && loadSplitLineage)) {
+                for (auto* dst : dstPtrs) {
+                    // Intentional insert: dst shards are brand-new IDs with no entries yet;
+                    // creating their state here IS the lineage propagation. Invariant-safe:
+                    // dst shards were just added to Stats.PartitionStats above.
+                    auto& h = PartitionSplitMergeStates[dst->ShardIdx];
+                    h.LastSplitTime = parentLastSplitTime;
+                    h.LastMergeTime = parentLastMergeTime;
+                    if (isSplit) {
+                        h.LastSplitTime = now;
+                        // Consecutive by-load splits deepen the lineage; size-splits do not.
+                        h.LoadSplitLineageDepth = parentMaxLoadSplitLineageDepth + (loadSplitLineage ? 1 : 0);
+                    } else if (isMerge) {
+                        h.LastMergeTime = now;
+                        h.LoadSplitLineageDepth = 0;  // merge relieves the hot region
+                    } else {
+                        h.LoadSplitLineageDepth = parentMaxLoadSplitLineageDepth;
+                    }
+                }
+            }
+        }
+
+        // Erase parent (now-gone) shard keys from the history map and the tableState deferred set.
+        for (const TShardIdx& s : removedShards) {
+            DropFromSplitMergeState(s);
+            PartitionSplitMergeStates.erase(s);
+        }
+    }
+
     PreserializedTablePartitions.clear();
     PreserializedTablePartitionsNoKeys.clear();
     PreserializedTableSplitBoundaries.clear();
 
     VerifyConsistency();
+}
+
+void TTableInfo::UpdateSplitMergePickCache(const TShardIdx& shardIdx) {
+    // Called after a deferral was recorded for shardIdx (which is in DeferredShards). While a
+    // shard stays deferred its weight only grows and candidates only move forward, so the
+    // only way another shard can overtake the cached winner is through this method.
+    const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
+    if (!h) {
+        return;
+    }
+    const ui32 weight = h->DeferredWeight();
+    const TInstant candidate = h->OldestCandidate();
+    auto& s = TableSplitMergeState;
+    // Most-deferred first; tie-broken by the oldest (smallest) candidate timestamp.
+    if (s.CachedPickShardIdx == InvalidShardIdx || weight > s.CachedPickWeight
+        || (weight == s.CachedPickWeight && candidate < s.CachedPickCandidate)) {
+        s.CachedPickShardIdx = shardIdx;
+        s.CachedPickWeight = weight;
+        s.CachedPickCandidate = candidate;
+    }
+}
+
+void TTableInfo::InvalidateSplitMergePickCache(const TShardIdx& shardIdx) {
+    if (TableSplitMergeState.CachedPickShardIdx == shardIdx) {
+        TableSplitMergeState.CachedPickShardIdx = InvalidShardIdx;
+    }
+}
+
+TShardIdx TTableInfo::PickMostDeferredPartition() {
+    auto& tableState = TableSplitMergeState;
+
+    // O(1) fast path: the cache is maintained incrementally by UpdateSplitMergePickCache /
+    // InvalidateSplitMergePickCache and is exact as long as it validates against the current
+    // per-shard state (weight and candidate unchanged, shard still deferred).
+    if (tableState.CachedPickShardIdx != InvalidShardIdx) {
+        const auto* h = PartitionSplitMergeStates.FindPtr(tableState.CachedPickShardIdx);
+        if (h && tableState.DeferredShards.contains(tableState.CachedPickShardIdx)
+            && h->DeferredWeight() == tableState.CachedPickWeight
+            && h->OldestCandidate() == tableState.CachedPickCandidate) {
+            return tableState.CachedPickShardIdx;
+        }
+        tableState.CachedPickShardIdx = InvalidShardIdx;
+    }
+
+    TShardIdx best = InvalidShardIdx;
+    ui32 bestWeight = 0;
+    TInstant bestCandidate;
+    TVector<TShardIdx> stale;
+    for (const auto& [shardIdx, wantsSplit] : tableState.DeferredShards) {
+        const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
+        if (!h) {
+            // No per-shard state: the entry is stale by definition; prune it so the table
+            // cannot churn in the revisit queue forever (and the counts stay exact).
+            stale.push_back(shardIdx);
+            continue;
+        }
+        const ui32 weight = h->DeferredWeight();
+        const TInstant candidate = h->OldestCandidate();
+        // Most-deferred first; tie-broken by the oldest (smallest) candidate timestamp.
+        if (best == InvalidShardIdx || weight > bestWeight
+            || (weight == bestWeight && candidate < bestCandidate)) {
+            best = shardIdx;
+            bestWeight = weight;
+            bestCandidate = candidate;
+        }
+    }
+    if (!stale.empty()) {
+        for (const TShardIdx& shardIdx : stale) {
+            const auto it = tableState.DeferredShards.find(shardIdx);
+            if (it == tableState.DeferredShards.end()) {
+                continue;
+            }
+            if (it->second) {
+                if (tableState.SplitDemandCount) {
+                    --tableState.SplitDemandCount;
+                }
+            } else if (tableState.MergeDemandCount) {
+                --tableState.MergeDemandCount;
+            }
+            tableState.DeferredShards.erase(it);
+        }
+        RecomputeOldestPendingCandidateAt();
+    }
+    if (best != InvalidShardIdx) {
+        tableState.CachedPickShardIdx = best;
+        tableState.CachedPickWeight = bestWeight;
+        tableState.CachedPickCandidate = bestCandidate;
+    }
+    return best;
+}
+
+void TTableInfo::DropFromSplitMergeState(const TShardIdx& shardIdx) {
+    auto& tableState = TableSplitMergeState;
+    const auto it = tableState.DeferredShards.find(shardIdx);
+    if (it == tableState.DeferredShards.end()) {
+        return;
+    }
+    // Decrement exactly the count that was incremented on insert (stored direction).
+    if (it->second) {
+        if (tableState.SplitDemandCount) {
+            --tableState.SplitDemandCount;
+        }
+    } else if (tableState.MergeDemandCount) {
+        --tableState.MergeDemandCount;
+    }
+    tableState.DeferredShards.erase(it);
+    InvalidateSplitMergePickCache(shardIdx);
+    RecomputeOldestPendingCandidateAt();
+}
+
+void TTableInfo::RecomputeOldestPendingCandidateAt() {
+    auto& tableState = TableSplitMergeState;
+    if (tableState.DeferredShards.empty()) {
+        tableState.OldestPendingCandidateAt = TInstant();
+        return;
+    }
+    TInstant oldest;
+    for (const auto& [shardIdx, wantsSplit] : tableState.DeferredShards) {
+        const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
+        if (!h) {
+            continue;
+        }
+        const TInstant& candidate = h->LastCandidate(wantsSplit);
+        if (candidate && (!oldest || candidate < oldest)) {
+            oldest = candidate;
+        }
+    }
+    tableState.OldestPendingCandidateAt = oldest;
 }
 
 void TTableInfo::VerifyConsistency() const {
@@ -2395,6 +2595,14 @@ void TTableInfo::VerifyConsistency() const {
         }
         // Position must reflect actual index in Partitions.
         Y_ABORT_UNLESS(p->Position == i);
+    }
+
+    // Split/merge history invariant: keys subset of live partitions (dies with the partition).
+    for (const auto& [shardIdx, _] : PartitionSplitMergeStates) {
+        Y_ABORT_UNLESS(Stats.PartitionStats.contains(shardIdx));
+    }
+    for (const auto& [shardIdx, _] : TableSplitMergeState.DeferredShards) {
+        Y_ABORT_UNLESS(Stats.PartitionStats.contains(shardIdx));
     }
 
     Y_ABORT_UNLESS(CondEraseSchedule.IsValidHeap());
@@ -2706,7 +2914,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
                                     float cpuUsageThreshold, const TTableInfo* mainTableForIndex,
                                     TInstant now,
-                                    TString& reason) const
+                                    TString& reason, bool& mergeByLoad) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
         return false;
@@ -2741,6 +2949,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= sizeToMerge) {
         reason = TStringBuilder() << "merge by size ("
             << "shardSize: " << stats->DataSize << ")";
+        mergeByLoad = false;
         canMerge = true;
     }
 
@@ -2749,6 +2958,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     bool canMergeByLoad = IsMergeByLoadEnabled(mainTableForIndex);
     if (!canMerge && canMergeByLoad && stats->StartTime && stats->StartTime + minUptime < now) {
         reason = "merge by load";
+        mergeByLoad = true;
         canMerge = true;
     }
 
@@ -2794,7 +3004,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                          TShardIdx shardIdx, const TTabletId& tabletId,
                                          TVector<TShardIdx>& shardsToMerge, const TTableInfo* mainTableForIndex,
                                          TInstant now,
-                                         TString& reason) const
+                                         TString& reason, bool& mergeByLoad) const
 {
     // Don't split/merge backup tables
     if (IsBackup) {
@@ -2831,17 +3041,20 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
 
     THashSet<TTabletId> partOwners;
     TString shardMergeReason;
+    bool shardMergeByLoad = false;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason, shardMergeByLoad)) {
         return false;
     }
+    // The threshold-cross reason of the whole merge wave follows its first shard.
+    mergeByLoad = shardMergeByLoad;
 
     reason = TStringBuilder() << "shard with tabletId: " << tabletId
         << " " << shardMergeReason;
 
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason, shardMergeByLoad)) {
             break;
         }
     }
@@ -2849,7 +3062,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason, shardMergeByLoad)) {
             break;
         }
     }

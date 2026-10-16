@@ -158,7 +158,7 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         {}
 
         std::string GetAuthInfo() const override {
-            return AuthInfo_.GetFuture().GetValueSync();
+            throw TAuthenticationError("Synchronous credentials access");
         }
 
         NThreading::TFuture<std::string> GetAuthInfoAsync() const override {

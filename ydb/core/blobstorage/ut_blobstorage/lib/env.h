@@ -12,6 +12,7 @@
 #include <ydb/core/tablet/resource_broker.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <optional>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
@@ -84,6 +85,8 @@ struct TEnvironmentSetup {
         const bool EnableChunkKeeper = true;
         const bool EnablePersistentPhantomFlagStorage = false;
         const bool SetupResourceBroker = false;
+        // Global blob_storage_config knob. Unset stays unset, so the flag alone leaves the size-class heap.
+        const std::optional<ui32> VDiskHeapAllocatorNumLeadingDisks = std::nullopt;
     };
 
     const TSettings Settings;
@@ -521,6 +524,10 @@ config:
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
                 config->FeatureFlags = std::make_unique<NKikimrConfig::TFeatureFlags>(Settings.FeatureFlags);
+                if (Settings.VDiskHeapAllocatorNumLeadingDisks) {
+                    config->BlobStorageConfig->SetVDiskHeapAllocatorNumLeadingDisks(
+                        *Settings.VDiskHeapAllocatorNumLeadingDisks);
+                }
 
                 if (Settings.NumPiles) {
                     config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(Runtime->GetAppDataBridgeConfig());
@@ -910,8 +917,10 @@ config:
     void CompactVDisk(const TActorId& actorId, bool freshOnly = false) {
         const TActorId& edge = Runtime->AllocateEdgeActor(actorId.NodeId());
         for (;;) {
+            // track delivery, so that a VDisk that is not running yet (e.g. right after a wipe) gets the request again
             Runtime->Send(new IEventHandle(actorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ?
-                TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL)), actorId.NodeId());
+                TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL), IEventHandle::FlagTrackDelivery),
+                actorId.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
             if (res->GetTypeRewrite() == TEvents::TSystem::Undelivered) {
                 Sim(TDuration::Seconds(5));

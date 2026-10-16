@@ -39,23 +39,38 @@
  std::shared_ptr<ThreadPool> MakeThreadPool(size_t reserve_threads) {
    auto thread_pool = std::make_shared<WorkStealingThreadPool>(reserve_threads);
    g_thread_pool_fork_manager->RegisterForkable(
---- contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc        (index)
-+++ contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc        (working tree)
-@@ -174,7 +174,7 @@ void WorkStealingThreadPool::PostforkChild() { pool_->Postfork(); }
+--- contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc	(index)
++++ contrib/libs/grpc/src/core/lib/event_engine/thread_pool/work_stealing_thread_pool.cc	(working tree)
+@@ -117,6 +117,14 @@
+ // Maximum time the lifeguard thread should sleep between checking for new work.
+ constexpr grpc_core::Duration kLifeguardMaxSleepBetweenChecks{
+     grpc_core::Duration::Seconds(1)};
++
++size_t EffectiveThreadsLimit() {
++  // The posix EventEngine TimerManager loop permanently occupies one pool
++  // thread; do not count it against the configured limit, otherwise small
++  // limits leave no thread for regular work until the lifeguard adds one.
++  constexpr size_t kTimerManagerThreads = 1;
++  return ThreadPool::GetThreadsLimit() + kTimerManagerThreads;
++}
+ }  // namespace
+ 
+ thread_local WorkQueue* g_local_queue = nullptr;
+@@ -174,7 +182,7 @@
  
  WorkStealingThreadPool::WorkStealingThreadPoolImpl::WorkStealingThreadPoolImpl(
      size_t reserve_threads)
 -    : reserve_threads_(reserve_threads), queue_(this), lifeguard_(this) {}
-+    : reserve_threads_(std::min(reserve_threads, ThreadPool::GetThreadsLimit())), queue_(this), lifeguard_(this) {}
++    : reserve_threads_(std::min(reserve_threads, EffectiveThreadsLimit())), queue_(this), lifeguard_(this) {}
  
  void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Start() {
    for (size_t i = 0; i < reserve_threads_; i++) {
-@@ -361,6 +361,11 @@ void WorkStealingThreadPool::WorkStealingThreadPoolImpl::Lifeguard::
+@@ -361,6 +369,11 @@
      backoff_.Reset();
      return;
    }
 +
-+  if (living_thread_count > ThreadPool::GetThreadsLimit()) {
++  if (living_thread_count > EffectiveThreadsLimit()) {
 +    return;
 +  }
 +

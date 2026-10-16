@@ -106,6 +106,7 @@ namespace NKikimr::NBlobDepot {
 
                     state.Key = binaryKey;
                     state.ValueChainIndex = static_cast<ui32>(value.ValueChain.size());
+                    ++Self->MoveData.RecordsScanned;
                     if (++keysProcessed >= Self->MoveData.MaxMoveDataKeysPerTx) {
                         stoppedByLimit = true;
                         return false;
@@ -718,6 +719,7 @@ namespace NKikimr::NBlobDepot {
         MoveData.BlobLocator.Clear();
         MoveData.NewBlobLocator.Clear();
         MoveData.NewBlobSeqId = {};
+        MoveData.RecordsScanned = 0;
         MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
     }
 

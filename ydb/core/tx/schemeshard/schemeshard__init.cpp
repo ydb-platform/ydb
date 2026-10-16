@@ -3982,6 +3982,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::SourceLocalPathId>());
                 txState.NeedUpdateObject = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedUpdateObject>(false);
                 txState.NeedSyncHive = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::NeedSyncHive>(false);
+                txState.LoadSplitLineage = txInFlightRowset.GetValueOrDefault<Schema::TxInFlightV2::LoadSplitLineage>(false);
 
                 if (Self->TolerateOrphanedPaths) {
                     const bool orphanTarget = !Self->PathsById.contains(txState.TargetPathId);

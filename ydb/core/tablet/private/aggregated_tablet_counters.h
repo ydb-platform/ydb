@@ -12,6 +12,10 @@ class TDbCounters;
 
 namespace NKikimr::NPrivate {
 
+inline ui64 DifferentiateToPerSecondRate(ui64 delta, TDuration interval) {
+    return interval ? delta * 1000000 / interval.MicroSeconds() : 0;
+}
+
 /**
  * The aggregate of a single category (the Executor counters or the application counters)
  * of the low level counters of one or more tablets of the same type.
@@ -60,17 +64,19 @@ public:
      *          RecalcAll() must be called explicitly afterwards.
      *
      * @param[in] now Used to differentiate the cumulative counters into per second rates
+     * @param[in] followerId Tells the followers of one tablet apart (0 = leader)
      */
     void Apply(
         ui64 tabletId,
         const TTabletCountersBase* counters,
         TTabletTypes::EType tabletType,
-        TInstant now);
+        TInstant now,
+        ui32 followerId = 0);
 
     /**
      * Drop the contribution of a single tablet from the aggregate.
      */
-    void Forget(ui64 tabletId);
+    void Forget(ui64 tabletId, ui32 followerId = 0);
 
     void RecalcAll();
 
@@ -110,7 +116,7 @@ private:
     TAggregatedCumulativeCounters AggregatedCumulativeCounters;
     TAggregatedHistogramCounters AggregatedHistogramCounters;
 
-    THashMap<ui64, TInstant> LastAggregateUpdateTime;
+    THashMap<TTabletKey, TInstant> LastAggregateUpdateTime;
 
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
     ::NMonitoring::TCountableBase::EVisibility Visibility;

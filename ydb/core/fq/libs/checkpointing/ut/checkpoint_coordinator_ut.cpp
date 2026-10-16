@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
@@ -12,7 +13,6 @@
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 
 #include <google/protobuf/util/message_differencer.h>
-
 #include <library/cpp/testing/unittest/gtest.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -23,13 +23,12 @@ namespace {
 using namespace NKikimr;
 using namespace NFq;
 
-enum ETestGraphFlags : ui64 {
+enum ETestGraphFlags: ui64 {
     InputWithSource = 1,
     SourceWithChannelInOneTask = 2,
 };
 
 NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType) {
-
     NYql::NDqProto::TReadyState result;
 
     auto* ingress = result.AddTask();
@@ -62,7 +61,7 @@ NYql::NDqProto::TReadyState BuildTestGraph(ui64 flags, const TString& sourceType
     return result;
 }
 
-struct TTestBootstrap : public TTestActorRuntime {
+struct TTestBootstrap: public TTestActorRuntime {
     NYql::NDqProto::TReadyState GraphState;
     NConfig::TCheckpointCoordinatorConfig Settings;
     NActors::TActorId StorageProxy;
@@ -106,8 +105,8 @@ struct TTestBootstrap : public TTestActorRuntime {
         ActorIdToProto(EgressActor, GraphState.AddActorId());
 
         ActorToTask[IngressActor] = GraphState.GetTask()[0].GetId();
-        ActorToTask[MapActor]     = GraphState.GetTask()[1].GetId();
-        ActorToTask[EgressActor]  = GraphState.GetTask()[2].GetId();
+        ActorToTask[MapActor] = GraphState.GetTask()[1].GetId();
+        ActorToTask[EgressActor] = GraphState.GetTask()[2].GetId();
 
         Settings = NConfig::TCheckpointCoordinatorConfig();
         Settings.SetEnabled(true);
@@ -121,17 +120,11 @@ struct TTestBootstrap : public TTestActorRuntime {
 
         TCheckpointCoordinatorSettings coordinatorSettings(Settings);
         coordinatorSettings.OutputStartTime = outputStartTime;
-        CheckpointCoordinator = Register(MakeCheckpointCoordinator(
-            CoordinatorId,
-            StorageProxy,
-            RunActor,
-            coordinatorSettings,
-            Counters,
-            NProto::TGraphParams(),
-            outputStartTime ? FederatedQuery::StateLoadMode::EMPTY : FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
-            {}
-        ).Release());
-        
+        CheckpointCoordinator =
+            Register(MakeCheckpointCoordinator(CoordinatorId, StorageProxy, RunActor, coordinatorSettings, Counters, NProto::TGraphParams(),
+                outputStartTime ? FederatedQuery::StateLoadMode::EMPTY : FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT, {}, false)
+                         .Release());
+
         auto ev = BuildEvReadyState();
         Send(new IEventHandle(CheckpointCoordinator, RunActor, ev.release()));
 
@@ -145,90 +138,67 @@ struct TTestBootstrap : public TTestActorRuntime {
         for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
             auto actorId = ActorIdFromProto(actorIds[i]);
             auto settings = NYql::NDq::TDqTaskSettings(&tasks[i]);
-            auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-                settings.GetId(),
-                NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED,
-                NYql::NDq::IsIngress(settings),
-                NYql::NDq::IsEgress(settings),
-                NYql::NDq::HasState(settings),
-                actorId
-            };
+            auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{ settings.GetId(),
+                NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED, NYql::NDq::IsIngress(settings),
+                NYql::NDq::IsEgress(settings), NYql::NDq::HasState(settings), actorId };
             event->Tasks.emplace_back(std::move(task));
-        }                
+        }
         return event;
     }
 
     bool IsEqual(
-        const TEvCheckpointStorage::TEvRegisterCoordinatorRequest& lhs,
-        const TEvCheckpointStorage::TEvRegisterCoordinatorRequest& rhs) {
+        const TEvCheckpointStorage::TEvRegisterCoordinatorRequest& lhs, const TEvCheckpointStorage::TEvRegisterCoordinatorRequest& rhs) {
         return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId);
     }
 
-    bool IsEqual(
-        const TEvCheckpointStorage::TEvCreateCheckpointRequest& lhs,
-        const TEvCheckpointStorage::TEvCreateCheckpointRequest& rhs) {
-        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId)
-            && std::tie(lhs.CheckpointId, lhs.NodeCount) == std::tie(rhs.CheckpointId, rhs.NodeCount)
-            && lhs.GraphDescription.index() == rhs.GraphDescription.index()
-                && (lhs.GraphDescription.index() == 0 
-                    ? std::get<0>(lhs.GraphDescription) == std::get<0>(rhs.GraphDescription)
-                    : google::protobuf::util::MessageDifferencer::Equals(std::get<1>(lhs.GraphDescription), std::get<1>(rhs.GraphDescription)));
+    bool IsEqual(const TEvCheckpointStorage::TEvCreateCheckpointRequest& lhs, const TEvCheckpointStorage::TEvCreateCheckpointRequest& rhs) {
+        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId) &&
+               std::tie(lhs.CheckpointId, lhs.NodeCount) == std::tie(rhs.CheckpointId, rhs.NodeCount) &&
+               lhs.GraphDescription.index() == rhs.GraphDescription.index() &&
+               (lhs.GraphDescription.index() == 0 ? std::get<0>(lhs.GraphDescription) == std::get<0>(rhs.GraphDescription)
+                                                  : google::protobuf::util::MessageDifferencer::Equals(
+                                                        std::get<1>(lhs.GraphDescription), std::get<1>(rhs.GraphDescription)));
     }
 
-    bool IsEqual(
-        const TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest& lhs,
+    bool IsEqual(const TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest& lhs,
         const TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest& rhs) {
-        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId)
-            && std::tie(lhs.CheckpointId, lhs.StateSizeBytes) == std::tie(rhs.CheckpointId, rhs.StateSizeBytes);
+        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId) &&
+               std::tie(lhs.CheckpointId, lhs.StateSizeBytes) == std::tie(rhs.CheckpointId, rhs.StateSizeBytes);
+    }
+
+    bool IsEqual(const TEvCheckpointStorage::TEvCompleteCheckpointRequest& lhs, const TEvCheckpointStorage::TEvCompleteCheckpointRequest& rhs) {
+        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId) &&
+               std::tie(lhs.CheckpointId, lhs.StateSizeBytes, lhs.Type) == std::tie(rhs.CheckpointId, rhs.StateSizeBytes, rhs.Type);
+    }
+
+    bool IsEqual(const TEvCheckpointStorage::TEvAbortCheckpointRequest& lhs, const TEvCheckpointStorage::TEvAbortCheckpointRequest& rhs) {
+        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId) && std::tie(lhs.CheckpointId, lhs.Reason) == std::tie(rhs.CheckpointId, rhs.Reason);
     }
 
     bool IsEqual(
-        const TEvCheckpointStorage::TEvCompleteCheckpointRequest& lhs,
-        const TEvCheckpointStorage::TEvCompleteCheckpointRequest& rhs) {
-        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId)
-            && std::tie(lhs.CheckpointId, lhs.StateSizeBytes, lhs.Type) == std::tie(rhs.CheckpointId, rhs.StateSizeBytes, rhs.Type);
+        const TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest& lhs, const TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest& rhs) {
+        return std::tie(lhs.GraphId, lhs.Statuses, lhs.Limit, lhs.LoadGraphDescription) ==
+               std::tie(rhs.GraphId, rhs.Statuses, rhs.Limit, rhs.LoadGraphDescription);
     }
 
-    bool IsEqual(
-        const TEvCheckpointStorage::TEvAbortCheckpointRequest& lhs,
-        const TEvCheckpointStorage::TEvAbortCheckpointRequest& rhs) {
-        return IsEqual(lhs.CoordinatorId, rhs.CoordinatorId)
-            && std::tie( lhs.CheckpointId, lhs.Reason) == std::tie(rhs.CheckpointId, rhs.Reason);
-    }
-
-    bool IsEqual(
-        const TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest& lhs,
-        const TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest& rhs) {
-        return std::tie(lhs.GraphId, lhs.Statuses, lhs.Limit, lhs.LoadGraphDescription) == std::tie(rhs.GraphId, rhs.Statuses, rhs.Limit, rhs.LoadGraphDescription);
-    }
-
-    bool IsEqual(
-        const NFq::TCoordinatorId& lhs,
-        const NFq::TCoordinatorId& rhs) {
+    bool IsEqual(const NFq::TCoordinatorId& lhs, const NFq::TCoordinatorId& rhs) {
         return std::tie(lhs.GraphId, lhs.Generation) == std::tie(rhs.GraphId, rhs.Generation);
     }
 
     bool IsEqual(
-        const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinator& lhs,
-        const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinator& rhs) {
+        const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinator& lhs, const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinator& rhs) {
         return google::protobuf::util::MessageDifferencer::Equals(lhs.Record, rhs.Record);
     }
 
-    bool IsEqual(
-        const NYql::NDq::TEvDqCompute::TEvInjectCheckpoint& lhs,
-        const NYql::NDq::TEvDqCompute::TEvInjectCheckpoint& rhs) {
+    bool IsEqual(const NYql::NDq::TEvDqCompute::TEvInjectCheckpoint& lhs, const NYql::NDq::TEvDqCompute::TEvInjectCheckpoint& rhs) {
         return google::protobuf::util::MessageDifferencer::Equals(lhs.Record, rhs.Record);
     }
 
-    bool IsEqual(
-        const NYql::NDq::TEvDqCompute::TEvCommitState& lhs,
-        const NYql::NDq::TEvDqCompute::TEvCommitState& rhs) {
+    bool IsEqual(const NYql::NDq::TEvDqCompute::TEvCommitState& lhs, const NYql::NDq::TEvDqCompute::TEvCommitState& rhs) {
         return google::protobuf::util::MessageDifferencer::Equals(lhs.Record, rhs.Record);
     }
 
-    bool IsEqual(
-        const NYql::NDq::TEvDqCompute::TEvRun& lhs,
-        const NYql::NDq::TEvDqCompute::TEvRun& rhs) {
+    bool IsEqual(const NYql::NDq::TEvDqCompute::TEvRun& lhs, const NYql::NDq::TEvDqCompute::TEvRun& rhs) {
         return google::protobuf::util::MessageDifferencer::Equals(lhs.Record, rhs.Record);
     }
 
@@ -241,30 +211,20 @@ struct TTestBootstrap : public TTestActorRuntime {
     }
 
     void MockRegisterCoordinatorResponseEvent(NYql::TIssues issues = NYql::TIssues()) {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            StorageProxy,
-            new TEvCheckpointStorage::TEvRegisterCoordinatorResponse(std::move(issues))));
+        Send(new IEventHandle(CheckpointCoordinator, StorageProxy, new TEvCheckpointStorage::TEvRegisterCoordinatorResponse(std::move(issues))));
     }
 
     void MockNewCheckpointCoordinatorAckEvent(TActorId& sender) {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            sender,
-            new NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck()));
+        Send(new IEventHandle(CheckpointCoordinator, sender, new NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck()));
     }
 
-    void MockCheckpointsMetadataResponse(NYql::TIssues issues = NYql::TIssues()) {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            StorageProxy,
-            new TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse(TVector<TCheckpointMetadata>(), std::move(issues))));
+    void MockCheckpointsMetadataResponse(NYql::TIssues issues = NYql::TIssues(), TVector<TCheckpointMetadata> checkpoints = {}) {
+        Send(new IEventHandle(CheckpointCoordinator, StorageProxy,
+            new TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse(std::move(checkpoints), std::move(issues))));
     }
 
     void MockCreateCheckpointResponse(TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            StorageProxy,
+        Send(new IEventHandle(CheckpointCoordinator, StorageProxy,
             new TEvCheckpointStorage::TEvCreateCheckpointResponse(checkpointId, std::move(issues), GraphDescId, 0)));
     }
 
@@ -274,10 +234,7 @@ struct TTestBootstrap : public TTestActorRuntime {
         ev->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
         ev->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::OK);
         ev->Record.SetStateSizeBytes(100);
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            sender,
-            ev.release()));
+        Send(new IEventHandle(CheckpointCoordinator, sender, ev.release()));
     }
 
     void MockNodeStateSaveFailedEvent(TCheckpointId& checkpointId, TActorId& sender) {
@@ -285,67 +242,49 @@ struct TTestBootstrap : public TTestActorRuntime {
         ev->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
         ev->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
         ev->Record.SetStatus(NYql::NDqProto::TEvSaveTaskStateResult::STORAGE_ERROR);
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            sender,
-            ev.release()));
+        Send(new IEventHandle(CheckpointCoordinator, sender, ev.release()));
     }
 
     void MockSetCheckpointPendingCommitStatusResponse(TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            StorageProxy,
+        Send(new IEventHandle(CheckpointCoordinator, StorageProxy,
             new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse(checkpointId, std::move(issues))));
     }
 
     void MockChangesCommittedEvent(TCheckpointId& checkpointId, TActorId& sender) {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            sender,
+        Send(new IEventHandle(CheckpointCoordinator, sender,
             new NYql::NDq::TEvDqCompute::TEvStateCommitted(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, ActorToTask[sender])));
     }
 
     void MockCompleteCheckpointResponse(TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
         Send(new IEventHandle(
-            CheckpointCoordinator,
-            StorageProxy,
-            new TEvCheckpointStorage::TEvCompleteCheckpointResponse(checkpointId, std::move(issues))));
+            CheckpointCoordinator, StorageProxy, new TEvCheckpointStorage::TEvCompleteCheckpointResponse(checkpointId, std::move(issues))));
     }
 
     void MockAbortCheckpointResponse(TCheckpointId& checkpointId, NYql::TIssues issues = NYql::TIssues()) {
         Send(new IEventHandle(
-            CheckpointCoordinator,
-            StorageProxy,
-            new TEvCheckpointStorage::TEvAbortCheckpointResponse(checkpointId, std::move(issues))));
+            CheckpointCoordinator, StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointResponse(checkpointId, std::move(issues))));
     }
 
     void MockScheduleCheckpointing() {
         Send(new IEventHandle(
-            CheckpointCoordinator,
-            CheckpointCoordinator,
-            new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ false)));
+            CheckpointCoordinator, CheckpointCoordinator, new TEvCheckpointCoordinator::TEvScheduleCheckpointing(/* waitStatistics */ false)));
     }
 
     void MockRunGraph() {
-        Send(new IEventHandle(
-            CheckpointCoordinator,
-            CheckpointCoordinator,
-            new TEvCheckpointCoordinator::TEvRunGraph{}));
+        Send(new IEventHandle(CheckpointCoordinator, CheckpointCoordinator, new TEvCheckpointCoordinator::TEvRunGraph{}));
     }
-
 };
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
-
-    class CheckpointsTestHelper : public TTestBootstrap
-    {
+    class CheckpointsTestHelper: public TTestBootstrap {
     public:
         CheckpointsTestHelper(ui64 graphFlags, ui64 snaphotRotationPeriod = 0, const TString& sourceType = TString(NYql::PqSource))
-            : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType) {
+            : TTestBootstrap(graphFlags, snaphotRotationPeriod, sourceType)
+        {
         }
-        
-        void RegisterCoordinator() {
+
+        void RegisterCoordinator(TVector<TCheckpointMetadata> checkpoints = {}) {
             Cerr << "Waiting for TEvRegisterCoordinatorRequest (storage)" << Endl;
             ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvRegisterCoordinatorRequest(CoordinatorId));
 
@@ -360,84 +299,58 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             MockNewCheckpointCoordinatorAckEvent(EgressActor);
 
             Cerr << "Waiting for TEvGetCheckpointsMetadataRequest (storage)" << Endl;
-            ExpectEvent(StorageProxy, 
-                TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
-                    CoordinatorId.GraphId, {ECheckpointStatus::PendingCommit, ECheckpointStatus::Completed}, 1, false
-                ));
+            ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest(
+                                          CoordinatorId.GraphId, { ECheckpointStatus::PendingCommit, ECheckpointStatus::Completed }, 1, false));
 
-            MockCheckpointsMetadataResponse();
+            MockCheckpointsMetadataResponse({}, std::move(checkpoints));
         }
 
-        void InjectCheckpoint(
-            TCheckpointId checkpointId,
-            TMaybe<TString> graphDescId = {},
+        void InjectCheckpoint(TCheckpointId checkpointId, TMaybe<TString> graphDescId = {},
             NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
-
             Cerr << "Waiting for TEvCreateCheckpointRequest (storage)" << Endl;
             if (graphDescId) {
-                ExpectEvent(StorageProxy, 
-                    TEvCheckpointStorage::TEvCreateCheckpointRequest(
-                        CoordinatorId,
-                        checkpointId,
-                        3,
-                        *graphDescId
-                    ));
+                ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvCreateCheckpointRequest(CoordinatorId, checkpointId, 3, *graphDescId));
             } else {
                 NProto::TCheckpointGraphDescription graphDesc;
                 graphDesc.MutableGraph()->CopyFrom(NProto::TGraphParams());
-                ExpectEvent(StorageProxy, 
-                    TEvCheckpointStorage::TEvCreateCheckpointRequest(
-                        CoordinatorId,
-                        checkpointId,
-                        3,
-                        graphDesc
-                    ));
+                ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvCreateCheckpointRequest(CoordinatorId, checkpointId, 3, graphDesc));
             }
 
             MockCreateCheckpointResponse(checkpointId);
 
             Cerr << "Waiting for TEvInjectCheckpointBarrier (ingress)" << Endl;
 
-            ExpectEvent(IngressActor, 
-                NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
+            ExpectEvent(
+                IngressActor, NYql::NDq::TEvDqCompute::TEvInjectCheckpoint(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, type));
         }
 
-        void AllSavedAndCommited(
-            TCheckpointId checkpointId,
-            NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
+        void AllSavedAndCommited(TCheckpointId checkpointId, NYql::NDqProto::ECheckpointType type = NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT) {
             MockNodeStateSavedEvent(checkpointId, IngressActor);
             MockNodeStateSavedEvent(checkpointId, MapActor);
             MockNodeStateSavedEvent(checkpointId, EgressActor);
 
             Cerr << "Waiting for TEvSetCheckpointPendingCommitStatusRequest (storage)" << Endl;
-            ExpectEvent(StorageProxy, 
-                TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, 300
-                ));
+            ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, 300));
 
             MockSetCheckpointPendingCommitStatusResponse(checkpointId);
 
             Cerr << "Waiting for TEvCommitChanges (ingress)" << Endl;
-            ExpectEvent(IngressActor, 
-                NYql::NDq::TEvDqCompute::TEvCommitState(
-                    checkpointId.SeqNo,
-                    checkpointId.CoordinatorGeneration,
-                    CoordinatorId.Generation
-                ));
+            ExpectEvent(IngressActor,
+                NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, CoordinatorId.Generation));
 
             Cerr << "Waiting for TEvCommitChanges (egress)" << Endl;
-            ExpectEvent(EgressActor, 
-                NYql::NDq::TEvDqCompute::TEvCommitState(
-                    checkpointId.SeqNo,
-                    checkpointId.CoordinatorGeneration,
-                    CoordinatorId.Generation
-                ));
+            ExpectEvent(EgressActor,
+                NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, CoordinatorId.Generation));
 
             MockChangesCommittedEvent(checkpointId, IngressActor);
             MockChangesCommittedEvent(checkpointId, EgressActor);
 
+            ExpectEvent(MapActor,
+                NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, CoordinatorId.Generation));
+            MockChangesCommittedEvent(checkpointId, MapActor);
+
             Cerr << "Waiting for TEvCompleteCheckpointRequest (storage)" << Endl;
-            ExpectEvent(StorageProxy, 
-                TEvCheckpointStorage::TEvCompleteCheckpointRequest(CoordinatorId, checkpointId, 300, type));
+            ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvCompleteCheckpointRequest(CoordinatorId, checkpointId, 300, type));
 
             MockCompleteCheckpointResponse(checkpointId);
         }
@@ -448,8 +361,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
             MockNodeStateSaveFailedEvent(checkpointId, MapActor);
 
             Cerr << "Waiting for TEvAbortCheckpointRequest (storage)" << Endl;
-            ExpectEvent(StorageProxy, 
-               TEvCheckpointStorage::TEvAbortCheckpointRequest( CoordinatorId, checkpointId, "Can't save node state"));
+            ExpectEvent(StorageProxy, TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"));
             MockAbortCheckpointResponse(checkpointId);
         }
 
@@ -480,6 +392,36 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         test.ExpectRun();
         test.AllSavedAndCommited(test.CheckpointId1);
         test.MockRunGraph();
+    }
+
+    Y_UNIT_TEST(ShouldRecommitIntermediateTaskAfterRestore) {
+        CheckpointsTestHelper test(ETestGraphFlags::InputWithSource);
+        auto checkpointId = TCheckpointId(test.CoordinatorId.Generation - 1, 7);
+        test.RegisterCoordinator({ TCheckpointMetadata(
+            test.CoordinatorId.GraphId, checkpointId, ECheckpointStatus::PendingCommit, TInstant::Zero(), TInstant::Zero()) });
+
+        for (const auto& actor : { test.IngressActor, test.MapActor, test.EgressActor }) {
+            const auto restore = test.GrabEdgeEvent<NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint>(actor, TDuration::Seconds(10));
+            UNIT_ASSERT(restore);
+            UNIT_ASSERT_VALUES_EQUAL(restore->Get()->Record.GetCheckpoint().GetGeneration(), checkpointId.CoordinatorGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(restore->Get()->Record.GetCheckpoint().GetId(), checkpointId.SeqNo);
+            test.Send(new IEventHandle(test.CheckpointCoordinator, actor,
+                new NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult(restore->Get()->Record.GetCheckpoint(), test.ActorToTask.at(actor),
+                    NYql::NDqProto::TEvRestoreFromCheckpointResult::OK, {})));
+        }
+
+        for (const auto& actor : { test.IngressActor, test.MapActor, test.EgressActor }) {
+            test.ExpectEvent(actor,
+                NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, test.CoordinatorId.Generation));
+        }
+        test.ExpectRun();
+        test.MockChangesCommittedEvent(checkpointId, test.IngressActor);
+        test.MockChangesCommittedEvent(checkpointId, test.EgressActor);
+        UNIT_ASSERT(!test.GrabEdgeEvent<TEvCheckpointStorage::TEvCompleteCheckpointRequest>(test.StorageProxy, TDuration::MilliSeconds(100)));
+        test.MockChangesCommittedEvent(checkpointId, test.MapActor);
+        test.ExpectEvent(test.StorageProxy,
+            TEvCheckpointStorage::TEvCompleteCheckpointRequest(test.CoordinatorId, checkpointId, 0, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT));
+        test.MockCompleteCheckpointResponse(checkpointId);
     }
 
     Y_UNIT_TEST(ShouldAllSnapshots) {
@@ -530,8 +472,7 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     Y_UNIT_TEST(ShouldDoNothingIfNoIngressTasks) {
         CheckpointsTestHelper test(ETestGraphFlags::InputWithSource, 0, "S3Source");
         test.ExpectRun();
-        ASSERT_THROW(
-            test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10)),
+        ASSERT_THROW(test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10)),
             NActors::TEmptyEventQueueException);
     }
 
@@ -543,4 +484,4 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
     }
 }
 
-} // namespace NFq
+}   // namespace NFq

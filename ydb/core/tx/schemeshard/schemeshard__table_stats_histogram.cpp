@@ -174,6 +174,7 @@ public:
     explicit TTxPartitionHistogram(TSelf* self, TEvDataShard::TEvGetTableStatsResult::TPtr& ev)
         : TBase(self)
         , Ev(ev)
+        , DemandTracking(AppData()->FeatureFlags.GetEnableSplitMergeDemandTracking())
     {
     }
 
@@ -185,6 +186,10 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+
+private:
+    // Tx-level snapshot of the EnableSplitMergeDemandTracking feature flag.
+    const bool DemandTracking;
 
 }; // TTxStorePartitionStats
 
@@ -222,7 +227,8 @@ TSmallVec<NScheme::TTypeInfo> GetKeyColumnTypes(const TTableInfo& tableInfo) {
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> SplitRequest(
-    TSchemeShard* ss, TTxId& txId, const TPathId& pathId, TTabletId datashardId, const TString& keyBuff)
+    TSchemeShard* ss, TTxId& txId, const TPathId& pathId, TTabletId datashardId, const TString& keyBuff,
+    bool loadSplitLineage)
 {
     auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->SelfTabletId()));
     auto& record = request->Record;
@@ -242,6 +248,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> SplitRequest(
 
     split.AddSourceTabletId(ui64(datashardId));
     split.AddSplitBoundary()->SetSerializedKeyPrefix(keyBuff);
+    // Travels with the op (persisted in TxInFlightV2 with the tx state) so ApplySplitMerge,
+    // run at op completion, knows whether to deepen the by-load split lineage -- no fire-time stamping.
+    split.SetLoadSplitLineage(loadSplitLineage);
 
     return request;
 }
@@ -283,6 +292,17 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             {"keyAccessBucketCount", rec.GetTableStats().GetKeyAccessSample().GetBuckets().size()},
             {"schemeshard", Self->TabletID()},
         );
+        // Slot limit exhausted at the histogram stage too: this partition is a deferred split
+        // candidate (histogram data only drives splits, so the direction is known here) --
+        // record it for the fair scheduler (resolve its shard/table locally first).
+        Self->NoteSplitMergeDeferral();
+        if (DemandTracking) {
+            const auto shardIt = Self->TabletIdToShardIdx.find(datashardId);
+            if (auto* table = Self->Tables.FindPtr(tableId); table && shardIt != Self->TabletIdToShardIdx.end()) {
+                Self->RecordSplitDeferral(tableId, **table, shardIt->second,
+                    TPartitionSplitMergeState::EDeferralReason::InFlightLimit, ctx.Now(), DemandTracking);
+            }
+        }
         return true;
     }
 
@@ -446,7 +466,8 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
     }
 
-    auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer());
+    auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer(),
+        /* loadSplitLineage */ splitReason == ESplitReason::SPLIT_BY_LOAD);
 
     YDB_LOG_NOTICE_CTX(ctx, "TTxPartitionHistogram Propose",
         {"datashard", datashardId},
@@ -463,6 +484,25 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     dbChanges.Apply(Self, txc, ctx);
     SplitOpSideEffects.ApplyOnExecute(Self, txc, ctx);
+
+    // Only clear the deferred state when the op actually ignited; on rejection the
+    // recorded demand must survive so the shard keeps its fair-scheduling turn.
+    const bool ignited = response
+        && (response->IsAccepted() || response->IsDone() || response->IsConditionalAccepted());
+    if (!ignited) {
+        YDB_LOG_NOTICE_CTX(ctx, "Histogram split propose rejected; deferred state kept",
+            {"status", response ? NKikimrScheme::EStatus_Name(response->Record.GetStatus()) : TString("unknown")},
+            {"reason", response ? response->Record.GetReason() : TString()},
+        );
+        return true;
+    }
+
+    if (DemandTracking) {
+        // The shard got a slot: drop it from the deferred set and reset its stuck counters.
+        // The by-load reason is NOT stamped here -- it travels with the op
+        // (TTxState::LoadSplitLineage, persisted in TxInFlightV2) and is applied at op completion.
+        Self->RecordSplitApplied(tableId, *tableInfo, shardIdx, ctx.Now());
+    }
 
     return true;
 }

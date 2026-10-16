@@ -44,6 +44,8 @@ VALUES
 
 For a description of the `Knn::ToBinaryStringFloat` function, see [{#T}](../../yql/reference/udf/list/knn.md).
 
+These examples convert YQL vector literals. When passing vectors as C++ SDK query parameters, serialize them on the client with `NYdb::NValueHelpers::Embedding` (C++ SDK v3.24.0 or later) and declare the parameters as `Bytes`; see the [SDK recipe](../ydb-sdk/vector-search.md#insert-vectors).
+
 ## Step 3. Building a vector index {#step3}
 
 To create a vector index `EmbeddingIndex` on the `Vectors` table, use the following command:

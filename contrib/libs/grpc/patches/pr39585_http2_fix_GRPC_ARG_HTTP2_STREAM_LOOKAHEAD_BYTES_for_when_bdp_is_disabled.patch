@@ -1,24 +1,58 @@
---- contrib/libs/grpc/src/core/ext/transport/chttp2/transport/chttp2_transport.cc	(a0adae11dd5b6e38e17e66aad094833577d8619c)
-+++ contrib/libs/grpc/src/core/ext/transport/chttp2/transport/chttp2_transport.cc	(24a33c939397e5e30c5d897458bd70872bb9481f)
-@@ -1072,6 +1072,9 @@ static void queue_setting_update(grpc_chttp2_transport* t,
-   if (use_value != t->settings[GRPC_LOCAL_SETTINGS][id]) {
-     t->settings[GRPC_LOCAL_SETTINGS][id] = use_value;
-     t->dirtied_local_settings = true;
-+    if (id == GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE) {
-+        t->flow_control.set_target_initial_window_size(use_value);
-+    }
+From 94c710abfbba3c51fd7eb274b231950b9ed7437d Mon Sep 17 00:00:00 2001
+From: Yash Tibrewal <yashkt@google.com>
+Date: Thu, 22 May 2025 20:36:56 -0700
+Subject: [PATCH] [http2] Fix GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES for when
+ BDP is disabled (#39585)
+
+Fixes b/401598085
+
+`GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES` is supposed to influence the initial window size for a stream. This behavior is effectively disabled if BDP is enabled (default on) and we let BDP decide the initial window size.
+
+We have a bug where if BDP is disabled, we use the value provided by `GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES` for a very brief period of time. The first settings frame sent out has this overridden value, but we quickly change it back to the default value 65535.
+
+```
+I0000 00:00:1747358562.572890 1361251 frame_settings.cc:224] CHTTP2:SVR:ipv6:%5B::1%5D:33960: got setting ENABLE_PUSH = 0
+I0000 00:00:1747358562.572964 1361251 frame_settings.cc:224] CHTTP2:SVR:ipv6:%5B::1%5D:33960: got setting MAX_CONCURRENT_STREAMS = 0
+I0000 00:00:1747358562.572989 1361251 frame_settings.cc:224] CHTTP2:SVR:ipv6:%5B::1%5D:33960: got setting INITIAL_WINDOW_SIZE = 1000
+I0000 00:00:1747358562.573009 1361251 frame_settings.cc:224] CHTTP2:SVR:ipv6:%5B::1%5D:33960: got setting MAX_HEADER_LIST_SIZE = 16384
+I0000 00:00:1747358562.573027 1361251 frame_settings.cc:224] CHTTP2:SVR:ipv6:%5B::1%5D:33960: got setting GRPC_ALLOW_TRUE_BINARY_METADATA = 1
+I0000 00:00:1747358562.573636 1361245 frame_settings.cc:224] CHTTP2:SVR:ipv6:%5B::1%5D:33960: got setting INITIAL_WINDOW_SIZE = 65535
+```
+
+The above is a log from an example server. The example client has bdp disabled and stream lookahead bytes set to 1000. We first see that the server receives `INITIAL_WINDOW_SIZE = 1000` but then it receives another setting `INITIAL_WINDOW_SIZE = 65535` shortly after.
+
+Closes #39585
+
+COPYBARA_INTEGRATE_REVIEW=https://github.com/grpc/grpc/pull/39585 from yashykt:LookaheadBytes 750e8a3e6cdf1c20d4e24615c028bdea2106a2d7
+PiperOrigin-RevId: 762240216
+---
+ src/core/ext/transport/chttp2/transport/chttp2_transport.cc | 1 +
+ src/core/ext/transport/chttp2/transport/flow_control.h      | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/src/core/ext/transport/chttp2/transport/chttp2_transport.cc b/src/core/ext/transport/chttp2/transport/chttp2_transport.cc
+index 73c3f4b887c5c..33d47e4afb76e 100644
+--- a/src/core/ext/transport/chttp2/transport/chttp2_transport.cc
++++ b/src/core/ext/transport/chttp2/transport/chttp2_transport.cc
+@@ -535,6 +535,7 @@ static void read_channel_args(grpc_chttp2_transport* t,
+       channel_args.GetInt(GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES).value_or(-1);
+   if (value >= 0) {
+     t->settings.mutable_local().SetInitialWindowSize(value);
++    t->flow_control.set_target_initial_window_size(value);
    }
- }
- 
---- contrib/libs/grpc/src/core/ext/transport/chttp2/transport/flow_control.h	(a0adae11dd5b6e38e17e66aad094833577d8619c)
-+++ contrib/libs/grpc/src/core/ext/transport/chttp2/transport/flow_control.h	(24a33c939397e5e30c5d897458bd70872bb9481f)
-@@ -265,6 +265,11 @@ class TransportFlowControl final {
+   value = channel_args.GetInt(GRPC_ARG_HTTP2_ENABLE_TRUE_BINARY).value_or(-1);
+   if (value >= 0) {
+diff --git a/src/core/ext/transport/chttp2/transport/flow_control.h b/src/core/ext/transport/chttp2/transport/flow_control.h
+index 0dd86dbaf58d0..db69b65767507 100644
+--- a/src/core/ext/transport/chttp2/transport/flow_control.h
++++ b/src/core/ext/transport/chttp2/transport/flow_control.h
+@@ -271,6 +271,11 @@ class TransportFlowControl final {
  
    FlowControlAction SetAckedInitialWindow(uint32_t value);
  
 +  void set_target_initial_window_size(uint32_t value) {
 +    target_initial_window_size_ =
-+        std::min(value, grpc_chttp2_settings_parameters[GRPC_CHTTP2_SETTINGS_INITIAL_WINDOW_SIZE].max_value);
++        std::min(value, Http2Settings::max_initial_window_size());
 +  }
 +
    // Getters

@@ -99,11 +99,11 @@ public:
                     tablet->SendStopTablet(SideEffects);
                     return true;
                 }
-                tablet->BecomeRunning(Local.NodeId());
+                tablet->BecomeRunning(Local.NodeId(), EHiveEventReason::StatusOk);
                 if (tablet->GetLeader().IsLockedToActor()) {
                     // Tablet is locked and shouldn't be running, but we just found out it's running on this node
                     // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
-                    tablet->InitiateStop(SideEffects);
+                    tablet->InitiateStop(SideEffects, EHiveEventReason::TabletLocked);
                     if (tablet->IsLeader()) {
                         tablet->AsLeader().RestoreLockedTabletMetrics();
                     }
@@ -141,11 +141,14 @@ public:
                 if (Local) {
                     SideEffects.Send(Local, new TEvLocal::TEvDeadTabletAck(std::make_pair(TabletId, FollowerId), Generation));
                 }
+                if (tablet->IsLeader() && Generation < tablet->AsLeader().KnownGeneration) {
+                    return true;
+                }
+                Self->RecordTabletEvent(*tablet, EHiveEventType::BootFailed, EHiveEventReason::TabletDead,
+                    TStringBuilder() << "node=" << Local.NodeId() << " generation=" << Generation
+                        << " status=" << static_cast<int>(Status) << " deadReason=" << Reason);
                 if (tablet->IsLeader()) {
                     TLeaderTabletInfo& leader(tablet->AsLeader());
-                    if (Generation < leader.KnownGeneration) {
-                        return true;
-                    }
                     if (IsFailStatusForPostponeRestart()) {
                         if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
@@ -153,6 +156,8 @@ public:
                                 {"logPrefix", GetLogPrefix()},
                                 {"tabletInfo", tablet->ToString()},
                                 {"postponedStart", leader.PostponedStart});
+                            Self->RecordTabletEvent(*tablet, EHiveEventType::StartPostponed, EHiveEventReason::RestartPenalty,
+                                TStringBuilder() << "postponedStart=" << leader.PostponedStart);
                         }
                     }
                 }
@@ -169,7 +174,7 @@ public:
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
                                         NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics));
                         }
-                        tablet->InitiateStop(SideEffects);
+                        tablet->InitiateStop(SideEffects, EHiveEventReason::TabletDead);
                     }
                     if (IsFailStatusForNodePenalty()) {
                         tablet->FailedNodeId = Local.NodeId();

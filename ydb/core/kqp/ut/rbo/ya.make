@@ -7,10 +7,13 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_rbo_compatibility_ut.cpp
+    kqp_rbo_copy_ut.cpp
     kqp_rbo_decorrelation_ut.cpp
     kqp_rbo_global_ut.cpp
     kqp_rbo_lowering_ut.cpp
     kqp_rbo_yql_ut.cpp
+    kqp_rbo_lookup_join_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
 
@@ -21,6 +24,7 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/library/benchmarks/queries/tpch
+    ydb/library/plan2svg
     ydb/public/lib/ut_helpers
     ydb/library/yql/udfs/statistics_internal
     ydb/core/kqp/ut/olap/helpers

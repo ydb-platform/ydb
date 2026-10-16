@@ -6,7 +6,7 @@ SelfHeal подсистем распространения метаданных 
 
 {% note warning %}
 
-Инструкция относится только к кластерам {{ ydb-short-name }} с **конфигурацией V2** и **распределённой конфигурацией**. На кластерах с **конфигурацией V1** эти шаги и команды (в том числе получение конфигурации через `ydb admin cluster config fetch`) недоступны или не дадут ожидаемого результата. Альтернатив для V1 здесь не приводится — см. [Миграция на конфигурацию V2](../configuration-management/migration/migration-to-v2.md).
+Инструкция относится только к кластерам {{ ydb-short-name }} с **конфигурацией V2**. На кластерах с **конфигурацией V1** эти шаги и команды (в том числе получение конфигурации через `ydb admin cluster config fetch`) недоступны или не дадут ожидаемого результата. Альтернатив для V1 здесь не приводится — см. [Миграция на конфигурацию V2](../configuration-management/migration/migration-to-v2.md).
 
 {% endnote %}
 
@@ -24,7 +24,11 @@ SelfHeal подсистем распространения метаданных 
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-2. Измените конфигурационный файл `config.yaml`. Для этого поменяйте значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`:
+2. Измените конфигурационный файл `config.yaml`. Для этого поменяйте значение параметра `state_storage_self_heal_config.enable` на `true` или на `false`.
+
+    Для работы SelfHeal необходимо включить Sentinel: установите параметр `cms_config.sentinel_config.enable` в значение `true` в секции `config` файла `config.yaml`. Примените изменения на шаге 3.
+
+    Пример конфигурации с включёнными Sentinel и SelfHeal:
 
     ```yaml
     config:
@@ -39,9 +43,9 @@ SelfHeal подсистем распространения метаданных 
 
     {% note info %}
 
-    Для работы механизма требуется активация как [CMS Sentinel](../../concepts/glossary.md#cms), так и [распределённой конфигурации](../../concepts/glossary.md#distributed-configuration). Убедитесь, что они включены.
+    Для работы механизма требуется [конфигурация V2](../configuration-management/configuration-v2/index.md) и включённый [CMS Sentinel](../../concepts/glossary.md#cms).
 
-    См. подробнее: [Миграция на конфигурацию V2 и включение распределённой конфигурации](../configuration-management/migration/migration-to-v2.md).
+    Наличие `self_management_config.enabled: true` косвенно указывает на использование конфигурации V2. Установка этого флага сама по себе не переводит кластер на конфигурацию V2. Для перехода выполните шаги инструкции [Миграция на конфигурацию V2](../configuration-management/migration/migration-to-v2.md).
 
     {% endnote %}
 

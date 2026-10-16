@@ -14,6 +14,7 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
@@ -35,6 +36,7 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+#include <util/string/printf.h>
 #include <util/system/hostname.h>
 
 #include <algorithm>
@@ -2371,6 +2373,12 @@ void TCms::Handle(TEvCms::TEvDDiskTabletListRequest::TPtr& ev, const TActorConte
         }
         auto* tablet = response->Record.AddTablets();
         tablet->SetTabletId(item.TabletId);
+        if (ClusterInfo->HasTablet(item.TabletId)) {
+            const auto& diskId = ClusterInfo->Tablet(item.TabletId).NbsDiskId;
+            if (!diskId.empty()) {
+                tablet->SetDiskId(diskId);
+            }
+        }
         tablet->SetRevision(item.Info->Revision);
         tablet->SetLastChangedAt(item.Info->LastChangedAt.MicroSeconds());
         tablet->SetGroupsCount(item.GroupsCount);
@@ -2547,6 +2555,15 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         const auto* usage = items[i];
         auto* disk = response->Record.AddDisks();
         disk->MutableDiskId()->CopyFrom(usage->DiskId);
+        const auto& id = usage->DiskId;
+        const TString poolName = ClusterInfo->GetDDiskPoolName(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
+        if (!poolName.empty()) {
+            disk->SetStoragePoolName(poolName);
+        }
+        disk->SetDDiskPath(Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
+            id.GetPDiskId(), id.GetDDiskSlotId()));
+        disk->SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
+            id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId()).ToString());
         disk->SetDDiskTabletCount(usage->DDiskTabletIds.size());
         disk->SetPersistentBufferTabletCount(usage->PersistentBufferTabletIds.size());
         if (request.GetIncludeTabletIds()) {

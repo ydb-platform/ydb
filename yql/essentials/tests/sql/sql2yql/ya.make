@@ -32,8 +32,8 @@ ENDIF()
     )
     DATA(
         arcadia/yql/essentials/tests/sql/suites
-        arcadia/yql/essentials/cfg/tests
     )
+    INCLUDE(${ARCADIA_ROOT}/yql/essentials/cfg/configs.inc)
     PEERDIR(
         yql/essentials/tests/common/test_framework
         library/python/testing/swag/lib

@@ -413,7 +413,9 @@ class Test(TestBase):
                 'Usage': 0.0, 'UsedSize': 0, 'AvailableSize': 0,
             }),
             self._trace('pool', 'list', '-AH'),
-            self._trace('box', 'list', '-AH'),
+            self._trace('box', 'list', '-AH', canonize_columns={
+                'Usage': 0.0, 'UsedSize': 0, 'AvailableSize': 0,
+            }),
             self._trace('node', 'list', '-A'),
             self._trace('cluster', 'list', '-A'),
         ]

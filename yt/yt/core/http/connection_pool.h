@@ -10,7 +10,7 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NHttp {
 
@@ -46,7 +46,7 @@ private:
         bool IsValid() const;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TMultiLruCache<NNet::TNetworkAddress, TPooledConnection> Cache_;
     NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
 

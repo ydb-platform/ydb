@@ -1,23 +1,23 @@
 #pragma once
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+
 #include <ydb/library/testlib/common/test_with_actor_system.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
 static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(20);
 
-class TBaseFixture : public NTestUtils::TTestWithActorSystemFixture, public TTypeParser {
+class TBaseFixture: public NTestUtils::TTestWithActorSystemFixture, public TTypeParser {
     using TBase = NTestUtils::TTestWithActorSystemFixture;
 
 public:
     // Helper classes for checking serialized rows in multi type format
-    class ICell : public TThrRefBase {
+    class ICell: public TThrRefBase {
     public:
         using TPtr = TIntrusivePtr<ICell>;
 
@@ -46,7 +46,8 @@ public:
 
         template <typename TIterator>
         TBatch(const TIterator& begin, const TIterator& end)
-            : Rows{begin, end} {
+            : Rows{ begin, end }
+        {
         }
 
         TBatch& AddRow(TRow row);
@@ -65,7 +66,7 @@ public:
 public:
     void CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const;
 
-    static NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage GetMessage(ui64 offset, const TString& data);
+    static TMessageStreamRecord GetRecord(ui64 offset, const TString& data);
 
 public:
     NKikimr::NMiniKQL::TMemoryUsageInfo MemoryInfo;
@@ -83,4 +84,4 @@ TValue CheckSuccess(TValueStatus<TValue> valueStatus) {
     return valueStatus.DetachResult();
 }
 
-}  // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

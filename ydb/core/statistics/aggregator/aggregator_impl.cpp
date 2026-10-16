@@ -880,7 +880,10 @@ void TStatisticsAggregator::FinishTraversal(
     bool traversalSucceeded = (status == NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
     auto pathIt = ScheduleTraversals.find(pathId);
-    if (pathIt != ScheduleTraversals.end()) {
+    const auto* table = CurrentForceTraversalTable();
+    // A sample does not refresh the full statistics used by background ANALYZE.
+    if (pathIt != ScheduleTraversals.end()
+            && (!table || table->SampleRate == 1.0)) {
         auto& traversalTable = pathIt->second;
         traversalTable.LastUpdateTime = TraversalStartTime;
 

@@ -375,16 +375,10 @@
 
     - Рекомендуемый способ
 
+        Для сериализации вектора используйте `NYdb::NValueHelpers::Embedding` из C++ SDK версии v3.24.0 или новее.
+
         ```cpp
-        std::string ConvertVectorToBytes(const std::vector<float>& vector)
-        {
-            std::string result;
-            for (const auto& value : vector) {
-                const char* bytes = reinterpret_cast<const char*>(&value);
-                result += std::string(bytes, sizeof(float));
-            }
-            return result + "\x01";
-        }
+        #include <ydb-cpp-sdk/client/value/embedding.h>
 
         void InsertItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
@@ -395,7 +389,7 @@
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
-                    embedding: String
+                    embedding: Bytes
                 >>;
                 UPSERT INTO `{0}`
                 (
@@ -418,7 +412,7 @@
                 valueBuilder.BeginStruct();
                 valueBuilder.AddMember("id").Utf8(item.Id);
                 valueBuilder.AddMember("document").Utf8(item.Document);
-                valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+                valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
                 valueBuilder.EndStruct();
             }
             valueBuilder.EndList();
@@ -431,12 +425,6 @@
             std::cout << items.size() << " items inserted" << std::endl;
         }
         ```
-
-        {% note info %}
-
-        В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
-
-        {% endnote %}
 
     - Альтернативный способ
 
@@ -1324,6 +1312,8 @@
     - Рекомендуемый способ
 
         ```cpp
+        #include <ydb-cpp-sdk/client/value/embedding.h>
+
         std::vector<TResultItem> SearchItemsAsBytes(
             NYdb::NQuery::TQueryClient& client,
             const std::string& tableName,
@@ -1338,7 +1328,7 @@
 
             std::string query = std::format(R"(
                 PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-                DECLARE $embedding as String;
+                DECLARE $embedding as Bytes;
                 SELECT
                     id,
                     document,
@@ -1349,9 +1339,7 @@
             )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
             auto params = NYdb::TParamsBuilder()
-                .AddParam("$embedding")
-                    .String(ConvertVectorToBytes(embedding))
-                    .Build()
+                .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
                 .Build();
 
             std::vector<TResultItem> result;

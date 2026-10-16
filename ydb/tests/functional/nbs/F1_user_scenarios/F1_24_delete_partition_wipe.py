@@ -18,8 +18,8 @@ class TestF1_24DeletePartitionWipe(NbsCase):
         self._created_disks.remove(disk.disk_id)
 
         def pbuffer_wiped():
-            html = self.fetch_pbuffer_page(pb_ids)
-            assert disk.tablet_id not in html, html[:1500]
+            tablets = self.fetch_pbuffer_tablets(pb_ids, disk.tablet_id, allow_missing=True)
+            assert not tablets, tablets
             return True
 
         self.wait_until(pbuffer_wiped, description='PBuffer tablet LSN gone after delete')

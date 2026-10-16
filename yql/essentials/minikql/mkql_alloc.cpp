@@ -36,12 +36,11 @@ void TAllocState::TListEntry::Unlink() noexcept {
     Clear();
 }
 
-TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters& counters, bool supportsSizedAllocators)
+TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters& counters)
     : TAlignedPagePool(location, counters)
 #ifndef NDEBUG
     , DefaultMemInfo(MakeIntrusive<TMemoryUsageInfo>("default"))
 #endif
-    , SupportsSizedAllocators(supportsSizedAllocators)
     , CurrentPAllocList(&GlobalPAllocList)
 {
 #ifndef NDEBUG

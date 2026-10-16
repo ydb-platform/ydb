@@ -102,7 +102,33 @@ public:
             ExitTimeUs.store(ts, std::memory_order_release);
         }
 
-        State.store(state, std::memory_order_release);
+        const auto previousState = State.exchange(state, std::memory_order_acq_rel);
+
+        if (state == EState::PENDING || state == EState::DELAYED || state == EState::EXITED ||
+            (state == EState::NONE && NWorkloadManager::IsWmStateQueued(previousState))) {
+            TActorId observer;
+            ui64 observerCookie;
+            TString poolId;
+            TString classifiedBy;
+            {
+                TGuard<TAdaptiveLock> guard(PoolIdLock);
+                observer = StateObserver;
+                observerCookie = StateObserverCookie;
+                poolId = PoolId;
+                classifiedBy = ClassifiedBy;
+            }
+            if (observer) {
+                NActors::TActivationContext::Send(new NActors::IEventHandle(observer, {},
+                    new NWorkloadManager::TEvWmStateChanged(state, std::move(poolId), std::move(classifiedBy)),
+                    0, observerCookie));
+            }
+        }
+    }
+
+    void SetStateObserver(TActorId observer, ui64 cookie) {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        StateObserver = observer;
+        StateObserverCookie = cookie;
     }
 
     void SetPoolContext(TString poolId, TString classifiedBy) override {
@@ -111,7 +137,7 @@ public:
         ClassifiedBy = std::move(classifiedBy);
     }
 
-    EState GetState() const {
+    EState GetState() const override {
         return State.load(std::memory_order_acquire);
     }
 
@@ -128,7 +154,7 @@ public:
         return PoolId;
     }
 
-    TString GetClassifiedBy() const {
+    TString GetClassifiedBy() const override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         return ClassifiedBy;
     }
@@ -140,6 +166,8 @@ public:
             TGuard<TAdaptiveLock> guard(PoolIdLock);
             PoolId.clear();
             ClassifiedBy.clear();
+            StateObserver = {};
+            StateObserverCookie = 0;
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -152,6 +180,8 @@ private:
     mutable TAdaptiveLock PoolIdLock;
     TString PoolId;
     TString ClassifiedBy;
+    TActorId StateObserver;
+    ui64 StateObserverCookie = 0;
 };
 
 template<typename TValue>
@@ -274,7 +304,7 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = curNow;
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
+        // EndQuery detached the previous updater; reuse the fresh idle state.
     }
 
     void EndQuery(const TKqpSessionInfo* sessionInfo) {
@@ -286,7 +316,10 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
-        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
+        // Admission callbacks can outlive the proxy's timeout response. Never
+        // reuse their updater for another query, even if the session is IDLE.
+        sessionInfo->WmState->SetStateObserver({}, 0);
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState = std::make_shared<TWmSessionUpdater>();
     }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,

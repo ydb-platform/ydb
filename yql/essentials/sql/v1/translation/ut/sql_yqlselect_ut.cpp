@@ -2419,6 +2419,26 @@ Y_UNIT_TEST(AggregationFactoryIsCallable) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
 }
 
+Y_UNIT_TEST(CumeDistPreservesAnsiCurrentRow) {
+    for (const bool ansi : {false, true}) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+        if (ansi) {
+            settings.Flags.insert("AnsiCurrentRow");
+        }
+        const auto res = SqlToYqlWithSettings(R"sql(
+            PRAGMA YqlSelect = 'force';
+            SELECT CUME_DIST() OVER (ORDER BY key)
+            FROM AS_TABLE([<|key: 1|>, <|key: 1|>, <|key: 2|>]);
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TWordCountHive stat = {"YqlWin", "ansi"};
+        VerifyProgram(res, stat);
+        UNIT_ASSERT_VALUES_EQUAL(stat["YqlWin"], 2);
+        UNIT_ASSERT_VALUES_EQUAL(stat["ansi"], ansi ? 1 : 0);
+    }
+}
+
 Y_UNIT_TEST(PragmaSupported) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

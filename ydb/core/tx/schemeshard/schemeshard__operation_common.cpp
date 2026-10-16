@@ -1048,7 +1048,6 @@ TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDa
 }
 
 // NTableState::TProposedWaitParts
-// Must be in sync with NTableState::TMoveTableProposedWaitParts
 TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextState)
     : OperationId(id)
     , NextState(nextState)
@@ -1115,7 +1114,12 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
             context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
         }
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-        context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
+        const TTabletId tablet = context.SS->ShardInfos.at(shard.Idx).TabletID;
+        if (shard.TabletType == ETabletType::ColumnShard) {
+            auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+            context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+        }
+        context.OnComplete.RouteByTablet(OperationId, tablet);
     }
     txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
 

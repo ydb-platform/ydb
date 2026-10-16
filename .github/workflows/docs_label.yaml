@@ -11,7 +11,7 @@ name: Label documentation PR
 # Run for all PRs so removing the last documentation change also removes the label.
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, labeled]
 
 concurrency:
   group: docs-label-${{ github.event.pull_request.number }}

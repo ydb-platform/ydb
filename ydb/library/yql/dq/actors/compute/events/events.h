@@ -31,6 +31,7 @@ enum class EResumeSource : ui32 {
     CAWakeupCallback,
     CAResumeByCheckpoint,
     CAFinish,
+    CheckpointCommit,
 
     Last,
 };

@@ -1,6 +1,6 @@
 #pragma once
 #include "settings.h"
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 
 #include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>

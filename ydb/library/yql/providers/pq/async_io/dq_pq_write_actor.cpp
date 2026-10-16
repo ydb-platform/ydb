@@ -15,23 +15,21 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
-
-#include <util/generic/algorithm.h>
-#include <util/generic/hash.h>
-#include <util/string/builder.h>
-#include <util/string/cast.h>
 
 #include <algorithm>
 #include <queue>
@@ -43,7 +41,7 @@
 #define SINK_LOG_N(s) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix() << s)
 #define SINK_LOG_W(s) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix() << s)
 #define SINK_LOG_E(s) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix() << s)
-#define SINK_LOG_C(s) LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix() << s)
+#define SINK_LOG_C(s) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix() << s)
 
 namespace NYql::NDq {
 
@@ -56,7 +54,7 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
 
         EvPqEventsReady = EvBegin,
@@ -73,19 +71,19 @@ struct TEvPrivate {
 
     // Events
 
-    struct TEvPqEventsReady : public TEventLocal<TEvPqEventsReady, EvPqEventsReady> {
-    };
+    struct TEvPqEventsReady: public TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
 
-    struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
+    struct TEvExecuteTopicEvent: public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
     };
 
     template <typename TResult, ui32 EEventId>
-    struct TEvApiResult : public TEventLocal<TEvApiResult<TResult, EEventId>, EEventId> {
+    struct TEvApiResult: public TEventLocal<TEvApiResult<TResult, EEventId>, EEventId> {
         explicit TEvApiResult(TResult result, const TInstant startedAt)
             : Result(std::move(result))
             , Latency(TInstant::Now() - startedAt)
-        {}
+        {
+        }
 
         const TResult Result;
         const TDuration Latency;
@@ -97,20 +95,20 @@ struct TEvPrivate {
     using TEvDeferredPublicationCanceled = TEvApiResult<NYdb::NTopic::TCancelPublicationResult, EvDeferredPublicationCanceled>;
 };
 
-class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExceptionHandler, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
+class TDqPqWriteActor final: public TActor<TDqPqWriteActor>, public IActorExceptionHandler, public IDqComputeActorAsyncOutput,
+                             TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr ui32 STATE_VERSION = 1;
     static constexpr TDuration SLOW_CHECKPOINT_DURATION = TDuration::Minutes(1);
 
     using TBase = TActor<TDqPqWriteActor>;
 
     struct TMetrics {
-        TMetrics(
-            const TTxId& txId, const ui64 taskId, NMonitoring::TDynamicCounterPtr counters, const bool enableStreamingQueriesCounters,
-            const bool enableCountersPerTask, const bool enableDeferredPublication
-        )
-            : TxId(std::visit([](const auto& arg) {
-                return ToString(arg);
-            }, txId))
+        TMetrics(const TTxId& txId, const ui64 taskId, NMonitoring::TDynamicCounterPtr counters, const bool enableStreamingQueriesCounters,
+            const bool enableCountersPerTask, const bool enableDeferredPublication)
+            : TxId(std::visit(
+                  [](const auto& arg) {
+                      return ToString(arg);
+                  }, txId))
             , SubGroup(counters ? counters->GetSubgroup("sink", "PqSink") : MakeIntrusive<NMonitoring::TDynamicCounters>())
         {
             auto task = SubGroup;
@@ -203,7 +201,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             TAckInfo(const i64 messageSize, const ui64 seqNo)
                 : MessageSize(messageSize)
                 , SeqNo(seqNo)
-            {}
+            {
+            }
 
             const i64 MessageSize = 0;
             const ui64 SeqNo = 0;
@@ -215,7 +214,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             : Metrics(metrics)
             , EnableDeduplication(enableDeduplication)
             , EgressStats(egressStats)
-        {}
+        {
+        }
 
         bool Empty() const {
             return Messages.empty() && Inflight.empty();
@@ -245,7 +245,7 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             Inflight.emplace(itemSize, NextMessageSeqNo++);
             EgressStats.Bytes += itemSize;
             Metrics.EgressDataRate->Add(itemSize);
-            return {seqNo, std::move(message)};
+            return { seqNo, std::move(message) };
         }
 
         TAckInfo PopAck() {
@@ -294,13 +294,15 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
                 : WaitConfirmedSeqNo(waitConfirmedSeqNo)
                 , Checkpoint(std::move(checkpoint))
                 , DeferredPublicationIntId(deferredPublicationIntId)
-            {}
+            {
+            }
 
             bool Equal(const NDqProto::TCheckpoint& checkpointBound) const {
                 return Checkpoint.GetGeneration() == checkpointBound.GetGeneration() && Checkpoint.GetId() == checkpointBound.GetId();
             }
 
-            const ui64 WaitConfirmedSeqNo = 0; // Checkpoint state should be saved after getting acks on all messages with SeqNo <= WaitConfirmedSeqNo
+            const ui64 WaitConfirmedSeqNo =
+                0;   // Checkpoint state should be saved after getting acks on all messages with SeqNo <= WaitConfirmedSeqNo
             const NDqProto::TCheckpoint Checkpoint;
             const TInstant StartTime = TInstant::Now();
             ui64 EgressBytes = 0;
@@ -313,7 +315,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
         TCheckpointsState(const TDqAsyncStats& egressStats, const TMetrics& metrics)
             : Metrics(metrics)
             , EgressStats(egressStats)
-        {}
+        {
+        }
 
         bool Empty() const {
             return !PendingCheckpoint;
@@ -335,17 +338,20 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             const auto& info = *PendingCheckpoint;
             const auto waitConfirmedSeqNo = info.WaitConfirmedSeqNo;
             auto result = TStringBuilder() << CheckpointLogString(info.Checkpoint)
-                << " Slow PQ sink checkpoint. Duration: " << duration.Seconds() << 's'
-                << ". Checkpoint seq no: " << waitConfirmedSeqNo
-                << (info.DeferredPublicationIntId ? TStringBuilder() << ". Deferred publication internal id: " << info.DeferredPublicationIntId : TStringBuilder())
-                << ". Checkpoint data size: " << info.DataSizeUnderCheckpoint;
+                                           << " Slow PQ sink checkpoint. Duration: " << duration.Seconds() << 's'
+                                           << ". Checkpoint seq no: " << waitConfirmedSeqNo
+                                           << (info.DeferredPublicationIntId ? TStringBuilder() << ". Deferred publication internal id: "
+                                                                                                << info.DeferredPublicationIntId
+                                                                             : TStringBuilder())
+                                           << ". Checkpoint data size: " << info.DataSizeUnderCheckpoint;
 
             if (!info.AllDataSent) {
                 result << ". Waiting for writing seq no range [" << sentSeqNo + 1 << ", " << waitConfirmedSeqNo << "]";
             } else if (!info.AllAcksReceived) {
                 result << ". Waiting acks for seq no range [" << confirmedSeqNo + 1 << ", " << waitConfirmedSeqNo << "]";
             } else {
-                result << ". Waiting commit request from checkpoint coordinator, last checkpoint bound: " << CheckpointLogString(LastCommitCheckpointBound);
+                result << ". Waiting commit request from checkpoint coordinator, last checkpoint bound: "
+                       << CheckpointLogString(LastCommitCheckpointBound);
             }
 
             return result;
@@ -353,12 +359,11 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
 
         void PushCheckpoint(const ui64 waitConfirmedSeqNo, NDqProto::TCheckpoint checkpoint) {
             Y_VALIDATE(!PendingCheckpoint, "Multiple checkpoint inflight is not supported");
-            Y_VALIDATE(!LastCommitCheckpointBound || (
-                LastCommitCheckpointBound->GetGeneration() < checkpoint.GetGeneration() || (
-                    LastCommitCheckpointBound->GetGeneration() == checkpoint.GetGeneration() &&
-                    LastCommitCheckpointBound->GetId() < checkpoint.GetId()
-                )
-            ), "Unexpected new checkpoint: " << CheckpointLogString(checkpoint) << " for last commit checkpoint bound: " << CheckpointLogString(*LastCommitCheckpointBound));
+            Y_VALIDATE(!LastCommitCheckpointBound || (LastCommitCheckpointBound->GetGeneration() < checkpoint.GetGeneration() ||
+                                                         (LastCommitCheckpointBound->GetGeneration() == checkpoint.GetGeneration() &&
+                                                             LastCommitCheckpointBound->GetId() < checkpoint.GetId())),
+                "Unexpected new checkpoint: " << CheckpointLogString(checkpoint)
+                                              << " for last commit checkpoint bound: " << CheckpointLogString(*LastCommitCheckpointBound));
             PendingCheckpoint.emplace(waitConfirmedSeqNo, std::move(checkpoint));
 
             if (!SlowCheckpointMonitoringStarted) {
@@ -375,7 +380,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             }
 
             // For correct deferred publication reset, sent message seq no must advance strictly one by one
-            Y_VALIDATE(PendingCheckpoint->WaitConfirmedSeqNo == sentSeqNo, "Unexpected sent seq no: " << sentSeqNo << ". Wait confirmed seq no: " << PendingCheckpoint->WaitConfirmedSeqNo);
+            Y_VALIDATE(PendingCheckpoint->WaitConfirmedSeqNo == sentSeqNo,
+                "Unexpected sent seq no: " << sentSeqNo << ". Wait confirmed seq no: " << PendingCheckpoint->WaitConfirmedSeqNo);
 
             PendingCheckpoint->AllDataSent = true;
             PendingCheckpoint->DeferredPublicationIntId = deferredPublicationIntId;
@@ -420,7 +426,9 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             }
 
             // Checkpoint for commit must be either restored or pending checkpoint
-            Y_VALIDATE(PendingCheckpoint->Equal(checkpointBound), "Unexpected checkpoint bound: " << CheckpointLogString(checkpointBound) << ", pending checkpoint: " << (PendingCheckpoint ? CheckpointLogString(PendingCheckpoint->Checkpoint) : "<null>"));
+            Y_VALIDATE(PendingCheckpoint->Equal(checkpointBound),
+                "Unexpected checkpoint bound: " << CheckpointLogString(checkpointBound) << ", pending checkpoint: "
+                                                << (PendingCheckpoint ? CheckpointLogString(PendingCheckpoint->Checkpoint) : "<null>"));
             Y_VALIDATE(PendingCheckpoint->AllDataSent && PendingCheckpoint->AllAcksReceived, "Pending checkpoint is not ready for commit");
             Metrics.InFlyPendingCommitCheckpoints->Dec();
             return std::exchange(PendingCheckpoint, std::nullopt);
@@ -451,24 +459,31 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
     // 3. After successful commit checkpoint marked as committed
     class TDeferredPublishState {
         struct TInflightPublicationInfo {
-            TInflightPublicationInfo(const ui64 publicationIntId, std::optional<NDqProto::TCheckpoint> checkpoint, const ui64 unpublishedDataSize)
+            TInflightPublicationInfo(
+                const ui64 publicationIntId, std::optional<NDqProto::TCheckpoint> checkpoint, const ui64 unpublishedDataSize)
                 : PublicationIntId(publicationIntId)
                 , Checkpoint(std::move(checkpoint))
                 , UnpublishedDataSize(unpublishedDataSize)
-            {}
+            {
+            }
 
             const ui64 PublicationIntId = 0;
-            const std::optional<NDqProto::TCheckpoint> Checkpoint; // Checkpoint what was associated with data in committing publication (empty when write actor finishing without checkpoints)
+            const std::optional<NDqProto::TCheckpoint>
+                Checkpoint;   // Checkpoint what was associated with data in committing publication (empty when write actor finishing without checkpoints)
             const ui64 UnpublishedDataSize = 0;
             const TInstant StartTime = TInstant::Now();
         };
 
     public:
-        TDeferredPublishState(const i64 currentExecutionGeneration, const ui64 taskId, const ui64 outputIndex, const NPq::NProto::TDqPqTopicSink& sinkParams, const TMetrics& metrics)
+        TDeferredPublishState(const i64 currentExecutionGeneration, const ui64 taskId, const ui64 outputIndex,
+            const NPq::NProto::TDqPqTopicSink& sinkParams, const TMetrics& metrics)
             : Metrics(metrics)
             , CurrentExecutionGeneration(currentExecutionGeneration)
-            , WriterIdentity(!sinkParams.GetDeferredPublicationExtIdPrefix().empty() ? TStringBuilder() << sinkParams.GetDeferredPublicationExtIdPrefix() << ":" << taskId << ":" << outputIndex : TStringBuilder())
-        {}
+            , WriterIdentity(!sinkParams.GetDeferredPublicationExtIdPrefix().empty()
+                                 ? TStringBuilder() << sinkParams.GetDeferredPublicationExtIdPrefix() << ":" << taskId << ":" << outputIndex
+                                 : TStringBuilder())
+        {
+        }
 
         operator bool() const {
             return !WriterIdentity.empty();
@@ -509,9 +524,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
                 return result;
             }
 
-            return result << CheckpointLogString(info.Checkpoint)
-                << " Slow PQ sink publication #" << info.PublicationIntId << " commit. Duration: " << duration.Seconds() << 's'
-                << ". Checkpoint data size: " << info.UnpublishedDataSize;
+            return result << CheckpointLogString(info.Checkpoint) << " Slow PQ sink publication #" << info.PublicationIntId
+                          << " commit. Duration: " << duration.Seconds() << 's' << ". Checkpoint data size: " << info.UnpublishedDataSize;
         }
 
         void ResetCurrentPublication() {
@@ -540,7 +554,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
                 settings.WriterIdentity(WriterIdentity);
 
                 const auto* actorSystem = TActivationContext::ActorSystem();
-                client.ListPublications(settings).Subscribe([actorSystem, selfId = SelfId, startedAt = PublicationCreationStartTime](const NYdb::NTopic::TAsyncListPublicationsResult& result) {
+                client.ListPublications(settings).Subscribe([actorSystem, selfId = SelfId, startedAt = PublicationCreationStartTime](
+                                                                const NYdb::NTopic::TAsyncListPublicationsResult& result) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationsListed(result.GetValue(), startedAt));
                 });
                 return;
@@ -558,7 +573,9 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
                     continue;
                 }
 
-                Y_VALIDATE(publication.WriterIdentity == WriterIdentity, "Unexpected writer identity in list result for writer: " << WriterIdentity << ", got identity: " << publication.WriterIdentity);
+                Y_VALIDATE(publication.WriterIdentity == WriterIdentity,
+                    "Unexpected writer identity in list result for writer: " << WriterIdentity
+                                                                             << ", got identity: " << publication.WriterIdentity);
 
                 // External IDs have the form <writer>:<generation>:<sequence>.
                 TStringBuf identity(publication.ExtPublicationId);
@@ -566,9 +583,9 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
                 TStringBuf sequenceStr;
                 i64 generation = 0;
                 ui64 sequence = 0;
-                if (identity.SkipPrefix(WriterIdentity + ":") && identity.TrySplit(':', generationStr, sequenceStr)
-                    && TryFromString(generationStr, generation) && generation >= 0 && generation < CurrentExecutionGeneration
-                    && TryFromString(sequenceStr, sequence)) {
+                if (identity.SkipPrefix(WriterIdentity + ":") && identity.TrySplit(':', generationStr, sequenceStr) &&
+                    TryFromString(generationStr, generation) && generation >= 0 && generation < CurrentExecutionGeneration &&
+                    TryFromString(sequenceStr, sequence)) {
                     StalePublications.push_back(publication.IntPublicationId);
                 }
             }
@@ -591,7 +608,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             Metrics.InFlyActivePublications->Inc();
         }
 
-        void CommitPublication(const ui64 publicationIntId, std::optional<NDqProto::TCheckpoint> checkpoint, const ui64 unpublishedDataSize, IDeferredPublishClient& client) {
+        void CommitPublication(const ui64 publicationIntId, std::optional<NDqProto::TCheckpoint> checkpoint, const ui64 unpublishedDataSize,
+            IDeferredPublishClient& client) {
             Y_VALIDATE(SelfId && WriterIdentity, "Deferred publication are disabled or not initialized");
             Y_VALIDATE(publicationIntId, "Publication is not initialised for checkpoint " << CheckpointLogString(checkpoint));
             Y_VALIDATE(!InflightPublicationCommit, "Parallel publications commit is not supported");
@@ -599,9 +617,11 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             InflightPublicationCommit.emplace(publicationIntId, std::move(checkpoint), unpublishedDataSize);
 
             const auto* actorSystem = TActivationContext::ActorSystem();
-            client.Publish(NYdb::NTopic::TDeferredPublication(publicationIntId)).Subscribe([actorSystem, selfId = SelfId, startedAt = InflightPublicationCommit->StartTime](const NYdb::NTopic::TAsyncPublishResult& result) {
-                actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCommitted(result.GetValue(), startedAt));
-            });
+            client.Publish(NYdb::NTopic::TDeferredPublication(publicationIntId))
+                .Subscribe([actorSystem, selfId = SelfId, startedAt = InflightPublicationCommit->StartTime](
+                               const NYdb::NTopic::TAsyncPublishResult& result) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCommitted(result.GetValue(), startedAt));
+                });
         }
 
         TInflightPublicationInfo OnPublicationCommitted() {
@@ -621,18 +641,20 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
             const auto* actorSystem = TActivationContext::ActorSystem();
             const auto startedAt = TInstant::Now();
             if (!StalePublications.empty()) {
-                client.CancelPublication(NYdb::NTopic::TDeferredPublication(StalePublications.back())).Subscribe([actorSystem, selfId = SelfId, startedAt](const NYdb::NTopic::TAsyncCancelPublicationResult& result) {
-                    actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCanceled(result.GetValue(), startedAt));
-                });
+                client.CancelPublication(NYdb::NTopic::TDeferredPublication(StalePublications.back()))
+                    .Subscribe([actorSystem, selfId = SelfId, startedAt](const NYdb::NTopic::TAsyncCancelPublicationResult& result) {
+                        actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCanceled(result.GetValue(), startedAt));
+                    });
                 return;
             }
 
             NYdb::NTopic::TBeginPublicationSettings settings;
             settings.WriterIdentity(WriterIdentity);
             const auto publicationExtId = TStringBuilder() << WriterIdentity << ":" << CurrentExecutionGeneration << ":" << PublicationSeqNo++;
-            client.BeginPublication(publicationExtId, settings).Subscribe([actorSystem, selfId = SelfId, startedAt](const NYdb::NTopic::TAsyncBeginPublicationResult& result) {
-                actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCreated(result.GetValue(), startedAt));
-            });
+            client.BeginPublication(publicationExtId, settings)
+                .Subscribe([actorSystem, selfId = SelfId, startedAt](const NYdb::NTopic::TAsyncBeginPublicationResult& result) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCreated(result.GetValue(), startedAt));
+                });
         }
 
         const TMetrics& Metrics;
@@ -652,7 +674,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
     struct TTopicEventProcessor {
         explicit TTopicEventProcessor(TDqPqWriteActor& self)
             : Self(self)
-        {}
+        {
+        }
 
         bool operator()(const NYdb::NTopic::TSessionClosedEvent& ev) {
             Self.Fail(ev, TStringBuilder() << "Write session to topic \"" << Self.SinkParams.GetTopicPath() << "\" was closed");
@@ -687,7 +710,8 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
                 Y_VALIDATE(!Self.Buffer.GetInflight().empty(), "Got unexpected ack with seq no: " << sdkAckSeqNo);
                 const auto& ackInfo = Self.Buffer.PopAck();
                 Self.FreeSpace += ackInfo.MessageSize;
-                SINK_LOG_T("Ack seq no (from inflight ack) " << ackInfo.SeqNo << ", message size: " << ackInfo.MessageSize << ", free space: " << Self.FreeSpace);
+                SINK_LOG_T("Ack seq no (from inflight ack) " << ackInfo.SeqNo << ", message size: " << ackInfo.MessageSize
+                                                             << ", free space: " << Self.FreeSpace);
             }
 
             return true;
@@ -704,12 +728,11 @@ class TDqPqWriteActor final : public TActor<TDqPqWriteActor>, public IActorExcep
 public:
     static constexpr char ActorName[] = "DQ_PQ_WRITE_ACTOR";
 
-    TDqPqWriteActor(
-        const ui64 outputIndex, const TCollectStatsLevel statsLevel, TTxId txId, const ui64 taskId, NPq::NProto::TDqPqTopicSink&& sinkParams,
-        NYdb::TDriver driver, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory, IDqComputeActorAsyncOutput::ICallbacks* const callbacks,
+    TDqPqWriteActor(const ui64 outputIndex, const TCollectStatsLevel statsLevel, TTxId txId, const ui64 taskId,
+        NPq::NProto::TDqPqTopicSink&& sinkParams, NYdb::TDriver driver,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory, IDqComputeActorAsyncOutput::ICallbacks* const callbacks,
         ::NMonitoring::TDynamicCounterPtr counters, const i64 freeSpace, const i64 currentExecutionGeneration, IPqStaticGateway::TPtr pqGateway,
-        const bool enableStreamingQueriesCounters, const bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag, const bool hasCheckpoints
-    )
+        const bool enableStreamingQueriesCounters, const bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag, const bool hasCheckpoints)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TaskId(taskId)
@@ -719,7 +742,8 @@ public:
         , PqGateway(std::move(pqGateway))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , Driver(std::move(driver))
-        , Metrics(TxId, TaskId, std::move(counters), enableStreamingQueriesCounters, /* enableCountersPerTask */ false, !SinkParams.GetDeferredPublicationExtIdPrefix().empty())
+        , Metrics(TxId, TaskId, std::move(counters), enableStreamingQueriesCounters, /* enableCountersPerTask */ false,
+              !SinkParams.GetDeferredPublicationExtIdPrefix().empty())
         , EnableDeduplication(enableStreamingQueriesPqSinkDeduplicationFeatureFlag && SinkParams.GetEnableDeduplication())
         , HasCheckpoints(hasCheckpoints)
         , FreeSpace(freeSpace)
@@ -753,7 +777,7 @@ private:
         DeferredPublishState.SetSelfId(SelfId());
     }
 
-    void PassAway() final { // Is called from Compute Actor, implements IActor & IDqComputeActorAsyncOutput
+    void PassAway() final {   // Is called from Compute Actor, implements IActor & IDqComputeActorAsyncOutput
         if (WriteSession) {
             WriteSession->Close(/* closeTimeout */ TDuration::Zero());
         }
@@ -794,27 +818,27 @@ private:
 
         Y_VALIDATE(!batch.IsWide(), "Wide batch is not supported");
         if (!batch.ForEachRow([&](const NUdf::TUnboxedValue& value) {
-            if (!value.IsBoxed()) {
-                Fail("Struct with single field was expected");
-                return false;
-            }
+                if (!value.IsBoxed()) {
+                    Fail("Struct with single field was expected");
+                    return false;
+                }
 
-            const NUdf::TUnboxedValue dataCol = value.GetElement(0);
-            if (!dataCol.IsString() && !dataCol.IsEmbedded()) {
-                Fail("Non string value could not be written to YDS stream");
-                return false;
-            }
+                const NUdf::TUnboxedValue dataCol = value.GetElement(0);
+                if (!dataCol.IsString() && !dataCol.IsEmbedded()) {
+                    Fail("Non string value could not be written to YDS stream");
+                    return false;
+                }
 
-            TString data(dataCol.AsStringRef());
+                TString data(dataCol.AsStringRef());
 
-            LWPROBE(PqWriteDataToSend, ToString(TxId), SinkParams.GetTopicPath(), data);
-            SINK_LOG_T("Received data for sending: " << data);
+                LWPROBE(PqWriteDataToSend, ToString(TxId), SinkParams.GetTopicPath(), data);
+                SINK_LOG_T("Received data for sending: " << data);
 
-            const auto messageSize = GetItemSize(data);
-            FreeSpace -= messageSize;
-            Buffer.PushMessage(std::move(data));
-            return true;
-        })) {
+                const auto messageSize = GetItemSize(data);
+                FreeSpace -= messageSize;
+                Buffer.PushMessage(std::move(data));
+                return true;
+            })) {
             return;
         }
 
@@ -836,7 +860,8 @@ private:
 
         if (const auto& info = CheckpointsState.CommitCheckpoints(checkpoint); info && info->DeferredPublicationIntId) {
             SINK_LOG_D("Commit deferred publication " << info->DeferredPublicationIntId << " on checkpoint " << CheckpointLogString(checkpoint));
-            DeferredPublishState.CommitPublication(info->DeferredPublicationIntId, checkpoint, info->DataSizeUnderCheckpoint, GetDeferredPublishClient());
+            DeferredPublishState.CommitPublication(
+                info->DeferredPublicationIntId, checkpoint, info->DataSizeUnderCheckpoint, GetDeferredPublishClient());
         } else {
             SINK_LOG_D("Commit checkpoint immediately " << CheckpointLogString(checkpoint));
             Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
@@ -883,7 +908,8 @@ private:
         }
 
         const auto intPublicationId = result.GetIntPublicationId();
-        SINK_LOG_D("Publication created, internal id: " << intPublicationId << ", external id: " << result.GetPublication().ExtPublicationId.value_or("<null>"));
+        SINK_LOG_D("Publication created, internal id: " << intPublicationId
+                                                        << ", external id: " << result.GetPublication().ExtPublicationId.value_or("<null>"));
         DeferredPublishState.OnPublicationCreated(intPublicationId);
 
         Process();
@@ -953,7 +979,8 @@ private:
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
-        if (const auto& diagnostics = CheckpointsState.GetSlowCheckpointDiagnostics(Buffer.GetLastSentMessageSeqNo(), Buffer.GetConfirmedSeqNo())) {
+        if (const auto& diagnostics =
+                CheckpointsState.GetSlowCheckpointDiagnostics(Buffer.GetLastSentMessageSeqNo(), Buffer.GetConfirmedSeqNo())) {
             SINK_LOG_W(diagnostics);
         }
 
@@ -964,7 +991,7 @@ private:
 
     // Initialization
 
-    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() { // Must be called after actor registration
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() {   // Must be called after actor registration
         Y_VALIDATE(OwnerId, "Can not create federated topic client settings before actor registration");
         NYdb::NFederatedTopic::TFederatedTopicClientSettings opts = PqGateway->GetFederatedTopicClientSettings();
 
@@ -991,51 +1018,46 @@ private:
 
     IDeferredPublishClient& GetDeferredPublishClient() {
         if (!DeferredPublishClient) {
-            DeferredPublishClient = PqGateway->GetDeferredPublishClient(Driver, NYdb::TCommonClientSettings()
-                .Database(SinkParams.GetDatabase())
-                .DiscoveryEndpoint(SinkParams.GetEndpoint())
-                .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
-                .CredentialsProviderFactory(CredentialsProviderFactory)
-            );
+            DeferredPublishClient =
+                PqGateway->GetDeferredPublishClient(Driver, NYdb::TCommonClientSettings()
+                                                                .Database(SinkParams.GetDatabase())
+                                                                .DiscoveryEndpoint(SinkParams.GetEndpoint())
+                                                                .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
+                                                                .CredentialsProviderFactory(CredentialsProviderFactory));
             Y_VALIDATE(DeferredPublishClient, "Failed to create deferred publish client");
         }
 
         return *DeferredPublishClient;
     }
 
-    const TString& GetSourceId() { // Must be called after state loading
+    const TString& GetSourceId() {   // Must be called after state loading
         if (!SourceId) {
-            SourceId = CreateGuidAsString(); // Not loaded from state, so this is the first run.
+            SourceId = CreateGuidAsString();   // Not loaded from state, so this is the first run.
             SINK_LOG_D("Created new source id: " << SourceId);
         }
 
         return SourceId;
     }
 
-    NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() { 
+    NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
         auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
-            /* minDelay           */ TDuration::MilliSeconds(500),
-            /* minLongRetryDelay  */ TDuration::Seconds(5),
-            /* maxDelay           */ TDuration::Seconds(20),
-            /* maxRetries         */ 100,
-            /* maxTime            */ TDuration::Seconds(60),
-            /* scaleFactor        */ 2.0,
-            /* customRetryClass   */ [](NYdb::EStatus status) {
+            /* minDelay           */ TDuration::MilliSeconds(500), /* minLongRetryDelay  */ TDuration::Seconds(5),
+            /* maxDelay           */ TDuration::Seconds(20), /* maxRetries         */ 100, /* maxTime            */ TDuration::Seconds(60),
+            /* scaleFactor        */ 2.0, /* customRetryClass   */ [](NYdb::EStatus status) {
                 if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
                     return ERetryErrorClass::LongRetry;
                 }
                 return NYdb::NTopic::GetRetryErrorClass(status);
             });
 
-        auto settings = NYdb::NTopic::TWriteSessionSettings()
-            .Path(SinkParams.GetTopicPath())
-            .TraceId(LogPrefix())
-            .MaxMemoryUsage(FreeSpace > 0 ? FreeSpace : DqPqDefaultFreeSpace)
-            .DeduplicationEnabled(EnableDeduplication)
-            .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
-                ? NYdb::NTopic::ECodec::RAW
-                : NYdb::NTopic::ECodec::GZIP)
-            .RetryPolicy(retryPolicy);
+        auto settings =
+            NYdb::NTopic::TWriteSessionSettings()
+                .Path(SinkParams.GetTopicPath())
+                .TraceId(LogPrefix())
+                .MaxMemoryUsage(FreeSpace > 0 ? FreeSpace : DqPqDefaultFreeSpace)
+                .DeduplicationEnabled(EnableDeduplication)
+                .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams ? NYdb::NTopic::ECodec::RAW : NYdb::NTopic::ECodec::GZIP)
+                .RetryPolicy(retryPolicy);
 
         if (EnableDeduplication) {
             const auto& sourceId = GetSourceId();
@@ -1117,7 +1139,7 @@ private:
         SINK_LOG_T("Extracted #" << events.size() << " PQ write session events, free space: " << initialFreeSpace);
 
         for (auto& event : events) {
-            if (!std::visit(TTopicEventProcessor{*this}, event)) {
+            if (!std::visit(TTopicEventProcessor{ *this }, event)) {
                 return false;
             }
         }
@@ -1181,7 +1203,8 @@ private:
             // In case of disabled checkpoints, publications should be committed once on finish
             SINK_LOG_I("Commit publication " << publicationIntId << " after finish without checkpoints");
             DeferredPublishState.ResetCurrentPublication();
-            DeferredPublishState.CommitPublication(publicationIntId, /* checkpoint */ std::nullopt, EgressStats.Bytes - CheckpointsState.GetWrittenDataUnderCheckpoint(), GetDeferredPublishClient());
+            DeferredPublishState.CommitPublication(publicationIntId, /* checkpoint */ std::nullopt,
+                EgressStats.Bytes - CheckpointsState.GetWrittenDataUnderCheckpoint(), GetDeferredPublishClient());
             return;
         }
 
@@ -1199,13 +1222,14 @@ private:
             WriteSession.reset();
         }
 
-        Y_VALIDATE(!IsIn({NDqProto::StatusIds::SUCCESS, NDqProto::StatusIds::UNSPECIFIED}, status), "Invalid fail status: " << NDqProto::StatusIds::StatusCode_Name(status));
+        Y_VALIDATE(!IsIn({ NDqProto::StatusIds::SUCCESS, NDqProto::StatusIds::UNSPECIFIED }, status),
+            "Invalid fail status: " << NDqProto::StatusIds::StatusCode_Name(status));
         SINK_LOG_W("Fail. Status: " << NDqProto::StatusIds::StatusCode_Name(status) << ". Issues: " << issues.ToOneLineString());
         Callbacks->OnAsyncOutputError(OutputIndex, issues, status);
     }
 
     void Fail(const NDqProto::StatusIds::StatusCode status, const TString& message) {
-        Fail(status, {TIssue(message)});
+        Fail(status, { TIssue(message) });
     }
 
     void Fail(const TString& message) {
@@ -1220,7 +1244,7 @@ private:
             rootIssue.AddSubIssue(MakeIntrusive<TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));
         }
 
-        Fail(NDqProto::StatusIds::EXTERNAL_ERROR, {rootIssue});
+        Fail(NDqProto::StatusIds::EXTERNAL_ERROR, { rootIssue });
     }
 
     TString LogPrefix() const {
@@ -1273,55 +1297,31 @@ private:
     std::optional<NYdb::NTopic::TContinuationToken> ContinuationToken;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateDqPqWriteActor(
-    NPq::NProto::TDqPqTopicSink&& settings,
-    ui64 outputIndex,
-    TCollectStatsLevel statsLevel,
-    TTxId txId,
-    ui64 taskId,
-    const THashMap<TString, TString>& secureParams,
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    IPqStaticGateway::TPtr pqGateway,
-    bool enableStreamingQueriesCounters,
-    i64 freeSpace,
-    i64 currentExecutionGeneration,
-    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
-    bool hasCheckpoints)
+std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateDqPqWriteActor(NPq::NProto::TDqPqTopicSink&& settings, ui64 outputIndex,
+    TCollectStatsLevel statsLevel, TTxId txId, ui64 taskId, const THashMap<TString, TString>& secureParams, NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, IDqComputeActorAsyncOutput::ICallbacks* callbacks,
+    const ::NMonitoring::TDynamicCounterPtr& counters, IPqStaticGateway::TPtr pqGateway, bool enableStreamingQueriesCounters, i64 freeSpace,
+    i64 currentExecutionGeneration, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag, bool hasCheckpoints)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
 
-    TDqPqWriteActor* actor = new TDqPqWriteActor(
-        outputIndex,
-        statsLevel,
-        txId,
-        taskId,
-        std::move(settings),
-        std::move(driver),
-        credentialsFactory->Create(token, addBearerToToken),
-        callbacks,
-        counters,
-        freeSpace,
-        currentExecutionGeneration,
-        pqGateway,
-        enableStreamingQueriesCounters,
-        enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
-        hasCheckpoints
-    );
-    return {actor, actor};
+    TDqPqWriteActor* actor = new TDqPqWriteActor(outputIndex, statsLevel, txId, taskId, std::move(settings), std::move(driver),
+        credentialsFactory->Create(token, addBearerToToken), callbacks, counters, freeSpace, currentExecutionGeneration, pqGateway,
+        enableStreamingQueriesCounters, enableStreamingQueriesPqSinkDeduplicationFeatureFlag, hasCheckpoints);
+    return { actor, actor };
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters,
+    bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters, enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
-            NPq::NProto::TDqPqTopicSink&& settings,
-            IDqAsyncIoFactory::TSinkArguments&& args)
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters,
+            enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
+            NPq::NProto::TDqPqTopicSink&& settings, IDqAsyncIoFactory::TSinkArguments&& args)
         {
             auto txId = args.TxId;
             if (const auto it = args.TaskParams.find("query_path"); it != args.TaskParams.end()) {
@@ -1339,26 +1339,10 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
             }
 
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
-            return CreateDqPqWriteActor(
-                std::move(settings),
-                args.OutputIndex,
-                args.StatsLevel,
-                txId,
-                args.TaskId,
-                args.SecureParams,
-                driver,
-                credentialsFactory,
-                args.Callback,
-                counters ? counters : args.TaskCounters,
-                pqGateway,
-                enableStreamingQueriesCounters,
-                DqPqDefaultFreeSpace,
-                currentExecutionGeneration,
-                enableStreamingQueriesPqSinkDeduplicationFeatureFlag,
-                hasCheckpoints
-            );
-        }
-    );
+            return CreateDqPqWriteActor(std::move(settings), args.OutputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams, driver,
+                credentialsFactory, args.Callback, counters ? counters : args.TaskCounters, pqGateway, enableStreamingQueriesCounters,
+                DqPqDefaultFreeSpace, currentExecutionGeneration, enableStreamingQueriesPqSinkDeduplicationFeatureFlag, hasCheckpoints);
+        });
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

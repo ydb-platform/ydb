@@ -9,8 +9,7 @@ namespace NKikimr::NKqp::NLocalTopicTests {
 Y_UNIT_TEST_SUITE(TLocalDeferredPublishClient) {
     Y_UNIT_TEST_F(BeginPublicationPreservesIdentity, TLocalTopicClientFixture) {
         auto client = CreateLocalDeferredPublishClient(LocalClientSettings(), ClientSettings());
-        const auto begin = client->BeginPublication("publication", TBeginPublicationSettings()
-            .WriterIdentity("writer")).GetValue(TEST_TIMEOUT);
+        const auto begin = client->BeginPublication("publication", TBeginPublicationSettings().WriterIdentity("writer")).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(begin.GetStatus(), EStatus::SUCCESS, begin.GetIssues().ToString());
         const auto& publication = begin.GetPublication();
         UNIT_ASSERT(publication.IntPublicationId > 0);
@@ -61,7 +60,7 @@ Y_UNIT_TEST_SUITE(TLocalDeferredPublishClient) {
 
         const auto publish = client->Publish(publication).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL_C(publish.GetStatus(), EStatus::SUCCESS, publish.GetIssues().ToString());
-        AssertTopicMessages({"published message"});
+        AssertTopicMessages({ "published message" });
         AssertTopicEndOffset(1);
 
         const auto repeated = client->Publish(publication).GetValue(TEST_TIMEOUT);
@@ -86,7 +85,7 @@ Y_UNIT_TEST_SUITE(TLocalDeferredPublishClient) {
 
     Y_UNIT_TEST_F(ListPublicationsPreservesAndFiltersWriterIdentity, TLocalTopicClientFixture) {
         auto client = CreateLocalDeferredPublishClient(LocalClientSettings(), ClientSettings());
-        const std::vector<std::optional<std::string>> identities = {std::nullopt, "", "writer", "writer", "other"};
+        const std::vector<std::optional<std::string>> identities = { std::nullopt, "", "writer", "writer", "other" };
         std::vector<TDeferredPublication> publications;
         for (size_t i = 0; i < identities.size(); ++i) {
             TBeginPublicationSettings settings;
@@ -111,10 +110,11 @@ Y_UNIT_TEST_SUITE(TLocalDeferredPublishClient) {
             UNIT_ASSERT(it->WriterIdentity == identities[i]);
         }
 
-        for (const std::string writer : {"", "writer", "missing"}) {
+        for (const std::string writer : { "", "writer", "missing" }) {
             const auto filtered = client->ListPublications(TListPublicationsSettings().WriterIdentity(writer)).GetValue(TEST_TIMEOUT);
             UNIT_ASSERT_VALUES_EQUAL_C(filtered.GetStatus(), EStatus::SUCCESS, filtered.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(filtered.GetPublications().size(), std::count(identities.begin(), identities.end(), std::optional<std::string>(writer)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                filtered.GetPublications().size(), std::count(identities.begin(), identities.end(), std::optional<std::string>(writer)));
             for (const auto& summary : filtered.GetPublications()) {
                 UNIT_ASSERT(summary.WriterIdentity);
                 UNIT_ASSERT_VALUES_EQUAL(*summary.WriterIdentity, writer);
@@ -153,8 +153,8 @@ Y_UNIT_TEST_SUITE(TLocalDeferredPublishClient) {
         const auto repeated = client->CancelPublication(publication).GetValue(TEST_TIMEOUT);
         UNIT_ASSERT_VALUES_EQUAL(repeated.GetStatus(), EStatus::NOT_FOUND);
 
-        WriteTopicMessages({"visible message"});
-        AssertTopicMessages({"visible message"});
+        WriteTopicMessages({ "visible message" });
+        AssertTopicMessages({ "visible message" });
         AssertTopicEndOffset(1);
 
         const auto reused = client->BeginPublication("canceled-message").GetValue(TEST_TIMEOUT);
@@ -187,4 +187,4 @@ Y_UNIT_TEST_SUITE(TLocalDeferredPublishClient) {
     }
 }
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

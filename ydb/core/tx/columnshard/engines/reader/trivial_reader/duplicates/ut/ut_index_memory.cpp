@@ -103,14 +103,15 @@ ui64 ReservedMemory(NTrivial::TPortionDataSource& source, const THashMap<ui32, N
 
 NArrow::NSSA::IDataSource::TFetchIndexContext IndexFetch(const NArrow::NSSA::TIndexCheckOperation::EOperation operation) {
     NArrow::NSSA::IDataSource::TFetchIndexContext::TOperationsBySubColumn operations;
-    operations.Add("", NArrow::NSSA::TIndexCheckOperation(operation, true));
+    operations.Add({}, NArrow::NSSA::TIndexCheckOperation(operation, true));
     return NArrow::NSSA::IDataSource::TFetchIndexContext(PkColumnId, operations);
 }
 
 NArrow::NSSA::IDataSource::TFetchIndexContext IndexFetchPaths(const std::vector<TString>& paths) {
     NArrow::NSSA::IDataSource::TFetchIndexContext::TOperationsBySubColumn operations;
     for (const auto& path : paths) {
-        operations.Add(path, NArrow::NSSA::TIndexCheckOperation(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true));
+        operations.Add(NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName::Parse(path),
+            NArrow::NSSA::TIndexCheckOperation(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true));
     }
     return NArrow::NSSA::IDataSource::TFetchIndexContext(PkColumnId, operations);
 }

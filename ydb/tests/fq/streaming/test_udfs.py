@@ -25,19 +25,19 @@ def kikimr_udfs(request):
             "enable_topics_sql_io_operations",
             "enable_streaming_queries",
         ],
-        query_service_config={"available_external_data_sources": ["Ydb", "YdbTopics"]},
+        query_service_config={"available_external_data_sources": ["Ydb"]},
         pq_client_service_types=["yandex-query"],
         table_service_config={"enable_compile_cache_warmup": False},
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
-        udfs_path=yatest.common.build_path("yql/essentials/udfs/common/python/python3_small")
+        udfs_path=yatest.common.build_path("yql/essentials/udfs/common/python/python3_small"),
     )
     config.yaml_config["log_config"] = {
         "default_level": 4,
         "entry": [
             {"component": "KQP_PROXY", "level": 7},
             {"component": "KQP_EXECUTER", "level": 7},
-        ]
+        ],
     }
 
     kikimr = Kikimr(config, timeout_seconds=30, enable_discovery=False)
@@ -99,7 +99,15 @@ def get_all_cgi_params(url):
             UPSERT INTO `{test_table}` (Key, Payload) VALUES (1, "test-")
         """)
 
-        def validate_query(text: str, previous_ids: int, status: List[str] = ["RUNNING"], check_issues: bool = True, suffix: Optional[str] = None, retry_count: List[int] = [0], client=None):
+        def validate_query(
+            text: str,
+            previous_ids: int,
+            status: List[str] = ["RUNNING"],
+            check_issues: bool = True,
+            suffix: Optional[str] = None,
+            retry_count: List[int] = [0],
+            client=None,
+        ):
             if client is None:
                 client = kikimr_udfs.ydb_client
 
@@ -143,7 +151,9 @@ def get_all_cgi_params(url):
 
             if suffix is not None:
                 self.wait_completed_checkpoints(kikimr_udfs, name)
-                self.write_stream_with_message_metadata(kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint)
+                self.write_stream_with_message_metadata(
+                    kikimr_udfs, [("test_data", {"msg_id": "id-1"})], endpoint=endpoint
+                )
                 assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == f"test_data{suffix}"
 
         tests_count = 20
@@ -204,10 +214,21 @@ END DO
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.slots.values())[1]
-        second_ydb_client = YdbClient.from_driver_config(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        second_ydb_client = YdbClient.from_driver_config(
+            database=kikimr_udfs.endpoint.database,
+            endpoint=f"grpc://{second_node.host}:{second_node.port}",
+            enable_discovery=False,
+        )
         logger.info("Checking query state after restart")
 
-        validate_query(precompute_sql, tests_count, status=["SUSPENDED", "FAILED", "STARTING", "RUNNING"], check_issues=False, retry_count=[0, 1], client=second_ydb_client)
+        validate_query(
+            precompute_sql,
+            tests_count,
+            status=["SUSPENDED", "FAILED", "STARTING", "RUNNING"],
+            check_issues=False,
+            retry_count=[0, 1],
+            client=second_ydb_client,
+        )
         logger.info("Hanging query validated after restart")
 
         sql = f"""

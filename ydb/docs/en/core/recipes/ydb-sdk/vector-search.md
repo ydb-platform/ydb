@@ -381,16 +381,10 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
   - Recommended approach
 
+    Use `NYdb::NValueHelpers::Embedding` from C++ SDK v3.24.0 or later to serialize the vector.
+
     ```cpp
-    std::string ConvertVectorToBytes(const std::vector<float>& vector)
-    {
-        std::string result;
-        for (const auto& value : vector) {
-            const char* bytes = reinterpret_cast<const char*>(&value);
-            result += std::string(bytes, sizeof(float));
-        }
-        return result + "\x01";
-    }
+    #include <ydb-cpp-sdk/client/value/embedding.h>
 
     void InsertItemsAsBytes(
         NYdb::NQuery::TQueryClient& client,
@@ -401,7 +395,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
             DECLARE $items AS List<Struct<
                 id: Utf8,
                 document: Utf8,
-                embedding: String
+                embedding: Bytes
             >>;
             UPSERT INTO `{0}`
             (
@@ -424,7 +418,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
             valueBuilder.BeginStruct();
             valueBuilder.AddMember("id").Utf8(item.Id);
             valueBuilder.AddMember("document").Utf8(item.Document);
-            valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+            valueBuilder.AddMember("embedding", NYdb::NValueHelpers::Embedding(item.Embedding));
             valueBuilder.EndStruct();
         }
         valueBuilder.EndList();
@@ -438,12 +432,6 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     }
     ```
 
-
-    {% note info %}
-
-    The `ConvertVectorToBytes` function assumes that the client uses a processor with [little-endian byte order](https://en.wikipedia.org/wiki/Endianness), such as x86_64. If a different byte order is used, the `ConvertVectorToBytes` function must be adapted.
-
-    {% endnote %}
 
   - Alternative approach
 
@@ -1332,6 +1320,8 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
   - Recommended approach
 
     ```cpp
+    #include <ydb-cpp-sdk/client/value/embedding.h>
+
     std::vector<TResultItem> SearchItemsAsBytes(
         NYdb::NQuery::TQueryClient& client,
         const std::string& tableName,
@@ -1346,7 +1336,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
         std::string query = std::format(R"(
             PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-            DECLARE $embedding as String;
+            DECLARE $embedding as Bytes;
             SELECT
                 id,
                 document,
@@ -1357,9 +1347,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
         )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         auto params = NYdb::TParamsBuilder()
-            .AddParam("$embedding")
-                .String(ConvertVectorToBytes(embedding))
-                .Build()
+            .AddParam("$embedding", NYdb::NValueHelpers::Embedding(embedding))
             .Build();
 
         std::vector<TResultItem> result;

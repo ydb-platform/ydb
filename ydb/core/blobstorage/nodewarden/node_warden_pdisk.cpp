@@ -36,10 +36,21 @@ namespace NKikimr::NStorage {
             : static_cast<ui32>(slotCount);
     }
 
-    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots) {
+    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes,
+            ui32 maxSlots, bool useFixedVDiskSlotSize) {
         Y_ABORT_UNLESS(driveSize);
         Y_ABORT_UNLESS(unitSizeInBytes);
 
+        if (useFixedVDiskSlotSize) {
+            const ui64 capacityUnits = driveSize / unitSizeInBytes;
+            const ui32 slotLimit = maxSlots ? maxSlots : 16;
+            pdiskConfig->ExpectedSlotSize = unitSizeInBytes;
+            pdiskConfig->ExpectedSlotCount = Min(capacityUnits, ui64(slotLimit));
+            pdiskConfig->SlotSizeInUnits = Max(ui64{1}, Min(capacityUnits / slotLimit, ui64(Max<ui32>())));
+            return;
+        }
+
+        pdiskConfig->ExpectedSlotSize = 0;
         const double slotCount = lround(double(driveSize) / unitSizeInBytes);
         ui32 slotSizeInUnits = 1u;
 
@@ -390,12 +401,13 @@ namespace NKikimr::NStorage {
                     {"path", path},
                     {"details", driveSizeDetails});
             } else {
-                InferPDiskSlotCount(pdiskConfig, size, inferSettings.UnitSize, inferSettings.MaxSlots);
+                InferPDiskSlotCount(pdiskConfig, size, inferSettings.UnitSize, inferSettings.MaxSlots, UseFixedVDiskSlotSize);
                 YDB_LOG_DEBUG("Inferred PDisk slot count",
                     {"marker", "NW102"},
                     {"path", path},
                     {"slotCount", pdiskConfig->ExpectedSlotCount},
                     {"slotSizeInUnits", pdiskConfig->SlotSizeInUnits},
+                    {"expectedSlotSize", pdiskConfig->ExpectedSlotSize},
                     {"fromDriveSize", size},
                     {"fromUnitSize", inferSettings.UnitSize},
                     {"fromMaxSlots", inferSettings.MaxSlots});

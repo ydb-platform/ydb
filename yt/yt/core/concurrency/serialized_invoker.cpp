@@ -5,7 +5,7 @@
 
 #include <library/cpp/yt/containers/ring_queue.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -51,7 +51,7 @@ public:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TRingQueue<TClosure> Queue_;
     bool CallbackScheduled_ = false;
     bool Dead_ = false;
@@ -89,7 +89,7 @@ private:
         bool Activated_ = false;
     };
 
-    void TrySchedule(TGuard<NThreading::TSpinLock>&& guard)
+    void TrySchedule(TGuard<TSpinLock>&& guard)
     {
         if (std::exchange(CallbackScheduled_, true)) {
             return;
@@ -101,7 +101,7 @@ private:
             Passed(TInvocationGuard(this))));
     }
 
-    void DrainQueue(TGuard<NThreading::TSpinLock>&& guard)
+    void DrainQueue(TGuard<TSpinLock>&& guard)
     {
         std::vector<TClosure> callbacks;
         while (!Queue_.empty()) {

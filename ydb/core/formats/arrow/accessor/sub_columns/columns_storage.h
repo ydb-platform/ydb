@@ -8,8 +8,14 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <ydb/core/formats/arrow/accessor/common/json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/common/types.h>
+#include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+
+#include <util/generic/overloaded.h>
+
+#include <variant>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
@@ -48,7 +54,7 @@ public:
         ui32 KeyIndex;
         EValueType ValueType;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::Array* CurrentArrayData;
+        std::variant<const arrow::Array*, const TDictionaryArray*> CurrentData;
         // Currently iterated accessor relative to GlobalChunkedArray
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         // Currently iterated arrow chunk relative to GlobalChunkedArray
@@ -56,6 +62,28 @@ public:
         ui32 CurrentIndex = 0;
 
         void InitArrays();
+
+        bool IsCurrentNull() const {
+            return std::visit(TOverloaded{
+                [this](const arrow::Array* array) {
+                    return array->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+                },
+                [this](const TDictionaryArray* dictionary) {
+                    return dictionary->IsNull(FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex));
+                }},
+                CurrentData);
+        }
+
+        ui32 GetCurrentFinishPosition() const {
+            return std::visit(TOverloaded{
+                [this](const arrow::Array*) {
+                    return ChunkAddress->GetAddress().GetGlobalFinishPosition();
+                },
+                [this](const TDictionaryArray*) {
+                    return FullArrayAddress->GetAddress().GetGlobalFinishPosition();
+                }},
+                CurrentData);
+        }
 
     public:
         TIterator(const ui32 keyIndex, const EValueType valueType, const std::shared_ptr<IChunkedArray>& chunkedArray)
@@ -73,21 +101,21 @@ public:
             return KeyIndex;
         }
 
-        // Current value is exposed as (array, local index); the reader interprets it per the
-        // column's value type.
-        const arrow::Array& GetArray() const {
-            return *CurrentArrayData;
-        }
-        ui32 GetLocalIndex() const {
-            return ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
-        }
 
         NArrow::NAccessor::TJsonValueView GetValue() const {
-            return ArrayElementToJsonValueView(*CurrentArrayData, GetLocalIndex(), ValueType);
+            return std::visit(TOverloaded{
+                [this](const arrow::Array* array) {
+                    return ArrayElementToJsonValueView(*array, ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex), ValueType);
+                },
+                [this](const TDictionaryArray* dictionary) {
+                    return dictionary->GetJsonValueView(FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex), ValueType);
+                }},
+                CurrentData);
         }
 
+
         bool HasValue() const {
-            return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+            return !IsCurrentNull();
         }
 
         bool IsValid() const {
@@ -99,10 +127,9 @@ public:
                 return true;
             }
             AFL_VERIFY(IsValid());
-            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             CurrentIndex = recordIndex;
-            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+            for (; CurrentIndex < GetCurrentFinishPosition(); ++CurrentIndex) {
+                if (IsCurrentNull()) {
                     continue;
                 }
                 return true;
@@ -113,10 +140,9 @@ public:
 
         bool Next() {
             AFL_VERIFY(IsValid());
-            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
             ++CurrentIndex;
-            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
-                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+            for (; CurrentIndex < GetCurrentFinishPosition(); ++CurrentIndex) {
+                if (IsCurrentNull()) {
                     continue;
                 }
                 return true;

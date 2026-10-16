@@ -341,6 +341,8 @@ struct Schema : NIceDb::Schema {
         struct BridgeMode : Column<27, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         // does this pool define DDisk pool instead of VDisk one?
         struct DDisk : Column<28, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        // TStoragePoolSettings.VDiskHeapAllocatorNumLeadingDisks; null inherits the global value, 0 is explicit
+        struct VDiskHeapAllocatorNumLeadingDisks : Column<29, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
@@ -348,7 +350,7 @@ struct Schema : NIceDb::Schema {
             DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
             VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
             Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-            DefaultGroupSizeInUnits, BridgeMode, DDisk>;
+            DefaultGroupSizeInUnits, BridgeMode, DDisk, VDiskHeapAllocatorNumLeadingDisks>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

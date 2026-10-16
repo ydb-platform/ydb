@@ -271,8 +271,8 @@ struct TIndexComparisonKey {
 
 };
 
-TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatmap, TExprBase maybeReadTableNode,  TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap)
+TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatmap, TExprBase maybeReadTableNode, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap, bool& error)
 {
     auto readMatch = MatchRead<TKqlReadTableRangesBase>(maybeReadTableNode);
     if (!readMatch) {
@@ -445,6 +445,15 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
     auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(indexName.Cast()).first->Name) : mainTableDesc;
 
     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+    if (readSettings.Sampling && (indexName ||
+        (buildResult.LiteralRange && buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size())))
+    {
+        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), indexName
+            ? "Sampling is not supported for index reads"
+            : "Sampling is not supported for lookups"));
+        error = true;
+        return {};
+    }
 
     TExprNode::TPtr ranges = buildResult.ComputeNode;
 
@@ -632,7 +641,7 @@ TMaybe<std::pair<TExprBase, TExprNode::TPtr>> BuildNewRead(TCoFlatMapBase flatma
     return std::make_pair(*input, residualLambda);
 }
 
-TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+TMaybeNode<TExprBase> KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx, const NYql::TParentsMap& parentsMap)
 {
     if (!node.Maybe<TCoFlatMapBase>()) {
@@ -658,7 +667,11 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
         TVector<TExprBase> individualReads;
         for(const auto& arg: extend) {
-            auto result = BuildNewRead(flatmap, arg, ctx, kqpCtx, typesCtx, parentsMap);
+            bool error = false;
+            auto result = BuildNewRead(flatmap, arg, ctx, kqpCtx, typesCtx, parentsMap, error);
+            if (error) {
+                return {};
+            }
             if (!result) {
                 result = {arg, flatmap.Lambda().Ptr()};
             }
@@ -681,7 +694,11 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             .Done();
     }
 
-    auto result = BuildNewRead(flatmap, flatmap.Input(), ctx, kqpCtx, typesCtx, parentsMap);
+    bool error = false;
+    auto result = BuildNewRead(flatmap, flatmap.Input(), ctx, kqpCtx, typesCtx, parentsMap, error);
+    if (error) {
+        return {};
+    }
     if (!result) {
         return node;
     }

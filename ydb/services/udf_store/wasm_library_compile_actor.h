@@ -9,7 +9,7 @@
 
 namespace NKikimr::NUdfStore {
 
-class TWasmLibraryCompileActor : public NActors::TActorBootstrapped<TWasmLibraryCompileActor> {
+class TWasmLibraryCompileActor: public NActors::TActorBootstrapped<TWasmLibraryCompileActor> {
 private:
     using TBase = NActors::TActorBootstrapped<TWasmLibraryCompileActor>;
 
@@ -59,13 +59,8 @@ private:
     void FailAndPersist(const TString& message);
 
 public:
-    TWasmLibraryCompileActor(
-        const NActors::TActorId& replyTo,
-        const TString& libraryName,
-        const TString& cpuSpec,
-        const TString& modulesTablePath,
-        const TString& moduleChunksTablePath,
-        const TString& artifactTablePath,
+    TWasmLibraryCompileActor(const NActors::TActorId& replyTo, const TString& libraryName, const TString& cpuSpec,
+        const TString& modulesTablePath, const TString& moduleChunksTablePath, const TString& artifactTablePath,
         const TString& artifactChunksTablePath)
         : ReplyTo_(replyTo)
         , LibraryName_(libraryName)
@@ -74,7 +69,8 @@ public:
         , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -88,4 +84,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -112,7 +112,12 @@ namespace NActors {
 
     namespace NInMemoryMetricsPrivate {
         TInstant DecodeTs(const TTimeAnchor& anchor, NHPTimer::STime ts) noexcept {
-            return anchor.BaseWallClock + TDuration::MicroSeconds(Ts2Us(ts - anchor.BaseCycles));
+            // Quantized timestamps can precede the registry's clock anchor.
+            // Convert the magnitude before constructing an unsigned duration.
+            if (ts < anchor.BaseCycles) {
+                return anchor.BaseWallClock - TDuration::MicroSeconds(Ts2Us(ui64(anchor.BaseCycles) - ui64(ts)));
+            }
+            return anchor.BaseWallClock + TDuration::MicroSeconds(Ts2Us(ui64(ts) - ui64(anchor.BaseCycles)));
         }
 
         bool TryPinChunk(TChunk* chunk) noexcept {

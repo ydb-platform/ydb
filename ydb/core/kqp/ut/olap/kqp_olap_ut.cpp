@@ -5530,8 +5530,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )";
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("TRUNCATE TABLE is not supported for column tables"),
                 "Unexpected error message: " << result.GetIssues().ToString());
         }
     }

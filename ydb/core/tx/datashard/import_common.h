@@ -70,6 +70,12 @@ public:
         return {column.Type, column.TypeMod};
     }
 
+    const TUserTable::TUserColumn& GetColumn(ui32 id) const {
+        auto it = Info->Columns.find(id);
+        Y_ENSURE(it != Info->Columns.end());
+        return it->second;
+    }
+
     const TVector<ui32>& GetKeyColumnIds() const {
         return Info->KeyColumnIds;
     }

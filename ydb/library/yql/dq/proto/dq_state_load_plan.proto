@@ -29,6 +29,8 @@ message TProgramPlan {
     EStateType StateType = 1;
     // Explicit program state for STATE_TYPE_FOREIGN.
     optional bytes State = 2;
+    // Load program state from this task when explicit State is absent.
+    optional uint64 ForeignTaskId = 3;
 }
 
 message TSourcePlan {

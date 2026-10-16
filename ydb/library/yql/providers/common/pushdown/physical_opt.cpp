@@ -1,9 +1,10 @@
 #include "predicate_node.h"
 
-#include <yql/essentials/utils/log/log.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NPushdown {
 
@@ -11,12 +12,14 @@ using namespace NNodes;
 
 namespace {
 
-TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos, const TSettings& settings) {
+TPredicateNode SplitForPartialPushdown(
+    const NPushdown::TPredicateNode& predicateTree, TExprContext& ctx, TPositionHandle pos, const TSettings& settings) {
     if (predicateTree.CanBePushed) {
         return predicateTree;
     }
 
-    if (predicateTree.Op != NPushdown::EBoolOp::And && (!settings.IsEnabled(TSettings::EFeatureFlag::SplitOrOperator) || predicateTree.Op != NPushdown::EBoolOp::Or)) {
+    if (predicateTree.Op != NPushdown::EBoolOp::And &&
+        (!settings.IsEnabled(TSettings::EFeatureFlag::SplitOrOperator) || predicateTree.Op != NPushdown::EBoolOp::Or)) {
         // Predicate can't be split, so return invalid value and skip this branch
         return NPushdown::TPredicateNode();
     }
@@ -37,15 +40,16 @@ TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicat
     return predicateToPush;
 }
 
-}
+}   // namespace
 
-NPushdown::TPredicateNode MakePushdownNode(const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings) {
+NPushdown::TPredicateNode MakePushdownNode(
+    const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings) {
     auto lambdaArg = lambda.Args().Arg(0).Ptr();
 
     YQL_LOG(TRACE) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
 
     auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
-    if (!maybeOptionalIf.IsValid()) { // Nothing to push
+    if (!maybeOptionalIf.IsValid()) {   // Nothing to push
         return {};
     }
 
@@ -77,4 +81,4 @@ TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContex
     return newFilterLambda;
 }
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

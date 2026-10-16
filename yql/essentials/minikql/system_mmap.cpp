@@ -1,5 +1,4 @@
 #include "system_mmap.h"
-#include "page_pool_constants.h"
 
 #include <util/generic/singleton.h>
 #include <util/stream/file.h>
@@ -33,74 +32,82 @@ ui64 GetMaxMemoryMaps() {
     return maxMapCount;
 }
 
+TSystemError MakeMemoryError(int status, const char* operation, void* address, size_t size) {
+    TSystemError error(status);
+    error << operation << "(" << address << ", " << size << ") failed";
+    if (status == ENOMEM) {
+        error << GetMemoryMapsString();
+    }
+    return error;
+}
+
 } // namespace
 
 #ifdef _win_
-void* TSystemMmap::Mmap(size_t size)
-{
-    if (auto res = ::VirtualAlloc(0, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)) {
-        return res;
-    } else {
-        return reinterpret_cast<void*>(-1);
+std::expected<void*, TSystemError> TSystemMmap::Mmap(size_t size) {
+    if (void* address = ::VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)) {
+        return address;
     }
+    return std::unexpected(MakeMemoryError(LastSystemError(), "Mmap", /*address=*/nullptr, size));
 }
 
-int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
+std::expected<void, TSystemError> TSystemMmap::Munmap(void* addr, size_t size) {
     Y_ABORT_UNLESS(AlignUp(addr, SystemPageSize) == addr, "Got unaligned address");
     Y_ABORT_UNLESS(AlignUp(size, SystemPageSize) == size, "Got unaligned size");
-    return !::VirtualFree(addr, size, MEM_DECOMMIT);
+    if (!::VirtualFree(addr, size, MEM_DECOMMIT)) {
+        return std::unexpected(MakeMemoryError(LastSystemError(), "Munmap", addr, size));
+    }
+    return {};
+}
+
+std::expected<void, TSystemError> TSystemMmap::Freeze(void* addr, size_t size) {
+    if (!::VirtualFree(addr, size, MEM_DECOMMIT)) {
+        return std::unexpected(MakeMemoryError(LastSystemError(), "Freeze", addr, size));
+    }
+    return {};
+}
+
+std::expected<void, TSystemError> TSystemMmap::Unfreeze(void* addr, size_t size) {
+    if (!::VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE)) {
+        return std::unexpected(MakeMemoryError(LastSystemError(), "Unfreeze", addr, size));
+    }
+    return {};
 }
 #else
-void* TSystemMmap::Mmap(size_t size)
-{
-    return ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
+std::expected<void*, TSystemError> TSystemMmap::Mmap(size_t size) {
+    void* address = ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
+    if (address == MAP_FAILED) {
+        return std::unexpected(MakeMemoryError(LastSystemError(), "Mmap", /*address=*/nullptr, size));
+    }
+    return address;
 }
 
-int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
+std::expected<void, TSystemError> TSystemMmap::Munmap(void* addr, size_t size) {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SystemPageSize) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SystemPageSize) == size, "Got unaligned size");
-
-    if (size > MaxMidSize) {
-        return ::munmap(addr, size);
+    if (::munmap(addr, size) == -1) {
+        return std::unexpected(MakeMemoryError(LastSystemError(), "Munmap", addr, size));
     }
+    return {};
+}
 
-    // Unlock memory in case somewhere was called `mlockall(MCL_FUTURE)`.
+std::expected<void, TSystemError> TSystemMmap::Freeze(void* addr, size_t size) {
+    // MADV_DONTNEED rejects locked pages, including those locked by mlockall(MCL_FUTURE).
     if (::munlock(addr, size) == -1) {
-        switch (LastSystemError()) {
-            case EAGAIN:
-                [[fallthrough]];
-                // The memory region was probably not locked - skip,
-                // also since we can't distinguish from other kernel problems that may cause EAGAIN (not enough memory for structures?)
-                // we rely on the failure of the following `madvise()` call.
-
-            case EPERM:
-                [[fallthrough]];
-                // The most common case we get this error if we have no privileges, but also ignored error when called `mlockall()`
-                // somewhere earlier. So ignore this.
-
-            case EINVAL:
-                // Something wrong with `addr` and `size` - we'll see the same error from the following `madvise()` call.
-                break;
-
-            case ENOMEM:
-                // Locking or unlocking a region would result in the total number of mappings with distinct attributes
-                // (e.g., locked versus unlocked) exceeding the allowed maximum.
-                // NOTE: `madvise(MADV_DONTNEED)` can't return ENOMEM.
-                return -1;
+        const int status = LastSystemError();
+        if (status == ENOMEM) {
+            return std::unexpected(MakeMemoryError(status, "Freeze", addr, size));
         }
     }
+    if (::madvise(addr, size, MADV_DONTNEED) == -1) {
+        return std::unexpected(MakeMemoryError(LastSystemError(), "Freeze", addr, size));
+    }
+    return {};
+}
 
-    /**
-        There is at least a couple of drawbacks of using madvise instead of munmap:
-        - more potential for use-after-free and memory corruption since we still may access unneeded regions by mistake,
-        - actual RSS memory may be freed later after kernel gets some memory-pressure, and it may confuse system monitoring tools.
-
-        But also there is a huge advantage: the number of memory maps used by process doesn't increase because of the "holes".
-
-        The main source of the growth of number of memory regions is a clean-up of freed pages from page pools.
-        Now we can safely invoke `TAlignedPagePool::DoCleanupGlobalFreeList()` whenever we want it.
-     */
-    return ::madvise(addr, size, MADV_DONTNEED);
+std::expected<void, TSystemError> TSystemMmap::Unfreeze(void*, size_t) {
+    // MADV_DONTNEED preserves access permissions; pages are populated on demand.
+    return {};
 }
 #endif
 

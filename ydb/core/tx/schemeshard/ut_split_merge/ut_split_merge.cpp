@@ -3009,3 +3009,404 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistencyCheckCounter) {
         UNIT_ASSERT_GT(GetCumulativeCounter(runtime, CounterName), 0u);
     }
 }
+
+// Integration + fairness tests for the split/merge candidacy memory (PR1).
+// Flag EnableSplitMergeDemandTracking + the EnableSplitMergeFairScheduling immediate control.
+Y_UNIT_TEST_SUITE(TSchemeShardSplitMergeHistory) {
+
+    // Mirrors the anonymous-namespace SetupEnv, but enables the history feature and (optionally)
+    // installs a split in-flight limit before the schemeshard boots so deferrals are forced.
+    TTestEnv SetupHistoryEnv(TTestBasicRuntime& runtime, bool enableHistory, bool enableFairScheduler,
+            ui64 splitInFlightLimit = 0) {
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
+        opts.EnableSplitMergeDemandTracking(enableHistory);
+
+        TTestEnv env(runtime, opts);
+
+        NDataShard::gDbStatsDataSizeResolution = 10;
+        NDataShard::gDbStatsRowCountResolution = 10;
+
+        {
+            auto& appData = runtime.GetAppData();
+            appData.FeatureFlags.SetEnablePersistentPartitionStats(true);
+            appData.FeatureFlags.SetEnableSplitMergeDemandTracking(enableHistory);
+            appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+            appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+            if (splitInFlightLimit) {
+                auto* counter = appData.SchemeShardConfig.AddInFlightCounterConfig();
+                counter->SetType(NKikimr::NSchemeShard::ESimpleCounters::COUNTER_IN_FLIGHT_OPS_TxSplitTablePartition);
+                counter->SetInFlightLimit(splitInFlightLimit);
+            }
+        }
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+
+        // Apply the config + flag via reboot (the schemeshard reads them at init).
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        if (enableFairScheduler) {
+            TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        }
+        return env;
+    }
+
+    TString HotTableScheme(const TString& name, ui32 maxPartitions, ui32 cpuThresholdPercent,
+            ui32 uniformPartitions = 1) {
+        return Sprintf(R"(
+                Name: "%s"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: %d
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: %d
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: %d }
+                    }
+                }
+            )", name.c_str(), uniformPartitions, maxPartitions, cpuThresholdPercent);
+    }
+
+    THolder<TLoadAndSplitSimulator> MakeHotSimulator(TTestActorRuntime& runtime, const TString& path) {
+        auto desc = DescribePrivatePath(runtime, path, true, true);
+        const ui64 localId = desc.GetPathDescription().GetSelf().GetPathId();
+        const ui64 ownerId = desc.GetPathDescription().GetSelf().GetSchemeshardId();
+        const ui64 ds0 = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        return MakeHolder<TLoadAndSplitSimulator>(
+            localId, ownerId, ds0,
+            false /* shouldSendReadRequests */,
+            ESendDuplicateTableStatsStrategy::None,
+            std::map<ui32, i32>{{0, 100}},  // 100% CPU on the leader (periodic stats)
+            std::map<ui32, i32>{{0, 100}},  // 100% CPU on the leader (get-stats result)
+            runtime);
+    }
+
+    ui32 PartitionCountOf(TTestActorRuntime& runtime, const TString& path) {
+        auto desc = DescribePrivatePath(runtime, path, true, true);
+        return desc.GetPathDescription().TablePartitionsSize();
+    }
+
+    // Flag OFF: a split-by-load table still splits normally, and the memory counters never move.
+    Y_UNIT_TEST(FlagOff_NoMemory) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ false, /* enableFairScheduler */ false);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Table", /* maxPartitions */ 4, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        runtime.WaitFor("the table to split", [&simulator, &runtime]() -> bool {
+            return (simulator->SplitAckCount > 0)
+                && ((runtime.GetCurrentTime() - simulator->LastSplitAckTime) > TDuration::Seconds(15));
+        }, TDuration::Seconds(60));
+
+        // Behavior unchanged: the table split. Memory disabled: the deferred gauges stay at zero.
+        UNIT_ASSERT_GT(PartitionCountOf(runtime, "/MyRoot/Table"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"), 0u);
+        // Always-on observability: demand was detected every stats cycle even with the flag off,
+        // and no slot-limit deferral happened (no in-flight limit is configured).
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, "SchemeShard/SplitDemandDetected"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected"), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals"), 0u);
+    }
+
+    // Flag ON, split slot limit 1: while one split is held in flight, other over-threshold shards
+    // become deferred candidates and are recorded (counters move above zero).
+    Y_UNIT_TEST(RecordsDeferredSplit) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Start with several partitions so that, with one split slot busy, the rest defer.
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 100
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold split operations near completion so the single slot stays occupied and the other
+        // hot shards keep hitting the in-flight limit (the deferral recording site).
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChangedAck> splitBlocker(runtime);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Drive load until a deferral is recorded (or give up after a bounded wait).
+        bool deferredRecorded = false;
+        for (ui32 i = 0; i < 40 && !deferredRecorded; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredRecorded = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+
+        UNIT_ASSERT_C(deferredRecorded, "expected at least one deferred split to be recorded");
+        UNIT_ASSERT_GT(GetSimpleCounter(runtime, "SchemeShard/TablesWithDeferredSplitMerge"), 0u);
+        // Always-on observability: demand detection and slot-limit deferrals are counted.
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, "SchemeShard/SplitDemandDetected"), 0u);
+        UNIT_ASSERT_GT(GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals"), 0u);
+
+        splitBlocker.Stop().Unblock();
+    }
+
+    // Fairness: two equally-hot tables, one split slot. With the fair scheduler on, neither table
+    // is starved -- both eventually split (round-robin hands the freed slot across tables).
+    Y_UNIT_TEST(FairScheduler_NoStarvationAcrossTables) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("TableA", /* maxPartitions */ 3, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("TableB", /* maxPartitions */ 3, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simA = MakeHotSimulator(runtime, "/MyRoot/TableA");
+        auto simB = MakeHotSimulator(runtime, "/MyRoot/TableB");
+        auto observerA = runtime.AddObserver([&simA](IEventHandle::TPtr& ev) { simA->ChangeEvent(ev); });
+        auto observerB = runtime.AddObserver([&simB](IEventHandle::TPtr& ev) { simB->ChangeEvent(ev); });
+
+        // Both tables must split -- neither starves the other for the single split slot.
+        // NOTE: assert on real partition counts (via Describe), not the simulators' SplitAckCount:
+        // EvSplitAck is not table-scoped, so two concurrent simulators cross-count each other's acks.
+        bool bothSplit = false;
+        for (ui32 i = 0; i < 90 && !bothSplit; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            bothSplit = (PartitionCountOf(runtime, "/MyRoot/TableA") > 1)
+                && (PartitionCountOf(runtime, "/MyRoot/TableB") > 1);
+        }
+
+        UNIT_ASSERT_GT_C(PartitionCountOf(runtime, "/MyRoot/TableA"), 1u, "TableA was starved");
+        UNIT_ASSERT_GT_C(PartitionCountOf(runtime, "/MyRoot/TableB"), 1u, "TableB was starved");
+    }
+
+    // Control off: the scheduler is inert (stats-arrival behavior), but the memory still records.
+    // The table still splits to its limit, and deferrals are recorded while the slot is busy.
+    Y_UNIT_TEST(FairScheduler_Off_FallsBackToArrivalOrder) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ false,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Start with two partitions and allow four: while the single split slot is held
+        // by one shard's split, the sibling hot shard is a Ready shard whose demand passes
+        // the shard-count check (ExpectedPartitionCount=3 < 4) and then hits the in-flight
+        // limit (the deferral recording site). With maxPartitions=3 the in-flight split
+        // already pushes ExpectedPartitionCount to the limit, so the sibling's demand is
+        // rejected with ConditionsNotMet before the slot check and no deferral is recorded.
+        TestCreateTable(runtime, ++txId, "/MyRoot",
+            HotTableScheme("Table", /* maxPartitions */ 4, /* cpu */ 1, /* uniformPartitions */ 2));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simulator = MakeHotSimulator(runtime, "/MyRoot/Table");
+        auto observer = runtime.AddObserver([&simulator](IEventHandle::TPtr& ev) { simulator->ChangeEvent(ev); });
+
+        // Hold the split op in flight: block the partitioning-change event the schemeshard
+        // sends to the datashard (the op completes independently of the Ack, so blocking the
+        // Ack does not keep the slot busy). While the single slot is occupied, the sibling
+        // hot shard's stats hit the in-flight limit and the deferral is recorded.
+        TBlockEvents<TEvDataShard::TEvSplitPartitioningChanged> splitBlocker(runtime);
+
+        // Memory records even with the scheduler off: a deferral is seen while a split holds the slot.
+        bool deferredSeen = false;
+        for (ui32 i = 0; i < 40 && !deferredSeen; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            deferredSeen = GetSimpleCounter(runtime, "SchemeShard/PartitionsWithDeferredSplitMerge") > 0;
+        }
+
+        // Release the slot: the held split completes (2 -> 3 partitions).
+        splitBlocker.Stop().Unblock();
+
+        // Baseline arrival-order behavior preserved: the table still grows past the
+        // pre-block partition count (the held split completes, 2 -> 3 partitions).
+        bool reachedLimit = false;
+        for (ui32 i = 0; i < 90 && !reachedLimit; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            reachedLimit = PartitionCountOf(runtime, "/MyRoot/Table") >= 3;
+        }
+
+        UNIT_ASSERT_C(reachedLimit, "table did not split to its partition limit with the scheduler off");
+        UNIT_ASSERT_C(deferredSeen, "memory did not record a deferral with the scheduler off");
+    }
+
+    // Churn: a high-demand table (4 hot shards) competes with a quiet one (1 hot shard) for a single
+    // split slot. With the fair scheduler on, round-robin still services the quiet table -- it splits.
+    Y_UNIT_TEST(Fairness_NoStarvationUnderChurn) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Churny table: starts with 4 partitions, all hot -> constant split demand.
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "Churny"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 4
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MaxPartitionsCount: 20
+                        SplitByLoadSettings: { Enabled: true CpuPercentageThreshold: 1 }
+                    }
+                }
+            )"));
+        env.TestWaitNotification(runtime, txId);
+        // Quiet table: one partition, equally hot.
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("Quiet", /* maxPartitions */ 3, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simChurny = MakeHotSimulator(runtime, "/MyRoot/Churny");
+        auto simQuiet = MakeHotSimulator(runtime, "/MyRoot/Quiet");
+        auto obsChurny = runtime.AddObserver([&simChurny](IEventHandle::TPtr& ev) { simChurny->ChangeEvent(ev); });
+        auto obsQuiet = runtime.AddObserver([&simQuiet](IEventHandle::TPtr& ev) { simQuiet->ChangeEvent(ev); });
+
+        // The quiet table must not be starved by the churny one's constant demand.
+        bool quietSplit = false;
+        for (ui32 i = 0; i < 120 && !quietSplit; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            quietSplit = PartitionCountOf(runtime, "/MyRoot/Quiet") > 1;
+        }
+
+        UNIT_ASSERT_C(quietSplit, "quiet table was starved by the churny table");
+    }
+
+    // Cross-direction fairness: a merge wave (a table with many tiny shards merging down to 1)
+    // races a hot single-shard table's split demand for the one shared split/merge in-flight
+    // slot. Merges are inline + decisive in the revisit wave, while splits only re-request
+    // stats and claim the slot later, so a merge cascade can in principle consume every freed
+    // slot before the split's stats round-trip wins one (the documented slot-level race, see
+    // plans/split_merge_memory_review.md, "Recommendation 4 (3a): proposed design").
+    // Empirically (first run of this test) the starvation does NOT reproduce here: the
+    // revisit wave round-robins tables, the split demand is recorded before the merge wave
+    // exists, and the split's stats round-trip wins a slot while the merge backlog is still
+    // draining. The test therefore asserts the interleaving property as a regression guard
+    // for the wave-level cross-direction fairness.
+    Y_UNIT_TEST(Fairness_SplitNotStarvedByMergeWave) {
+        TTestBasicRuntime runtime;
+        auto env = SetupHistoryEnv(runtime, /* enableHistory */ true, /* enableFairScheduler */ true,
+            /* splitInFlightLimit */ 1);
+
+        ui64 txId = 100;
+        // Split-demand table: one hot shard wanting a split, competing for the same single slot.
+        TestCreateTable(runtime, ++txId, "/MyRoot", HotTableScheme("SplitHot", /* maxPartitions */ 3, /* cpu */ 1));
+        env.TestWaitNotification(runtime, txId);
+
+        auto simSplit = MakeHotSimulator(runtime, "/MyRoot/SplitHot");
+        auto obsSplit = runtime.AddObserver([&simSplit](IEventHandle::TPtr& ev) { simSplit->ChangeEvent(ev); });
+
+        // Start split demand FIRST and wait until it is recorded -- guarantees the merge
+        // backlog exists while split demand is already queued (no vacuous pass).
+        bool splitDemandSeen = false;
+        for (ui32 i = 0; i < 60 && !splitDemandSeen; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            splitDemandSeen = GetCumulativeCounter(runtime, "SchemeShard/SplitDemandDetected") > 0;
+        }
+        UNIT_ASSERT_C(splitDemandSeen, "no split demand was detected on SplitHot");
+
+        // Merge-wave table: 8 tiny uniform shards merging down to MinPartitionsCount=1.
+        // Merge-by-size requires an explicit SizeToSplit and MinPartitionsCount in the policy
+        // (IsMergeBySizeEnabled), and each shard must own at least one data part
+        // (TryAddShardToMerge rejects shards with empty PartOwners) -- hence one tiny row
+        // per shard, far below the split threshold.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "MergeWave"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 8
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        SizeToSplit: 1000000000
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Write one tiny row into each of the 8 shards (key ranges: [i*125000, (i+1)*125000)).
+        {
+            auto desc = DescribePrivatePath(runtime, "/MyRoot/MergeWave", true, true);
+            const auto& parts = desc.GetPathDescription().GetTablePartitions();
+            for (int i = 0; i < parts.size(); ++i) {
+                TString writeQuery = Sprintf(R"(
+                    (
+                        (let key '( '('key (Uint64 '%lu)) ) )
+                        (let value '('('value (Uint64 '1)) ) )
+                        (return (AsList (UpdateRow '__user__MergeWave key value) ))
+                    )
+                )", i * 125000 + 1);
+                NKikimrMiniKQL::TResult result;
+                TString err;
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, parts.Get(i).GetDatashardId(), writeQuery, result, err);
+                UNIT_ASSERT_VALUES_EQUAL(err, "");
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            }
+        }
+
+        // Cold simulator for MergeWave: no CPU patches (empty maps), only drives the stats
+        // pipeline for this table (same construction as MakeHotSimulator minus the patches).
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/MergeWave", true, true);
+        const ui64 mwLocalId = desc.GetPathDescription().GetSelf().GetPathId();
+        const ui64 mwOwnerId = desc.GetPathDescription().GetSelf().GetSchemeshardId();
+        const ui64 mwDs0 = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        auto simMerge = MakeHolder<TLoadAndSplitSimulator>(
+            mwLocalId, mwOwnerId, mwDs0,
+            false /* shouldSendReadRequests */,
+            ESendDuplicateTableStatsStrategy::None,
+            std::map<ui32, i32>{},  // no CPU patch (periodic stats): cold shards
+            std::map<ui32, i32>{},  // no CPU patch (get-stats result): cold shards
+            runtime);
+        auto obsMerge = runtime.AddObserver([&simMerge](IEventHandle::TPtr& ev) { simMerge->ChangeEvent(ev); });
+
+        // Concurrent phase: poll each second; the primary property is checked per iteration.
+        bool mergeDemandSeen = false;
+        bool deferralSeen = false;
+        bool splitFiredWhileDraining = false;
+        bool mergeDrained = false;
+        for (ui32 i = 0; i < 120 && !mergeDrained; ++i) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            mergeDemandSeen = mergeDemandSeen
+                || GetCumulativeCounter(runtime, "SchemeShard/MergeDemandDetected") > 0;
+            deferralSeen = deferralSeen
+                || GetCumulativeCounter(runtime, "SchemeShard/SplitMergeDeferrals") > 0;
+            const ui32 splitCount = PartitionCountOf(runtime, "/MyRoot/SplitHot");
+            const ui32 mergeCount = PartitionCountOf(runtime, "/MyRoot/MergeWave");
+            if (splitCount > 1 && mergeCount > 1) {
+                splitFiredWhileDraining = true;  // split landed while the merge backlog remains
+            }
+            mergeDrained = mergeCount <= 1;
+        }
+
+        // Guards against a vacuous pass: demand was real on both sides and a deferral occurred.
+        UNIT_ASSERT_C(mergeDemandSeen, "no merge demand was detected on MergeWave");
+        UNIT_ASSERT_C(deferralSeen, "no split/merge deferral was recorded under slot contention");
+
+        // Primary (the cross-direction-fairness property): the split fired while the merge
+        // wave was still draining. The revisit wave round-robins tables and the split demand
+        // is recorded before the merge wave exists, so the split's stats round-trip wins a
+        // slot before the merge backlog drains (see plans/split_merge_memory_review.md,
+        // "Recommendation 4 (3a): proposed design" for the direction-aware revisit wave +
+        // soft split reservation that would restore fairness if this ever regresses).
+        UNIT_ASSERT_C(splitFiredWhileDraining,
+            "SplitHot was starved by the merge wave: the split did not fire while MergeWave was still draining");
+
+        // The fix must not simply block merges: the wave still completes within the bounded wait.
+        UNIT_ASSERT_C(mergeDrained, "MergeWave did not drain to 1 partition");
+    }
+}

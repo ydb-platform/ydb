@@ -21,6 +21,7 @@
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
 #include <algorithm>
+#include <cmath>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -278,13 +279,14 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
 }
 
 TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const TKikimrTableDescription& tableData, bool forcePrimary, TMaybe<ui64> tabletId,
-    TExprContext& ctx)
+    TExprContext& ctx, TMaybe<TKqpReadTableSettings::TSampling> sampling = {})
 {
     const auto& tableMeta = BuildTableMeta(tableData, pos, ctx);
 
     TKqpReadTableSettings settings;
     settings.ForcePrimary = forcePrimary;
     settings.TabletId = tabletId;
+    settings.Sampling = sampling;
 
     return BuildReadWithVirtualGeneratedColumns(columns, tableData, pos, ctx,
         [&](const TCoAtomList& physicalColumns) -> TExprBase {
@@ -301,13 +303,13 @@ TExprBase BuildReadTable(const TCoAtomList& columns, TPositionHandle pos, const 
 }
 
 TExprBase BuildReadTable(const TKiReadTable& read, const TKikimrTableDescription& tableData, bool forcePrimary,
-    bool withSystemColumns, TExprContext& ctx)
+    bool withSystemColumns, TExprContext& ctx, TMaybe<TKqpReadTableSettings::TSampling> sampling)
 {
     const auto& columns = read.GetSelectColumns(ctx, tableData, withSystemColumns);
     const auto tabletId =  NYql::HasSetting(read.Settings().Ref(), "tabletid")
         ? TMaybe<ui64>{FromString<ui64>(NYql::GetSetting(read.Settings().Ref(), "tabletid")->Child(1)->Content())}
         : TMaybe<ui64>{};
-    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, tabletId, ctx);
+    auto readNode = BuildReadTable(columns, read.Pos(), tableData, forcePrimary, tabletId, ctx, sampling);
 
     return readNode;
 }
@@ -1369,6 +1371,54 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
     auto& tableData = GetTableData(tablesData, read.DataSource().Cluster(), key.GetTablePath());
     auto view = key.GetView();
 
+    TMaybe<TKqpReadTableSettings::TSampling> sampling;
+    THashSet<TStringBuf> samplingSettings;
+    for (const auto& setting : read.Settings()) {
+        const auto name = setting.Name().Value();
+        if (name != "samplingrate" && name != "samplingseed" && name != "samplingmemtablestride") {
+            continue;
+        }
+        if (!sampling) {
+            sampling.ConstructInPlace();
+        }
+        if (!samplingSettings.insert(name).second || setting.Ref().ChildrenSize() != 2 ||
+            !setting.Value().Maybe<TCoAtom>())
+        {
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                << "Sampling hint " << name << " requires one literal value"));
+            return nullptr;
+        }
+        const auto value = setting.Value().Cast<TCoAtom>().Value();
+        bool valid = false;
+        if (name == "samplingrate") {
+            valid = TryFromString(value, sampling->Rate) && std::isfinite(sampling->Rate) &&
+                sampling->Rate > 0.0 && sampling->Rate <= 1.0;
+        } else if (name == "samplingseed") {
+            valid = !value.StartsWith('-') && TryFromString(value, sampling->Seed);
+        } else {
+            valid = !value.StartsWith('-') && TryFromString(value, sampling->MemtableStride) && sampling->MemtableStride > 0;
+        }
+        if (!valid) {
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                << "Invalid sampling hint " << name << ": " << value));
+            return nullptr;
+        }
+    }
+    if (sampling) {
+        if (!samplingSettings.contains("samplingrate")) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Sampling requires sampling_rate"));
+            return nullptr;
+        }
+        if (tableData.Metadata->Kind != EKikimrTableKind::Datashard || !tableData.Metadata->SysView.empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Sampling is supported only for row tables"));
+            return nullptr;
+        }
+        if (view && !view->PrimaryFlag) {
+            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Sampling is not supported for index reads"));
+            return nullptr;
+        }
+    }
+
     if (view && !view->PrimaryFlag) {
         const auto& indexName = view->Name;
         if (!ValidateTableHasIndex(tableData.Metadata, ctx, read.Pos())) {
@@ -1392,7 +1442,7 @@ TExprNode::TPtr HandleReadTable(const TKiReadTable& read, TExprContext& ctx, con
     }
 
     const bool forcePrimary = view && view->PrimaryFlag || kqpCtx->Config->IsAutoIndexSelectionDisabled();
-    return BuildReadTable(read, tableData, forcePrimary, withSystemColumns, ctx).Ptr();
+    return BuildReadTable(read, tableData, forcePrimary, withSystemColumns, ctx, sampling).Ptr();
 }
 
 TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputColumns,

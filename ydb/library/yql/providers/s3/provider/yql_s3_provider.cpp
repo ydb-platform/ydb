@@ -10,20 +10,16 @@ namespace NYql {
 TS3State::TS3State(bool strictConfigValidation)
     : Configuration(MakeIntrusive<TS3Configuration>(strictConfigValidation))
     , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
-{}
+{
+}
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
-    return [gateway, credentialsFactory, actorSystem, configurationInit] (
-        const TString& userName,
-        const TString& sessionId,
-        const TGatewaysConfig* gatewaysConfig,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions,
-        THiddenQueryAborter hiddenAborter,
-        const TQContext& qContext) {
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
+    return [gateway, credentialsFactory, actorSystem, configurationInit](const TString& userName, const TString& sessionId,
+               const TGatewaysConfig* gatewaysConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions, THiddenQueryAborter hiddenAborter,
+               const TQContext& qContext) {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
         Y_UNUSED(randomProvider);
@@ -51,7 +47,7 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
 
         TDataProviderInfo info;
 
-        info.Names.insert({TString{S3ProviderName}});
+        info.Names.insert({ TString{ S3ProviderName } });
         info.Source = CreateS3DataSource(state);
         info.Sink = CreateS3DataSink(state);
 
@@ -59,4 +55,4 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
     };
 }
 
-} // namespace NYql
+}   // namespace NYql

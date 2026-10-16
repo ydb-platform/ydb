@@ -120,6 +120,8 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksFresh;
         ui32 HullSstSizeInChunksLevel;
         ui32 HeapAllocatorMaxSstInBytes;
+        // Latched at VDisk start: the feature flag is set and orderNumber < N. A running VDisk does not re-read either.
+        bool UseHeapAllocator = false;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;

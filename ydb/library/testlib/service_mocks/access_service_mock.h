@@ -3,7 +3,6 @@
 #include "ydb/library/testlib/service_mocks/common.h"
 
 #include <util/system/mutex.h>
-#include <ydb/public/api/client/yc_private/servicecontrol/access_service.grpc.pb.h>
 #include <ydb/public/api/client/yc_private/accessservice/access_service.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -30,88 +29,7 @@ bool IsServiceAuthenticated(const THashSet<TString>& allowedServiceAuthTokens, g
 
 } // namespace
 
-class TAccessServiceMock : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service {
-public:
-    template <class TResponseProto>
-    struct TResponse {
-        TResponseProto Response;
-        grpc::Status Status = grpc::Status::OK;
-        bool RequireRequestId = false;
-    };
-
-    THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>> AuthenticateData;
-    THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse>> AuthorizeData;
-
-    TMutex MetadataMutex;
-    TString CapturedXUserIP;
-    TString CapturedUserAgent;
-    TString CapturedAuthenticateService;
-
-    template <class TResponseProto>
-    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResponseProto>& resp, const TString& token) {
-        if (resp.RequireRequestId) {
-            auto [reqIdBegin, reqIdEnd] = ctx->client_metadata().equal_range("x-request-id");
-            UNIT_ASSERT_C(reqIdBegin != reqIdEnd, "RequestId is expected. Token: " << token);
-            UNIT_ASSERT_VALUES_EQUAL_C(std::distance(reqIdBegin, reqIdEnd), 1, "Only one RequestId is expected. Token: " << token);
-            UNIT_ASSERT_C(!reqIdBegin->second.empty(), "RequestId is expected to be not empty. Token: " << token);
-        }
-    }
-
-    grpc::Status Authenticate(
-        grpc::ServerContext* ctx,
-        const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
-        yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
-    {
-        TString key;
-        with_lock (MetadataMutex) {
-            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
-            CapturedAuthenticateService.clear();
-            if (request->has_signature()) {
-                CapturedAuthenticateService = request->signature().v4_parameters().service();
-                key = CapturedAuthenticateService;
-            } else {
-                key = request->iam_token();
-            }
-        }
-
-        auto it = AuthenticateData.find(key);
-        if (it != AuthenticateData.end()) {
-            response->CopyFrom(it->second.Response);
-            CheckRequestId(ctx, it->second, key);
-            return it->second.Status;
-        } else {
-            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
-        }
-    }
-
-    grpc::Status Authorize(
-        grpc::ServerContext* ctx,
-        const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
-        yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override
-    {
-        with_lock (MetadataMutex) {
-            CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
-            CapturedUserAgent = NTestUtils::CaptureUserAgent(ctx);
-        }
-
-        if (request->resource_path_size() == 0) {
-            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
-        }
-
-        const TString& lastResourceId = request->resource_path(request->resource_path_size() - 1).id();
-        const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + request->permission() + "-" + lastResourceId;
-        auto it = AuthorizeData.find(token);
-        if (it != AuthorizeData.end()) {
-            response->CopyFrom(it->second.Response);
-            CheckRequestId(ctx, it->second, token);
-            return it->second.Status;
-        } else {
-            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
-        }
-    }
-};
-
-class TAccessServiceMockV2 : public yandex::cloud::priv::accessservice::v2::AccessService::Service {
+class TAccessServiceMock : public yandex::cloud::priv::accessservice::v2::AccessService::Service {
 public:
     template <class TResponseProto>
     struct TResponse {
@@ -231,7 +149,7 @@ public:
     }
 };
 
-class TTicketParserAccessServiceMockBase {
+class TTicketParserAccessServiceMock : public yandex::cloud::priv::accessservice::v2::AccessService::Service {
 public:
     std::atomic_uint64_t AuthenticateCount = 0;
     std::atomic_uint64_t AuthorizeCount = 0;
@@ -260,8 +178,15 @@ public:
     TString CapturedXUserIP;
     TString CapturedRequestId;
 
-    template <typename TRequest, typename TResponse>
-    grpc::Status HandleAuthenticateBase(grpc::ServerContext* ctx, const TRequest* request, TResponse* response) {
+    bool isUserAuthenticated = true;
+    TString UnauthenticatedErrorMessage = "User is unauthenticated";
+    THashSet<TString> AllowedServiceAuthTokens;
+
+    grpc::Status Authenticate(
+        grpc::ServerContext* ctx,
+        const yandex::cloud::priv::accessservice::v2::AuthenticateRequest* request,
+        yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override
+    {
         with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
             CapturedRequestId = NTestUtils::CaptureRequestId(ctx);
@@ -312,8 +237,11 @@ public:
         return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
     }
 
-    template <typename TRequest, typename TResponse>
-    grpc::Status HandleAuthorizeBase(grpc::ServerContext* ctx, const TRequest* request, TResponse* response) {
+    grpc::Status Authorize(
+        grpc::ServerContext* ctx,
+        const yandex::cloud::priv::accessservice::v2::AuthorizeRequest* request,
+        yandex::cloud::priv::accessservice::v2::AuthorizeResponse* response) override
+    {
         with_lock (MetadataMutex) {
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
             CapturedRequestId = NTestUtils::CaptureRequestId(ctx);
@@ -358,54 +286,6 @@ public:
             }
         }
         return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
-    }
-};
-
-class TTicketParserAccessServiceMock
-    : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service
-    , public TTicketParserAccessServiceMockBase
-{
-public:
-    grpc::Status Authenticate(
-        grpc::ServerContext* ctx,
-        const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
-        yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
-    {
-        return HandleAuthenticateBase(ctx, request, response);
-    }
-
-    grpc::Status Authorize(
-        grpc::ServerContext* ctx,
-        const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
-        yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override
-    {
-        return HandleAuthorizeBase(ctx, request, response);
-    }
-};
-
-class TTicketParserAccessServiceMockV2
-    : public yandex::cloud::priv::accessservice::v2::AccessService::Service
-    , public TTicketParserAccessServiceMockBase
-{
-public:
-    bool isUserAuthenticated = true;
-    TString UnauthenticatedErrorMessage = "User is unauthenticated";
-    THashSet<TString> AllowedServiceAuthTokens;
-
-    grpc::Status Authenticate(
-        grpc::ServerContext* ctx,
-        const yandex::cloud::priv::accessservice::v2::AuthenticateRequest* request,
-        yandex::cloud::priv::accessservice::v2::AuthenticateResponse* response) override
-    {
-        return HandleAuthenticateBase(ctx, request, response);
-    }
-
-    grpc::Status Authorize(
-        grpc::ServerContext* ctx,
-        const yandex::cloud::priv::accessservice::v2::AuthorizeRequest* request,
-        yandex::cloud::priv::accessservice::v2::AuthorizeResponse* response) override
-    {
-        return HandleAuthorizeBase(ctx, request, response);
     }
 
     ::grpc::Status BulkAuthorize(

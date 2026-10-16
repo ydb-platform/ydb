@@ -40,9 +40,10 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.Items().empty());
     const bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
     const bool usingBlockCrossJoin = usingBlockJoin && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    const bool forceInlining = ctx.KqpCtx.Config->GetEnableInlineJoinFiltersAfterCBO();
 
-    // Do not inline filters for cross join.
-    if (isRealCrossJoin && usingBlockCrossJoin) {
+    // Do not inline filters for cross join, unless we force the inlining with a flag
+    if (isRealCrossJoin && usingBlockCrossJoin && !forceInlining) {
         join->JoinKind = "Cross";
         return join;
     }
@@ -61,7 +62,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         }
     }
 
-    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
+    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions && !forceInlining) {
         return input;
     }
 

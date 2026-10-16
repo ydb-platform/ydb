@@ -319,6 +319,7 @@ message TKqpReadRangesSourceSettings {
     optional uint64 QuerySpanId = 27;
 
     optional string PoolId = 28;
+    optional TReadSampling Sampling = 29;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -2577,6 +2578,10 @@ message TEvReadResult {
     optional NKikimrDataEvents.EDataFormat ResultFormat = 4;
     optional NKikimrProto.TRowVersion Snapshot = 5;
 
+    // On OVERLOADED/NOT_FOUND, a token with Sampling is a terminal checkpoint:
+    // the reader has stopped with no unpublished sampling decisions. A client
+    // may resume only after receiving all preceding SeqNo values. A token from
+    // an earlier successful result cannot recover a lost sampled reader.
     optional bytes ContinuationToken = 6;
 
     // True when shard may have possibly returned more data, but

@@ -8,12 +8,12 @@ import re
 import subprocess
 import logging
 import ydb.tests.olap.lib.remote_execution as remote_execution
+from ydb.tests.olap.lib.workload_result import ErrorArea, Iteration, QueryPlan, WorkloadError, WorkloadRunResult
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 from enum import StrEnum, Enum
-from types import TracebackType
 from time import time, sleep
 from hashlib import md5
 
@@ -59,123 +59,6 @@ class YdbCliHelper:
             result += ['--sa-key-file', YdbCluster.ydb_iam_file]
         return result
 
-    class QueryPlan:
-        def __init__(self) -> None:
-            self.plan: dict = None
-            self.table: str = None
-            self.ast: str = None
-            self.svg: str = None
-            self.stats: str = None
-
-    class Iteration:
-        def __init__(self):
-            self.final_plan: Optional[YdbCliHelper.QueryPlan] = None
-            self.in_progress_plan: Optional[YdbCliHelper.QueryPlan] = None
-            self.error_message: Optional[str] = None
-            self.time: Optional[float] = None
-
-        def get_error_class(self) -> str:
-            msg_to_class = {
-                'Deadline Exceeded': 'timeout',
-                'Request timeout': 'timeout',
-                'Query did not complete within specified timeout': 'timeout',
-                'There is diff': 'diff'
-            }
-            for msg, cl in msg_to_class.items():
-                if self.error_message and self.error_message.find(msg) >= 0:
-                    return cl
-            if self.error_message:
-                return 'other'
-            return ''
-
-    class WorkloadRunResult:
-        def __init__(self):
-            self._stats: dict[str, dict[str, Any]] = {}
-            self.query_out: Optional[str] = None
-            self.stdout: str = ''
-            self.stderr: str = ''
-            self.error_message: str = ''
-            self.warning_message: str = ''
-            self.errors: list[str] = []
-            self.warnings: list[str] = []
-            self.explain = YdbCliHelper.Iteration()
-            self.iterations: dict[int, YdbCliHelper.Iteration] = {}
-            self.traceback: Optional[TracebackType] = None
-            self.start_time = time()
-
-        def merge(self, *others: list[YdbCliHelper.WorkloadRunResult]) -> YdbCliHelper.WorkloadRunResult:
-            def not_empty(x):
-                return bool(x)
-
-            results = [r for r in filter(lambda x: x is not None, others)]
-            self.start_time = min([r.start_time for r in results])
-            self.query_out = '\n'.join(filter(not_empty, [r.query_out for r in results]))
-            self.stdout = '\n'.join(filter(not_empty, [r.stdout for r in results]))
-            self.stderr = '\n'.join(filter(not_empty, [r.stderr for r in results]))
-            self.error_message = '\n'.join(filter(not_empty, [r.error_message for r in results]))
-            self.warning_message = '\n'.join(filter(not_empty, [r.warning_message for r in results]))
-            for r in results:
-                self._stats.update(r._stats)
-                self.errors.extend(r.errors)
-                self.warnings.extend(r.warnings)
-                self.explain = r.explain
-                if self.traceback is None and r.traceback is not None:
-                    self.traceback = r.traceback
-                for num, iter in r.iterations.items():
-                    while num in self.iterations:
-                        num = max(num + 1, len(self.iterations))
-                    self.iterations[num] = iter
-            return self
-
-        @property
-        def success(self) -> bool:
-            return len(self.errors) == 0
-
-        def get_stats(self, test: str) -> dict[str, dict[str, Any]]:
-            result = self._stats.get(test, {})
-            result.update({
-                'with_warnings': bool(self.warnings) or bool(self.warning_message),
-                'with_errors': bool(self.errors) or bool(self.error_message),
-                'errors': self.get_error_stats()
-            })
-            return result
-
-        def add_stat(self, test: str, signal: str, value: Any) -> None:
-            self._stats.setdefault(test, {})
-            self._stats[test][signal] = value
-
-        def get_error_stats(self):
-            result = {}
-            for iter in self.iterations.values():
-                cl = iter.get_error_class()
-                if cl:
-                    result[cl] = True
-            if len(result) == 0 and self.error_message:
-                result['other'] = True
-            if self.warning_message:
-                result['warning'] = True
-            return result
-
-        def add_error(self, msg: Optional[str]) -> bool:
-            if msg:
-                self.errors.append(msg)
-                if len(self.error_message) > 0:
-                    self.error_message += f'\n\n{msg}'
-                else:
-                    self.error_message = msg
-                return True
-            return False
-
-        def add_warning(self, msg: Optional[str]):
-            if msg:
-                self.warnings.append(msg)
-                if len(self.warning_message) > 0:
-                    self.warning_message += f'\n\n{msg}'
-                else:
-                    self.warning_message = msg
-                return True
-            return False
-
     class WorkloadRunner():
         def __init__(self,
                      workload_type: WorkloadType,
@@ -191,7 +74,7 @@ class YdbCliHelper:
                      threads: int,
                      user: str
                      ):
-            self.result = YdbCliHelper.WorkloadRunResult()
+            self.result = WorkloadRunResult()
             self.iterations = iterations
             self.check_canonical = check_canonical
             self.workload_type = workload_type
@@ -263,7 +146,7 @@ class YdbCliHelper:
 
         def run(self) -> bool:
             try:
-                if not self.result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path)):
+                if not self.result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path), area=ErrorArea.YDB_INFRA):
                     if os.getenv('SECRET_REQUESTS', '') == '1':
                         with open(f'{self.__prefix}.stdout', "wt") as sout, open(f'{self.__prefix}.stderr', "wt") as serr:
                             cmd = self.__get_cmd()
@@ -277,14 +160,15 @@ class YdbCliHelper:
                         self.stderr = process.stderr
                         self.stdout = process.stdout
                     self.returncode = process.returncode
+            except WorkloadError as e:
+                self.result.add_custom_error(e)
             except BaseException as e:
-                self.result.add_error(str(e))
-                self.result.traceback = e.__traceback__
+                self.result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
             return self.result.success
 
     class WorkloadResultParser:
         def __init__(self, runner: YdbCliHelper.WorkloadRunner, query_name: str, queries: list[str]):
-            self.result = YdbCliHelper.WorkloadRunResult()
+            self.result = WorkloadRunResult()
             self.result.start_time = runner.result.start_time
             self.__queries = queries
             self.__query_name = query_name
@@ -293,7 +177,7 @@ class YdbCliHelper:
 
         def __init_iter(self, iter_num: int) -> None:
             if iter_num not in self.result.iterations:
-                self.result.iterations[iter_num] = YdbCliHelper.Iteration()
+                self.result.iterations[iter_num] = Iteration()
 
         def __parse_stderr(self) -> None:
             self.result.stderr = self.__runner.stderr if self.__runner.stderr else ''
@@ -325,10 +209,10 @@ class YdbCliHelper:
                     msg = (self.result.stderr[begin_pos:] if end_pos < 0 else self.result.stderr[begin_pos:end_pos]).strip()
                     self.__init_iter(iter)
                     self.result.iterations[iter].error_message = msg
-                    self.result.add_error(f'Iteration {iter}: {msg}')
+                    self.result.add_error(f'Iteration {iter}: {msg}', area=self.result.iterations[iter].get_error_class())
 
-        def __load_plan(self, name: Any) -> YdbCliHelper.QueryPlan:
-            result = YdbCliHelper.QueryPlan()
+        def __load_plan(self, name: Any) -> QueryPlan:
+            result = QueryPlan()
             pp = self.__runner.get_plan_path(self.__query_name, name)
             if (os.path.exists(f'{pp}.json')):
                 with open(f'{pp}.json') as f:
@@ -363,9 +247,9 @@ class YdbCliHelper:
                 self.result.add_stat(signal['labels']['query'], signal['sensor'], signal['value'])
             if self.result.get_stats(f'{self.__query_name}').get("DiffsCount", 0) > 0:
                 if self.__runner.check_canonical == CheckCanonicalPolicy.WARNING:
-                    self.result.add_warning('There is diff in query results')
+                    self.result.add_warning('There is diff in query results', area=ErrorArea.DIFF)
                 else:
-                    self.result.add_error('There is diff in query results')
+                    self.result.add_error('There is diff in query results', area=ErrorArea.DIFF)
 
         def __load_query_out(self) -> None:
             path = self.__runner.get_query_output_path(self.__query_name)
@@ -391,7 +275,7 @@ class YdbCliHelper:
                     self.__init_iter(iter)
                     self.result.iterations[iter].time = float(m.group(2))
 
-        def __process(self) -> YdbCliHelper.WorkloadRunResult:
+        def __process(self) -> WorkloadRunResult:
             self.__parse_stderr()
             self.__parse_stdout()
             self.__load_stats()
@@ -402,7 +286,7 @@ class YdbCliHelper:
     def workload_run(workload_type: WorkloadType, path: str, query_names: list[str], iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
                      scale: Optional[int] = None, query_prefix=None, external_path='', threads: int = 0,
-                     users=['']) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+                     users=['']) -> dict[str, WorkloadRunResult]:
         runners = [YdbCliHelper.WorkloadRunner(
             workload_type,
             path,
@@ -427,7 +311,7 @@ class YdbCliHelper:
         with ThreadPoolExecutor(max_workers=len(runners)) as executor:
             results = as_completed([executor.submit(__get_result, r) for r in runners])
         results_by_q = [r.result() for r in results]
-        return {q: YdbCliHelper.WorkloadRunResult().merge(*[r.get(q) for r in results_by_q]) for q in extended_query_names}
+        return {q: WorkloadRunResult().merge(*[r.get(q) for r in results_by_q]) for q in extended_query_names}
 
     @classmethod
     @allure.step
@@ -482,7 +366,7 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def exec_tpcc(cls, executions: list[tuple[str, remote_execution.LongRemoteExecution]]) -> dict[str, YdbCliHelper.WorkloadRunResult]:
+    def exec_tpcc(cls, executions: list[tuple[str, remote_execution.LongRemoteExecution]]) -> dict[str, WorkloadRunResult]:
         start_time = time()
         with ExitStack() as stack:
             for _, exec in executions:
@@ -492,7 +376,7 @@ class YdbCliHelper:
 
         results = {}
         for user, exec in executions:
-            res = YdbCliHelper.WorkloadRunResult()
+            res = WorkloadRunResult()
             res.start_time = start_time
             try:
                 res.stdout = exec.stdout
@@ -517,9 +401,10 @@ class YdbCliHelper:
                         res.add_stat('test', f'tpcc_{tr}_ms_perc_{p.replace(".", "_")}', t)
                     for p, t in stats.get('percentiles_pure', {}).items():
                         res.add_stat('test', f'tpcc_{tr}_pure_perc_{p.replace(".", "_")}', t)
+            except WorkloadError as e:
+                res.add_custom_error(e)
             except BaseException as e:
-                res.add_error(str(e))
-                res.traceback = e.__traceback__
+                res.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))
             results[user] = res
 
         return results

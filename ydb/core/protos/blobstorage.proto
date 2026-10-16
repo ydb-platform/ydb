@@ -1057,6 +1057,9 @@ message TNodeWardenServiceSet {
         repeated TDonor Donors = 10; // a set of donor disks used to accelerate replication
         optional bool ReadOnly = 11;
         optional uint32 GroupSizeInUnits = 12;
+        // Set when the storage pool overrides the global knob, including 0. Absent means inherit. NodeWarden
+        // latches it when the VDisk starts.
+        optional uint32 VDiskHeapAllocatorNumLeadingDisks = 13;
     }
 
     message TReplBrokerConfig {

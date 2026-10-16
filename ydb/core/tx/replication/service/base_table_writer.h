@@ -14,6 +14,7 @@ namespace NKikimrTxDataShard {
 
 namespace NKikimrReplication {
     class TSchemaChange;
+    class TLocalTableWriterSettings;
 }
 
 namespace NKikimr::NReplication::NService {
@@ -46,6 +47,7 @@ IActor* CreateLocalTableWriter(
     THolder<IChangeRecordParser>&& parser,
     THolder<IChangeRecordSerializer>&& serializer,
     std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
-    EWriteMode mode = EWriteMode::Simple);
+    EWriteMode mode = EWriteMode::Simple,
+    const NKikimrReplication::TLocalTableWriterSettings* settings = nullptr);
 
 }

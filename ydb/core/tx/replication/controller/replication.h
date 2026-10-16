@@ -81,6 +81,8 @@ public:
 
         virtual ui64 GetId() const = 0;
         virtual ETargetKind GetKind() const = 0;
+        virtual bool IsIndexBuild() const = 0;
+        virtual void SetIndexBuild(bool value) = 0;
 
         virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;
@@ -102,6 +104,9 @@ public:
 
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
+
+        virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
+        virtual void SetStreamSchemaChanges(bool value) = 0;
 
         virtual const TString& GetIssue() const = 0;
         virtual void SetIssue(const TString& value) = 0;
@@ -144,8 +149,10 @@ public:
     ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
+    const ITarget* FindBaseTableTarget(const ITarget& indexTarget) const;
     void RemoveTarget(ui64 id);
-    const TVector<TString>& GetTargetTablePaths() const;
+    TVector<ITarget*> GetTargets() const;
+    TVector<TString> GetTargetTablePaths() const;
 
     void Progress(const TActorContext& ctx);
     void Shutdown(const TActorContext& ctx);

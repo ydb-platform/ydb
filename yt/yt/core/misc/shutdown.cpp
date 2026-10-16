@@ -7,14 +7,13 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
-#include <library/cpp/yt/threading/event_count.h>
-
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/string.h>
 
+#include <library/cpp/yt/system/event_count.h>
 #include <library/cpp/yt/system/exit.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 #include <library/cpp/yt/system/thread_id.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
@@ -103,7 +102,7 @@ public:
     // so the routine will not be executed. Moreover, if we try to join this thread we'll get deadlock
     // because this thread will try to acquire atexit lock which is owned by this thread
     #ifndef _win_
-        NThreading::TEvent shutdownCompleteEvent;
+        TEvent shutdownCompleteEvent;
         std::thread watchdogThread([&] {
             ::TThread::SetCurrentThreadName("ShutdownWD");
             if (!shutdownCompleteEvent.Wait(options.GraceTimeout)) {
@@ -195,7 +194,7 @@ public:
 private:
     std::atomic<FILE*> ShutdownLogFile_ = IsShutdownLoggingEnabledImpl() ? stderr : nullptr;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
 
     struct TRegisteredCallback
     {

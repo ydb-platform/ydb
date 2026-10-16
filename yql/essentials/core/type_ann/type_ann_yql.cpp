@@ -1532,7 +1532,7 @@ IGraphTransformer::TStatus YqlWinWrapper(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    const TStringBuf name = input->Head().Content();
+    const TStringBuf name = input->Child(0)->Content();
     const bool isRank = IsIn({"rank", "denserank", "percentrank"}, name);
     THashSet<TStringBuf> supportedSettings;
     if (isRank) {
@@ -1540,6 +1540,9 @@ IGraphTransformer::TStatus YqlWinWrapper(
         supportedSettings.insert("warnNoAnsi");
         supportedSettings.insert("window_expr");
         supportedSettings.insert("warned_unordered_window");
+    }
+    if (name == "cumedist") {
+        supportedSettings.insert("ansi");
     }
 
     auto settingsValidator = [](TStringBuf name, TExprNode& setting, TExprContext& ctx) {

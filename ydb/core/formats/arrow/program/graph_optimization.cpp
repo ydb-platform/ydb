@@ -99,7 +99,8 @@ TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, co
             }
             const TString name = Resolver.GetColumnName(input.GetColumnId(), true);
 
-            const IDataSource::TDataAddress dataAddr(input.GetColumnId(), Resolver.GetColumnName(input.GetColumnId()), "");
+            const IDataSource::TDataAddress dataAddr(
+                input.GetColumnId(), Resolver.GetColumnName(input.GetColumnId()), NAccessor::NSubColumns::TCanonicalSubColumnName{});
             auto inputFetcher = AddNode(std::make_shared<TOriginalColumnDataProcessor>(input.GetColumnId(), dataAddr));
             //            AFL_VERIFY(Producers.emplace(input.GetColumnId(), inputFetcher.get()).second);
 
@@ -556,14 +557,13 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
             return std::nullopt;
         }
         auto constProc = nodePath->GetProcessorAs<TConstProcessor>();
-        TString path;
         if (constProc->GetScalarConstant()->type->id() == arrow::utf8()->id() ||
             constProc->GetScalarConstant()->type->id() == arrow::binary()->id()) {
-            path = NAccessor::NSubColumns::ToSubcolumnName(constProc->GetScalarConstant()->ToString());
+            return TResourceAddress(nodeData->GetProcessor()->GetOutput()[0].GetColumnId(),
+                NAccessor::NSubColumns::TCanonicalSubColumnName::Parse(constProc->GetScalarConstant()->ToString()));
         } else {
             return std::nullopt;
         }
-        return TResourceAddress(nodeData->GetProcessor()->GetOutput()[0].GetColumnId(), path);
     } else {
         return std::nullopt;
     }
@@ -616,7 +616,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     const ui32 resourceIdIndexToAnd = BuildNextResourceId();
     auto resolvedColumnName = Resolver.GetColumnName(dataAddr->GetColumnId(), false);
     IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker,
-        resolvedColumnName.empty()?"COLUMN_NAME_NOT_RESOLVED":resolvedColumnName);
+        resolvedColumnName.empty() ? "COLUMN_NAME_NOT_RESOLVED" : resolvedColumnName);
     auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
         resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);

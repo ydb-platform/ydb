@@ -26,7 +26,7 @@ private:
 
     [[nodiscard]] bool Initialize();
 
-    virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
+    virtual std::optional<ui64> DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const override;
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
         return op.GetOperation() == EOperation::Equals && op.GetCaseSensitive();

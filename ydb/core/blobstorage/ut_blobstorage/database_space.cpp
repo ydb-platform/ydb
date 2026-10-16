@@ -153,7 +153,6 @@ Y_UNIT_TEST_SUITE(DatabaseSpace) {
 
     Y_UNIT_TEST(SubscribeBlockAndUnblock) {
         TTestContext ctx;
-        ctx.SetThresholds(TColor::YELLOW, TColor::LIGHT_YELLOW);
 
         // subscribe from two actors on the same node and from another node
         const std::vector<TSubscriber> subscribers{ctx.Subscribe(1), ctx.Subscribe(1), ctx.Subscribe(2)};

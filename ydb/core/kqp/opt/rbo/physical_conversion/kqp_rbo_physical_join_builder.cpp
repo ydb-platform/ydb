@@ -8,6 +8,58 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+namespace {
+
+bool BadKeyTypeForHashJoin(const TTypeAnnotationNode* type) {
+    while (type && (type->GetKind() == ETypeAnnotationKind::Tagged || type->GetKind() == ETypeAnnotationKind::Optional)) {
+        if (type->GetKind() == ETypeAnnotationKind::Tagged) {
+            type = type->Cast<TTaggedExprType>()->GetBaseType();
+        } else {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+    }
+
+    Y_ENSURE(type, "Null type for join key");
+
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (BadKeyTypeForHashJoin(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* element : type->Cast<TTupleExprType>()->GetItems()) {
+                if (BadKeyTypeForHashJoin(element)) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+bool BadTypesForBlockJoin(TOpJoin& join, TExprContext& ctx) {
+    for (const auto & joinIU : join.JoinKeys.Items()) {
+        if (BadKeyTypeForHashJoin(join.GetLeftInput()->GetIUType(joinIU.first, ctx))) {
+            return true;
+        }
+        if (BadKeyTypeForHashJoin(join.GetRightInput()->GetIUType(joinIU.second, ctx))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}
+
 
 TExprNode::TPtr TPhysicalJoinBuilder::BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
     TCoArgument leftArg{Ctx.NewArgument(Pos, "_kqp_left")};
@@ -686,5 +738,10 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput,
 
     Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" ||
              joinKind == "full" || joinKind == "cross");
+
+    if(BadTypesForBlockJoin(Join, Ctx)) {
+        useBlockHashJoin = false;
+    }
+
     return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
 }

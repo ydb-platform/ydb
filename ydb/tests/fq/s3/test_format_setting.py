@@ -24,6 +24,60 @@ from google.protobuf import struct_pb2
 
 
 class TestS3(TestYdsBase):
+    def check_large_parquet_timestamp_to_string(self, kikimr, s3, client, storage_connection_name, target_type):
+        # One decoded row group expands beyond the 240 KiB string builder limit.
+        row_count = 30000
+        null_rows = {9101, 9102, 9104, 9106, 18207}
+        timestamps = [None if i in null_rows else 1712059260000000 + i for i in range(row_count)]
+        table = pa.Table.from_arrays(
+            [pa.array(range(row_count), type=pa.int64()), pa.array(timestamps, type=pa.timestamp('us'))],
+            names=['id', 'ts'],
+        )
+        filename = f'large_timestamp_to_{target_type}.parquet'
+        path = yatest.common.work_path(filename)
+        pq.write_table(table, path, row_group_size=row_count)
+        decoded_batch_lengths = [batch.num_rows for batch in pq.read_table(path).to_batches()]
+        logging.info("Parquet fixture decoded batch lengths: %s", decoded_batch_lengths)
+        assert decoded_batch_lengths == [row_count]
+        assert (row_count - len(null_rows)) * 27 > 240 * 1024
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        # Aggregation checks every row without the result API's row limit.
+        for nullable in (True, False):
+            not_null = '' if nullable else ' NOT NULL'
+            input_filename = filename
+            expected_nulls = len(null_rows) if nullable else 0
+            if not nullable:
+                input_filename = f'large_timestamp_to_{target_type}_not_null.parquet'
+                non_null_table = table.set_column(
+                    1,
+                    pa.field('ts', pa.timestamp('us'), nullable=False),
+                    pa.array([1712059260000000 + i for i in range(row_count)], type=pa.timestamp('us')),
+                )
+                pq.write_table(non_null_table, yatest.common.work_path(input_filename), row_group_size=row_count)
+                s3_helpers.create_bucket_and_upload_file(
+                    input_filename, s3.s3_url, "fbucket", yatest.common.work_path()
+                )
+            sql = f'''
+                SELECT COUNT(*), COUNT(ts), MIN(ts), MAX(ts), SUM(id), SUM(LENGTH(ts))
+                FROM `{storage_connection_name}`.`/{input_filename}`
+                WITH (FORMAT="parquet", SCHEMA=(id Int64 NOT NULL, ts {target_type}{not_null}));
+            '''
+            query_id = client.create_query(
+                "large_timestamp", sql, type=fq.QueryContent.QueryType.ANALYTICS
+            ).result.query_id
+            client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+            rows = client.get_result_data(query_id, limit=1).result.result_set.rows
+            assert len(rows) == 1
+            items = rows[0].items
+            assert items[0].uint64_value == row_count
+            assert items[1].uint64_value == row_count - expected_nulls
+            for index, expected in ((2, "2024-04-02T12:01:00.000000Z"), (3, "2024-04-02T12:01:00.029999Z")):
+                actual = items[index].bytes_value.decode() if target_type == 'String' else items[index].text_value
+                assert actual == expected
+            assert items[4].int64_value == row_count * (row_count - 1) // 2
+            assert items[5].uint64_value == (row_count - expected_nulls) * 27
+
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
         s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_settings")
         kikimr.control_plane.wait_bootstrap(1)
@@ -351,9 +405,7 @@ Pear;15;33'''
         )
         return storage_binding_name
 
-    def create_source_date_binding(
-        self, unique_prefix, client, connection_id, filename, type_format, format
-    ):
+    def create_source_date_binding(self, unique_prefix, client, connection_id, filename, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -371,9 +423,7 @@ Pear;15;33'''
         )
         return storage_binding_name
 
-    def create_sink_date_binding(
-        self, unique_prefix, client, connection_id, prefix, type_format, format
-    ):
+    def create_sink_date_binding(self, unique_prefix, client, connection_id, prefix, type_format, format):
         dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
@@ -964,13 +1014,9 @@ Pear;15;33'''
                     id
                 FROM bindings.{}
             )
-            '''.format(
-            binding_for_names_name, binding_for_ids_name
-        )
+            '''.format(binding_for_names_name, binding_for_ids_name)
 
-        query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)
@@ -2020,6 +2066,8 @@ Pear;15;33'''
         assert rows[0].items[0].text_value == "apple"
         assert rows[0].items[1].bytes_value == b"2024-04-02"
 
+        self.check_large_parquet_timestamp_to_string(kikimr, s3, client, storage_connection_name, 'String')
+
     @yq_all
     def test_parquet_converters_to_utf8(self, kikimr, s3, client, unique_prefix):
         # timestamp[ms] -> Utf8
@@ -2157,6 +2205,8 @@ Pear;15;33'''
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
         assert rows[0].items[1].text_value == "2024-04-02"
+
+        self.check_large_parquet_timestamp_to_string(kikimr, s3, client, storage_connection_name, 'Utf8')
 
     @yq_all
     def test_parquet_converters_to_date(self, kikimr, s3, client, unique_prefix):

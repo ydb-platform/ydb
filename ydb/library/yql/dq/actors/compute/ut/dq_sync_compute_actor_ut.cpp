@@ -135,6 +135,11 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
             SetLogPriority(NKikimrServices::DQ_TASK_RUNNER, NActors::NLog::EPriority::PRI_TRACE);
         }
     }
+
+    // Joins the executor threads and destroys the actors, the base destructor finds nothing left to stop
+    void Stop() {
+        CleanupNodes();
+    }
 };
 
 using namespace NKikimr::NMiniKQL;
@@ -423,6 +428,11 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
 
         EdgeActor = ActorSystem.AllocateEdgeActor();
         DstEdgeActor = ActorSystem.AllocateEdgeActor();
+    }
+
+    // Actors use FunctionRegistry & co by plain pointers, and those members are destroyed before ActorSystem
+    void TearDown(NUnitTest::TTestContext& /* context */) override {
+        ActorSystem.Stop();
     }
 
     // Generates program that squares `id` column and passes `ts` column as is
@@ -965,6 +975,15 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 "Compute actor has not finished sink in " << timeout << ": it is stuck");
             Sleep(TDuration::MilliSeconds(10));
         }
+    }
+
+    // Events are handled in order, so the final state also proves that Bootstrap() of the actor has returned
+    NDqProto::TEvComputeActorState AbortComputeActor(NActors::TActorId computeActor) {
+        ActorSystem.Send(computeActor, EdgeActor, TEvDq::TEvAbortExecution::Aborted("test is over").Release());
+        auto finalState = ActorSystem.GrabEdgeEventIf<TEvDqCompute::TEvState>(EdgeActor, [](const TEvDqCompute::TEvState::TPtr& ev) {
+            return ev->Get()->Record.GetState() != NDqProto::COMPUTE_STATE_EXECUTING; // periodic stats
+        });
+        return finalState->Get()->Record;
     }
 
     //
@@ -1800,13 +1819,13 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     // false, TDqMemoryQuota constructor hits Y_ABORT_UNLESS -> process crash.
     //
     // Before the fix: this test aborts the process.
-    // After the fix: the actor is created successfully and sends TEvState.
+    // After the fix: the actor bootstraps (DoBootstrap() creates the memory quota) and runs until aborted.
     Y_UNIT_TEST_F(MapJoinTaskWithExhaustedQuotaManager, TSyncComputeActorTestFixture) {
         NDqProto::TDqTask task;
         GenerateSquareProgram(task, [](TExprContext& ctx) {
             return ctx.MakeType<TDataExprType>(EDataSlot::Int32);
         });
-        // HasMapJoin=true makes CalcMkqlMemoryLimit() return MkqlHeavyProgramMemoryLimit
+        // Before the fix HasMapJoin=true made CalcMkqlMemoryLimit() return MkqlHeavyProgramMemoryLimit
         task.MutableProgram()->MutableSettings()->SetHasMapJoin(true);
         AddDummyInputChannels(task, InputChannelId, 1);
         AddDummyOutputChannel(task, OutputChannelId, RowType);
@@ -1817,12 +1836,15 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
         memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
         memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
         // Quota manager funded with lightLimit only — simulates kqp_query_control_plane.cpp:315.
-        // AllocateExtraQuota(heavyLimit - lightLimit) returns false -> Y_ABORT_UNLESS fires.
+        // Before the fix AllocateExtraQuota(heavyLimit - lightLimit) returned false -> Y_ABORT_UNLESS fired.
         memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(40_MB, 40_MB);
 
         auto syncCA = CreateTestSyncComputeActor(task, memoryLimits);
         ActorSystem.EnableScheduleForActor(syncCA, true);
-        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor); // SayHelloOnBootstrap, sent before DoBootstrap()
+
+        const auto state = AbortComputeActor(syncCA);
+        UNIT_ASSERT_C(state.GetStatusCode() == NYql::NDqProto::StatusIds::ABORTED, state.ShortDebugString());
     }
 }
 

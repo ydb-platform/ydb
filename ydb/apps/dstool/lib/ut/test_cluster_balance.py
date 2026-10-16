@@ -226,3 +226,67 @@ def test_blocking_reassignment(strategy, monkeypatch, dry_run, failed_command_in
     assert [r.Rollback for r in requests] == ([True, True, dry_run] if failed_command_index is None else [True, True])
     if failed_command_index is None:
         assert requests[1].Command == requests[2].Command
+
+
+@pytest.mark.parametrize('expected_slot_size', [0, 100])
+@pytest.mark.parametrize('slot_size_in_units, expected_usage', [(0, 4), (1, 4), (2, 2), (3, 2)])
+def test_fixed_quota_preserves_weighted_slot_usage(
+        inferred_settings_strategy, expected_slot_size, slot_size_in_units, expected_usage):
+    base_config = balance.common.fetch_base_config()
+    disk = base_config.PDisk[0]
+    for group in base_config.Group:
+        group.GroupSizeInUnits = 2
+    disk.ExpectedSlotSize = expected_slot_size
+    disk.PDiskConfig.SlotSizeInUnits = slot_size_in_units
+    assert balance.common.build_pdisk_usage_map(base_config)[1, 1] == expected_usage
+
+
+@pytest.mark.parametrize('source_slot_size', [0, 100])
+@pytest.mark.parametrize('destination_slot_size', [0, 100])
+@pytest.mark.parametrize('destination_units, accepted', [(0, False), (1, False), (2, True)])
+def test_multi_unit_group_reassignment_to_last_slot(
+        inferred_settings_strategy, monkeypatch, source_slot_size, destination_slot_size, destination_units, accepted):
+    strategy = inferred_settings_strategy
+    base_config = balance.common.fetch_base_config()
+    for group in base_config.Group:
+        group.GroupSizeInUnits = 2
+    base_config.PDisk[0].ExpectedSlotSize = source_slot_size
+    destination = base_config.PDisk[1]
+    destination.ExpectedSlotSize = destination_slot_size
+    destination.ExpectedSlotCount = 1
+    destination.PDiskConfig.SlotSizeInUnits = destination_units
+    strategy.cluster_info = balance.ClusterInfo.collect_cluster_info()
+    strategy.calculate_extra_info()
+    requests = []
+
+    def invoke(request):
+        requests.append(request.Rollback)
+        return response_to(3)
+
+    monkeypatch.setattr(balance.common, 'invoke_bsc_request', invoke)
+    assert strategy.reassign_vslot(base_config.VSlot[0], False) == accepted
+    assert requests == ([True, False] if accepted else [True])
+
+
+@pytest.mark.parametrize('slot_size', [0, 100])
+@pytest.mark.parametrize('donor_slot_size', [0, 100])
+@pytest.mark.parametrize('count_donors', [False, True])
+def test_donor_weight_uses_its_pdisk_capacity_model(
+        inferred_settings_strategy, slot_size, donor_slot_size, count_donors):
+    base_config = balance.common.fetch_base_config()
+    for group in base_config.Group:
+        group.GroupSizeInUnits = 5
+    disk, donor_disk = base_config.PDisk
+    disk.ExpectedSlotSize = slot_size
+    disk.PDiskConfig.SlotSizeInUnits = 2
+    donor_disk.ExpectedSlotSize = donor_slot_size
+    donor_disk.PDiskConfig.SlotSizeInUnits = 4
+    donor_disk.NumStaticSlots = 1
+    donor = base_config.VSlot[0].Donors.add()
+    donor.VSlotId.NodeId = donor_disk.NodeId
+    donor.VSlotId.PDiskId = donor_disk.PDiskId
+    donor.VSlotId.VSlotId = 1
+
+    usage = balance.common.build_pdisk_usage_map(base_config, count_donors=count_donors)
+    assert usage[1, 1] == 6
+    assert usage[3, 1] == 1 + (2 if count_donors else 0)

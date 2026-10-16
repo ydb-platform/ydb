@@ -2,15 +2,15 @@
 
 #include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
+#include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/tls_backend.h>
-
-#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
 
@@ -25,7 +25,8 @@ TString GetSymbolsString(char start, char end, const TString& skip) {
     return result;
 }
 
-NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, const TString& userSID) {
+NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
+    const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, const TString& userSID) {
     NYdb::TCommonClientSettings settings;
 
     if (userSID) {
@@ -59,7 +60,10 @@ void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount) {
         }
 
         if (TInstant::Now() > timeout) {
-            UNIT_FAIL("Timeout waiting for resources to publish on node [" << nodeId << "], expectedNodeCount: " << expectedNodeCount << " has resourceManager: " << (resourceManager ? "true" : "false") << ", node count: " << (resourceManager ? resourceManager->GetClusterResources().size() : 0));
+            UNIT_FAIL("Timeout waiting for resources to publish on node ["
+                      << nodeId << "], expectedNodeCount: " << expectedNodeCount
+                      << " has resourceManager: " << (resourceManager ? "true" : "false")
+                      << ", node count: " << (resourceManager ? resourceManager->GetClusterResources().size() : 0));
         }
 
         Sleep(TDuration::MilliSeconds(100));
@@ -74,13 +78,9 @@ void WaitResourcesPublish(const TKikimrRunner& kikimrRunner) {
     }
 }
 
-std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
-    bool initializeHttpGateway,
-    NYql::NConnector::IClient::TPtr connectorClient,
-    NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
-    std::optional<NKikimrConfig::TAppConfig> appConfig,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    const TKikimrRunnerOptions& options)
+std::shared_ptr<TKikimrRunner> MakeKikimrRunner(bool initializeHttpGateway, NYql::NConnector::IClient::TPtr connectorClient,
+    NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver, std::optional<NKikimrConfig::TAppConfig> appConfig,
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory, const TKikimrRunnerOptions& options)
 {
     // Logger should be initialized before http gateway creation
     NYql::NLog::InitLogger(new NYql::NLog::TTlsLogBackend(NActors::CreateNullBackend()));
@@ -115,6 +115,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
     appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
     auto settings = TKikimrSettings(*appConfig);
+    settings.SetAuthToken(options.AuthToken);
 
     NYql::IHTTPGateway::TPtr httpGateway;
     const auto& queryServiceConfig = appConfig->GetQueryServiceConfig();
@@ -129,36 +130,23 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
 
     const auto& s3Config = queryServiceConfig.GetS3();
     const auto& solomonConfig = queryServiceConfig.GetSolomon();
-    auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
-        httpGateway,
-        connectorClient,
-        options.CredentialsFactory,
-        databaseAsyncResolver,
-        s3Config,
-        queryServiceConfig.GetGeneric(),
-        queryServiceConfig.GetYt(),
-        nullptr,
-        solomonConfig,
-        nullptr,
-        NYql::NDq::CreateReadActorFactoryConfig(s3Config),
-        NYql::NDq::CreatePqDqTaskTransformFactory(),
+    auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(httpGateway, connectorClient,
+        options.CredentialsFactory, databaseAsyncResolver, s3Config, queryServiceConfig.GetGeneric(), queryServiceConfig.GetYt(), nullptr,
+        solomonConfig, nullptr, NYql::NDq::CreateReadActorFactoryConfig(s3Config), NYql::NDq::CreatePqDqTaskTransformFactory(),
         NYql::TPqGatewayConfig{},
         options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver, options.CredentialsFactory),
-        nullptr,
-        driver);
+        nullptr, driver);
 
     auto logSettings = options.LogSettings;
     logSettings.DefaultLogPriority = std::max(NLog::PRI_NOTICE, logSettings.DefaultLogPriority);
-    logSettings
-        .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO)
+    logSettings.AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_INFO)
         .AddLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG)
         .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
     const auto& kqpSettings = appConfig->GetKQPConfig().GetSettings();
-    settings
-        .SetFeatureFlags(featureFlags)
+    settings.SetFeatureFlags(featureFlags)
         .SetFederatedQuerySetupFactory(federatedQuerySetupFactory)
-        .SetKqpSettings({kqpSettings.begin(), kqpSettings.end()})
+        .SetKqpSettings({ kqpSettings.begin(), kqpSettings.end() })
         .SetS3ActorsFactory(std::move(s3ActorsFactory))
         .SetWithSampleTables(false)
         .SetDomainRoot(options.DomainRoot)
@@ -217,11 +205,12 @@ private:
     const TString Token_;
 };
 
-class TStaticServiceAccountCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
+class TStaticServiceAccountCredentialsFactory: public NYql::ISecuredServiceAccountCredentialsFactory {
 public:
     explicit TStaticServiceAccountCredentialsFactory(TString token)
         : Token_(std::move(token))
-    {}
+    {
+    }
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
         return std::make_shared<TStaticCredentialsProviderFactory>(Token_);
@@ -239,8 +228,7 @@ public:
     }
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool addBearerToToken) override {
-        return NYql::CreateCredentialsProviderFactoryForStructuredToken(
-            SaFactory_, structuredTokenJson, addBearerToToken);
+        return NYql::CreateCredentialsProviderFactoryForStructuredToken(SaFactory_, structuredTokenJson, addBearerToToken);
     }
 
 private:
@@ -266,4 +254,4 @@ std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCoun
     };
 }
 
-} // namespace NKikimr::NKqp::NFederatedQueryTest
+}   // namespace NKikimr::NKqp::NFederatedQueryTest

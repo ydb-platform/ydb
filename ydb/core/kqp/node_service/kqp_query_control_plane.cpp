@@ -527,7 +527,30 @@ public:
                 createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
             }
 
-            auto actorId = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
+            TActorId actorId;
+            try {
+                actorId = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
+            } catch (...) {
+                const TString message = TStringBuilder() << "Failed to create compute actor for task " << taskId
+                    << ": " << CurrentExceptionMessage();
+                YDB_LOG_ERROR_COMP(NKikimrServices::KQP_NODE, "Compute actor creation failed",
+                    {"nodeId", SelfId().NodeId()},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"message", message});
+                ReplyError(msg, NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR, ev->Cookie, message);
+                State_->MarkRequestAsCancelled(executerId);
+                for (const auto& [startedTaskId, computeActorId] : State_->GetTasksByExecuterId(executerId)) {
+                    Send(computeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::INTERNAL_ERROR, message));
+                }
+
+                // Started actors finish their own tasks. Drop this and the remaining tasks so the query manager
+                // can terminate and return their reserved resources when the last started actor finishes.
+                for (size_t i = reply->Record.StartedTasksSize(); i < tasks.size(); ++i) {
+                    State_->OnTaskFinished(txId, executerId, tasks[i], /* success */ false);
+                }
+                co_return;
+            }
             auto* startedTask = reply->Record.AddStartedTasks();
             startedTask->SetTaskId(taskId);
             ActorIdToProto(actorId, startedTask->MutableActorId());

@@ -12,6 +12,34 @@ namespace NKikimr::NReplication::NService {
 
 using TFamily = NKikimrReplication::TSchemaChange::TFamily;
 
+namespace {
+
+auto MakeIndexSchemaChangeRecord(TStringBuf indexes = {}) {
+    TStringBuilder body;
+    body << R"json({
+        "ts": [10, 20],
+        "tableChanges": [{
+            "table": {
+                "schemaVersion": 2,
+                "columns": {
+                    "key": {"type": "Uint64"},
+                    "value": {"type": "Utf8"}
+                },
+                "primaryKeyColumnNames": ["key"]
+    )json";
+    if (indexes) {
+        body << ", \"indexes\": " << indexes;
+    }
+
+    body << "}}]}";
+
+    return TChangeRecordBuilder()
+        .WithBody(body)
+        .Build();
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(JsonChangeRecord) {
     Y_UNIT_TEST(DataChange) {
         auto record = TChangeRecordBuilder()
@@ -66,6 +94,54 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(schema.ColumnsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(0).GetName(), "key");
         UNIT_ASSERT_VALUES_EQUAL(schema.GetColumns(0).GetType(), "Uint64");
+    }
+
+    Y_UNIT_TEST(SchemaChangeIndexMetadata) {
+        auto parse = [](const TString& indexes) {
+            auto record = MakeIndexSchemaChangeRecord(indexes);
+            NKikimrReplication::TSchemaChange schema;
+            TString error;
+            UNIT_ASSERT_C(record->TryGetSchemaChange(schema, error), error);
+            return schema;
+        };
+
+        UNIT_ASSERT(!parse("").HasIndexes());
+        const auto empty = parse("{}");
+        UNIT_ASSERT(empty.HasIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(empty.GetIndexes().ItemsSize(), 0);
+        NKikimrReplication::TSchemaChange restored;
+        UNIT_ASSERT(restored.ParseFromString(empty.SerializeAsString()));
+        UNIT_ASSERT(restored.HasIndexes());
+
+        const auto first = parse(R"json({
+            "z": {"type": "GlobalSync", "indexColumns": ["value"], "dataColumns": []},
+            "a": {"type": "GlobalAsync", "indexColumns": ["key"], "dataColumns": ["value"]}
+        })json");
+        const auto second = parse(R"json({
+            "a": {"dataColumns": ["value"], "indexColumns": ["key"], "type": "GlobalAsync"},
+            "z": {"dataColumns": [], "indexColumns": ["value"], "type": "GlobalSync"}
+        })json");
+        UNIT_ASSERT_VALUES_EQUAL(first.SerializeAsString(), second.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(first.GetIndexes().GetItems(0).GetName(), "a");
+        UNIT_ASSERT_VALUES_EQUAL(first.GetIndexes().GetItems(1).GetType(), "GlobalSync");
+    }
+
+    Y_UNIT_TEST(SchemaChangeRejectsInvalidIndexes) {
+        for (const auto* indexes : {
+            "null", "[]", R"({"":{}})",
+            R"({"idx":{"type":"GlobalSync","indexColumns":[],"dataColumns":[]}})",
+            R"({"idx":{"type":"GlobalSync","indexColumns":["missing"],"dataColumns":[]}})",
+            R"({"idx":{"type":"GlobalSync","indexColumns":["key","key"],"dataColumns":[]}})",
+            R"({"idx":{"type":"GlobalSync","indexColumns":["key"],"dataColumns":["key"]}})",
+            R"({"idx":{"type":"GlobalSync","indexColumns":["key"]}})",
+            R"({"idx":{},"idx":{"type":"GlobalSync","indexColumns":["key"],"dataColumns":[]}})",
+        }) {
+            auto record = MakeIndexSchemaChangeRecord(indexes);
+            NKikimrReplication::TSchemaChange schema;
+            TString error;
+            UNIT_ASSERT_C(!record->TryGetSchemaChange(schema, error), indexes);
+            UNIT_ASSERT(!error.empty());
+        }
     }
 
     Y_UNIT_TEST(MalformedSchemaChange) {
@@ -399,7 +475,9 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
                     }
                 }]
             })json";
-            auto record = TChangeRecordBuilder().WithBody(body).Build();
+            auto record = TChangeRecordBuilder()
+                .WithBody(body)
+                .Build();
             NKikimrReplication::TSchemaChange schema;
             TString error;
             UNIT_ASSERT_C(!record->TryGetSchemaChange(schema, error), body);

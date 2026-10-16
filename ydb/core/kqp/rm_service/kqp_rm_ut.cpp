@@ -133,6 +133,7 @@ NKikimrConfig::TTableServiceConfig::TResourceManager MakeKqpResourceManagerConfi
     config.SetComputeActorsCount(100);
     config.SetPublishStatisticsIntervalSec(0);
     config.SetQueryMemoryLimit(1000);
+    config.SetEnableMemoryArena(true);
     // no band, so a demand past the memory arena grows it at once, and the execution units take no memory: the
     // tests that do not exercise the arena keep their resource broker expectations
     config.SetExecutionUnitMemory(0);

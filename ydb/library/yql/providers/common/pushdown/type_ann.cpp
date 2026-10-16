@@ -5,7 +5,8 @@
 
 namespace NYql::NPushdown {
 
-IGraphTransformer::TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
+IGraphTransformer::TStatus AnnotateFilterPredicate(
+    const TExprNode::TPtr& input, size_t childIndex, const TStructExprType* itemType, TExprContext& ctx) {
     if (childIndex >= input->ChildrenSize()) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -15,7 +16,7 @@ IGraphTransformer::TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input,
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!UpdateLambdaAllArgumentsTypes(filterLambda, {itemType}, ctx)) {
+    if (!UpdateLambdaAllArgumentsTypes(filterLambda, { itemType }, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -33,4 +34,4 @@ IGraphTransformer::TStatus AnnotateFilterPredicate(const TExprNode::TPtr& input,
     return IGraphTransformer::TStatus::Ok;
 }
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

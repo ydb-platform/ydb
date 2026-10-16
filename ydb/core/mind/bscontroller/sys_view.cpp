@@ -57,7 +57,7 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
         return;
     }
     ui64 allocatedSize = 0;
-    ui64 totalSize = 0;
+    std::optional<ui64> totalSize;
     for (const TGroupDiskInfo& disk : disks) {
         const auto& metrics = *disk.VDiskMetrics;
         if (metrics.HasAllocatedSize()) {
@@ -66,22 +66,22 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
         const auto& pdiskMetrics = *disk.PDiskMetrics;
         ui64 slotSize = 0;
-        if (disk.ExpectedSlotSize) {
-            slotSize = disk.ExpectedSlotSize;
-        } else if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
+        if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
             slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
+        } else if (disk.ExpectedSlotSize) {
+            slotSize = disk.ExpectedSlotSize;
         } else if (pdiskMetrics.GetTotalSize() && disk.ExpectedSlotCount) {
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
-        slotSize *= disk.ExpectedSlotSize
-            ? 1
-            : TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits());
-        if (slotSize) {
-            totalSize = Min(totalSize ? totalSize : Max<ui64>(), slotSize);
+        slotSize = TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits(), disk.ExpectedSlotSize,
+            pdiskMetrics.HasUserChunkPoolSize() ? std::make_optional(pdiskMetrics.GetUserChunkPoolSize()) : std::nullopt);
+        if (slotSize || (disk.ExpectedSlotSize && pdiskMetrics.HasUserChunkPoolSize())) {
+            totalSize = Min(totalSize.value_or(Max<ui64>()), slotSize);
         }
     }
-    const ui64 a = totalSize * disks.size() * type.DataParts() / type.TotalPartCount();
+    const ui64 a = totalSize.value_or(0) * disks.size() * type.DataParts() / type.TotalPartCount();
     const ui64 b = allocatedSize * disks.size() * type.DataParts() / type.TotalPartCount();
     info->SetAllocatedSize(b);
     info->SetAvailableSize(b < a ? a - b : 0);
@@ -348,12 +348,16 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     if (pDiskInfo->Metrics.HasEnforcedDynamicSlotSize()) {
         info->SetEnforcedDynamicSlotSize(pDiskInfo->Metrics.GetEnforcedDynamicSlotSize());
     }
+    if (pDiskInfo->Metrics.HasUserChunkPoolSize()) {
+        info->SetUserChunkPoolSize(pDiskInfo->Metrics.GetUserChunkPoolSize());
+    }
     ui32 expectedSlotCount = 0;
     ui32 slotSizeInUnits = 0;
     pDiskInfo->ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
     info->SetExpectedSlotCount(expectedSlotCount);
     info->SetExpectedSlotSize(pDiskInfo->GetEffectiveExpectedSlotSize());
     info->SetNumActiveSlots(pDiskInfo->NumActiveDynamicSlots + pDiskInfo->StaticSlotUsage);
+    info->SetStaticSlotUsage(pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(pDiskInfo->MaintenanceStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
@@ -605,6 +609,9 @@ void TBlobStorageController::UpdateSystemViews() {
                     if (pdisk.PDiskMetrics->HasEnforcedDynamicSlotSize()) {
                         pb->SetEnforcedDynamicSlotSize(pdisk.PDiskMetrics->GetEnforcedDynamicSlotSize());
                     }
+                    if (pdisk.PDiskMetrics->HasUserChunkPoolSize()) {
+                        pb->SetUserChunkPoolSize(pdisk.PDiskMetrics->GetUserChunkPoolSize());
+                    }
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
                 pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
@@ -619,6 +626,7 @@ void TBlobStorageController::UpdateSystemViews() {
                 pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
                 pb->SetSlotSizeInUnits(slotSizeInUnits);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
+                pb->SetStaticSlotUsage(pdisk.StaticSlotUsage);
             }
         }
         for (const auto& [vslotId, vslot] : StaticVSlots) {

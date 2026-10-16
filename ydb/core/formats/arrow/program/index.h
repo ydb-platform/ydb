@@ -35,7 +35,7 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("column_name", IndexContext.GetColumnName());
         if (IndexContext.GetSubColumnName()) {
-            result.InsertValue("sub_column_name", IndexContext.GetSubColumnName());
+            result.InsertValue("sub_column_name", IndexContext.GetSubColumnName().GetValue());
         }
         result.InsertValue("operation", IndexContext.GetOperation().DebugString());
         return result;

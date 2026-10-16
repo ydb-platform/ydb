@@ -19,6 +19,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
             auto* tableService = settings.AppConfig->MutableTableServiceConfig();
             tableService->SetEnableNewRBO(EnableNewRbo);
             tableService->SetEnableFallbackToYqlOptimizer(false);
+            tableService->SetEnableFallbackOnDML(false);
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -104,6 +105,26 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         UNIT_ASSERT_VALUES_EQUAL(*read(true)->Get()->Data, "mixed-sample");
         UNIT_ASSERT_VALUES_EQUAL(*read(false)->Get()->Data, "full");
         UNIT_ASSERT_VALUES_EQUAL(*read(false, EStatType::SIMPLE_COLUMN)->Get()->Data, "another-type");
+
+        TStatisticsItem omitted(1, type, {});
+        omitted.ColumnTags = columns;
+        omitted.Sampling = result->Get()->Sampling;
+        TStatisticsItem replacement(1, EStatType::SIMPLE_COLUMN, "replacement");
+        replacement.ColumnTags = columns;
+        TBlockEvents<NKqp::TEvKqp::TEvQueryRequest> clearCommit(runtime, [](const auto& ev) {
+            return ev->Get()->GetQuery().Contains("NULL AS sampled_data");
+        });
+        runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database", pathId,
+            {std::move(omitted), std::move(replacement)}));
+        runtime.WaitFor("omitted sample commit", [&] { return !clearCommit.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(*read(true)->Get()->Data, "mixed-sample");
+        clearCommit.Stop().Unblock();
+        const auto clearSave = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvSaveStatisticsQueryResponse>(sender);
+        UNIT_ASSERT_C(clearSave->Get()->Success, clearSave->Get()->Issues.ToString());
+        result = read(true);
+        UNIT_ASSERT(result->Get()->Success && !result->Get()->Sampling);
+        UNIT_ASSERT_VALUES_EQUAL(*result->Get()->Data, "full");
+        UNIT_ASSERT_VALUES_EQUAL(*read(false, EStatType::SIMPLE_COLUMN)->Get()->Data, "replacement");
 
         save("new-full", false);
         result = read(true);

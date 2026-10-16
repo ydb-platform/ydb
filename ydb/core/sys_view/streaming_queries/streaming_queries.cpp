@@ -1,15 +1,15 @@
 #include "streaming_queries.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
-#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/services/workload_manager/actors/actors.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
-
 #include <library/cpp/protobuf/json/json2proto.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
@@ -22,7 +22,7 @@ using namespace fmt::literals;
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvStart = EventSpaceBegin(TEvents::ES_PRIVATE),
 
         EvCheckStreamingQueriesTables = EvStart,
@@ -34,19 +34,20 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvCheckStreamingQueriesTables : public TEventLocal<TEvCheckStreamingQueriesTables, EvCheckStreamingQueriesTables> {
+    struct TEvCheckStreamingQueriesTables: public TEventLocal<TEvCheckStreamingQueriesTables, EvCheckStreamingQueriesTables> {
         TEvCheckStreamingQueriesTables(Ydb::StatusIds::StatusCode status, bool tablesExist, NYql::TIssues&& issues)
             : Status(status)
             , TablesExist(tablesExist)
             , Issues(std::move(issues))
-        {}
+        {
+        }
 
         const Ydb::StatusIds::StatusCode Status;
         const bool TablesExist = false;
         const NYql::TIssues Issues;
     };
 
-    struct TEvFetchStreamingQueriesResult : public TEventLocal<TEvFetchStreamingQueriesResult, EvFetchStreamingQueriesResult> {
+    struct TEvFetchStreamingQueriesResult: public TEventLocal<TEvFetchStreamingQueriesResult, EvFetchStreamingQueriesResult> {
         struct TQuery {
             TString Path;
             NKikimrKqp::TStreamingQueryState State;
@@ -62,19 +63,22 @@ struct TEvPrivate {
             : Status(status)
             , Info(std::move(info))
             , Issues(std::move(issues))
-        {}
+        {
+        }
 
         const Ydb::StatusIds::StatusCode Status;
         TInfo Info;
         const NYql::TIssues Issues;
     };
 
-    struct TEvDescribeStreamingQueriesResult : public TEventLocal<TEvDescribeStreamingQueriesResult, EvDescribeStreamingQueriesResult> {
-        TEvDescribeStreamingQueriesResult(Ydb::StatusIds::StatusCode status, std::unordered_map<TString, NKqp::TStreamingQuerySettings>&& infos, NYql::TIssues&& issues)
+    struct TEvDescribeStreamingQueriesResult: public TEventLocal<TEvDescribeStreamingQueriesResult, EvDescribeStreamingQueriesResult> {
+        TEvDescribeStreamingQueriesResult(
+            Ydb::StatusIds::StatusCode status, std::unordered_map<TString, NKqp::TStreamingQuerySettings>&& infos, NYql::TIssues&& issues)
             : Status(status)
             , Infos(std::move(infos))
             , Issues(std::move(issues))
-        {}
+        {
+        }
 
         const Ydb::StatusIds::StatusCode Status;
         std::unordered_map<TString, NKqp::TStreamingQuerySettings> Infos;
@@ -82,7 +86,8 @@ struct TEvPrivate {
     };
 };
 
-class TStreamingQueryFetcherActor final : public TQueryBase, public TQueryRetryActorMixin<TStreamingQueryFetcherActor, TEvPrivate::TEvFetchStreamingQueriesResult> {
+class TStreamingQueryFetcherActor final: public TQueryBase,
+                                         public TQueryRetryActorMixin<TStreamingQueryFetcherActor, TEvPrivate::TEvFetchStreamingQueriesResult> {
     using TBase = TQueryBase;
 
     static constexpr ui64 MAX_STREAMING_QUERIES_COUNT = 1000;
@@ -111,20 +116,17 @@ public:
 
 private:
     NStructuredLog::TStructuredMessage LogPrefix() const {
-        auto result = YDB_LOG_CREATE_MESSAGE(
-            {"ownerId", Owner},
-            {"actorId", SelfId()},
-            {"actorClassName", "TStreamingQueryFetcherActor"},
-            {"prefix", "[StreamingQueries] [SysView]"});
+        auto result = YDB_LOG_CREATE_MESSAGE({ "ownerId", Owner }, { "actorId", SelfId() }, { "actorClassName", "TStreamingQueryFetcherActor" },
+            { "prefix", "[StreamingQueries] [SysView]" });
 
         if (Y_LIKELY(OperationName)) {
-            YDB_LOG_UPDATE_MESSAGE(result, {"operationName", OperationName});
+            YDB_LOG_UPDATE_MESSAGE(result, { "operationName", OperationName });
         }
         if (Y_LIKELY(TraceId)) {
-            YDB_LOG_UPDATE_MESSAGE(result, {"traceId", TraceId});
+            YDB_LOG_UPDATE_MESSAGE(result, { "traceId", TraceId });
         }
         if (StateDescription) {
-            YDB_LOG_UPDATE_MESSAGE(result, {"state", StateDescription});
+            YDB_LOG_UPDATE_MESSAGE(result, { "state", StateDescription });
         }
         return result;
     }
@@ -137,13 +139,7 @@ private:
         TStringBuilder paramsDecl;
         TStringBuilder rangeFilter;
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$database_id")
-                .Utf8(DatabaseId)
-                .Build()
-            .AddParam("$limit")
-                .Uint64(MAX_STREAMING_QUERIES_COUNT + 1)
-                .Build();
+        params.AddParam("$database_id").Utf8(DatabaseId).Build() .AddParam("$limit").Uint64(MAX_STREAMING_QUERIES_COUNT + 1).Build();
 
         if (const auto& from = Settings.From) {
             YDB_LOG_TRACE("OnRunQuery: applying from filter",
@@ -153,9 +149,7 @@ private:
 
             paramsDecl << "DECLARE $from AS Text;\n";
             rangeFilter << " AND query_path " << (from->Inclusive ? ">=" : ">") << " $from";
-            params.AddParam("$from")
-                .Utf8(TString(from->Value))
-                .Build();
+            params.AddParam("$from").Utf8(TString(from->Value)).Build();
         }
 
         if (const auto& to = Settings.To) {
@@ -166,9 +160,7 @@ private:
 
             paramsDecl << "DECLARE $to AS Text;\n";
             rangeFilter << " AND query_path " << (to->Inclusive ? "<=" : "<") << " $to";
-            params.AddParam("$to")
-                .Utf8(TString(to->Value))
-                .Build();
+            params.AddParam("$to").Utf8(TString(to->Value)).Build();
         }
 
         if (const auto& pageToken = Settings.PageToken) {
@@ -178,9 +170,7 @@ private:
 
             paramsDecl << "DECLARE $page_token AS Text;\n";
             rangeFilter << " AND query_path " << (Settings.Reverse ? "<" : ">") << " $page_token";
-            params.AddParam("$page_token")
-                .Utf8(*pageToken)
-                .Build();
+            params.AddParam("$page_token").Utf8(*pageToken).Build();
         }
 
         const TString sql = fmt::format(R"(
@@ -194,12 +184,8 @@ private:
                 WHERE database_id = $database_id {range_filter}
                 ORDER BY database_id, query_path {order}
                 LIMIT $limit;
-            )",
-            "table"_a = NKqp::TStreamingQueryMeta::GetTablesPath(),
-            "params_decl"_a = paramsDecl,
-            "range_filter"_a = rangeFilter,
-            "order"_a = Settings.Reverse ? "DESC" : "ASC"
-        );
+            )", "table"_a = NKqp::TStreamingQueryMeta::GetTablesPath(), "params_decl"_a = paramsDecl, "range_filter"_a = rangeFilter,
+            "order"_a = Settings.Reverse ? "DESC" : "ASC");
 
         RunStreamQuery(sql, &params, std::min(Settings.FreeSpace, 60_MB));
     }
@@ -243,7 +229,8 @@ private:
             try {
                 NProtobufJson::Json2Proto(stateJson, query.State);
             } catch (const std::exception& e) {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Failed to parse streaming query '" << *queryPath << "' state: " << e.what());
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
+                                                           << "Failed to parse streaming query '" << *queryPath << "' state: " << e.what());
                 return;
             }
 
@@ -274,18 +261,20 @@ private:
 };
 
 template <typename TDerived>
-class TSchemeDescribeActorBase : public TActorBootstrapped<TDerived> {
+class TSchemeDescribeActorBase: public TActorBootstrapped<TDerived> {
     using TBase = TActorBootstrapped<TDerived>;
     using TRetryPolicy = IRetryPolicy<>;
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
 
 public:
-    TSchemeDescribeActorBase(const TString& operationName, const TString& database, const std::vector<TString>& paths, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TSchemeDescribeActorBase(const TString& operationName, const TString& database, const std::vector<TString>& paths,
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : OperationName(operationName)
         , Database(database)
         , Paths(paths)
         , UserToken(std::move(userToken))
-    {}
+    {
+    }
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Bootstrap",
@@ -402,12 +391,8 @@ protected:
 
 protected:
     NStructuredLog::TStructuredMessage LogPrefix() const {
-        auto result = YDB_LOG_CREATE_MESSAGE(
-            {"operationName", OperationName},
-            {"ownerId", Owner},
-            {"actorId", TBase::SelfId()},
-            {"actorClassName", "TSchemeDescribeActorBase"},
-            {"database", Database});
+        auto result = YDB_LOG_CREATE_MESSAGE({ "operationName", OperationName }, { "ownerId", Owner }, { "actorId", TBase::SelfId() },
+            { "actorClassName", "TSchemeDescribeActorBase" }, { "database", Database });
         return result;
     }
 
@@ -431,7 +416,7 @@ protected:
     }
 
     void FatalError(Ydb::StatusIds::StatusCode status, const TString& message) {
-        FatalError(status, {NYql::TIssue(message)});
+        FatalError(status, { NYql::TIssue(message) });
     }
 
 private:
@@ -449,13 +434,9 @@ private:
             RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
                 []() {
                     return ERetryErrorClass::ShortRetry;
-                },
-                TDuration::MilliSeconds(100),
-                TDuration::MilliSeconds(500),
-                TDuration::Seconds(1),
-                std::numeric_limits<size_t>::max(),
-                TDuration::Seconds(10)
-            )->CreateRetryState();
+                }, TDuration::MilliSeconds(100), TDuration::MilliSeconds(500), TDuration::Seconds(1), std::numeric_limits<size_t>::max(),
+                TDuration::Seconds(10))
+                             ->CreateRetryState();
         }
 
         if (const auto delay = RetryState->GetNextRetryDelay()) {
@@ -473,7 +454,7 @@ private:
     }
 
     bool ScheduleRetry(const TString& message) {
-        return ScheduleRetry({NYql::TIssue(message)});
+        return ScheduleRetry({ NYql::TIssue(message) });
     }
 
 private:
@@ -489,13 +470,15 @@ protected:
     NYql::TIssues Issues;
 };
 
-class TStreamingQueriesTablesCheckerActor final : public TSchemeDescribeActorBase<TStreamingQueriesTablesCheckerActor> {
+class TStreamingQueriesTablesCheckerActor final: public TSchemeDescribeActorBase<TStreamingQueriesTablesCheckerActor> {
     using TBase = TSchemeDescribeActorBase<TStreamingQueriesTablesCheckerActor>;
 
 public:
     TStreamingQueriesTablesCheckerActor(const TString& database)
-        : TBase(__func__, database, {JoinPath({database, NKqp::TStreamingQueryMeta::GetTablesPath()})}, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}))
-    {}
+        : TBase(__func__, database, { JoinPath({ database, NKqp::TStreamingQueryMeta::GetTablesPath() }) },
+              MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{}))
+    {
+    }
 
 protected:
     bool HandlePath(const TString& path, const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) final {
@@ -515,21 +498,23 @@ protected:
 
     NStructuredLog::TStructuredMessage LogPrefix() const {
         auto result = TBase::LogPrefix();
-        YDB_LOG_UPDATE_MESSAGE(result,
-            {"actorClassName", "TSchemeDescribeActorBase"});
+        YDB_LOG_UPDATE_MESSAGE(result, { "actorClassName", "TSchemeDescribeActorBase" });
         return result;
     }
+
 private:
     bool TablesExist = false;
 };
 
-class TStreamingQueryDescribeActor final : public TSchemeDescribeActorBase<TStreamingQueryDescribeActor> {
+class TStreamingQueryDescribeActor final: public TSchemeDescribeActorBase<TStreamingQueryDescribeActor> {
     using TBase = TSchemeDescribeActorBase<TStreamingQueryDescribeActor>;
 
 public:
-    TStreamingQueryDescribeActor(const TString& database, const std::vector<TString>& queryPaths, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TStreamingQueryDescribeActor(
+        const TString& database, const std::vector<TString>& queryPaths, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
         : TBase(__func__, database, queryPaths, std::move(userToken))
-    {}
+    {
+    }
 
 protected:
     bool HandlePath(const TString& path, const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) final {
@@ -566,7 +551,7 @@ private:
 // Fetching pipeline:
 // resolve database -> check tables -> fetch from queries table -> describe in SS -> resolve script executions
 
-class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan> {
+class TStreamingQueriesScan final: public TScanActorBase<TStreamingQueriesScan> {
     using TBase = TScanActorBase<TStreamingQueriesScan>;
     using TSchema = Schema::StreamingQueries;
 
@@ -586,86 +571,147 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
         TInstant SuspendedUntil;
         TString LastExecutionId;
         TString PreviousExecutionIds = "{}";
+        TString CreatedBy;
+        TString ModifiedBy;
+        TString StartedBy;
+        TString StoppedBy;
+        TInstant CreatedAt;
+        TInstant ModifiedAt;
+        TInstant SubmittedAt;
+        TInstant StartedAt;
+        TInstant FinishedAt;
 
         ui64 GetSize() const {
-            return sizeof(TQueryInfo) + Status.size() + Issues.size() + Plan.size() + Ast.size() + Text.size() + ResourcePool.size() + LastExecutionId.size() + PreviousExecutionIds.size();
+            return sizeof(TQueryInfo) + Status.size() + Issues.size() + Plan.size() + Ast.size() + Text.size() + ResourcePool.size() +
+                   LastExecutionId.size() + PreviousExecutionIds.size() + CreatedBy.size() + ModifiedBy.size() + StartedBy.size() +
+                   StoppedBy.size();
         }
     };
 
-    using TExtractorValue = std::pair<TString, TQueryInfo>;
+    using TQueriesBatch = std::unordered_map<TString, TQueryInfo>;
+    using TExtractorValue = TQueriesBatch::value_type;
 
-    class TExtractorsMap : public THashMap<NTable::TTag, std::function<TCell(const TExtractorValue&)>> {
+    class TExtractorsMap: public THashMap<NTable::TTag, std::function<TCell(const TExtractorValue&)>> {
     public:
         TExtractorsMap() {
-            AddString<TSchema::Path>([](const TExtractorValue& p) { return p.first; });
-            AddString<TSchema::Status>([](const TExtractorValue& p) { return p.second.Status; });
-            AddString<TSchema::Issues>([](const TExtractorValue& p) { return p.second.Issues; });
-            AddString<TSchema::Plan>([](const TExtractorValue& p) { return p.second.Plan; });
-            AddString<TSchema::Ast>([](const TExtractorValue& p) { return p.second.Ast; });
-            AddString<TSchema::Text>([](const TExtractorValue& p) { return p.second.Text; });
-            Add<TSchema::Run, bool>([](const TExtractorValue& p) { return p.second.Run; });
-            AddString<TSchema::ResourcePool>([](const TExtractorValue& p) { return p.second.ResourcePool; });
-            Add<TSchema::RetryCount, ui64>([](const TExtractorValue& p) { return p.second.RetryCount; });
+            AddString<TSchema::Path>([](const TExtractorValue& p) -> const TString& {
+                return p.first;
+            });
+            AddString<TSchema::Status>([](const TExtractorValue& p) -> const TString& {
+                return p.second.Status;
+            });
+            AddString<TSchema::Issues>([](const TExtractorValue& p) -> const TString& {
+                return p.second.Issues;
+            });
+            AddString<TSchema::Plan>([](const TExtractorValue& p) -> const TString& {
+                return p.second.Plan;
+            });
+            AddString<TSchema::Ast>([](const TExtractorValue& p) -> const TString& {
+                return p.second.Ast;
+            });
+            AddString<TSchema::Text>([](const TExtractorValue& p) -> const TString& {
+                return p.second.Text;
+            });
+            Add<TSchema::Run, bool>([](const TExtractorValue& p) {
+                return p.second.Run;
+            });
+            AddString<TSchema::ResourcePool>([](const TExtractorValue& p) -> const TString& {
+                return p.second.ResourcePool;
+            });
+            Add<TSchema::RetryCount, ui64>([](const TExtractorValue& p) {
+                return p.second.RetryCount;
+            });
             AddOpt<TSchema::LastFailAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.LastFailAt) {
-                    return p.second.LastFailAt.MicroSeconds();
-                }
-                return std::nullopt;
+                return p.second.LastFailAt ? std::optional<ui64>(p.second.LastFailAt.MicroSeconds()) : std::nullopt;
             });
             AddOpt<TSchema::SuspendedUntil, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
-                if (p.second.SuspendedUntil) {
-                    return p.second.SuspendedUntil.MicroSeconds();
-                }
-                return std::nullopt;
+                return p.second.SuspendedUntil ? std::optional<ui64>(p.second.SuspendedUntil.MicroSeconds()) : std::nullopt;
             });
-            AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) { return p.second.LastExecutionId; });
-            AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) { return p.second.PreviousExecutionIds; });
+            AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) -> const TString& {
+                return p.second.LastExecutionId;
+            });
+            AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) -> const TString& {
+                return p.second.PreviousExecutionIds;
+            });
+            AddOptionalString<TSchema::CreatedBy>([](const TExtractorValue& p) {
+                return p.second.CreatedBy;
+            });
+            AddOptionalString<TSchema::ModifiedBy>([](const TExtractorValue& p) {
+                return p.second.ModifiedBy;
+            });
+            AddOptionalString<TSchema::StartedBy>([](const TExtractorValue& p) {
+                return p.second.StartedBy;
+            });
+            AddOptionalString<TSchema::StoppedBy>([](const TExtractorValue& p) {
+                return p.second.StoppedBy;
+            });
+            AddOpt<TSchema::CreatedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.CreatedAt ? std::optional<ui64>(p.second.CreatedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::ModifiedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.ModifiedAt ? std::optional<ui64>(p.second.ModifiedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::SubmittedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.SubmittedAt ? std::optional<ui64>(p.second.SubmittedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::StartedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.StartedAt ? std::optional<ui64>(p.second.StartedAt.MicroSeconds()) : std::nullopt;
+            });
+            AddOpt<TSchema::FinishedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                return p.second.FinishedAt ? std::optional<ui64>(p.second.FinishedAt.MicroSeconds()) : std::nullopt;
+            });
         }
 
     private:
         template <typename TCol, typename TType>
         void Add(std::function<TType(const TExtractorValue& p)> extractor) {
-            insert({TCol::ColumnId, [extractor](const TExtractorValue& p) {
-                return TCell::Make<TType>(extractor(p));
-            }});
+            insert({ TCol::ColumnId, [extractor](const TExtractorValue& p) {
+                        return TCell::Make<TType>(extractor(p));
+                    } });
         }
 
         template <typename TCol, typename TType>
         void AddOpt(std::function<std::optional<TType>(const TExtractorValue& p)> extractor) {
-            insert({TCol::ColumnId, [extractor](const TExtractorValue& p) {
-                if (const auto& value = extractor(p)) {
-                    return TCell::Make<TType>(*value);
-                }
-                return TCell();
-            }});
+            insert({ TCol::ColumnId, [extractor](const TExtractorValue& p) {
+                        if (const auto& value = extractor(p)) {
+                            return TCell::Make<TType>(*value);
+                        }
+                        return TCell();
+                    } });
         }
 
         template <typename TCol>
-        void AddString(std::function<TString(const TExtractorValue& p)> textExtractor) {
-            insert({TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
-                const auto& value = textExtractor(p);
-                return TCell(value.data(), value.size());
-            }});
+        void AddString(std::function<const TString&(const TExtractorValue& p)> textExtractor) {
+            insert({ TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
+                        const auto& value = textExtractor(p);
+                        return TCell(value.data(), value.size());
+                    } });
+        }
+
+        template <typename TCol>
+        void AddOptionalString(std::function<TString(const TExtractorValue& p)> textExtractor) {
+            insert({ TCol::ColumnId, [textExtractor](const TExtractorValue& p) {
+                        const auto& value = textExtractor(p);
+                        return value.empty() ? TCell() : TCell(value.data(), value.size());
+                    } });
         }
     };
 
     static constexpr ui64 MAX_SCRIPT_EXECUTION_RESOLVE_INFLIGHT = 10;
 
 public:
-    TStreamingQueriesScan(const TActorId& ownerId, ui32 scanId, const TString& database,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-        const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TStreamingQueriesScan(const TActorId& ownerId, ui32 scanId, const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
         : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
         , Reverse(reverse)
     {
         for (const auto& column : Columns) {
-            if (ScriptExecutionInfoRequired = IsIn({
-                TSchema::Status::ColumnId, TSchema::Issues::ColumnId, TSchema::Plan::ColumnId,
-                TSchema::Ast::ColumnId, TSchema::RetryCount::ColumnId, TSchema::LastFailAt::ColumnId,
-                TSchema::SuspendedUntil::ColumnId
-            }, column.Tag)) {
+            if (ScriptExecutionInfoRequired =
+                    IsIn({ TSchema::Status::ColumnId, TSchema::Issues::ColumnId, TSchema::Plan::ColumnId, TSchema::Ast::ColumnId,
+                             TSchema::RetryCount::ColumnId, TSchema::LastFailAt::ColumnId, TSchema::SuspendedUntil::ColumnId,
+                             TSchema::SubmittedAt::ColumnId, TSchema::StartedAt::ColumnId, TSchema::FinishedAt::ColumnId }, column.Tag)) {
                 break;
             }
         }
@@ -827,6 +873,12 @@ public:
                 .ResourcePool = info.ResourcePool,
                 .LastExecutionId = query.State.GetCurrentExecutionId(),
                 .PreviousExecutionIds = NKqp::SequenceToJsonString(query.State.GetPreviousExecutionIds()),
+                .CreatedBy = info.CreatedBy,
+                .ModifiedBy = info.ModifiedBy,
+                .StartedBy = info.StartedBy,
+                .StoppedBy = info.StoppedBy,
+                .CreatedAt = info.CreatedAt,
+                .ModifiedAt = info.ModifiedAt,
             };
 
             if (ScriptExecutionInfoRequired) {
@@ -859,7 +911,8 @@ public:
                 {"issues", issues.ToOneLineString()},
                 {"operationStatus", operationStatus},
                 {"ready", ready});
-            ReplyErrorAndDie(requestStatus, NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
+            ReplyErrorAndDie(requestStatus,
+                NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
             return;
         }
 
@@ -884,6 +937,11 @@ public:
             auto& info = it->second;
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
+            info.SubmittedAt = event.SubmittedAt;
+            info.StartedAt = event.SubmittedAt;
+            if (event.FinishedAt) {
+                info.FinishedAt = event.FinishedAt;
+            }
 
             if (!ready || operationStatus != Ydb::StatusIds::SUCCESS) {
                 info.LastFailAt = event.LastFailAt;
@@ -951,7 +1009,8 @@ private:
         if (!DatabaseId) {
             HasInflightOperation = true;
 
-            const auto& databaseFetcher = Register(NWorkloadManager::CreateDatabaseFetcherActor(SelfId(), DatabaseName, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
+            const auto& databaseFetcher = Register(NWorkloadManager::CreateDatabaseFetcherActor(
+                SelfId(), DatabaseName, MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{})));
             YDB_LOG_DEBUG("ContinueScan: starting database fetcher",
                 {"logPrefix", LogPrefix()},
                 {"databaseFetcherActorId", databaseFetcher});
@@ -1014,7 +1073,8 @@ private:
         }
 
         const auto& kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
-        for (ui64 i = 0; InflightScriptExecutionInfoResolve < MAX_SCRIPT_EXECUTION_RESOLVE_INFLIGHT && i < PendingScriptExecutionInfo.size(); ++i) {
+        for (ui64 i = 0; InflightScriptExecutionInfoResolve < MAX_SCRIPT_EXECUTION_RESOLVE_INFLIGHT && i < PendingScriptExecutionInfo.size();
+             ++i) {
             const auto& path = PendingScriptExecutionInfo[i];
             const auto it = QueriesBatch.find(path);
             if (it == QueriesBatch.end()) {
@@ -1033,7 +1093,8 @@ private:
                 }
             }
 
-            Send(kqpProxyId, std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, /* failOnNotFound */ false), /* flags */ 0, i);
+            Send(kqpProxyId, std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId),
+                                 BUILTIN_ACL_METADATA, /* failOnNotFound */ false), /* flags */ 0, i);
 
             YDB_LOG_DEBUG("ResolveScriptExecutionInfo: resolving script execution info",
                 {"logPrefix", LogPrefix()},
@@ -1149,12 +1210,8 @@ private:
     }
 
     NStructuredLog::TStructuredMessage LogPrefix() const {
-        auto result = YDB_LOG_CREATE_MESSAGE(
-            {"ownerId", OwnerActorId},
-            {"actorId", SelfId()},
-            {"scanId", ScanId},
-            {"database", DatabaseName},
-            {"actorClassName", "TStreamingQueriesScan"});
+        auto result = YDB_LOG_CREATE_MESSAGE({ "ownerId", OwnerActorId }, { "actorId", SelfId() }, { "scanId", ScanId },
+            { "database", DatabaseName }, { "actorClassName", "TStreamingQueriesScan" });
         return result;
     }
 
@@ -1168,23 +1225,22 @@ private:
     bool HasInflightOperation = false;
     bool ListStreamingQueriesFinished = false;
     std::optional<TString> ListStreamingQueriesPageToken;
-    std::vector<TEvPrivate::TEvFetchStreamingQueriesResult::TQuery> ListedQueries; // Last list queries result
+    std::vector<TEvPrivate::TEvFetchStreamingQueriesResult::TQuery> ListedQueries;   // Last list queries result
 
     std::vector<TString> ReadyQueries;
     std::deque<TString> PendingScriptExecutionInfo;
     ui64 InflightScriptExecutionInfoResolve = 0;
     ui64 ResolvedQueriesCount = 0;
     ui64 UsedSpace = 0;
-    std::unordered_map<TString, TQueryInfo> QueriesBatch;
+    TQueriesBatch QueriesBatch;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IActor> CreateStreamingQueriesScan(const TActorId& ownerId, ui32 scanId, const TString& database,
     const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse) {
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse) {
     return MakeHolder<TStreamingQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), reverse);
 }
 
-} // namespace NKikimr::NSysView
+}   // namespace NKikimr::NSysView

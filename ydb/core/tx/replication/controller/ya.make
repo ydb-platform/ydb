@@ -60,6 +60,7 @@ SRCS(
     tx_drop_replication.cpp
     tx_drop_stream_result.cpp
     tx_heartbeat.cpp
+    tx_index_build.cpp
     tx_init.cpp
     tx_schema_change.cpp
     tx_init_schema.cpp
@@ -81,4 +82,5 @@ RECURSE_FOR_TESTS(
     ut_schema_change
     ut_stream_creator
     ut_target_discoverer
+    ut_worker_lifecycle
 )

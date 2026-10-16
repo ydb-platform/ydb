@@ -105,6 +105,16 @@ NWilson::TTraceId CreateTraceId()
         NWilson::TTraceId::MAX_TIME_TO_LIVE);
 }
 
+void ExpectChecksums(
+    const TBlockChecksums& expected,
+    const TBlockChecksums& actual)
+{
+    UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(expected[i], actual[i]);
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -680,6 +690,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         1,
                         range,
                         MakeSgList(readyWriteBuffer),
+                        TBlockChecksums(),
                         CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1027,6 +1038,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -1234,6 +1246,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -1314,6 +1327,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -1450,6 +1464,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     0,
                     range,
                     MakeSgList(writeBuffer),
+                    TBlockChecksums(),
                     CreateTraceId());
             });
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1579,6 +1594,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                         host,
                         range,
                         MakeSgList(writeBuffer),
+                        TBlockChecksums(),
                         CreateTraceId());
                 });
             UNIT_ASSERT_VALUES_EQUAL(
@@ -1877,6 +1893,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                     TBlockRange16::WithLength(0, 3),
                     TDuration::Seconds(1),
                     guardedSglist,
+                    TBlockChecksums(),
                     CreateTraceId(),
                     cb);
                 return future;
@@ -2545,6 +2562,191 @@ Y_UNIT_TEST_SUITE(TSessionsWithDirectSessionTransport)
 
         auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
         UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
+    }
+
+    // Each write method forwards the given checksums to the transport.
+    Y_UNIT_TEST_F(ShouldForwardWriteChecksumsToTransport, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        WaitReady(executor, RunAndGetInitialReady(dbg));
+
+        const auto range = TBlockRange16::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'w');
+        const auto guardedSglist = MakeSgList(buffer);
+        const TBlockChecksums ddiskChecksums{11, 22};
+        const TBlockChecksums pbufferChecksums{33, 44};
+        const TBlockChecksums manyChecksums{55, 66};
+
+        auto ddiskWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->WriteBlocksToDDisk(
+                    0,
+                    0,
+                    range,
+                    guardedSglist,
+                    ddiskChecksums,
+                    CreateTraceId());
+            });
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, GetResponse(ddiskWrite).Error.GetCode());
+        ExpectChecksums(ddiskChecksums, transportPtr->LastWriteChecksums);
+
+        auto pbufferWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->WriteBlocksToPBuffer(
+                    0,
+                    0,
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    range,
+                    guardedSglist,
+                    pbufferChecksums,
+                    CreateTraceId());
+            });
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            GetResponse(pbufferWrite).Error.GetCode());
+        ExpectChecksums(pbufferChecksums, transportPtr->LastWriteChecksums);
+
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(2);
+        hosts.Set(3);
+        auto manyWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                auto promise = NThreading::NewPromise<
+                    TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                dbg->WriteBlocksToManyPBuffers(
+                    0,
+                    2,
+                    hosts,
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    range,
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    manyChecksums,
+                    CreateTraceId(),
+                    [promise = std::move(promise)](
+                        TDBGWriteBlocksToManyPBuffersResponse response) mutable
+                    { promise.SetValue(std::move(response)); });
+                return future;
+            });
+        const auto manyResponse = GetResponse(manyWrite);
+        UNIT_ASSERT_VALUES_EQUAL(3, manyResponse.Responses.size());
+        for (const auto& one: manyResponse.Responses) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                one.Error.GetCode(),
+                FormatError(one.Error));
+        }
+        ExpectChecksums(manyChecksums, transportPtr->LastWriteChecksums);
+    }
+
+    // Checksums survive a DDisk write that waits until the session is Locked.
+    // PBuffer writes do not wait for that session and still forward checksums.
+    Y_UNIT_TEST_F(
+        ShouldForwardWriteChecksumsWhenDDiskSessionNotLocked,
+        TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto transport = std::make_shared<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto& ddisks = transportPtr->GetDDiskIds();
+        // Hosts 0..2 connect immediately and form the quorum. Host 3 stays
+        // NotLocked until the test resolves its connect.
+        auto pendingHost3 =
+            transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[3]);
+        transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
+
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        WaitReady(RunAndGetInitialReady(dbg));
+
+        const auto range = TBlockRange16::WithLength(0, 1);
+        TString buffer(DefaultBlockSize, 'w');
+        const auto guardedSglist = MakeSgList(buffer);
+        const THostIndex pendingHost = 3;
+        const TBlockChecksums pbufferChecksums{33, 44};
+        const TBlockChecksums manyChecksums{55, 66};
+        const TBlockChecksums ddiskChecksums{77, 88};
+
+        auto pbufferWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->WriteBlocksToPBuffer(
+                    0,
+                    pendingHost,
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    range,
+                    guardedSglist,
+                    pbufferChecksums,
+                    CreateTraceId());
+            });
+        UNIT_ASSERT_VALUES_EQUAL(
+            S_OK,
+            GetResponse(pbufferWrite).Error.GetCode());
+        ExpectChecksums(pbufferChecksums, transportPtr->LastWriteChecksums);
+
+        THostMask hosts;
+        hosts.Set(1);
+        hosts.Set(2);
+        hosts.Set(pendingHost);
+        auto manyWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                auto promise = NThreading::NewPromise<
+                    TDBGWriteBlocksToManyPBuffersResponse>();
+                auto future = promise.GetFuture();
+                dbg->WriteBlocksToManyPBuffers(
+                    0,
+                    pendingHost,
+                    hosts,
+                    TPBufferKey{.Generation = 1, .Lsn = 100},
+                    range,
+                    TDuration::Seconds(1),
+                    guardedSglist,
+                    manyChecksums,
+                    CreateTraceId(),
+                    [promise = std::move(promise)](
+                        TDBGWriteBlocksToManyPBuffersResponse response) mutable
+                    { promise.SetValue(std::move(response)); });
+                return future;
+            });
+        UNIT_ASSERT_VALUES_EQUAL(3, GetResponse(manyWrite).Responses.size());
+        ExpectChecksums(manyChecksums, transportPtr->LastWriteChecksums);
+
+        auto pendingWrite = RunOnExecutor(
+            executor,
+            [&]
+            {
+                return dbg->WriteBlocksToDDisk(
+                    0,
+                    pendingHost,
+                    range,
+                    guardedSglist,
+                    ddiskChecksums,
+                    CreateTraceId());
+            });
+        auto inFlightWrite = WaitFuture(executor, pendingWrite, WaitTimeout);
+        DrainExecutor(executor);
+        UNIT_ASSERT(!inFlightWrite.HasValue());
+        ExpectChecksums(manyChecksums, transportPtr->LastWriteChecksums);
+
+        pendingHost3.SetValue(TStorageTransportMock::MakeConnectResult());
+        DrainExecutor(executor);
+        auto response = WaitFuture(executor, inFlightWrite, WaitTimeout);
+        UNIT_ASSERT_VALUES_EQUAL(S_OK, response.Error.GetCode());
+        ExpectChecksums(ddiskChecksums, transportPtr->LastWriteChecksums);
     }
 }
 

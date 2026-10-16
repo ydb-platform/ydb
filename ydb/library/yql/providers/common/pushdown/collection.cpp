@@ -216,6 +216,9 @@ private:
         if (Settings.IsEnabled(EFlag::DecimalCtor) && node.Maybe<TCoDecimal>()) {
             return true;
         }
+        if (Settings.IsEnabled(EFlag::UuidType) && node.Maybe<TCoUuid>()) {
+            return true;
+        }
         return false;
     }
 

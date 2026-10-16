@@ -136,6 +136,7 @@ struct TKqpResourceManagerEvents {
         Unused4, // EvEstimateResourcesResponse,
         Unused1, // EvAllocateTaskResourcesRequest, extra resources allocation
         Unused2, // EvAllocateTaskResourcesResponse
+        EvQueryMemoryState,
     };
 };
 

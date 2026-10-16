@@ -27,6 +27,8 @@ namespace NKikimr::NKqp::NScheduler {
         struct TStaticAttributes;
 
         namespace NDynamic {
+            struct TTreeElement;
+
             class TQuery;
             class TPool;
             class TDatabase;
@@ -73,6 +75,9 @@ namespace NKikimr::NKqp::NScheduler {
     struct TOptions {
         bool Enabled = true;
         TDelayParams DelayParams;
+        // The memory of the queries is accounted and limited by the scheduler, see FeatureFlags.EnableComputeSchedulerMemory.
+        // Only with Enabled, see TComputeScheduler::IsMemoryEnabled
+        bool MemoryEnabled = true;
     };
 
 } // namespace NKikimr::NKqp::NScheduler

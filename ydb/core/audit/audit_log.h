@@ -29,7 +29,8 @@
     do {                                                                                                                          \
         if (condition && !TStringBuf(value).empty()) {                                                                            \
             auditParts.emplace_back(key, value);                                                                                  \
-            auditStructuredMessage.AppendValue({key}, TString(value));                                                            \
+            auto update = YDB_LOG_CREATE_MESSAGE({key, value});                                                                   \
+            YDB_LOG_UPDATE_MESSAGE(auditStructuredMessage, update);                                                               \
         }                                                                                                                         \
     } while (0);
 

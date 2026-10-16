@@ -3,11 +3,13 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
-#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
+
+#include <array>
 
 namespace NKikimr::NOlap {
 class TPortionDataAccessor;
@@ -21,33 +23,37 @@ class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
-    // Fixed when seeded: Handle(TEvMoveData) rejects live groups, so a portion created afterwards cannot hold a target blob.
-    THashSet<ui64> InitialPortionIds;
-    // Portions waiting for accessor-load so we can check their DsGroup.
-    THashSet<ui64> PendingPortionIds;
-    // Blob identities are immutable for a portion id, including across retirement and level moves.
-    THashSet<ui64> RejectedPortionIds;
-    THashSet<ui64> TargetPortionIds;
-    // Portions confirmed to have blobs in TargetGroups; ready to be rewritten.
-    THashMap<TRWAddress, THashSet<ui64>> PortionsToMove;
-    THashMap<ui64, TRWAddress> PortionAddress;
-    // Still counted: old blobs reach the delete queues only on commit, so the gate must wait.
-    THashSet<ui64> InFlightPortionIds;
-    // Seeded portions that left the index; the gate waits until cleanup erases them from the granule.
-    THashSet<ui64> RetiredPortionIds;
-    // Uncommitted at the session start: a commit hands them to the normal path, an abort drops them.
-    THashSet<ui64> UncommittedPortionIds;
-    // Uncommitted portions with blobs in TargetGroups, held until the write commits or aborts.
-    THashSet<ui64> UncommittedOnTarget;
+    enum class EPortionState {
+        Pending,
+        Ready,
+        InFlight,
+        Uncommitted,
+        Retired,
+        Count,
+    };
+    using TPortions = TMap<ui64, EPortionState>;
+    // Seeded once. New writes cannot use the inactive target groups; rejected and cleaned-up ids never return.
+    TPortions Portions;
+    std::array<ui64, static_cast<size_t>(EPortionState::Count)> StateCounts = {};
     ui64 RejectedPortions = 0;
+    // Stable cursors bound each pass; erased candidates do not leave empty hash buckets to scan.
+    // ErasePortion advances either cursor if it points at the erased entry.
+    TPortions::iterator RefreshPosition;
+    TPortions::iterator RewritePosition;
+    static constexpr size_t PortionsPerPass = 1024;
 
-    // Keeps InitialPortionIds intact so an aborted change can re-enter PendingPortionIds.
-    void RemoveFromActiveQueue(ui64 portionId);
+    TPortions::iterator NextPortion(TPortions::iterator& position);
+    void SetState(EPortionState& state, EPortionState next);
+    void ErasePortion(TPortions::iterator it);
 
 protected:
-    // Needed only for bookkeeping of the seeded set (a move finishing, failing, or a seeded write committing); nothing new is adopted, since new portions land in active groups.
-    virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
-    virtual void DoRemovePortion(const ui64 portionId) override;
+    // Progress is read from the seeded portions; normal index notifications do not change session membership.
+    void DoAddPortion(const TPortionInfo&, const TAddExternalContext&) override {
+    }
+
+    void DoRemovePortion(ui64) override {
+    }
+
     virtual void DoExtractTasks(
         TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 
@@ -61,8 +67,8 @@ public:
     std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self);
 
-    // Drop cleaned-up retired ids; a retired id still in the granule's maps awaits cleanup.
-    void PruneRetiredPortions(
+    // Reconcile a bounded batch with the current catalogue, including commits, retirements, and cleanup.
+    void RefreshPortions(
         const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
 
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;

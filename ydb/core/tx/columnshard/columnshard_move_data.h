@@ -26,7 +26,6 @@ private:
     struct TSession {
         TActorId HiveSender;
         THashSet<ui32> TargetGroups;
-        bool Active = false;
         bool VacuumCompleted = false;
         ui64 ReportedRejections = 0;
         bool TargetsChanged = false;

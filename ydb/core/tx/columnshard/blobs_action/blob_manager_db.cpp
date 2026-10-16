@@ -135,7 +135,7 @@ bool HasOwnedGCBlobs(NIceDb::TNiceDb& db, const THashSet<ui32>& groups, const IB
     while (!rows.EndOfSet()) {
         bool owned = true;
         if constexpr (std::is_same_v<TTable, Schema::BlobsToDeleteWT>) {
-            owned = rows.template GetValue<typename TTable::TabletId>() == (ui64)selfTabletId;
+            owned = rows.template GetValue<typename TTable::TabletId>() == static_cast<ui64>(selfTabletId);
         }
         if (owned) {
             const auto value = rows.template GetValue<typename TTable::BlobId>();
@@ -143,7 +143,7 @@ bool HasOwnedGCBlobs(NIceDb::TNiceDb& db, const THashSet<ui32>& groups, const IB
             const auto blob = TUnifiedBlobId::ParseFromString(value, selector, error);
             AFL_VERIFY(blob.IsValid())("error", error)("blob", value);
             // The legacy delete table also mirrors borrowed-blob unlink requests.
-            if (blob.GetLogoBlobId().TabletID() == (ui64)selfTabletId && groups.contains(blob.GetDsGroup())) {
+            if (blob.GetLogoBlobId().TabletID() == static_cast<ui64>(selfTabletId) && groups.contains(blob.GetDsGroup())) {
                 hasBlobs = true;
                 return true;
             }

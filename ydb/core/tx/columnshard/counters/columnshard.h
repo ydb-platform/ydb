@@ -115,13 +115,12 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
-    // Both also count towards GetTotal(), so without them a gate held by either shows every other gauge at zero.
+    // Either can hold the completion gate while every other queue gauge is zero.
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsUncommitted;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsRetired;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataFinishedCount;
     // The denominator for every GateBlocked counter below.
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateCheckedCount;
-    NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByReseedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByCleanupCount;
@@ -251,10 +250,6 @@ public:
 
     void OnMoveDataGateChecked() const {
         MoveDataGateCheckedCount->Add(1);
-    }
-
-    void OnMoveDataGateBlockedByReseed() const {
-        MoveDataGateBlockedByReseedCount->Add(1);
     }
 
     void OnMoveDataGateBlockedByVacuum() const {

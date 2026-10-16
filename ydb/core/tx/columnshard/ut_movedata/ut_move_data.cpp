@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
@@ -229,40 +230,6 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
-    // BlobsToDelete leg: the group comes straight off TUnifiedBlobId (keep leg: TestMoveDataKeepQueue).
-    Y_UNIT_TEST(TestMoveDataDeleteQueue) {
-        static constexpr ui64 TabletId = 42;
-        TBlobManagerFixture f(TabletId, 3);
-        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ OldGroup }), "empty queues must match nothing");
-
-        f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
-        UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "blob in the old group must match");
-        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ NewGroup }), "the group it was not written to must not match");
-    }
-
-    // Keep leg: the group is resolved through TabletInfo->GroupFor(channel, generation).
-    Y_UNIT_TEST(TestMoveDataKeepQueue) {
-        static constexpr ui64 TabletId = 45;
-
-        // Generation 3 < ReassignGen: batches allocate blobs resolving into OldGroup.
-        TBlobManagerFixture f(TabletId, 3);
-        auto batch = f.Manager->StartBlobBatch();
-        batch.AllocateNextBlobId(TString("payload"));
-        f.Manager->SaveBlobBatchOnComplete(std::move(batch));
-
-        UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "BlobsToKeep: blob in old group must match via GroupFor");
-        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ NewGroup }), "BlobsToKeep: new group must not match");
-
-        // Generation 7 >= ReassignGen: same channels now resolve into NewGroup.
-        NOlap::TBlobManager mgrNew(f.TabletInfo, 7, NOlap::TTabletId(TabletId));
-        auto batchNew = mgrNew.StartBlobBatch();
-        batchNew.AllocateNextBlobId(TString("payload"));
-        mgrNew.SaveBlobBatchOnComplete(std::move(batchNew));
-
-        UNIT_ASSERT_C(mgrNew.HasBlobsForGroups({ NewGroup }), "BlobsToKeep: blob after reassign must match new group");
-        UNIT_ASSERT_C(!mgrNew.HasBlobsForGroups({ OldGroup }), "BlobsToKeep: old group must not match after reassign");
-    }
-
     Y_UNIT_TEST(DurableGCCheckReadsEveryTableAndEncoding) {
         static constexpr ui64 TabletId = 42;
         const auto checkTable = []<class TTable>() {
@@ -338,9 +305,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         const NOlap::TGenStep barrier(TabletGen, 0);
         UNIT_ASSERT(f.BuildGCTask());
         f.Manager->OnGCStartOnComplete(barrier);
-        UNIT_ASSERT(!f.Manager->HasCollectedBeforeCurrentGeneration());
         f.Manager->OnGCFinishedOnComplete(barrier);
-        UNIT_ASSERT(f.Manager->HasCollectedBeforeCurrentGeneration());
 
         const auto blob = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
         db.Transaction([&](NOlap::TBlobManagerDb& blobs) {
@@ -445,31 +410,30 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         ClassifyPortion(actualizer, portions.at(1), OldGroup);
 
-        // Retired but still in the granule: its blobs have not reached the GC queues.
-        actualizer.RemovePortion(1);
+        // No actualizer notification: retirement is discovered from the catalogue.
+        const auto retiredPortion = portions.at(1);
+        retiredPortion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+        actualizer.RefreshPortions(portions, noUncommitted);
         const auto retired = actualizer.GetMoveDataQueueSizes();
         UNIT_ASSERT_VALUES_EQUAL_C(retired.GetTotal(), 0, "a retired portion is no longer waiting for a rewrite");
         UNIT_ASSERT_VALUES_EQUAL_C(retired.Retired, 1, "a retired portion that cleanup has not erased must hold the gate");
 
         // A portion the session did not seed is not ours, so its retirement holds nothing.
         portions.emplace(2, MakeDefaultTierPortion(2));
-        actualizer.RemovePortion(2);
+        portions.at(2)->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+        actualizer.RefreshPortions(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Retired, 1, "an unseeded portion must not count");
 
         portions.erase(1);
         const auto& actualizerView = actualizer;
         UNIT_ASSERT_VALUES_EQUAL(actualizerView.GetMoveDataQueueSizes().Retired, 1);
-        actualizer.PruneRetiredPortions(portions, noUncommitted);
+        actualizer.RefreshPortions(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().Retired, 0, "the gate must open once cleanup erased the portion");
 
-        // Forgetting a cleaned-up retired id must preserve the seeded membership used on re-add.
-        auto readdedPortion = MakeDefaultTierPortion(1);
-        portions.emplace(1, readdedPortion);
-        actualizer.AddPortion(readdedPortion, NOlap::NActualizer::TAddExternalContext(start, portions));
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
-        ClassifyPortion(actualizer, readdedPortion, OldGroup);
-        actualizer.RemovePortion(1);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 1);
+        // A late accessor response cannot resurrect a cleaned-up candidate.
+        ClassifyPortion(actualizer, retiredPortion, OldGroup);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
     }
 
     // A portion seeded with a remove snapshot, as after an aborted write, waits for cleanup instead of a rewrite.
@@ -492,7 +456,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         portions.erase(1);
         const auto& actualizerView = actualizer;
         UNIT_ASSERT_VALUES_EQUAL(actualizerView.GetMoveDataQueueSizes().Retired, 1);
-        actualizer.PruneRetiredPortions(portions, noUncommitted);
+        actualizer.RefreshPortions(portions, noUncommitted);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
     }
 
@@ -528,7 +492,8 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
         actualizer.AddPortion(portion, context);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 0);
-        actualizer.RemovePortion(1);
+        portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+        actualizer.RefreshPortions(portions, {});
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, 1);
     }
@@ -540,9 +505,10 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             auto portion = MakeDefaultTierPortion(1);
             THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
             actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
-            actualizer.RemovePortion(1);
+            portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+            actualizer.RefreshPortions(portions, {});
             UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Pending, 1);
-            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 1);
+            UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
 
             ClassifyPortion(actualizer, portion, Target ? OldGroup : NewGroup);
             UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
@@ -559,7 +525,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
         actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
         portions.erase(1);
-        actualizer.PruneRetiredPortions(portions, {});
+        actualizer.RefreshPortions(portions, {});
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
 
@@ -567,6 +533,69 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         ClassifyPortion(actualizer, portion, OldGroup);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 0);
+    }
+
+    Y_UNIT_TEST(CandidateReconciliationIsBoundedAndErasurePreservesProgress) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
+        constexpr ui64 PortionCount = 4097;
+        for (ui64 id = 1; id <= PortionCount; ++id) {
+            portions.emplace(id, MakeDefaultTierPortion(id));
+        }
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        // Erase entries at and between the cursors through classification before any reconciliation.
+        for (ui64 id = 1; id <= PortionCount; ++id) {
+            ClassifyPortion(actualizer, portions.at(id), id % 2 ? NewGroup : OldGroup);
+        }
+        const auto selected = actualizer.GetMoveDataQueueSizes().ConfirmedToMove;
+        UNIT_ASSERT_VALUES_EQUAL(selected, PortionCount / 2);
+        portions.clear();
+        actualizer.RefreshPortions(portions, {});
+        UNIT_ASSERT_GT(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
+        UNIT_ASSERT_LT(actualizer.GetMoveDataQueueSizes().GetTotal(), selected);
+        for (ui32 pass = 0; pass < 10 && actualizer.GetMoveDataQueueSizes().GetTotal(); ++pass) {
+            actualizer.RefreshPortions(portions, {});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Rejected, (PortionCount + 1) / 2);
+    }
+
+    Y_UNIT_TEST(RewriteRetriesAfterLockReleaseWithoutAddPortion) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        NOlap::NActualizer::TMoveDataActualizer actualizer({ OldGroup }, schema.Index);
+        auto portion = MakeDefaultTierPortion(1);
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(TInstant::Seconds(1000), portions), {});
+        ClassifyPortion(actualizer, portion, OldGroup);
+        auto locks = std::make_shared<NOlap::NDataLocks::TManager>();
+        NColumnShard::TEngineLogsCounters counters;
+        auto controller = std::make_shared<NOlap::NActualizer::TController>();
+        const auto extract = [&] {
+            NOlap::NActualizer::TTieringProcessContext tasks(
+                512_MB, NOlap::TSaverContext(NOlap::TTestStoragesManager::GetInstance()), locks, schema.Index, counters, controller);
+            NOlap::NActualizer::TInternalTasksContext internal;
+            actualizer.ExtractTasks(tasks, NOlap::NActualizer::TExternalTasksContext(portions), internal);
+            size_t result = 0;
+            for (const auto& [_, addressTasks] : tasks.GetTasks()) {
+                result += addressTasks.size();
+            }
+            return result;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(extract(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().InFlight, 1);
+        auto lock = locks->RegisterLock<NOlap::NDataLocks::TListPortionsLock>(
+            "move", std::vector<NOlap::TPortionInfo::TConstPtr>{ portion }, NOlap::NDataLocks::ELockCategory::Actualization);
+        UNIT_ASSERT_VALUES_EQUAL(extract(), 0);
+        // An aborted rewrite releases its lock. Deliberately omit ReturnToIndexes/AddPortion.
+        lock->Release(*locks);
+        UNIT_ASSERT_VALUES_EQUAL(extract(), 1);
+        portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+        // Even before reconciliation, retirement must prevent another rewrite.
+        UNIT_ASSERT_VALUES_EQUAL(extract(), 0);
+        actualizer.RefreshPortions(portions, {});
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().InFlight, 0);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().Retired, 1);
     }
 
     Y_UNIT_TEST(MoveDataMetadataRequestsUsePortionSchema) {
@@ -828,7 +857,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(first->GetListsByGroupId().contains(oldGroupAddress), "the first task broadcasts to every historical group");
         f.Manager->OnGCStartOnComplete(TGenStep(4, 1));
         f.Manager->OnGCFinishedOnComplete(TGenStep(4, 1));
-        UNIT_ASSERT_C(!f.Manager->HasCollectedBeforeCurrentGeneration(), "a barrier from generation 4 must not count for generation 7");
 
         auto second = f.BuildGCTask();
         UNIT_ASSERT_C(second, "the remaining keep entry must produce a task");
@@ -836,7 +864,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             "the barrier of this generation must reach the historical group, or an orphan written before the crash stays behind the gate");
         f.Manager->OnGCStartOnComplete(TGenStep(TabletGen, 0));
         f.Manager->OnGCFinishedOnComplete(TGenStep(TabletGen, 0));
-        UNIT_ASSERT(f.Manager->HasCollectedBeforeCurrentGeneration());
     }
 
 }   // Y_UNIT_TEST_SUITE

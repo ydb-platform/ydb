@@ -168,6 +168,16 @@ public:
         Runtime.SendToPipe(TabletId, Sender, new TEvTablet::TEvMoveData(groups), 0, GetPipeConfigWithRetries());
     }
 
+    void WaitForFirstGC() {
+        // An empty request waits for the persisted current-generation barrier without rewriting portions.
+        // This also confirms that earlier-generation Keep flags were acknowledged.
+        StartMove({});
+        const auto response = DriveGate(150);
+        UNIT_ASSERT_C(response, "the first GC barrier was not committed");
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(response->Get()->Record.GetStatus()), static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::Success));
+    }
+
     // Each step is a wakeup, which reruns the background work and the MoveData gate.
     TEvTablet::TEvMoveDataResponse::TPtr DriveGate(
         const ui32 steps, const std::function<void(ui32)>& onStep = {}, const std::function<bool()>& stopWhen = {}) {
@@ -197,7 +207,8 @@ public:
 
     // Success promises the old group holds no portion data, not merely that the queues drained.
     void AssertDrainedSuccess(const TEvTablet::TEvMoveDataResponse::TPtr& response) const {
-        UNIT_ASSERT_VALUES_EQUAL((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::Success);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(response->Get()->Record.GetStatus()), static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::Success));
         UNIT_ASSERT_VALUES_EQUAL_C(
             LivePortionBlobs(*OldGroupProxy, TabletId).size(), 0u, "answered Success with portion data still live in the old group");
     }
@@ -260,7 +271,8 @@ void RunMoveDataToCompletion(const bool moveDataEnabled) {
     f.StartMove();
     const auto response = f.DriveGateWithWrite(150, 2, 1000, 1001);
     UNIT_ASSERT_C(response, "no TEvMoveDataResponse: the move never drained OldGroup");
-    UNIT_ASSERT_VALUES_EQUAL((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::Success);
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<int>(response->Get()->Record.GetStatus()), static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::Success));
 
     // Success must mean rewritten, not merely empty queues: only the move puts data in NewGroup.
     const size_t movedBlobs = LivePortionBlobs(*f.NewGroupProxy, TabletId).size();
@@ -320,7 +332,8 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove({ NewGroup });
         const auto refused = f.DriveGate(20);
         UNIT_ASSERT(refused);
-        UNIT_ASSERT_VALUES_EQUAL((int)refused->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(refused->Get()->Record.GetStatus()),
+            static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch));
 
         f.StartMove();
         const auto next = f.DriveGate(150);
@@ -340,8 +353,8 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.StartMove();
         const auto response = f.DriveGate(20);
         UNIT_ASSERT_C(response, "a request naming a live group must be answered, not left pending");
-        UNIT_ASSERT_VALUES_EQUAL_C((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch,
-            "expected ErrorGroupIdMismatch");
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(response->Get()->Record.GetStatus()),
+            static_cast<int>(NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch), "expected ErrorGroupIdMismatch");
         UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "a refused move must not touch the data");
     }
 
@@ -461,7 +474,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     }
 
     // An uncommitted write cannot be rewritten, yet its blobs sit in the old group until it commits and moves.
-    Y_UNIT_TEST(SuccessWaitsForUncommittedWriteToCommit) {
+    Y_UNIT_TEST(UncommittedWriteCommitsAfterFirstGCDrainedKeepQueue) {
         TMoveDataFixture f;
         f.Write(1, 0, 1000);
         const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
@@ -469,6 +482,8 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         // Proposed but left unplanned, so the write survives the restart below and still holds no commit snapshot.
         f.ProposeLockCommit(3, writeIds, 7);
         f.ReassignPastWrittenData();
+        // Keep acknowledgements are already durable; the prepared portion must still be tracked.
+        f.WaitForFirstGC();
 
         f.StartMove();
         UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
@@ -490,6 +505,8 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         // Proposed but left unplanned, so the write survives the restart below and can be aborted on demand afterwards.
         f.ProposeLockCommit(3, writeIds, 7);
         f.ReassignPastWrittenData();
+        // Keep acknowledgements are already durable; the prepared portion must still be tracked.
+        f.WaitForFirstGC();
 
         f.StartMove();
         UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "answered Success while an uncommitted write held blobs in the old group");
@@ -689,11 +706,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.Controller->WaitCompactions(TDuration::Seconds(10));
         f.ReassignPastWrittenData();
 
-        const auto storage = f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
-        f.DriveGate(150, {}, [&] {
-            return storage->HasCollectedBeforeCurrentGeneration();
-        });
-        UNIT_ASSERT(storage->HasCollectedBeforeCurrentGeneration());
+        f.WaitForFirstGC();
 
         std::vector<TAutoPtr<IEventHandle>> held;
         f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {

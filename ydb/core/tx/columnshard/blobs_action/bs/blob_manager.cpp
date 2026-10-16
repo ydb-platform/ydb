@@ -7,8 +7,6 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#include <util/generic/algorithm.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap {
@@ -393,7 +391,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         PopGCBarriers(*CollectGenStepInFlight);
         if (FirstGC) {
             gcContext.InitializeFirst(TabletInfo);
-            // Under MoveData a recovered barrier below this generation proves nothing about it: keep broadcasting until one from it goes out.
+            // Repeat the broadcast to collect orphan blobs left by earlier generations.
             const bool moveDataEnabled = HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardMoveData();
             FirstGC = moveDataEnabled && CollectGenStepInFlight->Generation() < CurrentGen;
         }
@@ -544,18 +542,6 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
         account(i.first);
     }
     return result;
-}
-
-bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
-    // GroupFor can answer Max<ui32>, which no target set holds.
-    const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
-        return groups.contains(TabletInfo->GroupFor(blob.Channel(), blob.Generation()));
-    };
-    // Another tablet's borrowed blob is queued here for unlink, not for our collection, so it must not hold our gate.
-    const auto deletedBlobInGroups = [&](const auto& blob) {
-        return blob.second.contains(SelfTabletId) && groups.contains(blob.first.GetDsGroup());
-    };
-    return AnyOf(BlobsToKeep, keptBlobInGroups) || AnyOf(BlobsToDelete, deletedBlobInGroups) || AnyOf(BlobsToDeleteDelayed, deletedBlobInGroups);
 }
 
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {

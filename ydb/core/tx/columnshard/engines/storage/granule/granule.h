@@ -251,8 +251,6 @@ public:
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
-        // Actualizers never see a portion that carries a remove snapshot, so the move session learns of the abort here.
-        ActualizationIndex->OnUncommittedPortionAborted(GetInsertedPortionVerifiedPtr(insertWriteId)->GetPortionId());
         CommitPortionOnComplete(insertWriteId, engine);
     }
 

@@ -70,12 +70,6 @@ void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroup
     MoveDataActualizer->Seed(context, uncommitted);
 }
 
-void TGranuleActualizationIndex::OnUncommittedPortionAborted(const ui64 portionId) {
-    if (MoveDataActualizer) {
-        MoveDataActualizer->RemovePortion(portionId);
-    }
-}
-
 void TGranuleActualizationIndex::StopMoveData() {
     if (!MoveDataActualizer) {
         return;
@@ -89,7 +83,7 @@ TMoveDataQueueSizes TGranuleActualizationIndex::UpdateMoveDataQueueSizes(
     if (!MoveDataActualizer) {
         return TMoveDataQueueSizes();
     }
-    MoveDataActualizer->PruneRetiredPortions(portions, uncommitted);
+    MoveDataActualizer->RefreshPortions(portions, uncommitted);
     return MoveDataActualizer->GetMoveDataQueueSizes();
 }
 

@@ -13,7 +13,6 @@
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/util/backoff.h>
 
-#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 #include <map>
@@ -190,14 +189,6 @@ public:
 
     bool IsWeightedDataChannelSelectionEnabled() const {
         return WeightedDataChannelSelection;
-    }
-
-    // Scans the pending keep/delete queues, not live portions.
-    bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
-
-    // True once a barrier from this generation was broadcast to every historical group and committed.
-    bool HasCollectedBeforeCurrentGeneration() const {
-        return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
     }
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {

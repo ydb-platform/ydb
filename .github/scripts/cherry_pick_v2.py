@@ -664,7 +664,7 @@ def process_branch(
     cherry_pick_logs = []
     
     # Prepare branch. Fetch may go through the probe-selected proxy; push below does not.
-    run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', target_branch], logger, stream=bool(fetch_proxy_args()))
+    run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', target_branch], logger, stream=True)
     run_git(repo_path, ['reset', '--hard', 'HEAD'], logger)
     run_git(repo_path, ['checkout', '-B', target_branch, f'origin/{target_branch}'], logger)
     run_git(repo_path, ['checkout', '-b', dev_branch_name, target_branch], logger)
@@ -673,7 +673,7 @@ def process_branch(
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
         # Fetch commit to ensure it's available locally (needed for unmerged PRs)
-        run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', commit_sha], logger, check=False, stream=bool(fetch_proxy_args()))
+        run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', commit_sha], logger, check=False, stream=True)
         try:
             result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
@@ -986,7 +986,7 @@ def main():
         logger.info("Cloning repository: %s to %s via %s", repo_url, repo_dir, proxy or "direct")
         subprocess.run(
             ['git', *fetch_proxy_args(), 'clone', repo_url, repo_dir],
-            env={**os.environ, 'GIT_PROTOCOL': '2', **({'GIT_TRACE': '1'} if proxy else {})},
+            env={**os.environ, 'GIT_PROTOCOL': '2', 'GIT_TRACE': '1'},
             check=True,
             text=True,
         )

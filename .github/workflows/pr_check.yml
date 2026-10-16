@@ -311,6 +311,8 @@ jobs:
         fi
     - name: Checkout
       uses: actions/checkout@v5
+      env:
+        GIT_TRACE: "1"
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
@@ -437,6 +439,8 @@ jobs:
         fi
     - name: Checkout
       uses: actions/checkout@v5
+      env:
+        GIT_TRACE: "1"
       with:
         fetch-depth: 2
     - name: Drop GitHub proxy

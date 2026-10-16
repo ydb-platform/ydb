@@ -106,6 +106,8 @@ jobs:
           fi
       - name: checkout
         uses: actions/checkout@v5
+        env:
+          GIT_TRACE: "1"
         with:
           fetch-depth: 1
           ref: ${{ inputs.script_version_sha }}

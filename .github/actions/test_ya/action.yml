@@ -435,6 +435,17 @@ runs:
         fi
 
         analytics track runner_info --kind info --runner
+        if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
+          chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
+          if [ "${GH_PROXY_USED}" = true ]; then
+            chosen_mbps="${GH_PROXY_PROXY_MBPS}"
+          fi
+          analytics track github_proxy --kind info --source ya_phase \
+            --value "$chosen_mbps" --unit "MB/s" \
+            --label "use_proxy=${GH_PROXY_USED}" \
+            --label "direct_last5_mbps=${GH_PROXY_DIRECT_MBPS}" \
+            --label "proxy_last5_mbps=${GH_PROXY_PROXY_MBPS}"
+        fi
         analytics flush
 
         if [ true = ${{ inputs.run_tests }} ]; then

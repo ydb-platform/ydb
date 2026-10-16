@@ -1419,8 +1419,18 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequest
     UpdateTokenSpan = {};
 }
 
+<<<<<<< HEAD
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+=======
+template <EProtocol Protocol>
+void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        return;
+    }
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
     RequestNotChecked = true;
 
     if (State != ES_INITED) {

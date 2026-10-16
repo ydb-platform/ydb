@@ -1296,6 +1296,20 @@ public:
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
 
+        const bool allowModifications = QueryState->IsInternalCall() || QueryState->IsCreateTableAs()
+            || AppData()->FeatureFlags.GetEnableClientModifications();
+        if (!allowModifications) {
+            for (const auto& op : phyQuery.GetTableOps()) {
+                if (TYdbOperation(op.GetOperation()) & KikimrModifyOps()) {
+                    const TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
+                    std::vector<TIssue> issues{YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        "Client data writes are disabled")};
+                    ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "", MessageFromIssues(issues));
+                    return false;
+                }
+            }
+        }
+
         auto checkSchemeTx = [&]() {
             for (const auto &tx : phyQuery.GetTransactions()) {
                 if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME) {

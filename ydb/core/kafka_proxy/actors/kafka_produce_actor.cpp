@@ -221,8 +221,33 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TP
 }
 
 void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx) {
+<<<<<<< HEAD
     Requests.push_back(request);
     ProcessRequests(ctx);
+=======
+    if (PendingRequest) {
+        YDB_LOG_ERROR("Produce actor: Another request is already in flight",
+            {LogPrefix()},
+            {"pendingCorrelationId", PendingRequest->Request->Get()->CorrelationId},
+            {"correlationId", request->Get()->CorrelationId});
+        return;
+    }
+
+    PendingRequest = std::make_shared<TPendingRequest>(request);
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        PendingRequest->StartTime = ctx.Now();
+        for (const auto& topic : PendingRequest->Request->Get()->Request->TopicData) {
+            for (size_t i = 0; i < topic.PartitionData.size(); ++i) {
+                auto& result = PendingRequest->Results.emplace_back();
+                result.ErrorCode = EKafkaErrors::POLICY_VIOLATION;
+                result.ErrorMessage = "Client data writes are disabled";
+            }
+        }
+        SendResults(ctx);
+        return;
+    }
+    StartPendingRequest(ctx);
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
 }
 
 void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {

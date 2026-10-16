@@ -1,6 +1,10 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
+<<<<<<< HEAD
 #include <ydb/services/ydb/ydb_keys_ut.h>
+=======
+#include <ydb/library/testlib/helpers.h>
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -41,7 +45,11 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
 public:
+<<<<<<< HEAD
     TDatastreamsTestServer(bool autopartitioningEnabled = false) {
+=======
+    TDatastreamsTestServer(bool enableClientModifications = true) {
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
         NKikimrConfig::TAppConfig appConfig;
 
         if (autopartitioningEnabled) {
@@ -51,6 +59,12 @@ public:
 
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
+<<<<<<< HEAD
+=======
+        appConfig.MutableFeatureFlags()->SetEnableTopicMessagesBatching(true);
+        appConfig.MutableFeatureFlags()->SetEnableTopicWriteOffsetDeltaInKeys(true);
+        appConfig.MutableFeatureFlags()->SetEnableClientModifications(enableClientModifications);
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
         // NOTE(shmel1k@): KIKIMR-14221
         appConfig.MutablePQConfig()->SetCheckACL(false);
         appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
@@ -3171,6 +3185,30 @@ waitForNavCache:
                 result.GetIssues().PrintTo(Cerr);
             }
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ClientDataWrites, enableClientModifications) {
+        TInsecureDatastreamsTestServer server(enableClientModifications);
+
+        const TString stream = "client-data-writes";
+        auto& client = *server.DataStreamsClient;
+        auto created = client.CreateStream(stream, NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        for (size_t size : {size_t(16), size_t(600 * 1024)}) {
+            const TString data(size, 'x');
+            auto single = client.PutRecord(stream, {data, "key", ""}).ExtractValueSync();
+            auto batch = client.PutRecords(stream, {{data, "key", ""}, {"second", "key", ""}}).ExtractValueSync();
+
+            const auto expected = enableClientModifications ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED;
+            UNIT_ASSERT_VALUES_EQUAL_C(single.GetStatus(), expected, single.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(batch.GetStatus(), expected, batch.GetIssues().ToString());
+
+            if (!enableClientModifications) {
+                UNIT_ASSERT_STRING_CONTAINS(single.GetIssues().ToString(), "Client data writes are disabled");
+                UNIT_ASSERT_STRING_CONTAINS(batch.GetIssues().ToString(), "Client data writes are disabled");
+            }
         }
     }
 

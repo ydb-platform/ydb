@@ -16,6 +16,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    kqp_client_data_writes_ut.cpp
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_scheme_ut.cpp
@@ -25,6 +26,11 @@ SRCS(
 )
 
 PEERDIR(
+<<<<<<< HEAD
+=======
+    ydb/public/sdk/cpp/src/client/import
+    yql/essentials/types/binary_json
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common

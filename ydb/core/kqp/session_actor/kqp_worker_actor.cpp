@@ -196,7 +196,7 @@ public:
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
-            !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
+            !Settings.LongSession, QueryState->RequestEv->IsInternalCall(), nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());
 
         auto& queryRequest = QueryState->RequestEv;
         QueryState->ProxyRequestId = proxyRequestId;
@@ -576,6 +576,7 @@ private:
 
     IKqpHost::TExecScriptSettings ParseExecScriptSettings() {
         IKqpHost::TExecScriptSettings execSettings;
+        execSettings.IsInternalCall = QueryState->RequestEv->IsInternalCall();
         execSettings.Deadlines = QueryState->QueryDeadlines;
         execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
         auto statsMode = GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::Basic);

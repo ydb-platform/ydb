@@ -344,6 +344,18 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 }
 
 void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
+<<<<<<< HEAD
+=======
+    if (!NKikimr::AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        SendFailedForAllPartitions(EKafkaErrors::POLICY_VIOLATION, ctx);
+        return;
+    }
+    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+        Error = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+        SendFailedForAllPartitions(Error, ctx);
+        return;
+    }
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
     SendAuthRequest(ctx);
     Become(&TKafkaOffsetCommitActor::StateWork);
 }

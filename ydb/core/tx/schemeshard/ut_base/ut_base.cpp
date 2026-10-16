@@ -3,6 +3,12 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_effective_acl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
+#include <ydb/library/testlib/helpers.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -12699,5 +12705,51 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 Name: "Table1"
                 Columns { Name: "value"  FamilyName: "new_family" }
             )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST_TWIN(ClientModificationsUserToken, enableClientModifications) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin", "admins@builtin"};
+
+        const NACLib::TUserToken admin("admin@builtin", {});
+        const TVector<TString> tokens = {
+            admin.SerializeAsString(),
+            NACLib::TUserToken("member@builtin", {"admins@builtin"}).SerializeAsString(),
+            NACLib::TUserToken("user@builtin", {}).SerializeAsString(),
+            TString(),
+        };
+
+        ui64 txId = 100;
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            const bool allowed = enableClientModifications || i < 2 || tokens[i].empty();
+            const TString name = TStringBuilder() << "dir" << i;
+
+            auto* request = MkDirRequest(++txId, "/MyRoot", name);
+            request->Record.SetUserToken(tokens[i]);
+
+            // Neither the requested owner nor the audit SID grants administrator privileges.
+            request->Record.SetOwner("admin@builtin");
+            request->Record.SetUserSID("admin@builtin");
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResults(runtime, txId, allowed
+                ? TVector<TExpectedResult>{{NKikimrScheme::StatusAccepted}}
+                : TVector<TExpectedResult>{{NKikimrScheme::StatusPreconditionFailed,
+                    "Client schema modifications are disabled for non-administrators"}});
+
+            if (!allowed) {
+                TestLs(runtime, "/MyRoot/" + name, false, NLs::PathNotExist);
+
+                // A rejected proposal must not leave an in-flight operation behind.
+                request = MkDirRequest(txId, "/MyRoot", name);
+                request->Record.SetUserToken(admin.SerializeAsString());
+                AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+                TestModificationResult(runtime, txId);
+            }
+
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + name, false, NLs::PathExist);
+        }
     }
 }

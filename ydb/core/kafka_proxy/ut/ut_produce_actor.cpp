@@ -69,7 +69,7 @@ namespace {
             const TString TopicName = "topic"; // as specified in pq_ut_common
             const NKikimrConfig::TKafkaProxyConfig KafkaConfig = {};
             const TString KeyToProduce = "record-key";
-            const TString ValueToProduce = "record-value";
+            TString ValueToProduce = "record-value";
             TString TransactionalId = "123";
 
             void SetUp(NUnitTest::TTestContext&) override {
@@ -95,7 +95,24 @@ namespace {
                 Ctx->Finalize();
             }
 
+<<<<<<< HEAD
             void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0) {
+=======
+            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0, i32 partitionIndex = 0, i64 baseTimestamp = 0, i64 timestampDelta = 0, ECompressionType compression = ECompressionType::NONE) {
+                SendProduceToPartitions({partitionIndex}, transactionalId, producerId, producerEpoch, baseSequence, baseTimestamp, timestampDelta, compression);
+            }
+
+            void SendProduceToPartitions(
+                    const std::vector<i32>& partitionIndexes,
+                    TMaybe<TString> transactionalId = {},
+                    ui64 producerId = 0,
+                    ui16 producerEpoch = 0,
+                    i32 baseSequence = 0,
+                    i64 baseTimestamp = 0,
+                    i64 timestampDelta = 0,
+                    ECompressionType compression = ECompressionType::NONE,
+                    size_t recordsCount = 1) {
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
@@ -110,11 +127,24 @@ namespace {
 
                 TKafkaRecordBatch batch;
                 records->BaseOffset = 3;
+                records->LastOffsetDelta = recordsCount - 1;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
+<<<<<<< HEAD
                 records->Records.resize(1);
                 records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
                 records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
+=======
+                records->BaseTimestamp = baseTimestamp;
+                records->Attributes = static_cast<i16>(compression);
+                records->Records.resize(recordsCount);
+                for (size_t i = 0; i < recordsCount; ++i) {
+                    records->Records[i].OffsetDelta = i;
+                    records->Records[i].TimestampDelta = timestampDelta;
+                    records->Records[i].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
+                    records->Records[i].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
+                }
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
 
                 partitionData.Records = records;
                 topicData.PartitionData.push_back(partitionData);
@@ -403,5 +433,121 @@ namespace {
             UNIT_ASSERT(response != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
+<<<<<<< HEAD
+=======
+
+        Y_UNIT_TEST(WatchNotifyUpdatedWithoutSelfDoesNotFailInFlightProduce) {
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
+
+            SendProduce();
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            SendWatchNotifyUpdated(MakeDescribeResult({0}, false));
+            SendProduce();
+            auto second = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(WatchNotifyUpdatedWithEmptyAclDoesNotDenyAccess) {
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
+
+            SendProduce();
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            SendWatchNotifyUpdated(MakeDescribeResult({0}, true, "owner@builtin", {}));
+            SendProduce();
+            auto second = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(WatchNotifyUpdatedWithBrokenAclDoesNotAbort) {
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
+
+            SendProduce();
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            SendWatchNotifyUpdated(MakeDescribeResult({0}, true, "owner@builtin", TString("\xFF\xFF\xFF\x0F")));
+            SendProduce();
+            auto second = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(second->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(WatchNotifyUpdatedRebuildsPartitionChooser) {
+            SendProduce({}, 0, 0, 0, 0);
+            auto first = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(first->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            SendProduce({}, 0, 0, 0, 1);
+            auto missing = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(missing->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+
+            SendWatchNotifyUpdated(MakeDescribeResult({0, 1}, false));
+            SendProduce({}, 0, 0, 0, 1);
+            auto added = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(added->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(WatchNotifyDeletedFailsPendingWritesWithoutTimeout) {
+            ui32 writeRequests = 0;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                    ++writeRequests;
+                    return TTestActorRuntimeBase::EEventAction::DROP;
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+            Ctx->Runtime->SetDispatchTimeout(TDuration::Seconds(5));
+
+            SendProduce();
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&writeRequests]() {
+                return writeRequests > 0;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+            SendWatchNotifyDeleted();
+            auto response = GrabProduceResponse();
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+        }
+
+        Y_UNIT_TEST(ClientDataWritesDisabled) {
+            Ctx->Runtime->GetAppData().FeatureFlags.SetEnableClientModifications(false);
+            ui32 writes = 0;
+            Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == TEvPartitionWriter::TEvWriteRequest::EventType) {
+                    ++writes;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+
+            for (size_t size : {size_t(16), size_t(600 * 1024)}) {
+                for (size_t recordsCount : {size_t(1), size_t(2)}) {
+                    for (const auto& transactionalId : {TMaybe<TString>{}, TMaybe<TString>{"transaction"}}) {
+                        ValueToProduce = TString(size, 'x');
+                        SendProduceToPartitions({0, 1}, transactionalId, 0, 0, 0, 0, 0,
+                            ECompressionType::NONE, recordsCount);
+
+                        auto event = GrabProduceResponse();
+                        auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
+                        UNIT_ASSERT(response);
+                        UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses.size(), 2);
+
+                        for (const auto& partition : response->Responses[0].PartitionResponses) {
+                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::POLICY_VIOLATION);
+                            UNIT_ASSERT_STRING_CONTAINS(TString(*partition.ErrorMessage), "Client data writes are disabled");
+                        }
+                    }
+                }
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+        }
+
+>>>>>>> e34e2c85aef (Add a feature flag to restrict client modifications)
     }
 } // anonymous namespace

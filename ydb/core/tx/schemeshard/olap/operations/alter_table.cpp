@@ -391,7 +391,10 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterColumnTable AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

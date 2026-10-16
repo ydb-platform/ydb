@@ -654,14 +654,24 @@ TTypedColumn CompileYqlKernelUdf(const TKqpOlapUdf& udf, TKqpOlapCompileContext&
     const auto kernelName = udf.KernelName().StringValue();
     const auto addArgument = [&](const TTypedColumn& column) {
         // For now there are no known kernels that support utf8 and do not support string
-        if (IsUtf8Block(*column.Type)) {
-            const auto stringColumn = CompileYqlKernelToString(column, ctx);
-            ids.emplace_back(stringColumn.Id);
-            argTypes.emplace_back(stringColumn.Type);
-        } else {
-            ids.emplace_back(column.Id);
-            argTypes.emplace_back(column.Type);
+        const auto stringColumn = IsUtf8Block(*column.Type) ? CompileYqlKernelToString(column, ctx) : column;
+        bool isScalar;
+        // Supported UDFs require an optional first argument and a non-optional second argument.
+        // Other signatures require type introspection.
+        if (ids.empty() && !GetBlockItemType(*stringColumn.Type, isScalar)->IsOptionalOrNull()) {
+            const auto optionalType = ctx.GetOptionalType(*stringColumn.Type);
+            auto* const command = ctx.CreateAssignCmd();
+            auto* const function = command->MutableFunction();
+            function->AddArguments()->SetId(stringColumn.Id);
+            function->SetKernelIdx(ctx.GetKernelRequestBuilder().AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Just, stringColumn.Type, optionalType));
+            function->SetFunctionType(TProgram::YQL_KERNEL);
+            function->SetKernelName(ToString(TKernelRequestBuilder::EUnaryOp::Just));
+            ids.emplace_back(command->GetColumn().GetId());
+            argTypes.emplace_back(optionalType);
+            return;
         }
+        ids.emplace_back(stringColumn.Id);
+        argTypes.emplace_back(stringColumn.Type);
     };
     for (const auto& arg : udf.Args()) {
         if (const auto& column = arg.Maybe<TKqpOlapApplyColumnArg>()) {

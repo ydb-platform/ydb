@@ -1,8 +1,12 @@
 items:
 - name: Мониторинг
   href: monitoring.md
-- name: Логирование
-  href: logging.md
+- name: Логи
+  items:
+  - name: Логирование
+    href: logging.md
+  - name: Уровни логирования
+    href: log-levels.md
 - name: Минидампы
   href: minidumps.md
 - name: Системные представления

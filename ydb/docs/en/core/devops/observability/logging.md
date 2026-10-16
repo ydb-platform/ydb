@@ -2,6 +2,8 @@
 
 Each {{ ydb-short-name }} component writes messages of different levels to logs. These can be used to detect critical problems or understand the causes of issues.
 
+For when to raise or lower verbosity (`INFO`, `DEBUG`, `TRACE`) and how to avoid overloading the cluster with logs, see [{#T}](log-levels.md).
+
 ## Logging Setup {#log_setup}
 
 Logging configuration for individual components can be done in [{{ ydb-ui-name }}](../../reference/ydb-ui/logs.md#change_log_level).

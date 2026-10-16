@@ -1,8 +1,12 @@
 items:
 - name: Monitoring
   href: monitoring.md
-- name: Logging
-  href: logging.md
+- name: Logs
+  items:
+  - name: Logging
+    href: logging.md
+  - name: Log levels
+    href: log-levels.md
 - name: Minidumps
   href: minidumps.md
 - name: System views

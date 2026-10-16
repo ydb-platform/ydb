@@ -674,7 +674,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         const auto* appData = AppData();
         this->Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvSubmitTask(
-            TStringBuilder() << "Restore { " << TxId << ":" << DataShard << " }",
+            TStringBuilder() << "Restore { " << TxId << ":" << TabletId << " }",
             {{ 1, 0 }},
             appData->DataShardConfig.GetRestoreTaskName(),
             appData->DataShardConfig.GetRestoreTaskPriority(),
@@ -1442,9 +1442,10 @@ public:
         return GetSettings(task).GetLimits().GetReadBatchSize();
     }
 
-    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
+    explicit TS3Downloader(const TActorId& dataShard, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
         : ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, GetSettings(task)))
         , DataShard(dataShard)
+        , TabletId(tabletId)
         , TxId(txId)
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::YdbDump)
@@ -1520,6 +1521,7 @@ public:
 private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
+    const ui64 TabletId;
     const ui64 TxId;
     const TStorageSettings Settings;
     const NBackupRestoreTraits::EDataFormat DataFormat;
@@ -1579,23 +1581,24 @@ NKikimrSchemeOp::TFSSettings TS3Downloader<NKikimrSchemeOp::TFSSettings>::GetSet
 
 IActor* CreateDownloaderBySettingsType(
     const TActorId& dataShard,
+    ui64 tabletId,
     ui64 txId,
     const NKikimrSchemeOp::TRestoreTask& task,
     const TTableInfo& tableInfo)
 {
     if (task.HasS3Settings()) {
         return new TS3Downloader<NKikimrSchemeOp::TS3Settings>(
-            dataShard, txId, task, tableInfo);
+            dataShard, tabletId, txId, task, tableInfo);
     } else if (task.HasFSSettings()) {
         return new TS3Downloader<NKikimrSchemeOp::TFSSettings>(
-            dataShard, txId, task, tableInfo);
+            dataShard, tabletId, txId, task, tableInfo);
     }
 
     Y_ABORT("Unsupported storage type in restore task");
 }
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
-    return CreateDownloaderBySettingsType(dataShard, txId, task, info);
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 tabletId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
+    return CreateDownloaderBySettingsType(dataShard, tabletId, txId, task, info);
 }
 
 } // NDataShard

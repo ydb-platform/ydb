@@ -10,6 +10,8 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -51,13 +53,10 @@ STFUNC(TBscProxy::StateWork)
         HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
-            LOG_ERROR(
-                TActivationContext::AsActorContext(),
-                NKikimrServices::NBS_PARTITION,
-                "%s Unhandled event type: %u event %s",
-                LogTitle.GetWithTime().c_str(),
-                ev->GetTypeRewrite(),
-                ev->ToString().c_str());
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"type", ev->GetTypeRewrite()},
+                {"#_ev->ToString().c_str", ev->ToString()});
             break;
     }
 }
@@ -72,13 +71,10 @@ void TBscProxy::HandleSend(TEvSend::TPtr& ev, const TActorContext& ctx)
     const ui64 clientRequestCookie = ev->Cookie;
 
     if (InFlight) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s BSC request rejected cookie=%lu already inflight cookie=%lu",
-            LogTitle.GetWithTime().c_str(),
-            clientRequestCookie,
-            InFlight->ClientRequestCookie);
+        YDB_LOG_INFO_CTX(ctx, "BSC request rejected already inflight",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"cookie", clientRequestCookie},
+            {"#_dup_cookie", InFlight->ClientRequestCookie});
         ctx.Send(
             Owner,
             MakePipeFailureResult("BSC request already in flight"),
@@ -101,13 +97,10 @@ void TBscProxy::HandleSend(TEvSend::TPtr& ev, const TActorContext& ctx)
         clientConfig));
     NTabletPipe::SendData(ctx, PipeClient, request.Release(), bscRequestCookie);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s BSC request sent clientRequestCookie=%lu bscRequestCookie=%lu",
-        LogTitle.GetWithTime().c_str(),
-        clientRequestCookie,
-        bscRequestCookie);
+    YDB_LOG_INFO_CTX(ctx, "BSC request sent",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"clientRequestCookie", clientRequestCookie},
+        {"bscRequestCookie", bscRequestCookie});
 }
 
 void TBscProxy::HandleAllocateResult(
@@ -115,12 +108,9 @@ void TBscProxy::HandleAllocateResult(
     const TActorContext& ctx)
 {
     if (!InFlight || InFlight->BscRequestCookie != ev->Cookie) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Ignore BSC result for untracked cookie=%lu",
-            LogTitle.GetWithTime().c_str(),
-            ev->Cookie);
+        YDB_LOG_INFO_CTX(ctx, "Ignore BSC result for untracked",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"cookie", ev->Cookie});
         return;
     }
 
@@ -142,12 +132,9 @@ void TBscProxy::HandleConnect(
         return;
     }
 
-    LOG_ERROR(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s BSController pipe connect failed: %s",
-        LogTitle.GetWithTime().c_str(),
-        NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
+    YDB_LOG_ERROR_CTX(ctx, "BSController pipe connect",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"failed", NKikimrProto::EReplyStatus_Name(msg->Status)});
 
     FailInFlight(
         ctx,
@@ -163,11 +150,8 @@ void TBscProxy::HandleDisconnect(
         return;
     }
 
-    LOG_ERROR(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s BSController pipe destroyed",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_ERROR_CTX(ctx, "BSController pipe destroyed",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     FailInFlight(ctx, "BSController pipe destroyed");
 }

@@ -18,6 +18,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
@@ -225,11 +227,8 @@ TDirectBlockGroup::TDirectBlockGroup(
 
 TDirectBlockGroup::~TDirectBlockGroup()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s ~TDirectBlockGroup",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "~TDirectBlockGroup",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 }
 
 TArenaAllocatorPoolPtr TDirectBlockGroup::GetArenaAllocatorPool()
@@ -916,14 +915,11 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         const std::optional<THostIndex> hostIndex = Connections.FindByPBufferId(
             singlePBufferResponse.GetPersistentBufferId());
         if (!hostIndex) {
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s unexpected PBufferDiskId: %s",
-                LogTitle.GetWithTime().c_str(),
-                singlePBufferResponse.GetPersistentBufferId()
+            YDB_LOG_ERROR_CTX(*ActorSystem, "Unexpected",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"PBufferDiskId", singlePBufferResponse.GetPersistentBufferId()
                     .ShortUtf8DebugString()
-                    .c_str());
+                    });
             continue;
         }
         Y_ABORT_UNLESS(
@@ -1092,14 +1088,11 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
         }
     } else {
         NProto::TError error = TranslateError(response);
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s SyncWithPBufferResult: Segment count: %d. Response %s %s",
-            LogTitle.GetWithTime().c_str(),
-            segmentCount,
-            response.ShortUtf8DebugString().c_str(),
-            FormatError(error).Quote().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "SyncWithPBufferResult: Segment Response",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"count", segmentCount},
+            {"#_response.ShortUtf8DebugString().c_str", response.ShortUtf8DebugString()},
+            {"#_FormatError(error).Quote().c_str", FormatError(error)});
 
         if (IsSessionBlockedError(error)) {
             HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
@@ -1380,12 +1373,9 @@ void TDirectBlockGroup::OnAddHostFailed(const NProto::TError& error)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s AddHost request failed: %s",
-        LogTitle.GetWithTime().c_str(),
-        FormatError(error).Quote().c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "AddHost request",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"failed", FormatError(error)});
 }
 
 void TDirectBlockGroup::OnAddHostSucceeded(
@@ -1404,13 +1394,10 @@ void TDirectBlockGroup::OnAddHostSucceeded(
         NBsController::TDDiskId(pbufferId),
         dbgConnectionsConfigGeneration);
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s AddHost %s request OK, DBG connections config generation %u",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(newHostIndex).c_str(),
-        Connections.GetGeneration());
+    YDB_LOG_INFO_CTX(*ActorSystem, "AddHost request OK, DBG connections config generation",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNode(newHostIndex).c_str", PrintHostAndNode(newHostIndex)},
+        {"#_Connections.GetGeneration", Connections.GetGeneration()});
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
@@ -1425,12 +1412,9 @@ void TDirectBlockGroup::OnRemoveHostSucceeded(
 
     MarkSlotDead(removeIndex, dbgConnectionsConfigGeneration);
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s RemoveHost committed: slot %s is dead",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(removeIndex).c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "RemoveHost committed: slot is dead",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNode(removeIndex).c_str", PrintHostAndNode(removeIndex)});
 }
 
 void TDirectBlockGroup::OnRemoveHostFailed(
@@ -1439,13 +1423,10 @@ void TDirectBlockGroup::OnRemoveHostFailed(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s RemoveHost %s request failed: %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(removeIndex).c_str(),
-        FormatError(error).c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "RemoveHost request",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostIndex(removeIndex).c_str", PrintHostIndex(removeIndex)},
+        {"failed", FormatError(error)});
 }
 
 TDuration TDirectBlockGroup::TakeCopyRangeBudget(ui64 byteCount)
@@ -1548,14 +1529,11 @@ void TDirectBlockGroup::PersistHostHealth(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(Service);
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s %s persisting health change: %s -> %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(hostIndex).c_str(),
-        ToString(oldHealth).c_str(),
-        ToString(newHealth).c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "Persisting health ->",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)},
+        {"change", ToString(oldHealth)},
+        {"#_ToString(newHealth).c_str", ToString(newHealth)});
 
     Service->PersistHostHealth(
         DirectBlockGroupIndex,
@@ -1571,14 +1549,11 @@ void TDirectBlockGroup::SetHostState(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s %s state changed: %s -> %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(hostIndex).c_str(),
-        ToString(oldState).c_str(),
-        ToString(newState).c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "State ->",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)},
+        {"changed", ToString(oldState)},
+        {"#_ToString(newState).c_str", ToString(newState)});
 
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
@@ -1592,12 +1567,9 @@ void TDirectBlockGroup::QueryAddHost()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(Service);
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s QueryAddHost, DBG connections config generation %u",
-        LogTitle.GetWithTime().c_str(),
-        Connections.GetGeneration());
+    YDB_LOG_INFO_CTX(*ActorSystem, "QueryAddHost, DBG connections config generation",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_Connections.GetGeneration", Connections.GetGeneration()});
 
     Service->QueryAddHost(DirectBlockGroupIndex, Connections.GetGeneration());
 }
@@ -1608,22 +1580,16 @@ void TDirectBlockGroup::QueryRemoveHost(THostIndex hostIndex)
     Y_ABORT_UNLESS(Service);
 
     if (const auto reason = ValidateRemoveHost(hostIndex); !reason.empty()) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s RemoveHost rejected (hostIndex=%s): %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str(),
-            reason.c_str());
+        YDB_LOG_WARN_CTX(*ActorSystem, "RemoveHost rejected",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_(hostIndex", PrintHostAndNode(hostIndex)},
+            {"#_)", reason});
         return;
     }
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s QueryRemoveHost %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(hostIndex).c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "QueryRemoveHost",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)});
 
     Service->QueryRemoveHost(
         DirectBlockGroupIndex,
@@ -1696,13 +1662,10 @@ void TDirectBlockGroup::DoEstablishConnection(
     if (connectionType == EConnectionType::DDisk) {
         actualSeqNo++;
 
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s %s starting session: new seq_no: %lu",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str(),
-            actualSeqNo);
+        YDB_LOG_INFO_CTX(*ActorSystem, "Starting session: new",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)},
+            {"seqNo", actualSeqNo});
     }
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
@@ -1763,28 +1726,20 @@ void TDirectBlockGroup::OnConnectResponse(
 
     NProto::TError error = TranslateError(result);
 
-    LOG_LOG(
-        *ActorSystem,
-        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnConnectResponse: %s %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(hostIndex).c_str(),
-        FormatError(error).Quote().c_str());
+    YDB_LOG_CTX(*ActorSystem, HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO, "",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"onConnectResponse", PrintHostAndNode(hostIndex)},
+        {"#_FormatError(error).Quote().c_str", FormatError(error)});
 
     if (!HasError(error)) {
         Counters.OnConnectOk(ToDBGConnectionType(connectionType));
         if (connectionType == EConnectionType::DDisk) {
             if (seqNo <= connection.ConfirmedSessionSeqNo) {
-                LOG_WARN(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "%s %s attempt to establish a session with an old "
-                    "seq_no: %lu while actual seq_no: %lu",
-                    LogTitle.GetWithTime().c_str(),
-                    PrintHostAndNode(hostIndex).c_str(),
-                    seqNo,
-                    connection.ConfirmedSessionSeqNo);
+                YDB_LOG_WARN_CTX(*ActorSystem, "Attempt to establish a session with an old while actual",
+                    {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                    {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)},
+                    {"seqNo", seqNo},
+                    {"#_dup_seq_no", connection.ConfirmedSessionSeqNo});
                 return;
             }
         }
@@ -1819,13 +1774,10 @@ void TDirectBlockGroup::OnConnectResponse(
         return;
     } else {
         Counters.OnConnectErr(ToDBGConnectionType(connectionType));
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s connection failed %s: %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str(),
-            FormatError(error).Quote().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Connection failed",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)},
+            {"#_FormatError(error).Quote().c_str", FormatError(error)});
         ReEstablishConnection(connectionType, hostIndex);
         return;
     }
@@ -1835,12 +1787,9 @@ void TDirectBlockGroup::OnConnectResponse(
     connection.ConnectPromise.SetValue(error);
     if (!IsInitialized() && HasLockedQuorum() && HasPBufferQuorum()) {
         InitialReadyPromise.SetValue();
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s DBG reached initial locked quorum (>= %zu sessions)",
-            LogTitle.GetWithTime().c_str(),
-            MinLockedDDiskSessionsToStart);
+        YDB_LOG_INFO_CTX(*ActorSystem, "DBG reached initial locked quorum sessions)",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_(>", MinLockedDDiskSessionsToStart});
     }
 }
 
@@ -1858,13 +1807,9 @@ void TDirectBlockGroup::ReEstablishConnection(
     Counters.OnReconnect(ToDBGConnectionType(connectionType));
 
     if (BlockedGenerationDetected) {
-        LOG_WARN(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s reconnect %s suppressed: blocked generation, suicide in "
-            "progress",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str());
+        YDB_LOG_WARN_CTX(*ActorSystem, "Reconnect suppressed: blocked generation, suicide in progress",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)});
         return;
     }
 
@@ -1884,12 +1829,9 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnNodeDisconnected %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNodeId(hostIndex, nodeId).c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "OnNodeDisconnected",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNodeId(hostIndex, nodeId).c_str", PrintHostAndNodeId(hostIndex, nodeId)});
 
     Counters.OnDisconnect(EDBGConnectionType::DDisk);
     Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
@@ -2057,14 +1999,11 @@ void TDirectBlockGroup::OnResponse(
     }
 
     if (HasError(error)) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s OnResponse %s %s %s",
-            LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex).c_str(),
-            ToString(operation).c_str(),
-            FormatError(error).Quote().c_str());
+        YDB_LOG_DEBUG_CTX(*ActorSystem, "OnResponse",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_PrintHostAndNode(hostIndex).c_str", PrintHostAndNode(hostIndex)},
+            {"#_ToString(operation).c_str", ToString(operation)},
+            {"#_FormatError(error).Quote().c_str", FormatError(error)});
 
         if (IsCanNotAcquireDataError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
@@ -2201,12 +2140,9 @@ void TDirectBlockGroup::HandleBlockedGeneration(
                          << " DDisk returned BLOCKED (stale tablet generation) "
                          << context;
 
-    LOG_ERROR(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s SUICIDE: %s",
-        LogTitle.GetWithTime().c_str(),
-        reason.c_str());
+    YDB_LOG_ERROR_CTX(*ActorSystem, "",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"SUICIDE", reason});
 
     // No retry/reconnect: signal the actor to suicide.
     Service->StopTablet(reason);
@@ -2304,12 +2240,9 @@ void TDirectBlockGroup::DoBalanceDDisks(EDDiskBalanceStrategy strategy)
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     const auto allowedForBalancing = GetBalancingAllowedHosts();
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s DDisk balancing requested: %s",
-        LogTitle.GetWithTime().c_str(),
-        ToString(strategy).c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "DDisk balancing",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"requested", ToString(strategy)});
 
     const auto ddiskCountByHost =
         CountDDisksByHost(strategy, allowedForBalancing);

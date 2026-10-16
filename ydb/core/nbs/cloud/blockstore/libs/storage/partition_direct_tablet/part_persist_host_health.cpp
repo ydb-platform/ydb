@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -28,15 +30,12 @@ void TPartitionActor::HandlePersistHostHealth(
     EHostHealth oldHealth = msg->OldHealth;
     EHostHealth newHealth = msg->NewHealth;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Not implemented PersistHostHealth %s/%s: %s -> %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintDbgId(dbgId).c_str(),
-        PrintHostIndex(hostIndex).c_str(),
-        ToString(oldHealth).c_str(),
-        ToString(newHealth).c_str());
+    YDB_LOG_INFO_CTX(ctx, "Not implemented PersistHostHealth / ->",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintDbgId(dbgId).c_str", PrintDbgId(dbgId)},
+        {"#_PrintHostIndex(hostIndex).c_str", PrintHostIndex(hostIndex)},
+        {"#_ToString(oldHealth).c_str", ToString(oldHealth)},
+        {"#_ToString(newHealth).c_str", ToString(newHealth)});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

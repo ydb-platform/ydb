@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,11 +41,8 @@ TEraseRequestExecutor::TEraseRequestExecutor(
 TEraseRequestExecutor::~TEraseRequestExecutor()
 {
     if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Reply not sent",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -84,12 +83,9 @@ TEraseRequestExecutor::GetFuture() const
 void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
 {
     if (HasError(response.Error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Erase failed: %s",
-            LogTitle.GetWithTime().c_str(),
-            FormatError(response.Error).Quote().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Erase",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"failed", FormatError(response.Error)});
 
         Reply({}, MakePBufferKeys(Hint.Segments));
         return;
@@ -114,12 +110,9 @@ void TEraseRequestExecutor::ScheduleRequestTimeout()
         return;
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnRequestTimeout %s",
-        LogTitle.GetWithTime().c_str(),
-        FormatDuration(RequestTimeout).c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -137,11 +130,8 @@ void TEraseRequestExecutor::OnRequestTimeout()
         return;
     }
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnRequestTimeout.",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "OnRequestTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     Reply({}, MakePBufferKeys(Hint.Segments));
 }

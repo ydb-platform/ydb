@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,10 +27,7 @@ TRestoreRequestExecutor::TRestoreRequestExecutor(
 TRestoreRequestExecutor::~TRestoreRequestExecutor()
 {
     if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TRestoreRequestExecutor. Reply not sent");
+        YDB_LOG_ERROR_CTX(*ActorSystem, "TRestoreRequestExecutor. Reply not sent");
 
         Y_ABORT_UNLESS(false);
     }

@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT component
+
 namespace NYdb::NBS {
 
 using namespace NActors;
@@ -20,13 +22,10 @@ TString EventInfo(const IEventHandle& ev)
     int component,
     const TString& location)
 {
-    LOG_ERROR(
-        *TlsActivationContext,
-        component,
-        "Unexpected event: (0x%08X) %s, %s",
-        ev.GetTypeRewrite(),
-        EventInfo(ev).c_str(),
-        location.c_str());
+    YDB_LOG_ERROR_CTX(*TlsActivationContext, "Unexpected event: (0x%08X)",
+        {"#_ev.GetTypeRewrite", ev.GetTypeRewrite()},
+        {"#_EventInfo(ev).c_str", EventInfo(ev)},
+        {"location", location});
 }
 
 void HandleUnexpectedEvent(

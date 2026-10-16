@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -55,11 +57,8 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
 TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 {
     if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Reply not sent.",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -102,20 +101,14 @@ void TReadSingleLocationRequestExecutor::StartReading()
             TStringBuilder message;
             message << "Read from all available hosts failed. "
                     << ExtendedDebugState();
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s %s",
-                LogTitle.GetWithTime().c_str(),
-                message.c_str());
+            YDB_LOG_ERROR_CTX(*ActorSystem, "",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"message", message});
             Reply(MakeError(E_REJECTED, std::move(message)));
         } else {
-            LOG_DEBUG(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s Read started from all available hosts. %s",
-                LogTitle.GetWithTime().c_str(),
-                ExtendedDebugState().c_str());
+            YDB_LOG_DEBUG_CTX(*ActorSystem, "Read started from all available hosts",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
         }
         return;
     }
@@ -130,15 +123,11 @@ void TReadSingleLocationRequestExecutor::StartReading()
         printPriority = NActors::NLog::PRI_INFO;
     }
 
-    LOG_LOG(
-        *ActorSystem,
-        printPriority,
-        NKikimrServices::NBS_PARTITION,
-        "%s Will read from %s of %s, try %lu",
-        LogTitle.GetWithTime().c_str(),
-        fromDDisk ? "DDisk" : "PBuffer",
-        PrintHostAndNode(*host).c_str(),
-        tryCount);
+    YDB_LOG_CTX(*ActorSystem, printPriority, "Will read from of try",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_num_0", fromDDisk ? "DDisk" : "PBuffer"},
+        {"#_PrintHostAndNode(*host).c_str", PrintHostAndNode(*host)},
+        {"tryCount", tryCount});
 
     ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
         *host,
@@ -180,14 +169,11 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
         return;
     }
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Response from %s: %s, %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(host).c_str(),
-        FormatError(response.Error).Quote().c_str(),
-        ExtendedDebugState().c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "Response from",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintHostAndNode(host).c_str", PrintHostAndNode(host)},
+        {"#_FormatError(response.Error).Quote().c_str", FormatError(response.Error)},
+        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
 
     StartReading();
 }
@@ -200,29 +186,20 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
 
     const auto duration = TInstant::Now() - StartAt;
     if (duration > SlowRequestTime) {
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s [?] Slow request %s",
-            LogTitle.GetWithTime().c_str(),
-            ExtendedDebugState().c_str());
+        YDB_LOG_INFO_CTX(*ActorSystem, "[?] Slow request",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
     }
 
     if (HasError(error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s [!] Reply error: %s %s",
-            LogTitle.GetWithTime().c_str(),
-            FormatError(error).Quote().c_str(),
-            ExtendedDebugState().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "[!] Reply",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"error", FormatError(error)},
+            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
     } else {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Reply OK %s",
-            LogTitle.GetWithTime().c_str(),
-            ExtendedDebugState().c_str());
+        YDB_LOG_DEBUG_CTX(*ActorSystem, "Reply OK",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
     }
 
     ReadHint.Lock.Disarm();
@@ -237,13 +214,10 @@ void TReadSingleLocationRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
         return;
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnHedgingTimeout %s %s",
-        LogTitle.GetWithTime().c_str(),
-        ExtendedDebugState().c_str(),
-        FormatDuration(hedgingDelay).c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnHedgingTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ExtendedDebugState().c_str", ExtendedDebugState()},
+        {"#_FormatDuration(hedgingDelay).c_str", FormatDuration(hedgingDelay)});
 
     DirectBlockGroup->Schedule(
         hedgingDelay,
@@ -261,12 +235,9 @@ void TReadSingleLocationRequestExecutor::ScheduleRequestTimeout()
         return;
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnRequestTimeout %s",
-        LogTitle.GetWithTime().c_str(),
-        FormatDuration(RequestTimeout).c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -284,12 +255,9 @@ void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
         return;
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnHedgingTimeout %s",
-        LogTitle.GetWithTime().c_str(),
-        ExtendedDebugState().c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "OnHedgingTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
 
     const bool allRetriesAreSpent = ReadHint.HostMask == Requested;
     if (!allRetriesAreSpent) {
@@ -303,12 +271,9 @@ void TReadSingleLocationRequestExecutor::OnRequestTimeout()
         return;
     }
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnRequestTimeout. %s",
-        LogTitle.GetWithTime().c_str(),
-        ExtendedDebugState().c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "OnRequestTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ExtendedDebugState().c_str", ExtendedDebugState()});
 
     Reply(MakeError(E_TIMEOUT, "Request timeout"));
 }

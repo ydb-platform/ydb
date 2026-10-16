@@ -7,6 +7,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DBS_CONTROLLER
+
 namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 using namespace NKikimr;
@@ -23,22 +25,16 @@ TDbsControllerActor::TDbsControllerActor(
           NKikimr::TTabletStorageInfoPtr(info),
           nullptr)
 {
-    LOG_INFO(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] DbsController initialization started",
-        TabletID());
+    YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "DbsController initialization started",
+        {"tabletID", TabletID()});
 }
 
 TDbsControllerActor::~TDbsControllerActor() = default;
 
 void TDbsControllerActor::OnDetach(const TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] OnDetach",
-        TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnDetach",
+        {"tabletID", TabletID()});
     Die(ctx);
 }
 
@@ -48,11 +44,8 @@ void TDbsControllerActor::OnTabletDead(
 {
     Y_UNUSED(ev);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] OnTabletDead",
-        TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletID", TabletID()});
     Die(ctx);
 }
 
@@ -60,12 +53,9 @@ void TDbsControllerActor::OnActivateExecutor(const TActorContext& ctx)
 {
     Become(&TThis::StateWork);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] Started DbsController: actor id %s",
-        TabletID(),
-        SelfId().ToString().data());
+    YDB_LOG_INFO_CTX(ctx, "Started DbsController: actor id",
+        {"tabletID", TabletID()},
+        {"#_SelfId", SelfId()});
 
     if (!Executor()->GetStats().IsFollower()) {
         ExecuteTx(ctx, CreateTx<TInitSchema>());
@@ -86,13 +76,10 @@ void TDbsControllerActor::HandleServerConnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] Pipe client %s server %s connected",
-        TabletID(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server connected",
+        {"tabletID", TabletID()},
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TDbsControllerActor::HandleServerDisconnected(
@@ -101,13 +88,10 @@ void TDbsControllerActor::HandleServerDisconnected(
 {
     const auto* msg = ev->Get();
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] Pipe client %s server %s disconnected",
-        TabletID(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_DEBUG_CTX(ctx, "Pipe client server disconnected",
+        {"tabletID", TabletID()},
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TDbsControllerActor::HandleServerDestroyed(
@@ -116,13 +100,10 @@ void TDbsControllerActor::HandleServerDestroyed(
 {
     const auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] Pipe client %s server %s got destroyed",
-        TabletID(),
-        ToString(msg->ClientId).c_str(),
-        ToString(msg->ServerId).c_str());
+    YDB_LOG_INFO_CTX(ctx, "Pipe client server got destroyed",
+        {"tabletID", TabletID()},
+        {"#_ToString(msg->ClientId).c_str", ToString(msg->ClientId)},
+        {"#_ToString(msg->ServerId).c_str", ToString(msg->ServerId)});
 }
 
 void TDbsControllerActor::ReportTabletState(const TActorContext& ctx)
@@ -169,13 +150,10 @@ STFUNC(TDbsControllerActor::StateWork)
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_ERROR(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::DBS_CONTROLLER,
-                    "[%lu] Unhandled event type: %u event %s",
-                    TabletID(),
-                    ev->GetTypeRewrite(),
-                    ev->ToString().c_str());
+                YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
+                    {"tabletID", TabletID()},
+                    {"type", ev->GetTypeRewrite()},
+                    {"#_ev->ToString().c_str", ev->ToString()});
             }
             break;
     }

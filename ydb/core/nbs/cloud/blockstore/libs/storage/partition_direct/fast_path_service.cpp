@@ -32,6 +32,8 @@
 #include <memory>
 #include <utility>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 using namespace NKikimr;
 using namespace NThreading;
 
@@ -202,30 +204,21 @@ TFastPathService::TFastPathService(
             copyRangeBandwidth);
     }
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Regions: %zu",
-        LogTitle.GetWithTime().c_str(),
-        Regions.size());
+    YDB_LOG_INFO_CTX(*ActorSystem, "",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"regions", Regions.size()});
 }
 
 TFastPathService::~TFastPathService()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Destroy",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "Destroy",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Run",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "Run",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
@@ -249,11 +242,8 @@ IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
 
 NThreading::TFuture<void> TFastPathService::Stop()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s TFastPathService::Stop",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "TFastPathService::Stop",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     TVector<NThreading::TFuture<void>> stopFutures;
     for (size_t regionIndex = 0; regionIndex < Regions.size(); ++regionIndex) {
@@ -556,14 +546,11 @@ void TFastPathService::SetNodeChaosMode(
     std::optional<ui32> dbgIndex,
     TChaosConfig::TChaosNodeConfig::EChaosMode mode)
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s SetChaosNodeMode %s %s %s",
-        LogTitle.GetWithTime().c_str(),
-        PrintNodeId(nodeId).c_str(),
-        dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all",
-        ToString(mode).c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "SetChaosNodeMode",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_PrintNodeId(nodeId).c_str", PrintNodeId(nodeId)},
+        {"#_num_0", dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all"},
+        {"#_ToString(mode).c_str", ToString(mode)});
 
     auto apply = [&](TChaosConfig::TDbgAndNodeId id)
     {
@@ -702,21 +689,15 @@ TFastPathService::GatherVChunkStats(
 
 void TFastPathService::OnRegionStopped(size_t regionIndex)
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnRegionStopped %zu",
-        LogTitle.GetWithTime().c_str(),
-        regionIndex);
+    YDB_LOG_INFO_CTX(*ActorSystem, "OnRegionStopped",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"regionIndex", regionIndex});
 }
 
 void TFastPathService::OnAllRegionsStopped()
 {
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnAllRegionsStopped",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(*ActorSystem, "OnAllRegionsStopped",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 }
 
 void TFastPathService::ScheduleDirtyMapDebugPrint()
@@ -770,12 +751,9 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
             StorageConfig->Dump(),
             std::move(DebugDumps));
     } catch (const std::exception& e) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Dump error %s",
-            LogTitle.GetWithTime().c_str(),
-            e.what());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Dump error",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_e.what", e.what()});
     }
 
     ScheduleDirtyMapDebugPrint();

@@ -3,6 +3,8 @@
 
 #include <util/generic/fwd.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -20,10 +22,7 @@ bool TPartitionActor::PrepareInitSchema(
     Y_UNUSED(tx);
     Y_UNUSED(args);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "PartitionDirect schema initializing");
+    YDB_LOG_INFO_CTX(ctx, "PartitionDirect schema initializing");
 
     return true;
 }
@@ -39,10 +38,7 @@ void TPartitionActor::ExecuteInitSchema(
     TPartitionDatabase db(tx.DB);
     db.InitSchema();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "PartitionDirect schema execution completed");
+    YDB_LOG_INFO_CTX(ctx, "PartitionDirect schema execution completed");
 }
 
 void TPartitionActor::CompleteInitSchema(
@@ -51,10 +47,7 @@ void TPartitionActor::CompleteInitSchema(
 {
     Y_UNUSED(args);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "PartitionDirect schema initialized");
+    YDB_LOG_INFO_CTX(ctx, "PartitionDirect schema initialized");
 
     ExecuteTx(ctx, CreateTx<TLoadState>());
 }

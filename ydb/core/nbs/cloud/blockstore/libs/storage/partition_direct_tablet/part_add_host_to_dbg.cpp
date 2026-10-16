@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -148,13 +150,10 @@ void TPartitionActor::CompleteAddHostToDBG(
 {
     const size_t dbgId = args.DirectBlockGroupId;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s AddHost persisted dbgId=%lu newHostIndex=%s",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        PrintHostIndex(args.NewHostIndex).c_str());
+    YDB_LOG_INFO_CTX(ctx, "AddHost persisted",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"dbgId", dbgId},
+        {"newHostIndex", PrintHostIndex(args.NewHostIndex)});
 
     Y_ABORT_UNLESS(FastPathService);
 
@@ -202,12 +201,9 @@ void TPartitionActor::HandleAddHostAllocationResult(
     const auto* msg = ev->Get();
 
     if (!AddHostInFlight.has_value()) {
-        LOG_WARN(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s AddHost response with no in-flight request, cookie=%lu",
-            LogTitle.GetWithTime().c_str(),
-            ev->Cookie);
+        YDB_LOG_WARN_CTX(ctx, "AddHost response with no in-flight request",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"cookie", ev->Cookie});
         return;
     }
 
@@ -239,14 +235,10 @@ void TPartitionActor::HandleAddHostAllocationResult(
     {
         // Not cancelled: the intent stays persisted, so it is retried on the
         // next recovery until BSController grants the DDisk.
-        LOG_WARN(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s AddHost (dbgId=%lu) not completed, kept for retry on "
-            "recovery: %s",
-            LogTitle.GetWithTime().c_str(),
-            dbgId,
-            FormatError(error).Quote().c_str());
+        YDB_LOG_WARN_CTX(ctx, "AddHost not completed, kept for retry",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_(dbgId", dbgId},
+            {"recovery", FormatError(error)});
         return;
     }
 
@@ -268,13 +260,10 @@ void TPartitionActor::HandleAddHostToDBG(
     const ui32 dbgConnectionsConfigGeneration =
         msg->DBGConnectionsConfigGeneration;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHost to dbgId=%lu, DBG connections config generation %u",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        dbgConnectionsConfigGeneration);
+    YDB_LOG_INFO_CTX(ctx, "Handle AddHost to DBG connections config generation",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"dbgId", dbgId},
+        {"dbgConnectionsConfigGeneration", dbgConnectionsConfigGeneration});
 
     // The request always carries a DBG's own index so an out-of-range dbgId is
     // a bug, not a bad request.
@@ -373,13 +362,10 @@ void TPartitionActor::RejectAddHost(
 {
     auto error = MakeError(E_REJECTED, message);
 
-    LOG_ERROR(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s AddHost failed (dbgId=%lu): %s",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        FormatError(error).Quote().c_str());
+    YDB_LOG_ERROR_CTX(ctx, "AddHost failed",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_(dbgId", dbgId},
+        {"#_)", FormatError(error)});
 
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);
@@ -393,12 +379,9 @@ void TPartitionActor::SendAllocateDDiskForAddHost(
     size_t dbgId)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Skip AddHost BSC send during delete dbgId=%lu",
-            LogTitle.GetWithTime().c_str(),
-            dbgId);
+        YDB_LOG_INFO_CTX(ctx, "Skip AddHost BSC send during delete",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"dbgId", dbgId});
         return;
     }
 

@@ -1,6 +1,8 @@
 #include "part_database.h"
 #include "partition_direct_actor.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -56,12 +58,9 @@ void TPartitionActor::CompleteUpdateVChunkState(
     ExecutingUpdateVChunkState = false;
 
     if (!PendingUpdateVChunkStateRequests.empty()) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Execute pending UpdateVChunkStateRequests %zu",
-            LogTitle.GetWithTime().c_str(),
-            PendingUpdateVChunkStateRequests.size());
+        YDB_LOG_INFO_CTX(ctx, "Execute pending UpdateVChunkStateRequests",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_PendingUpdateVChunkStateRequests.size", PendingUpdateVChunkStateRequests.size()});
 
         ExecutingUpdateVChunkState = true;
         ExecuteTx(

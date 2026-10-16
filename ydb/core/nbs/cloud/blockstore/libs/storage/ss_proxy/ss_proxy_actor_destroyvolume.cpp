@@ -9,6 +9,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_SS_PROXY
+
 namespace NYdb::NBS::NStorage {
 
 using namespace NActors;
@@ -93,13 +95,10 @@ void TDestroyVolumeActor::DestroyVolume(const TActorContext& ctx)
     auto request = std::make_unique<TEvSSProxy::TEvModifySchemeRequest>(
         std::move(modifyScheme));
 
-    LOG_DEBUG(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Sending drop request for %s in directory %s (diskId %s)",
-        VolumeName.Quote().data(),
-        VolumeDir.Quote().data(),
-        DiskId.Quote().data());
+    YDB_LOG_DEBUG_CTX(ctx, "Sending drop request for in directory (diskId",
+        {"#_VolumeName.Quote().data", VolumeName.Quote().data()},
+        {"#_VolumeDir.Quote().data", VolumeDir.Quote().data()},
+        {"#_DiskId.Quote().data", DiskId.Quote().data()});
 
     NYdb::NBS::Send(ctx, MakeSSProxyServiceId(), std::move(request));
 }
@@ -112,12 +111,9 @@ void TDestroyVolumeActor::HandleDestroyVolumeResponse(
     const auto& error = msg->GetError();
 
     if (FAILED(error.GetCode())) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_SS_PROXY,
-            "Volume %s: drop failed: %s",
-            DiskId.Quote().data(),
-            FormatError(error).data());
+        YDB_LOG_ERROR_CTX(ctx, "Volume drop",
+            {"#_DiskId.Quote().data", DiskId.Quote().data()},
+            {"failed", FormatError(error).data()});
 
         ReplyAndDie(
             ctx,
@@ -125,11 +121,8 @@ void TDestroyVolumeActor::HandleDestroyVolumeResponse(
         return;
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_SS_PROXY,
-        "Volume %s dropped successfully",
-        DiskId.Quote().data());
+    YDB_LOG_INFO_CTX(ctx, "Volume dropped successfully",
+        {"#_DiskId.Quote().data", DiskId.Quote().data()});
 
     ReplyAndDie(ctx, std::make_unique<TEvSSProxy::TEvDestroyVolumeResponse>());
 }

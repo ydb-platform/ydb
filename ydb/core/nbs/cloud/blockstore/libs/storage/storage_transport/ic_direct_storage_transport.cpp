@@ -15,6 +15,8 @@
 
 #include <atomic>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 using namespace NActors;
@@ -273,11 +275,9 @@ template <typename TEvent>
         return true;
     }
 
-    LOG_WARN_S(
-        *actorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "Direct send failed, node# " << recipient.NodeId() << " eventType# "
-                                     << TEvent::EventType);
+    YDB_LOG_WARN_CTX(*actorSystem, "Direct send failed",
+        {"node", recipient.NodeId()},
+        {"eventType", TEvent::EventType});
     return false;
 }
 

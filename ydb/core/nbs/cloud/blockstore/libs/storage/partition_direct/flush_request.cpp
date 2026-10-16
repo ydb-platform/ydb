@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,11 +51,8 @@ TFlushRequestExecutor::TFlushRequestExecutor(
 TFlushRequestExecutor::~TFlushRequestExecutor()
 {
     if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Reply not sent",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Reply not sent",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -64,12 +63,9 @@ void TFlushRequestExecutor::Run()
     if (!Cooldown) {
         DoRun();
     } else {
-        LOG_INFO(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Flush cooldown time %s",
-            LogTitle.GetWithTime().c_str(),
-            FormatDuration(Cooldown).c_str());
+        YDB_LOG_INFO_CTX(*ActorSystem, "Flush cooldown time",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_FormatDuration(Cooldown).c_str", FormatDuration(Cooldown)});
         DirectBlockGroup->Schedule(
             Cooldown,
             [self = shared_from_this()]()
@@ -124,14 +120,11 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
     flushOk.reserve(Hint.Segments.size());
     for (size_t i = 0; i < Hint.Segments.size(); ++i) {
         if (HasError(response.Errors[i])) {
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "%s Flush failed: %s %s %s",
-                LogTitle.GetWithTime().c_str(),
-                Hint.Segments[i].PBufferKey.Print().c_str(),
-                Hint.Segments[i].Range.Print().c_str(),
-                FormatError(response.Errors[i]).Quote().c_str());
+            YDB_LOG_ERROR_CTX(*ActorSystem, "Flush",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"failed", Hint.Segments[i].PBufferKey.Print()},
+                {"#_Hint.Segments[i].Range.Print().c_str", Hint.Segments[i].Range.Print()},
+                {"#_FormatError(response.Errors[i]).Quote().c_str", FormatError(response.Errors[i])});
 
             flushFailed.push_back(Hint.Segments[i].PBufferKey);
         } else {
@@ -158,12 +151,9 @@ void TFlushRequestExecutor::ScheduleRequestTimeout()
         return;
     }
 
-    LOG_DEBUG(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnRequestTimeout %s",
-        LogTitle.GetWithTime().c_str(),
-        FormatDuration(RequestTimeout).c_str());
+    YDB_LOG_DEBUG_CTX(*ActorSystem, "Schedule OnRequestTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_FormatDuration(RequestTimeout).c_str", FormatDuration(RequestTimeout)});
 
     DirectBlockGroup->Schedule(
         RequestTimeout,
@@ -181,11 +171,8 @@ void TFlushRequestExecutor::OnRequestTimeout()
         return;
     }
 
-    LOG_WARN(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s OnRequestTimeout.",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_WARN_CTX(*ActorSystem, "OnRequestTimeout",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     Reply({}, MakePBufferKeys(Hint.Segments));
 }

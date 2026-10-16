@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -141,14 +143,10 @@ void TPartitionActor::CompleteCommitRemoveHost(
 {
     const size_t dbgId = args.DirectBlockGroupId;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s RemoveHost persisted dbgId=%lu removeIndex=%s, the slot is "
-        "dead until the next tablet start compacts it away",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        PrintHostIndex(args.RemoveIndex).c_str());
+    YDB_LOG_INFO_CTX(ctx, "RemoveHost persisted the slot is dead until the next tablet start compacts it away",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"dbgId", dbgId},
+        {"removeIndex", PrintHostIndex(args.RemoveIndex)});
 
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);
@@ -174,11 +172,8 @@ void TPartitionActor::CompleteCommitRemoveHost(
 void TPartitionActor::SendRemoveHostRequest(const TActorContext& ctx)
 {
     if (CurrentStateFunc() == &TThis::StateDelete) {
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Skip RemoveHost BSC send during delete",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Skip RemoveHost BSC send during delete",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
         return;
     }
 
@@ -225,27 +220,20 @@ void TPartitionActor::HandleRemoveHostAllocationResult(
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::NOT_FOUND) {
         // The deletion already applied (a crash between the BSC mutation and
         // the local commit); there is no listing to check.
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s RemoveHost already applied (dbgId=%lu), persisting: %s",
-            LogTitle.GetWithTime().c_str(),
-            dbgId,
-            msg->Record.GetErrorReason().c_str());
+        YDB_LOG_INFO_CTX(ctx, "RemoveHost already applied",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_(dbgId", dbgId},
+            {"persisting", msg->Record.GetErrorReason()});
     } else {
         // A malformed or mismatching response keeps the intent, so the
         // remove is retried on the next recovery.
         const auto response =
             ValidateAllocationResponse(*msg, dbgId, LiveHostCount(updatedDbg));
         if (HasError(response.Error)) {
-            LOG_WARN(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "%s RemoveHost (dbgId=%lu) not completed, kept for retry on "
-                "recovery: %s",
-                LogTitle.GetWithTime().c_str(),
-                dbgId,
-                FormatError(response.Error).c_str());
+            YDB_LOG_WARN_CTX(ctx, "RemoveHost not completed, kept for retry",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"#_(dbgId", dbgId},
+                {"recovery", FormatError(response.Error)});
             return;
         }
     }
@@ -268,15 +256,11 @@ void TPartitionActor::HandleRemoveHostFromDBG(
     const ui32 dbgConnectionsConfigGeneration =
         msg->DBGConnectionsConfigGeneration;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle RemoveHostFromDBG dbgId=%lu hostIndex=%s DBG connections "
-        "config generation=%u",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        PrintHostIndex(static_cast<THostIndex>(hostIndex)).c_str(),
-        dbgConnectionsConfigGeneration);
+    YDB_LOG_INFO_CTX(ctx, "Handle RemoveHostFromDBG DBG connections config",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"dbgId", dbgId},
+        {"hostIndex", PrintHostIndex(static_cast<THostIndex>(hostIndex))},
+        {"generation", dbgConnectionsConfigGeneration});
 
     Y_ABORT_UNLESS(FastPathService);
 
@@ -391,13 +375,10 @@ void TPartitionActor::RejectRemoveHost(
 {
     auto error = MakeError(E_REJECTED, message);
 
-    LOG_ERROR(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s RemoveHost failed (dbgId=%lu): %s",
-        LogTitle.GetWithTime().c_str(),
-        dbgId,
-        FormatError(error).c_str());
+    YDB_LOG_ERROR_CTX(ctx, "RemoveHost failed",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_(dbgId", dbgId},
+        {"#_)", FormatError(error)});
 
     auto dbgPtr = FastPathService->GetDirectBlockGroup(dbgId);
     Y_ABORT_UNLESS(dbgPtr);

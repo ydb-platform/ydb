@@ -5,6 +5,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DBS_CONTROLLER
+
 namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,17 +97,12 @@ void TDbsControllerActor::CompleteNodeMaintenancePermission(
     TTxDbsController::TNodeMaintenancePermission& args)
 {
     if (args.Allowed) {
-        LOG_INFO_S(
-            ctx,
-            NKikimrServices::DBS_CONTROLLER,
-            "NodeMaintenancePermission allowed for nodes " << args.NodeIds);
+        YDB_LOG_INFO_CTX(ctx, "NodeMaintenancePermission allowed for nodes",
+            {"#_args.NodeIds", args.NodeIds});
     } else {
-        LOG_INFO_S(
-            ctx,
-            NKikimrServices::DBS_CONTROLLER,
-            "NodeMaintenancePermission denied for nodes "
-                << args.NodeIds
-                << ", blocked by partitions: " << args.BlockingTablets);
+        YDB_LOG_INFO_CTX(ctx, "NodeMaintenancePermission denied for nodes, blocked by partitions",
+            {"#_args.NodeIds", args.NodeIds},
+            {"partitions", args.BlockingTablets});
     }
 
     auto response = std::make_unique<

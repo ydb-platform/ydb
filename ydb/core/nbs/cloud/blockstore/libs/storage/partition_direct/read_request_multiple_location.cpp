@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,11 +77,8 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
 TReadMultipleLocationRequestExecutor::~TReadMultipleLocationRequestExecutor()
 {
     if (!Promise.IsReady()) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s Reply has not been sent.",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "Reply has not been sent",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         Y_ABORT_UNLESS(false);
     }
@@ -141,19 +140,13 @@ void TReadMultipleLocationRequestExecutor::Reply(
     }
 
     if (HasError(error)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s SubRequest: %zu, Error: %s",
-            LogTitle.GetWithTime().c_str(),
-            index,
-            FormatError(error).Quote().c_str());
+        YDB_LOG_ERROR_CTX(*ActorSystem, "",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"subRequest", index},
+            {"error", FormatError(error)});
     } else {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "%s OK",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_DEBUG_CTX(*ActorSystem, "OK",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
     }
 
     SgList.Close();

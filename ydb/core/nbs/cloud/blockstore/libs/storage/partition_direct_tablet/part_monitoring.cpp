@@ -19,6 +19,8 @@
 #include <numeric>
 #include <optional>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -436,14 +438,11 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     if (page == EMonPage::Chaos && ev->Get()->GetMethod() == HTTP_METHOD_POST) {
         const auto action = ParseChaosAction(cgi);
         if (action) {
-            LOG_INFO(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "%s Mon page requested chaos action=%s nodeId=%u dbg=%s",
-                LogTitle.GetWithTime().c_str(),
-                cgi.Get("action").c_str(),
-                action->NodeId,
-                cgi.Get("dbg").c_str());
+            YDB_LOG_INFO_CTX(ctx, "Mon page requested chaos",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"action", cgi.Get("action")},
+                {"nodeId", action->NodeId},
+                {"dbg", cgi.Get("dbg")});
 
             FastPathService->SetNodeChaosMode(
                 action->NodeId,
@@ -471,12 +470,9 @@ bool TPartitionActor::OnRenderAppHtmlPage(
     {
         TStringBuilder reply;
         if (FastPathService->GetDirectBlockGroup(*data.SelectedDbg)) {
-            LOG_INFO(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "%s Mon page requested AddHost dbgId=%lu",
-                LogTitle.GetWithTime().c_str(),
-                *data.SelectedDbg);
+            YDB_LOG_INFO_CTX(ctx, "Mon page requested AddHost",
+                {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                {"dbgId", *data.SelectedDbg});
 
             FastPathService->QueryAddHost(
                 *data.SelectedDbg,

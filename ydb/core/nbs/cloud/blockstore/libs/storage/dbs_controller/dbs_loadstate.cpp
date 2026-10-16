@@ -1,6 +1,8 @@
 #include "dbs_controller_actor.h"
 #include "dbs_controller_database.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DBS_CONTROLLER
+
 namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 using namespace NActors;
@@ -37,11 +39,8 @@ void TDbsControllerActor::CompleteLoadState(
 {
     Y_UNUSED(args);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "[%lu] State loaded, DbsController is ready",
-        TabletID());
+    YDB_LOG_INFO_CTX(ctx, "State loaded, DbsController is ready",
+        {"tabletID", TabletID()});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -3,6 +3,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DBS_CONTROLLER
+
 namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -60,11 +62,8 @@ void TDbsControllerActor::HandleUpdateDDiskMapRequest(
     const TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "Handle UpdateDDiskMap request" << ", tabletId: "
-                                        << ev->Get()->Record.GetTabletId());
+    YDB_LOG_INFO_CTX(ctx, "Handle UpdateDDiskMap request",
+        {"tabletId", ev->Get()->Record.GetTabletId()});
 
     ExecuteTx(
         ctx,
@@ -81,11 +80,8 @@ void TDbsControllerActor::HandleRemoveTabletDDiskMapRequest(
     const TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "Handle RemoveTabletDDiskMap request"
-            << ", tabletId: " << ev->Get()->Record.GetTabletId());
+    YDB_LOG_INFO_CTX(ctx, "Handle RemoveTabletDDiskMap request",
+        {"tabletId", ev->Get()->Record.GetTabletId()});
 
     ExecuteTx(
         ctx,
@@ -219,13 +215,9 @@ void TDbsControllerActor::CompleteUpdateDDiskMap(
     const NActors::TActorContext& ctx,
     TTxDbsController::TUpdateDDiskMap& args)
 {
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "UpdateDDiskMap persisted data for tablet "
-            << args.PartitionTabletId << ": "
-            << args.ModifiedInverseRecords.size()
-            << " inverse records updated");
+    YDB_LOG_INFO_CTX(ctx, "UpdateDDiskMap persisted data for tablet inverse records updated",
+        {"#_args.PartitionTabletId", args.PartitionTabletId},
+        {"#_args.ModifiedInverseRecords.size", args.ModifiedInverseRecords.size()});
 
     auto response =
         std::make_unique<TEvDbsControllerPrivate::TEvUpdateDDiskMapResponse>(
@@ -263,13 +255,10 @@ bool TDbsControllerActor::PrepareRemoveTabletDDiskMap(
             [id = args.PartitionTabletId](const auto& x)
             { return x.GetPartitionTabletId() == id; });
         if (removed != 1) {
-            LOG_ERROR_S(
-                ctx,
-                NKikimrServices::DBS_CONTROLLER,
-                "Database integrity failure: expected 1 records for tablet, "
-                "got "
-                    << removed << "; partition tablet id = "
-                    << args.PartitionTabletId << ", DDiskId = " << key);
+            YDB_LOG_ERROR_CTX(ctx, "partition tablet id DDiskId",
+                {"removed", removed},
+                {"#_args.PartitionTabletId", args.PartitionTabletId},
+                {"key", key});
         }
     }
 
@@ -298,13 +287,9 @@ void TDbsControllerActor::CompleteRemoveTabletDDiskMap(
     const NActors::TActorContext& ctx,
     TTxDbsController::TRemoveTabletDDiskMap& args)
 {
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "RemoveTabletDDiskMap cleared data for tablet "
-            << args.PartitionTabletId << ": "
-            << args.ModifiedInverseRecords.size()
-            << " inverse records updated");
+    YDB_LOG_INFO_CTX(ctx, "RemoveTabletDDiskMap cleared data for tablet inverse records updated",
+        {"#_args.PartitionTabletId", args.PartitionTabletId},
+        {"#_args.ModifiedInverseRecords.size", args.ModifiedInverseRecords.size()});
 
     auto response = std::make_unique<
         TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapResponse>(

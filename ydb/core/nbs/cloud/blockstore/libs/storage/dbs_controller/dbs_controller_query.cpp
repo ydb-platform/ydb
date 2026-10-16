@@ -3,6 +3,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/actors/helpers.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DBS_CONTROLLER
+
 namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -11,11 +13,8 @@ void TDbsControllerActor::HandleGetPartitionsForNodeRequest(
     const TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO_S(
-        ctx,
-        NKikimrServices::DBS_CONTROLLER,
-        "Handle GetPartitionsForNode request" << ", nodeId: "
-                                              << ev->Get()->Record.GetNodeId());
+    YDB_LOG_INFO_CTX(ctx, "Handle GetPartitionsForNode request",
+        {"nodeId", ev->Get()->Record.GetNodeId()});
 
     ExecuteTx(
         ctx,

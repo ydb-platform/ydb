@@ -18,6 +18,8 @@
 
 #include <library/cpp/threading/future/future.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -33,12 +35,9 @@ void TPartitionActor::HandleDeletePartition(
 {
     const bool teardownRunning = !InflightDeleteRequests.empty();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle DeletePartition request (teardownRunning=%d)",
-        LogTitle.GetWithTime().c_str(),
-        static_cast<int>(teardownRunning));
+    YDB_LOG_INFO_CTX(ctx, "Handle DeletePartition request",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_(teardownRunning", static_cast<int>(teardownRunning)});
 
     InflightDeleteRequests.push_back(
         {.Sender = ev->Sender, .Cookie = ev->Cookie});
@@ -53,11 +52,8 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
     UnregisterFrontendVolume(ctx);
     Become(&TThis::StateDelete);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Become StateDelete",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Become StateDelete",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     StopBscProxy(ctx);
     AddHostInFlight.reset();
@@ -95,11 +91,8 @@ void TPartitionActor::HandleFastPathServiceStoppedDuringDelete(
 {
     Y_UNUSED(ev);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s FastPathService stopped, starting cleanup",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "FastPathService stopped, starting cleanup",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     FastPathService.reset();
     if (CleanupActor || InflightDeleteRequests.empty()) {
@@ -114,21 +107,15 @@ void TPartitionActor::StartCleanupActor(
     TDirectBlockGroupsConnections connections)
 {
     if (CleanupActor) {
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s StartCleanupActor skipped: cleanup already running %s",
-            LogTitle.GetWithTime().c_str(),
-            CleanupActor.ToString().c_str());
+        YDB_LOG_ERROR_CTX(ctx, "StartCleanupActor skipped: cleanup already running",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"cleanupActor", CleanupActor});
         return;
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s StartCleanupActor groups=%u",
-        LogTitle.GetWithTime().c_str(),
-        connections.DirectBlockGroupConnectionsSize());
+    YDB_LOG_INFO_CTX(ctx, "StartCleanupActor",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"groups", connections.DirectBlockGroupConnectionsSize()});
 
     CleanupActor = ctx.Register(CreatePartitionCleanupActor({
         .Parent = ctx.SelfID,
@@ -149,24 +136,18 @@ void TPartitionActor::HandlePartitionCleanupCompleted(
     const NActors::TActorContext& ctx)
 {
     if (ev->Sender != CleanupActor) {
-        LOG_WARN(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Ignore stale cleanup completion from %s (current %s)",
-            LogTitle.GetWithTime().c_str(),
-            ev->Sender.ToString().c_str(),
-            CleanupActor.ToString().c_str());
+        YDB_LOG_WARN_CTX(ctx, "Ignore stale cleanup completion from (current",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"#_ev->Sender.ToString().c_str", ev->Sender},
+            {"cleanupActor", CleanupActor});
         return;
     }
 
     const auto& error = ev->Get()->Error;
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s HandlePartitionCleanupCompleted: %s",
-        LogTitle.GetWithTime().c_str(),
-        FormatError(error).c_str());
+    YDB_LOG_INFO_CTX(ctx, "",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"handlePartitionCleanupCompleted", FormatError(error)});
 
     CleanupActor = {};
 
@@ -198,11 +179,8 @@ void TPartitionActor::ReplyToDeleteWaiters(
 // Finish delete, reply to all requests
 void TPartitionActor::FinishDelete(const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s FinishDelete",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "FinishDelete",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     ReplyToDeleteWaiters(ctx, {});
 }
@@ -212,12 +190,9 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Ignore AllocateDDiskBlockGroupResult during delete: %s",
-        LogTitle.GetWithTime().c_str(),
-        ev->Get()->Record.ShortDebugString().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Ignore AllocateDDiskBlockGroupResult during",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"delete", ev->Get()->Record.ShortDebugString()});
 }
 
 // Ignore update volume config during delete
@@ -225,11 +200,8 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
     const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Reject UpdateVolumeConfig: partition is being deleted",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Reject UpdateVolumeConfig: partition is being deleted",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     // Schemeshard aborts on any status other than OK or
     // ERROR_UPDATE_IN_PROGRESS. The partition cannot apply a new config while
@@ -245,11 +217,8 @@ void TPartitionActor::HandleStatVolumeDuringDelete(
         ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Reject StatVolume: partition is being deleted",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Reject StatVolume: partition is being deleted",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     auto response = std::make_unique<
         NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeResponse>(
@@ -262,12 +231,9 @@ void TPartitionActor::HandleUpdateVChunkConfigDuringDelete(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Drop UpdateVChunkConfig during delete: %s",
-        LogTitle.GetWithTime().c_str(),
-        ev->Get()->VChunkConfig.DebugPrint().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Drop UpdateVChunkConfig during",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"delete", ev->Get()->VChunkConfig.DebugPrint()});
 
     ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
@@ -276,12 +242,9 @@ void TPartitionActor::HandleUpdateDirtyMapStateDuringDelete(
     const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Drop UpdateDirtyMapState during delete: vchunk %u",
-        LogTitle.GetWithTime().c_str(),
-        ev->Get()->VChunkIndex);
+    YDB_LOG_INFO_CTX(ctx, "Drop UpdateDirtyMapState during delete: vchunk",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_ev->Get()->VChunkIndex", ev->Get()->VChunkIndex});
 
     ev->Get()->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
@@ -292,12 +255,9 @@ void TPartitionActor::HandleSetVChunkTouchedDuringDelete(
 {
     auto* msg = ev->Get();
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Drop SetVChunkTouched during delete: vchunk %u",
-        LogTitle.GetWithTime().c_str(),
-        msg->VChunkIndex);
+    YDB_LOG_INFO_CTX(ctx, "Drop SetVChunkTouched during delete: vchunk",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_msg->VChunkIndex", msg->VChunkIndex});
 
     msg->UpdateCompleted.SetValue(EPersistResult::Cancelled);
 }
@@ -307,11 +267,8 @@ void TPartitionActor::HandleFastPathServiceShutdownDuringDelete(
     const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s FastPathServiceShutdown during delete",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "FastPathServiceShutdown during delete",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
     Reply(
         ctx,
@@ -331,12 +288,9 @@ void TPartitionActor::HandleAddHostToDBGDuringDelete(
         return;
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Drop AddHost during delete (dbgId=%lu): FastPathService stopped",
-        LogTitle.GetWithTime().c_str(),
-        dbgId);
+    YDB_LOG_INFO_CTX(ctx, "Drop AddHost during delete FastPathService stopped",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_(dbgId", dbgId});
 }
 
 void TPartitionActor::HandlePersistHostHealthDuringDelete(
@@ -344,11 +298,8 @@ void TPartitionActor::HandlePersistHostHealthDuringDelete(
     const NActors::TActorContext& ctx)
 {
     Y_UNUSED(ev);
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Drop PersistHostHealth during delete",
-        LogTitle.GetWithTime().c_str());
+    YDB_LOG_INFO_CTX(ctx, "Drop PersistHostHealth during delete",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 }
 
 void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
@@ -362,25 +313,19 @@ void TPartitionActor::HandleRemoveHostFromDBGDuringDelete(
         return;
     }
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Drop RemoveHost during delete (dbgId=%lu): FastPathService stopped",
-        LogTitle.GetWithTime().c_str(),
-        dbgId);
+    YDB_LOG_INFO_CTX(ctx, "Drop RemoveHost during delete FastPathService stopped",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"#_(dbgId", dbgId});
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateDelete)
 {
-    LOG_DEBUG(
-        TActivationContext::AsActorContext(),
-        NKikimrServices::NBS_PARTITION,
-        "%s Processing event: %s from sender: %lu",
-        LogTitle.GetWithTime().c_str(),
-        ev->GetTypeName().data(),
-        ev->Sender.LocalId());
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Processing",
+        {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+        {"event", ev->GetTypeName().data()},
+        {"sender", ev->Sender.LocalId()});
 
     switch (ev->GetTypeRewrite()) {
         // One more request to delete partition while we are removing the tablet

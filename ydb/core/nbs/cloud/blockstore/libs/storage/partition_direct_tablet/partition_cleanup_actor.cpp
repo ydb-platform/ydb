@@ -26,6 +26,8 @@
 #include <util/generic/ptr.h>
 #include <util/system/datetime.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -136,11 +138,8 @@ public:
     {
         Become(&TThis::StateWipe);
 
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Become StateWipe",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Become StateWipe",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         ctx.Schedule(PartitionCleanupTimeout, new TEvents::TEvWakeup());
         StartPBufferUnregister(ctx);
@@ -162,13 +161,10 @@ private:
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_ERROR(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "%s Unhandled event type: %u event %s",
-                    LogTitle.GetWithTime().c_str(),
-                    ev->GetTypeRewrite(),
-                    ev->ToString().c_str());
+                YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
+                    {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                    {"type", ev->GetTypeRewrite()},
+                    {"#_ev->ToString().c_str", ev->ToString()});
                 break;
         }
     }
@@ -182,13 +178,10 @@ private:
             HFunc(TEvents::TEvWakeup, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_ERROR(
-                    TActivationContext::AsActorContext(),
-                    NKikimrServices::NBS_PARTITION,
-                    "%s Unhandled event type: %u event %s",
-                    LogTitle.GetWithTime().c_str(),
-                    ev->GetTypeRewrite(),
-                    ev->ToString().c_str());
+                YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Unhandled event event",
+                    {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                    {"type", ev->GetTypeRewrite()},
+                    {"#_ev->ToString().c_str", ev->ToString()});
                 break;
         }
     }
@@ -276,14 +269,11 @@ private:
             .Kind = kind,
             .DBGIndex = dbgIndex};
 
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Send wipe request kind=%s target=%s cookie=%lu",
-            LogTitle.GetWithTime().c_str(),
-            kind == ECleanupTarget::PBuffer ? "PBuffer" : "DDisk",
-            target.ToString().c_str(),
-            cookie);
+        YDB_LOG_INFO_CTX(ctx, "Send wipe request",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"kind", kind == ECleanupTarget::PBuffer ? "PBuffer" : "DDisk"},
+            {"target", target},
+            {"cookie", cookie});
 
         auto ev = std::make_unique<IEventHandle>(
             target,
@@ -328,14 +318,11 @@ private:
         const TActorContext& ctx)
     {
         const auto& record = ev->Get()->Record;
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s HandleUnregisterPersistentBufferResult cookie=%lu status=%s",
-            LogTitle.GetWithTime().c_str(),
-            ev->Cookie,
-            NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
-                .c_str());
+        YDB_LOG_INFO_CTX(ctx, "HandleUnregisterPersistentBufferResult",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"cookie", ev->Cookie},
+            {"status", NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
+                });
 
         // Cleanup may be retried after a lost reply or target registrations may
         // never have been made. Their absence already satisfies cleanup.
@@ -363,14 +350,11 @@ private:
         const TActorContext& ctx)
     {
         const auto& record = ev->Get()->Record;
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s HandleDeleteTabletChunksResult cookie=%lu status=%s",
-            LogTitle.GetWithTime().c_str(),
-            ev->Cookie,
-            NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
-                .c_str());
+        YDB_LOG_INFO_CTX(ctx, "HandleDeleteTabletChunksResult",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"cookie", ev->Cookie},
+            {"status", NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
+                });
 
         OnWipeResult(ctx, ev->Cookie, TranslateError(record));
     }
@@ -384,13 +368,10 @@ private:
             return;
         }
 
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Wipe request undelivered target=%s cookie=%lu",
-            LogTitle.GetWithTime().c_str(),
-            it->second.Target.ToString().c_str(),
-            ev->Cookie);
+        YDB_LOG_ERROR_CTX(ctx, "Wipe request undelivered",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"target", it->second.Target},
+            {"cookie", ev->Cookie});
 
         Complete(ctx, MakeError(E_REJECTED, "wipe request undelivered"));
     }
@@ -402,14 +383,11 @@ private:
         const ui32 nodeId = ev->Get()->NodeId;
         for (const auto& [cookie, request]: InFlight) {
             if (request.NodeId == nodeId) {
-                LOG_ERROR(
-                    ctx,
-                    NKikimrServices::NBS_PARTITION,
-                    "%s Node %u disconnected during wipe cookie=%lu target=%s",
-                    LogTitle.GetWithTime().c_str(),
-                    nodeId,
-                    cookie,
-                    request.Target.ToString().c_str());
+                YDB_LOG_ERROR_CTX(ctx, "Node disconnected during wipe",
+                    {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+                    {"nodeId", nodeId},
+                    {"cookie", cookie},
+                    {"target", request.Target});
                 Complete(
                     ctx,
                     MakeError(E_REJECTED, "node disconnected during wipe"));
@@ -446,11 +424,8 @@ private:
     {
         Become(&TThis::StateDeallocate);
 
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Become StateDeallocate",
-            LogTitle.GetWithTime().c_str());
+        YDB_LOG_INFO_CTX(ctx, "Become StateDeallocate",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()});
 
         auto request = std::make_unique<
             TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
@@ -480,13 +455,10 @@ private:
         const TActorContext& ctx)
     {
         const auto& record = ev->Get()->Record;
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s HandleDeallocateResult status=%s reason=%s",
-            LogTitle.GetWithTime().c_str(),
-            NKikimrProto::EReplyStatus_Name(record.GetStatus()).c_str(),
-            record.GetErrorReason().c_str());
+        YDB_LOG_INFO_CTX(ctx, "HandleDeallocateResult",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"status", NKikimrProto::EReplyStatus_Name(record.GetStatus())},
+            {"reason", record.GetErrorReason()});
 
         Complete(ctx, CheckDeallocateResult(*ev->Get()));
     }
@@ -498,12 +470,9 @@ private:
         }
         Completed = true;
 
-        LOG_INFO(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s Cleanup completed: %s",
-            LogTitle.GetWithTime().c_str(),
-            FormatError(error).c_str());
+        YDB_LOG_INFO_CTX(ctx, "Cleanup",
+            {"#_LogTitle.GetWithTime().c_str", LogTitle.GetWithTime()},
+            {"completed", FormatError(error)});
 
         ctx.Send(
             Params.Parent,

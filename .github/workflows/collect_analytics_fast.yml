@@ -39,28 +39,47 @@ jobs:
           exit 0
         fi
 
-        archive=https://github.com/ydb-platform/ydb/archive/refs/heads/main.tar.gz
+        repo_url=https://github.com/ydb-platform/ydb.git
 
-        # 30s of the ydb archive on both paths at once. Speed is the last 5s that still received bytes.
+        # Depth-1 clone, same transfer as checkout. Speed is 5s of tmp_pack once objects are actually arriving.
+        pack_size() {
+          local f
+          f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
+          if [ -z "$f" ]; then echo 0; return; fi
+          stat -c %s "$f" 2>/dev/null || stat -f %z "$f"
+        }
         measure() {
-          local url=$1 out pid i now n last back
-          out=$(mktemp /tmp/gh-probe.XXXXXX)
-          local -a s=(0)
-          curl -L --http1.1 --max-time 30 -o "$out" -fsS "$url" >/dev/null &
+          local git_config=$1 dest log pid i sz s1 s2
+          dest=$(mktemp -d /tmp/gh-probe.XXXXXX)
+          log=$(mktemp)
+          if [ -n "$git_config" ]; then
+            git -c "$git_config" clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+          else
+            git clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+          fi
           pid=$!
-          for i in $(seq 1 30); do
+          s1=0
+          for i in $(seq 1 45); do
             sleep 1
-            now=$(wc -c < "$out" | tr -d ' ' || true)
-            s+=("${now:-0}")
+            sz=$(pack_size "$dest")
+            if [ "$sz" -gt 1000000 ]; then s1=$sz; break; fi
           done
+          s2=$s1
+          if [ "$s1" -gt 0 ]; then
+            sleep 5
+            s2=$(pack_size "$dest")
+            if [ "$s2" -lt "$s1" ]; then s2=$s1; fi
+          fi
           kill "$pid" 2>/dev/null || true
+          pkill -P "$pid" 2>/dev/null || true
           wait "$pid" 2>/dev/null || true
-          rm -f "$out"
-          n=${#s[@]}; last=$((n - 1))
-          while [ "$last" -gt 0 ] && [ "${s[$last]}" -eq "${s[$((last - 1))]}" ]; do last=$((last - 1)); done
-          if [ "$last" -lt 1 ]; then echo "0 0"; return; fi
-          back=5; [ "$last" -lt 5 ] && back=$last
-          echo "${s[$last]} $(( (${s[$last]} - ${s[$((last - back))]}) / back ))"
+          if [ "$s1" -eq 0 ]; then
+            echo "git clone never started receiving objects:" >&2
+            tr '\r' '\n' < "$log" | grep -E 'Receiving objects|Compressing objects|fatal:' | tail -5 >&2 || true
+          fi
+          rm -rf "$dest"
+          rm -f "$log"
+          echo "$s2 $(( (s2 - s1) / 5 ))"
         }
 
         megabytes() {
@@ -69,9 +88,9 @@ jobs:
 
         direct_out=$(mktemp)
         proxy_out=$(mktemp)
-        measure "$archive" >"$direct_out" &
+        measure "" >"$direct_out" &
         direct_pid=$!
-        measure "${proxy_url}/${archive}" >"$proxy_out" &
+        measure "url.${proxy_url}/https://github.com/.insteadOf=https://github.com/" >"$proxy_out" &
         proxy_pid=$!
         wait "$direct_pid" || true
         wait "$proxy_pid" || true
@@ -87,7 +106,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "archive GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+        echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
         {
           echo "GH_PROXY_MEASURED=1"
           echo "GH_PROXY_USED=$use_proxy"
@@ -237,28 +256,47 @@ jobs:
           exit 0
         fi
 
-        archive=https://github.com/ydb-platform/ydb/archive/refs/heads/main.tar.gz
+        repo_url=https://github.com/ydb-platform/ydb.git
 
-        # 30s of the ydb archive on both paths at once. Speed is the last 5s that still received bytes.
+        # Depth-1 clone, same transfer as checkout. Speed is 5s of tmp_pack once objects are actually arriving.
+        pack_size() {
+          local f
+          f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
+          if [ -z "$f" ]; then echo 0; return; fi
+          stat -c %s "$f" 2>/dev/null || stat -f %z "$f"
+        }
         measure() {
-          local url=$1 out pid i now n last back
-          out=$(mktemp /tmp/gh-probe.XXXXXX)
-          local -a s=(0)
-          curl -L --http1.1 --max-time 30 -o "$out" -fsS "$url" >/dev/null &
+          local git_config=$1 dest log pid i sz s1 s2
+          dest=$(mktemp -d /tmp/gh-probe.XXXXXX)
+          log=$(mktemp)
+          if [ -n "$git_config" ]; then
+            git -c "$git_config" clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+          else
+            git clone --depth 1 --single-branch --no-tags --progress "$repo_url" "$dest" >"$log" 2>&1 &
+          fi
           pid=$!
-          for i in $(seq 1 30); do
+          s1=0
+          for i in $(seq 1 45); do
             sleep 1
-            now=$(wc -c < "$out" | tr -d ' ' || true)
-            s+=("${now:-0}")
+            sz=$(pack_size "$dest")
+            if [ "$sz" -gt 1000000 ]; then s1=$sz; break; fi
           done
+          s2=$s1
+          if [ "$s1" -gt 0 ]; then
+            sleep 5
+            s2=$(pack_size "$dest")
+            if [ "$s2" -lt "$s1" ]; then s2=$s1; fi
+          fi
           kill "$pid" 2>/dev/null || true
+          pkill -P "$pid" 2>/dev/null || true
           wait "$pid" 2>/dev/null || true
-          rm -f "$out"
-          n=${#s[@]}; last=$((n - 1))
-          while [ "$last" -gt 0 ] && [ "${s[$last]}" -eq "${s[$((last - 1))]}" ]; do last=$((last - 1)); done
-          if [ "$last" -lt 1 ]; then echo "0 0"; return; fi
-          back=5; [ "$last" -lt 5 ] && back=$last
-          echo "${s[$last]} $(( (${s[$last]} - ${s[$((last - back))]}) / back ))"
+          if [ "$s1" -eq 0 ]; then
+            echo "git clone never started receiving objects:" >&2
+            tr '\r' '\n' < "$log" | grep -E 'Receiving objects|Compressing objects|fatal:' | tail -5 >&2 || true
+          fi
+          rm -rf "$dest"
+          rm -f "$log"
+          echo "$s2 $(( (s2 - s1) / 5 ))"
         }
 
         megabytes() {
@@ -267,9 +305,9 @@ jobs:
 
         direct_out=$(mktemp)
         proxy_out=$(mktemp)
-        measure "$archive" >"$direct_out" &
+        measure "" >"$direct_out" &
         direct_pid=$!
-        measure "${proxy_url}/${archive}" >"$proxy_out" &
+        measure "url.${proxy_url}/https://github.com/.insteadOf=https://github.com/" >"$proxy_out" &
         proxy_pid=$!
         wait "$direct_pid" || true
         wait "$proxy_pid" || true
@@ -285,7 +323,7 @@ jobs:
           use_proxy=true
         fi
 
-        echo "archive GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+        echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last active 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last active 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
         {
           echo "GH_PROXY_MEASURED=1"
           echo "GH_PROXY_USED=$use_proxy"

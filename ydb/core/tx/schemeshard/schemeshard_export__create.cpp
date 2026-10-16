@@ -941,14 +941,7 @@ private:
         return path->LastTxId;
     }
 
-    void KillChildActors(TExportInfo::TItem& item) {
-        if (auto schemeUploader = std::exchange(item.SchemeUploader, {})) {
-            Send(schemeUploader, new TEvents::TEvPoisonPill());
-            Self->RunningExportSchemeUploaders.erase(schemeUploader);
-        }
-    }
-
-    void Cancel(TExportInfo& exportInfo, ui32 itemIdx, TStringBuf marker) {
+    void Cancel(TExportInfo& exportInfo, ui32 itemIdx, TStringBuf marker, NIceDb::TNiceDb& db) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items.at(itemIdx);
 
@@ -964,7 +957,17 @@ private:
         }
 
         for (ui32 i : xrange(exportInfo.Items.size())) {
-            KillChildActors(exportInfo.Items[i]);
+            auto& other = exportInfo.Items[i];
+            if (auto uploader = std::exchange(other.SchemeUploader, {})) {
+                Send(uploader, new TEvents::TEvPoisonPill());
+                Self->RunningExportSchemeUploaders.erase(uploader);
+                // A stopped uploader cannot acknowledge cancellation. A retained
+                // tx id belongs to a completed backup awaiting its marker upload.
+                Self->TxIdToExport.erase(other.WaitTxId);
+                other.WaitTxId = InvalidTxId;
+                other.State = EState::Cancelled;
+                Self->PersistExportItemState(db, exportInfo, i);
+            }
             if (i == itemIdx) {
                 continue;
             }
@@ -988,7 +991,7 @@ private:
     }
 
     void CancelAndPersistExport(const TExportInfo::TPtr& exportInfo, ui32 itemIdx, TStringBuf marker, NIceDb::TNiceDb& db) {
-        Cancel(*exportInfo, itemIdx, marker);
+        Cancel(*exportInfo, itemIdx, marker, db);
         PersistExportStateAndNotify(exportInfo, db);
         if (exportInfo->IsFinished()) {
             AuditLogExportEnd(*exportInfo, Self);
@@ -1339,7 +1342,7 @@ private:
                         return;
                     }
 
-                    Cancel(*exportInfo, itemIdx, "unhappy propose");
+                    Cancel(*exportInfo, itemIdx, "unhappy propose", db);
                     Self->EraseEncryptionKey(db, *exportInfo);
                 } else {
                     if (!exportInfo->IsInProgress()) {
@@ -1486,7 +1489,7 @@ private:
                 return;
             }
 
-            Cancel(*exportInfo, itemIdx, "unsuccessful scheme upload");
+            Cancel(*exportInfo, itemIdx, "unsuccessful scheme upload", db);
 
             return PersistExportStateAndNotify(exportInfo, db);
         }

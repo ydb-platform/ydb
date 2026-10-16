@@ -11,6 +11,31 @@ namespace NActors {
 
     const TEventSerializedData IEventHandle::EmptyBuffer;
 
+    IEventBase* IEventHandle::GetSlow(ui32 expectedType, TEventLoader loader, const std::type_info& typeInfo) {
+        Y_ENSURE(Type == expectedType,
+            "Event type " << Type << " doesn't match the expected type " << expectedType
+            << " class " << TypeName(typeInfo));
+
+        if (!Event) {
+            if (loader) {
+                Event.Reset(loader(Buffer ? Buffer.Get() : &EmptyBuffer));
+                Buffer.Reset();
+            } else {
+                Y_ENSURE(false, "Event type " << Type << " cannot be loaded by class " << TypeName(typeInfo));
+            }
+        }
+
+        if (Event) {
+            return Event.Get();
+        }
+
+        Y_ENSURE(false, "Failed to Load() event type " << Type << " class " << TypeName(typeInfo));
+    }
+
+    void IEventHandle::ResetBuffer() {
+        Buffer.Reset();
+    }
+
     TString IEventHandle::GetTypeName() const {
         return HasEvent() ? TypeName(*(const_cast<IEventHandle*>(this)->GetBase())) : TypeName(*this);
     }

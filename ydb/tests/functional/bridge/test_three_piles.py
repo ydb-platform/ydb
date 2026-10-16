@@ -22,6 +22,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
     pile_names = ("r1", "r2", "r3")
     nodes_count = 24
     transition_timeout = 120
+    # Repeated rejoins accumulate system-tablet history; copying it is rate-limited.
+    synchronization_timeout = 300
 
     def setup_method(self):
         self.states = {"r1": PRIMARY, "r2": SYNC, "r3": SYNC}
@@ -51,8 +53,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
     def primary(self):
         return next(name for name, state in self.states.items() if state == PRIMARY)
 
-    def eventually(self, action, description):
-        deadline = time.monotonic() + self.transition_timeout
+    def eventually(self, action, description, timeout=None):
+        deadline = time.monotonic() + (self.transition_timeout if timeout is None else timeout)
         last_error = None
         while time.monotonic() < deadline:
             try:
@@ -63,12 +65,12 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         states = {name: PileState.State.Name(state) for name, state in self.states.items()}
         raise AssertionError(f"Timed out waiting for {description}; expected states: {states}") from last_error
 
-    def wait_states(self):
+    def wait_states(self, timeout=None):
         def check():
             for name, state in self.states.items():
                 if state != DISCONNECTED:
                     self.get_cluster_state_and_check(self.bridge_clients[name], self.states)
-        self.eventually(check, "cluster state on every connected pile")
+        self.eventually(check, "cluster state on every connected pile", timeout=timeout)
 
     def update(self, changes, via=None, expected_status=StatusIds.SUCCESS, quorum_piles=None):
         self.logger.info(
@@ -124,7 +126,7 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         # Automatic synchronization may finish before the next state request.
         self.states[name] = SYNC
         if wait:
-            self.wait_states()
+            self.wait_states(timeout=self.synchronization_timeout)
 
     def promote(self, name):
         old_primary = self.primary

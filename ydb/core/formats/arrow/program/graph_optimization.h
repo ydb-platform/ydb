@@ -188,6 +188,8 @@ private:
     void AddEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveNode(const ui32 idenitifier);
+    void ForgetProducer(TGraphNode* node);
+    void DropNodeIfUnused(TGraphNode* node);
     THashMap<ui32, TGraphNode*> GetBranch(TGraphNode* from, const bool backOnly) const;
     void RemoveBranch(TGraphNode* from, const bool backOnly);
     /** Column ids that are fetched as data in the entire graph (all FetchOriginalData nodes). */

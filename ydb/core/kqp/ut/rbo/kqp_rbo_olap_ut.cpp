@@ -1451,6 +1451,46 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         }
     }
 
+    Y_UNIT_TEST(PredicatePushdown_ComplexLike) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        auto settings = TKikimrSettings(appConfig).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto scheme = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        UNIT_ASSERT(scheme.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/likeidx` (
+                id Int64 NOT NULL,
+                str String,
+                PRIMARY KEY(id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync().IsSuccess());
+
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        UNIT_ASSERT(session.ExecuteQuery(R"(
+            INSERT INTO `/Root/likeidx` (id, str) VALUES (1, "xxaaabbbxx"), (2, "xxbbbaaaxx")
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+
+        const auto query = R"(
+            PRAGMA kikimr.OptEnableOlapPushdownComplexLike = "true";
+            SELECT id FROM `/Root/likeidx` WHERE str LIKE '%aaa%bbb%' ORDER BY id
+        )";
+        auto explained = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues());
+        const auto ast = *explained.GetStats()->GetAst();
+        UNIT_ASSERT_C(ast.contains("string_contains_index_only"), ast);
+        UNIT_ASSERT(ast.contains("Re2.PatternFromLike"));
+        UNIT_ASSERT(ast.contains("KqpOlapApply"));
+
+        auto executed = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(executed.IsSuccess(), executed.GetIssues());
+        CompareYson(FormatResultSetYson(executed.GetResultSet(0)), "[[1]]");
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

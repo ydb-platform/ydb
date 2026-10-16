@@ -678,6 +678,9 @@ TTypedColumn CompileYqlKernelUdf(const TKqpOlapUdf& udf, TKqpOlapCompileContext&
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
     function->SetKernelName(kernelName);
+    if (udf.IndexOnly()) {
+        function->SetIndexOnly(true);
+    }
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
     return {command->GetColumn().GetId(), resultType};
 }
@@ -759,7 +762,14 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp &opera
 
     TKernelRequestBuilder::EBinaryOp op;
     const TTypeAnnotationNode* type = ctx.ExprCtx().MakeType<TDataExprType>(EDataSlot::Bool);
-    if (const std::string_view& oper = operation.Operator().Value(); oper == "string_contains"sv) {
+    TString oper(operation.Operator().Value());
+    bool indexOnly = false;
+    constexpr TStringBuf indexOnlySuffix = "_index_only";
+    if (oper.EndsWith(indexOnlySuffix)) {
+        indexOnly = true;
+        oper = oper.substr(0, oper.size() - indexOnlySuffix.size());
+    }
+    if (oper == "string_contains"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StringContains;
     } else if (oper == "starts_with"sv) {
         op = TKernelRequestBuilder::EBinaryOp::StartsWith;
@@ -801,6 +811,9 @@ TTypedColumn CompileYqlKernelBinaryOperation(const TKqpOlapFilterBinaryOp &opera
 
     const auto kernel = ctx.AddYqlKernelBinaryFunc(operation.Pos(), op, *leftColumn.Type, *rightColumn.Type, type);
     cmpFunc->SetYqlOperationId((ui32)op);
+    if (indexOnly) {
+        cmpFunc->SetIndexOnly(true);
+    }
     cmpFunc->SetFunctionType(TProgram::YQL_KERNEL);
     cmpFunc->SetKernelIdx(kernel.first);
     cmpFunc->AddArguments()->SetId(leftColumn.Id);

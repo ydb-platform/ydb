@@ -1283,7 +1283,9 @@ bool ValidateOlapFilterConditions(const TExprNode* node, const TStructExprType* 
         if (!EnsureAtom(*op, ctx)) {
             return false;
         }
-        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with", "+", "-", "*", "/", "%", "??"})) {
+        if (!op->IsAtom({"eq", "neq", "lt", "lte", "gt", "gte", "string_contains", "starts_with", "ends_with",
+                         "string_contains_index_only", "starts_with_index_only", "ends_with_index_only",
+                         "+", "-", "*", "/", "%", "??"})) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
                 TStringBuilder() << "Unexpected OLAP binary operation: " << op->Content()
             ));
@@ -1525,7 +1527,10 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateOlapUdf(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3U, ctx)) {
+    if (!EnsureMinArgsCount(*node, 3U, ctx) || !EnsureMaxArgsCount(*node, 4U, ctx)) {
+        return TStatus::Error;
+    }
+    if (node->ChildrenSize() == 4U && !EnsureAtom(*node->Child(3), ctx)) {
         return TStatus::Error;
     }
 

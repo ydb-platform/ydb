@@ -798,7 +798,8 @@
             "Children": [
                 {"Index": 0, "Name": "Args", "Type": "TExprList"},
                 {"Index": 1, "Name": "KernelName", "Type": "TCoAtom"},
-                {"Index": 2, "Name": "OutputType", "Type": "TExprBase"}
+                {"Index": 2, "Name": "OutputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "IndexOnly", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {

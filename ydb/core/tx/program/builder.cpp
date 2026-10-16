@@ -340,6 +340,9 @@ TConclusionStatus TProgramBuilder::ReadAssign(
                 if (processor.IsFail()) {
                     return processor;
                 }
+                if (assign.GetFunction().GetIndexOnly()) {
+                    processor.GetResult()->SetIndexOnly(true);
+                }
                 Builder.Add(processor.DetachResult());
             }
             break;

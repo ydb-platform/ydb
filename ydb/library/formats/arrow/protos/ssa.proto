@@ -109,6 +109,10 @@ message TProgram {
             optional uint32 KernelIdx = 4;
             optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
             optional string KernelName = 6;
+            // Hint exists only so a skip index can probe it. The data kernel is redundant
+            // because the original predicate stays in the same program. Old shards ignore
+            // the field and still execute the kernel.
+            optional bool IndexOnly = 7;
         }
 
         message TExternalFunction {

@@ -35,7 +35,9 @@ TString GetOlapColumnName(TStringBuf columnName, bool stripAliasPrefix) {
 TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
 TFilterOpsLevels NullFilterOpsLevels = TFilterOpsLevels(NullNode, NullNode);
 
-const std::unordered_set<std::string> SecondLevelFilters = {"string_contains", "starts_with", "ends_with"};
+const std::unordered_set<std::string> SecondLevelFilters = {
+    "string_contains", "starts_with", "ends_with",
+    "string_contains_index_only", "starts_with_index_only", "ends_with_index_only"};
 
 TMaybeNode<TExprBase> CombinePredicatesWithAnd(const TVector<TExprBase>& conjuncts, TExprContext& ctx, TPositionHandle pos, bool useOlapAnd,
                                                bool trueForEmpty) {
@@ -543,6 +545,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 
     // Opt-in Memchr-based UDF (OlapKernels._yql_AsciiContainsIgnoreCase) via a direct YQL kernel.
     // Default remains the String._yql_AsciiContainsIgnoreCase direct YQL kernel.
+    const bool indexOnly = pushdownOptions.IndexOnlyHints.contains(predicate.Raw());
     TString udfName;
     if (pushdownOptions.FastAsciiIgnoreCaseContains && predicate.CallableName() == "StringContainsIgnoreCase") {
         udfName = "OlapKernels._yql_AsciiContainsIgnoreCase";
@@ -551,14 +554,17 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
     }
 
     if (!udfName.empty()) {
-        return Build<TKqpOlapUdf>(ctx, pos)
+        auto udf = Build<TKqpOlapUdf>(ctx, pos)
             .Args()
                 .Add(parameter.first)
                 .Add(parameter.second)
             .Build()
             .KernelName(ctx.NewAtom(pos, udfName))
-            .OutputType(ExpandType(predicate.Pos(), *(predicate.Ptr()->GetTypeAnn()), ctx))
-        .Done();
+            .OutputType(ExpandType(predicate.Pos(), *(predicate.Ptr()->GetTypeAnn()), ctx));
+        if (indexOnly) {
+            udf.IndexOnly(ctx.NewAtom(pos, "index_only"));
+        }
+        return udf.Done();
     }
 
     std::string compareOperator = "";
@@ -587,6 +593,9 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
     }
 
     YQL_ENSURE(!compareOperator.empty(), "Unsupported comparison node: " << predicate.Ptr()->Content());
+    if (indexOnly) {
+        compareOperator += "_index_only";
+    }
 
     return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
         .Operator().Value(compareOperator, TNodeFlags::Default).Build()
@@ -1322,9 +1331,9 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 }
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx) {
-    const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown(),
+    TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown(),
         /*stripAliasPrefixFromColName=*/false, kqpCtx.Config->GetEnableOlapPushdownRegexp(),
-        kqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase());
+        kqpCtx.Config->GetEnableOlapFastAsciiIgnoreCase(), kqpCtx.Config->GetEnableOlapPushdownComplexLike());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -1361,6 +1370,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     const auto& optionaIf = maybeOptionalIf.Cast();
     auto predicate = optionaIf.Predicate();
+    predicate = TExprBase(RewriteComplexLikeForIndex(predicate.Ptr(), &lambdaArg, ctx, pushdownOptions));
     auto value = optionaIf.Value();
     // Use original value in final flatmap, because we need an original ast for the given value in `KqpPushOlapProjection`.
     auto originalValue = value;

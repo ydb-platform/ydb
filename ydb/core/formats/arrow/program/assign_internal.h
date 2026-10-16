@@ -12,6 +12,7 @@ private:
     using TBase = IResourceProcessor;
 
     YDB_ACCESSOR_DEF(std::shared_ptr<IKernelLogic>, KernelLogic);
+    YDB_ACCESSOR(bool, IndexOnly, false);
 
     std::shared_ptr<IStepFunction> Function;
 

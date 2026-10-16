@@ -6,6 +6,7 @@
 #include "graph_optimization.h"
 #include "header.h"
 #include "index.h"
+#include "kernel_logic.h"
 #include "original.h"
 #include "reserve.h"
 #include "stream_logic.h"
@@ -73,6 +74,37 @@ void TGraph::RemoveNode(const ui32 idenitifier) {
         i.second->RemoveEdgeFrom(it->second->GetIdentifier(), i.first.GetResourceId());
     }
     Nodes.erase(it);
+}
+
+void TGraph::ForgetProducer(TGraphNode* node) {
+    for (auto it = Producers.begin(); it != Producers.end();) {
+        if (it->second == node) {
+            auto stale = it++;
+            Producers.erase(stale);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TGraph::DropNodeIfUnused(TGraphNode* node) {
+    if (!node || !node->GetOutputEdges().empty()) {
+        return;
+    }
+    const auto type = node->GetProcessor()->GetProcessorType();
+    if (type == EProcessorType::Filter || type == EProcessorType::Projection || type == EProcessorType::DistinctMarker) {
+        return;
+    }
+    std::vector<TGraphNode*> inputs;
+    inputs.reserve(node->GetInputEdges().size());
+    for (auto&& edge : node->GetInputEdges()) {
+        inputs.push_back(edge.second);
+    }
+    ForgetProducer(node);
+    RemoveNode(node->GetIdentifier());
+    for (auto* input : inputs) {
+        DropNodeIfUnused(input);
+    }
 }
 
 TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory)
@@ -585,13 +617,32 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     }
     auto dataNode = GetProducerVerified(calc->GetInput().front().GetColumnId());
     auto constNode = GetProducerVerified(calc->GetInput().back().GetColumnId());
+    // Ignore-case kernels on Utf8 are fed ToString(column) and ToString(literal).
+    // The ngram index is on the original column, and the literal bytes are unchanged.
+    const auto unwrapToString = [this](TGraphNode* node) -> TGraphNode* {
+        if (node->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
+            return node;
+        }
+        const auto inner = node->GetProcessorAs<TCalculationProcessor>();
+        if (!inner->GetKernelLogic() || inner->GetKernelLogic()->GetClassName() != TToStringKernel::GetClassNameStatic() ||
+            inner->GetInput().size() != 1) {
+            return node;
+        }
+        return GetProducerVerified(inner->GetInput().front().GetColumnId());
+    };
     if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
-        return false;
+        constNode = unwrapToString(constNode);
+        if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+            return false;
+        }
     }
     if (!calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
     std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
+    if (!dataAddr) {
+        dataAddr = GetOriginalAddress(unwrapToString(dataNode));
+    }
     if (!dataAddr) {
         return false;
     }
@@ -623,6 +674,25 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
     AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
     AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
+
+    if (calc->GetIndexOnly()) {
+        // The original LIKE/ILIKE stays in the program, so the substring kernel is redundant.
+        // A bloom deny is all-false and AND short-circuit skips the rest of the portion.
+        // No usable index makes the checker allow-all.
+        dest->GetProcessor()->ExchangeInput(destResourceId, resourceIdIndexToAnd);
+        AddEdge(indexProcNode.get(), dest, resourceIdIndexToAnd);
+        std::vector<TGraphNode*> inputs;
+        inputs.reserve(condNode->GetInputEdges().size());
+        for (auto&& edge : condNode->GetInputEdges()) {
+            inputs.push_back(edge.second);
+        }
+        ForgetProducer(condNode);
+        RemoveNode(condNode->GetIdentifier());
+        for (auto* input : inputs) {
+            DropNodeIfUnused(input);
+        }
+        return true;
+    }
 
     const ui32 resourceIdEqToAnd = BuildNextResourceId();
     RegisterProducer(resourceIdEqToAnd, condNode);

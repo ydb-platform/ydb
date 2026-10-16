@@ -692,6 +692,9 @@ public:
                     resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
                 } else if (compSign == "neq") {
                     resSelectivity = 1 - this->ComputeEqualitySelectivity(member, value, false);
+                } else if (compSign.EndsWith("_index_only")) {
+                    // Index hints do not reject rows. Counting them would double the original match.
+                    return 1.0;
                 } else if (RegexpSigns.contains(compSign)) {
                     return 0.5;
                 }

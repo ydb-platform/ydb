@@ -1,5 +1,6 @@
 #include "bridge.h"
 
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr {
@@ -23,7 +24,7 @@ namespace NKikimr {
         std::optional<size_t> ResolvePileIndex(const NKikimrConfig::TBridgeConfig& bridgeConfig,
                 const std::optional<TString>& pileName) {
             if (!pileName) {
-                return bridgeConfig.PilesSize() == 1 ? std::make_optional<size_t>(0) : std::nullopt;
+                return GetImplicitPileIndex(bridgeConfig.PilesSize());
             }
             for (size_t i = 0; i < bridgeConfig.PilesSize(); ++i) {
                 if (bridgeConfig.GetPiles(i).GetName() == *pileName) {
@@ -31,6 +32,25 @@ namespace NKikimr {
                 }
             }
             return std::nullopt;
+        }
+
+        TBridgePileId GetInlinePileId() {
+            return TBridgePileId::FromPileIndex(0);
+        }
+
+        void MakeInlinePileGroupState(NKikimrBridge::TGroupState *state, TGroupId groupId, ui32 generation) {
+            state->Clear();
+            auto *pile = state->AddPile(); // index of the pile in the state is its pile id, see GetInlinePileId()
+            groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+            pile->SetGroupGeneration(generation);
+            pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+        }
+
+        void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group) {
+            const auto groupId = TGroupId::FromProto(group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+            MakeInlinePileGroupState(group->MutableBridgeGroupState(), groupId, group->GetGroupGeneration());
+            groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+            GetInlinePileId().CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
         }
 
         NKikimrBridge::TClusterState MakeImplicitSinglePileClusterState() {

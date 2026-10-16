@@ -7,6 +7,15 @@
 
 namespace NKikimr::NStorage {
 
+    // Bump generation of the bridge proxy group after the groups of its piles got their generations bumped; inline pile
+    // is its own pile, so it is not bumped twice. bumpedAsPile tells whether the group was bumped as the pile.
+    inline void BumpBridgeProxyGeneration(NKikimrBlobStorage::TGroupInfo *proxyGroup,
+            const std::function<bool(TGroupId)>& bumpedAsPile) {
+        if (!bumpedAsPile(TGroupId::FromProto(proxyGroup, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
+            proxyGroup->SetGroupGeneration(proxyGroup->GetGroupGeneration() + 1);
+        }
+    }
+
     class TDistributedConfigKeeper::TInvokeRequestHandlerActor : public TActor<TInvokeRequestHandlerActor> {
         friend class TDistributedConfigKeeper;
 

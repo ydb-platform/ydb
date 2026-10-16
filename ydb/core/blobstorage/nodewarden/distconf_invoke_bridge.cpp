@@ -165,9 +165,7 @@ namespace NKikimr::NStorage {
                     pile.SetGroupGeneration(refGroup->GetGroupGeneration());
                     changedGroupIds.insert(refGroupId);
                 }
-                if (!changedGroupIds.contains(groupId)) { // inline pile has been already bumped above
-                    group->SetGroupGeneration(group->GetGroupGeneration() + 1);
-                }
+                BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
             }
             for (auto& vdisk : *ss->MutableVDisks()) {
                 auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
@@ -265,10 +263,7 @@ namespace NKikimr::NStorage {
         state->CopyFrom(newState);
 
         // update referenced group generations
-        if (!referencedGroups.contains(TGroupId::FromProto(bridgeProxyGroup, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
-            // inline pile has been already bumped above
-            bridgeProxyGroup->SetGroupGeneration(bridgeProxyGroup->GetGroupGeneration() + 1);
-        }
+        BumpBridgeProxyGeneration(bridgeProxyGroup, [&](TGroupId id) { return referencedGroups.contains(id); });
         for (auto& pile : *state->MutablePile()) {
             const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
             Y_ABORT_UNLESS(it != groupMap.end());

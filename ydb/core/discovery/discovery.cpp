@@ -204,9 +204,10 @@ namespace NDiscovery {
             if (!CheckEndpointId(endpointId, entry)) {
                 continue;
             }
-            if (bridgeInfo && bridgeInfo->Piles.size() == 1 && entry.GetBridgePileName().empty()) {
+            if (const auto implicitPileId = NBridge::GetImplicitPileId(bridgeInfo.get());
+                    implicitPileId && entry.GetBridgePileName().empty()) {
                 // single-pile cluster (converted from non-bridged one) may contain nodes without pile name
-                entry.SetBridgePileName(bridgeInfo->Piles.front().Name);
+                entry.SetBridgePileName(bridgeInfo->GetPile(implicitPileId)->Name);
             }
             if (entry.GetSsl()) {
                 AddEndpoint(cachedMessageSsl, statesSsl, entry);

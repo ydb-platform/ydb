@@ -277,12 +277,11 @@ public:
         State->Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
             if (groupInfo.IsBridgeConversionCandidate()) {
                 TGroupInfo *group = State->Groups.FindForUpdate(groupId);
-                group->BridgePileId = TBridgePileId::FromPileIndex(0);
+                group->BridgePileId = NBridge::GetInlinePileId();
                 group->BridgeProxyGroupId = groupId;
-                auto *pile = group->BridgeGroupInfo.emplace().MutableBridgeGroupState()->AddPile();
-                groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
-                pile->SetGroupGeneration(group->Generation); // gets adjusted along with generation bump on commit
-                pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+                // pile generation gets adjusted along with generation bump on commit
+                NBridge::MakeInlinePileGroupState(group->BridgeGroupInfo.emplace().MutableBridgeGroupState(), groupId,
+                    group->Generation);
                 State->GroupContentChanged.insert(groupId);
             } else if (groupInfo.BlocksBridgeConversion()) {
                 blocked = true;

@@ -96,7 +96,7 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
         auto *msg = ev->Get();
-        if (const auto& info = msg->Info; info && !info->IsBridged() && info->GetBridgeProxyGroupId() == info->GroupID) {
+        if (const auto& info = msg->Info; info && info->IsInlinePileView()) {
             // this is the view of the inline pile and it comes from the bridge proxy put in front of us
             InlinePileBridgeProxyId = ev->Sender;
         }

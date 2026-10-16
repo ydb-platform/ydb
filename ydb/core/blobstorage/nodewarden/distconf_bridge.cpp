@@ -257,13 +257,7 @@ namespace NKikimr::NStorage {
             const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
             prevGenerations.emplace(groupId, group.GetGroupGeneration());
             group.SetGroupGeneration(group.GetGroupGeneration() + 1);
-
-            auto *pile = group.MutableBridgeGroupState()->AddPile();
-            groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
-            pile->SetGroupGeneration(group.GetGroupGeneration());
-            pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
-            groupId.CopyToProto(&group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
-            TBridgePileId::FromPileIndex(0).CopyToProto(&group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+            NBridge::MakeInlinePile(&group);
         }
         for (auto& vdisk : *ss->MutableVDisks()) {
             auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());

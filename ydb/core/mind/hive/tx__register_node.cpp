@@ -84,10 +84,10 @@ public:
             TBridgePileId bridgePileId;
             if (Record.HasBridgePileId()) {
                 bridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
-            } else if (Self->BridgeInfo && Self->BridgeInfo->Piles.size() == 1) {
+            } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get())) {
                 // node is not bridge-capable yet (it is being restarted while converting the cluster into bridged
                 // one), but the cluster has single pile, so the node implicitly belongs to it
-                bridgePileId = TBridgePileId::FromPileIndex(0);
+                bridgePileId = implicitPileId;
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");
             }

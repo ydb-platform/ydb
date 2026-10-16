@@ -850,13 +850,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
 
     // turn the only static group into the pile of its own, as it happens when converting cluster to bridged one
     void MakeInlinePile(NKikimrBlobStorage::TStorageConfig& config) {
-        auto *group = config.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
-        auto *pile = group->MutableBridgeGroupState()->AddPile();
-        pile->SetGroupId(group->GetGroupID());
-        pile->SetGroupGeneration(group->GetGroupGeneration());
-        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
-        group->SetBridgeProxyGroupId(group->GetGroupID());
-        TBridgePileId::FromPileIndex(0).CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+        NBridge::MakeInlinePile(config.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0));
         config.MutableClusterState()->CopyFrom(NBridge::MakeImplicitSinglePileClusterState());
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
     }

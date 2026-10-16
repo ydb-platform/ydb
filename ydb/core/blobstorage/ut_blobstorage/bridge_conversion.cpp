@@ -163,19 +163,6 @@ namespace {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
-    // turn the group into an inline pile one: it becomes bridged group with single pile being the group itself
-    void MakeInlinePile(NKikimrBlobStorage::TGroupInfo *group) {
-        const auto groupId = TGroupId::FromProto(group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
-        auto *state = group->MutableBridgeGroupState();
-        state->ClearPile();
-        auto *pile = state->AddPile();
-        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
-        pile->SetGroupGeneration(group->GetGroupGeneration());
-        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
-        groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
-        TBridgePileId::FromPileIndex(0).CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
-    }
-
     NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult InvokeDistconf(TEnvironmentSetup& env,
             const std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&)>& fill, ui32 nodeId = 1) {
         const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
@@ -302,7 +289,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
                         auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
                         for (auto& group : *record.MutableServiceSet()->MutableGroups()) {
                             if (group.GetGroupID() == groupId && group.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
-                                MakeInlinePile(&group);
+                                NBridge::MakeInlinePile(&group);
                             }
                         }
                     }
@@ -311,7 +298,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
                 case TEvBlobStorage::EvUpdateGroupInfo:
                     if (auto *msg = ev->Get<TEvBlobStorage::TEvUpdateGroupInfo>(); converted &&
                             msg->GroupId.GetRawId() == groupId && msg->GroupInfo) {
-                        MakeInlinePile(&*msg->GroupInfo);
+                        NBridge::MakeInlinePile(&*msg->GroupInfo);
                     }
                     break;
 
@@ -321,7 +308,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
                         auto& [generation, value] = *msg->GenerationValue;
                         NKikimrBlobStorage::TGroupInfo group;
                         UNIT_ASSERT(group.ParseFromString(value));
-                        MakeInlinePile(&group);
+                        NBridge::MakeInlinePile(&group);
                         UNIT_ASSERT(group.SerializeToString(&value));
                     }
                     break;
@@ -387,7 +374,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
                 return true;
             } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
                 const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
-                if (info && !info->IsBridged() && info->GetBridgeProxyGroupId() == TGroupId::FromValue(groupId)) {
+                if (info && info->IsInlinePileView() && info->GroupID == TGroupId::FromValue(groupId)) {
                     inlineViewConfigured = true;
                 }
             } else if (holdStopBatching && ev->Sender == dsProxyId && ev->GetTypeName().Contains("TEvStopBatchingPutRequests")) {

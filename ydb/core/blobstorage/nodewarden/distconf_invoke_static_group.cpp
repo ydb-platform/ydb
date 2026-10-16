@@ -29,9 +29,7 @@ namespace NKikimr::NStorage {
                         continue;
                     }
                     pile.SetGroupGeneration(*generation);
-                    if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) != groupId) {
-                        group.SetGroupGeneration(group.GetGroupGeneration() + 1);
-                    }
+                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
                 }
             }
         }

@@ -250,6 +250,7 @@ public:
 class TBlobStorageController::TTxConvertToBridge : public TTransactionBase<TBlobStorageController> {
     std::optional<TConfigState> State;
     bool Finished = false;
+    bool Failed = false;
 
 public:
     TTxConvertToBridge(TBlobStorageController *controller)
@@ -292,6 +293,7 @@ public:
             YDB_LOG_ERROR("Failed to commit bridge conversion",
                 {"marker", "BSCBR14"},
                 {"error", *error});
+            Failed = true;
         } else {
             Finished = !blocked;
         }
@@ -309,20 +311,20 @@ public:
             {"finished", Finished});
 
         if (!Finished) {
-            Self->OnBridgeConversionStepDone();
+            Self->OnBridgeConversionStepDone(Failed);
             return;
         }
 
         NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
         request.MutableNotifyBscConversionFinished();
         Self->InvokeOnRoot(std::move(request), [self = Self](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
-            if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-                // will be retried upon next storage config change
+            const bool failed = result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
+            if (failed) {
                 YDB_LOG_WARN("Failed to notify distconf about finished bridge conversion",
                     {"marker", "BSCBR16"},
                     {"result", result});
             }
-            self->OnBridgeConversionStepDone();
+            self->OnBridgeConversionStepDone(failed);
         });
     }
 };
@@ -339,12 +341,28 @@ void TBlobStorageController::CheckBridgeConversion() {
     }
 }
 
-void TBlobStorageController::OnBridgeConversionStepDone() {
+void TBlobStorageController::OnBridgeConversionStepDone(bool failed) {
     Y_ABORT_UNLESS(ConvertingToBridge);
     ConvertingToBridge = false;
     if (RecheckBridgeConversion) {
         CheckBridgeConversion();
+    } else if (failed) {
+        // nothing else may trigger the check on a quiet cluster, so repeat the whole step (not just the notification, as
+        // the conditions might have changed meanwhile) after a while
+        if (!BridgeConversionRetryScheduled) {
+            BridgeConversionRetryScheduled = true;
+            TActivationContext::Schedule(BridgeConversionRetryBackoff.Next(), new IEventHandle(
+                TEvPrivate::EvRetryBridgeConversion, 0, SelfId(), {}, nullptr, 0));
+        }
+    } else {
+        BridgeConversionRetryBackoff.Reset();
     }
+}
+
+void TBlobStorageController::HandleRetryBridgeConversion() {
+    Y_ABORT_UNLESS(BridgeConversionRetryScheduled);
+    BridgeConversionRetryScheduled = false;
+    CheckBridgeConversion();
 }
 
 void TBlobStorageController::CheckUnsyncedBridgePiles() {

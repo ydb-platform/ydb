@@ -1707,6 +1707,7 @@ private:
             EvUpdateHostRecords,
             EvUpdateShredState,
             EvCheckSyncerDisconnectedNodes,
+            EvRetryBridgeConversion,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2196,9 +2197,12 @@ private:
 
     bool ConvertingToBridge = false;
     bool RecheckBridgeConversion = false;
+    bool BridgeConversionRetryScheduled = false;
+    TBackoffTimer BridgeConversionRetryBackoff{100, 30000};
 
     void CheckBridgeConversion();
-    void OnBridgeConversionStepDone();
+    void OnBridgeConversionStepDone(bool failed);
+    void HandleRetryBridgeConversion();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);

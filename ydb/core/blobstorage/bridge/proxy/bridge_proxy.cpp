@@ -632,16 +632,29 @@ namespace NKikimr {
                 return ProcessFullQuorumResponse(self, std::move(ev));
             }
 
+            template<typename TRequestEvent, typename TEvent>
+            std::unique_ptr<IEventBase> ProcessTrustedPileResponse(TThis& self, std::unique_ptr<TEvent> ev,
+                    const TBridgeInfo::TPile& pile) {
+                if (ev->Status != NKikimrProto::OK || DataIsTrustedInPile(pile)) {
+                    // synced pile holds the whole content of the group, so its answer is the answer
+                    return ev;
+                } else if (ResponsesPending) {
+                    return nullptr; // wait for the trusted pile
+                } else {
+                    Y_DEBUG_ABORT("missing response from trusted pile");
+                    return static_cast<TRequestEvent&>(*OriginalRequest).MakeErrorResponse(
+                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
+                }
+            }
+
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
-                (void)self, (void)ev;
-                return nullptr;
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
+                return ProcessTrustedPileResponse<TEvBlobStorage::TEvAssimilate>(self, std::move(ev), pile);
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> ev,
-                    const TBridgeInfo::TPile& /*pile*/, TRequestPayload& /*payload*/) {
-                (void)self, (void)ev;
-                return nullptr;
+                    const TBridgeInfo::TPile& pile, TRequestPayload& /*payload*/) {
+                return ProcessTrustedPileResponse<TEvBlobStorage::TEvCheckIntegrity>(self, std::move(ev), pile);
             }
         };
         struct TRequestInFlight {
@@ -684,8 +697,8 @@ namespace NKikimr {
                     switch (ev->GetTypeRewrite()) {
 #define MAKE_ERROR(TYPE) \
                         case TYPE::EventType: \
-                            Send(ev->Sender, static_cast<TYPE*>(ev->GetBase())->MakeErrorResponse(NKikimrProto::ERROR, \
-                                "bridge request timed out", GroupId), 0, ev->Cookie); \
+                            ReplyWithError(*static_cast<TYPE*>(ev->GetBase()), ev->Sender, ev->Cookie, \
+                                "bridge request timed out"); \
                             break;
 
                         DSPROXY_ENUM_EVENTS(MAKE_ERROR)
@@ -717,7 +730,20 @@ namespace NKikimr {
         }
 
         template<typename TEvent>
+        void ReplyWithError(TEvent& msg, TActorId sender, ui64 cookie, const TString& errorReason) {
+            auto response = msg.MakeErrorResponse(NKikimrProto::ERROR, errorReason, GroupId);
+            SetExecutionRelay(*response, std::exchange(msg.ExecutionRelay, {}));
+            Send(sender, response.release(), 0, cookie);
+        }
+
+        template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev) {
+            if (InnerProxyId && ev->Get()->ForceGroupGeneration) {
+                // request to the physical group of the inline pile (e.g. phantom check from replication), it has to reach
+                // DS proxy as is, with its own generation fence, sender and cookie
+                TActivationContext::Send(ev->Forward(InnerProxyId));
+                return;
+            }
             if (!BridgeInfo) {
                 // this process runs without BridgeConfig, but the group is bridged one; this happens when the node was
                 // not prepared before the cluster got converted to bridged one, and it can't serve bridged groups until
@@ -725,8 +751,8 @@ namespace NKikimr {
                 STLOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, BS_PROXY_BRIDGE, BPB04,
                     "bridged group request on node running without BridgeConfig", (GroupId, GroupId));
                 NotCapableReported = true;
-                Send(ev->Sender, ev->Get()->MakeErrorResponse(NKikimrProto::ERROR,
-                    "node runs without BridgeConfig and can't serve bridged group", GroupId), 0, ev->Cookie);
+                ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
+                    "node runs without BridgeConfig and can't serve bridged group");
                 return;
             }
 
@@ -960,6 +986,10 @@ namespace NKikimr {
                             request->Span.EndError(common->ErrorReason);
                         }
 
+                        // subrequests are clones without the relay, so return the one of the original request
+                        auto *originalCommon = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(request->OriginalRequest.get());
+                        Y_ABORT_UNLESS(originalCommon);
+                        SetExecutionRelay(*response, std::exchange(originalCommon->ExecutionRelay, {}));
                         Send(request->Sender, response.release(), 0, request->Cookie);
                         request->Finished = true;
                     }

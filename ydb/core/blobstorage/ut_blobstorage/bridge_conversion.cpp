@@ -196,6 +196,25 @@ namespace {
         return res.GetQueryConfig().GetConfig();
     }
 
+    // create cluster with single dynamic group and convert it into single-pile bridged one; returns the group id
+    ui32 ConvertClusterWithOneGroup(TEnvironmentSetup& env, TDataChecker& checker) {
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+        return groupId;
+    }
+
     std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> GetPoolGroups(
             const NKikimrBlobStorage::TBaseConfig& baseConfig, ui64 storagePoolId) {
         std::vector<const NKikimrBlobStorage::TBaseConfig::TGroup*> res;
@@ -552,6 +571,161 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             env.Runtime->GetClock() + TDuration::Minutes(1));
         UNIT_ASSERT_C(res, "tablet constrained to untouched node did not start");
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+    }
+
+    // requests to the service of the converted group which the bridge proxy has to handle in a special way
+    Y_UNIT_TEST(RequestsToInlinePile) {
+        TEnvironmentSetup env(MakeSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertClusterWithOneGroup(env, checker);
+
+        ui32 generation = 0;
+        const auto baseConfig = env.FetchBaseConfig();
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetGroupId() == groupId) {
+                generation = group.GetGroupGeneration();
+            }
+        }
+        UNIT_ASSERT(generation > 1);
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        auto send = [&](IEventBase *ev) {
+            env.Runtime->WrapInActorContext(edge, [&] { SendToBSProxy(edge, groupId, ev); });
+        };
+
+        // BlobDepot agent attaches execution relay to requests to its backing groups and expects it back
+        const TString data = "data with execution relay";
+        const TLogoBlobID id(100501, 1, 1, 0, data.size(), 0);
+        {
+            auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, data, TInstant::Max());
+            ev->ExecutionRelay = relay;
+            send(ev.release());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+            UNIT_ASSERT(res->Get()->ExecutionRelay == relay);
+        }
+        {
+            auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+            auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            ev->ExecutionRelay = relay;
+            send(ev.release());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), data);
+            UNIT_ASSERT(res->Get()->ExecutionRelay == relay);
+        }
+
+        // BlobDepot read path checks integrity of blobs in its backing groups
+        {
+            auto relay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
+            auto ev = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(id, TInstant::Max(), NKikimrBlobStorage::FastRead);
+            ev->ExecutionRelay = relay;
+            send(ev.release());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCheckIntegrityResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+            UNIT_ASSERT_EQUAL_C(res->Get()->PlacementStatus, TEvBlobStorage::TEvCheckIntegrityResult::PS_OK,
+                res->Get()->ToString());
+            UNIT_ASSERT(res->Get()->ExecutionRelay == relay);
+        }
+
+        // replication sends phantom checks to the physical group with its own generation
+        {
+            auto ev = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::AsyncRead);
+            ev->PhantomCheck = true;
+            ev->ForceGroupGeneration = generation;
+            send(ev.release());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        }
+
+        // and the generation of such request is a fence which must not be replaced
+        {
+            const TString data = "data with stale generation";
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TLogoBlobID(100501, 1, 2, 0, data.size(), 0), data,
+                TInstant::Max());
+            ev->ForceGroupGeneration = generation - 1;
+            send(ev.release());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::RACE, res->Get()->ToString());
+        }
+
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
+    // converted groups still have their VDisks laid out by the erasure of the pool, so it can't be changed
+    Y_UNIT_TEST(PoolErasureOfConvertedGroups) {
+        TEnvironmentSetup env(MakeSettings());
+        TDataChecker checker(env);
+        ConvertClusterWithOneGroup(env, checker);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *read = request.AddCommand()->MutableReadStoragePool();
+        read->SetBoxId(1);
+        read->AddStoragePoolId(1);
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        NKikimrBlobStorage::TDefineStoragePool pool = response.GetStatus(0).GetStoragePool(0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetErasureSpecies(), "block-4-2");
+        pool.SetErasureSpecies("none");
+
+        request.Clear();
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(!response.GetSuccess(), "erasure change of pool with converted groups must be rejected");
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "different erasure species");
+    }
+
+    // BSC has to retry finishing conversion when distconf fails to clear the flag, as nothing else may trigger it on a
+    // quiet cluster
+    Y_UNIT_TEST(ConversionFinishRetried) {
+        TEnvironmentSetup env(MakeSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
+
+        // intercept the first notification from BSC, so that it does not reach distconf
+        std::unique_ptr<IEventHandle> held;
+        ui32 numNotifications = 0;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType &&
+                    ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record.HasNotifyBscConversionFinished() &&
+                    !numNotifications++) {
+                held = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+
+        const auto res = ConvertToBridge(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        const TInstant deadline = env.Runtime->GetClock() + TDuration::Minutes(1);
+        env.Runtime->Sim([&] { return !held && env.Runtime->GetClock() <= deadline; });
+        UNIT_ASSERT(held);
+        UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+
+        // answer it with an error, which is not retried by the invocation itself (like loss of quorum during propose)
+        auto result = std::make_unique<NStorage::TEvNodeConfigInvokeOnRootResult>();
+        result->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+        result->Record.SetErrorReason("injected failure");
+        env.Runtime->Send(new IEventHandle(held->Sender, held->Recipient, result.release(), 0, held->Cookie),
+            held->Sender.NodeId());
+
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_GE(numNotifications, 2);
+        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
+
+        checker.Write(groupId);
+        checker.CheckAll();
     }
 
     Y_UNIT_TEST(ConvertStaticGroup) {

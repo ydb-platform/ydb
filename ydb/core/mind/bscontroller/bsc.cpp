@@ -1060,6 +1060,7 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
+        cFunc(TEvPrivate::EvRetryBridgeConversion, HandleRetryBridgeConversion);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);

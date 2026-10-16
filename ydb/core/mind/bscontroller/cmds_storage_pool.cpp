@@ -158,7 +158,9 @@ namespace NKikimr::NBsController {
         for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
-            if (!group->BridgeGroupInfo && group->ErasureSpecies != storagePool.ErasureSpecies) {
+            // inline pile keeps its own VDisks, so it must match the pool geometry like any physical group
+            const bool physical = !group->BridgeGroupInfo || group->IsInlinePile();
+            if (physical && group->ErasureSpecies != storagePool.ErasureSpecies) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
         }

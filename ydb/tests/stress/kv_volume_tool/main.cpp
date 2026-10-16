@@ -160,12 +160,6 @@ TString FormatHostPort(const TString& host, ui32 port) {
 
 constexpr int TryNextNode = -1;
 
-enum class EOpResult {
-    Ok,
-    Failed,
-    Unavailable,
-};
-
 bool IsNodeUnavailable(const grpc::Status& status) {
     const grpc::StatusCode code = status.error_code();
     return code == grpc::StatusCode::UNAVAILABLE || code == grpc::StatusCode::DEADLINE_EXCEEDED || code == grpc::StatusCode::UNIMPLEMENTED;
@@ -200,6 +194,8 @@ struct TNodeSession {
     size_t Index = 0;
     ui32 ChannelId = 0;
     bool Ready = false;
+    const std::atomic<bool>* Stop = nullptr;
+    std::chrono::steady_clock::time_point Deadline = std::chrono::steady_clock::time_point::max();
     std::shared_ptr<grpc::Channel> Channel;
     std::unique_ptr<TKvStub> KvStub;
 
@@ -218,16 +214,19 @@ struct TNodeSession {
         return *Nodes;
     }
 
-    TKvStub& Stub() {
-        return *KvStub;
-    }
-
-    TNodeSession Spawn(size_t index, ui32 channelId) const {
+    TNodeSession Spawn(
+        size_t index,
+        ui32 channelId,
+        const std::atomic<bool>* stop = nullptr,
+        std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max()) const
+    {
         TNodeSession session;
         session.Nodes = Nodes;
         session.Index = Nodes->empty() ? 0 : index % Nodes->size();
         session.ChannelId = channelId;
         session.Ready = Ready;
+        session.Stop = stop;
+        session.Deadline = deadline;
         if (session.Ready) {
             session.Reopen();
         }
@@ -240,21 +239,14 @@ struct TNodeSession {
             Cerr << "Discovery returned no endpoints" << Endl;
             return 1;
         }
-        for (size_t attempt = 0; attempt < Nodes->size(); ++attempt) {
-            const TNodeEndpoint& node = (*Nodes)[Index];
+        const int code = Retry([&] {
             if (VerboseMode) {
-                Cerr << "Trying endpoint: " << node.HostPort << Endl;
+                Cerr << "Trying endpoint: " << (*Nodes)[Index].HostPort << Endl;
             }
-            const int code = fn(*KvStub);
-            if (code != TryNextNode) {
-                return code;
-            }
-            if (attempt + 1 == Nodes->size()) {
-                break;
-            }
-            NoteUnavailable(node, true);
-            Index = (Index + 1) % Nodes->size();
-            Reopen();
+            return fn(*KvStub);
+        }, true);
+        if (code != TryNextNode) {
+            return code;
         }
         Cerr << "Failed to connect to any discovered endpoint:" << Endl;
         for (const auto& node : *Nodes) {
@@ -265,47 +257,52 @@ struct TNodeSession {
 
     template <typename TFn>
     bool Call(TFn&& fn, TString* errorOut) {
-        return Call(std::forward<TFn>(fn), errorOut, [] { return false; });
-    }
-
-    template <typename TFn, typename TStop>
-    bool Call(TFn&& fn, TString* errorOut, TStop&& shouldStop) {
         if (!Ready || Nodes->empty()) {
             if (errorOut) {
                 *errorOut = "discovery returned no endpoints";
             }
             return false;
         }
-        for (size_t attempt = 0; attempt < Nodes->size(); ++attempt) {
-            if (attempt > 0 && shouldStop()) {
-                break;
-            }
+        const int code = Retry([&] {
             if (errorOut) {
                 errorOut->clear();
             }
-            const EOpResult result = fn(*KvStub);
-            if (result != EOpResult::Unavailable) {
-                return result == EOpResult::Ok;
-            }
-            if (attempt + 1 == Nodes->size() || shouldStop()) {
-                break;
-            }
-            NoteUnavailable((*Nodes)[Index], false);
-            Index = (Index + 1) % Nodes->size();
-            Reopen();
-        }
-        if (errorOut && errorOut->empty()) {
+            return fn(*KvStub);
+        }, false);
+        if (code == TryNextNode && errorOut && errorOut->empty()) {
             *errorOut = "all discovered endpoints are unavailable";
         }
-        return false;
+        return code == 0;
     }
 
 private:
-    static void NoteUnavailable(const TNodeEndpoint& node, bool logAlways) {
-        if (!logAlways && !VerboseMode) {
-            return;
+    bool Stopped() const {
+        if (Stop && Stop->load(std::memory_order_relaxed)) {
+            return true;
         }
-        Cerr << "Endpoint " << node.HostPort << " is unavailable, trying the next one" << Endl;
+        return std::chrono::steady_clock::now() >= Deadline;
+    }
+
+    template <typename TFn>
+    int Retry(TFn&& fn, bool logAlways) {
+        for (size_t attempt = 0; attempt < Nodes->size(); ++attempt) {
+            if (attempt > 0 && Stopped()) {
+                break;
+            }
+            const int code = fn();
+            if (code != TryNextNode) {
+                return code;
+            }
+            if (attempt + 1 == Nodes->size() || Stopped()) {
+                break;
+            }
+            if (logAlways || VerboseMode) {
+                Cerr << "Endpoint " << (*Nodes)[Index].HostPort << " is unavailable, trying the next one" << Endl;
+            }
+            Index = (Index + 1) % Nodes->size();
+            Reopen();
+        }
+        return TryNextNode;
     }
 
     void Reopen() {
@@ -1121,26 +1118,26 @@ TString FormatOperationIssues(const Ydb::Operations::Operation& operation) {
     return issues;
 }
 
-EOpResult FromGrpcStatus(const grpc::Status& status, TString* errorOut) {
+int FromGrpcStatus(const grpc::Status& status, TString* errorOut) {
     if (errorOut) {
         *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
             << " (code=" << static_cast<int>(status.error_code()) << ")";
     }
-    return IsNodeUnavailable(status) ? EOpResult::Unavailable : EOpResult::Failed;
+    return IsNodeUnavailable(status) ? TryNextNode : 1;
 }
 
-EOpResult FromOperationStatus(const Ydb::Operations::Operation& operation, TString* errorOut) {
+int FromOperationStatus(const Ydb::Operations::Operation& operation, TString* errorOut) {
     if (operation.status() == Ydb::StatusIds::SUCCESS) {
-        return EOpResult::Ok;
+        return 0;
     }
     if (errorOut) {
         *errorOut = TStringBuilder() << "status=" << StatusToString(operation.status())
             << " issues=[" << FormatOperationIssues(operation) << "]";
     }
-    return operation.status() == Ydb::StatusIds::UNAVAILABLE ? EOpResult::Unavailable : EOpResult::Failed;
+    return operation.status() == Ydb::StatusIds::UNAVAILABLE ? TryNextNode : 1;
 }
 
-EOpResult DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
+int DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -1161,13 +1158,10 @@ EOpResult DoWriteValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TSt
     if (!status.ok()) {
         return FromGrpcStatus(status, errorOut);
     }
-    if (const EOpResult result = FromOperationStatus(response.operation(), errorOut); result != EOpResult::Ok) {
-        return result;
-    }
-    return EOpResult::Ok;
+    return FromOperationStatus(response.operation(), errorOut);
 }
 
-EOpResult DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TVector<TString>& keys, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
+int DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TVector<TString>& keys, const TString& value, ui32 storageChannel, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ExecuteTransactionRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -1190,13 +1184,10 @@ EOpResult DoWriteBatch(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TSt
     if (!status.ok()) {
         return FromGrpcStatus(status, errorOut);
     }
-    if (const EOpResult result = FromOperationStatus(response.operation(), errorOut); result != EOpResult::Ok) {
-        return result;
-    }
-    return EOpResult::Ok;
+    return FromOperationStatus(response.operation(), errorOut);
 }
 
-EOpResult DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, TString* errorOut = nullptr, const TString& traceparent = {}) {
+int DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TString& database, const TString& path, ui64 partitionId, const TString& key, TString* errorOut = nullptr, const TString& traceparent = {}) {
     Ydb::KeyValue::ReadRequest request;
     request.set_path(path);
     request.set_partition_id(partitionId);
@@ -1212,10 +1203,7 @@ EOpResult DoReadValue(Ydb::KeyValue::V1::KeyValueService::Stub& stub, const TStr
     if (!status.ok()) {
         return FromGrpcStatus(status, errorOut);
     }
-    if (const EOpResult result = FromOperationStatus(response.operation(), errorOut); result != EOpResult::Ok) {
-        return result;
-    }
-    return EOpResult::Ok;
+    return FromOperationStatus(response.operation(), errorOut);
 }
 
 ui64 Percentile(TVector<ui64>& values, double q) {
@@ -1413,7 +1401,7 @@ std::unique_ptr<TLoadContext> BuildLoadContext(
 
 std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
     return std::thread([&ctx, t] {
-        TNodeSession session = ctx.Session.Spawn(t, t + 1);
+        TNodeSession session = ctx.Session.Spawn(t, t + 1, &ctx.Stop, ctx.Deadline);
         std::mt19937 rng(static_cast<unsigned>(ctx.RunId + t));
         std::uniform_int_distribution<int> percent(1, 100);
 
@@ -1439,7 +1427,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
                     return (ctx.Options.BatchSize == 1)
                         ? DoWriteValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0], ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent)
                         : DoWriteBatch(stub, ctx.Options.Database, ctx.Path, partitionId, keys, ctx.Value, ctx.Options.StorageChannel, &error, trace.Traceparent);
-                }, &error, [&] { return !ctx.StillRunning(); });
+                }, &error);
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1460,7 +1448,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
                 TScopedTimer readTimer([&] {
                     return session.Call([&](auto& stub) {
                         return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, keys[0]);
-                    }, nullptr, [&] { return !ctx.StillRunning(); });
+                    }, nullptr);
                 });
                 ctx.Record(readTimer.GetResult(), readTimer.GetDuration().count(), false);
             }
@@ -1470,7 +1458,7 @@ std::thread BuildWriteWorker(TLoadContext& ctx, ui32 t) {
 
 std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
     return std::thread([&ctx, t] {
-        TNodeSession session = ctx.Session.Spawn(ctx.Options.Threads + t, ctx.Options.Threads + t + 1);
+        TNodeSession session = ctx.Session.Spawn(ctx.Options.Threads + t, ctx.Options.Threads + t + 1, &ctx.Stop, ctx.Deadline);
         std::mt19937 rng(static_cast<unsigned>(ctx.RunId + 100000 + t));
         std::uniform_int_distribution<ui32> threadDist(0, ctx.Options.Threads - 1);
 
@@ -1493,7 +1481,7 @@ std::thread BuildReadWorker(TLoadContext& ctx, ui32 t) {
             TScopedTimer timer([&] {
                 return session.Call([&](auto& stub) {
                     return DoReadValue(stub, ctx.Options.Database, ctx.Path, partitionId, key, &error, trace.Traceparent);
-                }, &error, [&] { return !ctx.StillRunning(); });
+                }, &error);
             });
             const bool ok = timer.GetResult();
             const ui64 latencyMs = timer.GetDuration().count();
@@ -1810,7 +1798,7 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
 
     for (const auto& config : workerConfigs) {
         workers.emplace_back([&, config] {
-            TNodeSession worker = session.Spawn(config.ThreadIndex, config.ThreadIndex + 1);
+            TNodeSession worker = session.Spawn(config.ThreadIndex, config.ThreadIndex + 1, &stop, deadline);
             std::mt19937 rng(static_cast<unsigned>(runId + config.ThreadIndex));
             std::uniform_int_distribution<int> percent(1, 100);
 
@@ -1823,9 +1811,7 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
                 TScopedTimer writeTimer([&] {
                     return worker.Call([&](auto& stub) {
                         return DoWriteValue(stub, options.Database, path, partitionId, key, value, config.StorageChannel, config.IsS3 ? &error : nullptr);
-                    }, config.IsS3 ? &error : nullptr, [&] {
-                        return stop.load(std::memory_order_relaxed) || std::chrono::steady_clock::now() >= deadline;
-                    });
+                    }, config.IsS3 ? &error : nullptr);
                 });
                 const bool writeOk = writeTimer.GetResult();
                 const ui64 latencyMs = writeTimer.GetDuration().count();
@@ -1839,9 +1825,7 @@ int LoadVolumeChannels(const TOptions& options, TNodeSession& session, const TSt
                     TScopedTimer readTimer([&] {
                         return worker.Call([&](auto& stub) {
                             return DoReadValue(stub, options.Database, path, partitionId, key, config.IsS3 ? &error : nullptr);
-                        }, config.IsS3 ? &error : nullptr, [&] {
-                            return stop.load(std::memory_order_relaxed) || std::chrono::steady_clock::now() >= deadline;
-                        });
+                        }, config.IsS3 ? &error : nullptr);
                     });
                     const bool readOk = readTimer.GetResult();
                     const ui64 readLatencyMs = readTimer.GetDuration().count();

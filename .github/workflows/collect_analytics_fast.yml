@@ -22,28 +22,49 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Probe GitHub speed
+      if: vars.GH_PROXY_URL != ''
+      env:
+        GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
       shell: bash
       run: |
-        set +e
-        url='https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz'
-        direct=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "$url" 2>/dev/null || true)
-        proxy=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "https://gh-proxy.com/$url" 2>/dev/null || true)
         set -euo pipefail
-        read -r speed_bytes speed speed_elapsed <<< "${direct:-0 0 0}"
-        read -r proxy_bytes proxy_speed proxy_elapsed <<< "${proxy:-0 0 0}"
+        proxy_url="${GH_PROXY_URL:-}"
+        proxy_url="${proxy_url%/}"
+        if [ -z "$proxy_url" ]; then
+          echo "GH_PROXY_URL is empty, checkout stays direct"
+          exit 0
+        fi
+
+        archive=https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+
+        # Bytes, bytes/sec, seconds. The archive is about 1 GB, so 30s does not finish it.
+        measure() {
+          curl -L --http2 --max-time 30 -o /dev/null -s \
+            -w '%{size_download} %{speed_download} %{time_total}' \
+            "$1" 2>/dev/null || true
+        }
+
+        megabytes() {
+          awk -v bytes="${1:-0}" -v digits="$2" 'BEGIN { printf "%.*f", digits, (bytes + 0) / 1000000 }'
+        }
+
+        read -r direct_bytes direct_bps direct_seconds <<< "$(measure "$archive")" || true
+        read -r proxy_bytes proxy_bps proxy_seconds <<< "$(measure "${proxy_url}/${archive}")" || true
+
+        faster=$(awk -v direct="${direct_bps:-0}" -v proxy="${proxy_bps:-0}" 'BEGIN {
+          print (proxy + 0 > direct + 0) ? "proxy" : "github"
+        }')
         use_proxy=false
-        if awk -v d="${speed:-0}" -v p="${proxy_speed:-0}" 'BEGIN { exit !(p+0 > d+0) }'; then
+        if [ "$faster" = proxy ]; then
           use_proxy=true
         fi
-        mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        got=$(awk -v b="${speed_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
-        proxy_got=$(awk -v b="${proxy_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
-        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; use_proxy=${use_proxy}"
+
+        echo "GitHub $(megabytes "${direct_bytes:-0}" 1) MB in ${direct_seconds:-0}s, $(megabytes "${direct_bps:-0}" 2) MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}" 1) MB in ${proxy_seconds:-0}s, $(megabytes "${proxy_bps:-0}" 2) MB/s; use_proxy=${use_proxy}"
+
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"
-            echo "GIT_CONFIG_KEY_0=url.https://gh-proxy.com/https://github.com/.insteadOf"
+            echo "GIT_CONFIG_KEY_0=url.${proxy_url}/https://github.com/.insteadOf"
             echo "GIT_CONFIG_VALUE_0=https://github.com/"
           } >> "$GITHUB_ENV"
         fi
@@ -54,6 +75,7 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
     - name: Drop GitHub proxy
+      if: vars.GH_PROXY_URL != ''
       shell: bash
       run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
     - name: Setup ydb access
@@ -168,28 +190,49 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Probe GitHub speed
+      if: vars.GH_PROXY_URL != ''
+      env:
+        GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
       shell: bash
       run: |
-        set +e
-        url='https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz'
-        direct=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "$url" 2>/dev/null || true)
-        proxy=$(curl -L --http2 --max-time 20 -o /dev/null -s -w '%{size_download} %{speed_download} %{time_total}' "https://gh-proxy.com/$url" 2>/dev/null || true)
         set -euo pipefail
-        read -r speed_bytes speed speed_elapsed <<< "${direct:-0 0 0}"
-        read -r proxy_bytes proxy_speed proxy_elapsed <<< "${proxy:-0 0 0}"
+        proxy_url="${GH_PROXY_URL:-}"
+        proxy_url="${proxy_url%/}"
+        if [ -z "$proxy_url" ]; then
+          echo "GH_PROXY_URL is empty, checkout stays direct"
+          exit 0
+        fi
+
+        archive=https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
+
+        # Bytes, bytes/sec, seconds. The archive is about 1 GB, so 30s does not finish it.
+        measure() {
+          curl -L --http2 --max-time 30 -o /dev/null -s \
+            -w '%{size_download} %{speed_download} %{time_total}' \
+            "$1" 2>/dev/null || true
+        }
+
+        megabytes() {
+          awk -v bytes="${1:-0}" -v digits="$2" 'BEGIN { printf "%.*f", digits, (bytes + 0) / 1000000 }'
+        }
+
+        read -r direct_bytes direct_bps direct_seconds <<< "$(measure "$archive")" || true
+        read -r proxy_bytes proxy_bps proxy_seconds <<< "$(measure "${proxy_url}/${archive}")" || true
+
+        faster=$(awk -v direct="${direct_bps:-0}" -v proxy="${proxy_bps:-0}" 'BEGIN {
+          print (proxy + 0 > direct + 0) ? "proxy" : "github"
+        }')
         use_proxy=false
-        if awk -v d="${speed:-0}" -v p="${proxy_speed:-0}" 'BEGIN { exit !(p+0 > d+0) }'; then
+        if [ "$faster" = proxy ]; then
           use_proxy=true
         fi
-        mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
-        got=$(awk -v b="${speed_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
-        proxy_got=$(awk -v b="${proxy_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
-        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; use_proxy=${use_proxy}"
+
+        echo "GitHub $(megabytes "${direct_bytes:-0}" 1) MB in ${direct_seconds:-0}s, $(megabytes "${direct_bps:-0}" 2) MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}" 1) MB in ${proxy_seconds:-0}s, $(megabytes "${proxy_bps:-0}" 2) MB/s; use_proxy=${use_proxy}"
+
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"
-            echo "GIT_CONFIG_KEY_0=url.https://gh-proxy.com/https://github.com/.insteadOf"
+            echo "GIT_CONFIG_KEY_0=url.${proxy_url}/https://github.com/.insteadOf"
             echo "GIT_CONFIG_VALUE_0=https://github.com/"
           } >> "$GITHUB_ENV"
         fi
@@ -200,6 +243,7 @@ jobs:
       with:
         ref: ${{ inputs.commit_sha }}
     - name: Drop GitHub proxy
+      if: vars.GH_PROXY_URL != ''
       shell: bash
       run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
     - name: Setup ydb access

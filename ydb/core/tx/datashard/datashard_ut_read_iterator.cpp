@@ -395,7 +395,8 @@ struct TTestHelper {
         }
     }
 
-    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false) {
+    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns, bool hnsw = false,
+            Ydb::Table::VectorIndexSettings::Metric metric = Ydb::Table::VectorIndexSettings::DISTANCE_COSINE) {
         auto &runtime = *Server->GetRuntime();
         auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (hnsw && ev->GetTypeRewrite() == TEvDataShard::TEvProposeTransaction::EventType) {
@@ -410,7 +411,7 @@ struct TTestHelper {
                         table->SetVectorIndexEmbeddingColumnId(columns.size());
                         auto* settings = table->MutableVectorIndexKmeansTreeDescription()
                             ->MutableSettings()->mutable_settings();
-                        settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+                        settings->set_metric(metric);
                         settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
                         settings->set_vector_dimension(2);
                         settings->set_min_rows(1);
@@ -6396,12 +6397,12 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                 (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
         )");
         auto& runtime = *helper.Server->GetRuntime();
-        const auto snapshot = CreateVolatileSnapshot(helper.Server, {"/Root/hnsw-flag"}, TDuration::Hours(1));
         runtime.SimulateSleep(TDuration::Seconds(2));
         ui64 readId = 0;
         auto read = [&] {
             auto request = helper.GetBaseReadRequest("hnsw-flag", ++readId,
-                NKikimrDataEvents::FORMAT_CELLVEC, Followers ? snapshot : TRowVersion{});
+                NKikimrDataEvents::FORMAT_CELLVEC, TRowVersion::Max());
+            request->Record.ClearSnapshot();
             AddRangeQuery<ui32>(*request, {}, true, {}, true);
             auto* top = request->Record.MutableVectorTopK();
             top->SetColumn(2);
@@ -6432,7 +6433,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             TVector<TAutoPtr<IEventHandle>> pending;
             constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
             auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-                if (ev->GetTypeRewrite() == buildResult) {
+                const bool graphReady = Followers
+                    ? ev->GetTypeRewrite() == TEvHnswCache::TEvAcquired::EventType
+                        && bool(ev->Get<TEvHnswCache::TEvAcquired>()->Graph)
+                    : ev->GetTypeRewrite() == buildResult;
+                if (graphReady) {
                     pending.push_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -6442,9 +6447,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             setEnabled(true);
             for (ui32 attempt = 0; attempt < 30 && pending.empty(); ++attempt) {
                 read();
-                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+                runtime.SimulateSleep(Followers ? TDuration::Seconds(1) : TDuration::MilliSeconds(200));
             }
-            UNIT_ASSERT_C(!pending.empty(), "HNSW build did not produce a result");
+            UNIT_ASSERT_C(!pending.empty(), "HNSW graph acquisition or build did not produce a result");
             setEnabled(false);
             UNIT_ASSERT_VALUES_EQUAL(read(), 2u);
             runtime.SetObserverFunc(observer);
@@ -6462,7 +6467,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                     accelerated = true;
                     break;
                 }
-                runtime.SimulateSleep(TDuration::MilliSeconds(200));
+                runtime.SimulateSleep(Followers ? TDuration::Seconds(1) : TDuration::MilliSeconds(200));
             }
             UNIT_ASSERT_C(accelerated, "enabling HNSW did not enable the cache");
             setEnabled(false);
@@ -6470,7 +6475,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(HnswFollowerBuildSurvivesReadEdgeAdvance, ChangeVectors) {
+    Y_UNIT_TEST_TWIN(HnswFollowerDownloadSurvivesReadEdgeAdvance, ChangeVectors) {
         TPortManager pm;
         TServerSettings settings(pm.GetPort(2134));
         settings.SetEnableHnswIndex(true).SetDomainName("Root").SetUseRealThreads(false).SetNeedStatsCollectors(true);
@@ -6478,6 +6483,22 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         settings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(settings, 1, true);
+        auto& runtime = *helper.Server->GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> pending;
+        TDataShard* follower = nullptr;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvHnswCache::TEvAcquired::EventType
+                    && ev->Get<TEvHnswCache::TEvAcquired>()->Graph) {
+                auto* recipient = dynamic_cast<TDataShard*>(runtime.FindActor(ev->Recipient));
+                if (recipient && recipient->IsFollower()) {
+                    follower = recipient;
+                    pending.push_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
         helper.CreateCustomTable("hnsw-follower-edge", {
             {"parent", "Uint32", true, false}, {"key", "Uint32", true, false},
             {"emb", "String", false, false}}, true);
@@ -6486,7 +6507,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                 (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
                 (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
         )");
-        auto& runtime = *helper.Server->GetRuntime();
         runtime.SimulateSleep(TDuration::Seconds(2));
         ui64 readId = 0;
         auto read = [&](bool advanceEdge) {
@@ -6508,18 +6528,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             }
             return helper.SendRead("hnsw-follower-edge", request.release());
         };
-        TVector<TAutoPtr<IEventHandle>> pending;
-        TDataShard* follower = nullptr;
-        constexpr ui32 buildResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
-        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == buildResult) {
-                follower = dynamic_cast<TDataShard*>(runtime.FindActor(ev->Recipient));
-                pending.push_back(ev.Release());
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        Y_DEFER { runtime.SetObserverFunc(observer); };
         for (ui32 attempt = 0; attempt < 20 && pending.empty(); ++attempt) {
             read(false);
             runtime.SimulateSleep(TDuration::MilliSeconds(200));
@@ -6538,8 +6546,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         read(true);
         const auto newEdge = follower->GetSnapshotManager().GetFollowerReadEdge().first;
         UNIT_ASSERT_GT(newEdge, oldEdge);
-        UNIT_ASSERT_VALUES_EQUAL_C(follower->IsHnswIndexBuildObsolete(tid), ChangeVectors,
-            "In-flight graph invalidation must depend on data changes, not read-edge advancement");
+        UNIT_ASSERT_C(!follower->IsHnswIndexBuildObsolete(tid),
+            "Redo must update the private journal while a shared graph is downloading");
         runtime.SetObserverFunc(observer);
         for (auto& ev : pending) {
             runtime.Send(ev.Release());
@@ -6570,7 +6578,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         helper.CreateCustomTable("table-vector-prefix", {
             {"parent", "Uint64", true, false},
             {"key", "Uint64", true, false},
-            {"emb", "String", false, false}}, true);
+            {"emb", "String", false, false}}, true, Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
         ExecSQL(helper.Server, helper.Sender, R"(
             UPSERT INTO `/Root/table-vector-prefix` (parent, key, emb) VALUES
                 (9223372036854775809ul, 1ul, "\x00\x00\xC8\x42\x00\x00\x00\x00\x01"),
@@ -6647,6 +6655,24 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMinBytes(64_MB);
         serverSettings.AppConfig->MutableMemoryControllerConfig()->SetSharedCacheMaxBytes(64_MB);
         TTestHelper helper(serverSettings);
+        auto& runtime = *helper.Server->GetRuntime();
+        const auto cacheActor = runtime.GetLocalServiceId(MakeHnswCacheId());
+        TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
+        ui32 registrations = 0;
+        std::optional<ui64> limitOverride;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == cacheActor) {
+                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
+                ++registrations;
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->GetRecipientRewrite() == cacheActor) {
+                consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
+            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->GetRecipientRewrite() == cacheActor && limitOverride) {
+                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limitOverride;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(observer); };
+
         helper.CreateCustomTable("table-vector-memory", {
             {"parent", "Uint32", true, false},
             {"key", "Uint32", true, false},
@@ -6656,27 +6682,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
                 (1, 1, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01"),
                 (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
         )");
-        auto& runtime = *helper.Server->GetRuntime();
         const auto shardActor = ResolveTablet(runtime, helper.Tables.at("table-vector-memory").TabletId);
         auto* shard = dynamic_cast<TDataShard*>(runtime.FindActor(shardActor));
         UNIT_ASSERT(shard);
         const auto localTid = shard->GetUserTables().begin()->second->LocalTid;
-        TIntrusivePtr<NMemory::TRegistrantConsumer> consumer;
-        ui32 registrations = 0;
-        std::optional<ui64> limitOverride;
-        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegister::EventType && ev->Sender == shardActor) {
-                UNIT_ASSERT(ev->Get<NMemory::TEvConsumerRegister>()->Kind == NMemory::EMemoryConsumerKind::SharedCache);
-                ++registrations;
-            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerRegistered::EventType && ev->Recipient == shardActor) {
-                consumer = dynamic_cast<NMemory::TRegistrantConsumer*>(ev->Get<NMemory::TEvConsumerRegistered>()->Consumer.Get());
-            } else if (ev->GetTypeRewrite() == NMemory::TEvConsumerLimit::EventType && ev->Recipient == shardActor && limitOverride) {
-                ev->Get<NMemory::TEvConsumerLimit>()->LimitBytes = *limitOverride;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        Y_DEFER { runtime.SetObserverFunc(observer); };
-
         Ydb::Table::VectorIndexSettings settings;
         settings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
@@ -6721,12 +6730,21 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         )");
         const ui64 pinnedBytes = consumer->GetReport().Used;
         limitOverride = 0;
-        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(0)));
+        runtime.Send(new IEventHandle(MakeHnswCacheId(), helper.Sender, new NMemory::TEvConsumerLimit(0)));
         runtime.WaitFor("HNSW cache eviction", [&] { return !cached(); });
         UNIT_ASSERT_VALUES_EQUAL(consumer->GetReport().Used, pinnedBytes);
         UNIT_ASSERT_VALUES_EQUAL(read()->Record.GetStats().GetRows(), 3);
         pinned.reset();
         runtime.WaitFor("released HNSW reservations", [&] { return consumer->GetReport().Used == 0; });
+
+        bool staleLimitSeen = false;
+        auto staleLimitObserver = runtime.AddObserver<NMemory::TEvConsumerLimit>([&](auto& ev) {
+            staleLimitSeen |= ev->Recipient == shardActor && ev->Sender == helper.Sender && ev->Cookie == 123;
+        });
+        runtime.Send(new IEventHandle(shardActor, helper.Sender, new NMemory::TEvConsumerLimit(1_MB), 0, 123), 0, true);
+        runtime.WaitFor("stale tablet memory notification", [&] { return staleLimitSeen; });
+        UNIT_ASSERT_VALUES_EQUAL_C(shard->GetHnswCacheMemoryLimit(), 0,
+            "A tablet must not overwrite the node cache's newer memory grant");
 
         limitOverride.reset();
         warmCache();

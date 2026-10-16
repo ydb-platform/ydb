@@ -8,6 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 
+#include <iosfwd>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -57,6 +58,11 @@ public:
         return Used;
     }
 
+    bool HasPendingPressure() const noexcept {
+        std::lock_guard guard(Mutex);
+        return Max(Used, PendingDemand) > Limit;
+    }
+
     bool TryAcquire(ui64 bytes) noexcept {
         std::lock_guard guard(Mutex);
         if (bytes > Max<ui64>() - Used) {
@@ -87,12 +93,19 @@ public:
         Report();
     }
 
+    void SetReclaimable(ui64 bytes) {
+        std::lock_guard guard(Mutex);
+        Reclaimable = bytes;
+        Report();
+    }
+
 private:
     void Report() {
         if (Consumer) {
             // Serialize reports with reservations: a release on a build/reader
             // thread must not overwrite a newer report with stale usage.
-            Consumer->SetReport({.Used = Used, .Demand = Max(Used, PendingDemand)});
+            Consumer->SetReport({.Used = Used, .Demand = Max(Used, PendingDemand),
+                .Reclaimable = Min(Used, Reclaimable)});
         }
     }
 
@@ -100,6 +113,7 @@ private:
     ui64 Limit = 0;
     bool LimitKnown = false;
     ui64 Used = 0;
+    ui64 Reclaimable = 0;
     // Preserve the whole request when an unsuccessful build releases its
     // partial reservations. Cleared on completion, invalidation, or eviction.
     ui64 PendingDemand = 0;
@@ -110,6 +124,63 @@ private:
 struct THnswSearchResult {
     std::vector<std::pair<TString, float>> Results;
     bool Covered = true;
+};
+
+// A bootstrap response may race with redo that has already passed its
+// checkpoint. Remember those commits until the graph base becomes known;
+// a late commit below that base must invalidate the downloaded generation.
+class THnswBootstrapChanges {
+public:
+    static constexpr size_t MaxSteps = 16384;
+    static constexpr ui64 RecordBytes = 128;
+
+    bool NeedsRecord(ui32 step) const {
+        return !SnapshotKnown && (Steps.empty() || Steps.back().Step != step);
+    }
+
+    bool Observe(ui32 step, TRowVersion version, std::shared_ptr<void> reservation = {}) {
+        if (SnapshotKnown)
+            return Covers(step) || version > Base;
+        if (!Steps.empty() && step < Steps.back().Step)
+            return false;
+        if (NeedsRecord(step)) {
+            if (Steps.size() == MaxSteps)
+                return false;
+            Steps.push_back({step, version, std::move(reservation)});
+        } else {
+            Steps.back().Version = Min(Steps.back().Version, version);
+        }
+        return true;
+    }
+
+    bool HasChangesAfter(ui32 checkpoint) const {
+        return !Steps.empty() && Steps.back().Step > checkpoint;
+    }
+
+    bool SetSnapshot(TRowVersion base, ui32 checkpoint) {
+        for (const auto& change : Steps) {
+            if (change.Step > checkpoint && change.Version <= base)
+                return false;
+        }
+        Base = base;
+        Checkpoint = checkpoint;
+        SnapshotKnown = true;
+        std::vector<TStep>().swap(Steps);
+        return true;
+    }
+
+    bool Covers(ui32 step) const { return SnapshotKnown && step <= Checkpoint; }
+
+private:
+    struct TStep {
+        ui32 Step;
+        TRowVersion Version;
+        std::shared_ptr<void> Reservation;
+    };
+    std::vector<TStep> Steps;
+    TRowVersion Base;
+    ui32 Checkpoint = 0;
+    bool SnapshotKnown = false;
 };
 
 // Owned by the tablet mailbox. Generations share committed history, never
@@ -169,10 +240,28 @@ public:
         ui64 maxMemoryBytes,
         TString& error, bool allowEmpty = false);
 
+    // Each view owns its MVCC state; only immutable graph storage is shared.
+    std::unique_ptr<THnswIndex> CreateView(TRowVersion base,
+        std::shared_ptr<THnswIndexChanges> changes,
+        TRowVersion upper = TRowVersion::Max()) const;
+    bool SharesGraphWith(const THnswIndex& other) const;
+    bool HasGraphReservation() const;
+    size_t GraphUseCount() const;
+    void SetGraphReservation(std::shared_ptr<void> reservation,
+        std::shared_ptr<THnswCacheMemoryTracker> memoryTracker = {});
+
+    // Versioned graph snapshot. Transaction-local and committed changes are
+    // transferred separately; importing never calls graph construction.
+    void SaveGraph(std::ostream& output) const;
+    static std::unique_ptr<THnswIndex> LoadGraph(std::istream& input,
+        const Ydb::Table::VectorIndexSettings& settings,
+        ui64 maxMemoryBytes, TString& error);
+
     // Returns up to k nearest neighbors of targetVector (same wire format as
     // build-time vectors), ordered from closest to farthest.
     THnswSearchResult Search(TStringBuf targetVector, size_t k,
         TRowVersion readVersion = TRowVersion::Max(), ui32 efSearch = 15) const;
+    ui64 EstimatedSearchMemoryBytes(size_t k = 1, ui32 efSearch = 15) const;
 
     // Resolves the visible vector; base vectors are reconstructed from the
     // wrapper-owned NMSLIB Objects, and delta vectors retain their wire format.
@@ -210,6 +299,7 @@ public:
         size_t serializedKeyBytes = 0);
 
 private:
+    class TGraph;
     class TImpl;
 
     explicit THnswIndex(std::unique_ptr<TImpl> impl);

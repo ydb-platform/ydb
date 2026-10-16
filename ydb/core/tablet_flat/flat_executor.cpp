@@ -1242,7 +1242,7 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         if (dataUpdate)
             dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
 
-        for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex))
+        for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex, Owner->GetFollowerRedoObserver()))
             for (auto &partView: subset->Flatten)
                 DropPartStorePageCollections(*partView);
 
@@ -1292,6 +1292,8 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
             }
 
             const ui32 followerGcStep = update->NeedFollowerGcAck ? Step0 : 0;
+            if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus())
+                Owner->OnFollowerPartsReplaced(proto.GetTableId());
             AddFollowerPartSwitch(proto, aux, followerGcStep, Step0);
 
             // Row version changes are rolled up immediately (similar to schema changes)
@@ -4973,6 +4975,15 @@ void TExecutor::GetTabletCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
 void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
     Memory->SetProfiles(ev->Get()->ResourceProfiles);
     ReadResourceProfile();
+}
+
+ui32 TExecutor::GetFollowerSnapshotCheckpoint() {
+    Y_ENSURE(Stats->IsActive && !Stats->IsFollower());
+    // A detached batch may keep accepting writes at Step() - 1. Seal it
+    // before exporting; otherwise a later write could fall inside the
+    // advertised checkpoint without appearing in the exported journal.
+    LogicRedo->FlushBatchedLog();
+    return Step() - 1;
 }
 
 void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) {

@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/testing/unittest
     ydb/core/base
+    ydb/core/tx/datashard/hnsw
     ydb/core/blobstorage
     ydb/core/blobstorage/crypto
     ydb/core/blobstorage/nodewarden

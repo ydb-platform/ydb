@@ -6,6 +6,25 @@
 
 namespace NKikimr::NDataShard {
 
+bool TDataShard::CanReuseHnswGraph(const TUserTable& previous, const TUserTable& next) const {
+    if (previous.GetSchema() == next.GetSchema())
+        return true;
+    if (!previous.HnswSettings || !next.HnswSettings)
+        return false;
+    NKikimrSchemeOp::TTableDescription before, after;
+    previous.GetSchema(before);
+    next.GetSchema(after);
+    // Replica placement and storage policies do not change graph keys,
+    // vectors, or journal coverage. Preserve an already built generation.
+    before.ClearPartitionConfig();
+    after.ClearPartitionConfig();
+    before.ClearTableSchemaVersion();
+    after.ClearTableSchemaVersion();
+    before.ClearCoordinatedSchemaVersion();
+    after.ClearCoordinatedSchemaVersion();
+    return before.SerializeAsString() == after.SerializeAsString();
+}
+
 namespace {
 
 constexpr ui64 ScanMetadataBytes = 256;
@@ -397,9 +416,29 @@ void TDataShard::InvalidateHnswIndex(ui32 localTid) {
     entry.Pending.clear();
     entry.PendingReservations.clear();
     entry.UntrackedTransactions.clear();
+    entry.FollowerBootstrapChanges = {};
+    entry.FollowerDesiredBase = TRowVersion::Min();
+    entry.FollowerJournalTracking = false;
+    entry.FollowerNotRequired = false;
+    entry.FollowerGraph.reset();
+    entry.FollowerJournal.reset();
+    entry.FollowerSnapshot.Clear();
+    entry.GraphKey.clear();
+    NTabletPipe::CloseAndForgetClient(SelfId(), entry.FollowerPipe);
     entry.RowCountAtBuild = 0;
     entry.BuildObsolete = entry.Building;
     entry.NextScanAttemptAt = TInstant::Zero();
+    // Invalidation is also used after the executor has detached and by
+    // callers outside an actor activation. Neither can schedule recovery.
+    if (!Executor() || !TlsActivationContext)
+        return;
+    if (IsFollower())
+        ScheduleHnswFollowerSync();
+    if (!IsFollower() && !IsStopping() && State == TShardState::Ready
+            && AppData()->FeatureFlags.GetEnableHnswIndex() && entry.VectorColumnTag) {
+        entry.InitialBuildAttemptsLeft = Max<ui32>(entry.InitialBuildAttemptsLeft, 30);
+        ScheduleHnswRebuild(localTid);
+    }
 }
 
 void TDataShard::InvalidateHnswIndexes() {
@@ -415,6 +454,13 @@ void TDataShard::PrepareFollowerHnswIndex(ui32 localTid, const NTable::TDatabase
         const TRowVersion& readVersion) {
     auto& entry = HnswIndexCache[localTid];
     const auto counter = db.Head(localTid);
+    if (entry.FollowerJournalTracking && entry.Changes->Valid) {
+        entry.FollowerChangeCounter = counter;
+        entry.FollowerReadVersion = Max(entry.FollowerReadVersion, readVersion);
+        if (entry.Index && entry.Index->GetBaseVersion() <= readVersion)
+            entry.Index->SetSnapshot(entry.Index->GetBaseVersion(), entry.Changes, entry.FollowerReadVersion);
+        return;
+    }
     if (entry.FollowerChangeCounter == counter) {
         // Read edges may advance during a long build without any vector
         // changes. Preserve both installed and in-flight graphs in that case.
@@ -465,14 +511,11 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
     }
     index->SetSnapshot(baseVersion, entry.Changes,
         IsFollower() ? Max(baseVersion, entry.FollowerReadVersion) : TRowVersion::Max());
-    Y_ENSURE(memoryReservation, "HNSW index installed without a memory reservation");
-    struct TOwnedIndex {
-        std::shared_ptr<void> Reservation;
-        std::shared_ptr<THnswIndex> Index;
-    };
-    auto owned = std::make_shared<TOwnedIndex>(TOwnedIndex{std::move(memoryReservation), std::move(index)});
-    index = std::shared_ptr<THnswIndex>(owned, owned->Index.get());
+    Y_ENSURE(memoryReservation || index->HasGraphReservation(), "HNSW index installed without a memory reservation");
+    if (memoryReservation)
+        index->SetGraphReservation(std::move(memoryReservation), HnswCacheMemoryTracker);
     entry.Generations.push_back(index);
+    const auto* previousIndex = entry.Index.get();
     if (entry.Index && entry.Index->GetBaseVersion() > baseVersion) {
         entry.Retained.push_back(std::move(index));
     } else {
@@ -488,6 +531,8 @@ void TDataShard::SetHnswIndex(ui32 localTid, std::shared_ptr<THnswIndex> index,
     entry.RowCountAtBuild = rowCountAtBuild;
     entry.VectorColumnTag = vectorColumnTag;
     entry.Settings = settings;
+    if (!IsFollower() && entry.Index.get() != previousIndex)
+        PublishHnswGraph(localTid);
     entry.Building = false;
     entry.BuildObsolete = false;
     entry.NextScanAttemptAt = TInstant::Zero();
@@ -554,6 +599,8 @@ void TDataShard::ApplyHnswIndexChange(ui32 localTid, TString key, THnswIndexChan
     }
     entry.Changes->Set(std::move(key), change.Version, std::move(change.Vector),
         std::move(change.MemoryReservation));
+    if (!IsFollower() && !entry.Index && entry.NextScanAttemptAt == TInstant::Max())
+        entry.InitialBuildAttemptsLeft = 30;
     entry.NextScanAttemptAt = TInstant::Zero();
     ScheduleHnswRebuild(localTid);
 }

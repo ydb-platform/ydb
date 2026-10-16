@@ -3486,6 +3486,38 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
         }
     };
 
+    Y_UNIT_TEST(FollowerSnapshotCheckpointSealsLogBatch) {
+        struct TTxEnableBatching : ITransaction {
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                txc.DB.Alter().SetExecutorAllowLogBatching(true)
+                    .SetExecutorLogFlushPeriod(TDuration::Seconds(30));
+                return true;
+            }
+            void Complete(const TActorContext& ctx) override {
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }
+        };
+
+        TMyEnvBase env;
+        TRowsModel rows;
+        env.FireDummyTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{new TTxEnableBatching()});
+        ui32 step = 0, checkpoint = 0, nextCheckpoint = 0;
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(1, step)});
+        env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
+            checkpoint = executor->GetFollowerSnapshotCheckpoint();
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        UNIT_ASSERT_GE(checkpoint, step);
+        env.SendSync(new NFake::TEvExecute{new TTxWriteRow(2, step)});
+        env.SendSync(new NFake::TEvCall{[&](auto* executor, const auto& ctx) {
+            nextCheckpoint = executor->GetFollowerSnapshotCheckpoint();
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }});
+        UNIT_ASSERT_GT(nextCheckpoint, checkpoint);
+    }
+
     Y_UNIT_TEST(BasicFollowerRead) {
         TMyEnvBase env;
         TRowsModel rows;

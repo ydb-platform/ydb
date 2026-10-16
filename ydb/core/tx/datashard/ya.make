@@ -6,6 +6,7 @@ ADDINCL(
 
 SRCS(
     datashard_hnsw.cpp
+    datashard_hnsw_replication.cpp
     datashard.h
     datashard__engine_host.h
     datashard__lock_rows.h
@@ -308,7 +309,6 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_hnsw.cpp
-    hnsw_index.cpp
     hnsw_index_build_unit.cpp
     hnsw_index_build_actor.cpp
 )
@@ -487,6 +487,7 @@ PEERDIR(
     ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/datashard/hnsw
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
     ydb/core/tx/sequenceproxy/public

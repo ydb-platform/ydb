@@ -516,6 +516,13 @@ private:
 };
 
 void TDataShard::OnLeaderUserAuxUpdate(TString update) {
+    if (IsFollower() && TStringBuf(update).StartsWith(HnswGraphAuxPrefix)) {
+        auto event = MakeHolder<TEvHnswCache::TEvGraphAnnouncement>();
+        const auto payload = TStringBuf(update).SubStr(HnswGraphAuxPrefix.size());
+        if (event->Record.ParseFromArray(payload.data(), payload.size()))
+            TActivationContext::Send(new IEventHandle(SelfId(), SelfId(), event.Release()));
+        return;
+    }
     if (!IsFollower() || !TStringBuf(update).StartsWith(HnswReadinessAuxPrefix)) {
         return;
     }

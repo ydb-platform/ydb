@@ -470,6 +470,11 @@ namespace similarity {
 
         void SetQueryTimeParams(const AnyParams &) override;
 
+        // Portable topology over the caller-owned data_, in little-endian
+        // uint32 words. Loading restores links without running construction.
+        void SaveTopology(std::ostream& output) const;
+        void LoadTopology(std::istream& input, uint32_t connectivity, uint64_t maxBytes);
+
     private:
         typedef std::vector<HnswNode *> ElementList;
         void baseSearchAlgorithmOld(KNNQuery<dist_t> *query, size_t ef);
@@ -499,6 +504,7 @@ namespace similarity {
         }
 
 
+        void OptimizeIndex();
         void SaveOptimizedIndex(std::ostream& output);
         void LoadOptimizedIndex(std::istream& input);
 
@@ -601,11 +607,13 @@ namespace similarity {
         deque<VisitedList *> pool;
         mutex poolguard;
         int numelements;
+        size_t maxIdleLists;
 
     public:
         VisitedListPool(int initmaxpools, int numelements1)
         {
             numelements = numelements1;
+            maxIdleLists = initmaxpools;
             for (int i = 0; i < initmaxpools; i++)
                 pool.push_front(new VisitedList(numelements));
         }
@@ -627,7 +635,12 @@ namespace similarity {
         void releaseVisitedList(VisitedList *vl)
         {
             unique_lock<mutex> lock(poolguard);
-            pool.push_front(vl);
+            // Extra concurrent readers may allocate temporary lists. Retain
+            // only the initial workspace covered by the graph's reservation.
+            if (pool.size() < maxIdleLists)
+                pool.push_front(vl);
+            else
+                delete vl;
         };
         ~VisitedListPool()
         {

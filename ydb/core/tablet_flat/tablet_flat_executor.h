@@ -19,6 +19,7 @@ class TTabletCountersBase;
 
 namespace NTable {
     class TDatabase;
+    struct IRedoObserver;
     class TScheme;
     class TBackupExclusion;
 }
@@ -529,6 +530,8 @@ namespace NFlatExecutorSetup {
 
         virtual void OnFollowerSchemaUpdated();
         virtual void OnFollowerDataUpdated();
+        virtual NTable::IRedoObserver* GetFollowerRedoObserver() { return nullptr; }
+        virtual void OnFollowerPartsReplaced(ui32) {}
 
         virtual bool NeedBackup() const;
         virtual TIntrusiveConstPtr<NTable::TBackupExclusion> BackupExclusion() const;
@@ -682,6 +685,9 @@ namespace NFlatExecutorSetup {
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }
+        // Leader-only boundary for exporting state with a follower redo
+        // journal. Future mutations must have strictly greater log steps.
+        virtual ui32 GetFollowerSnapshotCheckpoint() = 0;
     protected:
         //
         IExecutor()

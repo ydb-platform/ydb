@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/hnsw_index.h>
+#include <ydb/core/tx/datashard/hnsw/cache.h>
 
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -7,10 +8,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/size_literals.h>
 #include <util/random/fast.h>
 
 #include <atomic>
 #include <thread>
+#include <sstream>
 
 namespace NKikimr::NDataShard {
 
@@ -92,6 +95,187 @@ THashSet<TString> BruteForceTopK(
 } // namespace
 
 Y_UNIT_TEST_SUITE(THnswIndexTest) {
+    Y_UNIT_TEST(BootstrapRejectsLateCommitsBeforeAndAfterManifestDelivery) {
+        THnswBootstrapChanges before;
+        UNIT_ASSERT(before.Observe(11, {50, 0}));
+        UNIT_ASSERT(!before.SetSnapshot({100, 0}, 10));
+        THnswBootstrapChanges after;
+        UNIT_ASSERT(after.Observe(9, {50, 0}));
+        UNIT_ASSERT(after.SetSnapshot({100, 0}, 10));
+        UNIT_ASSERT(after.Covers(9));
+        UNIT_ASSERT(after.Observe(9, {50, 0}));
+        UNIT_ASSERT(!after.Covers(11));
+        UNIT_ASSERT(after.Observe(11, {101, 0}));
+        UNIT_ASSERT(!after.Observe(12, {100, 0}));
+    }
+
+    Y_UNIT_TEST(BootstrapHistoryIsBoundedAndReleasesReservationsAtCheckpoint) {
+        THnswBootstrapChanges changes;
+        auto reservation = std::make_shared<int>(0);
+        std::weak_ptr<int> weak = reservation;
+        UNIT_ASSERT(changes.Observe(1, {100, 0}, std::move(reservation)));
+        UNIT_ASSERT(!weak.expired());
+        UNIT_ASSERT(changes.SetSnapshot({50, 0}, 1));
+        UNIT_ASSERT(weak.expired());
+        THnswBootstrapChanges delayed;
+        for (ui32 step = 0; step < THnswBootstrapChanges::MaxSteps; ++step)
+            UNIT_ASSERT(delayed.Observe(step, {100, 0}));
+        UNIT_ASSERT(!delayed.Observe(THnswBootstrapChanges::MaxSteps, {100, 0}));
+    }
+
+    Y_UNIT_TEST(JournalSnapshotPreservesVersionsAndDetectsCorruption) {
+        THnswJournalSnapshot journal;
+        journal.Changes.push_back({"a", {10, 1}, SerializeFloatVector({1, 2})});
+        journal.Changes.push_back({"a", {20, 2}, std::nullopt});
+        std::ostringstream output(std::ios::binary);
+        journal.Save(output);
+        const auto bytes = output.str();
+        std::istringstream input(bytes, std::ios::binary);
+        auto loaded = THnswJournalSnapshot::Load(input, 1_MB);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->Changes.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(loaded->Changes[0].Key, "a");
+        UNIT_ASSERT_VALUES_EQUAL(loaded->Changes[0].Version, TRowVersion(10, 1));
+        UNIT_ASSERT_VALUES_EQUAL(*loaded->Changes[0].Vector, *journal.Changes[0].Vector);
+        UNIT_ASSERT(!loaded->Changes[1].Vector);
+        for (size_t i = 0; i < bytes.size(); ++i) {
+            auto damaged = bytes;
+            damaged[i] ^= char(0x80);
+            std::istringstream invalid(damaged, std::ios::binary);
+            UNIT_ASSERT_EXCEPTION(THnswJournalSnapshot::Load(invalid, 1_MB), yexception);
+        }
+        std::istringstream tooSmall(bytes, std::ios::binary);
+        UNIT_ASSERT_EXCEPTION(THnswJournalSnapshot::Load(tooSmall, 1), yexception);
+    }
+
+    Y_UNIT_TEST(SharedGraphViewsKeepIndependentSnapshotsAndOwnership) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        auto leader = THnswIndex::Build(settings, {{"a", SerializeFloatVector({1, 0})},
+            {"b", SerializeFloatVector({2, 0})}}, 1_MB, error);
+        UNIT_ASSERT_C(leader, error);
+        auto reservation = std::make_shared<int>(1);
+        std::weak_ptr<int> lifetime = reservation;
+        leader->SetGraphReservation(std::move(reservation));
+        auto firstChanges = std::make_shared<THnswIndexChanges>();
+        auto secondChanges = std::make_shared<THnswIndexChanges>();
+        auto first = leader->CreateView({10, 0}, firstChanges, {20, 0});
+        auto second = leader->CreateView({10, 0}, secondChanges, {30, 0});
+        UNIT_ASSERT(first->SharesGraphWith(*second));
+        UNIT_ASSERT(first->SharesGraphWith(*leader));
+        first->Erase("a", {15, 0});
+        const auto target = SerializeFloatVector({0, 0});
+        UNIT_ASSERT_VALUES_EQUAL(first->Search(target, 1, {20, 0}).Results.front().first, "b");
+        UNIT_ASSERT_VALUES_EQUAL(second->Search(target, 1, {20, 0}).Results.front().first, "a");
+        UNIT_ASSERT(!first->CanRead({25, 0}));
+        UNIT_ASSERT(second->CanRead({25, 0}));
+        firstChanges->Valid = false;
+        UNIT_ASSERT(!first->CanRead({20, 0}));
+        UNIT_ASSERT(second->CanRead({20, 0}));
+        leader.reset();
+        first.reset();
+        UNIT_ASSERT(!lifetime.expired());
+        UNIT_ASSERT_VALUES_EQUAL(second->Search(target, 1, {20, 0}).Results.front().first, "a");
+        second.reset();
+        UNIT_ASSERT(lifetime.expired());
+    }
+
+    Y_UNIT_TEST(SharedGraphSearchWorkspaceIsAdmittedAndReleased) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        const auto vector = SerializeFloatVector({1, 0});
+        auto graph = THnswIndex::Build(settings, {{"a", vector}}, 1_MB, error);
+        UNIT_ASSERT_C(graph, error);
+        auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+        graph->SetGraphReservation(std::make_shared<int>(0), tracker);
+        auto replica = graph->CreateView({10, 0}, std::make_shared<THnswIndexChanges>());
+        const auto workspace = replica->EstimatedSearchMemoryBytes();
+        tracker->SetLimit(workspace - 1);
+        UNIT_ASSERT(!replica->Search(vector, 1, {10, 0}).Covered);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+        tracker->SetLimit(workspace);
+        const auto result = replica->Search(vector, 1, {10, 0});
+        UNIT_ASSERT(result.Covered);
+        UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "a");
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+    }
+
+    Y_UNIT_TEST(SnapshotRestoresTopologyVectorsAndCanBeExportedAgain) {
+        for (const auto metric : {Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN,
+                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT}) {
+            auto settings = MakeSettings(metric, Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 8);
+            settings.set_m(4); // Exercise multiple higher levels in the optimized layout.
+            TFastRng<ui64> rng(42);
+            std::vector<std::pair<TString, TString>> rows;
+            for (ui32 i = 0; i < 1000; ++i)
+                rows.emplace_back(KeyFor(i), RandomFloatVector(rng, 8));
+            TString error;
+            auto original = THnswIndex::Build(settings, rows, 1_MB, error);
+            UNIT_ASSERT_C(original, error);
+            std::ostringstream out(std::ios::binary);
+            original->SaveGraph(out);
+            std::istringstream in(out.str(), std::ios::binary);
+            auto restored = THnswIndex::LoadGraph(in, settings, original->EstimatedMemoryBytes() + 4096, error);
+            UNIT_ASSERT_C(restored, error);
+            UNIT_ASSERT(!original->SharesGraphWith(*restored));
+            UNIT_ASSERT_VALUES_EQUAL(restored->Size(), original->Size());
+            for (const auto& [key, vector] : rows) {
+                TString actual;
+                UNIT_ASSERT(restored->GetVector(key, actual));
+                UNIT_ASSERT_VALUES_EQUAL(actual, vector);
+                UNIT_ASSERT_VALUES_EQUAL(restored->Search(vector, 10).Results,
+                    original->Search(vector, 10).Results);
+            }
+            std::ostringstream again(std::ios::binary);
+            restored->SaveGraph(again);
+            UNIT_ASSERT_VALUES_EQUAL(again.str(), out.str());
+        }
+    }
+
+    Y_UNIT_TEST(SnapshotRejectsCorruptionTruncationIncompatibilityAndInsufficientMemory) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        auto original = THnswIndex::Build(settings, {{"a", SerializeFloatVector({1, 0})}}, 1_MB, error);
+        UNIT_ASSERT_C(original, error);
+        std::ostringstream out(std::ios::binary);
+        original->SaveGraph(out);
+        const auto bytes = out.str();
+        for (size_t length = 0; length < bytes.size(); ++length) {
+            std::istringstream input(bytes.substr(0, length), std::ios::binary);
+            UNIT_ASSERT(!THnswIndex::LoadGraph(input, settings, 1_MB, error));
+        }
+        for (size_t i = 0; i < bytes.size(); ++i) {
+            auto damaged = bytes;
+            damaged[i] ^= char(0x80);
+            std::istringstream input(damaged, std::ios::binary);
+            UNIT_ASSERT(!THnswIndex::LoadGraph(input, settings, 1_MB, error));
+        }
+        std::istringstream tooSmall(bytes, std::ios::binary);
+        UNIT_ASSERT(!THnswIndex::LoadGraph(tooSmall, settings, 1, error));
+        settings.set_m(24);
+        std::istringstream incompatible(bytes, std::ios::binary);
+        UNIT_ASSERT(!THnswIndex::LoadGraph(incompatible, settings, 1_MB, error));
+    }
+
+    Y_UNIT_TEST(EmptySnapshotRoundTrip) {
+        auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        TString error;
+        auto original = THnswIndex::Build(settings, {}, 1_MB, error, true);
+        UNIT_ASSERT_C(original, error);
+        std::ostringstream out(std::ios::binary);
+        original->SaveGraph(out);
+        std::istringstream input(out.str(), std::ios::binary);
+        auto restored = THnswIndex::LoadGraph(input, settings, 1_MB, error);
+        UNIT_ASSERT_C(restored, error);
+        UNIT_ASSERT_VALUES_EQUAL(restored->Size(), 0);
+        UNIT_ASSERT(restored->Search(SerializeFloatVector({1, 0}), 1).Covered);
+    }
+
     Y_UNIT_TEST(OmittedMinRowsUsesDocumentedDefault) {
         Ydb::Table::VectorIndexSettings settings;
         UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 10000u);
@@ -195,6 +379,9 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 60);
         UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 60);
 
+        tracker.SetReclaimable(100);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Reclaimable, 60);
+
         UNIT_ASSERT(!tracker.TryAcquire(50));
         UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 60);
         UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 110);
@@ -219,6 +406,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         tracker.Release(50);
         UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Used, 0);
         UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Demand, 0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer->Report.Reclaimable, 0);
     }
 
     Y_UNIT_TEST(CacheMemoryTrackersHaveIndependentLimits) {
@@ -445,11 +633,13 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
     Y_UNIT_TEST(MemoryEstimateAccountsForConnectivity) {
         const auto defaultEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 16);
         const auto denseEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 100);
-        UNIT_ASSERT_VALUES_EQUAL(defaultEstimate,
-            100 * (2 * 4 * sizeof(float) + 256 + 2 * 16 * sizeof(ui32)));
+        // Both the native pointer links and optimized integer links remain
+        // resident. Container overhead may change independently of this bound.
+        UNIT_ASSERT_GE(defaultEstimate,
+            100 * (2 * 4 * sizeof(float) + 2 * 16 * (sizeof(ui32) + sizeof(void*))));
         UNIT_ASSERT_GT(denseEstimate, defaultEstimate);
-        UNIT_ASSERT_VALUES_EQUAL(denseEstimate - defaultEstimate,
-            100 * 2 * (100 - 16) * sizeof(ui32));
+        UNIT_ASSERT_GE(denseEstimate - defaultEstimate,
+            100 * 2 * (100 - 16) * (sizeof(ui32) + sizeof(void*)));
         UNIT_ASSERT_VALUES_EQUAL(
             THnswIndex::EstimateMemoryBytes(100, 4, 16, 1234),
             defaultEstimate + 1234);

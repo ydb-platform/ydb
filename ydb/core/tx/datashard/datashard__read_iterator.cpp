@@ -3,7 +3,6 @@
 #include "datashard_impl.h"
 #include "datashard_read_operation.h"
 #include "hnsw_index.h"
-#include "hnsw_index_build_actor.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
 #include "probes.h"
@@ -44,7 +43,9 @@ bool CanUseHnsw(const TDataShard& shard, const TReadIteratorState& state) {
     }
     const auto& table = shard.GetUserTables().at(state.PathId.LocalPathId);
     const auto& record = state.Request->Record;
-    if (!table->HnswSettings || !table->HnswVectorColumnTag || !record.HasVectorTopK()
+    if (!table->HnswSettings || !table->HnswVectorColumnTag
+            || table->HnswSettings->vector_type() != Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+            || !record.HasVectorTopK()
             || record.GetVectorTopK().GetColumn() >= record.ColumnsSize()
             || table->HnswVectorColumnTag != record.GetColumns(record.GetVectorTopK().GetColumn())) {
         return false;
@@ -374,112 +375,6 @@ struct TShortTableInfo {
 
 std::vector<TRawTypeValue> ToRawTypeValue(
     TArrayRef<const TCell> keyCells, const TShortTableInfo& tableInfo, bool addNulls);
-
-// Scans the full local table partition for (primary key, vector column) pairs.
-// Keep reservation and page-fault handling in sync with
-// ScanPostingTableVectors() in hnsw_index_build_unit.cpp.
-// Returns an empty vector (and sets hasPageFault) if the scan needs to
-// page-fault and retry; the caller then leaves the current transaction without
-// marking the build as done.
-std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
-    TTransactionContext& txc,
-    const TShortTableInfo& tableInfo,
-    ui32 vectorColumn,
-    const Ydb::Table::VectorIndexSettings& settings,
-    TDataShard& dataShard,
-    std::shared_ptr<void>& memoryReservation,
-    ui64& reservedBytes,
-    bool& hasPageFault,
-    const TRowVersion& readVersion)
-{
-    hasPageFault = false;
-    reservedBytes = 0;
-    std::vector<NTable::TTag> columns{vectorColumn};
-    for (ui32 keyColumn : tableInfo.KeyColumnIds) {
-        if (keyColumn != vectorColumn) {
-            columns.push_back(keyColumn);
-        }
-    }
-
-    // Split destinations may borrow whole parts from the source tablet.
-    // Only index keys belonging to this shard, even before borrowed compaction.
-    std::vector<TRawTypeValue> minKey;
-    std::vector<TRawTypeValue> maxKey;
-    NTable::TKeyRange range;
-    if (tableInfo.ShardRange) {
-        const auto bounds = tableInfo.ShardRange->ToTableRange();
-        if (bounds.From) {
-            minKey = ToRawTypeValue(bounds.From, tableInfo, bounds.InclusiveFrom);
-        }
-        if (bounds.To) {
-            maxKey = ToRawTypeValue(bounds.To, tableInfo, !bounds.InclusiveTo);
-        }
-        range.MinKey = minKey;
-        range.MaxKey = maxKey;
-        range.MinInclusive = bounds.InclusiveFrom;
-        range.MaxInclusive = bounds.InclusiveTo;
-    }
-    auto precharge = txc.DB.Precharge(tableInfo.LocalTid, minKey, maxKey, columns, 0, 0, 0,
-        NTable::EDirection::Forward, readVersion);
-    if (!precharge.Ready) {
-        hasPageFault = true;
-        return {};
-    }
-
-    const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
-        precharge.ItemsPrecharged, settings.vector_dimension(),
-        settings.has_m() ? settings.m() : 16);
-    memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
-    if (!memoryReservation) {
-        return {};
-    }
-    reservedBytes = estimatedBytes;
-
-    std::vector<std::pair<TString, TString>> result;
-    result.reserve(precharge.ItemsPrecharged);
-    auto iter = txc.DB.IterateRange(tableInfo.LocalTid, range, columns, readVersion, nullptr, nullptr);
-    while (true) {
-        const auto ready = iter->Next(NTable::ENext::All);
-        if (ready == NTable::EReady::Page) {
-            hasPageFault = true;
-            return {};
-        }
-        if (ready == NTable::EReady::Gone) {
-            break;
-        }
-        const auto key = iter->GetKey();
-        const auto values = iter->GetValues();
-        if (!key.Cells().empty() && !values.Cells().empty() && !values.Cells()[0].IsNull()) {
-            result.emplace_back(TSerializedCellVec::Serialize(key.Cells()), TString(values.Cells()[0].AsBuf()));
-        }
-    }
-
-    size_t keyBytes = 0;
-    for (const auto& [key, _] : result) {
-        keyBytes += key.size();
-    }
-    // Precharge does not count rows held in memtables. Include the actual
-    // scanned rows as well as their keys before handing the build its budget.
-    const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
-        result.size(), settings.vector_dimension(),
-        settings.has_m() ? settings.m() : 16, keyBytes);
-    if (requiredBytes > reservedBytes) {
-        auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
-        if (!additionalReservation) {
-            result.clear();
-            memoryReservation.reset();
-            return {};
-        }
-        struct TCombinedReservation {
-            std::shared_ptr<void> Initial;
-            std::shared_ptr<void> Additional;
-        };
-        memoryReservation = std::make_shared<TCombinedReservation>(
-            TCombinedReservation{std::move(memoryReservation), std::move(additionalReservation)});
-        reservedBytes = requiredBytes;
-    }
-    return result;
-}
 
 std::unique_ptr<IBlockBuilder> CreateBlockBuilder(
     const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -3153,8 +3048,14 @@ public:
             if (!canUseHnsw && TableInfo.HnswSettings && AppData()->FeatureFlags.GetEnableHnswIndex()) {
                 Self->RegisterHnswFallback(localTid, TDataShard::EHnswFallback::UnsupportedRead);
             }
-            if (canUseHnsw && Self->IsFollower()) {
-                Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion);
+            if (Self->IsFollower() && TableInfo.HnswSettings
+                    && TableInfo.HnswSettings->vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
+                    && AppData()->FeatureFlags.GetEnableHnswIndex()) {
+                const auto cache = Self->HnswIndexCache.find(localTid);
+                if (cache == Self->HnswIndexCache.end() || !cache->second.Index)
+                    Self->ScheduleHnswFollowerSync();
+                if (canUseHnsw)
+                    Self->PrepareFollowerHnswIndex(localTid, txc.DB, state.ReadVersion);
             }
             // Select a generation whose base and committed journal cover this read.
             Self->PruneHnswIndexes();
@@ -3173,49 +3074,18 @@ public:
                     Self->RegisterHnswCacheLookup(localTid, false);
                 }
             }
-            const auto buildVersion = Self->IsFollower() ? state.ReadVersion : Self->GetHnswBuildVersion();
-            if (!topState->HnswIndex
+            const auto buildVersion = Self->GetHnswBuildVersion();
+            if (!Self->IsFollower() && !topState->HnswIndex
                     && canUseHnsw
-                    && (Self->IsFollower() || !Self->GetHnswIndex(localTid, vectorColumnTag,
-                        hnswSettings, useCachedHnswParameters))
-                    && (Self->IsFollower() || buildVersion < Self->Pipeline.GetUnreadableEdge())
+                    && !Self->GetHnswIndex(localTid, vectorColumnTag,
+                        hnswSettings, useCachedHnswParameters)
+                    && buildVersion < Self->Pipeline.GetUnreadableEdge()
                     && Self->GetHnswCacheMemoryLimit() != 0
                     && hnswSettings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
                     && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
                         hnswSettings, buildVersion)) {
                 Self->TrackHnswOpenTransactions(localTid, txc.DB);
-                if (!Self->IsFollower()) {
-                    Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
-                } else {
-                    // Followers reconstruct directly at their repeatable read version.
-                    bool pageFault = false;
-                    ui64 reservedBytes = 0;
-                    std::shared_ptr<void> memoryReservation;
-                    auto vectors = ScanVectorColumnForHnsw(
-                        txc, TableInfo, vectorColumnTag, hnswSettings,
-                        *Self, memoryReservation, reservedBytes, pageFault,
-                        buildVersion);
-                    if (pageFault) {
-                        Self->DeferHnswIndexBuild(localTid, TDuration::MilliSeconds(500));
-                    } else if (!memoryReservation) {
-                        // Splits and replica builds can temporarily retain other
-                        // graphs. Retry after their reservations are released.
-                        Self->DeferHnswIndexBuild(localTid, TDuration::Seconds(5));
-                    } else if (vectors.empty()
-                            || vectors.size() < GetHnswMinRows(hnswSettings)) {
-                        Self->DisableHnswIndexBuild(localTid);
-                    } else {
-                        const ui64 rowCount = vectors.size();
-                        auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
-                            vectorColumnTag, rowCount,
-                            hnswSettings, std::move(vectors),
-                            std::move(memoryReservation), reservedBytes, buildVersion,
-                            Self->GetHnswBuildToken(localTid));
-                        const TActorId actorId = ctx.Register(
-                            actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
-                        Self->Actors.insert(actorId);
-                    }
-                }
+                Self->StartHnswSnapshotScan(localTid, Self->GetUserTables().at(state.PathId.LocalPathId), buildVersion, txc);
             }
             state.VectorTopK = std::move(topState);
         }

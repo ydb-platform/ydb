@@ -29,6 +29,7 @@
 \
     action(TEvDataShard, TEvProposeTransactionResult,     NSchemeShard::TXTYPE_DATASHARD_PROPOSE_RESULT)           \
     action(TEvDataShard, TEvSchemaChanged,                NSchemeShard::TXTYPE_DATASHARD_SCHEMA_CHANGED)           \
+    action(TEvDataShard, TEvHnswReplicaStatus, NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT) \
     action(TEvDataShard, TEvStateChanged,                 NSchemeShard::TXTYPE_DATASHARD_STATE_RESULT)             \
     action(TEvDataShard, TEvInitSplitMergeDestinationAck, NSchemeShard::TXTYPE_INIT_SPLIT_DST_ACK)                 \
     action(TEvDataShard, TEvSplitAck,                     NSchemeShard::TXTYPE_SPLIT_ACK)                          \

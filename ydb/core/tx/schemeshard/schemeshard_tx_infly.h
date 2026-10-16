@@ -7,6 +7,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/hnsw.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tx/message_seqno.h>
 
@@ -92,6 +93,12 @@ struct TTxState {
     TVector<TShardOperation> Shards; // shards + operations on them
     bool NeedUpdateObject = false;
     bool NeedSyncHive = false;
+    bool HnswWaitRequired = false;
+    ui64 HnswSchemaVersion = 0;
+    TInstant HnswWaitStartedAt;
+    ui64 HnswProbeRound = 0;
+    bool HnswProbeInFlight = false;
+    TVector<NKikimrHnsw::TReplicaProbeResult::TCheckpoint> HnswCheckpoints;
     // not persist:
     // DbRefCount references on TargetPathId/SourcePathId. Holding the handle
     // is holding the reference: acquired via AcquirePathRefs by both

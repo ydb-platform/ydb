@@ -9,7 +9,9 @@
 #include <library/cpp/resource/resource.h>
 #include <util/generic/xrange.h>
 #include <util/stream/file.h>
+#include <util/stream/mem.h>
 #include <util/stream/str.h>
+#include <util/string/join.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -77,6 +79,148 @@ Y_UNIT_TEST_SUITE(NPage) {
             TPartEggs eggs{ nullptr, MassZ.Model->Scheme, { std::move(part) } };
 
             TWreck<TCheckIter, TPartEggs>(MassZ, 666).Do(EWreck::Cached, eggs);
+        }
+    }
+
+    struct TDeltaInfo {
+        ui64 TxId;
+        ui32 SavepointSeqNum;
+        ELockMode LockMode;
+
+        bool operator==(const TDeltaInfo&) const = default;
+
+        friend IOutputStream& operator<<(IOutputStream& out, const TDeltaInfo& info) {
+            return out << "{" << info.TxId << ", " << info.SavepointSeqNum << ", " << ui32(info.LockMode) << "}";
+        }
+    };
+
+    // Reads delta records of the main group straight from data pages
+    TVector<TDeltaInfo> CollectDeltas(const NTest::TPartEggs& eggs, TSet<ui16>& dataPageVersions) {
+        auto& part = dynamic_cast<const NTest::TPartStore&>(*eggs.Lone());
+        const auto& group = part.Scheme->Groups[0];
+
+        TVector<TDeltaInfo> deltas;
+        for (auto pageId : xrange(part.Store->PageCollectionPagesCount(0))) {
+            auto* raw = part.Store->GetPage(0, pageId);
+            auto label = NPage::TLabelWrapper().Read(*raw, NPage::EPage::Undef);
+            if (label.Type != NPage::EPage::DataPage) {
+                continue;
+            }
+            dataPageVersions.insert(label.Version);
+
+            NPage::TDataPage page(raw);
+            for (auto it = page->Begin(); it != page->End(); ++it) {
+                for (size_t index = 0; const auto* record = it->GetAltRecord(index); ++index) {
+                    if (!record->IsDelta()) {
+                        break;
+                    }
+                    auto lockMode = record->IsLocked() ? std::get<0>(record->GetLockInfo(group)) : ELockMode::None;
+                    deltas.push_back({ record->GetDeltaTxId(group), record->GetDeltaSavepointSeqNum(group), lockMode });
+                }
+            }
+        }
+        return deltas;
+    }
+
+    // The least ABI evolution required to read the part, as written in its root metadata
+    ui32 GetPartRequiredEvolution(const NTest::TPartEggs& eggs) {
+        auto& part = dynamic_cast<const NTest::TPartStore&>(*eggs.Lone());
+        auto* raw = part.Store->GetMeta();
+        UNIT_ASSERT(raw);
+        NProto::TRoot root;
+        TMemoryInput stream(raw->data(), raw->size());
+        UNIT_ASSERT(root.ParseFromArcadiaStream(&stream));
+        UNIT_ASSERT(root.HasEvol());
+        return root.GetEvol().GetTail();
+    }
+
+    Y_UNIT_TEST(DeltaSavepointSeqNum)
+    {
+        using namespace NTable::NTest;
+
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({ 0 });
+
+        NPage::TConf conf{ true, 2 * 1024 };
+
+        {
+            // Without savepoint seq nums pages keep the old format
+            auto eggs = TPartCook(lay, conf)
+                .Delta(123).AddN(1_u32, "a")
+                .Delta(234).AddN(1_u32, "b")
+                .Ver().AddN(1_u32, "c")
+                .Delta(123).AddN(2_u32, "d")
+                .Finish();
+
+            TSet<ui16> versions;
+            auto deltas = CollectDeltas(eggs, versions);
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "1");
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), 28u /* Uncommitted deltas present */);
+            UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
+                { 123, 0, ELockMode::None },
+                { 234, 0, ELockMode::None },
+                { 123, 0, ELockMode::None },
+            }));
+        }
+
+        {
+            // A delta with a savepoint seq num makes its page version 2
+            auto eggs = TPartCook(lay, conf)
+                .Delta(123, 5).AddN(1_u32, "a")
+                .Delta(123).AddN(1_u32, "b")
+                .Ver().AddN(1_u32, "c")
+                .Lock(ELockMode::Exclusive, 234).Delta(234, 7).AddN(2_u32, "d")
+                .Finish();
+
+            TSet<ui16> versions;
+            auto deltas = CollectDeltas(eggs, versions);
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "2");
+            // Older versions reject such a part on load with an explicit ABI incompatibility
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), SavepointSeqNumEvolution);
+            UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
+                { 123, 5, ELockMode::None },
+                { 123, 0, ELockMode::None },
+                { 234, 7, ELockMode::Exclusive },
+            }));
+
+            // Rows are still readable through the regular iterator
+            TCheckIter wrap(eggs, { });
+            wrap.To(1).Has(*TSchemedCookRow(*lay).Col(1_u32, "c"));
+        }
+
+        {
+            // A part spanning many pages, where only the page with a seq num delta becomes version 2
+            const TString value(100, 'x');
+            TPartCook cook(lay, conf);
+            for (ui32 key = 1; key <= 300; ++key) {
+                if (key == 10) {
+                    cook.Delta(123).AddN(key, value);
+                }
+                if (key == 150) {
+                    cook.Delta(123, 9).AddN(key, value);
+                }
+                cook.Ver().AddN(key, value);
+            }
+            auto eggs = cook.Finish();
+
+            TSet<ui16> versions;
+            auto deltas = CollectDeltas(eggs, versions);
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", versions), "1,2");
+            UNIT_ASSERT_VALUES_EQUAL(GetPartRequiredEvolution(eggs), SavepointSeqNumEvolution);
+            UNIT_ASSERT_VALUES_EQUAL(deltas, (TVector<TDeltaInfo>{
+                { 123, 0, ELockMode::None },
+                { 123, 9, ELockMode::None },
+            }));
+
+            // Rows from version 1 and version 2 pages are readable through the regular iterator
+            TCheckIter wrap(eggs, { });
+            wrap.To(1).Has(*TSchemedCookRow(*lay).Col(1_u32, value));
+            wrap.To(2).Has(*TSchemedCookRow(*lay).Col(150_u32, value));
+            wrap.To(3).Has(*TSchemedCookRow(*lay).Col(300_u32, value));
         }
     }
 

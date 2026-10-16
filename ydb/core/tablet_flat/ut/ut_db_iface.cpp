@@ -1167,9 +1167,419 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(31).Replay(EPlay::Redo);
         check();
 
-        // Savepoint seq nums don't affect visibility yet
+        // Savepoint seq nums alone don't affect visibility
         me.To(40).Select(table1).NoKeyN(1_u64).NoKeyN(2_u64);
         me.To(41).ReadTx(123).Select(table1).HasN(1_u64, 21_u64, 22_u64).HasN(2_u64, 23_u64, 10005_u64);
+    }
+
+    TString DumpRemovedTxOps(TDbExec& me, ui32 table, ui64 txId) {
+        const auto* ranges = me->FindRemovedTxOps(table, txId);
+        return ranges ? ToString(*ranges) : TString("none");
+    }
+
+    Y_UNIT_TEST(RemoveTxOps) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).Commit();
+
+        me.To(20).Begin();
+        me.To(21).WriteTx(123, 5).PutN(table1, 1_u64, 21_u64);
+        me.To(22).WriteTx(123, 7).PutN(table1, 2_u64, 22_u64);
+        me.To(23).Commit();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+
+        // Adjacent and overlapping ranges are merged, rejected changes are undone
+        me.To(30).Begin();
+        me.To(31).RemoveTxOps(table1, 123, 5, 6);
+        me.To(32).RemoveTxOps(table1, 123, 7, 7);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 7] }");
+        me.To(33).Reject();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 0u);
+
+        // Seq num 0 means no savepoint seq num and cannot be rolled back
+        me.To(40).Begin();
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 123, 0, 5), yexception);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 123, 7, 5), yexception);
+        me.To(41).RemoveTxOps(table1, 123, 5, 6);
+        me.To(42).RemoveTxOps(table1, 123, 9, 10);
+        me.To(43).Commit();
+
+        // The new redo event is written once per call
+        UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::RemoveTxOps), 2u);
+        // Older versions fail on such a redo chunk with an explicit ABI incompatibility
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), SavepointSeqNumEvolution);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 6], [9, 10] }");
+
+        me.To(50).Begin();
+        me.To(51).RemoveTxOps(table1, 123, 6, 9);
+        me.To(52).Commit();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
+
+        // A rejected transaction undoes several additions on top of existing ranges
+        me.To(53).Begin();
+        me.To(54).RemoveTxOps(table1, 123, 12, 12);
+        me.To(55).RemoveTxOps(table1, 123, 11, 11);
+        me.To(56).RemoveTxOps(table1, 123, 20, 21);
+        me.To(57).RemoveTxOps(table1, 123, 3, 4);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [3, 12], [20, 21] }");
+        me.To(58).Reject();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
+
+        me.To(60).Replay(EPlay::Boot);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        me.To(61).Replay(EPlay::Redo);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+
+        // Removed operations don't affect transaction status, but hide its changes
+        UNIT_ASSERT(me->HasOpenTx(table1, 123));
+        me.To(70).ReadTx(123).Select(table1).NoKeyN(1_u64).NoKeyN(2_u64);
+
+        // Operations of unknown transactions may be removed, of committed or removed ones may not
+        me.To(80).Begin();
+        me.To(81).RemoveTxOps(table1, 456, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 456), "{ [1, 1] }");
+        me.To(82).WriteTx(234, 3).PutN(table1, 3_u64, 23_u64);
+        me.To(83).CommitTx(table1, 234);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 234, 3, 3), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 234), "none");
+        me.To(84).RemoveTx(table1, 345);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 345, 1, 1), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 345), "none");
+        me.To(85).Commit();
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsVisibility) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).PutN(table1, 1_u64, 11_u64, 12_u64);
+        me.To(13).Commit();
+
+        // Operations of tx 123 before the first savepoint (seq num 0), and with seq nums 2 and 3
+        me.To(20).Begin();
+        me.To(21).WriteTx(123).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
+        me.To(22).WriteTx(123, 2).PutN(table1, 1_u64, ECellOp::Empty, 22_u64);
+        me.To(23).WriteTx(123, 2).PutN(table1, 2_u64, 23_u64, ECellOp::Empty);
+        me.To(24).WriteTx(123, 3).PutN(table1, 3_u64, 24_u64, ECellOp::Empty);
+        me.To(25).RemoveTxOps(table1, 123, 2, 2);
+        me.To(26).Commit();
+
+        // Removed operations are invisible to own reads, other operations are visible
+        const auto checkRemoved = [&](ui32 step) {
+            me.To(step).ReadTx(123).Select(table1)
+                .HasN(1_u64, 21_u64, 12_u64)
+                .NoKeyN(2_u64)
+                .HasN(3_u64, 24_u64, 10005_u64);
+            me.To(step + 1).ReadTx(123).Iter(table1)
+                .Seek({ }, ESeek::Lower).IsN(1_u64, 21_u64, 12_u64)
+                .Next().IsN(3_u64, 24_u64, 10005_u64)
+                .Next().Is(EReady::Gone);
+            // Read tx sticks until the auto tx commits, read as another reader explicitly
+            me.To(step + 2).ReadTx(0).Select(table1)
+                .HasN(1_u64, 11_u64, 12_u64)
+                .NoKeyN(2_u64)
+                .NoKeyN(3_u64);
+        };
+
+        checkRemoved(30);
+        me.To(40).Replay(EPlay::Boot);
+        checkRemoved(41);
+        me.To(45).Replay(EPlay::Redo);
+        checkRemoved(46);
+
+        // Compaction drops removed deltas. These tests don't keep tx status on
+        // compaction, so removed operations are lost with the mem table and
+        // nothing would hide the removed deltas if they were kept.
+        me.To(50).Snap(table1).Compact(table1, false);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+        checkRemoved(51);
+
+        // Operations removed after their deltas are already in parts
+        me.To(60).Begin();
+        me.To(61).WriteTx(123, 4).PutN(table1, 4_u64, 25_u64, ECellOp::Empty);
+        me.To(62).WriteTx(123, 5).PutN(table1, 1_u64, ECellOp::Empty, 26_u64);
+        me.To(63).Commit();
+        me.To(64).Snap(table1).Compact(table1, false);
+
+        me.To(70).Begin();
+        me.To(71).RemoveTxOps(table1, 123, 4, 5);
+        me.To(72).WriteTx(123, 6).PutN(table1, 4_u64, ECellOp::Empty, 27_u64);
+        // A late write with a removed seq num stays invisible
+        me.To(73).WriteTx(123, 5).PutN(table1, 3_u64, ECellOp::Empty, 28_u64);
+        me.To(74).Commit();
+
+        const auto checkMixed = [&](ui32 step, bool committed) {
+            me.To(step).ReadTx(committed ? 0 : 123).Select(table1)
+                .HasN(1_u64, 21_u64, 12_u64)
+                .NoKeyN(2_u64)
+                .HasN(3_u64, 24_u64, 10005_u64)
+                .HasN(4_u64, 10004_u64, 27_u64);
+            me.To(step + 1).ReadTx(committed ? 0 : 123).Iter(table1)
+                .Seek({ }, ESeek::Lower).IsN(1_u64, 21_u64, 12_u64)
+                .Next().IsN(3_u64, 24_u64, 10005_u64)
+                .Next().IsN(4_u64, 10004_u64, 27_u64)
+                .Next().Is(EReady::Gone);
+        };
+
+        checkMixed(80, false);
+        me.To(83).Replay(EPlay::Boot);
+        checkMixed(84, false);
+
+        // Removed operations stay invisible after commit until compaction folds the transaction
+        me.To(90).Begin();
+        me.To(91).CommitTx(table1, 123);
+        me.To(92).Commit();
+        checkMixed(93, true);
+        me.To(96).Replay(EPlay::Boot);
+        checkMixed(97, true);
+
+        me.To(100).Snap(table1).Compact(table1);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+        UNIT_ASSERT(!me->HasCommittedTx(table1, 123));
+        checkMixed(101, true);
+    }
+
+    Y_UNIT_TEST(SavepointSeqNumVisibilityBound) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).Commit();
+
+        me.To(20).Begin();
+        me.To(21).WriteTx(123).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
+        me.To(22).WriteTx(123, 1).PutN(table1, 2_u64, 22_u64, ECellOp::Empty);
+        me.To(23).WriteTx(123, 2).PutN(table1, 1_u64, ECellOp::Empty, 23_u64);
+        me.To(24).WriteTx(123, 2).PutN(table1, 3_u64, 24_u64, ECellOp::Empty);
+        me.To(25).Commit();
+
+        const auto check = [&](ui32 step) {
+            // Without a bound all own changes are visible
+            me.To(step).ReadTx(123).Select(table1)
+                .HasN(1_u64, 21_u64, 23_u64)
+                .HasN(2_u64, 22_u64, 10005_u64)
+                .HasN(3_u64, 24_u64, 10005_u64);
+            // A statement with seq num 2 sees own changes of earlier statements only
+            me.To(step + 1).ReadTx(123, 1).Select(table1)
+                .HasN(1_u64, 21_u64, 10005_u64)
+                .HasN(2_u64, 22_u64, 10005_u64)
+                .NoKeyN(3_u64);
+            me.To(step + 2).ReadTx(123, 1).Iter(table1)
+                .Seek({ }, ESeek::Lower).IsN(1_u64, 21_u64, 10005_u64)
+                .Next().IsN(2_u64, 22_u64, 10005_u64)
+                .Next().Is(EReady::Gone);
+            // Changes without seq nums are always visible
+            me.To(step + 3).ReadTx(123, 0).Select(table1)
+                .HasN(1_u64, 21_u64, 10005_u64)
+                .NoKeyN(2_u64)
+                .NoKeyN(3_u64);
+            // The bound doesn't make changes visible to other readers
+            me.To(step + 4).ReadTx(0).Select(table1)
+                .NoKeyN(1_u64)
+                .NoKeyN(2_u64)
+                .NoKeyN(3_u64);
+        };
+
+        check(30);
+        me.To(40).Snap(table1).Compact(table1, false);
+        check(41);
+
+        // Mem table on top of parts
+        me.To(50).Begin();
+        me.To(51).WriteTx(123, 3).PutN(table1, 2_u64, ECellOp::Empty, 25_u64);
+        me.To(52).Commit();
+        me.To(53).ReadTx(123, 2).Select(table1).HasN(2_u64, 22_u64, 10005_u64);
+        me.To(54).ReadTx(123, 3).Select(table1).HasN(2_u64, 22_u64, 25_u64);
+
+        // Removed operations stay invisible within the bound
+        me.To(60).Begin();
+        me.To(61).RemoveTxOps(table1, 123, 1, 1);
+        me.To(62).Commit();
+        me.To(63).ReadTx(123, 2).Select(table1)
+            .HasN(1_u64, 21_u64, 23_u64)
+            .NoKeyN(2_u64)
+            .HasN(3_u64, 24_u64, 10005_u64);
+        me.To(64).ReadTx(123, 3).Select(table1).HasN(2_u64, 10004_u64, 25_u64);
+    }
+
+    class TSkipsObserver : public ITransactionObserver {
+    public:
+        TVector<ui64> Skips;
+
+        void OnSkipUncommitted(ui64 txId) override {
+            Skips.push_back(txId);
+        }
+
+        void OnSkipCommitted(const TRowVersion&) override {}
+        void OnSkipCommitted(const TRowVersion&, ui64) override {}
+        void OnApplyCommitted(const TRowVersion&) override {}
+        void OnApplyCommitted(const TRowVersion&, ui64) override {}
+    };
+
+    Y_UNIT_TEST(RemoveTxOpsNoConflicts) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).Commit();
+
+        me.To(20).Begin();
+        me.To(21).WriteTx(123, 2).PutN(table1, 1_u64, 21_u64);
+        me.To(22).WriteTx(234, 2).PutN(table1, 2_u64, 22_u64);
+        me.To(23).Commit();
+        me.To(24).Snap(table1).Compact(table1, false);
+
+        me.To(30).Begin();
+        me.To(31).RemoveTxOps(table1, 123, 2, 2);
+        me.To(32).WriteTx(123, 2).PutN(table1, 3_u64, 23_u64);
+        me.To(33).Commit();
+
+        // Removed deltas of other transactions are not conflicts, in parts and in the mem table
+        const auto skips = [&](ui64 key) {
+            TIntrusivePtr<TSkipsObserver> observer = new TSkipsObserver;
+            const TRawTypeValue rawKey[] = { TRawTypeValue(&key, sizeof(key), NScheme::NTypeIds::Uint64) };
+            auto res = me->SelectRowVersion(table1, TRawVals(rawKey), 0, nullptr, observer);
+            UNIT_ASSERT_VALUES_EQUAL(res.Ready, EReady::Gone);
+
+            TIntrusivePtr<TSkipsObserver> iterObserver = new TSkipsObserver;
+            TKeyRange range;
+            range.MinKey = rawKey;
+            range.MaxKey = rawKey;
+            auto iter = me->IterateRange(table1, range, { 1, 4 }, TRowVersion::Max(), nullptr, iterObserver);
+            UNIT_ASSERT_VALUES_EQUAL(iter->Next(ENext::All), EReady::Gone);
+            UNIT_ASSERT_VALUES_EQUAL(iterObserver->Skips, observer->Skips);
+
+            return observer->Skips;
+        };
+
+        // Direct reads need an active tx to have a page env
+        me.To(40).Begin();
+        UNIT_ASSERT_VALUES_EQUAL(skips(1), TVector<ui64>{ });
+        UNIT_ASSERT_VALUES_EQUAL(skips(2), TVector<ui64>{ 234 });
+        UNIT_ASSERT_VALUES_EQUAL(skips(3), TVector<ui64>{ });
+        me.To(41).Commit();
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsKeepRowLocks) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).Commit();
+
+        // A lock on top of a delta, compaction attaches it to the delta record in the part
+        me.To(20).Begin();
+        me.To(21).WriteTx(123, 2).PutN(table1, 1_u64, 21_u64);
+        me.To(22).WriteTx(234).LockRowN(table1, ELockMode::Exclusive, 1_u64);
+        me.To(23).Commit();
+        me.To(24).Snap(table1).Compact(table1, false);
+
+        me.To(30).Begin();
+        me.To(31).RemoveTxOps(table1, 123, 2, 2);
+        me.To(32).Commit();
+
+        const auto check = [&](ui32 step) {
+            me.To(step).ReadTx(123).Select(table1).NoKeyN(1_u64);
+            auto res = me.To(step + 1).SelectRowVersionN(table1, 1_u64);
+            UNIT_ASSERT_VALUES_EQUAL(res.Ready, EReady::Gone);
+            UNIT_ASSERT_VALUES_EQUAL(res.LockMode, ELockMode::Exclusive);
+            UNIT_ASSERT_VALUES_EQUAL(res.LockTxId, 234u);
+        };
+
+        check(40);
+
+        // The removed delta is dropped while its lock is kept
+        me.To(50).Compact(table1);
+        UNIT_ASSERT(!me->HasTxData(table1, 123));
+        check(51);
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsCommittedWriteMerge) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).WriteVer({1, 10}).PutN(table1, 1_u64, 11_u64, 12_u64);
+        me.To(13).WriteVer({1, 10}).PutN(table1, 2_u64, 13_u64, 14_u64);
+        me.To(14).Commit();
+
+        // Removed operations of tx 123: an upsert of key 1 and an erase of key 2
+        me.To(20).Begin();
+        me.To(21).WriteTx(123, 2).PutN(table1, 1_u64, 21_u64, ECellOp::Empty);
+        me.To(22).WriteTx(123, 2).EraseN(table1, 2_u64);
+        me.To(23).RemoveTxOps(table1, 123, 2, 2);
+        me.To(24).WriteVer({2, 20}).CommitTx(table1, 123);
+        me.To(25).Commit();
+
+        // Committed writes over the removed deltas of a committed transaction
+        // must not merge their changes into the new row state
+        me.To(30).Begin();
+        me.To(31).WriteVer({3, 30}).PutN(table1, 1_u64, ECellOp::Empty, 31_u64);
+        me.To(32).WriteVer({3, 30}).PutN(table1, 2_u64, ECellOp::Empty, 32_u64);
+        me.To(33).Commit();
+
+        const auto check = [&](ui32 step) {
+            me.To(step).Select(table1)
+                .HasN(1_u64, 11_u64, 31_u64)
+                .HasN(2_u64, 13_u64, 32_u64);
+            me.To(step + 1).ReadVer({2, 20}).Select(table1)
+                .HasN(1_u64, 11_u64, 12_u64)
+                .HasN(2_u64, 13_u64, 14_u64);
+        };
+
+        check(40);
+        me.To(50).Replay(EPlay::Boot);
+        check(51);
+        me.To(55).Replay(EPlay::Redo);
+        check(56);
+
+        me.To(60).Snap(table1).Compact(table1);
+        check(61);
     }
 
     Y_UNIT_TEST(ReplayNewTable) {

@@ -19,6 +19,8 @@
 
 #include <fmt/format.h>
 
+#include <atomic>
+
 namespace NKikimr::NKqp {
 
 using namespace NYdb;
@@ -3987,6 +3989,210 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2);
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
         UNIT_ASSERT_GE(s3Mock.GetPartialReadRequestCount(), 2);
+    }
+
+    Y_UNIT_TEST(MissingFilePolicyForExternalTableAndSqlRead) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+        constexpr TStringBuf bucket = "missing-file-policy-bucket";
+        constexpr TStringBuf object = "test.json";
+        const TString objectPath = TStringBuilder() << "/" << bucket << "/" << object;
+        const TString deniedPath = TStringBuilder() << "/" << bucket << "/denied.json";
+        const auto port = NTesting::GetFreePort();
+
+        THashMap<TString, TString> data{{objectPath, TString(TEST_CONTENT)}, {deniedPath, TString(TEST_CONTENT)}};
+        auto settings = TS3Mock::TSettings(port);
+        settings.ErrorResponse = [objectPath, deniedPath](TStringBuf method, TStringBuf path) -> TString {
+            if (method == "GET" && path == objectPath) {
+                return "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n"
+                    "<Error><Code>NoSuchKey</Code></Error>";
+            }
+            if (method == "GET" && path == deniedPath) {
+                return "HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"
+                    "<Error><Code>AccessDenied</Code></Error>";
+            }
+            return {};
+        };
+        TS3Mock s3Mock(std::move(data), settings);
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        const TString ddl = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/missing_source` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://localhost:{port}/{bucket}/",
+                AUTH_METHOD = "NONE"
+            );
+        )", "port"_a = port, "bucket"_a = bucket);
+        auto result = db.ExecuteQuery(ddl, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto checkZeroRows = [&](const TString& query, bool expectWarning) {
+            auto read = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(read.GetStatus(), EStatus::SUCCESS, read.GetIssues().ToString());
+            TResultSetParser parser(read.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 0);
+            if (expectWarning) {
+                UNIT_ASSERT_STRING_CONTAINS(read.GetIssues().ToString(), "Skipped missing S3 file");
+                bool hasWarning = false;
+                for (const auto& issue : read.GetIssues()) {
+                    hasWarning |= issue.GetSeverity() == NYdb::NIssue::ESeverity::Warning;
+                }
+                UNIT_ASSERT(hasWarning);
+            } else {
+                UNIT_ASSERT_C(read.GetIssues().ToString().find("Skipped missing S3 file") == std::string::npos, read.GetIssues().ToString());
+            }
+        };
+
+        for (const TString format : {"json_each_row", "json_list", "parquet", "raw"}) {
+            const TString schema = format == "raw" ? "data String NOT NULL" : "key Utf8 NOT NULL, value Utf8 NOT NULL";
+            for (const TString policy : {"", "fail", "ignore", "warn"}) {
+                const TString policyClause = policy ? TStringBuilder() << ", ON_MISSING_FILE = \"" << policy << "\"" : TString{};
+                const TString table = TStringBuilder() << "/Root/missing_" << format << "_" << (policy ? policy : "default");
+                result = db.ExecuteQuery(fmt::format(R"(
+                    CREATE EXTERNAL TABLE `{table}` ({schema}) WITH (
+                        DATA_SOURCE = "/Root/missing_source", LOCATION = "test.json", FORMAT = "{format}"{policy_clause});
+                )", "table"_a = table, "schema"_a = schema, "format"_a = format, "policy_clause"_a = policyClause), TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                const TString tableRead = fmt::format("SELECT COUNT(*) FROM `{table}`;", "table"_a = table);
+                const TString sqlRead = fmt::format(R"(
+                    SELECT COUNT(*) FROM `/Root/missing_source`.`test.json` WITH (
+                        FORMAT = "{format}", SCHEMA = ({schema}){policy_clause});
+                )", "format"_a = format, "schema"_a = schema, "policy_clause"_a = policyClause);
+                for (const auto& query : {tableRead, sqlRead}) {
+                    if (policy == "ignore" || policy == "warn") {
+                        checkZeroRows(query, policy == "warn");
+                    } else {
+                        result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, query);
+                        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "404");
+                    }
+                }
+            }
+        }
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/missing_source`.`denied.json` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (key Utf8 NOT NULL, value Utf8 NOT NULL),
+                ON_MISSING_FILE = "ignore"
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/missing_source`.`test.json` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (key Utf8 NOT NULL, value Utf8 NOT NULL),
+                ON_MISSING_FILE = "invalid"
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "on_missing_file must be one of");
+
+        result = db.ExecuteQuery(R"(
+            CREATE EXTERNAL TABLE `/Root/missing_invalid` (key Utf8 NOT NULL, value Utf8 NOT NULL)
+                WITH (DATA_SOURCE = "/Root/missing_source", LOCATION = "test.json",
+                      FORMAT = "json_each_row", ON_MISSING_FILE = "invalid");
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "on_missing_file must be one of");
+    }
+
+    Y_UNIT_TEST(MissingFilePolicyDoesNotPreventWritesOrHealthyReads) {
+        const TString bucket = "missing-file-policy-writes-bucket";
+        CreateBucket(bucket);
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        auto result = db.ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/write_policy_source` WITH (
+                SOURCE_TYPE = "ObjectStorage", LOCATION = "{location}", AUTH_METHOD = "NONE");
+        )", "location"_a = GetBucketLocation(bucket)), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        for (const TString format : {"raw", "json_list", "json_each_row", "parquet"}) {
+            const TString schema = format == "raw" ? "data String NOT NULL" : "key Utf8 NOT NULL, value Utf8 NOT NULL";
+            const TString row = format == "raw" ? R"(SELECT "payload" AS data)" :
+                R"(SELECT "key"u AS key, "value"u AS value)";
+            for (const TString policy : {"", "fail", "ignore", "warn"}) {
+                const TString name = TStringBuilder() << format << "_" << (policy ? policy : "default");
+                const TString table = TStringBuilder() << "/Root/write_policy_" << name;
+                const TString path = name + "/";
+                const TString policyClause = policy ? TStringBuilder() << ", ON_MISSING_FILE = \"" << policy << "\"" : TString{};
+                result = db.ExecuteQuery(fmt::format(R"(
+                    CREATE EXTERNAL TABLE `{table}` ({schema}) WITH (
+                        DATA_SOURCE = "/Root/write_policy_source", LOCATION = "{path}",
+                        FORMAT = "{format}"{policy_clause});
+                )", "table"_a = table, "schema"_a = schema, "path"_a = path,
+                    "format"_a = format, "policy_clause"_a = policyClause), TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                result = db.ExecuteQuery(fmt::format("INSERT INTO `{table}` {row};", "table"_a = table, "row"_a = row),
+                    TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                const TString tableRead = fmt::format("SELECT COUNT(*) FROM `{table}`;", "table"_a = table);
+                const TString sqlRead = fmt::format(R"(
+                    SELECT COUNT(*) FROM `/Root/write_policy_source`.`{path}` WITH (
+                        FORMAT = "{format}", SCHEMA = ({schema}){policy_clause});
+                )", "path"_a = path, "format"_a = format, "schema"_a = schema, "policy_clause"_a = policyClause);
+                for (const auto& query : {tableRead, sqlRead}) {
+                    result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query << " " << result.GetIssues().ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+                    TResultSetParser parser(result.GetResultSet(0));
+                    UNIT_ASSERT(parser.TryNextRow());
+                    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 1);
+                    UNIT_ASSERT_C(result.GetIssues().ToString().find("Skipped missing S3 file") == std::string::npos,
+                        result.GetIssues().ToString());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MissingFileAfterPartialRead) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+        constexpr TStringBuf bucket = "missing-after-partial-bucket";
+        constexpr TStringBuf object = "test.json";
+        const TString objectPath = TStringBuilder() << "/" << bucket << "/" << object;
+        const auto port = NTesting::GetFreePort();
+
+        THashMap<TString, TString> data{{objectPath, TString(TEST_CONTENT)}};
+        auto settings = TS3Mock::TSettings(port).WithPartialReadFailure(objectPath);
+        std::atomic<ui32> requests = 0;
+        settings.ErrorResponse = [&requests, objectPath](TStringBuf method, TStringBuf path) -> TString {
+            if (method == "GET" && path == objectPath && requests.fetch_add(1) > 0) {
+                return "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n"
+                    "<Error><Code>NoSuchKey</Code></Error>";
+            }
+            return {};
+        };
+        TS3Mock s3Mock(std::move(data), settings);
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+        auto result = db.ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/missing_after_partial` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://localhost:{port}/{bucket}/",
+                AUTH_METHOD = "NONE"
+            );)", "port"_a = port, "bucket"_a = bucket), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/missing_after_partial`.`test.json` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA = (key Utf8 NOT NULL, value Utf8 NOT NULL),
+                ON_MISSING_FILE = "warn"
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Skipped missing S3 file");
+        UNIT_ASSERT_GE(requests.load(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
     }
 
     Y_UNIT_TEST(MultipleWriteIntoExternalTableDisabled) {

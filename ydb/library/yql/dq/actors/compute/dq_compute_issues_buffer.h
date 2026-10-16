@@ -22,6 +22,7 @@ public:
     ui32 GetAllAddedIssuesCount() const;
     void Push(const TIssues& issues);
     std::vector<TIssueInfo> Dump();
+    TIssues TakeWarnings();
 
 private:
     void Clear();
@@ -33,6 +34,7 @@ private:
     std::vector<TIssueInfo> Issues;
     ui32 HeadIndex = 0;
     ui32 ItemsCount = 0;
+    TIssues Warnings;
 };
 
 }

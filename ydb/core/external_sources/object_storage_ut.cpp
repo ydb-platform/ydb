@@ -5,6 +5,8 @@
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#include <tuple>
+
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(ObjectStorageTest) {
@@ -21,6 +23,41 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
         NKikimrExternalSources::TGeneral general;
         general.mutable_attributes()->insert({"a", "b"});
         UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Unknown attribute a");
+    }
+
+    Y_UNIT_TEST(MissingFilePolicy) {
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "json_each_row"});
+        const auto defaultContent = source->Pack(schema, general);
+        NKikimrExternalSources::TObjectStorage stored;
+        UNIT_ASSERT(stored.ParseFromString(defaultContent));
+        UNIT_ASSERT(!stored.has_on_missing_file());
+        UNIT_ASSERT(stored.on_missing_file() == NKikimrExternalSources::TObjectStorage::ON_MISSING_FILE_FAIL);
+        UNIT_ASSERT(!source->GetParameters(defaultContent).contains("on_missing_file"));
+
+        for (const auto& [input, output, policy] : {
+            std::tuple{"FaIl", "fail", NKikimrExternalSources::TObjectStorage::ON_MISSING_FILE_FAIL},
+            std::tuple{"IgNoRe", "ignore", NKikimrExternalSources::TObjectStorage::ON_MISSING_FILE_IGNORE},
+            std::tuple{"WaRn", "warn", NKikimrExternalSources::TObjectStorage::ON_MISSING_FILE_WARN}}) {
+            (*general.mutable_attributes())["on_missing_file"] = input;
+            const auto content = source->Pack(schema, general);
+            UNIT_ASSERT(stored.ParseFromString(content));
+            UNIT_ASSERT(stored.has_on_missing_file());
+            UNIT_ASSERT(stored.on_missing_file() == policy);
+            const auto parameters = source->GetParameters(content);
+            UNIT_ASSERT_VALUES_EQUAL(parameters.at("on_missing_file").at(0), output);
+        }
+
+        for (const auto invalid : {"skip_all_errors", "", "warn ", "1"}) {
+            (*general.mutable_attributes())["on_missing_file"] = invalid;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException,
+                "on_missing_file must be one of: fail, ignore, warn");
+        }
+        general.mutable_attributes()->erase("on_missing_file");
+        (*general.mutable_attributes())["ON_MISSING_FILE"] = "IGNORE";
+        UNIT_ASSERT_VALUES_EQUAL(source->GetParameters(source->Pack(schema, general)).at("on_missing_file").at(0), "ignore");
     }
 
     Y_UNIT_TEST(FailedValidation) {

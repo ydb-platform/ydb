@@ -59,7 +59,8 @@
             "Children": [
                 {"Index": 5, "Name": "SizeLimit", "Type": "TExprBase", "Optional": true},
                 {"Index": 6, "Name": "PathPattern", "Type": "TExprBase", "Optional": true},
-                {"Index": 7, "Name": "PathPatternVariant", "Type": "TExprBase", "Optional": true}
+                {"Index": 7, "Name": "PathPatternVariant", "Type": "TExprBase", "Optional": true},
+                {"Index": 8, "Name": "OnMissingFile", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

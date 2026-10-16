@@ -18,6 +18,15 @@ bool ParseS3ErrorResponse(const TString& response, TString& errorCode, TString& 
 TIssues BuildIssues(long httpCode, const TString& s3ErrorCode, const TString& message);
 NDqProto::StatusIds::StatusCode StatusFromS3ErrorCode(const TString& s3ErrorCode);
 
+enum class EMissingFilePolicy {
+    Fail,
+    Ignore,
+    Warn,
+};
+
+EMissingFilePolicy ParseMissingFilePolicy(TStringBuf value);
+bool IsMissingS3Object(long httpCode, TStringBuf s3ErrorCode);
+
 struct TS3Result {
     const TString Body;
     bool Parsed = false;

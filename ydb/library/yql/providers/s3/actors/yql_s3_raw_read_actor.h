@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_util.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -38,7 +39,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     ui64 fileQueueBatchSizeLimit,
     ui64 fileQueueBatchObjectCountLimit,
     ui64 fileQueueConsumersCountDelta,
-    bool allowLocalFiles
+    bool allowLocalFiles,
+    EMissingFilePolicy missingFilePolicy
 );
 
 } // namespace NYql::NDq

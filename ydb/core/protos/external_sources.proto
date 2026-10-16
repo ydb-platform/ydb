@@ -15,6 +15,12 @@ message TGeneral {
 }
 
 message TObjectStorage {
+    enum EOnMissingFile {
+        ON_MISSING_FILE_FAIL = 0;
+        ON_MISSING_FILE_IGNORE = 1;
+        ON_MISSING_FILE_WARN = 2;
+    }
+
     optional string format = 1 [(Ydb.length).le = 1024];
     map<string, string> format_setting = 2 [(Ydb.size).le = 100];
     optional string compression = 3 [(Ydb.length).le = 1024];
@@ -60,4 +66,5 @@ message TObjectStorage {
     "/city=${city}/code=${code}/device_id=${device_id}"
     */
     repeated string partitioned_by = 5;
+    optional EOnMissingFile on_missing_file = 6;
 }

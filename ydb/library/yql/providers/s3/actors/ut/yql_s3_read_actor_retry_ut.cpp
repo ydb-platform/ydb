@@ -857,6 +857,217 @@ Y_UNIT_TEST_SUITE(TS3ReadCoro) {
 }
 
 Y_UNIT_TEST_SUITE(TS3ReadActors) {
+    Y_UNIT_TEST(CompleteRowsSurviveButIncompleteRecordIsNotEmitted) {
+        for (const TString policy : {"fail", "ignore", "warn"}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            gateway->StreamScript = [gateway = gateway.get()](const TString&, int, auto& onStart, auto& onData, auto& onFinish) {
+                onStart(CURLE_OK, 206);
+                onData(gateway->Content("a\nx\npartial"));
+                onFinish(CURLE_PARTIAL_FILE, {TIssue("partial transfer")});
+            };
+            gateway->RangeScript = [](const TString&, size_t, size_t, IHTTPGateway::TOnResult& callback) {
+                callback(IHTTPGateway::TResult(IHTTPGateway::TContent("<Error><Code>NoSuchKey</Code></Error>", 404)));
+            };
+            auto source = CsvSource();
+            (*source.MutableSettings())["onmissingfile"] = policy;
+            TS3ReadActorFactoryConfig config;
+            config.RowsInBatch = 1;
+            ca.CreateReader(gateway, source, 1, 100, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy(), config);
+            ca.ReadToEnd();
+            UNIT_ASSERT_VALUES_EQUAL_C(ca.Rows, 1, ca.Describe());
+            UNIT_ASSERT_VALUES_EQUAL_C(ca.FatalErrors().empty(), policy != "fail", ca.Describe());
+            if (policy != "fail") {
+                UNIT_ASSERT_C(ca.Finished, ca.Describe());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingDisappearanceAcrossPoliciesAndEofKinds) {
+        for (const TString policy : {"", "fail", "ignore", "warn"}) {
+            for (const bool curlError : {false, true}) {
+                ui64 finishedSplitSize = 0;
+                TSimulatedCA ca;
+                ca.Observers.push_back([&finishedSplitSize](TAutoPtr<IEventHandle>& ev) {
+                    if (ev->GetTypeRewrite() == TEvS3Provider::TEvFileFinished::EventType) {
+                        finishedSplitSize = ev->Get<TEvS3Provider::TEvFileFinished>()->SplitSize;
+                    }
+                });
+                auto gateway = std::make_shared<TFakeS3Gateway>();
+                const TString data = "a\nx\n";
+                gateway->ServeStream(data);
+                if (curlError) {
+                    gateway->StreamScript = [gateway = gateway.get(), data](const TString&, int, auto& onStart, auto& onData, auto& onFinish) {
+                        onStart(CURLE_OK, 206);
+                        onData(gateway->Content(data));
+                        onFinish(CURLE_PARTIAL_FILE, {TIssue("partial transfer")});
+                    };
+                }
+                gateway->RangeScript = [](const TString&, size_t, size_t, IHTTPGateway::TOnResult& callback) {
+                    callback(IHTTPGateway::TResult(IHTTPGateway::TContent("<Error><Code>NoSuchKey</Code></Error>", 404)));
+                };
+                auto source = CsvSource();
+                if (policy) {
+                    (*source.MutableSettings())["onmissingfile"] = policy;
+                }
+                ca.CreateReader(gateway, source, 1, data.size() + 10, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+                ca.ReadToEnd();
+                const bool skip = policy == "ignore" || policy == "warn";
+                UNIT_ASSERT_VALUES_EQUAL_C(ca.FatalErrors().empty(), skip, ca.Describe());
+                UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls.load(), skip ? 1 : 0);
+                if (skip) {
+                    UNIT_ASSERT_C(ca.Finished, ca.Describe());
+                    UNIT_ASSERT_VALUES_EQUAL(finishedSplitSize, data.size() + 10);
+                    UNIT_ASSERT_VALUES_EQUAL(ca.Describe().Contains("Skipped missing S3 file"), policy == "warn");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingProbeMustConfirmMissingKey) {
+        for (const auto [status, code] : {std::pair{206L, ""}, std::pair{403L, "AccessDenied"}, std::pair{404L, "NoSuchBucket"}, std::pair{503L, "SlowDown"}}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            gateway->ServeStream("a\nx\n");
+            gateway->RangeScript = [status, code](const TString&, size_t, size_t, IHTTPGateway::TOnResult& callback) {
+                callback(IHTTPGateway::TResult(IHTTPGateway::TContent(TStringBuilder() << "<Error><Code>" << code << "</Code></Error>", status)));
+            };
+            auto source = CsvSource();
+            (*source.MutableSettings())["onmissingfile"] = "warn";
+            ca.CreateReader(gateway, source, 1, 20, IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+            ca.ReadToEnd();
+            UNIT_ASSERT_C(!ca.FatalErrors().empty(), ca.Describe());
+            UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls.load(), 1);
+            UNIT_ASSERT(!ca.Describe().Contains("Skipped missing S3 file"));
+        }
+    }
+
+    Y_UNIT_TEST(RetryThenMissingKeyAcrossPolicies) {
+        for (const TString policy : {"fail", "ignore", "warn"}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            gateway->StreamScript = [gateway = gateway.get()](const TString&, int attempt, auto& onStart, auto& onData, auto& onFinish) {
+                onStart(CURLE_OK, attempt == 1 ? 503 : 404);
+                onData(gateway->Content(S3Error(attempt == 1 ? "SlowDown" : "NoSuchKey", "test error")));
+                onFinish(CURLE_OK, {});
+            };
+            auto retryPolicy = IHTTPGateway::TRetryPolicy::GetFixedIntervalPolicy(
+                [](CURLcode, long status) { return status == 503 ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry; },
+                TDuration::MilliSeconds(10), TDuration::MilliSeconds(10));
+            auto source = CsvSource();
+            (*source.MutableSettings())["onmissingfile"] = policy;
+            ca.CreateReader(gateway, source, 1, 20, retryPolicy);
+            ca.ReadToEnd();
+            UNIT_ASSERT_VALUES_EQUAL(gateway->StreamCalls.load(), 2);
+            UNIT_ASSERT_VALUES_EQUAL_C(ca.FatalErrors().empty(), policy != "fail", ca.Describe());
+            if (policy != "fail") {
+                UNIT_ASSERT_C(ca.Finished, ca.Describe());
+                UNIT_ASSERT_VALUES_EQUAL(ca.Describe().Contains("Skipped missing S3 file"), policy == "warn");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RawSkippedFileDoesNotConsumeLimit) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        gateway->RangeScript = [gateway = gateway.get()](const TString&, size_t, size_t, IHTTPGateway::TOnResult& callback) {
+            if (gateway->RangeCalls.load() == 1) {
+                callback(IHTTPGateway::TResult(IHTTPGateway::TContent("<Error><Code>NoSuchKey</Code></Error>", 404)));
+            } else {
+                callback(IHTTPGateway::TResult(IHTTPGateway::TContent("data", 206)));
+            }
+        };
+        NS3::TSource source;
+        source.SetUrl("http://fake/");
+        source.SetRowsLimitHint(1);
+        (*source.MutableSettings())["onmissingfile"] = "ignore";
+        TS3ReadActorFactoryConfig config;
+        config.MaxInflight = 1;
+        ca.CreateReader(gateway, source, 2, 4, GetHTTPDefaultRetryPolicy(), config);
+        ca.ReadToEnd();
+        UNIT_ASSERT_C(ca.Finished && ca.Rows == 1 && ca.FatalErrors().empty(), ca.Describe());
+        UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls.load(), 2);
+    }
+
+    Y_UNIT_TEST(RawShortSuccessfulResponseRequiresMissingProbe) {
+        for (const bool missing : {false, true}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            gateway->RangeScript = [gateway = gateway.get(), missing](const TString&, size_t, size_t, IHTTPGateway::TOnResult& callback) {
+                if (gateway->RangeCalls.load() == 1) {
+                    callback(IHTTPGateway::TResult(IHTTPGateway::TContent("x", 206)));
+                } else if (missing) {
+                    callback(IHTTPGateway::TResult(IHTTPGateway::TContent("<Error><Code>NoSuchKey</Code></Error>", 404)));
+                } else {
+                    callback(IHTTPGateway::TResult(IHTTPGateway::TContent("x", 206)));
+                }
+            };
+            NS3::TSource source;
+            source.SetUrl("http://fake/");
+            (*source.MutableSettings())["onmissingfile"] = "warn";
+            ca.CreateReader(gateway, source, 1, 4);
+            ca.ReadToEnd();
+            UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls.load(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(ca.FatalErrors().empty(), missing);
+            if (missing) {
+                UNIT_ASSERT_C(ca.Finished && ca.Rows == 0, ca.Describe());
+                UNIT_ASSERT_STRING_CONTAINS(ca.Describe(), "Skipped missing S3 file");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(MissingBucketIsNeverSkipped) {
+        for (const bool raw : {false, true}) {
+            TSimulatedCA ca;
+            auto gateway = std::make_shared<TFakeS3Gateway>();
+            const TString error = "<Error><Code>NoSuchBucket</Code></Error>";
+            gateway->RangeScript = [error](const TString&, size_t, size_t, IHTTPGateway::TOnResult& callback) {
+                callback(IHTTPGateway::TResult(IHTTPGateway::TContent(error, 404)));
+            };
+            gateway->StreamScript = [gateway = gateway.get(), error](const TString&, int, auto& onStart, auto& onData, auto& onFinish) {
+                onStart(CURLE_OK, 404);
+                onData(gateway->Content(error));
+                onFinish(CURLE_OK, {});
+            };
+            auto source = CsvSource();
+            if (raw) {
+                source.ClearFormat();
+                source.ClearRowType();
+            }
+            (*source.MutableSettings())["onmissingfile"] = "ignore";
+            ca.CreateReader(gateway, source, 1, 4);
+            ca.ReadToEnd();
+            UNIT_ASSERT_C(!ca.FatalErrors().empty(), ca.Describe());
+            UNIT_ASSERT_STRING_CONTAINS(ca.Describe(), "NoSuchBucket");
+        }
+    }
+
+    Y_UNIT_TEST(CompleteCompressedStreamWithDeferredChunksIsNotShort) {
+        TSimulatedCA ca;
+        auto gateway = std::make_shared<TFakeS3Gateway>();
+        TStringBuilder csv;
+        csv << "a\n";
+        for (ui32 i = 0; i < 500; ++i) {
+            csv << i << "\n";
+        }
+        const TString compressed = Gzip(csv);
+        gateway->StreamScript = [gateway = gateway.get(), compressed](const TString&, int, auto& onStart, auto& onData, auto& onFinish) {
+            onStart(CURLE_OK, 206);
+            for (ui64 offset = 0; offset < compressed.size(); offset += 128) {
+                onData(gateway->Content(compressed.substr(offset, 128)));
+            }
+            onFinish(CURLE_OK, {});
+        };
+        auto source = CsvSource();
+        source.SetAsyncDecompressing(true);
+        (*source.MutableSettings())["compression"] = "gzip";
+        (*source.MutableSettings())["onmissingfile"] = "warn";
+        ca.CreateReader(gateway, source, 1, compressed.size(), IHTTPGateway::TRetryPolicy::GetNoRetryPolicy());
+        ca.ReadToEnd();
+        UNIT_ASSERT_C(ca.Finished && ca.Rows > 0 && ca.AllErrors().empty(), ca.Describe());
+        UNIT_ASSERT_VALUES_EQUAL(gateway->RangeCalls.load(), 0);
+    }
+
     // The file queue registered by the reader (runtime listing off) dies with it.
     Y_UNIT_TEST(LocalFileQueueDiesWithReader) {
         for (bool raw : {false, true}) {

@@ -797,7 +797,19 @@ protected:
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             FillStats(record.MutableStats(), /* last */ true);
         }
-        IssuesToMessage(issues, record.MutableIssues());
+        TIssues finalIssues = issues;
+        if (State == NDqProto::COMPUTE_STATE_FINISHED && statusCode == NYql::NDqProto::StatusIds::SUCCESS) {
+            auto appendWarnings = [&finalIssues](auto& holders) {
+                for (auto& [index, holder] : holders) {
+                    finalIssues.AddIssues(holder.IssuesBuffer.TakeWarnings());
+                }
+            };
+            appendWarnings(SourcesMap);
+            appendWarnings(InputTransformsMap);
+            appendWarnings(SinksMap);
+            appendWarnings(OutputTransformsMap);
+        }
+        IssuesToMessage(finalIssues, record.MutableIssues());
 
         if (ComputeActorSpan) {
             ComputeActorSpan.End();

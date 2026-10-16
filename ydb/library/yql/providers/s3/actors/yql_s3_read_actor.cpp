@@ -155,6 +155,10 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
+struct TS3MissingFile : public yexception {
+    using yexception::yexception;
+};
+
 void ThrowParquetNotOk(arrow::Status status) {
     if (!status.ok()) {
         throw parquet::ParquetException(status.ToString());
@@ -171,6 +175,7 @@ struct TReadSpec {
     using TPtr = std::shared_ptr<TReadSpec>;
 
     bool Arrow = false;
+    EMissingFilePolicy MissingFilePolicy = EMissingFilePolicy::Fail;
     ui64 ParallelRowGroupCount = 0;
     bool RowGroupReordering = true;
     ui64 ParallelDownloadCount = 0;
@@ -616,7 +621,15 @@ public:
 
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvS3Provider::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
         if (result.Issues) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
+            TString s3ErrorCode;
+            TString message;
+            const long httpCode = result.Content.HttpResponseCode;
+            const bool shortRead = result.CurlResponseCode == CURLE_PARTIAL_FILE;
+            if (httpCode == 404) {
+                ParseS3ErrorResponse(result.Content.Extract(), s3ErrorCode, message);
+            }
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range,
+                std::move(result.Issues), IsMissingS3Object(httpCode, s3ErrorCode), shortRead), 0, cookie));
         } else if (const auto httpCode = result.Content.HttpResponseCode; httpCode < 200 || httpCode >= 300) {
             const TString response = result.Content.Extract();
             TString s3ErrorCode;
@@ -625,7 +638,16 @@ public:
                 message = response;
             }
             SubstGlobal(message, '\r', ' ');
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, BuildIssues(httpCode, s3ErrorCode, message)), 0, cookie));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range,
+                BuildIssues(httpCode, s3ErrorCode, message), IsMissingS3Object(httpCode, s3ErrorCode)), 0, cookie));
+        } else if (result.Content.size() < static_cast<size_t>(range.Length) ||
+                   (result.Content.HttpResponseCode == 206 && result.Content.size() != static_cast<size_t>(range.Length))) {
+            TIssues issues;
+            issues.AddIssue(TIssue(TStringBuilder() << "S3 range ended early: expected " << range.Length
+                << " bytes, received " << result.Content.size()));
+            actorSystem->Send(new IEventHandle(selfId, TActorId{},
+                new TEvS3Provider::TEvReadResult2(range, std::move(issues), false,
+                    result.Content.size() < static_cast<size_t>(range.Length)), 0, cookie));
         } else {
             actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
         }
@@ -692,6 +714,10 @@ public:
 
     void HandleEvent(TEvS3Provider::TEvReadResult2::THandle& event) {
         if (event.Get()->Failure) {
+            if (ReadSpec->MissingFilePolicy != EMissingFilePolicy::Fail &&
+                (event.Get()->MissingFile || (event.Get()->ShortRead && ProbeMissingObject()))) {
+                throw TS3MissingFile();
+            }
             ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << event.Get()->Issues.ToOneLineString();
         }
         auto readyRange = event.Get()->ReadRange;
@@ -1101,6 +1127,8 @@ public:
         ServerReturnedError = false;
         Issues.Clear();
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+        ExpectedDownloadSize = RetryStuff->SizeLimit;
+        ReceivedDownloadSize = 0;
     }
 
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
@@ -1115,6 +1143,7 @@ public:
             HttpDataRps->Inc();
         }
         if (200L == HttpResponseCode || 206L == HttpResponseCode) {
+            ReceivedDownloadSize += ev->Get()->Result.size();
             if (IsPaused() || !DeferredDataParts.empty() || !InputBuffer.empty()) {
                 DeferredDataParts.push(std::move(ev->Release()));
                 if (DeferredQueueSize) {
@@ -1152,14 +1181,14 @@ public:
         }
 
         Issues.Clear();
+        TString s3ErrorCode;
         if (!ErrorText.empty()) {
-            TString errorCode;
             TString message;
-            if (!ParseS3ErrorResponse(ErrorText, errorCode, message)) {
+            if (!ParseS3ErrorResponse(ErrorText, s3ErrorCode, message)) {
                 message = ErrorText;
             }
-            Issues.AddIssues(BuildIssues(HttpResponseCode, errorCode, message));
-            FatalCode = StatusFromS3ErrorCode(errorCode);
+            Issues.AddIssues(BuildIssues(HttpResponseCode, s3ErrorCode, message));
+            FatalCode = StatusFromS3ErrorCode(s3ErrorCode);
         }
 
         if (ev->Get()->Issues) {
@@ -1169,6 +1198,12 @@ public:
         if (HttpResponseCode >= 300) {
             ServerReturnedError = true;
             Issues.AddIssue(TIssue{TStringBuilder() << "HTTP error code: " << HttpResponseCode});
+        }
+
+        if (!Issues && !RetryStuff->IsCancelled() && ReceivedDownloadSize < ExpectedDownloadSize &&
+            (HttpResponseCode == 200 || HttpResponseCode == 206)) {
+            CurlResponseCode = CURLE_PARTIAL_FILE;
+            Issues.AddIssue(TIssue("S3 object ended before the expected number of bytes was read"));
         }
 
         if (Issues) {
@@ -1182,6 +1217,13 @@ public:
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
                 FinishDecompressor();
+                if (ReadSpec->MissingFilePolicy != EMissingFilePolicy::Fail &&
+                    (IsMissingS3Object(HttpResponseCode, s3ErrorCode) ||
+                     (CurlResponseCode == CURLE_PARTIAL_FILE && ProbeMissingObject()))) {
+                    SkippedMissingFile = true;
+                    Issues.Clear();
+                    throw TS3ReadError();
+                }
                 LOG_CORO_W("ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
@@ -1218,6 +1260,24 @@ public:
                 FinishDecompressor();
             }
         }
+    }
+
+    bool ProbeMissingObject() {
+        const auto self = SelfActorId;
+        auto* actorSystem = GetActorSystem();
+        RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers, 0, 1,
+            [actorSystem, self](IHTTPGateway::TResult&& result) {
+                TString errorCode;
+                TString message;
+                const long httpCode = result.Content.HttpResponseCode;
+                if (httpCode == 404) {
+                    ParseS3ErrorResponse(result.Content.Extract(), errorCode, message);
+                }
+                actorSystem->Send(new IEventHandle(self, TActorId{},
+                    new TEvS3Provider::TEvMissingFileProbeResult(httpCode, std::move(errorCode), std::move(result.Issues))));
+            }, {}, RetryStuff->RetryPolicy);
+        auto ev = WaitForSpecificEvent<TEvS3Provider::TEvMissingFileProbeResult>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
+        return IsMissingS3Object(ev->Get()->HttpCode, ev->Get()->S3ErrorCode);
     }
 
     void HandleEvent(TEvS3Provider::TEvContinue::THandle&) {
@@ -1391,6 +1451,10 @@ private:
             // The owner stops us (LIMIT reached or it passes away): issues of an attempt that was
             // waiting for its retry were already reported as retriable and are not a failure.
             Issues.Clear();
+        } catch (const TS3MissingFile&) {
+            SkippedMissingFile = true;
+            RetryStuff->Cancel();
+            FinishDecompressor();
         } catch (const TDtorException&) {
             // Stop any activity instantly
             RetryStuff->Cancel();
@@ -1420,7 +1484,9 @@ private:
         if (issues) {
             OnFatalError(std::move(issues), FatalCode);
         } else {
-            Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), RetryStuff->SizeLimit));
+            const auto splitSize = RetryStuff->SizeLimit + (SkippedMissingFile ? RetryStuff->Offset : 0);
+            Send(ParentActorId, new TEvS3Provider::TEvFileFinished(PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), splitSize,
+                SkippedMissingFile ? Path : TString{}));
         }
     }
 
@@ -1490,9 +1556,12 @@ private:
     long HttpResponseCode = 0L;
     CURLcode CurlResponseCode = CURLE_OK;
     bool ServerReturnedError = false;
+    bool SkippedMissingFile = false;
+    ui64 ExpectedDownloadSize = 0;
+    ui64 ReceivedDownloadSize = 0;
     TString ErrorText;
     TIssues Issues;
-    NYql::NDqProto::StatusIds::StatusCode FatalCode;
+    NYql::NDqProto::StatusIds::StatusCode FatalCode = NYql::NDqProto::StatusIds::UNSPECIFIED;
 
     TActorId DecompressorActorId;
     std::size_t LastOffset = 0;
@@ -2046,6 +2115,19 @@ private:
 
     void HandleFileFinished(TEvS3Provider::TEvFileFinished::TPtr& ev) {
         CoroActors.erase(ev->Sender);
+        if (ev->Get()->SkippedPath) {
+            LOG_W("TS3StreamReadActor", "Skipping missing S3 file " << ev->Get()->SkippedPath);
+            ++SkippedMissingFiles;
+            if (Counters) {
+                Counters->GetCounter("SkippedMissingFiles", true)->Inc();
+            }
+            if (ReadSpec->MissingFilePolicy == EMissingFilePolicy::Warn && SkippedMissingFiles <= 16) {
+                TIssues warning;
+                warning.AddIssue(TIssue(TStringBuilder() << "Skipped missing S3 file " << ev->Get()->SkippedPath)
+                    .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_WARNING));
+                OnRetriableError(warning);
+            }
+        }
         if (IsCurrentBatchEmpty && CoroActors.size() == 0) {
             IsCurrentBatchEmpty = false;
         }
@@ -2170,6 +2252,7 @@ private:
     const bool AddPathIndex;
     size_t ListedFiles = 0;
     size_t CompletedFiles = 0;
+    ui64 SkippedMissingFiles = 0;
     std::optional<ui64> RowsRemained;
     const TReadSpec::TPtr ReadSpec;
     std::deque<TReadyBlock> Blocks;
@@ -2384,6 +2467,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TS3Credentials credentials(credentialsFactory, token);
 
     const auto& settings = params.GetSettings();
+    const auto missingFileIt = settings.find("onmissingfile");
+    const auto missingFilePolicy = ParseMissingFilePolicy(missingFileIt != settings.cend()
+        ? TStringBuf(missingFileIt->second) : TStringBuf{});
     TString pathPattern = "*";
     ES3PatternVariant pathPatternVariant = ES3PatternVariant::FilePattern;
     const bool hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
@@ -2463,6 +2549,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
         const auto readSpec = std::make_shared<TReadSpec>();
         readSpec->Arrow = params.GetFormat() == "parquet";
+        readSpec->MissingFilePolicy = missingFilePolicy;
         readSpec->ParallelRowGroupCount = params.GetParallelRowGroupCount();
         readSpec->RowGroupReordering = params.GetRowGroupReordering();
         readSpec->ParallelDownloadCount = params.GetParallelDownloadCount();
@@ -2604,7 +2691,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                         std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                         cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
-                                        params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
+                                        params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles,
+                                        missingFilePolicy);
 }
 
 } // namespace NYql::NDq

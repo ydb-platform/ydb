@@ -3656,6 +3656,7 @@ Y_UNIT_TEST(ExternalTable) {
             LOCATION = "/folder1/",
             FORMAT = "csv_with_names",
             COMPRESSION = "gzip",
+            ON_MISSING_FILE = "warn",
             PARTITIONED_BY = "['Year']"
         );
     )");
@@ -3672,6 +3673,7 @@ Y_UNIT_TEST(ExternalTable) {
              "LOCATION = '/folder1/'",
              "FORMAT = 'csv_with_names'",
              "COMPRESSION = 'gzip'",
+             "ON_MISSING_FILE = 'warn'",
              "PARTITIONED_BY = '[\"Year\"]'",
          }) {
         UNIT_ASSERT_C(query.find(expected) != std::string::npos,
@@ -3693,6 +3695,7 @@ Y_UNIT_TEST(ExternalTable) {
              "LOCATION = '/folder1/'",
              "FORMAT = 'csv_with_names'",
              "COMPRESSION = 'gzip'",
+             "ON_MISSING_FILE = 'warn'",
              "PARTITIONED_BY = '[\"Year\"]'",
          }) {
         UNIT_ASSERT_C(recreated.find(expected) != std::string::npos,

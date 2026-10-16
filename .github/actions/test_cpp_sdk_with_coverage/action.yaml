@@ -27,6 +27,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
         BUILD_PRESET: profile
+        GIT_TRACE: "1"
       run: |
         set -ex
 

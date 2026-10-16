@@ -136,11 +136,6 @@ jobs:
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           fetch-depth: 0
-      - name: Drop GitHub proxy
-        if: vars.GH_PROXY_URL != ''
-        shell: bash
-        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
-
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
@@ -153,3 +148,7 @@ jobs:
           bazel_remote_uri: ${{ vars.REMOTE_CACHE_URL_YA }}
           bazel_remote_username: ${{ secrets.REMOTE_CACHE_USERNAME }}
           bazel_remote_password: ${{ secrets.REMOTE_CACHE_PASSWORD }}
+      - name: Drop GitHub proxy
+        if: vars.GH_PROXY_URL != ''
+        shell: bash
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"

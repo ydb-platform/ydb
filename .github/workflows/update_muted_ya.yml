@@ -55,10 +55,85 @@ jobs:
   collect-testowners-and-sync:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
+      - name: Probe GitHub speed
+        if: vars.GH_PROXY_URL != ''
+        env:
+          GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          proxy_url="${GH_PROXY_URL:-}"
+          proxy_url="${proxy_url%/}"
+          if [ -z "$proxy_url" ]; then
+            echo "GH_PROXY_URL is empty, checkout stays direct"
+            exit 0
+          fi
+
+          archive=https://github.com/ydb-platform/ydb/archive/refs/heads/main.tar.gz
+
+          # Total bytes, and bytes/sec over the last 5s. The average from the start hides the slow tail.
+          measure() {
+            local out pid i now n end start back bps
+            out=$(mktemp)
+            curl -L --http2 --max-time 30 -o "$out" -s "$1" &
+            pid=$!
+            local -a samples=()
+            for i in $(seq 1 30); do
+              sleep 1
+              now=$(wc -c < "$out" | tr -d ' ')
+              samples+=("${now:-0}")
+            done
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            rm -f "$out"
+            n=${#samples[@]}
+            end=${samples[$((n - 1))]:-0}
+            back=5
+            if [ "$n" -le 5 ]; then
+              back=$((n - 1))
+            fi
+            if [ "$back" -lt 1 ]; then
+              back=1
+            fi
+            start=${samples[$((n - 1 - back))]:-0}
+            bps=$(( (end - start) / back ))
+            echo "$end $bps"
+          }
+
+          megabytes() {
+            awk -v bytes="${1:-0}" 'BEGIN { printf "%.2f", (bytes + 0) / 1000000 }'
+          }
+
+          read -r direct_bytes direct_tail <<< "$(measure "$archive")" || true
+          read -r proxy_bytes proxy_tail <<< "$(measure "${proxy_url}/${archive}")" || true
+
+          faster=$(awk -v direct="${direct_tail:-0}" -v proxy="${proxy_tail:-0}" 'BEGIN {
+            print (proxy + 0 > direct + 0) ? "proxy" : "github"
+          }')
+          use_proxy=false
+          if [ "$faster" = proxy ]; then
+            use_proxy=true
+          fi
+
+          echo "GitHub $(megabytes "${direct_bytes:-0}") MB, last 5s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 5s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+
+          if [ "$use_proxy" = true ]; then
+            {
+              echo "GIT_CONFIG_COUNT=1"
+              echo "GIT_CONFIG_KEY_0=url.${proxy_url}/https://github.com/.insteadOf"
+              echo "GIT_CONFIG_VALUE_0=https://github.com/"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Checkout repository
         uses: actions/checkout@v5
+        env:
+          GIT_TRACE: "1"
         with:
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
+      - name: Drop GitHub proxy
+        if: vars.GH_PROXY_URL != ''
+        shell: bash
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
 
       - name: Install dependencies
         run: |
@@ -171,11 +246,6 @@ jobs:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ env.WORKFLOW_CHECKOUT_REF }}
           fetch-depth: 0
-      - name: Drop GitHub proxy
-        if: vars.GH_PROXY_URL != ''
-        shell: bash
-        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -188,6 +258,8 @@ jobs:
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Prepare base mute file
+        env:
+          GIT_TRACE: "1"
         run: |
           set -euo pipefail
           echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> "$GITHUB_ENV"
@@ -196,6 +268,11 @@ jobs:
 
           git fetch origin "${{ matrix.BASE_BRANCH }}:refs/remotes/origin/${{ matrix.BASE_BRANCH }}"
           git show "origin/${{ matrix.BASE_BRANCH }}:${{ matrix.MUTED_YA_RELATIVE }}" > base_muted_ya.txt
+
+      - name: Drop GitHub proxy
+        if: vars.GH_PROXY_URL != ''
+        shell: bash
+        run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
 
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}

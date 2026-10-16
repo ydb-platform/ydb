@@ -54,6 +54,15 @@ protected:
         // Outside the single-null case, positions do not reference null entries.
         return HasOnlyNullValue() ? GetRecordsCount() : ArrayPositions->null_count();
     }
+    virtual std::optional<bool> DoHasNulls() const override {
+        if ((HasOnlyNullValue() && GetRecordsCount()) || ArrayPositions->null_count()) {
+            return true;
+        }
+        if (ArrayDictionary->null_count()) {
+            return std::nullopt;
+        }
+        return false;
+    }
 
     virtual ui32 DoGetValueRawBytes() const override {
         return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);

@@ -194,7 +194,10 @@ bool CreateConsistentCopyTables(
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()
                   .NotDeleted()
-                  .Or(&TPath::TChecker::IsColumnTable, &TPath::TChecker::IsTable);
+                  .NotUnderDeleting()
+                  .Or(&TPath::TChecker::IsColumnTable, &TPath::TChecker::IsTable)
+                  // Never allow copying a backup table as a source
+                  .NotBackupTable();
 
             // Allow copying index impl tables when feature flag is enabled
             if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
@@ -202,6 +205,13 @@ bool CreateConsistentCopyTables(
             }
 
             checks.IsTheSameDomain(firstPath);
+
+            // Fail the whole operation before any part is proposed when the source
+            // is locked by another in-flight operation (mirrors the check in
+            // TCopyTable::Propose, but at parts-building time)
+            if (!descr.GetAllowUnderSameOperation()) {
+                checks.NotUnderOperation();
+            }
 
             if (!checks) {
                 result = {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

@@ -316,6 +316,12 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& i
     ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
     Imports.erase(importInfo.Id);
 
+    for (const auto& item : importInfo.Items) {
+        if (item.WaitTxId != InvalidTxId) {
+            TxIdToImport.erase(item.WaitTxId);
+        }
+    }
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }

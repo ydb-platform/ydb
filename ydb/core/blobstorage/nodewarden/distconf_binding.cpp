@@ -143,13 +143,14 @@ namespace NKikimr::NStorage {
         }
 
         // check if some nodes were deleted -- we have to unbind them
+        THashSet<ui32> addedNodeIds;
         bool bindingReset = false;
-        auto applyChanges = [&](auto& prev, auto& cur) {
+        auto applyChanges = [&](const auto& prev, auto& cur) {
             std::ranges::sort(cur);
-            for (auto prevIt = prev.begin(), curIt = cur.begin(); prevIt != prev.end() || curIt != cur.end(); ) {
-                if (prevIt == prev.end() || (curIt != cur.end() && *curIt < *prevIt)) { // node added
-                    ++curIt;
-                } else if (curIt == cur.end() || *prevIt < *curIt) { // node deleted
+            for (auto prevIt = prev.cbegin(), curIt = cur.cbegin(); prevIt != prev.cend() || curIt != cur.cend(); ) {
+                if (prevIt == prev.cend() || (curIt != cur.cend() && *curIt < *prevIt)) { // node added
+                    addedNodeIds.insert(*curIt++);
+                } else if (curIt == cur.cend() || *prevIt < *curIt) { // node deleted
                     const ui32 nodeId = *prevIt++;
                     UnbindNode(nodeId, "node vanished");
                     if (Binding && Binding->NodeId == nodeId) {
@@ -161,7 +162,6 @@ namespace NKikimr::NStorage {
                     ++curIt;
                 }
             }
-            prev = std::move(cur);
         };
         applyChanges(NodeIdsForOutgoingBinding, nodeIdsForOutgoingBinding);
         applyChanges(NodeIdsForIncomingBinding, nodeIdsForIncomingBinding);
@@ -170,10 +170,22 @@ namespace NKikimr::NStorage {
             AbortBinding("node vanished");
         }
 
+        NodeIdsForOutgoingBinding = std::move(nodeIdsForOutgoingBinding);
+        NodeIdsForIncomingBinding = std::move(nodeIdsForIncomingBinding);
+        NodeIdsForOtherPilesOutgoingBinding = std::move(nodeIdsForOtherPilesOutgoingBinding);
+
         // issue updates
         BindQueue.Update(NodeIdsForOutgoingBinding);
         RevBindQueue.Update(NodeIdsForIncomingBinding);
         OtherPilesBindQueue.Update(NodeIdsForOtherPilesOutgoingBinding);
+
+        if (!addedNodeIds.empty()) {
+            for (const auto& [nodeId, info] : AllBoundNodes) {
+                if (addedNodeIds.contains(nodeId.NodeId())) {
+                    GetBindQueue(nodeId.NodeId())->Disable(nodeId.NodeId());
+                }
+            }
+        }
     }
 
     TBridgePileId TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
@@ -381,7 +393,7 @@ namespace NKikimr::NStorage {
         }
         subs.SessionId = sessionId;
 
-        if (Binding && Binding->NodeId == nodeId) {
+        if (Binding && Binding->NodeId == nodeId && !Binding->SessionId) {
             YDB_LOG_DEBUG("Continuing bind",
                 {"marker", "NWDC09"},
                 {"binding", Binding});

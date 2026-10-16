@@ -286,7 +286,7 @@ void AddYtPart(
 
 TActorId StartYtWrapper(TTestActorRuntime& runtime, const TActorId& edge, const NKikimrSchemeOp::TRestoreTask& task) {
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), task.GetTableDescription(), ui32(0));
-    auto actor = NColumnShard::NBackup::CreateImportDownloader(edge, 0, task, NDataShard::TTableInfo(0, userTable), MakeYdbSchema());
+    auto actor = NColumnShard::NBackup::CreateImportDownloader(edge, 1, 0, task, NDataShard::TTableInfo(0, userTable), MakeYdbSchema());
     return runtime.Register(actor.release());
 }
 
@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
+            edge, 1, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
         auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
 
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
 
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema3ColsReversed());
+            edge, 1, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema3ColsReversed());
         auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
 
@@ -538,7 +538,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         auto restoreTask = MakeRestoreTask(bucketName);
         auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
         auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
+            edge, 1, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
         auto importActorId = runtime->Register(importActor.release());
         runtime->DispatchEvents({}, TDuration::Seconds(1));
 

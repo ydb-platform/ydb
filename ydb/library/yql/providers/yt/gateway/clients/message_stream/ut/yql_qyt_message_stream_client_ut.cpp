@@ -6,9 +6,6 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
-
 namespace NYql {
 
 ////////////////////////////////////////////////////////////////////////////
@@ -82,35 +79,6 @@ Y_UNIT_TEST_SUITE(TQytTopicSessionTest) {
         UNIT_ASSERT(std::holds_alternative<NFq::TMessageStreamSessionClosedEvent>(*event));
         auto& closeEvent = std::get<NFq::TMessageStreamSessionClosedEvent>(*event);
         UNIT_ASSERT_EQUAL(closeEvent.Status, NFq::EMessageStreamStatus::Success);
-    }
-
-////////////////////////////////////////////////////////////////////////////
-// Test: Row data extraction logic
-////////////////////////////////////////////////////////////////////////////
-
-    Y_UNIT_TEST(ExtractRowDataLogic) {
-        auto nameTable = NYT::New<NYT::NTableClient::TNameTable>();
-        const int dataColumnId = nameTable->GetIdOrRegisterName("data");
-
-        NYT::NTableClient::TUnversionedRowBuilder builder;
-        const TString payload("hello world");
-        builder.AddValue(NYT::NTableClient::MakeUnversionedStringValue(
-            TStringBuf(payload.data(), payload.size()), dataColumnId));
-        auto row = builder.GetRow();
-
-        std::optional<int> dataId = nameTable->FindId("data");
-        TStringBuf extractedData;
-        for (const auto& value : row) {
-            if (dataId && value.Id != static_cast<ui16>(*dataId)) {
-                continue;
-            }
-            if (value.Type == NYT::NTableClient::EValueType::String) {
-                extractedData = TStringBuf(value.Data.String, value.Length);
-                break;
-            }
-        }
-
-        UNIT_ASSERT_EQUAL(TString(extractedData), payload);
     }
 
 ////////////////////////////////////////////////////////////////////////////

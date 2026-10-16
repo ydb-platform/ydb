@@ -65,12 +65,11 @@ class ChangesAlreadyAppliedError(Exception):
 
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True, stream=False) -> subprocess.CompletedProcess:
-    """Run git command. stream=True lets GIT_TRACE reach the Actions log."""
+    """Run git command. stream=True leaves git output in the Actions log."""
     try:
         result = subprocess.run(
             ['git'] + cmd,
             cwd=repo_path,
-            env={**os.environ, 'GIT_TRACE': '1'} if stream else None,
             capture_output=not stream,
             text=True,
             check=check
@@ -82,7 +81,7 @@ def run_git(repo_path: str, cmd: List[str], logger, check=True, stream=False) ->
 
 
 def fetch_proxy_args() -> List[str]:
-    """Rewrite only this git command's GitHub URL, when the workflow probe chose a proxy.
+    """Rewrite only this git command's GitHub URL, when GH_FETCH_PROXY_URL is set.
 
     Not stored in repo config, so a later push still goes to github.com and can
     carry the auth header. The header is attached to https://github.com/, not to
@@ -92,6 +91,39 @@ def fetch_proxy_args() -> List[str]:
     if not proxy:
         return []
     return ["-c", f"url.{proxy}/https://github.com/.insteadOf=https://github.com/"]
+
+
+def run_git_transfer(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
+    """Fetch or clone through the proxy, then retry on github.com if that fails."""
+    if fetch_proxy_args():
+        result = run_git(repo_path, fetch_proxy_args() + cmd, logger, check=False, stream=True)
+        if result.returncode == 0:
+            return result
+        logger.warning("proxied git failed, retrying on github.com: %s", " ".join(cmd))
+    return run_git(repo_path, cmd, logger, check=check, stream=True)
+
+
+def fetch_ref_matching_github(repo_path: str, fetch_cmd: List[str], rev: str, expected: str, logger) -> None:
+    """Fetch a ref and require it to be the commit GitHub API reports.
+
+    A proxy can answer a branch name with a different tip. The commit object
+    hash does not catch that. On mismatch, refetch without the proxy once.
+    """
+    def current() -> str:
+        result = run_git(repo_path, ['rev-parse', rev], logger)
+        return (result.stdout or '').strip()
+
+    run_git_transfer(repo_path, fetch_cmd, logger)
+    actual = current()
+    if actual == expected:
+        return
+    if fetch_proxy_args():
+        logger.warning("%s is %s, GitHub has %s; refetching without proxy", rev, actual, expected)
+        run_git(repo_path, fetch_cmd, logger, stream=True)
+        actual = current()
+        if actual == expected:
+            return
+    raise RuntimeError(f"{rev} is {actual}, GitHub has {expected}")
 
 
 def configure_push_auth(repo_path: str, token: str, logger) -> None:
@@ -663,8 +695,16 @@ def process_branch(
     all_conflict_files = []
     cherry_pick_logs = []
     
-    # Prepare branch. Fetch may go through the probe-selected proxy; push below does not.
-    run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', target_branch], logger, stream=True)
+    # Fetch may go through the probe-selected proxy. The tip must match GitHub
+    # before we cherry-pick onto it. Push below does not use the proxy.
+    expected_tip = repo.get_branch(target_branch).commit.sha
+    fetch_ref_matching_github(
+        repo_path,
+        ['fetch', 'origin', target_branch],
+        f'origin/{target_branch}',
+        expected_tip,
+        logger,
+    )
     run_git(repo_path, ['reset', '--hard', 'HEAD'], logger)
     run_git(repo_path, ['checkout', '-B', target_branch, f'origin/{target_branch}'], logger)
     run_git(repo_path, ['checkout', '-b', dev_branch_name, target_branch], logger)
@@ -673,7 +713,7 @@ def process_branch(
     for commit_sha in commit_shas:
         logger.info("Cherry-picking commit: %s", commit_sha[:7])
         # Fetch commit to ensure it's available locally (needed for unmerged PRs)
-        run_git(repo_path, fetch_proxy_args() + ['fetch', 'origin', commit_sha], logger, check=False, stream=True)
+        run_git_transfer(repo_path, ['fetch', 'origin', commit_sha], logger, check=False)
         try:
             result = run_git(repo_path, ['cherry-pick', '--allow-empty', commit_sha], logger, check=False)
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
@@ -984,12 +1024,25 @@ def main():
         repo_url = f"https://github.com/{repo_name}.git"
         proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
         logger.info("Cloning repository: %s to %s via %s", repo_url, repo_dir, proxy or "direct")
-        subprocess.run(
-            ['git', *fetch_proxy_args(), 'clone', repo_url, repo_dir],
-            env={**os.environ, 'GIT_PROTOCOL': '2', 'GIT_TRACE': '1'},
-            check=True,
-            text=True,
-        )
+        clone_env = {**os.environ, 'GIT_PROTOCOL': '2'}
+        try:
+            subprocess.run(
+                ['git', *fetch_proxy_args(), 'clone', repo_url, repo_dir],
+                env=clone_env,
+                check=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError:
+            if not fetch_proxy_args():
+                raise
+            logger.warning("proxied clone failed, retrying on github.com")
+            shutil.rmtree(repo_dir, ignore_errors=True)
+            subprocess.run(
+                ['git', 'clone', repo_url, repo_dir],
+                env=clone_env,
+                check=True,
+                text=True,
+            )
         
         # Process each target branch
         results: list[BackportResult] = []

@@ -29,7 +29,7 @@ jobs:
 
           repo_url=https://github.com/ydb-platform/ydb.git
 
-          # Depth-1 clone, same transfer as checkout. Speed is the 15th second after tmp_pack passes 1 MB.
+          # Depth-1 clone, same transfer as checkout. Speed is bytes added over the 15s after tmp_pack passes 1 MB, ignoring a flat tail.
           pack_size() {
             local f
             f=$(ls "$1"/.git/objects/pack/tmp_pack_* 2>/dev/null | head -1 || true)
@@ -53,13 +53,21 @@ jobs:
               if [ "$sz" -gt 1000000 ]; then s1=$sz; break; fi
             done
             s2=$s1
+            elapsed=0
             if [ "$s1" -gt 0 ]; then
-              sleep 14
-              s1=$(pack_size "$dest")
-              sleep 1
-              s2=$(pack_size "$dest")
-              if [ "$s2" -lt "$s1" ]; then s2=$s1; fi
+              grown=$s1
+              for j in $(seq 1 15); do
+                sleep 1
+                sz=$(pack_size "$dest")
+                if [ "$sz" -lt "$grown" ]; then sz=$grown; fi
+                if [ "$sz" -gt "$grown" ]; then
+                  grown=$sz
+                  elapsed=$j
+                fi
+              done
+              s2=$grown
             fi
+            if [ "$elapsed" -lt 1 ]; then elapsed=1; fi
             kill "$pid" 2>/dev/null || true
             pkill -P "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
@@ -69,7 +77,7 @@ jobs:
             fi
             rm -rf "$dest"
             rm -f "$log"
-            echo "$s2 $(( s2 - s1 ))"
+            echo "$s2 $(( (s2 - s1) / elapsed ))"
           }
 
           megabytes() {
@@ -96,7 +104,7 @@ jobs:
             use_proxy=true
           fi
 
-          echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, last 1s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, last 1s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
+          echo "git pack GitHub $(megabytes "${direct_bytes:-0}") MB, 15s $(megabytes "${direct_tail:-0}") MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}") MB, 15s $(megabytes "${proxy_tail:-0}") MB/s; use_proxy=${use_proxy}"
           {
             echo "GH_PROXY_MEASURED=1"
             echo "GH_PROXY_USED=$use_proxy"

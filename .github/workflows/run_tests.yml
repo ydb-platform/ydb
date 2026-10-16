@@ -56,7 +56,7 @@ on:
         description: "Compare GitHub and vars.GH_PROXY_URL, then fetch through whichever is faster"
         required: false
         type: boolean
-        default: false
+        default: true
 
   workflow_dispatch:
     inputs:

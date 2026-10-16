@@ -225,7 +225,12 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
     TBlobStorageGroupType type(ErasureSpecies);
     const double factor = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     if (size) {
-        pb->SetSpace(Min<ui64>(pb->HasSpace() ? pb->GetSpace() : Max<ui64>(), *size * factor));
+        const double groupSize = *size * factor;
+        // Beware of UB when casting an out-of-range double to ui64.
+        // Check before casting: Max<ui64>() itself rounds up to 2^64 as a double.
+        const ui64 space = groupSize < static_cast<double>(Max<ui64>())
+            ? static_cast<ui64>(groupSize) : Max<ui64>();
+        pb->SetSpace(Min(pb->HasSpace() ? pb->GetSpace() : Max<ui64>(), space));
     }
     if (iops) {
         pb->SetIOPS(Min<double>(pb->HasIOPS() ? pb->GetIOPS() : Max<double>(), *iops * VDisksInGroup.size() / type.TotalPartCount()));

@@ -510,6 +510,11 @@ class TExecutor
     ui64 UsedTabletMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
+    bool TabletMemoryHostEnabled = false;
+    NMemory::TConsumerReport OwnerMemoryReport;
+    NMemory::EMemoryZone MemoryZone = NMemory::EMemoryZone::Green;
+    std::optional<ui64> MemoryShare;
+
     bool BackupSnapshotInProgress = false;
     std::optional<TBackoff> BackupRetry;
 
@@ -735,6 +740,15 @@ public:
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);
+    void Handle(NMemory::TEvMemoryZone::TPtr &ev);
+
+    NMemory::EMemoryZone GetMemoryZone() const override {
+        return MemoryZone;
+    }
+
+    std::optional<ui64> GetMemoryShare() const override {
+        return MemoryShare;
+    }
 
     void AllowBorrowedGarbageCompaction(ui32 tableId) override;
 

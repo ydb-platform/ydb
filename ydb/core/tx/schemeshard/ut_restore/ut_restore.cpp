@@ -4171,7 +4171,23 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(YtEmptyTable) {
         TTestBasicRuntime runtime;
+        bool sawRestore = false;
+        auto proposals = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+                return;
+            }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+            if (tx.HasRestore()) {
+                sawRestore = true;
+                UNIT_ASSERT(tx.GetRestore().HasYtImport());
+                UNIT_ASSERT(!tx.GetRestore().GetYtImport().HasPlan());
+                UNIT_ASSERT(!tx.GetRestore().GetYtImport().HasPart());
+            }
+        });
         RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}}, YtImportRequest(), false);
+        UNIT_ASSERT(sawRestore);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
         const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(EmptyYsonStr, content);
@@ -4179,16 +4195,63 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(YtTwoPartsUseActualKeys) {
         TTestBasicRuntime runtime;
+        THashSet<TString> restoredParts;
+        auto proposals = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+                return;
+            }
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+            if (tx.HasRestore()) {
+                const auto& task = tx.GetRestore();
+                UNIT_ASSERT(task.HasYtImport());
+                UNIT_ASSERT(!task.GetYtImport().HasPlan());
+                UNIT_ASSERT(task.GetYtImport().HasPart());
+                restoredParts.insert(task.GetYtImport().GetPart().GetObjectKey());
+            }
+        });
         RunYt(runtime, {
             {"/table_metadata.yson", YtMetadata()},
             {"/table_0_1", YtPart({10, 20})},
             {"/table_2_3", YtPart({100, 200})}
         }, YtImportRequest(), false);
+        UNIT_ASSERT_VALUES_EQUAL(restoredParts.size(), 2);
+        UNIT_ASSERT(restoredParts.contains("table_0_1"));
+        UNIT_ASSERT(restoredParts.contains("table_2_3"));
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
         const auto shards = ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
         NKqp::CompareYson(R"([[[[["10";["10"]];["20";["20"]]];%false]]])", shards[0]);
         NKqp::CompareYson(R"([[[[["100";["100"]];["200";["200"]]];%false]]])", shards[1]);
+    }
+
+    Y_UNIT_TEST(YtRejectsRestorePlanWithoutMatchingDestination) {
+        for (ui32 invalidPlan = 0; invalidPlan != 3; ++invalidPlan) {
+            TTestBasicRuntime runtime;
+            bool changedProposal = false;
+            auto proposals = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+                auto& tx = *ev->Get()->Record.MutableTransaction(0);
+                if (tx.GetOperationType() != ESchemeOpRestore) {
+                    return;
+                }
+                auto& ytImport = *tx.MutableRestore()->MutableYtImport();
+                if (invalidPlan == 0) {
+                    ytImport.ClearPlan();
+                } else if (invalidPlan == 1) {
+                    // One destination partition was created for the single source part.
+                    *ytImport.MutablePlan()->AddParts() = ytImport.GetPlan().GetParts(0);
+                } else {
+                    *ytImport.MutablePart() = ytImport.GetPlan().GetParts(0);
+                }
+                changedProposal = true;
+            });
+            const auto importId = RunYt(runtime, {{"/table_metadata.yson", YtMetadata()}, {"/table_0_0", YtPart({10})}},
+                YtImportRequest(), false, Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT(changedProposal);
+            UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, importId, Ydb::StatusIds::CANCELLED), "YT restore requires");
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist});
+        }
     }
 
     Y_UNIT_TEST(YtCompositeKeysUseSerializedSplitBoundaries) {
@@ -4344,8 +4407,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_C(!restoreBlocker.empty(), creationError);
         creationResults.Remove();
         const auto& task = restoreBlocker.front()->Get()->Record.GetTransaction(0).GetRestore();
-        UNIT_ASSERT(task.HasYtImportPlan());
-        UNIT_ASSERT_VALUES_EQUAL(task.GetYtImportPlan().PartsSize(), 2);
+        UNIT_ASSERT(task.GetYtImport().HasPlan());
+        UNIT_ASSERT_VALUES_EQUAL(task.GetYtImport().GetPlan().PartsSize(), 2);
         // Planning must not read metadata again once the destination was created.
         s3Mock.GetData()["/table_metadata.yson"] = "invalid metadata after planning";
         restoreBlocker.Stop().clear();
@@ -4445,7 +4508,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
         TestImport(runtime, 100, "/MyRoot", Sprintf(YtImportRequest().data(), port));
         runtime.WaitFor("pinned YT restore plan", [&] { return !restoreBlocker.empty(); });
-        const auto& plan = restoreBlocker.front()->Get()->Record.GetTransaction(0).GetRestore().GetYtImportPlan();
+        const auto& plan = restoreBlocker.front()->Get()->Record.GetTransaction(0).GetRestore().GetYtImport().GetPlan();
         UNIT_ASSERT(!plan.GetParts(0).GetETag().empty());
         s3Mock.GetData()["/table_0_0"] = YtPart({20});
         restoreBlocker.Stop().Unblock();

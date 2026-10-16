@@ -628,7 +628,10 @@ private:
             {"item", item.ToString(itemIdx)},
         );
 
-        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV, TPath::Init(importInfo->DomainPathId, Self).DomainInfo()->GetSchemeLimits().MaxShardsInPath));
+        const TPath domainPath = TPath::Init(importInfo->DomainPathId, Self);
+        const auto maxShardsInPath = domainPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+        auto* schemeGetter = CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV, maxShardsInPath);
+        item.SchemeGetter = ctx.RegisterWithSameMailbox(schemeGetter);
         Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
     }
 

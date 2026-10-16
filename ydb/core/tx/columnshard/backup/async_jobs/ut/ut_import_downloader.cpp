@@ -263,8 +263,7 @@ TString MakeYtGzip(TStringBuf text) {
 NKikimrSchemeOp::TRestoreTask MakeYtRestoreTask(const TString& bucket) {
     auto task = MakeRestoreTask(bucket);
     task.MutableTableDescription()->MutableColumns(0)->SetNotNull(true);
-    task.SetYtSource(true);
-    task.MutableYtImportPlan()->SetVersion(1);
+    task.MutableYtImport()->MutablePlan()->SetVersion(1);
     return task;
 }
 
@@ -274,7 +273,7 @@ void AddYtPart(
     NTestUtils::UploadObject(task.GetS3Settings().GetBucket(), TString(key), data, client);
     const auto head = client.HeadObject(Aws::S3::Model::HeadObjectRequest().WithBucket(task.GetS3Settings().GetBucket()).WithKey(TString(key)));
     UNIT_ASSERT_C(head.IsSuccess(), head.GetError().GetMessage());
-    auto* part = task.MutableYtImportPlan()->AddParts();
+    auto* part = task.MutableYtImport()->MutablePlan()->AddParts();
     part->SetObjectKey(TString(key));
     const auto& etag = head.GetResult().GetETag();
     part->SetETag(etag.data(), etag.size());

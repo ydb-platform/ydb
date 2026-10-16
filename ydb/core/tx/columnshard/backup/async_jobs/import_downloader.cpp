@@ -44,9 +44,9 @@ public:
 
     void Bootstrap() {
         Counters.OnActorAlive();
-        if (RestoreTask.GetYtSource() && RestoreTask.HasYtImportPlan()) {
-            YtPlan = RestoreTask.GetYtImportPlan();
-            RestoreTask.ClearYtImportPlan();
+        if (RestoreTask.HasYtImport() && RestoreTask.GetYtImport().HasPlan()) {
+            YtPlan = RestoreTask.GetYtImport().GetPlan();
+            RestoreTask.MutableYtImport()->ClearPlan();
             if (YtPlan->GetVersion() != 1) {
                 return Fail("Unsupported YT import plan version");
             }
@@ -65,7 +65,7 @@ public:
         TMaybe<NDataShard::TTableInfo> partTableInfo;
         if (YtPlan) {
             const auto& part = YtPlan->GetParts(PartIndex);
-            *task.MutableYtImportPart() = part;
+            *task.MutableYtImport()->MutablePart() = part;
             TSerializedCellVec lower;
             TSerializedCellVec upper;
             if (!TSerializedCellVec::TryParse(part.GetFirstKey(), lower)) {
@@ -141,7 +141,7 @@ public:
         const TInstant processStartTime = TInstant::Now();
 
         const auto& record = ev->Get()->Record;
-        if (RestoreTask.GetYtSource() && !record.RowsSize()) {
+        if (RestoreTask.HasYtImport() && !record.RowsSize()) {
             // Gzip EOF verification can produce a zero-row final checkpoint. No
             // column write is needed, and the blob splitter expects actual rows.
             auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();

@@ -1242,12 +1242,12 @@ public:
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(GetReadBatchSize(task))
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
-        , Checksum(!task.GetYtSource() && task.GetValidateChecksums() ? CreateChecksum() : nullptr)
+        , Checksum(!task.HasYtImport() && task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
-        , DirectPartImportEnabled(!task.GetYtSource() && AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
-        , YtSource(task.GetYtSource())
-        , YtPart(task.HasYtImportPart() ? TMaybe<NKikimrSchemeOp::TYtImportPart>(task.GetYtImportPart()) : Nothing())
+        , DirectPartImportEnabled(!task.HasYtImport() && AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
+        , YtSource(task.HasYtImport())
+        , YtPart(task.GetYtImport().HasPart() ? TMaybe<NKikimrSchemeOp::TYtImportPart>(task.GetYtImport().GetPart()) : Nothing())
     {
         if (YtSource) {
             DataFormatSelected = true;

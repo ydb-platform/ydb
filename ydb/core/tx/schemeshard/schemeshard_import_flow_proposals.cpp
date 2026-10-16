@@ -98,7 +98,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             // The source plan defines the layout independently of the default table profile.
             tableDesc.ClearUniformPartitionsCount();
             tableDesc.ClearSplitBoundary();
-            // Planned source keys already have the internal split-boundary encoding.
+            // Part 0 belongs to the initial unbounded-below partition. Each later
+            // part starts a new partition at its first key, already in internal encoding.
             for (size_t i = 1; i < item.YtImportPlan->PartsSize(); ++i) {
                 tableDesc.AddSplitBoundary()->SetSerializedKeyPrefix(item.YtImportPlan->GetParts(i).GetFirstKey());
             }
@@ -294,8 +295,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     }
 
     if (item.YtImportPlan) {
-        *task.MutableYtImportPlan() = *item.YtImportPlan;
-        task.SetYtSource(true);
+        *task.MutableYtImport()->MutablePlan() = *item.YtImportPlan;
         task.SetValidateChecksums(false);
         return propose;
     }

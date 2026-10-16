@@ -885,63 +885,51 @@ namespace NActors {
         TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
     }
 
-    TFormattedRecordWriter::TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component)
-        : ActorContext(NActors::TlsActivationContext ? &NActors::TlsActivationContext->AsActorContext() : nullptr)
-        , Priority(priority)
-        , Component(component) {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
+    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum) {
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition},
+            {"file", filename},
+            {"line", lineNum});
+
+        TStringBuilder textMessage;
+        textMessage << "Verify failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, structuredMessage);
+        Y_ABORT("%s", textMessage.data());
     }
 
-    TFormattedRecordWriter::~TFormattedRecordWriter() {
-        if (ActorContext) {
-            ::NActors::MemLogAdapter(
-                *ActorContext,
-                Priority,
-                Component,
-                __FILE_NAME__,
-                __LINE__,
-                TBase::GetResult());
-        } else {
-            Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
-        }
-    }
+    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum) {
+        // Construct structured message
+        NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
+        YDB_LOG_UPDATE_MESSAGE(structuredMessage,
+            {"condition", condition});
 
-    TVerifyFormattedRecordWriter::TVerifyFormattedRecordWriter(const TString& conditionText)
-        : ConditionText(conditionText) {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
-        TBase::Write("verification", ConditionText);
+        // Construct text message
+        TStringBuilder textMessage;
+        textMessage << "Ensure failed ";
+        NStructuredLog::TTextWriter().Write(textMessage, YDB_LOG_CREATE_MESSAGE(structuredMessage,
+            {"file", filename},
+            {"line", lineNum}));
 
-    }
-
-    TVerifyFormattedRecordWriter::~TVerifyFormattedRecordWriter() {
-        const TString data = TBase::GetResult();
-        Y_ABORT("%s", data.data());
-    }
-
-    TEnsureFormattedRecordWriter::TEnsureFormattedRecordWriter(const TString& conditionText)
-        : ConditionText(conditionText) {
-        TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
-        TBase::Write("verification", ConditionText);
-
-    }
-
-    TEnsureFormattedRecordWriter::~TEnsureFormattedRecordWriter() noexcept(false) {
-        const TString data = TBase::GetResult();
+        // Log message
         if (NActors::TlsActivationContext) {
-            ::NActors::MemLogAdapter(
+            ::NActors::MemStructLogAdapter(
                 NActors::TlsActivationContext->AsActorContext(),
                 NLog::EPriority::PRI_ERROR,
                 0,
-                __FILE_NAME__,
-                __LINE__,
-                data);
+                filename.Data(),
+                lineNum,
+                "Ensure failed",
+                std::move(structuredMessage) );
         } else {
-            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << data << Endl;
+            Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << textMessage.data() << Endl;
         }
+
+        // final action
         if (!std::uncaught_exceptions()) {
-            Y_ENSURE(false, data.data());
+            Y_ENSURE(false, textMessage.data());
         } else {
-            Y_ABORT("%s", data.data());
+            Y_ABORT("%s", textMessage.data());
         }
     }
 

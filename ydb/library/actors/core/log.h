@@ -623,76 +623,32 @@ namespace NActors {
         }
     };
 
-    class TFormattedRecordWriter: public TFormatedStreamWriter {
-    private:
-        using TBase = TFormatedStreamWriter;
-        const TActorContext* ActorContext = nullptr;
-        ::NActors::NLog::EPriority Priority = ::NActors::NLog::EPriority::PRI_INFO;
-        ::NActors::NLog::EComponent Component = 0;
-    public:
+void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum);
 
-        TFormattedRecordWriter(::NActors::NLog::EPriority priority, ::NActors::NLog::EComponent component);
+#define AFL_VERIFY(condition)                                                                                                   \
+    if (condition) {                                                                                                            \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+    } else [[unlikely]] {                                                                                                       \
+        NActors::LogVerifFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                          \
+    }
 
-        template <class TKey, class TValue>
-        TFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
-            TBase::Write(pName, pValue);
-            return *this;
-        }
+void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum);
 
-        ~TFormattedRecordWriter();
-    };
-
-    class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {
-    private:
-        using TBase = TFormatedStreamWriter;
-        const TString ConditionText;
-    public:
-
-        TVerifyFormattedRecordWriter(const TString& conditionText);
-
-        template <class TKey, class TValue>
-        TVerifyFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
-            TBase::Write(pName, pValue);
-            return *this;
-        }
-
-        [[noreturn]] ~TVerifyFormattedRecordWriter();
-    };
-
-    class TEnsureFormattedRecordWriter: public TFormatedStreamWriter {
-    private:
-        using TBase = TFormatedStreamWriter;
-        const TString ConditionText;
-    public:
-
-        TEnsureFormattedRecordWriter(const TString& conditionText);
-
-        template <class TKey, class TValue>
-        TEnsureFormattedRecordWriter& operator()(const TKey& pName, const TValue& pValue) {
-            TBase::Write(pName, pValue);
-            return *this;
-        }
-
-        [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
-    };
-}
-
-#define AFL_VERIFY(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
-#define AFL_ENSURE(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_ENSURE(condition)                                                                                                   \
+    if (condition) {                                                                                                            \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+    } else [[unlikely]] {                                                                                                       \
+        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__);                                         \
+    }
 
 #ifndef NDEBUG
 /// Assert that depend on NDEBUG macro and outputs message like printf
 #define AFL_VERIFY_DEBUG AFL_VERIFY
 #else
-#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::LogVerifFailed(#condition, TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__)
 #endif
 
-#define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
-    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
-        else NActors::TFormattedRecordWriter(\
-            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
-            )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
-
+}
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \

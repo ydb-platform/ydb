@@ -1,5 +1,9 @@
 #include "kqp_federated_query_helpers.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_object_type.h>
 #include <ydb/library/yql/providers/yt/gateway/clients/message_stream/yql_yt_client.h>
 
 #include <ydb/core/base/counters.h>
@@ -26,12 +30,10 @@
 #include <ydb/library/yql/providers/ydb_external/provider/yql_ydb_external_provider.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
-#include <yql/essentials/public/issue/yql_issue_utils.h>
 
 #include <yt/yql/providers/yt/comp_nodes/dq/dq_yt_factory.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
@@ -40,6 +42,7 @@
 
 #include <util/system/file.h>
 
+#include <algorithm>
 #include <mutex>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
@@ -47,6 +50,36 @@
 namespace NKikimr::NKqp {
 
 namespace {
+
+    enum class EYdbDataSourceRouting {
+        Unknown,
+        Connector,
+        Ydb,
+    };
+
+    EYdbDataSourceRouting GetYdbDataSourceRouting(const TString& databaseName,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup) {
+        if (!federatedQuerySetup || databaseName.empty()) {
+            return EYdbDataSourceRouting::Unknown;
+        }
+
+        bool hasDatabaseNames = false;
+        const auto checkConnector = [&](const auto& connector) {
+            const auto& names = connector.GetDatabaseNames();
+            hasDatabaseNames |= !names.empty();
+            return std::find(names.begin(), names.end(), databaseName) != names.end();
+        };
+        const auto& gatewayConfig = federatedQuerySetup->GenericGatewayConfig;
+        if (gatewayConfig.HasConnector() && checkConnector(gatewayConfig.GetConnector())) {
+            return EYdbDataSourceRouting::Connector;
+        }
+        for (const auto& connector : gatewayConfig.GetConnectors()) {
+            if (checkConnector(connector)) {
+                return EYdbDataSourceRouting::Connector;
+            }
+        }
+        return hasDatabaseNames ? EYdbDataSourceRouting::Ydb : EYdbDataSourceRouting::Unknown;
+    }
 
     bool ValidateExternalSink(const NKqpProto::TKqpExternalSink& sink) {
         if (sink.GetType() != "S3Sink") {
@@ -57,50 +90,6 @@ namespace {
         sink.GetSettings().UnpackTo(&sinkSettings);
 
         return sinkSettings.GetAtomicUploadCommit();
-    }
-
-    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryTypeImpl(
-        TActorSystem* actorSystem,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TString& endpoint,
-        const TString& database,
-        bool useTls,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        const TString& path,
-        bool addRoot) {
-        auto driver = federatedQuerySetup->Driver;
-
-        NYdb::TCommonClientSettings opts;
-        opts
-            .DiscoveryEndpoint(endpoint)
-            .Database(addRoot ? "/Root" + database : database)
-            .SslCredentials(NYdb::TSslCredentials(useTls))
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .CredentialsProviderFactory(credentialsProviderFactory);
-        auto schemeClient = std::make_shared<NYdb::NScheme::TSchemeClient>(*driver, opts);
-
-        return schemeClient->DescribePath(addRoot ? "/Root" + path : path)
-            .Apply([actorSystem, p = path, sc = schemeClient, database, endpoint, f = federatedQuerySetup, useTls, credentialsProviderFactory, addRoot](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
-                auto describePathResult = result.GetValue();
-                TGetSchemeEntryResult res;
-                if (!describePathResult.IsSuccess()) {
-                    if (describePathResult.GetStatus() == NYdb::EStatus::CLIENT_UNAUTHENTICATED && !addRoot) {
-                        return GetSchemeEntryTypeImpl(actorSystem, f, endpoint, database, useTls, credentialsProviderFactory, p, true);
-                    }
-                    TString message = TStringBuilder() << "Describe path '" << p << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "' failed.";
-                    YDB_LOG_WARN_CTX(*actorSystem, message,
-                        {"issues", describePathResult.GetIssues()});
-                    auto rootIssue = NYql::TIssue(message);
-                    for (const auto& issue : describePathResult.GetIssues()) {
-                        rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));
-                    }
-                    res.Issues.AddIssue(rootIssue);
-                } else {
-                    NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();
-                    res.EntryType = entry.Type;
-                }
-                return NThreading::MakeFuture<TGetSchemeEntryResult>(res);
-            });
     }
 
 }  // anonymous namespace
@@ -467,61 +456,70 @@ namespace {
         return false;
     }
 
-    NThreading::TFuture<TGetSchemeEntryResult> GetSchemeEntryType(
+    bool RequiresExternalObjectKindContext(
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TString& endpoint,
-        const TString& database,
-        bool useTls,
-        const TString& structuredTokenJson,
-        const TString& path) {
-        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
-            YDB_LOG_NOTICE_CTX(*NActors::TActivationContext::ActorSystem(), "Skipped describe for path in external YDB database",
-                {"path", path},
-                {"database", database},
-                {"endpoint", endpoint});
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table});
+        const NYql::TExternalDataSource& source,
+        const TMaybe<TString>& externalPath,
+        bool resolveEntityInsideDataSource) {
+        if (!externalPath) {
+            return false;
         }
-        try {
-            return GetSchemeEntryTypeImpl(
-                    NActors::TActivationContext::ActorSystem(),
-                    federatedQuerySetup,
-                    endpoint,
-                    NKikimr::CanonizePath(database),
-                    useTls,
-                    federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson),
-                    path,
-                    false);
-        } catch (const std::exception& e) {
-            TGetSchemeEntryResult result;
-            result.Issues.AddIssue(NYql::TIssue(TStringBuilder() << "Failed to get scheme entry type: " << e.what()));
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(result);
-        }
-    };
 
-    NThreading::TFuture<TYtEntityTypeResult> GetYtEntityType(
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-        const TString& endpoint,
-        const TString& structuredTokenJson,
-        const TString& path) {
-        try {
-            Y_ENSURE(federatedQuerySetup && federatedQuerySetup->CredentialsFactory,
-                "YT external data source credentials factory is unavailable");
-            auto credentials = federatedQuerySetup->CredentialsFactory->Create(structuredTokenJson)->CreateProvider();
-            auto client = NYql::CreateYtClient(endpoint, TString(credentials->GetAuthInfo()));
-            return NYql::IsYtQueue(client, path).Apply([](const NThreading::TFuture<bool>& future) {
-                TYtEntityTypeResult result;
-                try {
-                    result.IsQueue = future.GetValue();
-                } catch (const std::exception& error) {
-                    result.Issues.AddIssue(NYql::TIssue(error.what()));
-                }
-                return result;
-            });
-        } catch (const std::exception& error) {
-            TYtEntityTypeResult result;
-            result.Issues.AddIssue(NYql::TIssue(error.what()));
-            return NThreading::MakeFuture(result);
+        if (source.IsYdb() && !source.GetDatabaseName().empty()) {
+            const auto routing = resolveEntityInsideDataSource
+                ? GetYdbDataSourceRouting(source.GetDatabaseName(), federatedQuerySetup)
+                : EYdbDataSourceRouting::Unknown;
+            return routing != EYdbDataSourceRouting::Connector;
         }
+
+        return source.GetDatabaseType() == NYql::EDatabaseType::YT;
+    }
+
+    NThreading::TFuture<NFq::TExternalObjectKindResult> GetExternalObjectKind(
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
+        const NYql::TExternalDataSource& source,
+        const TMaybe<TString>& externalPath,
+        bool resolveEntityInsideDataSource,
+        const NYql::TKikimrConfiguration* config,
+        const NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) {
+        NFq::TExternalObjectKindResult result;
+        if (!externalPath) {
+            return NThreading::MakeFuture(std::move(result));
+        }
+
+        if (resolveEntityInsideDataSource && source.IsYdb()) {
+            if (source.GetDatabaseName().empty()) {
+                return NThreading::MakeFuture(std::move(result));
+            }
+
+            const auto databaseName = source.GetDatabaseName();
+            const auto routing = GetYdbDataSourceRouting(databaseName, federatedQuerySetup);
+            if (routing == EYdbDataSourceRouting::Connector) {
+                return NThreading::MakeFuture(std::move(result));
+            }
+
+            return NYql::NYdbExternal::GetYdbObjectType(
+                federatedQuerySetup ? federatedQuerySetup->Driver : nullptr,
+                federatedQuerySetup ? federatedQuerySetup->CredentialsFactory : nullptr,
+                source.GetLocation(), databaseName, source.IsTlsEnabled(),
+                source.ComposeStructuredTokenJson(), databaseName + "/" + *externalPath,
+                routing == EYdbDataSourceRouting::Ydb,
+                [actorSystem = NActors::TActivationContext::ActorSystem()](const TString& message, const TString& issues) {
+                    YDB_LOG_WARN_CTX(*actorSystem, message, {"issues", issues});
+                });
+        }
+
+        if (source.GetDatabaseType() != NYql::EDatabaseType::YT || !config || !config->FeatureFlags.GetEnableQYT()) {
+            return NThreading::MakeFuture(std::move(result));
+        }
+        if (!externalSourceFactory || !externalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
+            result.Issues.AddIssue(NYql::TIssue({}, "YT MessageStream provider is not available"));
+            return NThreading::MakeFuture(std::move(result));
+        }
+
+        return NYql::GetYtObjectType(
+            federatedQuerySetup ? federatedQuerySetup->CredentialsFactory : nullptr,
+            source.GetLocation(), source.ComposeStructuredTokenJson(), *externalPath);
     }
 
     std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinksWithEffects(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {

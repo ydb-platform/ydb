@@ -262,10 +262,10 @@ TExternalDataSource::TExternalDataSource(
 TExternalDataSource TExternalDataSource::CreateFromDescription(
     const NKikimrSchemeOp::TExternalDataSourceDescription& description,
     const TString& dataSourcePath,
-    EKind kind)
+    NFq::EExternalObjectKind kind)
 {
     auto source = TExternalDataSource(description, dataSourcePath);
-    if (kind != EKind::Unknown) {
+    if (kind != NFq::EExternalObjectKind::Unknown) {
         source.InitObjectKind(kind);
     }
     return source;
@@ -281,14 +281,14 @@ TExternalDataSource TExternalDataSource::CreateForLocalTopic(const TString& clus
     if (!transientToken.empty()) {
         (*description.MutableProperties()->mutable_properties())["transient_token"] = transientToken;
     }
-    return CreateFromDescription(description, cluster, EKind::MessageStream);
+    return CreateFromDescription(description, cluster, NFq::EExternalObjectKind::MessageStream);
 }
 
 void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TString& dataSourcePath) {
     TExternalDataSource updated = *this;
     updated.DatabaseType = DatabaseTypeFromString(type);
-    if (updated.Kind == EKind::Unknown) {
-        updated.Kind = EKind::Table;
+    if (updated.Kind == NFq::EExternalObjectKind::Unknown) {
+        updated.Kind = NFq::EExternalObjectKind::Table;
     }
     updated.DataSourcePath = dataSourcePath;
     Y_ENSURE(updated.DatabaseType, "TExternalDataSource: unknown source type: " << type);
@@ -296,11 +296,11 @@ void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TStri
     *this = std::move(updated);
 }
 
-void TExternalDataSource::InitObjectKind(EKind kind) {
+void TExternalDataSource::InitObjectKind(NFq::EExternalObjectKind kind) {
     const bool isYt = DatabaseType == EDatabaseType::YT;
-    Y_ENSURE((IsYdb() || isYt) && Kind == EKind::Unknown,
+    Y_ENSURE((IsYdb() || isYt) && Kind == NFq::EExternalObjectKind::Unknown,
         "TExternalDataSource: only an unresolved Ydb or YT source can initialize object kind");
-    Y_ENSURE(kind == EKind::Table || kind == EKind::MessageStream,
+    Y_ENSURE(kind == NFq::EExternalObjectKind::Table || kind == NFq::EExternalObjectKind::MessageStream,
         "TExternalDataSource: object kind does not match the connection type");
     Kind = kind;
 }
@@ -321,7 +321,7 @@ bool TExternalDataSource::IsYdb() const {
 }
 
 bool TExternalDataSource::IsMessageStream() const {
-    return Kind == EKind::MessageStream;
+    return Kind == NFq::EExternalObjectKind::MessageStream;
 }
 
 TString TExternalDataSource::GetDatabaseName() const {

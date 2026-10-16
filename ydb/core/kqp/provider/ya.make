@@ -43,6 +43,7 @@ PEERDIR(
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/constraints
+    ydb/library/yql/providers/abstract
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/db_id_async_resolver

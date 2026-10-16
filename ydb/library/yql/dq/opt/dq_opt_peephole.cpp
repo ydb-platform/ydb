@@ -1040,9 +1040,6 @@ TExprNode::TPtr NarrowHashJoinCoreOutput(TExprNode::TPtr&& wideFlow, const THash
 
 bool HasBlockChannelInput(const TExprBase& input) {
     const TExprNode* current = input.Raw();
-    // Wide-channel reconstruction wraps a stage argument into this transparent
-    // chain. Do not look through arbitrary operators: after one of them the
-    // input is scalar even if its source channel was block-based.
     while (current) {
         if (const auto type = current->GetTypeAnn(); type && IsWideSequenceBlockType(*type)) {
             return true;
@@ -1072,45 +1069,16 @@ bool HasBlockChannelInput(const TExprBase& input) {
 
 } // anonymous namespace
 
-bool DqPeepholeHasBlockInput(const TExprBase& input) {
-    return HasBlockChannelInput(input);
-}
-
-TExprBase DqPeepholeChooseHashJoin(const TExprBase& node, TExprContext& ctx, bool leftIsBlock, bool rightIsBlock) {
+TExprBase DqPeepholeChooseHashJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyHashJoin>()) {
         return node;
     }
     const auto join = node.Cast<TDqPhyHashJoin>();
 
-    // A block join needs both sides in block layout. A mixed join is scalarized
-    // by the existing WideFromBlocks wrapper on its block side.
-    if (leftIsBlock && rightIsBlock) {
-        auto blockJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
-            .LeftInput(join.LeftInput())
-            .RightInput(join.RightInput())
-            .LeftLabel(join.LeftLabel())
-            .RightLabel(join.RightLabel())
-            .JoinType(join.JoinType())
-            .JoinKeys(join.JoinKeys())
-            .LeftJoinKeyNames(join.LeftJoinKeyNames())
-            .RightJoinKeyNames(join.RightJoinKeyNames())
-            .Settings(join.Settings())
-            .Done();
-        return blockJoin;
-    }
-
-    auto scalarJoin = Build<TDqPhyScalarHashJoin>(ctx, join.Pos())
-        .LeftInput(join.LeftInput())
-        .RightInput(join.RightInput())
-        .LeftLabel(join.LeftLabel())
-        .RightLabel(join.RightLabel())
-        .JoinType(join.JoinType())
-        .JoinKeys(join.JoinKeys())
-        .LeftJoinKeyNames(join.LeftJoinKeyNames())
-        .RightJoinKeyNames(join.RightJoinKeyNames())
-        .Settings(join.Settings())
-        .Done();
-    return scalarJoin;
+    const bool useBlocks = HasBlockChannelInput(join.LeftInput()) && HasBlockChannelInput(join.RightInput());
+    return TExprBase(ctx.RenameNode(join.Ref(), useBlocks
+        ? TDqPhyBlockHashJoin::CallableName()
+        : TDqPhyScalarHashJoin::CallableName()));
 }
 
 TExprBase DqPeepholeRewriteScalarHashJoin(const TExprBase& node, TExprContext& ctx) {

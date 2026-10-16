@@ -637,7 +637,5 @@ message TTableServiceConfig {
     // Allows to collect point predicates for each valid index and use them for index lookup join if applicable.
     optional bool EnableLookupJoinPointPrefixes = 154 [default = false, (InvalidateCompileCache) = true];
 
-    // When true, the legacy optimizer selects scalar or block hash join based on the input layout.
-    // Overridable per query via PRAGMA ydb.UseScalarHashJoin.
     optional bool UseScalarHashJoin = 155 [default = false, (InvalidateCompileCache) = true];
 };

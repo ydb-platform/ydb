@@ -1913,34 +1913,21 @@ TExprBase DqBuildHashJoin(
             if (useBlockHashJoin) {
                 const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
+                hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
+                    .LeftInput(leftInputArg)
+                    .RightInput(rightInputArg)
+                    .LeftLabel(join.LeftLabel())
+                    .RightLabel(join.RightLabel())
+                    .JoinType(join.JoinType())
+                    .JoinKeys(join.JoinKeys())
+                    .LeftJoinKeyNames(join.LeftJoinKeyNames())
+                    .RightJoinKeyNames(join.RightJoinKeyNames())
+                    .Settings()
+                        .Add(joinSettings)
+                        .Build()
+                    .Done().Ptr();
                 if (useScalarHashJoin && DqCanUseScalarHashJoin(join, ctx)) {
-                    hashJoin = Build<TDqPhyHashJoin>(ctx, join.Pos())
-                        .LeftInput(leftInputArg)
-                        .RightInput(rightInputArg)
-                        .LeftLabel(join.LeftLabel())
-                        .RightLabel(join.RightLabel())
-                        .JoinType(join.JoinType())
-                        .JoinKeys(join.JoinKeys())
-                        .LeftJoinKeyNames(join.LeftJoinKeyNames())
-                        .RightJoinKeyNames(join.RightJoinKeyNames())
-                        .Settings()
-                            .Add(joinSettings)
-                            .Build()
-                        .Done().Ptr();
-                } else {
-                    hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
-                        .LeftInput(leftInputArg)
-                        .RightInput(rightInputArg)
-                        .LeftLabel(join.LeftLabel())
-                        .RightLabel(join.RightLabel())
-                        .JoinType(join.JoinType())
-                        .JoinKeys(join.JoinKeys())
-                        .LeftJoinKeyNames(join.LeftJoinKeyNames())
-                        .RightJoinKeyNames(join.RightJoinKeyNames())
-                        .Settings()
-                            .Add(joinSettings)
-                            .Build()
-                        .Done().Ptr();
+                    hashJoin = ctx.RenameNode(*hashJoin, TDqPhyHashJoin::CallableName());
                 }
                 break;
             }

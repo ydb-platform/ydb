@@ -637,7 +637,7 @@ public:
             .Add(CreateKqpTxPeepholeTransformer(
                 typesCtx, config,
                 /* withFinalStageRules */ config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE,
-                {"KqpPeephole-RewriteCrossJoin"}),
+                {"KqpPeephole-RewriteCrossJoin", "KqpPeephole-ChooseHashJoin"}),
                 "Peephole")
             .Build(false);
     }

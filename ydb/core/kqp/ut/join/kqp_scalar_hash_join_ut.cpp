@@ -100,11 +100,14 @@ void CheckPlan(TQueryClient& client, const TString& query, bool expectScalarHash
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
-    Y_UNIT_TEST(SelectImplementationByInputLayout) {
+    Y_UNIT_TEST_TWIN(SelectImplementationByInputLayout, ForceBlockChannels) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         auto* tableService = settings.AppConfig.MutableTableServiceConfig();
         tableService->SetEnableNewRBO(false);
         tableService->SetEnableOlapSink(true);
+        tableService->SetBlockChannelsMode(ForceBlockChannels
+            ? NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE
+            : NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         CreateSampleTables(client);
@@ -129,7 +132,7 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        const auto makeQuery = [](TStringBuf left, TStringBuf right, bool useScalarHashJoin = true) {
+        const auto makeQuery = [](TStringBuf left, TStringBuf right, bool useScalarHashJoin) {
             return TStringBuilder() << R"(
                 PRAGMA TablePathPrefix='/Root';
                 PRAGMA ydb.UseBlockHashJoin='true';
@@ -149,23 +152,24 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
             return TString(*explainResult.GetStats()->GetAst());
         };
 
-        const TString scalarQuery = makeQuery("L", "R");
-        const TString scalarAst = explain(scalarQuery);
-        UNIT_ASSERT_C(scalarAst.Contains("ScalarHashJoin"), scalarAst);
-        UNIT_ASSERT_C(!scalarAst.Contains("BlockHashJoin"), scalarAst);
-
-        const TString disabledAst = explain(makeQuery("L", "R", false));
-        UNIT_ASSERT_C(disabledAst.Contains("BlockHashJoin"), disabledAst);
-        UNIT_ASSERT_C(!disabledAst.Contains("ScalarHashJoin"), disabledAst);
-
-        const TString blockAst = explain(makeQuery("CL", "CR"));
-        UNIT_ASSERT_C(blockAst.Contains("BlockHashJoin"), blockAst);
-        UNIT_ASSERT_C(!blockAst.Contains("ScalarHashJoin"), blockAst);
-
-        const TString mixedQuery = makeQuery("L", "CR");
-        const TString mixedAst = explain(mixedQuery);
-        UNIT_ASSERT_C(mixedAst.Contains("ScalarHashJoin"), mixedAst);
-        UNIT_ASSERT_C(!mixedAst.Contains("BlockHashJoin"), mixedAst);
+        struct TCase {
+            TStringBuf Left;
+            TStringBuf Right;
+            bool UseScalarHashJoin;
+            bool ExpectScalarHashJoin;
+        };
+        const std::vector<TCase> cases = {
+            {"L", "R", true, !ForceBlockChannels},
+            {"L", "R", false, false},
+            {"CL", "CR", true, false},
+            {"L", "CR", true, !ForceBlockChannels},
+            {"CL", "R", true, !ForceBlockChannels},
+        };
+        for (const auto& [left, right, useScalarHashJoin, expectScalarHashJoin] : cases) {
+            const TString ast = explain(makeQuery(left, right, useScalarHashJoin));
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("ScalarHashJoin"), expectScalarHashJoin, ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(ast.Contains("BlockHashJoin"), !expectScalarHashJoin, ast);
+        }
     }
 
     Y_UNIT_TEST(ReplaceMapJoin) {

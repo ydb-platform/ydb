@@ -213,16 +213,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
                 self.disconnect(name)
                 self.check_data()
 
-    def check_restored_piles(self, piles):
-        for index, restored in enumerate(piles):
-            if index:
-                # Restore peers only to prepare the next isolation check.
-                for name in self.pile_names:
-                    if self.states[name] == DISCONNECTED:
-                        self.rejoin(name)
-            self.keep_only(restored)
-            self.write_data()
-
     @pytest.mark.parametrize("target", ["r2", "r3"])
     def test_switchover(self, target):
         self.create_data()
@@ -293,7 +283,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         [(("r2", "r3"), ("r2", "r3")), (("r1", "r2"), ("r2", "r1"))],
         ids=["survive-r1-forward-rejoin", "survive-r3-reverse-rejoin"],
     )
-    def test_two_lagging_piles(self, disconnect_order, return_order):
+    @pytest.mark.parametrize("verify_index", [0, 1], ids=["verify-first", "verify-second"])
+    def test_two_lagging_piles(self, disconnect_order, return_order, verify_index):
         self.create_data()
         survivor = next(name for name in self.pile_names if name not in disconnect_order)
         for name in disconnect_order:
@@ -303,10 +294,13 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             self.rejoin(name)
             self.check_data()
             self.write_data()
-        # Prove that each restored pile has the data without reading another replica.
-        self.check_restored_piles(return_order)
+        # Verify each restored pile in its own run. Rejoining peers between isolation
+        # checks would add another recovery cycle and change the data being verified.
+        self.keep_only(return_order[verify_index])
+        self.write_data()
 
-    def test_rejoin_without_waiting_for_other_pile(self):
+    @pytest.mark.parametrize("verify_pile", ["r2", "r3"])
+    def test_rejoin_without_waiting_for_other_pile(self, verify_pile):
         self.create_data()
         for name in ("r2", "r3"):
             self.disconnect(name)
@@ -314,7 +308,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.rejoin("r2", wait=False)
         self.rejoin("r3", wait=False)
         self.wait_states(timeout=self.synchronization_timeout)
-        self.check_restored_piles(("r2", "r3"))
+        self.keep_only(verify_pile)
+        self.write_data()
 
     def check_discovery(self):
         expected_nodes = {

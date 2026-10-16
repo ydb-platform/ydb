@@ -31,16 +31,15 @@ jobs:
         set -euo pipefail
         read -r speed_bytes speed speed_elapsed <<< "${direct:-0 0 0}"
         read -r proxy_bytes proxy_speed proxy_elapsed <<< "${proxy:-0 0 0}"
-        threshold=3000000
         use_proxy=false
-        if awk -v s="${speed:-0}" -v t="$threshold" 'BEGIN { exit !(s+0 < t) }'; then
+        if awk -v d="${speed:-0}" -v p="${proxy_speed:-0}" 'BEGIN { exit !(p+0 > d+0) }'; then
           use_proxy=true
         fi
         mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
         proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
         got=$(awk -v b="${speed_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
         proxy_got=$(awk -v b="${proxy_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
-        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; threshold 3 MB/s, use_proxy=${use_proxy}"
+        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; use_proxy=${use_proxy}"
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"
@@ -178,16 +177,15 @@ jobs:
         set -euo pipefail
         read -r speed_bytes speed speed_elapsed <<< "${direct:-0 0 0}"
         read -r proxy_bytes proxy_speed proxy_elapsed <<< "${proxy:-0 0 0}"
-        threshold=3000000
         use_proxy=false
-        if awk -v s="${speed:-0}" -v t="$threshold" 'BEGIN { exit !(s+0 < t) }'; then
+        if awk -v d="${speed:-0}" -v p="${proxy_speed:-0}" 'BEGIN { exit !(p+0 > d+0) }'; then
           use_proxy=true
         fi
         mb=$(awk -v s="${speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
         proxy_mb=$(awk -v s="${proxy_speed:-0}" 'BEGIN { printf "%.2f", (s+0)/1000000 }')
         got=$(awk -v b="${speed_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
         proxy_got=$(awk -v b="${proxy_bytes:-0}" 'BEGIN { printf "%.1f", (b+0)/1000000 }')
-        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; threshold 3 MB/s, use_proxy=${use_proxy}"
+        echo "GitHub ${got} MB in ${speed_elapsed}s, ${mb} MB/s; gh-proxy.com ${proxy_got} MB in ${proxy_elapsed}s, ${proxy_mb} MB/s; use_proxy=${use_proxy}"
         if [ "$use_proxy" = true ]; then
           {
             echo "GIT_CONFIG_COUNT=1"

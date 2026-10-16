@@ -4,6 +4,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -280,7 +281,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/true);
     }
 
-    // Flag off: TEvMoveData goes straight to the executor, which leaves the portions alone.
     Y_UNIT_TEST(MoveDataDisabledLeavesPortionsInPlace) {
         RunMoveDataToCompletion(/*moveDataEnabled=*/false);
     }
@@ -518,7 +518,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     // A running cleanup has taken its portions out of CleanupPortions but not yet queued their blobs for GC.
     Y_UNIT_TEST(SuccessWaitsForTheRunningCleanup) {
         TMoveDataFixture f;
-        // With TTL off, every TTL change is a MoveData rewrite.
         f.Controller->DisableBackground(EBackground::TTL);
         f.Write(1, 0, 1000);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
@@ -681,6 +680,53 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             f.Runtime.Send(ev.Release());
         }
         UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1101);
+    }
+
+    Y_UNIT_TEST(SuccessWaitsForDurableGCCleanupAfterBlobStorageAcknowledges) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        const auto storage = f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator();
+        f.DriveGate(150, {}, [&] {
+            return storage->HasCollectedBeforeCurrentGeneration();
+        });
+        UNIT_ASSERT(storage->HasCollectedBeforeCurrentGeneration());
+
+        std::vector<TAutoPtr<IEventHandle>> held;
+        f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->HasEvent()) {
+                if (const auto* finished = dynamic_cast<const TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase())) {
+                    for (auto blobs = finished->Action->GetBlobsToRemove().GetIterator(); blobs.IsValid(); ++blobs) {
+                        if (blobs.GetBlobId().GetDsGroup() == OldGroup) {
+                            held.emplace_back(ev.Release());
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        const auto counters =
+            GetServiceCounters(f.Runtime.GetDynamicCounters(0), "tablets")->GetSubgroup("subsystem", "columnshard")->GetSubgroup("module_id",
+                "CS");
+        const auto blocked = counters->GetCounter("Deriviative/MoveData/GateBlocked/GC/Count", true);
+        const auto before = blocked->Val();
+        f.StartMove();
+        UNIT_ASSERT_C(!f.DriveGateWithWrite(150, 2, 1000, 1001), "Success before durable GC cleanup");
+        UNIT_ASSERT_C(!held.empty(), "no GC completion containing the target group was held");
+        UNIT_ASSERT_C(blocked->Val() > before, "the durable GC gate was not exercised");
+
+        f.Runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        for (auto& ev : held) {
+            f.Runtime.Send(ev.Release());
+        }
+        const auto response = f.DriveGate(150);
+        UNIT_ASSERT_C(response, "no Success after GC cleanup committed");
+        f.AssertDrainedSuccess(response);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1000);
     }
 
     // Drained queues are not barrier coverage: a fresh incarnation has collected nothing yet, and its empty queues say nothing about the old generations.

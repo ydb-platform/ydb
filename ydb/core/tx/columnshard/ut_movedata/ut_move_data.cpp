@@ -1,9 +1,11 @@
 #include "tablet_info_helper.h"
 
+#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
@@ -153,6 +155,79 @@ struct TBlobManagerFixture {
     }
 };
 
+struct TGCDbSchema: NIceDb::Schema {
+    using TTables = SchemaTables<NColumnShard::Schema::BlobsToKeep, NColumnShard::Schema::BlobsToDelete, NColumnShard::Schema::BlobsToDeleteWT>;
+};
+
+class TGCDbFixture {
+    class TGroupSelector: public NOlap::IBlobGroupSelector {
+        const TIntrusivePtr<TTabletStorageInfo> Info;
+
+    public:
+        explicit TGroupSelector(const ui64 tabletId)
+            : Info(MakeTabletInfo(tabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }))
+        {
+        }
+
+        ui32 GetGroup(const TLogoBlobID& blob) const override {
+            return Info->GroupFor(blob.Channel(), blob.Generation());
+        }
+    };
+
+    TActorSystemStub ActorSystemStub;
+    NTable::NTest::TDbExec Database;
+    const ui64 TabletId;
+    const TGroupSelector Selector;
+
+public:
+    explicit TGCDbFixture(const ui64 tabletId)
+        : TabletId(tabletId)
+        , Selector(tabletId)
+    {
+        Database.Begin();
+        NIceDb::TNiceDb db(*Database.operator->());
+        db.Materialize<TGCDbSchema>();
+        Database.Commit();
+    }
+
+    template <class TAction>
+    void Transaction(TAction&& action, const bool commit = true) {
+        Database.Begin();
+        NOlap::TBlobManagerDb db(*Database.operator->());
+        action(db);
+        if (commit) {
+            Database.Commit();
+        } else {
+            Database.Reject();
+        }
+    }
+
+    template <class TTable>
+    void Insert(const NOlap::TUnifiedBlobId& blob, const bool newEncoding, const ui64 rowTabletId) {
+        Transaction([&](NOlap::TBlobManagerDb& blobs) {
+            NIceDb::TNiceDb db(blobs.GetDatabase());
+            const TString encoded = newEncoding ? blob.ToStringNew() : blob.ToStringLegacy();
+            if constexpr (std::is_same_v<TTable, NColumnShard::Schema::BlobsToDeleteWT>) {
+                db.Table<TTable>().Key(encoded, rowTabletId).Update();
+            } else {
+                db.Table<TTable>().Key(encoded).Update();
+            }
+        });
+    }
+
+    bool HasBlobs(const THashSet<ui32>& groups) {
+        bool found = true;
+        Transaction([&](NOlap::TBlobManagerDb& db) {
+            UNIT_ASSERT(db.HasGCBlobsForGroups(groups, &Selector, NOlap::TTabletId(TabletId), found));
+        });
+        return found;
+    }
+
+    void Restart() {
+        Database.Replay(NTable::NTest::EPlay::Boot);
+    }
+};
+
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
     // BlobsToDelete leg: the group comes straight off TUnifiedBlobId (keep leg: TestMoveDataKeepQueue).
     Y_UNIT_TEST(TestMoveDataDeleteQueue) {
@@ -163,32 +238,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
         UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "blob in the old group must match");
         UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ NewGroup }), "the group it was not written to must not match");
-    }
-
-    // A delete-only GC task drains the queue and sets no barrier, and the gate must still wait for its commit.
-    Y_UNIT_TEST(TestMoveDataGateHeldWhileDeleteOnlyGCInFlight) {
-        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
-        static constexpr ui64 TabletId = 44;
-        static constexpr ui32 TabletGen = 3;
-        TBlobManagerFixture f(TabletId, TabletGen);
-
-        // The first GC of an incarnation collects up to the current step; once it commits, the next task has no barrier to set.
-        const NOlap::TGenStep barrier(TabletGen, 0);
-        UNIT_ASSERT_C(f.BuildGCTask(), "the first GC must set a barrier");
-        f.Manager->OnGCStartOnComplete(barrier);
-        UNIT_ASSERT_C(!f.Manager->HasCollectedBeforeCurrentGeneration(), "a barrier that BlobStorage has not acknowledged proves nothing");
-        f.Manager->OnGCFinishedOnComplete(barrier);
-        UNIT_ASSERT_C(f.Manager->HasCollectedBeforeCurrentGeneration(), "the committed first round covers every earlier generation");
-
-        f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
-        auto task = f.BuildGCTask();
-        UNIT_ASSERT_C(task, "a queued delete must produce a GC task");
-        UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while a delete-only GC task is in flight");
-        UNIT_ASSERT_C(
-            !f.Manager->HasBlobsForGroups({ NewGroup }), "a task that touches only the old group must not hold a move out of the new one");
-
-        f.Manager->OnGCFinishedOnComplete(std::nullopt);
-        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ OldGroup }), "the gate must open once the task commits");
     }
 
     // Keep leg: the group is resolved through TabletInfo->GroupFor(channel, generation).
@@ -212,6 +261,108 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         UNIT_ASSERT_C(mgrNew.HasBlobsForGroups({ NewGroup }), "BlobsToKeep: blob after reassign must match new group");
         UNIT_ASSERT_C(!mgrNew.HasBlobsForGroups({ OldGroup }), "BlobsToKeep: old group must not match after reassign");
+    }
+
+    Y_UNIT_TEST(DurableGCCheckReadsEveryTableAndEncoding) {
+        static constexpr ui64 TabletId = 42;
+        const auto checkTable = []<class TTable>() {
+            for (const bool newEncoding : { false, true }) {
+                TGCDbFixture db(TabletId);
+                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+                const auto oldBlob = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
+                db.Insert<TTable>(oldBlob, newEncoding, TabletId);
+                UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+                UNIT_ASSERT(!db.HasBlobs({ NewGroup }));
+                UNIT_ASSERT(!db.HasBlobs({}));
+                db.Restart();
+                UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+                db.Transaction([&](NOlap::TBlobManagerDb& blobs) {
+                    if constexpr (std::is_same_v<TTable, NColumnShard::Schema::BlobsToKeep>) {
+                        blobs.EraseBlobToKeep(oldBlob);
+                    } else {
+                        blobs.EraseBlobToDelete(oldBlob, NOlap::TTabletId(TabletId));
+                    }
+                });
+                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+                db.Insert<TTable>(MakeDsBlobId(NewGroup, TabletId, ReassignGen + 1, 2, 2), newEncoding, TabletId);
+                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+                UNIT_ASSERT(db.HasBlobs({ NewGroup }));
+            }
+        };
+        checkTable.template operator()<NColumnShard::Schema::BlobsToKeep>();
+        checkTable.template operator()<NColumnShard::Schema::BlobsToDelete>();
+        checkTable.template operator()<NColumnShard::Schema::BlobsToDeleteWT>();
+    }
+
+    Y_UNIT_TEST(DurableGCCheckUsesExplicitGroupForNewEncoding) {
+        static constexpr ui64 TabletId = 42;
+        TGCDbFixture db(TabletId);
+        // The encoded group wins even when our channel history resolves the generation elsewhere.
+        db.Insert<NColumnShard::Schema::BlobsToKeep>(MakeDsBlobId(OldGroup, TabletId, ReassignGen + 1, 1, 2), true, TabletId);
+        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+        UNIT_ASSERT(!db.HasBlobs({ NewGroup }));
+    }
+
+    Y_UNIT_TEST(DurableGCCheckIgnoresBorrowedBlobsAndForeignUnlinks) {
+        static constexpr ui64 TabletId = 42;
+        static constexpr ui64 ForeignTabletId = 99;
+        const auto checkTable = []<class TTable>() {
+            for (const bool newEncoding : { false, true }) {
+                TGCDbFixture db(TabletId);
+                const auto borrowed = MakeDsBlobId(OldGroup, ForeignTabletId, 1, 1, 2);
+                db.Insert<TTable>(borrowed, newEncoding, TabletId);
+                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+                db.Restart();
+                UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+            }
+        };
+        checkTable.template operator()<NColumnShard::Schema::BlobsToKeep>();
+        checkTable.template operator()<NColumnShard::Schema::BlobsToDelete>();
+        checkTable.template operator()<NColumnShard::Schema::BlobsToDeleteWT>();
+        for (const bool newEncoding : { false, true }) {
+            TGCDbFixture db(TabletId);
+            const auto owned = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
+            db.Insert<NColumnShard::Schema::BlobsToDeleteWT>(owned, newEncoding, ForeignTabletId);
+            UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+            db.Insert<NColumnShard::Schema::BlobsToDeleteWT>(owned, newEncoding, TabletId);
+            UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+        }
+    }
+
+    Y_UNIT_TEST(DurableGCCheckSurvivesTaskExtractionUntilCleanupCommits) {
+        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
+        static constexpr ui64 TabletId = 44;
+        static constexpr ui32 TabletGen = 3;
+        TBlobManagerFixture f(TabletId, TabletGen);
+        TGCDbFixture db(TabletId);
+        const NOlap::TGenStep barrier(TabletGen, 0);
+        UNIT_ASSERT(f.BuildGCTask());
+        f.Manager->OnGCStartOnComplete(barrier);
+        UNIT_ASSERT(!f.Manager->HasCollectedBeforeCurrentGeneration());
+        f.Manager->OnGCFinishedOnComplete(barrier);
+        UNIT_ASSERT(f.Manager->HasCollectedBeforeCurrentGeneration());
+
+        const auto blob = MakeDsBlobId(OldGroup, TabletId, 1, 1, 2);
+        db.Transaction([&](NOlap::TBlobManagerDb& blobs) {
+            f.Manager->DeleteBlobOnExecute(NOlap::TTabletId(TabletId), blob, blobs);
+        });
+        f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), blob);
+        UNIT_ASSERT(f.BuildGCTask());
+        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+        UNIT_ASSERT(!db.HasBlobs({ NewGroup }));
+        db.Restart();
+        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+
+        const auto cleanup = [&](NOlap::TBlobManagerDb& blobs) {
+            blobs.EraseBlobToDelete(blob, NOlap::TTabletId(TabletId));
+        };
+        db.Transaction(cleanup, false);
+        UNIT_ASSERT(db.HasBlobs({ OldGroup }));
+        db.Transaction(cleanup);
+        f.Manager->OnGCFinishedOnComplete(std::nullopt);
+        UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
+        db.Restart();
+        UNIT_ASSERT(!db.HasBlobs({ OldGroup }));
     }
 
     // Borrowed leg: the group comes from the persisted DS:<group>:<id> form, not our history.

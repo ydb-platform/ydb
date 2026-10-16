@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/mapfindptr.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -62,20 +63,30 @@ bool HasEntityInDefaultStorage(const TPortionInfo& info, const TVersionedIndex& 
     return false;
 }
 
+TTieringProcessContext::EAddPortionResult AddPortionToMove(
+    TTieringProcessContext& tasks, const TPortionInfo::TConstPtr& portion, const TVersionedIndex& index) {
+    const auto schema = portion->GetSchema(index);
+    const auto tier = portion->GetTierNameDef(IStoragesManager::DefaultStorageId);
+    TPortionEvictionFeatures features(schema, schema, tier);
+    features.SetTargetTierName(tier);
+    features.SetForcedMove();
+    return tasks.AddPortion(portion, std::move(features), TDuration::Zero());
+}
+
 }   // anonymous namespace
 
 void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
-    auto it = PortionAddress.find(portionId);
-    if (it == PortionAddress.end()) {
+    const auto* address = MapFindPtr(PortionAddress, portionId);
+    if (address == nullptr) {
         return;
     }
-    auto itAddr = PortionsToMove.find(it->second);
-    AFL_VERIFY(itAddr != PortionsToMove.end());
-    AFL_VERIFY(itAddr->second.erase(portionId));
-    if (itAddr->second.empty()) {
-        PortionsToMove.erase(itAddr);
+    auto* portions = MapFindPtr(PortionsToMove, *address);
+    AFL_VERIFY(portions != nullptr);
+    AFL_VERIFY(portions->erase(portionId));
+    if (portions->empty()) {
+        PortionsToMove.erase(*address);
     }
-    PortionAddress.erase(it);
+    PortionAddress.erase(portionId);
 }
 
 void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& /*context*/) {
@@ -134,13 +145,7 @@ void TMoveDataActualizer::DoExtractTasks(
         bool limitExceeded = false;
         for (auto& portionId : portions) {
             auto portion = externalContext.GetPortionVerified(portionId);
-            auto portionSchema = portion->GetSchema(VersionedIndex);
-            const TString tierName = portion->GetTierNameDef(IStoragesManager::DefaultStorageId);
-            TPortionEvictionFeatures features(portionSchema, portionSchema, tierName);
-            features.SetTargetTierName(tierName);
-            features.SetForcedMove();
-
-            switch (tasksContext.AddPortion(portion, std::move(features), TDuration::Zero())) {
+            switch (AddPortionToMove(tasksContext, portion, VersionedIndex)) {
                 case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
                     limitExceeded = true;
                     break;
@@ -200,7 +205,6 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
     }
     TargetPortionIds.emplace(portionId);
     if (RetiredPortionIds.contains(portionId)) {
-        // Its data is already retired: classification only determines whether cleanup blocks completion.
         return;
     }
     // An uncommitted write cannot be rewritten, so the gate holds until it commits or aborts.
@@ -229,12 +233,11 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
 
     for (auto portionId : PendingPortionIds) {
         TPortionInfo::TPtr portion;
-        if (const auto it = portions.find(portionId); it != portions.end()) {
-            portion = it->second;
-        } else if (const auto itUncommitted = uncommitted.find(portionId); itUncommitted != uncommitted.end()) {
-            portion = itUncommitted->second;
+        if (const auto* found = MapFindPtr(portions, portionId)) {
+            portion = *found;
+        } else if (const auto* found = MapFindPtr(uncommitted, portionId)) {
+            portion = *found;
         } else {
-            // MoveDataMetadataRequestsBatching pins this down: a portion the engine no longer knows is skipped, not requested.
             continue;
         }
         if (!currentRequest) {

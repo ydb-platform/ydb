@@ -1,10 +1,12 @@
 #include "columnshard_impl.h"
 #include "columnshard_move_data.h"
 
+#include "blobs_action/blob_manager_db.h"
 #include "engines/column_engine_logs.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -14,11 +16,7 @@ namespace NKikimr::NColumnShard {
 namespace {
 
 THashSet<ui32> RequestedGroups(const NKikimrTabletBase::TEvMoveData& record) {
-    THashSet<ui32> groups;
-    for (const auto groupId : record.GetGroups()) {
-        groups.emplace(groupId);
-    }
-    return groups;
+    return { record.GetGroups().begin(), record.GetGroups().end() };
 }
 
 // Same contract as keyvalue and blob_depot: a group that is still the latest entry keeps taking writes, so the move could never converge.
@@ -26,13 +24,14 @@ std::optional<ui32> FindLiveGroup(const TTabletStorageInfo& info, const THashSet
     if (groups.empty()) {
         return std::nullopt;
     }
-    for (const auto& channel : info.Channels) {
+    const auto* channel = FindIfPtr(info.Channels, [&groups](const auto& channel) {
         const auto* latest = channel.LatestEntry();
-        if (latest && groups.contains(latest->GroupID)) {
-            return latest->GroupID;
-        }
+        return latest != nullptr && groups.contains(latest->GroupID);
+    });
+    if (channel == nullptr) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    return channel->LatestEntry()->GroupID;
 }
 
 void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 liveGroup, const TActorContext& ctx) {
@@ -43,9 +42,59 @@ void RefuseMoveData(const TActorId& sender, const ui64 tabletId, const ui32 live
 
 }   // namespace
 
-TMoveDataDriver::TMoveDataDriver(TColumnShard* self, const std::shared_ptr<TAtomicCounter>& tabletActivity)
+class TMoveDataDriver::TTxCheckGC: public TTransactionBase<TColumnShard> {
+    const TActorId DriverId;
+    const ui64 Revision;
+    bool Ready = false;
+
+    TMoveDataDriver* GetDriver() const {
+        return Self->MoveDataDriverId == DriverId ? Self->MoveDataDriver : nullptr;
+    }
+
+public:
+    TTxCheckGC(TColumnShard* self, const TActorId driverId, const ui64 revision)
+        : TBase(self)
+        , DriverId(driverId)
+        , Revision(revision)
+    {}
+
+    TTxType GetTxType() const override {
+        return TXTYPE_MOVE_DATA_CHECK_GC;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Ready = false;
+        auto* driver = GetDriver();
+        if (driver == nullptr || driver->State.Revision != Revision) {
+            return true;
+        }
+        TBlobGroupSelector selector(Self->Info());
+        NOlap::TBlobManagerDb db(txc.DB);
+        bool hasBlobs = false;
+        if (!db.HasGCBlobsForGroups(driver->State.TargetGroups, &selector, (NOlap::TTabletId)Self->TabletID(), hasBlobs)) {
+            return false;
+        }
+        Ready = !hasBlobs;
+        if (hasBlobs) {
+            Self->Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        auto* driver = GetDriver();
+        if (driver == nullptr) {
+            return;
+        }
+        driver->State.GCCheckInFlight = false;
+        if (Ready && driver->State.Revision == Revision && driver->CanCompleteMigration(driver->UpdateQueueSizes())) {
+            driver->CompleteMigration(ctx);
+        }
+    }
+};
+
+TMoveDataDriver::TMoveDataDriver(TColumnShard* self)
     : Self(self)
-    , TabletActivity(tabletActivity)
     , MetadataTaskSubscription("CS::MOVE_DATA", self->Counters.GetSubscribeCounters())
 {
 }
@@ -65,8 +114,8 @@ void TMoveDataDriver::Request(
         RefuseMoveData(sender, owner.TabletID(), *liveGroup, ctx);
         return;
     }
-    if (!owner.MoveDataDriver) {
-        owner.MoveDataDriver = new TMoveDataDriver(&owner, owner.TabletActivityImpl);
+    if (owner.MoveDataDriver == nullptr) {
+        owner.MoveDataDriver = new TMoveDataDriver(&owner);
         owner.MoveDataDriverId = ctx.RegisterWithSameMailbox(owner.MoveDataDriver);
     }
     owner.MoveDataDriver->AcceptRequest(sender, requested, ctx);
@@ -86,6 +135,9 @@ void TMoveDataDriver::AcceptRequest(const TActorId& sender, const THashSet<ui32>
     YDB_LOG_INFO("MoveData requested", {"tabletId", Self->TabletID()}, {"groups", State.TargetGroups.size()}, {"changed", changed});
     // Admission is synchronous even though the gate runs on the driver's cadence.
     State.TargetsChanged |= changed;
+    if (changed) {
+        ++State.Revision;
+    }
     ctx.Send(SelfId(), new TEvPrivate::TEvMoveDataPoke());
 }
 
@@ -109,8 +161,9 @@ void TMoveDataDriver::Stop(TColumnShard& owner, const TActorContext& ctx) {
     if (!owner.MoveDataDriverId) {
         return;
     }
-    AFL_VERIFY(owner.MoveDataDriver);
-    // Cleanup can precede queued pokes while the owner is still alive.
+    AFL_VERIFY(owner.MoveDataDriver != nullptr);
+    // Same-mailbox callbacks cannot run between invalidation and tablet cleanup.
+    owner.MoveDataDriver->Self = nullptr;
     owner.MoveDataDriver->State.Active = false;
     ctx.Send(owner.MoveDataDriverId, new TEvents::TEvPoison());
     owner.MoveDataDriver = nullptr;
@@ -118,7 +171,7 @@ void TMoveDataDriver::Stop(TColumnShard& owner, const TActorContext& ctx) {
 }
 
 void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
-    if (MoveDataDriver) {
+    if (MoveDataDriver != nullptr) {
         MoveDataDriver->OnVacuumCompleted(ctx);
     }
 }
@@ -138,14 +191,14 @@ NOlap::NActualizer::TMoveDataQueueSizes TMoveDataDriver::UpdateQueueSizes() {
     return Self->MutableIndexAs<NOlap::TColumnEngineForLogs>().UpdateMoveDataQueueSizes();
 }
 
-void TMoveDataDriver::CheckGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
+bool TMoveDataDriver::CanCompleteMigration(const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
     if (!State.Active) {
-        return;
+        return false;
     }
     Self->Counters.GetCSCounters().OnMoveDataGateChecked();
     if (State.TargetsChanged) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByReseed();
-        return;
+        return false;
     }
 
     Self->Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight, queues.Uncommitted, queues.Retired);
@@ -155,39 +208,46 @@ void TMoveDataDriver::CheckGate(const TActorContext& ctx, const NOlap::NActualiz
     }
     if (!State.VacuumCompleted) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
-        return;
+        return false;
     }
     if (queues.GetTotal() != 0) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
         if (queues.Uncommitted) {
             YDB_LOG_INFO("MoveData gate waits for uncommitted writes", {"tabletId", Self->TabletID()}, {"uncommitted", queues.Uncommitted});
         }
-        return;
+        return false;
     }
     // A retired seeded portion still in the granule has not reached the GC queues, so its blobs can still sit in a target group.
     if (queues.Retired != 0) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
         YDB_LOG_INFO("MoveData gate waits for cleanup", {"tabletId", Self->TabletID()}, {"retired", queues.Retired});
-        return;
+        return false;
     }
     const auto& defaultOperator = Self->GetStoragesManager()->GetDefaultOperator();
     if (!defaultOperator->HasCollectedBeforeCurrentGeneration()) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByFirstGCRound();
         YDB_LOG_INFO("MoveData gate waits for the first GC round", {"tabletId", Self->TabletID()});
-        return;
+        return false;
     }
     // A shared or borrowed link is not ours to collect, so it gets its own sensor.
     const auto& sharedBlobs = defaultOperator->GetSharedBlobs();
     if (sharedBlobs && sharedBlobs->HasBlobsForGroups(State.TargetGroups)) {
         Self->Counters.GetCSCounters().OnMoveDataGateBlockedByShared();
         YDB_LOG_INFO("MoveData gate waits for shared blobs", {"tabletId", Self->TabletID()});
-        return;
+        return false;
     }
-    if (defaultOperator->HasGCBlobsForGroups(State.TargetGroups)) {
-        Self->Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-        YDB_LOG_INFO("MoveData gate waits for pending GC", {"tabletId", Self->TabletID()});
-        return;
+    return true;
+}
+
+void TMoveDataDriver::TryCompleteMigration(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues) {
+    if (!State.GCCheckInFlight && CanCompleteMigration(queues)) {
+        State.GCCheckInFlight = true;
+        // Execute can complete synchronously and invalidate Self through Stop.
+        Self->Execute(new TTxCheckGC(Self, SelfId(), State.Revision), ctx);
     }
+}
+
+void TMoveDataDriver::CompleteMigration(const TActorContext& ctx) {
     YDB_LOG_INFO("MoveData gate passed", {"tabletId", Self->TabletID()});
 
     if (Self->HasIndex()) {
@@ -209,23 +269,21 @@ void TMoveDataDriver::SetupMetadata() {
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx) {
-    if (!IsOwnerAlive()) {
+    if (Self == nullptr) {
         PassAway();
         return;
     }
     if (!State.Active) {
         return;
     }
-    // The shared mailbox serializes application with tablet mutations. A late result
-    // targets this driver incarnation, never a replacement session on the tablet.
     AFL_VERIFY(ev->Get()->GetGeneration() == Self->Generation())("ev", ev->Get()->GetGeneration())("tablet", Self->Generation());
     ev->Get()->GetProcessor()->ApplyResult(
         ev->Get()->ExtractResult(), Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
     Self->SetupMetadata();
-    StartAndCheckGate(ctx);
+    RunMigrationStep(ctx);
 }
 
-void TMoveDataDriver::SetupRewrites() {
+void TMoveDataDriver::StartPortionRewrites() {
     if (!State.Active || !Self->HasIndex()) {
         return;
     }
@@ -238,7 +296,7 @@ void TMoveDataDriver::SetupRewrites() {
     Self->StartTtlChanges(std::move(indexChanges));
 }
 
-void TMoveDataDriver::StartAndCheckGate(const TActorContext& ctx) {
+void TMoveDataDriver::RunMigrationStep(const TActorContext& ctx) {
     if (!State.Active) {
         return;
     }
@@ -246,31 +304,31 @@ void TMoveDataDriver::StartAndCheckGate(const TActorContext& ctx) {
         RestartActualizer();
     }
     // One index walk per turn: prune retired ids and use the sizes to select work and check the gate.
-    const NOlap::NActualizer::TMoveDataQueueSizes queues = UpdateQueueSizes();
+    const auto queues = UpdateQueueSizes();
     if (queues.Pending) {
         SetupMetadata();
     }
     if (queues.ConfirmedToMove) {
-        SetupRewrites();
+        StartPortionRewrites();
     }
-    CheckGate(ctx, queues);
+    TryCompleteMigration(ctx, queues);
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx) {
-    if (!IsOwnerAlive()) {
+    if (Self == nullptr) {
         PassAway();
         return;
     }
-    StartAndCheckGate(ctx);
+    RunMigrationStep(ctx);
     ScheduleWakeup(ctx);
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx) {
-    if (!IsOwnerAlive()) {
+    if (Self == nullptr) {
         PassAway();
         return;
     }
-    StartAndCheckGate(ctx);
+    RunMigrationStep(ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -204,8 +204,8 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
 void TGranuleMeta::BuildActualizationTasks(
     NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const NActualizer::EActualizationScope scope) const {
     // The lag paces tiering; the move runs on its own cadence and a tiering pass must not starve it.
-    const bool paced = (scope != NActualizer::EActualizationScope::MoveDataOnly);
-    if (paced && context.GetActualInstant() < NextActualizations) {
+    const bool applyActualizationLag = (scope != NActualizer::EActualizationScope::MoveDataOnly);
+    if (applyActualizationLag && context.GetActualInstant() < NextActualizations) {
         YDB_LOG_DEBUG("",
             {"event", "skip_actualization"},
             {"waiting", NextActualizations - context.GetActualInstant()});
@@ -213,7 +213,7 @@ void TGranuleMeta::BuildActualizationTasks(
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
     ActualizationIndex->ExtractActualizationTasks(context, extTasks, scope);
-    if (paced) {
+    if (applyActualizationLag) {
         NextActualizations = context.GetActualInstant() + actualizationLag;
     }
 }

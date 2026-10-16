@@ -415,10 +415,6 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     BlobsManagerCounters.GCCounters.OnGCTask(gcContext.GetKeepsToErase().size(), gcContext.GetKeepBytes(),
         gcContext.GetExtractedToRemoveFromDB().GetSize(), gcContext.GetDeleteBytes(), gcContext.IsFull(), !!CollectGenStepInFlight);
     auto removeCategories = sharedBlobsInfo->BuildRemoveCategories(std::move(gcContext.MutableExtractedToRemoveFromDB()));
-    THashSet<ui32> taskGroups;
-    for (const auto& [address, _] : gcContext.GetPerGroupGCListsInFlight()) {
-        taskGroups.emplace(address.GetGroupId());
-    }
     auto result = std::make_shared<NBlobOperations::NBlobStorage::TGCTask>(storageId, std::move(gcContext.MutablePerGroupGCListsInFlight()),
         CollectGenStepInFlight, std::move(gcContext.MutableKeepsToErase()), manager, std::move(removeCategories), counters, TabletInfo->TabletID,
         CurrentGen);
@@ -428,7 +424,6 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         return nullptr;
     }
 
-    GCTaskInFlightGroups = std::move(taskGroups);
     return result;
 }
 
@@ -552,12 +547,6 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
 }
 
 bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
-    // A built GC task drains BlobsToDelete before its rows leave the local DB, so the queues alone lie.
-    for (const ui32 groupId : GCTaskInFlightGroups) {
-        if (groups.contains(groupId)) {
-            return true;
-        }
-    }
     // GroupFor can answer Max<ui32>, which no target set holds.
     const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
         return groups.contains(TabletInfo->GroupFor(blob.Channel(), blob.Generation()));
@@ -586,7 +575,6 @@ void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep,
 }
 
 void TBlobManager::OnGCFinishedOnComplete(const std::optional<TGenStep>& genStep) {
-    GCTaskInFlightGroups.clear();
     if (genStep) {
         LastCollectedGenStep = *genStep;
         AFL_VERIFY(GCBarrierPreparation == LastCollectedGenStep)("prepare", GCBarrierPreparation)("last", LastCollectedGenStep);

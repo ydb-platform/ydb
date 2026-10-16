@@ -152,9 +152,9 @@ public:
 
     std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests() {
         std::vector<TCSMetadataRequest> result;
-        for (auto&& i : Tables) {
-            auto r = i.second->CollectMoveDataMetadataRequests();
-            result.insert(result.end(), std::make_move_iterator(r.begin()), std::make_move_iterator(r.end()));
+        for (auto&& [_, tableInfo] : Tables) {
+            auto requests = tableInfo->CollectMoveDataMetadataRequests();
+            result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
         }
         return result;
     }

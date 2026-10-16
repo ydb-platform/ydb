@@ -20,6 +20,8 @@ class TColumnShard;
 // The driver and tablet share a mailbox; synchronous admission precedes queued gate checks.
 class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
 private:
+    class TTxCheckGC;
+
     // On restart Hive resends the request; session progress is not persisted.
     struct TSession {
         TActorId HiveSender;
@@ -28,11 +30,11 @@ private:
         bool VacuumCompleted = false;
         ui64 ReportedRejections = 0;
         bool TargetsChanged = false;
+        ui64 Revision = 0;
+        bool GCCheckInFlight = false;
     };
 
-    TColumnShard* const Self;
-    // Dropped before the tablet stops the driver, so queued events cannot touch a dead owner.
-    const std::shared_ptr<TAtomicCounter> TabletActivity;
+    TColumnShard* Self;
     TSession State;
     const NOlap::NResourceBroker::NSubscribe::TTaskContext MetadataTaskSubscription;
     const std::shared_ptr<TAtomicCounter> MetadataRequestsInFlight = std::make_shared<TAtomicCounter>();
@@ -42,24 +44,22 @@ private:
         ctx.Schedule(Cadence, new TEvPrivate::TEvMoveDataWakeup());
     }
 
-    bool IsOwnerAlive() const {
-        return TabletActivity->Val() != 0;
-    }
-
     void AcceptRequest(const TActorId& sender, const THashSet<ui32>& requested, const TActorContext& ctx);
     void RestartActualizer();
     NOlap::NActualizer::TMoveDataQueueSizes UpdateQueueSizes();
-    void CheckGate(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues);
+    void TryCompleteMigration(const TActorContext& ctx, const NOlap::NActualizer::TMoveDataQueueSizes& queues);
+    bool CanCompleteMigration(const NOlap::NActualizer::TMoveDataQueueSizes& queues);
+    void CompleteMigration(const TActorContext& ctx);
     void SetupMetadata();
-    void SetupRewrites();
-    void StartAndCheckGate(const TActorContext& ctx);
+    void StartPortionRewrites();
+    void RunMigrationStep(const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
 public:
-    TMoveDataDriver(TColumnShard* self, const std::shared_ptr<TAtomicCounter>& tabletActivity);
+    explicit TMoveDataDriver(TColumnShard* self);
 
     // Called on the owner's mailbox, before another queued driver turn can pass the gate.
     static void Request(TColumnShard& owner, const NKikimrTabletBase::TEvMoveData& request, const TActorId& sender, const TActorContext& ctx);

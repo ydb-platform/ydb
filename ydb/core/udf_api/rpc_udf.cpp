@@ -1,28 +1,23 @@
-#include <ydb/core/grpc_services/service_udf.h>
-
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_request_base.h>
+#include <ydb/core/grpc_services/service_udf.h>
 #include <ydb/core/udf_api/common.h>
 #include <ydb/core/udf_api/events.h>
 #include <ydb/core/udf_api/mutation_actor.h>
 #include <ydb/core/udf_api/query_actor.h>
 
-#include <ydb/public/api/protos/ydb_udf.pb.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/public/api/protos/ydb_udf.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr::NGRpcService {
 
 using namespace NActors;
 
-using TEvDeleteModuleRequest = TGrpcRequestOperationCall<Ydb::Udf::DeleteModuleRequest,
-    Ydb::Udf::DeleteModuleResponse>;
-using TEvListModulesRequest = TGrpcRequestOperationCall<Ydb::Udf::ListModulesRequest,
-    Ydb::Udf::ListModulesResponse>;
-using TEvDescribeModuleRequest = TGrpcRequestOperationCall<Ydb::Udf::DescribeModuleRequest,
-    Ydb::Udf::DescribeModuleResponse>;
+using TEvDeleteModuleRequest = TGrpcRequestOperationCall<Ydb::Udf::DeleteModuleRequest, Ydb::Udf::DeleteModuleResponse>;
+using TEvListModulesRequest = TGrpcRequestOperationCall<Ydb::Udf::ListModulesRequest, Ydb::Udf::ListModulesResponse>;
+using TEvDescribeModuleRequest = TGrpcRequestOperationCall<Ydb::Udf::DescribeModuleRequest, Ydb::Udf::DescribeModuleResponse>;
 
 namespace {
 
@@ -78,8 +73,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TString owner;
         if (!NUdfApi::ParseDatabaseOwner(*ev->Get()->Request, owner)) {
-            this->Reply(Ydb::StatusIds::SCHEME_ERROR, NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR,
-                "Error resolving database");
+            this->Reply(Ydb::StatusIds::SCHEME_ERROR, NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Error resolving database");
             return;
         }
         Authorize(owner);
@@ -87,8 +81,7 @@ private:
 
     void Authorize(const TString& databaseOwner) {
         if (!NUdfApi::IsUdfStoreAdministrator(this->UserToken.Get(), databaseOwner)) {
-            this->Reply(Ydb::StatusIds::UNAUTHORIZED, NKikimrIssues::TIssuesIds::ACCESS_DENIED,
-                AccessDeniedMessage(this->UserToken.Get()));
+            this->Reply(Ydb::StatusIds::UNAUTHORIZED, NKikimrIssues::TIssuesIds::ACCESS_DENIED, AccessDeniedMessage(this->UserToken.Get()));
             return;
         }
         this->Register(static_cast<TDerived*>(this)->CreateWorker());
@@ -106,8 +99,7 @@ private:
     }
 };
 
-class TDeleteModuleRPC
-    : public TUdfRequestActor<TDeleteModuleRPC, TEvDeleteModuleRequest, NUdfApi::TEvDeleteModuleResult> {
+class TDeleteModuleRPC: public TUdfRequestActor<TDeleteModuleRPC, TEvDeleteModuleRequest, NUdfApi::TEvDeleteModuleResult> {
 public:
     using TUdfRequestActor::TUdfRequestActor;
 
@@ -116,8 +108,7 @@ public:
     }
 };
 
-class TListModulesRPC
-    : public TUdfRequestActor<TListModulesRPC, TEvListModulesRequest, NUdfApi::TEvListModulesResult> {
+class TListModulesRPC: public TUdfRequestActor<TListModulesRPC, TEvListModulesRequest, NUdfApi::TEvListModulesResult> {
 public:
     using TUdfRequestActor::TUdfRequestActor;
 
@@ -126,8 +117,7 @@ public:
     }
 };
 
-class TDescribeModuleRPC
-    : public TUdfRequestActor<TDescribeModuleRPC, TEvDescribeModuleRequest, NUdfApi::TEvDescribeModuleResult> {
+class TDescribeModuleRPC: public TUdfRequestActor<TDescribeModuleRPC, TEvDescribeModuleRequest, NUdfApi::TEvDescribeModuleResult> {
 public:
     using TUdfRequestActor::TUdfRequestActor;
 
@@ -220,15 +210,13 @@ private:
                     return;
                 }
                 if (chunk.metadata().total_size() == 0) {
-                    Reply(Ydb::StatusIds::BAD_REQUEST,
-                        "metadata must carry total_size: it is the only way to tell a body that arrived whole"
-                        " from one cut short mid-stream");
+                    Reply(Ydb::StatusIds::BAD_REQUEST, "metadata must carry total_size: it is the only way to tell a body that arrived whole"
+                                                       " from one cut short mid-stream");
                     return;
                 }
                 if (chunk.metadata().total_size() > MaxModuleBodySize) {
-                    Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                        << "total_size " << chunk.metadata().total_size() << " exceeds the "
-                        << MaxModuleBodySize << " byte limit");
+                    Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "total_size " << chunk.metadata().total_size() << " exceeds the "
+                                                                        << MaxModuleBodySize << " byte limit");
                     return;
                 }
                 HasMetadata_ = true;
@@ -249,8 +237,8 @@ private:
                     return;
                 }
                 if (Body_.size() + chunk.data().size() > TotalSize_) {
-                    Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                        << "the stream carries more than the announced total_size of " << TotalSize_ << " bytes");
+                    Reply(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "the stream carries more than the announced total_size of " << TotalSize_ << " bytes");
                     return;
                 }
                 Body_ += chunk.data();
@@ -287,8 +275,8 @@ private:
         // one, and a module that is short a few bytes is a module that fails to
         // compile for reasons nobody will connect to the upload.
         if (Body_.size() != TotalSize_) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                << "the stream ended after " << Body_.size() << " of the announced " << TotalSize_ << " bytes");
+            Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << "the stream ended after " << Body_.size() << " of the announced " << TotalSize_ << " bytes");
             return;
         }
         Register(NUdfApi::CreateUploadModuleActor(SelfId(), Params_, std::move(Body_)));
@@ -297,10 +285,7 @@ private:
     //! Errors travel in the operation of the single response message rather
     //! than in the gRPC status, so a client reads them the same way it reads
     //! the unary calls of this service.
-    void Reply(
-        Ydb::StatusIds::StatusCode status,
-        const TString& error,
-        const Ydb::Udf::UploadModuleResult* result = nullptr)
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& error, const Ydb::Udf::UploadModuleResult* result = nullptr)
     {
         Ydb::Udf::UploadModuleResponse response;
         auto& operation = *response.mutable_operation();
@@ -329,7 +314,7 @@ private:
     TString Body_;
 };
 
-} // namespace
+}   // namespace
 
 void DoDeleteModuleRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TDeleteModuleRPC(p.release()));
@@ -348,8 +333,7 @@ void TEvUploadModuleRequest::Pass(const IFacilityProvider& facility) {
 }
 
 template <>
-void FillYdbStatus(Ydb::Udf::UploadModuleResponse& response,
-    const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status)
+void FillYdbStatus(Ydb::Udf::UploadModuleResponse& response, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status)
 {
     auto& operation = *response.mutable_operation();
     operation.set_ready(true);
@@ -357,4 +341,4 @@ void FillYdbStatus(Ydb::Udf::UploadModuleResponse& response,
     NYql::IssuesToMessage(issues, operation.mutable_issues());
 }
 
-} // namespace NKikimr::NGRpcService
+}   // namespace NKikimr::NGRpcService

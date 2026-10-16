@@ -1,18 +1,19 @@
 #include "local_leader_election.h"
-#include <memory>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/ydb/util.h>
-
 #include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/service_coordination.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
+
+#include <memory>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
@@ -23,7 +24,7 @@ using namespace NThreading;
 
 namespace {
 
-constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
+constexpr TDuration RestartDuration = TDuration::Seconds(3);   // Delay before next restart after fatal error
 constexpr TDuration AcquireSemaphorePeriod = TDuration::Seconds(3);
 
 constexpr char SemaphoreName[] = "RowDispatcher";
@@ -36,7 +37,7 @@ using TLocalRpcCtx = NKikimr::NRpcService::TLocalRpcBiStreamingCtx<TRpcIn, TRpcO
 
 struct TEvPrivate {
     // Event ids
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = TLocalRpcCtx::TRpcEvents::EvEnd,
         EvCreateNodeResult = EvBegin,
         EvSelfPing,
@@ -50,21 +51,26 @@ struct TEvPrivate {
 
     // Events
 
-    struct  TEvCreateNodeResult : NActors::TEventLocal<TEvCreateNodeResult, EvCreateNodeResult> {
+    struct TEvCreateNodeResult: NActors::TEventLocal<TEvCreateNodeResult, EvCreateNodeResult> {
         NYdb::TStatus Status;
+
         explicit TEvCreateNodeResult(NYdb::TStatus status)
-            : Status(std::move(status)) {}
+            : Status(std::move(status))
+        {
+        }
     };
 
-    struct TEvSelfPing : NActors::TEventLocal<TEvSelfPing, EvSelfPing> {};
-    struct TEvRestart : NActors::TEventLocal<TEvRestart, EvTimeout> {};
+    struct TEvSelfPing: NActors::TEventLocal<TEvSelfPing, EvSelfPing> {};
+
+    struct TEvRestart: NActors::TEventLocal<TEvRestart, EvTimeout> {};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TLeaderElectionMetrics {
     explicit TLeaderElectionMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
         Errors = Counters->GetCounter("LeaderElectionErrors", true);
         LeaderChanged = Counters->GetCounter("LeaderChanged", true);
     }
@@ -74,9 +80,7 @@ struct TLeaderElectionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
-
 class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, public IActorExceptionHandler {
-
     enum class EState {
         Init,
         WaitNodeCreated,
@@ -88,7 +92,6 @@ class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, pub
     struct TOperation {
         TInstant SendTimestamp = TInstant::Now();
     };
-
 
     TString CoordinationNodePath;
     TActorId ParentId;
@@ -107,6 +110,7 @@ class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, pub
     struct NodeInfo {
         bool Connected = false;
     };
+
     std::map<ui32, NodeInfo> RowDispatchersByNode;
     TLeaderElectionMetrics Metrics;
 
@@ -124,10 +128,7 @@ class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, pub
     TInstant LastAcquireSemaphore;
 
 public:
-    TLocalLeaderElection(
-        NActors::TActorId parentId,
-        NActors::TActorId coordinatorId,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+    TLocalLeaderElection(NActors::TActorId parentId, NActors::TActorId coordinatorId, const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void Bootstrap();
     void PassAway() override;
@@ -193,32 +194,34 @@ private:
     TOperation* FindSentRequest(uint64_t reqId) const;
 
     template <typename TRpc, typename TSettings>
-    NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto, const NYdb::TOperationRequestSettings<TSettings>& settings, NKikimr::NRpcService::TLocalRpcOperationRequestCreator requestCreator) {
+    NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto,
+        const NYdb::TOperationRequestSettings<TSettings>& settings, NKikimr::NRpcService::TLocalRpcOperationRequestCreator requestCreator) {
         const auto promise = NThreading::NewPromise<NKikimr::NRpcService::TLocalRpcOperationResult>();
         auto token = NACLib::TSystemUsers::Metadata().SerializeAsString();
-        auto* actor = new NKikimr::NRpcService::TOperationRequestExecuter<TRpc, TSettings>(std::move(proto), {
-            .ChannelBufferSize = 16000,
-            .OperationSettings = settings,
-            .RequestCreator = std::move(requestCreator),
-            .Database = NKikimr::AppData()->TenantName,
-            .Token = token,
-            .Promise = promise,
-            .OperationName = "local_coordination_rpc_operation",
-        });
+        auto* actor = new NKikimr::NRpcService::TOperationRequestExecuter<TRpc, TSettings>(
+            std::move(proto), {
+                                  .ChannelBufferSize = 16000,
+                                  .OperationSettings = settings,
+                                  .RequestCreator = std::move(requestCreator),
+                                  .Database = NKikimr::AppData()->TenantName,
+                                  .Token = token,
+                                  .Promise = promise,
+                                  .OperationName = "local_coordination_rpc_operation",
+                              });
         Register(actor, TMailboxType::HTSwap, TActivationContext::ActorSystem()->AppData<NKikimr::TAppData>()->SystemPoolId);
         return promise.GetFuture();
     }
 
-    void CreateNode(const std::string& path, const NYdb::NCoordination::TCreateNodeSettings& settings = NYdb::NCoordination::TCreateNodeSettings());
+    void CreateNode(
+        const std::string& path, const NYdb::NCoordination::TCreateNodeSettings& settings = NYdb::NCoordination::TCreateNodeSettings());
 };
 
 TLocalLeaderElection::TLocalLeaderElection(
-    NActors::TActorId parentId,
-    NActors::TActorId coordinatorId,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    NActors::TActorId parentId, NActors::TActorId coordinatorId, const ::NMonitoring::TDynamicCounterPtr& counters)
     : ParentId(parentId)
     , CoordinatorId(coordinatorId)
-    , Metrics(counters) {
+    , Metrics(counters)
+{
 }
 
 void TLocalLeaderElection::Bootstrap() {
@@ -236,41 +239,41 @@ void TLocalLeaderElection::Bootstrap() {
 
 void TLocalLeaderElection::ProcessState() {
     switch (State) {
-    case EState::Init:
-        if (RestartScheduled) {
-            return;
-        }
-        CreateNode(CoordinationNodePath);
-        State = EState::WaitNodeCreated;
-        [[fallthrough]];
-    case EState::WaitNodeCreated:
-        if (!CoordinationNodeCreated) {
-            return;
-        }
-        if (!SessionId) {
-            StartSession();
-        }
-        State = EState::WaitSessionCreated;
-        [[fallthrough]];
-    case EState::WaitSessionCreated:
-        if (!SessionId) {
-            return;
-        }
-        if (!SemaphoreCreated) {
-            CreateSemaphore();
-        }
-        State = EState::WaitSemaphoreCreated;
-        [[fallthrough]];
-    case EState::WaitSemaphoreCreated:
-        if (!SemaphoreCreated) {
-            return;
-        }
-        State = EState::Started;
-        [[fallthrough]];
-    case EState::Started:
-        AcquireSemaphore();
-        DescribeSemaphore();
-        break;
+        case EState::Init:
+            if (RestartScheduled) {
+                return;
+            }
+            CreateNode(CoordinationNodePath);
+            State = EState::WaitNodeCreated;
+            [[fallthrough]];
+        case EState::WaitNodeCreated:
+            if (!CoordinationNodeCreated) {
+                return;
+            }
+            if (!SessionId) {
+                StartSession();
+            }
+            State = EState::WaitSessionCreated;
+            [[fallthrough]];
+        case EState::WaitSessionCreated:
+            if (!SessionId) {
+                return;
+            }
+            if (!SemaphoreCreated) {
+                CreateSemaphore();
+            }
+            State = EState::WaitSemaphoreCreated;
+            [[fallthrough]];
+        case EState::WaitSemaphoreCreated:
+            if (!SemaphoreCreated) {
+                return;
+            }
+            State = EState::Started;
+            [[fallthrough]];
+        case EState::Started:
+            AcquireSemaphore();
+            DescribeSemaphore();
+            break;
     }
 }
 
@@ -339,15 +342,17 @@ void TLocalLeaderElection::StartSession() {
     YDB_LOG_DEBUG("Start session",
         {"logPrefix", LogPrefix});
     auto token = NACLib::TUserToken(BUILTIN_ACL_METADATA, {}).SerializeAsString();
-    auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
-        .Database = NKikimr::AppData()->TenantName,
-        .Token = token,
-        .PeerName = "localhost/local_coordination_rpc_read",
-        .RequestType = std::nullopt,
-        .RpcMethodName = "CoordinationService.Session",
+    auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(),
+        TLocalRpcCtx::TSettings{
+            .Database = NKikimr::AppData()->TenantName,
+            .Token = token,
+            .PeerName = "localhost/local_coordination_rpc_read",
+            .RequestType = std::nullopt,
+            .RpcMethodName = "CoordinationService.Session",
         });
 
-    auto ev = std::make_unique<NKikimr::NGRpcService::TEvCoordinationSessionRequest>(std::move(ctx), NKikimr::NGRpcService::TRequestAuxSettings{});
+    auto ev =
+        std::make_unique<NKikimr::NGRpcService::TEvCoordinationSessionRequest>(std::move(ctx), NKikimr::NGRpcService::TRequestAuxSettings{});
     // The tenant and coordination node were resolved by the owning service.
     ev->DisablePathNormalization();
     if (token) {
@@ -360,7 +365,7 @@ void TLocalLeaderElection::PassAway() {
     YDB_LOG_DEBUG("PassAway",
         {"logPrefix", LogPrefix});
     if (RpcActor) {
-        CloseSession(NYdb::EStatus::ABORTED, {NYql::TIssue("Actor is shutting down")});
+        CloseSession(NYdb::EStatus::ABORTED, { NYql::TIssue("Actor is shutting down") });
     }
     TActorBootstrapped::PassAway();
 }
@@ -437,8 +442,9 @@ bool TLocalLeaderElection::OnUnhandledException(const std::exception& e) {
     return true;
 }
 
-void TLocalLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoordination::TCreateNodeSettings& settings) {
-    using TCreateNodeRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::CreateNodeRequest, Ydb::Coordination::CreateNodeResponse>;
+void TLocalLeaderElection::CreateNode(const std::string& path, const NYdb::NCoordination::TCreateNodeSettings& settings) {
+    using TCreateNodeRequest =
+        NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::CreateNodeRequest, Ydb::Coordination::CreateNodeResponse>;
 
     if (CoordinationNodeCreated) {
         return;
@@ -446,10 +452,13 @@ void TLocalLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoo
     TCreateNodeRequest::TRequest request;
     request.set_path(path);
 
-    DoLocalRpcRequest<TCreateNodeRequest, NYdb::NCoordination::TCreateNodeSettings>(std::move(request), settings, &NKikimr::NGRpcService::DoCreateCoordinationNode).Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult>& f) {
-        const auto [status, response] = f.GetValue();
-        actorSystem->Send(actorId, new TEvPrivate::TEvCreateNodeResult(status));
-    });
+    DoLocalRpcRequest<TCreateNodeRequest, NYdb::NCoordination::TCreateNodeSettings>(
+        std::move(request), settings, &NKikimr::NGRpcService::DoCreateCoordinationNode)
+        .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](
+                       const NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult>& f) {
+            const auto [status, response] = f.GetValue();
+            actorSystem->Send(actorId, new TEvPrivate::TEvCreateNodeResult(status));
+        });
 }
 
 void TLocalLeaderElection::Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev) {
@@ -643,7 +652,7 @@ void TLocalLeaderElection::SendSessionEventFail() {
 }
 
 void TLocalLeaderElection::CloseSession(NYdb::EStatus status, const NYql::TIssues& issues) {
-    const bool success = status ==  NYdb::EStatus::SUCCESS;
+    const bool success = status == NYdb::EStatus::SUCCESS;
     if (!success) {
         Metrics.Errors->Inc();
         YDB_LOG_ERROR("Closing session with failed status",
@@ -683,7 +692,7 @@ NYql::TIssues TLocalLeaderElection::AddRootIssue(const TString& message, const N
         rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
     }
 
-    return {rootIssue};
+    return { rootIssue };
 }
 
 void TLocalLeaderElection::CloseSession(const grpc::Status& status, const TString& message) {
@@ -808,7 +817,7 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     if (source.acquired()) {
         YDB_LOG_DEBUG("Semaphore successfully acquired",
             {"logPrefix", LogPrefix});
-        LastAcquireSemaphore = TInstant::Now();    // delay
+        LastAcquireSemaphore = TInstant::Now();   // delay
     } else {
         YDB_LOG_DEBUG("Semaphore acquire timed out",
             {"logPrefix", LogPrefix});
@@ -850,7 +859,7 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
         return;
     }
     const auto& session = description.GetOwners()[0];
-    auto data = TString{session.GetData()};
+    auto data = TString{ session.GetData() };
     auto generation = session.GetOrderId();
     NActorsProto::TActorId protoId;
     if (!protoId.ParseFromString(data)) {
@@ -942,25 +951,24 @@ TLocalLeaderElection::TOperation* TLocalLeaderElection::FindSentRequest(uint64_t
 void TLocalLeaderElection::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     const auto sourceType = ev->Get()->SourceType;
     const auto reason = ev->Get()->Reason;
-    Y_VALIDATE(sourceType == NKikimr::NGRpcService::TEvCoordinationSessionRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
+    Y_VALIDATE(sourceType == NKikimr::NGRpcService::TEvCoordinationSessionRequest::EventType,
+        "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
     YDB_LOG_ERROR("Coordination service is unavailable",
         {"logPrefix", LogPrefix},
         {"reason", reason});
-    CloseSession(NYdb::EStatus::INTERNAL_ERROR, {NYql::TIssue("Coordination service is unavailable, please contact internal support")});
+    CloseSession(NYdb::EStatus::INTERNAL_ERROR, { NYql::TIssue("Coordination service is unavailable, please contact internal support") });
     ResetState();
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewLocalLeaderElection(
-    NActors::TActorId rowDispatcherId,
-    NActors::TActorId coordinatorId,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    NActors::TActorId rowDispatcherId, NActors::TActorId coordinatorId, const ::NMonitoring::TDynamicCounterPtr& counters)
 {
     return std::unique_ptr<NActors::IActor>(new TLocalLeaderElection(rowDispatcherId, coordinatorId, counters));
 }
 
-} // namespace NFq
+}   // namespace NFq

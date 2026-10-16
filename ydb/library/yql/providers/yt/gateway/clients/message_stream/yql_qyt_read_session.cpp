@@ -1,38 +1,33 @@
-#include "yql_qyt_message_stream_client.h"
 #include "yql_qyt_blocking_queue.h"
+#include "yql_qyt_message_stream_client.h"
+#include "yql_qyt_read_session.h"
+
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/threading/future/async.h>
+#include <library/cpp/yt/logging/logger.h>
+#include <util/datetime/base.h>
+#include <util/generic/yexception.h>
+#include <util/stream/str.h>
+#include <util/string/builder.h>
+#include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/queue_client.h>
+#include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/queue_client/consumer_client.h>
+#include <yt/yt/client/queue_client/queue_rowset.h>
+#include <yt/yt/client/table_client/name_table.h>
+#include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/transaction_client/helpers.h>
+#include <yt/yt/client/ypath/rich.h>
+#include <yt/yt/core/actions/future.h>
 
 #include <algorithm>
 #include <atomic>
 #include <functional>
 #include <future>
-
-#include <library/cpp/threading/future/async.h>
-#include <library/cpp/json/json_writer.h>
-
-#include <yt/yt/client/api/client.h>
-#include <yt/yt/client/api/queue_client.h>
-#include <yt/yt/client/api/transaction.h>
-#include <yt/yt/client/transaction_client/helpers.h>
-#include <yt/yt/client/queue_client/consumer_client.h>
-#include <yt/yt/client/queue_client/queue_rowset.h>
-#include <yt/yt/client/table_client/name_table.h>
-#include <yt/yt/client/table_client/unversioned_row.h>
-#include <yt/yt/client/ypath/rich.h>
-
-#include <yt/yt/core/actions/future.h>
-#include <library/cpp/yt/logging/logger.h>
-
-#include <util/generic/yexception.h>
-#include <util/string/builder.h>
-#include <util/stream/str.h>
-
-#include <util/datetime/base.h>
-
 #include <map>
 #include <mutex>
 #include <thread>
 
-#include "yql_qyt_read_session.h"
 namespace NYql {
 namespace {
 using namespace NFq;
@@ -74,15 +69,18 @@ bool IsFatalError(const std::exception& ex) {
 
 using TCommitOffset = std::function<NThreading::TFuture<void>(ui64)>;
 
-struct TQytPartitionSession final : public IMessageStreamPartitionControl {
+struct TQytPartitionSession final: public IMessageStreamPartitionControl {
     TQytPartitionSession(ui64 partitionId, TCommitOffset commit, ui64 defaultOffset, ui64 minimumOffset)
-        : Id{partitionId}
+        : Id{ partitionId }
         , CommitOffset(std::move(commit))
         , NextAcknowledged(defaultOffset)
         , MinimumOffset(minimumOffset)
-    {}
+    {
+    }
 
-    NFq::TMessageStreamPartitionId GetPartitionId() const override { return Id; }
+    NFq::TMessageStreamPartitionId GetPartitionId() const override {
+        return Id;
+    }
 
     void ConfirmStart(std::optional<ui64> startOffset, std::optional<ui64> maxOffset) override {
         if (!Active || Confirmed) {
@@ -91,11 +89,16 @@ struct TQytPartitionSession final : public IMessageStreamPartitionControl {
         Confirmed = true;
         std::lock_guard guard(Mutex);
         NextAcknowledged = std::max(startOffset.value_or(NextAcknowledged), MinimumOffset);
-        Start.TrySetValue(TStartOffsets{NextAcknowledged, maxOffset});
+        Start.TrySetValue(TStartOffsets{ NextAcknowledged, maxOffset });
     }
 
-    void ConfirmStop() override { Active = false; }
-    void ConfirmExhausted() override {}
+    void ConfirmStop() override {
+        Active = false;
+    }
+
+    void ConfirmExhausted() override {
+    }
+
     void RequestStatus() override {
         if (Active && ReportStatus) {
             ReportStatus();
@@ -161,13 +164,13 @@ struct TQytPartitionSession final : public IMessageStreamPartitionControl {
 
     const NFq::TMessageStreamPartitionId Id;
     const TCommitOffset CommitOffset;
-    std::atomic<bool> Active{true};
+    std::atomic<bool> Active{ true };
     bool Confirmed = false;
     ui64 NextAcknowledged;
     const ui64 MinimumOffset;
     static constexpr ui64 UnknownOffset = std::numeric_limits<ui64>::max();
-    std::atomic<ui64> CommittedOffset{UnknownOffset};
-    std::atomic<ui64> PendingCommit{UnknownOffset};
+    std::atomic<ui64> CommittedOffset{ UnknownOffset };
+    std::atomic<ui64> PendingCommit{ UnknownOffset };
     std::mutex Mutex;
     std::map<ui64, ui64> Acknowledged;
     std::function<void()> ReportStatus;
@@ -183,26 +186,14 @@ struct TQytPartitionSession final : public IMessageStreamPartitionControl {
 // offset, converts each queue row into a message stream data event and pushes
 // it into a bounded blocking queue drained by WaitEvent()/GetEvents().
 
-
-class TQytReadSession final : public IMessageStreamReadSession, public std::enable_shared_from_this<TQytReadSession> {
+class TQytReadSession final: public IMessageStreamReadSession, public std::enable_shared_from_this<TQytReadSession> {
     using TEQueue = TBlockingEQueue<TMessageStreamReadEvent>;
     using TMessage = TMessageStreamRecord;
 
 public:
-    TQytReadSession(
-        IClientPtr client,
-        NYT::NYPath::TRichYPath queuePath,
-        NYT::NYPath::TRichYPath consumerPath,
-        std::shared_ptr<TQytPartitionSession> session,
-        int partitionIndex,
-        i64 startOffset,
-        NYT::NTableClient::TTableSchema schema,
-        TQueueRowBatchReadOptions readOptions,
-        TDuration pollPeriod,
-        bool tableMode,
-        i64 endOffset,
-        size_t maxMemoryBytes,
-        bool requireWriteTime,
+    TQytReadSession(IClientPtr client, NYT::NYPath::TRichYPath queuePath, NYT::NYPath::TRichYPath consumerPath,
+        std::shared_ptr<TQytPartitionSession> session, int partitionIndex, i64 startOffset, NYT::NTableClient::TTableSchema schema,
+        TQueueRowBatchReadOptions readOptions, TDuration pollPeriod, bool tableMode, i64 endOffset, size_t maxMemoryBytes, bool requireWriteTime,
         std::shared_ptr<TEQueue> events)
         : Client(std::move(client))
         , QueuePath(std::move(queuePath))
@@ -222,11 +213,11 @@ public:
         Y_UNUSED(maxMemoryBytes);
         Pool.Start(1);
         Session->ReportStatus = [this]() {
-            EventsQ->PushControl(TMessageStreamPartitionStatusEvent{Session, Session->GetCommittedOffset(),
-                static_cast<ui64>(Offset.load()), TableMode ? std::optional<ui64>(EndOffset) : std::nullopt, {}});
+            EventsQ->PushControl(TMessageStreamPartitionStatusEvent{ Session, Session->GetCommittedOffset(), static_cast<ui64>(Offset.load()),
+                TableMode ? std::optional<ui64>(EndOffset) : std::nullopt, {} });
         };
         Session->ReportError = [this](const TString& error) {
-            EventsQ->PushControl(TMessageStreamSessionClosedEvent{EMessageStreamStatus::InternalError, {TIssue(error)}});
+            EventsQ->PushControl(TMessageStreamSessionClosedEvent{ EMessageStreamStatus::InternalError, { TIssue(error) } });
             EventsQ->Stop();
         };
     }
@@ -243,9 +234,9 @@ public:
             try {
                 PollLoop();
             } catch (const TMessageStreamException& ex) {
-                EventsQ->Push(TMessageStreamSessionClosedEvent{ex.GetStatus(), {TIssue(ex.what())}}, 0);
+                EventsQ->Push(TMessageStreamSessionClosedEvent{ ex.GetStatus(), { TIssue(ex.what()) } }, 0);
             } catch (const std::exception& ex) {
-                EventsQ->Push(TMessageStreamSessionClosedEvent{EMessageStreamStatus::InternalError, {TIssue(ex.what())}}, 0);
+                EventsQ->Push(TMessageStreamSessionClosedEvent{ EMessageStreamStatus::InternalError, { TIssue(ex.what()) } }, 0);
             }
         }
         completion.TrySetValue();
@@ -307,14 +298,13 @@ private:
     TMessage MakeMessage(TString data, i64 offset, std::optional<TInstant> writeTime) {
         TMessage message;
         message.Data = std::move(data);
-        message.Id = {Session->GetPartitionId(), static_cast<ui64>(offset)};
+        message.Id = { Session->GetPartitionId(), static_cast<ui64>(offset) };
         message.WriteTime = writeTime;
         return message;
     }
 
     // Temporary solution to fit the PQ json_each_row format.
-    TString EncodeStructuredRow(const std::vector<int>& columnIds,
-        const std::vector<const TUnversionedValue*>& values) {
+    TString EncodeStructuredRow(const std::vector<int>& columnIds, const std::vector<const TUnversionedValue*>& values) {
         TString json;
         TStringOutput output(json);
         NJson::TJsonWriter writer(&output, false);
@@ -354,8 +344,7 @@ private:
         TDuration backoff = MinBackoff;
 
         // Announce assignment and snapshot bounds before delivering records.
-        EventsQ->Push(TMessageStreamPartitionStartRequestedEvent{
-            Session, static_cast<ui64>(Offset.load()), static_cast<ui64>(EndOffset)}, 0);
+        EventsQ->Push(TMessageStreamPartitionStartRequestedEvent{ Session, static_cast<ui64>(Offset.load()), static_cast<ui64>(EndOffset) }, 0);
         auto startFuture = Session->Start.GetFuture();
         while (!startFuture.Wait(PollPeriod)) {
             if (EventsQ->IsStopped()) {
@@ -383,14 +372,8 @@ private:
             }
             IQueueRowsetPtr rowset;
             try {
-
-                auto future = Client->PullQueueConsumer(
-                    ConsumerPath,
-                    QueuePath,
-                    Offset,
-                    PartitionIndex,
-                    ReadOptions);
-                                while (!future.BlockingWait(TDuration::MilliSeconds(10))) {
+                auto future = Client->PullQueueConsumer(ConsumerPath, QueuePath, Offset, PartitionIndex, ReadOptions);
+                while (!future.BlockingWait(TDuration::MilliSeconds(10))) {
                     if (EventsQ->IsStopped()) {
                         future.Cancel(NYT::TError("QYT read session closed"));
                         return;
@@ -404,7 +387,6 @@ private:
                 // Reset backoff on success
                 backoff = MinBackoff;
             } catch (const std::exception& ex) {
-
                 if (EventsQ->IsStopped()) {
                     break;
                 }
@@ -412,8 +394,7 @@ private:
                 if (IsFatalError(ex)) {
                     // Fatal error in PollLoop — terminate the session.
                     EventsQ->Push(TMessageStreamSessionClosedEvent{
-                        EMessageStreamStatus::InvalidArgument,
-                        {TIssue(TString("Fatal error: ") + ex.what())}}, 0);
+                                      EMessageStreamStatus::InvalidArgument, { TIssue(TString("Fatal error: ") + ex.what()) } }, 0);
                     break;
                 }
                 // Transient error in PollLoop — retry with backoff.
@@ -480,8 +461,8 @@ private:
                 }
                 TString data = EncodeStructuredRow(columnIds, values);
                 std::optional<TInstant> writeTime;
-                const TUnversionedValue* timestamp = timestampId && static_cast<size_t>(*timestampId) < values.size()
-                    ? values[*timestampId] : nullptr;
+                const TUnversionedValue* timestamp =
+                    timestampId && static_cast<size_t>(*timestampId) < values.size() ? values[*timestampId] : nullptr;
                 if (timestamp && timestamp->Type == NYT::NTableClient::EValueType::Uint64) {
                     writeTime = NYT::NTransactionClient::TimestampToInstant(NYT::NTransactionClient::TTimestamp(timestamp->Data.Uint64)).first;
                 }
@@ -494,13 +475,10 @@ private:
                 ++rowOffset;
             }
 
-            Offset = readEnd
-                ? std::min<i64>(rowset->GetFinishOffset(), *readEnd)
-                : rowset->GetFinishOffset();
+            Offset = readEnd ? std::min<i64>(rowset->GetFinishOffset(), *readEnd) : rowset->GetFinishOffset();
 
-            EventsQ->Push(TMessageStreamDataEvent{Session, std::move(msgs)}, batchSize);
+            EventsQ->Push(TMessageStreamDataEvent{ Session, std::move(msgs) }, batchSize);
         }
-
     }
 
     void SleepInterruptibly(TDuration duration) {
@@ -516,7 +494,8 @@ private:
         EventsQ->Stop();
         Pool.Stop();
 
-        while (EventsQ->Pop(false)) {}
+        while (EventsQ->Pop(false)) {
+        }
     }
 
     const IClientPtr Client;
@@ -541,14 +520,21 @@ private:
 
 // All partitions share one bounded queue, so MaxMemoryUsageBytes is a session
 // limit. Each assignment keeps its own offsets and confirmation/commit control.
-class TQytMultiReadSession final : public IMessageStreamReadSession {
+class TQytMultiReadSession final: public IMessageStreamReadSession {
 public:
     explicit TQytMultiReadSession(std::vector<std::shared_ptr<IMessageStreamReadSession>> sessions)
         : Sessions(std::move(sessions))
-    {}
-    ~TQytMultiReadSession() override { Close(); }
+    {
+    }
 
-    NThreading::TFuture<void> WaitEvent() override { return Sessions.front()->WaitEvent(); }
+    ~TQytMultiReadSession() override {
+        Close();
+    }
+
+    NThreading::TFuture<void> WaitEvent() override {
+        return Sessions.front()->WaitEvent();
+    }
+
     std::vector<TMessageStreamReadEvent> GetEvents(const TMessageStreamGetEventsSettings& settings) override {
         if (Closed) {
             return {};
@@ -562,6 +548,7 @@ public:
         }
         return events;
     }
+
     NThreading::TFuture<void> Close() override {
         if (!Closed) {
             Closed = true;
@@ -573,34 +560,36 @@ public:
         }
         return ClosedFuture;
     }
-    TString GetSessionId() const override { return Sessions.front()->GetSessionId(); }
+
+    TString GetSessionId() const override {
+        return Sessions.front()->GetSessionId();
+    }
+
 private:
     const std::vector<std::shared_ptr<IMessageStreamReadSession>> Sessions;
     bool Closed = false;
     NThreading::TFuture<void> ClosedFuture;
 };
 
+}   // namespace
 
-}
-std::shared_ptr<NFq::IMessageStreamReadSession> CreateQytPartitionReadSession(
-    const TQytMessageStreamClientSettings& config, const NFq::TMessageStreamReadSessionSettings& settings,
-    const NYT::NYPath::TRichYPath& queue, const NYT::NYPath::TRichYPath& consumer,
-    int partition, ui64 start, ui64 minimum, ui64 end,
-    std::function<NThreading::TFuture<void>(ui64)> commit, std::shared_ptr<TQytEventQueue> events) {
+std::shared_ptr<NFq::IMessageStreamReadSession> CreateQytPartitionReadSession(const TQytMessageStreamClientSettings& config,
+    const NFq::TMessageStreamReadSessionSettings& settings, const NYT::NYPath::TRichYPath& queue, const NYT::NYPath::TRichYPath& consumer,
+    int partition, ui64 start, ui64 minimum, ui64 end, std::function<NThreading::TFuture<void>(ui64)> commit,
+    std::shared_ptr<TQytEventQueue> events) {
     auto control = std::make_shared<TQytPartitionSession>(partition, std::move(commit), start, minimum);
     NYT::NQueueClient::TQueueRowBatchReadOptions options;
     options.MaxRowCount = config.MaxRowCount;
     options.MaxDataWeight = config.MaxDataWeight;
-    auto session = std::make_shared<TQytReadSession>(config.Client, queue, consumer,
-        control, partition, start, config.Schema,
-        options, TDuration::MilliSeconds(config.PollPeriodMs),
-        !settings.AutoPartitioningSupport, end, settings.MaxMemoryUsageBytes,
+    auto session = std::make_shared<TQytReadSession>(config.Client, queue, consumer, control, partition, start, config.Schema, options,
+        TDuration::MilliSeconds(config.PollPeriodMs), !settings.AutoPartitioningSupport, end, settings.MaxMemoryUsageBytes,
         settings.RequireWriteTime || settings.ReadFromWriteTime.has_value(), std::move(events));
     session->StartPolling();
     return session;
 }
+
 std::shared_ptr<NFq::IMessageStreamReadSession> CreateQytMultiReadSession(
     std::vector<std::shared_ptr<NFq::IMessageStreamReadSession>> sessions) {
     return std::make_shared<TQytMultiReadSession>(std::move(sessions));
 }
-}
+}   // namespace NYql

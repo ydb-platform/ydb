@@ -1,6 +1,7 @@
 #pragma once
-#include "secret.h"
 #include "initializer.h"
+#include "secret.h"
+
 #include <ydb/services/metadata/manager/common.h>
 
 namespace NKikimr::NMetadata::NSecret {
@@ -8,6 +9,7 @@ namespace NKikimr::NMetadata::NSecret {
 class TSecretBehaviour: public TClassBehaviour<TSecret> {
 private:
     static TFactory::TRegistrator<TSecretBehaviour> Registrator;
+
 protected:
     virtual NInitializer::IInitializationBehaviour::TPtr ConstructInitializer() const override;
     virtual NModifications::IOperationsManager::TPtr ConstructOperationsManager() const override;
@@ -20,4 +22,4 @@ public:
     virtual TString GetTypeId() const override;
 };
 
-}
+}   // namespace NKikimr::NMetadata::NSecret

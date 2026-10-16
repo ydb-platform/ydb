@@ -1,26 +1,28 @@
-#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/local_table_client.h>
 #include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 
 namespace NFq {
 
 namespace {
 
-struct TLocalYdbConnection : public IYdbConnection {
-
+struct TLocalYdbConnection: public IYdbConnection {
     TLocalYdbConnection(const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions)
         : TablePathPrefix(tablePathPrefix)
         , Db(db)
-        , TableClient(CreateLocalTableClient(maxActiveSessions)) {
+        , TableClient(CreateLocalTableClient(maxActiveSessions))
+    {
     }
 
     IYdbTableClient::TPtr GetTableClient() const override {
         return TableClient;
     }
+
     TString GetTablePathPrefix() const override {
         return JoinPath(Db, TablePathPrefix);
     }
-    TString GetDb()const override {
+
+    TString GetDb() const override {
         return Db;
     }
 
@@ -34,10 +36,10 @@ private:
     IYdbTableClient::TPtr TableClient;
 };
 
-} // namespace
+}   // namespace
 
 IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix, ui64 maxActiveSessions) {
     return MakeIntrusive<TLocalYdbConnection>(db, tablePathPrefix, maxActiveSessions);
 }
 
-} // namespace NFq
+}   // namespace NFq

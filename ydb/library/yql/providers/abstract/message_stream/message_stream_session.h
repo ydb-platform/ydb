@@ -137,14 +137,9 @@ struct TMessageStreamSessionClosedEvent {
 // Common event envelope for YDB/QYT/Kafka, not a backend wire event. Adapters
 // translate native notifications and synthesize missing lifecycle events; SDK
 // commit acknowledgements are internal and do not become record/data events.
-using TMessageStreamReadEvent = std::variant<
-    TMessageStreamDataEvent,
-    TMessageStreamPartitionStartRequestedEvent,
-    TMessageStreamPartitionStopRequestedEvent,
-    TMessageStreamPartitionExhaustedEvent,
-    TMessageStreamPartitionStatusEvent,
-    TMessageStreamPartitionClosedEvent,
-    TMessageStreamSessionClosedEvent>;
+using TMessageStreamReadEvent = std::variant<TMessageStreamDataEvent, TMessageStreamPartitionStartRequestedEvent,
+    TMessageStreamPartitionStopRequestedEvent, TMessageStreamPartitionExhaustedEvent, TMessageStreamPartitionStatusEvent,
+    TMessageStreamPartitionClosedEvent, TMessageStreamSessionClosedEvent>;
 
 // Per assignment: StartRequested -> confirmation -> Data/Status -> optional Exhausted ->
 // StopRequested -> confirmation -> Closed. Closed may also interrupt any state.
@@ -188,4 +183,4 @@ public:
     virtual TString GetSessionId() const = 0;
 };
 
-} // namespace NFq
+}   // namespace NFq

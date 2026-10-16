@@ -1,8 +1,8 @@
 #include "yql_pq_message_stream_client.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <exception>
 #include <limits>
@@ -67,9 +67,8 @@ template <class TValue>
 NFq::TMessageStreamResult<TValue> MakeResult(const TStatus& status, TValue value = {}) {
     using TResult = NFq::TMessageStreamResult<TValue>;
     auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-    return status.IsSuccess()
-        ? TResult::Success(std::move(value), std::move(issues))
-        : TResult::Failure(ToStreamStatus(status.GetStatus()), std::move(issues));
+    return status.IsSuccess() ? TResult::Success(std::move(value), std::move(issues))
+                              : TResult::Failure(ToStreamStatus(status.GetStatus()), std::move(issues));
 }
 
 TReadSessionSettings ToSdkReadSettingsImpl(const TString& stream, const NFq::TMessageStreamReadSessionSettings& settings) {
@@ -103,14 +102,8 @@ TReadSessionSettings ToSdkReadSettingsImpl(const TString& stream, const NFq::TMe
     if (settings.Retry) {
         const auto& retry = *settings.Retry;
         const bool retryAuthenticationErrors = retry.RetryAuthenticationErrors;
-        sdk.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
-            retry.MinDelay,
-            retry.MinLongRetryDelay,
-            retry.MaxDelay,
-            retry.MaxRetries,
-            retry.MaxTime,
-            retry.ScaleFactor,
-            [retryAuthenticationErrors](EStatus status) {
+        sdk.RetryPolicy(NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(retry.MinDelay, retry.MinLongRetryDelay, retry.MaxDelay,
+            retry.MaxRetries, retry.MaxTime, retry.ScaleFactor, [retryAuthenticationErrors](EStatus status) {
                 if (retryAuthenticationErrors && status == EStatus::CLIENT_UNAUTHENTICATED) {
                     return ERetryErrorClass::LongRetry;
                 }
@@ -121,7 +114,7 @@ TReadSessionSettings ToSdkReadSettingsImpl(const TString& stream, const NFq::TMe
     return sdk;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 std::optional<Ydb::StatusIds::StatusCode> ToYdbStatus(NFq::EMessageStreamStatus status) {
     using NFq::EMessageStreamStatus;
@@ -180,11 +173,11 @@ NFq::TMessageStreamResult<NFq::TMessageStreamDescription> ToMessageStream(const 
     NFq::TMessageStreamDescription description;
     if (result.IsSuccess()) {
         for (const auto& partition : result.GetTopicDescription().GetPartitions()) {
-            description.Partitions.push_back({.PartitionId = {partition.GetPartitionId()}, .Active = partition.GetActive()});
+            description.Partitions.push_back({ .PartitionId = { partition.GetPartitionId() }, .Active = partition.GetActive() });
         }
         description.Consumers.emplace();
         for (const auto& consumer : result.GetTopicDescription().GetConsumers()) {
-            description.Consumers->push_back({.Name = TString(consumer.GetConsumerName())});
+            description.Consumers->push_back({ .Name = TString(consumer.GetConsumerName()) });
         }
     }
     return MakeResult(result, std::move(description));
@@ -195,7 +188,7 @@ NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription> ToMessageStrea
     if (result.IsSuccess()) {
         for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
             NFq::TMessageStreamConsumerPartition item;
-            item.PartitionId = {partition.GetPartitionId()};
+            item.PartitionId = { partition.GetPartitionId() };
             if (const auto& stats = partition.GetPartitionStats()) {
                 item.StartOffset = stats->GetStartOffset();
                 item.EndOffset = stats->GetEndOffset();
@@ -217,7 +210,7 @@ NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription> ToMessageStre
     NFq::TMessageStreamPartitionDescription description;
     if (result.IsSuccess()) {
         const auto& partition = result.GetPartitionDescription().GetPartition();
-        description.PartitionId = {partition.GetPartitionId()};
+        description.PartitionId = { partition.GetPartitionId() };
         if (const auto& stats = partition.GetPartitionStats()) {
             description.StartOffset = stats->GetStartOffset();
             description.EndOffset = stats->GetEndOffset();
@@ -226,8 +219,9 @@ NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription> ToMessageStre
     return MakeResult(result, std::move(description));
 }
 
-NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition> ToMessageStreamConsumerPosition(const NYdb::TStatus& status, NFq::TMessageStreamPartitionId partitionId, ui64 offset) {
-    return MakeResult(status, NFq::TMessageStreamConsumerPosition{.PartitionId = partitionId, .NextOffset = offset});
+NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition> ToMessageStreamConsumerPosition(
+    const NYdb::TStatus& status, NFq::TMessageStreamPartitionId partitionId, ui64 offset) {
+    return MakeResult(status, NFq::TMessageStreamConsumerPosition{ .PartitionId = partitionId, .NextOffset = offset });
 }
 
 NYdb::TStatus ToSdkStatus(NFq::EMessageStreamStatus status, const NYql::TIssues& issues) {
@@ -240,14 +234,15 @@ namespace {
 using namespace NYdb;
 using namespace NYdb::NTopic;
 
-class TYdbPartitionControl final : public NFq::IMessageStreamPartitionControl {
+class TYdbPartitionControl final: public NFq::IMessageStreamPartitionControl {
 public:
     explicit TYdbPartitionControl(TPartitionSession::TPtr session)
         : Session(std::move(session))
-    {}
+    {
+    }
 
     NFq::TMessageStreamPartitionId GetPartitionId() const override {
-        return {Session->GetPartitionId()};
+        return { Session->GetPartitionId() };
     }
 
     ui64 GetPartitionSessionId() const {
@@ -289,8 +284,7 @@ public:
 
     bool AcknowledgeRange(ui64 startOffset, ui64 endOffset) override {
         if (startOffset >= endOffset) {
-            ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::InvalidArgument)
-                << "Empty or reversed acknowledgement range";
+            ythrow NFq::TMessageStreamException(NFq::EMessageStreamStatus::InvalidArgument) << "Empty or reversed acknowledgement range";
         }
         if (Closed) {
             return false;
@@ -330,11 +324,12 @@ private:
     std::optional<TReadSessionEvent::TEndPartitionSessionEvent> EndEvent;
 };
 
-class TYdbMessageStreamReadSession final : public NFq::IMessageStreamReadSession {
+class TYdbMessageStreamReadSession final: public NFq::IMessageStreamReadSession {
 public:
     explicit TYdbMessageStreamReadSession(std::shared_ptr<IReadSession> session)
         : Session(std::move(session))
-    {}
+    {
+    }
 
     ~TYdbMessageStreamReadSession() override {
         try {
@@ -368,7 +363,7 @@ public:
         if (Closed || limit == 0 || settings.MaxByteSize == 0) {
             return result;
         }
-        result.reserve(std::min(limit, size_t{16}));
+        result.reserve(std::min(limit, size_t{ 16 }));
 
         // Retry only batches consisting entirely of filtered acknowledgements.
         // Returning the first useful batch preserves the SDK byte budget and avoids
@@ -380,8 +375,7 @@ public:
             // A queued event may exceed the remaining byte budget. Permit one
             // indivisible event so the caller can make progress with a soft limit.
             // Probe only once without blocking: readiness can race with delivery.
-            if (events.empty() && settings.MaxByteSize != std::numeric_limits<size_t>::max()
-                && WaitEvent().IsReady()) {
+            if (events.empty() && settings.MaxByteSize != std::numeric_limits<size_t>::max() && WaitEvent().IsReady()) {
                 events = Session->GetEvents(false, 1, std::numeric_limits<size_t>::max());
             }
             if (events.empty()) {
@@ -496,7 +490,7 @@ private:
                     if (const auto& meta = message.GetMessageMeta()) {
                         record.Attributes.reserve(meta->Fields.size());
                         for (const auto& [key, value] : meta->Fields) {
-                            record.Attributes.push_back({.Name = TString(key), .Value = TString(value)});
+                            record.Attributes.push_back({ .Name = TString(key), .Value = TString(value) });
                         }
                     }
                     try {
@@ -507,26 +501,26 @@ private:
                     }
                     converted.Records.push_back(std::move(record));
                 }
-                return NFq::TMessageStreamReadEvent{std::move(converted)};
+                return NFq::TMessageStreamReadEvent{ std::move(converted) };
             } else if constexpr (std::is_same_v<TEvent, TReadSessionEvent::TStartPartitionSessionEvent>) {
                 auto control = ControlFor(concrete.GetPartitionSession());
                 Activate(control);
                 const ui64 committed = concrete.GetCommittedOffset();
                 const ui64 end = concrete.GetEndOffset();
                 control->SetStartEvent(std::move(concrete));
-                return NFq::TMessageStreamReadEvent{NFq::TMessageStreamPartitionStartRequestedEvent{
+                return NFq::TMessageStreamReadEvent{ NFq::TMessageStreamPartitionStartRequestedEvent{
                     .PartitionControl = std::move(control),
                     .CommittedOffset = committed,
                     .EndOffset = end,
-                }};
+                } };
             } else if constexpr (std::is_same_v<TEvent, TReadSessionEvent::TStopPartitionSessionEvent>) {
                 auto control = ControlFor(concrete.GetPartitionSession());
                 control->SetStopEvent(std::move(concrete));
-                return NFq::TMessageStreamReadEvent{NFq::TMessageStreamPartitionStopRequestedEvent{.PartitionControl = std::move(control)}};
+                return NFq::TMessageStreamReadEvent{ NFq::TMessageStreamPartitionStopRequestedEvent{ .PartitionControl = std::move(control) } };
             } else if constexpr (std::is_same_v<TEvent, TReadSessionEvent::TEndPartitionSessionEvent>) {
                 auto control = ControlFor(concrete.GetPartitionSession());
                 control->SetEndEvent(std::move(concrete));
-                return NFq::TMessageStreamReadEvent{NFq::TMessageStreamPartitionExhaustedEvent{.PartitionControl = std::move(control)}};
+                return NFq::TMessageStreamReadEvent{ NFq::TMessageStreamPartitionExhaustedEvent{ .PartitionControl = std::move(control) } };
             } else if constexpr (std::is_same_v<TEvent, TReadSessionEvent::TPartitionSessionStatusEvent>) {
                 NFq::TMessageStreamPartitionStatusEvent status;
                 status.PartitionControl = ControlFor(concrete.GetPartitionSession());
@@ -534,17 +528,17 @@ private:
                 status.ReadOffset = concrete.GetReadOffset();
                 status.EndOffset = concrete.GetEndOffset();
                 status.WriteTimeHighWatermark = concrete.GetWriteTimeHighWatermark();
-                return NFq::TMessageStreamReadEvent{std::move(status)};
+                return NFq::TMessageStreamReadEvent{ std::move(status) };
             } else if constexpr (std::is_same_v<TEvent, TReadSessionEvent::TPartitionSessionClosedEvent>) {
                 auto control = ControlFor(concrete.GetPartitionSession());
                 Release(concrete.GetPartitionSession());
-                return NFq::TMessageStreamReadEvent{NFq::TMessageStreamPartitionClosedEvent{.PartitionControl = std::move(control)}};
+                return NFq::TMessageStreamReadEvent{ NFq::TMessageStreamPartitionClosedEvent{ .PartitionControl = std::move(control) } };
             } else if constexpr (std::is_same_v<TEvent, TSessionClosedEvent>) {
                 MarkClosed();
-                return NFq::TMessageStreamReadEvent{NFq::TMessageStreamSessionClosedEvent{
+                return NFq::TMessageStreamReadEvent{ NFq::TMessageStreamSessionClosedEvent{
                     .Status = ToStreamStatus(concrete.GetStatus()),
                     .Issues = NYdb::NAdapters::ToYqlIssues(concrete.GetIssues()),
-                }};
+                } };
             } else if constexpr (std::is_same_v<TEvent, TReadSessionEvent::TCommitOffsetAcknowledgementEvent>) {
                 // The SDK queue has already given up this event. Callers that treat
                 // a ready WaitEvent as a non-empty GetEvents must tolerate the gap.
@@ -566,7 +560,7 @@ private:
     std::unordered_map<ui64, ui64> ActivePartitions;
 };
 
-class TPqMessageStreamClient final : public NFq::IMessageStreamClient {
+class TPqMessageStreamClient final: public NFq::IMessageStreamClient {
 public:
     explicit TPqMessageStreamClient(const TString& stream, TTopicClient client)
         : Stream(stream)
@@ -588,19 +582,21 @@ public:
     }
 
     NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
-        const TString& consumer, const NFq::TMessageStreamDescribeConsumerSettings& settings) override
-    {
-        return Client.DescribeConsumer(Stream, consumer, TDescribeConsumerSettings()
-            .IncludeStats(settings.IncludeStats)
-            .IncludeLocation(settings.IncludeGeneration)).Apply([](const auto& future) {
-            return ToMessageStream(future.GetValue());
-        });
+        const TString& consumer, const NFq::TMessageStreamDescribeConsumerSettings& settings) override {
+        return Client
+            .DescribeConsumer(
+                Stream, consumer, TDescribeConsumerSettings().IncludeStats(settings.IncludeStats).IncludeLocation(settings.IncludeGeneration))
+            .Apply([](const auto& future) {
+                return ToMessageStream(future.GetValue());
+            });
     }
 
-    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(NFq::TMessageStreamPartitionId partitionId) override {
-        return Client.DescribePartition(Stream, partitionId.Value, TDescribePartitionSettings().IncludeStats(true)).Apply([](const auto& future) {
-            return ToMessageStream(future.GetValue());
-        });
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(
+        NFq::TMessageStreamPartitionId partitionId) override {
+        return Client.DescribePartition(Stream, partitionId.Value, TDescribePartitionSettings().IncludeStats(true))
+            .Apply([](const auto& future) {
+                return ToMessageStream(future.GetValue());
+            });
     }
 
     std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSessionSettings& settings) override {
@@ -608,8 +604,7 @@ public:
     }
 
     NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
-        NFq::TMessageStreamPartitionId partitionId, const TString& consumer, ui64 offset) override
-    {
+        NFq::TMessageStreamPartitionId partitionId, const TString& consumer, ui64 offset) override {
         return Client.CommitOffset(Stream, partitionId.Value, consumer, offset).Apply([partitionId, offset](const auto& future) {
             return ToMessageStreamConsumerPosition(future.GetValue(), partitionId, offset);
         });
@@ -620,7 +615,7 @@ private:
     TTopicClient Client;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 std::shared_ptr<NFq::IMessageStreamClient> CreateMessageStreamClient(const TString& stream, NYdb::NTopic::TTopicClient client) {
     return std::make_shared<TPqMessageStreamClient>(stream, std::move(client));
@@ -630,4 +625,4 @@ std::shared_ptr<NFq::IMessageStreamReadSession> WrapYdbReadSession(std::shared_p
     return std::make_shared<TYdbMessageStreamReadSession>(std::move(session));
 }
 
-} // namespace NYql
+}   // namespace NYql

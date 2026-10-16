@@ -7,6 +7,7 @@
 
 namespace NYql {
 
-std::shared_ptr<NFq::IMessageStreamClient> CreateExternalTopicClient(const TString& stream, const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings);
+std::shared_ptr<NFq::IMessageStreamClient> CreateExternalTopicClient(
+    const TString& stream, const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings);
 
-} // namespace NYql
+}   // namespace NYql

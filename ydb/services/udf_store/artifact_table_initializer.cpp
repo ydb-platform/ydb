@@ -17,10 +17,10 @@ TVector<TString> GetPathFromMetadata(const TString& fullPath) {
         ++it;
     }
     AFL_VERIFY(it != cend(path));
-    return {it, cend(path)};
+    return { it, cend(path) };
 }
 
-} // namespace
+}   // namespace
 
 void TWasmArtifactTableInitializer::Bootstrap() {
     Become(&TWasmArtifactTableInitializer::StateFunc);
@@ -29,37 +29,20 @@ void TWasmArtifactTableInitializer::Bootstrap() {
 
 void TWasmArtifactTableInitializer::CreateCurrentTable() {
     if (Step_ == EStep::ArtifactTable) {
-        Register(CreateTableCreator(
-            GetPathFromMetadata(ArtifactTablePath_),
-            TUdfWasmArtifact::GetColumnDescription(),
-            TUdfWasmArtifact::GetPk(),
-            NKikimrServices::METADATA_PROVIDER,
-            Nothing(),
-            {},
-            /* isSystemUser */ true
-        ));
+        Register(CreateTableCreator(GetPathFromMetadata(ArtifactTablePath_), TUdfWasmArtifact::GetColumnDescription(), TUdfWasmArtifact::GetPk(),
+            NKikimrServices::METADATA_PROVIDER, Nothing(), {}, /* isSystemUser */ true));
         return;
     }
 
-    Register(CreateTableCreator(
-        GetPathFromMetadata(ArtifactChunksTablePath_),
-        TArtifactChunkSchema::GetColumnDescription(),
-        TArtifactChunkSchema::GetPk(),
-        NKikimrServices::METADATA_PROVIDER,
-        Nothing(),
-        {},
-        /* isSystemUser */ true
-    ));
+    Register(CreateTableCreator(GetPathFromMetadata(ArtifactChunksTablePath_), TArtifactChunkSchema::GetColumnDescription(),
+        TArtifactChunkSchema::GetPk(), NKikimrServices::METADATA_PROVIDER, Nothing(), {}, /* isSystemUser */ true));
 }
 
 void TWasmArtifactTableInitializer::HandleTableCreated(TEvTableCreator::TEvCreateTableResponse::TPtr& ev) {
     if (!ev->Get()->Success) {
-        const TString tablePath = Step_ == EStep::ArtifactTable
-            ? ArtifactTablePath_
-            : ArtifactChunksTablePath_;
+        const TString tablePath = Step_ == EStep::ArtifactTable ? ArtifactTablePath_ : ArtifactChunksTablePath_;
         const TString errorMessage = TStringBuilder()
-            << "failed to create wasm artifact table '" << tablePath
-            << "': " << ev->Get()->Issues.ToString();
+                                     << "failed to create wasm artifact table '" << tablePath << "': " << ev->Get()->Issues.ToString();
         YDB_LOG_ERROR("TWasmArtifactTableInitializer",
             {"errorMessage", errorMessage});
         Send(ParentId_, new TEvStoreInitFailed(errorMessage));
@@ -80,4 +63,4 @@ void TWasmArtifactTableInitializer::HandleTableCreated(TEvTableCreator::TEvCreat
     PassAway();
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

@@ -3,6 +3,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/dsproxy_events.h>
 #include <ydb/library/actors/core/log.h>
+#include <util/random/fast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY
 

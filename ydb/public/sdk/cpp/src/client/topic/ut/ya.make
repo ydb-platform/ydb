@@ -20,6 +20,9 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    reader_metrics_test_utils.h
+    delivered_messages_ut.cpp
+    reader_counters_ut.cpp
     basic_usage_ut.cpp
     content_based_deduplication_ut.cpp
     describe_topic_ut.cpp

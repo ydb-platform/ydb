@@ -150,7 +150,13 @@ public:
         }
 
         const auto it = Self->TargetGroupToSyncerState.find(TargetGroupId);
-        Y_ABORT_UNLESS(it != Self->TargetGroupToSyncerState.end());
+        if (it == Self->TargetGroupToSyncerState.end()) {
+            // target group stopped being a pile while this transaction was in flight (e.g. the bridged group was
+            // decommitted), so there is nothing to sync anymore
+            Self->CheckUnsyncedBridgePiles();
+            Self->ProcessSyncers();
+            return;
+        }
         TSyncerState& syncerState = it->second;
         Y_ABORT_UNLESS(syncerState.InCommit);
         syncerState.InCommit = false;
@@ -1008,20 +1014,44 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
 }
 
 void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc) {
+    // collect groups that are not sync targets anymore: deleted groups and piles that were removed from their bridge
+    // proxy groups (e.g. when the whole bridged group gets decommitted, inline pile stays, but it isn't a pile anymore)
+    THashSet<TGroupId> targetGroupIds;
     for (const auto& [base, overlay] : state.Groups.Diff()) {
-        if (base && !overlay->second) { // deleted group
-            const TGroupId groupId = base->first;
-            if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
-                TSyncerState& syncerState = it->second;
-                for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
-                    const size_t n = NodeToSyncerState.erase({nodeId, &syncerState});
-                    Y_ABORT_UNLESS(n == 1);
+        if (!base) {
+            continue;
+        }
+        if (!overlay->second) { // deleted group
+            targetGroupIds.insert(base->first);
+        }
+        if (const auto& prev = base->second->BridgeGroupInfo) {
+            const TGroupInfo *cur = overlay->second.Get();
+            THashSet<TGroupId> remaining;
+            if (cur && cur->BridgeGroupInfo) {
+                for (const auto& pile : cur->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    remaining.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                 }
-                TargetGroupToSyncerState.erase(it);
             }
-            if (BridgeSyncState.erase(groupId)) {
-                NIceDb::TNiceDb(txc.DB).Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
+            for (const auto& pile : prev->GetBridgeGroupState().GetPile()) {
+                if (const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                        !remaining.contains(groupId)) {
+                    targetGroupIds.insert(groupId);
+                }
             }
+        }
+    }
+
+    for (const TGroupId groupId : targetGroupIds) {
+        if (const auto it = TargetGroupToSyncerState.find(groupId); it != TargetGroupToSyncerState.end()) {
+            TSyncerState& syncerState = it->second;
+            for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
+                const size_t n = NodeToSyncerState.erase({nodeId, &syncerState});
+                Y_ABORT_UNLESS(n == 1);
+            }
+            TargetGroupToSyncerState.erase(it);
+        }
+        if (BridgeSyncState.erase(groupId)) {
+            NIceDb::TNiceDb(txc.DB).Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
         }
     }
 }

@@ -736,6 +736,43 @@ namespace NKikimr {
             Send(sender, response.release(), 0, cookie);
         }
 
+        // does this group block writes due to decommission; the same rule as the one VDisks use for their groups
+        bool DecommitFenced() const {
+            switch (Info->DecommitStatus) {
+                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
+                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
+                    return false;
+
+                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+                    return true;
+
+                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    break;
+            }
+            Y_UNREACHABLE();
+        }
+
+        template<typename TEvent>
+        static bool IsFencedWrite([[maybe_unused]] const TEvent& ev) {
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut> ||
+                    std::is_same_v<TEvent, TEvBlobStorage::TEvBlock> ||
+                    std::is_same_v<TEvent, TEvBlobStorage::TEvPatch>) {
+                return true;
+            } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                return !ev.Hard || ev.RecordGeneration != Max<ui32>(); // hard barrier of assimilation process is allowed
+            } else {
+                return false;
+            }
+        }
+
+        // service id of decommitted group points to the BlobDepot agent, and this proxy serves only agent's requests
+        bool IsBehindAgent() const {
+            return Info->BlobDepotId.value_or(0);
+        }
+
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev) {
             if (InnerProxyId && ev->Get()->ForceGroupGeneration) {
@@ -753,6 +790,13 @@ namespace NKikimr {
                 NotCapableReported = true;
                 ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
                     "node runs without BridgeConfig and can't serve bridged group");
+                return;
+            }
+
+            if (DecommitFenced() && IsFencedWrite(*ev->Get())) {
+                // piles of bridged group don't know about its decommission, so this proxy is the only one to block
+                // writes not coming from the BlobDepot (e.g. requests restarted after the group switched to it)
+                ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie, "group is being decommitted");
                 return;
             }
 
@@ -869,6 +913,15 @@ namespace NKikimr {
             if (!res) {
                 res = std::make_unique<TEvent>(TEvBlobStorage::CloneEventPolicy, ev);
             }
+
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
+                if (DecommitFenced()) {
+                    // pile groups don't carry decommit state of their bridge proxy group, while this proxy blocks writes
+                    // for them; let the VDisks of piles proceed with assimilation
+                    res->IgnoreDecommitState = true;
+                }
+            }
+
             return res;
         }
 
@@ -932,8 +985,12 @@ namespace NKikimr {
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
-                        std::unique_ptr<IEventHandle> h(CreateEventForBSProxy(handle->Sender, GroupId,
-                            handle->ReleaseBase().Release(), handle->Cookie, std::move(handle->TraceId)));
+                        // when the group is decommitted, its service id points to the BlobDepot agent, which would take
+                        // restarted request for its client's one; restart it right here then
+                        std::unique_ptr<IEventHandle> h(IsBehindAgent()
+                            ? handle.release()
+                            : CreateEventForBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(),
+                                handle->Cookie, std::move(handle->TraceId)));
                         if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
                             // static group configuration is updated a bit differently, so we can't expect for instant update;
                             // here we introduce a backoff timer
@@ -1010,16 +1067,20 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
             auto *msg = ev->Get();
+            if (msg->Info && msg->Info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+                // decommitted group has lost its piles, BlobDepot agent in front of us is going to stop us
+                return;
+            }
             if (InnerProxyId) {
                 // inner proxy has to see its group as an ordinary pile one
                 Y_ABORT_UNLESS(!msg->Info || msg->Info->IsInlinePile());
                 Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(
                     msg->Info ? msg->Info->MakeInlinePileView() : nullptr, msg->NodeLayoutInfo, msg->StoragePoolCounters));
-                if (!msg->Info) {
-                    // keep current configuration; the inner proxy waits for the new one, and subrequests are sent with
-                    // forced group generation anyway
-                    return;
-                }
+            }
+            if (!msg->Info) {
+                // keep current configuration; the inner proxy (if any) waits for the new one, and subrequests are sent
+                // with forced group generation anyway
+                return;
             }
             auto prevInfo = std::exchange(Info, std::move(msg->Info));
             Y_ABORT_UNLESS(prevInfo);

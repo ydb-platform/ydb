@@ -350,10 +350,14 @@ namespace NKikimr::NBlobDepot {
                         ConnectToBlobDepot();
                     }
                 }
-                if (!info->GetTotalVDisksNum()) {
-                    // proxy finishes serving user requests
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
-                    ProxyId = {};
+                if (info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE && ProxyId) {
+                    // decommitted group has lost its physical part, the proxy has nothing to serve anymore; group's VDisk
+                    // count can't tell this, as bridge proxy group has no VDisks of its own even before decommission ends;
+                    // the proxy still gets the configuration to pass us requests it has queued while being unconfigured
+                    const TActorId proxyId = std::exchange(ProxyId, {});
+                    TActivationContext::Send(ev->Forward(proxyId));
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, proxyId, {}, nullptr, 0));
+                    return;
                 }
             }
             if (ProxyId) {

@@ -135,6 +135,10 @@ namespace NKikimr::NBsController {
                 continue;
             } else if (group->VirtualGroupState) {
                 throw TExError() << "group is already virtual" << TErrorParams::GroupId(groupId);
+            } else if (group->IsBridgePileOnly()) {
+                // bridged group is decommitted as a whole through its bridge proxy group, single piles are not
+                throw TExError() << "can't decommit a pile of bridged group, decommit its bridge proxy group instead"
+                    << TErrorParams::GroupId(groupId);
             }
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
@@ -177,7 +181,8 @@ namespace NKikimr::NBsController {
                 for (auto it = storagePoolGroups.lower_bound({group->StoragePoolId, Min<TGroupId>()});
                         it != storagePoolGroups.end() && it->first == group->StoragePoolId; ++it) {
                     if (const TGroupInfo *poolGroup = Groups.Find(it->second)) {
-                        numPhysicalGroups += poolGroup->IsPhysicalGroup();
+                        // piles of bridged groups are not visible on their own, data goes to their proxy groups
+                        numPhysicalGroups += poolGroup->IsPhysicalGroup() && !poolGroup->IsBridgePileOnly();
                     } else {
                         throw TExGroupNotFound(it->second.GetRawId())
                             << TErrorParams::BoxId(std::get<0>(group->StoragePoolId))
@@ -1108,6 +1113,31 @@ namespace NKikimr::NBsController {
                 } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS) {
                     std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group is not being decommitted");
                 } else {
+                    if (group->BridgeGroupInfo) {
+                        // bridged group is decommitted as a whole: release piles along with their VDisks (except for
+                        // the inline one, which is the group itself) and turn this group into an ordinary virtual one
+                        std::vector<TGroupId> pileGroupIds;
+                        for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                            const auto pileGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                            if (pileGroupId != group->ID) {
+                                pileGroupIds.push_back(pileGroupId);
+                            }
+                        }
+                        group->BridgeGroupInfo.reset();
+                        group->BridgePileId = TBridgePileId();
+                        group->BridgeProxyGroupId.reset();
+
+                        for (const TGroupId pileGroupId : pileGroupIds) {
+                            const TGroupInfo *pileGroup = state.Groups.Find(pileGroupId);
+                            Y_ABORT_UNLESS(pileGroup);
+                            for (const TVSlotInfo *vslot : pileGroup->VDisksInGroup) {
+                                state.DestroyVSlot(vslot->VSlotId);
+                            }
+                            state.DeleteExistingGroup(pileGroupId);
+                        }
+                        group = state.Groups.FindForUpdate(TGroupId::FromValue(groupId));
+                        Y_ABORT_UNLESS(group);
+                    }
                     for (const TVSlotInfo *vslot : group->VDisksInGroup) {
                         state.DestroyVSlot(vslot->VSlotId);
                     }

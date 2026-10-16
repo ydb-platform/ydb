@@ -163,6 +163,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvPrivate::EvRetryAssimilate, HandleRetryAssimilate);
             cFunc(TEvPrivate::EvResumeScanDataForPlanning, HandleResumeScanDataForPlanning);
             cFunc(TEvPrivate::EvResumeScanDataForCopying, HandleResumeScanDataForCopying);
             fFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
@@ -348,6 +349,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         if (ev->Get()->Status == NKikimrProto::OK) {
+            AssimilateRetryBackoff.Reset();
             Self->Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
         } else {
             YDB_LOG_INFO("TEvAssimilate failed",
@@ -356,9 +358,17 @@ namespace NKikimr::NBlobDepot {
                 {"status", ev->Get()->Status},
                 {"errorReason", ev->Get()->ErrorReason});
 
-            ActionInProgress = false;
-            Action();
+            // the failure is likely to repeat right away (e.g. the group doesn't know yet that its decommission has
+            // started), so retry with a delay; action remains in progress until then
+            TActivationContext::Schedule(AssimilateRetryBackoff.Next(), new IEventHandle(TEvPrivate::EvRetryAssimilate,
+                0, SelfId(), {}, nullptr, 0));
         }
+    }
+
+    void TAssimilator::HandleRetryAssimilate() {
+        Y_ABORT_UNLESS(ActionInProgress);
+        ActionInProgress = false;
+        Action();
     }
 
     void TAssimilator::ScanDataForPlanning() {

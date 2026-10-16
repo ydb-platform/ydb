@@ -37,10 +37,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 ===== testcase =====
 soft barrier without quorum and without Keep

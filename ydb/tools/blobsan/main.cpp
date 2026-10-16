@@ -654,8 +654,9 @@ int main(int argc, char **argv) {
                 const auto& vdisk = group.States.at(index);
                 const auto& k = std::make_tuple(blobId.TabletID(), blobId.Channel());
                 if (const auto it = vdisk.Barriers.find(k); it != vdisk.Barriers.end()) {
-                    const bool keep = blob.KeepMask >> index & 1;
-                    err << "\n\tBarrier[" << index << "]#         " << it->second.ToString(blobId.Generation(), blobId.Channel(), keep);
+                    const auto nodeId = std::find(nums.begin(), nums.end(), index) - nums.begin();
+                    const bool keep = blob.KeepMask >> nodeId & 1;
+                    err << "\n\tBarrier[" << index << "]#         " << it->second.ToString(blobId.Generation(), blobId.Step(), keep);
                 }
             }
 

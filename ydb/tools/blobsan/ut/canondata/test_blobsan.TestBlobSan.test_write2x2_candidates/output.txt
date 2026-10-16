@@ -113,10 +113,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 ===== testcase =====
 all disks captured, local data incomplete
@@ -251,10 +251,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 blobsan --write2x2-candidates mirror-3-dc
 Exit Status: 0
@@ -418,10 +418,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 blobsan --write2x2-candidates mirror-3-dc
 Exit Status: 0
@@ -447,10 +447,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 ===== testcase =====
 incomplete ingress and local data
@@ -488,10 +488,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 blobsan --write2x2-candidates mirror-3-dc
 Exit Status: 0
@@ -517,10 +517,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 ===== testcase =====
 no known parts
@@ -641,10 +641,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	Misplaced#          false
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 
 ===== testcase =====
 misplaced local part
@@ -686,10 +686,10 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	Misplaced#          true
 	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[2]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
-	Barrier[8]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
 TrashSize# 100
 
 ===== testcase =====
@@ -726,11 +726,11 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	KeepMask#           100000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
-	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[0]#         soft[2:1=>1:1](collect)
 	Barrier[1]#         soft[2:1=>1:1](collect)
 	Barrier[2]#         soft[2:1=>1:1](collect)
 	Barrier[6]#         soft[2:1=>1:1](collect)
-	Barrier[7]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)
 
 blobsan --write2x2-candidates mirror-3-dc
@@ -755,11 +755,11 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           100000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
-	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[0]#         soft[2:1=>1:1](collect)
 	Barrier[1]#         soft[2:1=>1:1](collect)
 	Barrier[2]#         soft[2:1=>1:1](collect)
 	Barrier[6]#         soft[2:1=>1:1](collect)
-	Barrier[7]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)
 
 ===== testcase =====
@@ -814,11 +814,11 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
 	KeepMask#           100000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
-	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[0]#         soft[2:1=>1:1](collect)
 	Barrier[1]#         soft[2:1=>1:1](collect)
 	Barrier[2]#         soft[2:1=>1:1](collect)
 	Barrier[6]#         soft[2:1=>1:1](collect)
-	Barrier[7]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)
 
 blobsan --write2x2-candidates mirror-3-dc
@@ -843,11 +843,11 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           100000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
-	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[0]#         soft[2:1=>1:1](collect)
 	Barrier[1]#         soft[2:1=>1:1](collect)
 	Barrier[2]#         soft[2:1=>1:1](collect)
 	Barrier[6]#         soft[2:1=>1:1](collect)
-	Barrier[7]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
 	Barrier[8]#         soft[2:1=>1:1](collect)
 
 ===== testcase =====
@@ -1087,12 +1087,12 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           000000000
 	DoNotKeepMask#      000000000
 	Misplaced#          false
-	Barrier[0]#         soft[2:1=>1:0](collect)
-	Barrier[1]#         soft[2:1=>1:0](collect)
-	Barrier[2]#         soft[2:1=>1:0](collect)
-	Barrier[6]#         soft[2:1=>1:0](collect)
-	Barrier[7]#         soft[2:1=>1:0](collect)
-	Barrier[8]#         soft[2:1=>1:0](collect)
+	Barrier[0]#         soft[2:1=>1:0]
+	Barrier[1]#         soft[2:1=>1:0]
+	Barrier[2]#         soft[2:1=>1:0]
+	Barrier[6]#         soft[2:1=>1:0]
+	Barrier[7]#         soft[2:1=>1:0]
+	Barrier[8]#         soft[2:1=>1:0]
 
 ===== testcase =====
 blob above soft barrier generation
@@ -1287,9 +1287,9 @@ Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
 	KeepMask#           110110110
 	DoNotKeepMask#      000000000
 	Misplaced#          false
-	Barrier[0]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0](collect)
-	Barrier[1]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0](collect)
-	Barrier[2]#         soft[2:1=>1:1](collect) hard[3:1=>1:0](collect)
-	Barrier[6]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0](collect)
-	Barrier[7]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0](collect)
-	Barrier[8]#         soft[2:1=>1:1](collect) hard[3:1=>1:0](collect)
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep) hard[3:1=>1:0]

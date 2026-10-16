@@ -8,6 +8,8 @@ import yatest.common
 
 # PickSubgroup for TLogoBlobID(1, 1, 1, 0, 100, 0); subgroup node % 3 is its DC.
 SUBGROUP_ORDER = (7, 1, 4, 8, 2, 5, 6, 0, 3)
+CHANNEL5_SUBGROUP_ORDER = (0, 3, 6, 1, 4, 7, 2, 5, 8)
+BLOCK42_SUBGROUP_ORDER = (5, 6, 7, 0, 1, 2, 3, 4)
 TWO_REALMS = tuple(index for node, index in enumerate(SUBGROUP_ORDER) if node % 3 != 2)
 
 
@@ -26,7 +28,7 @@ class Snapshot:
 
     def __init__(self, local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=TWO_REALMS,
                  known_nodes=None, local_parts=None, keep_flags=None, blob_indexes=None, barrier_indexes=None,
-                 barriers=None, known_per_disk=None):
+                 barriers=None, known_per_disk=None, subgroup_order=SUBGROUP_ORDER, part_count=3, blob_channel=0):
         self.parameters = dict(local_realms=tuple(local_realms), keep=keep, barrier=barrier, quorum=quorum,
                                known_full=known_full, indexes=tuple(indexes))
         for name, value in dict(known_nodes=known_nodes, local_parts=local_parts, keep_flags=keep_flags,
@@ -34,36 +36,43 @@ class Snapshot:
                                 barriers=barriers, known_per_disk=known_per_disk).items():
             if value is not None:
                 self.parameters[name] = value
+        if subgroup_order != SUBGROUP_ORDER:
+            self.parameters['subgroup_order'] = subgroup_order
+        if part_count != 3:
+            self.parameters['part_count'] = part_count
+        if blob_channel:
+            self.parameters['blob_channel'] = blob_channel
 
         if known_nodes is None:
-            known_nodes = tuple(range(9)) if known_full else (0,)
+            known_nodes = tuple(range(len(subgroup_order))) if known_full else (0,)
         if barriers is None:
             barriers = [] if barrier is None else [dict(kind=barrier)]
         self.records = []
         for index in self.parameters['indexes']:
-            node = SUBGROUP_ORDER.index(index)
-            realm = node % 3
+            node = subgroup_order.index(index)
+            part = node % part_count
             known = 0
             for known_node in (known_per_disk or {}).get(index, known_nodes):
-                part = known_node % 3
-                position = 2 + part if known_node < 3 else 8 + (known_node - 3) * 6 + part * 2 + 1
+                known_part = known_node % part_count
+                position = (2 + known_part if known_node < part_count else
+                            2 + 2 * part_count + (known_node - part_count) * 2 * part_count + known_part * 2 + 1)
                 known |= ingress_bit(position)
-            parts = (local_parts or {}).get(index, (realm,) if realm in local_realms else ())
-            local = sum(ingress_bit(5 + part) for part in parts)
+            parts = (local_parts or {}).get(index, (part,) if part in local_realms else ())
+            local = sum(ingress_bit(2 + part_count + part) for part in parts)
             flags = (keep_flags or {}).get(index, keep)
             if isinstance(flags, int):
                 flags = (flags,)
 
-            # TLogoBlobID(tablet=1, generation=1, step=1, channel=0, size=100).
-            blob_key = (1, 1 << 24, 100 << 4 | 1 << 56)
+            # TLogoBlobID(tablet=1, generation=1, step=1, channel=blob_channel, size=100).
+            blob_key = (1, 1 << 24 | blob_channel << 56, 100 << 4 | 1 << 56)
             blobs = []
             if blob_indexes is None or index in blob_indexes:
                 blobs = [(blob_key, known | local | flag << 6) for flag in flags]
             barrier_records = []
             if barrier_indexes is None or index in barrier_indexes:
                 for parameters in barriers:
-                    fields = dict(kind='soft', record=(2, 1), collect=(1, 1), tablet=1, channel=0,
-                                  ingress=0x1FF if quorum else 1 << index)
+                    fields = dict(kind='soft', record=(2, 1), collect=(1, 1), tablet=1, channel=blob_channel,
+                                  ingress=(1 << len(subgroup_order)) - 1 if quorum else 1 << index)
                     fields.update(parameters)
                     key = (fields['tablet'], fields['channel'] | int(fields['kind'] == 'hard') << 31,
                            *fields['record'])
@@ -109,14 +118,16 @@ class TestBlobSan:
         Path(path).write_text(content)
         return yatest.common.canonical_file(path, local=True, universal_lines=True)
 
-    def _trace(self, arguments, data=b''):
+    def _trace(self, arguments, data=b'', capture_stdout=False):
         binary = yatest.common.binary_path('ydb/tools/blobsan/blobsan')
         result = subprocess.run(
             [binary, *arguments], input=bytes(data),
-            stdout=subprocess.DEVNULL,
+            stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
             stderr=subprocess.PIPE, check=True,
         )
         lines = [' '.join(['blobsan', *arguments]), f'Exit Status: {result.returncode}']
+        if result.stdout:
+            lines.append('Stdout: ' + result.stdout.decode().replace(binary, 'blobsan').rstrip('\n'))
         if result.stderr:
             lines.append('Stderr: ' + result.stderr.decode().replace(binary, 'blobsan').rstrip('\n'))
         return '\n'.join(lines)
@@ -128,6 +139,49 @@ class TestBlobSan:
         results = [f'===== testcase =====\n{name}\n{description}\nSnapshot: {data!r}']
         results.extend(self.run_blobsan(data, options) for options in [(), ('--write2x2-candidates',)])
         return '\n\n'.join(results)
+
+    def test_stdout_dump(self):
+        data = snapshot(keep=1, barrier='soft', local_realms=(0, 1))
+        result = f'Snapshot: {data!r}\n\n' + self._trace(['mirror-3-dc'], data, capture_stdout=True)
+        return self._canonical_file('output.txt', result + '\n')
+
+    def test_barrier_reporting(self):
+        cases = [
+            ('Keep flags use subgroup positions', {
+                'barrier': 'soft', 'indexes': tuple(range(9)), 'keep_flags': {2: 1, 8: 1},
+            },
+                'When only VDisks 2 and 8 have Keep,\n'
+                'then only their soft barrier reports contain (keep), regardless of subgroup order.'),
+            ('channel greater than collected step', {
+                'keep': 1, 'barrier': 'soft', 'indexes': tuple(range(9)),
+                'blob_channel': 5, 'subgroup_order': CHANNEL5_SUBGROUP_ORDER,
+            },
+                'When a channel-5 blob at step 1 is covered by a barrier collecting through step 1,\n'
+                'then every barrier report contains (collect)(keep).'),
+            ('step greater than collected step', {'barriers': [{'collect': (1, 0)}]},
+             'When a channel-0 blob at step 1 is above a barrier collecting through step 0,\n'
+             'then its barrier reports contain neither (collect) nor (keep).'),
+        ]
+        results = [self._testcase(name, snapshot(**parameters), description)
+                   for name, parameters, description in cases]
+        return self._canonical_file('output.txt', '\n\n'.join(results) + '\n')
+
+    def test_block42(self):
+        cases = [
+            ('full local layout', 6, 'soft', 'A kept blob with all six main parts is complete and is skipped.'),
+            ('incomplete local layout', 4, 'soft', 'Four local parts are restorable but incomplete, so the kept blob is reported.'),
+            ('too few local parts', 3, 'soft', 'Three local parts are not restorable and contribute to TrashSize instead.'),
+            ('above barriers', 4, None, 'An incomplete blob above all barriers is skipped in default mode.'),
+        ]
+        results = []
+        for name, num_parts, barrier, description in cases:
+            local_parts = {BLOCK42_SUBGROUP_ORDER[node]: (node,) for node in range(num_parts)}
+            data = snapshot(keep=1, barrier=barrier, indexes=tuple(range(8)),
+                            subgroup_order=BLOCK42_SUBGROUP_ORDER, part_count=6, known_nodes=tuple(range(6)),
+                            local_realms=(), local_parts=local_parts)
+            results.append(f'===== testcase =====\n{name}\n{description}\nSnapshot: {data!r}\n\n'
+                           + self._trace(['block-4-2'], data))
+        return self._canonical_file('output.txt', '\n\n'.join(results) + '\n')
 
     def test_write2x2_candidates(self):
         cases = [

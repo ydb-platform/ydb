@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import base64
 import os
 import shutil
 import datetime
@@ -16,19 +15,6 @@ pr_label_retry = "automerge-retry"
 check_name = "checks_integrated"
 failed_comment_mark = "<!--SyncFailed-->"
 retry_comment_mark = "<!--SyncRetry-->"
-
-
-def fetch_proxy_args() -> list:
-    """Rewrite only this git command's GitHub URL, when the workflow probe chose a proxy.
-
-    Not stored in repo config, so a later push still goes to github.com and can
-    carry the auth header. The header is attached to https://github.com/, not to
-    the rewritten proxy URL.
-    """
-    proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
-    if not proxy:
-        return []
-    return ["-c", f"url.{proxy}/https://github.com/.insteadOf=https://github.com/"]
 
 
 class PrAutomerger:
@@ -130,8 +116,8 @@ class PrAutomerger:
 
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
-        self.git_run("fetch", "origin", base_ref, proxy=True, stream=True)
-        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR", proxy=True, stream=True)
+        self.git_run("fetch", "origin", base_ref)
+        self.git_run("fetch", "origin", f"pull/{pr.number}/head:PR")
         self.git_run("reset", "--hard", f"origin/{base_ref}")
         try:
             self.git_run("merge", "PR", "-m", commit_msg)
@@ -143,19 +129,14 @@ class PrAutomerger:
         shutil.rmtree("merge-repo", ignore_errors=True)
         original_dir = os.getcwd()
         try:
-            repo_url = f"https://github.com/{self.repo_name}.git"
-            proxy = os.environ.get("GH_FETCH_PROXY_URL", "").strip().rstrip("/")
-            self.logger.info("clone %s via %s", repo_url, proxy or "direct")
             self.git_run(
                 "clone",
                 "--filter=blob:none",
                 "--single-branch",
                 "--branch",
                 pr.base.ref,
-                repo_url,
+                f"https://{self.token}@github.com/{self.repo_name}.git",
                 "merge-repo",
-                proxy=True,
-                stream=True,
             )
             os.chdir("merge-repo")
 
@@ -167,7 +148,6 @@ class PrAutomerger:
                 return False
 
             try:
-                self.configure_push_auth()
                 self.git_run("push")
                 return True
             except subprocess.CalledProcessError:
@@ -220,34 +200,14 @@ class PrAutomerger:
             text += f" Sync workflow logs can be found [here]({self.workflow_url})."
         pr.create_issue_comment(f"{failed_comment_mark}\n{text}")
 
-    def configure_push_auth(self) -> None:
-        """Authenticate later git calls without putting the token in the remote URL.
+    def git_run(self, *args):
+        args = ["git"] + list(args)
 
-        GitHub redirects push to the same repo with a trailing slash, and git drops
-        credentials that were embedded in the clone URL. http.extraheader is sent
-        on the redirected request as well. It matches https://github.com/, not the
-        proxy URL used by clone and fetch.
-        """
-        basic = base64.b64encode(f"x-access-token:{self.token}".encode()).decode()
-        self.logger.info("configure push auth for https://github.com/")
-        subprocess.run(
-            ["git", "config", "http.https://github.com/.extraheader", f"AUTHORIZATION: basic {basic}"],
-            check=True,
-            capture_output=True,
-        )
-
-    def git_run(self, *args, proxy=False, stream=False):
-        cmd = ["git"]
-        if proxy:
-            cmd.extend(fetch_proxy_args())
-        cmd.extend(args)
-
-        self.logger.info("run: %r", cmd)
+        self.logger.info("run: %r", args)
         try:
             completed = subprocess.run(
-                cmd,
-                env={**os.environ, "GIT_TRACE": "1"} if stream else None,
-                capture_output=not stream,
+                args,
+                capture_output=True,
                 check=True,
             )
         except subprocess.CalledProcessError as e:
@@ -259,8 +219,6 @@ class PrAutomerger:
                 self.logger.error("stderr:\n%s", stderr)
             raise
 
-        if stream:
-            return ""
         stdout = completed.stdout.decode()
         stderr = completed.stderr.decode()
         if stdout:

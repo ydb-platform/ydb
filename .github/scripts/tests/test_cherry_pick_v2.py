@@ -3,6 +3,7 @@
 import datetime
 import logging
 import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -19,7 +20,9 @@ from cherry_pick_v2 import (
     create_commit_source,
     create_pr_source,
     fetch_proxy_args,
+    fetch_ref_matching_github,
     get_merged_commit_shas,
+    run_git_transfer,
     pick_linked_pr,
     sort_sources,
     to_utc,
@@ -463,6 +466,86 @@ class FetchProxyArgsTest(unittest.TestCase):
             "-c",
             "url.https://gh-proxy.com/https://github.com/.insteadOf=https://github.com/",
         ])
+
+
+class FetchTransferTest(unittest.TestCase):
+    def _run(self, commands):
+        calls = []
+
+        def run(args, **kwargs):
+            calls.append(list(args))
+            failed = "insteadOf" in " ".join(args) and commands.get("proxy_fails")
+            code = 1 if failed else 0
+            stdout = commands.get("stdout", {}).get(tuple(args), "")
+            if kwargs.get("check") and code != 0:
+                raise subprocess.CalledProcessError(code, args, stdout, "fail")
+            return subprocess.CompletedProcess(args, code, stdout, "")
+
+        with mock.patch.dict(os.environ, {"GH_FETCH_PROXY_URL": "https://gh-proxy.com"}, clear=False):
+            with mock.patch("cherry_pick_v2.subprocess.run", side_effect=run):
+                commands["body"]()
+        return calls
+
+    def test_proxy_failure_retries_on_github(self):
+        def body():
+            run_git_transfer("/repo", ["fetch", "origin", "main"], LOGGER)
+
+        calls = self._run({"proxy_fails": True, "body": body})
+        self.assertIn("insteadOf", " ".join(calls[0]))
+        self.assertEqual(calls[1], ["git", "fetch", "origin", "main"])
+
+    def test_branch_tip_must_match_github(self):
+        expected = "a" * 40
+        seen = {"n": 0}
+
+        def body():
+            fetch_ref_matching_github(
+                "/repo",
+                ["fetch", "origin", "stable"],
+                "origin/stable",
+                expected,
+                LOGGER,
+            )
+
+        calls = []
+
+        def run(args, **kwargs):
+            calls.append(list(args))
+            text = " ".join(args)
+            if args[-2:] == ["rev-parse", "origin/stable"]:
+                seen["n"] += 1
+                sha = ("b" * 40 if seen["n"] == 1 else expected) + "\n"
+                return subprocess.CompletedProcess(args, 0, sha, "")
+            if "insteadOf" in text and "fetch" in args:
+                return subprocess.CompletedProcess(args, 0, "", "")
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        with mock.patch.dict(os.environ, {"GH_FETCH_PROXY_URL": "https://gh-proxy.com"}, clear=False):
+            with mock.patch("cherry_pick_v2.subprocess.run", side_effect=run):
+                body()
+        direct = [cmd for cmd in calls if "fetch" in cmd and "insteadOf" not in " ".join(cmd)]
+        self.assertEqual(direct, [["git", "fetch", "origin", "stable"]])
+
+    def test_mismatch_after_direct_fetch_raises(self):
+        def body():
+            fetch_ref_matching_github(
+                "/repo",
+                ["fetch", "origin", "stable"],
+                "origin/stable",
+                "a" * 40,
+                LOGGER,
+            )
+
+        def run(args, **kwargs):
+            if args[-2:] == ["rev-parse", "origin/stable"]:
+                return subprocess.CompletedProcess(args, 0, ("b" * 40) + "\n", "")
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("GH_FETCH_PROXY_URL", None)
+            with mock.patch("cherry_pick_v2.subprocess.run", side_effect=run):
+                with self.assertRaises(RuntimeError):
+                    body()
 
 
 if __name__ == '__main__':

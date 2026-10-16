@@ -29,6 +29,7 @@ SRCS(
     ut_table_pg_types.cpp
     ut_commit_redo_limit.cpp
     ut_db_ref_map.cpp
+    ut_copy_table_proposals.cpp
 )
 
 END()

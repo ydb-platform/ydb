@@ -173,7 +173,7 @@ struct TSharedPageCacheMock {
     }
 
     TSharedPageCacheMock& SetLimit(ui64 limitBytes) {
-        auto limit = new NMemory::TEvConsumerLimit(limitBytes);
+        auto limit = new NMemory::TEvConsumerLimit(NMemory::EMemoryConsumerKind::SharedCache, limitBytes);
         Send(Sender1, limit);
 
         TWaitForFirstEvent<NMemory::TEvConsumerLimit> waiter(Runtime);

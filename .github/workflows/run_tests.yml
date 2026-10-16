@@ -52,11 +52,6 @@ on:
         required: false
         type: boolean
         default: true
-      git_github_proxy:
-        description: "Compare GitHub and vars.GH_PROXY_URL, then fetch through whichever is faster"
-        required: false
-        type: boolean
-        default: true
 
   workflow_dispatch:
     inputs:
@@ -309,7 +304,7 @@ jobs:
           fi
 
       - name: Probe GitHub speed
-        if: vars.GH_PROXY_URL != '' && (github.event_name == 'workflow_dispatch' || inputs.git_github_proxy)
+        if: vars.GH_PROXY_URL != ''
         env:
           GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
         shell: bash
@@ -391,7 +386,7 @@ jobs:
           ref: ${{ matrix.branch }}
 
       - name: Drop GitHub proxy
-        if: vars.GH_PROXY_URL != '' && (github.event_name == 'workflow_dispatch' || inputs.git_github_proxy)
+        if: vars.GH_PROXY_URL != ''
         shell: bash
         run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
 

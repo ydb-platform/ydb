@@ -19,7 +19,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const std::vector<std::pair<TString, TString>>& taskSensorLabels,
     const std::vector<ui64>& nodeIds,
     bool useActorSystemThreadsInTopicClient,
-    bool useYtflowEngine,
+    bool allowYtflowEngine,
     bool addTransparentPrefixToTransparentSystemColumns) {
     return [=] (
                const TString& userName,
@@ -56,8 +56,8 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
-            state->UseYtflowEngine = useYtflowEngine;
-            if (useYtflowEngine) {
+            state->AllowYtflowEngine = allowYtflowEngine;
+            if (allowYtflowEngine) {
                 state->YtflowIntegration = CreatePqYtflowIntegration(state);
                 state->YtflowOptimization = CreatePqYtflowOptimization(state);
             }
@@ -96,7 +96,24 @@ bool TPqState::IsRtmrMode() const {
     if (!SupportRtmrMode) {
         return false;
     }
+    if (IsYtflowEngine()) {
+        return false;
+    }
     return Configuration->PqReadByRtmrCluster_.Get() != "dq";
+}
+
+bool TPqState::IsYtflowEngine() const {
+    if (!AllowYtflowEngine) {
+        return false;
+    }
+    return Types->EngineType == EEngineType::Ytflow;
+}
+
+bool TPqState::ShouldAddTransparentPrefixToTransparentSystemColumns() const {
+    if (IsYtflowEngine()) {
+        return false;
+    }
+    return AddTransparentPrefixToTransparentSystemColumns;
 }
 
 const TPqState::TTopicMeta* TPqState::FindTopicMeta(const TString& cluster, const TString& topicPath) const {

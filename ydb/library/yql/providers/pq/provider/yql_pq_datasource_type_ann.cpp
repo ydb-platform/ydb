@@ -582,7 +582,7 @@ public:
         const auto metadataKey = TString(key->TailPtr()->Content());
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             metadataKey,
-            State_->AddTransparentPrefixToTransparentSystemColumns,
+            State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
             State_->EnableUserAttributesInTopicQuery,
             State_->ForbidYqlSysColumnsAndSystemMetadata
         );

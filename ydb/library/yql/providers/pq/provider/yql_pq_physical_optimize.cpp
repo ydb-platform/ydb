@@ -37,7 +37,7 @@ TCoAtomList GetWatermarkMetadataColumns(TPositionHandle pos, const TPqState& sta
     for (const auto& key : RequiredMetadataColumns) {
         const auto descriptor = GetPqMetaFieldDescriptorByKey(
             TString(key),
-            state.AddTransparentPrefixToTransparentSystemColumns,
+            state.ShouldAddTransparentPrefixToTransparentSystemColumns(),
             state.EnableUserAttributesInTopicQuery,
             state.ForbidYqlSysColumnsAndSystemMetadata
         );

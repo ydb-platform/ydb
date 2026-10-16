@@ -6,6 +6,7 @@ Applies merged sources in merge-time order, unmerged ones after them in input
 order, and creates PRs with proper metadata.
 """
 
+import base64
 import os
 import sys
 import datetime
@@ -77,6 +78,21 @@ def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.Co
     except subprocess.CalledProcessError as e:
         logger.error(f'Non-zero return code {e.returncode} of command {e.cmd}, stdout: {e.stdout}, stderr: {e.stderr}')
         raise
+
+
+def configure_push_auth(repo_path: str, token: str, logger) -> None:
+    """Authenticate later git calls without putting the token in the remote URL.
+
+    GitHub redirects push to the same repo with a trailing slash, and git drops
+    credentials that were embedded in the clone URL. http.extraheader is sent
+    on the redirected request as well.
+    """
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    run_git(
+        repo_path,
+        ['config', 'http.https://github.com/.extraheader', f'AUTHORIZATION: basic {basic}'],
+        logger,
+    )
 
 
 def expand_sha(repo, ref: str, logger) -> str:
@@ -950,7 +966,7 @@ def main():
     # Clone repository
     repo_dir = tempfile.mkdtemp(prefix="ydb-cherry-pick-")
     try:
-        repo_url = f"https://{token}@github.com/{repo_name}.git"
+        repo_url = f"https://github.com/{repo_name}.git"
         logger.info("Cloning repository: %s to %s", repo_url, repo_dir)
         subprocess.run(
             ['git', 'clone', repo_url, repo_dir],
@@ -959,6 +975,7 @@ def main():
             text=True,
             capture_output=True
         )
+        configure_push_auth(repo_dir, token, logger)
         
         # Process each target branch
         results: list[BackportResult] = []

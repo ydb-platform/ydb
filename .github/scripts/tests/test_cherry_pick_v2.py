@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -17,6 +18,7 @@ from cherry_pick_v2 import (
     collect_sources,
     create_commit_source,
     create_pr_source,
+    fetch_proxy_args,
     get_merged_commit_shas,
     pick_linked_pr,
     sort_sources,
@@ -446,6 +448,21 @@ class CollectSourcesTest(unittest.TestCase):
         repo.get_commit.side_effect = lambda sha: by_sha[sha]
         sources = collect_sources(repo, ['123', 'abc123'], False, LOGGER)
         self.assertEqual([s.type for s in sources], ['pr', 'commit'])
+
+
+class FetchProxyArgsTest(unittest.TestCase):
+    def test_empty_means_direct_fetch(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("GH_FETCH_PROXY_URL", None)
+            self.assertEqual(fetch_proxy_args(), [])
+
+    def test_proxy_rewrites_only_this_command(self):
+        with mock.patch.dict(os.environ, {"GH_FETCH_PROXY_URL": "https://gh-proxy.com/"}):
+            args = fetch_proxy_args()
+        self.assertEqual(args, [
+            "-c",
+            "url.https://gh-proxy.com/https://github.com/.insteadOf=https://github.com/",
+        ])
 
 
 if __name__ == '__main__':

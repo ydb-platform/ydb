@@ -120,6 +120,32 @@ struct TGroupState {
 
 std::unordered_map<ui32, TGroupState> Groups;
 
+using TOutputLogoBlob = TLevelIndexStreamActor::TOutputLogoBlob;
+using TOutputLogoBlobFull = TLevelIndexStreamActor::TOutputLogoBlobFull;
+
+TIngress GetIngress(const TOutputLogoBlob& record) {
+    return TIngress(record.Ingress);
+}
+
+TIngress GetIngress(const TOutputLogoBlobFull& record) {
+    return record.MemRec.GetIngress();
+}
+
+void OutputMemRec(IOutputStream& /*out*/, const TOutputLogoBlob& /*record*/)
+{}
+
+void OutputMemRec(IOutputStream& out, const TOutputLogoBlobFull& record) {
+    const TBlobType::EType type = record.MemRec.GetType();
+    out << " Type# " << TBlobType::TypeToStr(type);
+    if (type == TBlobType::DiskBlob || type == TBlobType::HugeBlob) {
+        TDiskDataExtractor extr;
+        out << " Data# " << record.MemRec.GetDiskData(&extr, nullptr)->ToString();
+    } else {
+        // the outbound array of ManyHugeBlobs is not streamed
+        out << " Size# " << record.MemRec.DataSize();
+    }
+}
+
 void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& info) {
     TBufferInput stream(buffer);
     TRecordHeader header;
@@ -184,11 +210,12 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
             }
         }
 
-        auto processLogoBlob = [&](const TLevelIndexStreamActor::TOutputLogoBlob& record) {
+        auto processLogoBlob = [&](const auto& record) {
             const TLogoBlobID& blobId = record.Key.LogoBlobID();
-            const TIngress ingress(record.Ingress);
+            const TIngress ingress = GetIngress(record);
             if (OutputCout) {
                 lines << "Key# " << blobId << " Ingress# " << ingress.ToString(&topology, vdiskId, blobId);
+                OutputMemRec(lines, record);
             }
 
             EKeepMode keepMode;
@@ -293,7 +320,11 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
 
         switch (blockHeader.Database) {
             case static_cast<ui32>(TLevelIndexStreamActor::EDatabase::LOGOBLOBS):
-                processRecordArray(TLevelIndexStreamActor::TOutputLogoBlob(), processLogoBlob);
+                if (blockHeader.FullMemRec) {
+                    processRecordArray(TLevelIndexStreamActor::TOutputLogoBlobFull(), processLogoBlob);
+                } else {
+                    processRecordArray(TLevelIndexStreamActor::TOutputLogoBlob(), processLogoBlob);
+                }
                 break;
 
             case static_cast<ui32>(TLevelIndexStreamActor::EDatabase::BLOCKS):
